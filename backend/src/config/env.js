@@ -47,6 +47,9 @@ const env = {
     nodeEnv: process.env.NODE_ENV || 'development',
     timezone: process.env.TZ || 'Asia/Bangkok',
     currentTerm: process.env.CURRENT_TERM || '2568-2',
+    // Hour (0-23, Bangkok time) at which the session switches morning → evening.
+    // Before this hour = morning (ส่งเช้า). From this hour onward = evening (รับเย็น).
+    driverSessionSwitchHour: parseInt(process.env.DRIVER_SESSION_SWITCH_HOUR || '12', 10),
   },
   export: {
     pdfFontPath: process.env.PDF_FONT_PATH || './fonts/THSarabunNew.ttf',

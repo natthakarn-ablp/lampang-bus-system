@@ -21,6 +21,7 @@ function generateAccessToken(user) {
   return jwt.sign(
     {
       sub: user.id,
+      username: user.username,
       role: user.role,
       scopeType: user.scope_type || null,
       scopeId: user.scope_id || null,

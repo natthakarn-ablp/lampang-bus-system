@@ -7,7 +7,8 @@ const cors = require('cors');
 const env = require('./config/env');
 const { testConnection } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
-const authRoutes = require('./routes/auth.routes');
+const authRoutes   = require('./routes/auth.routes');
+const driverRoutes = require('./routes/driver.routes');
 
 const app = express();
 
@@ -23,10 +24,10 @@ app.get('/health', (_req, res) => {
 });
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
+app.use('/api/auth',   authRoutes);
+app.use('/api/driver', driverRoutes);
 
-// Phase 2+ routes will be added here:
-// app.use('/api/driver',    require('./routes/driver.routes'));
+// Phase 3+ routes will be added here:
 // app.use('/api/school',    require('./routes/school.routes'));
 // app.use('/api/district',  require('./routes/district.routes'));
 // app.use('/api/central',   require('./routes/central.routes'));

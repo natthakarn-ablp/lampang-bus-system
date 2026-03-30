@@ -26,6 +26,7 @@ async function authenticate(req, res, next) {
 
     req.user = {
       id: payload.sub,
+      username: payload.username || '',
       role: payload.role,
       scopeType: payload.scopeType || null,
       scopeId: payload.scopeId || null,

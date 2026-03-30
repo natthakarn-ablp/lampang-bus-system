@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.vscode/
+.DS_Store
+coverage/
+backend/node_modules/
+frontend/node_modules/
+backend/dist/
+frontend/dist/

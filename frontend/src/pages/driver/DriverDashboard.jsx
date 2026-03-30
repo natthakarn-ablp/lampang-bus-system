@@ -1,107 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
-import Layout from '../../components/Layout';
 import DashboardCard from '../../components/DashboardCard';
-import StudentList from './StudentList';
 import { resolveSession, SESSION_LABEL, DONE_LABEL, ALL_DONE_LABEL, SESSION_TAG } from '../../utils/session';
 
-// ─── Emergency Modal ──────────────────────────────────────────────────────────
+/**
+ * DriverDashboard — the /driver index page (ภาพรวมวันนี้).
+ *
+ * Rendered by App.jsx as the index child of the /driver nested route.
+ * Layout (sidebar) is provided by DriverLayout via <Outlet />.
+ */
+export default function DriverDashboard() {
+  const navigate = useNavigate();
 
-function EmergencyModal({ onClose }) {
-  const [detail,  setDetail]  = useState('');
-  const [note,    setNote]    = useState('');
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error,   setError]   = useState('');
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      await api.post('/driver/emergency', { detail, note });
-      setSuccess(true);
-    } catch (err) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (success) {
-    return (
-      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md text-center">
-          <div className="text-5xl mb-4">✅</div>
-          <h2 className="text-lg font-bold text-gray-800 mb-2">แจ้งเหตุฉุกเฉินแล้ว</h2>
-          <p className="text-gray-500 text-sm mb-6">ทีมงานจะดำเนินการโดยเร็ว</p>
-          <button
-            onClick={onClose}
-            className="bg-blue-600 text-white px-8 py-2 rounded-lg font-medium hover:bg-blue-700"
-          >
-            ปิด
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <h2 className="text-lg font-bold text-red-700 mb-5">🚨 แจ้งเหตุฉุกเฉิน</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">รายละเอียด *</label>
-            <textarea
-              value={detail}
-              onChange={(e) => setDetail(e.target.value)}
-              required
-              rows={3}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
-              placeholder="อธิบายเหตุการณ์ที่เกิดขึ้น"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">หมายเหตุ</label>
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
-              placeholder="ข้อมูลเพิ่มเติม (ถ้ามี)"
-            />
-          </div>
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-lg transition"
-            >
-              {loading ? 'กำลังส่ง…' : 'แจ้งเหตุ'}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-lg transition"
-            >
-              ยกเลิก
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ─── Today's Status Overview ──────────────────────────────────────────────────
-
-function StatusOverview() {
   const [status,  setStatus]  = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showEmergency, setShowEmergency] = useState(false);
 
   useEffect(() => {
     api.get('/driver/status-today')
@@ -112,12 +25,11 @@ function StatusOverview() {
 
   // Session resolved from backend (source of truth); fallback to browser time.
   const session = resolveSession(status?.current_session);
-
   const s = status?.summary;
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
-      {/* Header row */}
+      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-800">ภาพรวมวันนี้</h1>
@@ -137,8 +49,10 @@ function StatusOverview() {
             {session === 'morning' ? '🌅' : '🌆'} โหมดปัจจุบัน: {SESSION_LABEL[session]}
           </span>
         </div>
+
+        {/* Emergency button — navigates to dedicated page */}
         <button
-          onClick={() => setShowEmergency(true)}
+          onClick={() => navigate('/driver/emergency')}
           className="flex items-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 font-medium text-sm px-4 py-2 rounded-lg transition flex-shrink-0"
         >
           🚨 แจ้งเหตุฉุกเฉิน
@@ -186,12 +100,10 @@ function StatusOverview() {
               </h2>
               <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
                 {status.recent.map((log) => {
-                  // Display label respects session context:
-                  // morning CHECKED_IN = "ส่งแล้ว", evening CHECKED_IN = "รับแล้ว"
                   const actionLabel =
                     log.status === 'CHECKED_IN'
                       ? (log.session === 'morning' ? 'ส่งแล้ว' : 'รับแล้ว')
-                      : 'ส่งแล้ว'; // CHECKED_OUT fallback
+                      : 'ส่งแล้ว';
 
                   return (
                     <div key={log.id} className="flex items-center justify-between px-5 py-3 text-sm">
@@ -221,24 +133,6 @@ function StatusOverview() {
           )}
         </>
       )}
-
-      {showEmergency && (
-        <EmergencyModal onClose={() => setShowEmergency(false)} />
-      )}
     </div>
-  );
-}
-
-// ─── Driver Dashboard (router shell) ─────────────────────────────────────────
-
-export default function DriverDashboard() {
-  return (
-    <Layout>
-      <Routes>
-        <Route index           element={<StatusOverview />} />
-        <Route path="roster"   element={<StudentList />} />
-        <Route path="emergency" element={<StatusOverview />} />
-      </Routes>
-    </Layout>
   );
 }

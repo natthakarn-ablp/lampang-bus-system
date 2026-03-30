@@ -2,7 +2,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 
 import Login            from './pages/Login';
+import DriverLayout     from './pages/driver/DriverLayout';
 import DriverDashboard  from './pages/driver/DriverDashboard';
+import StudentList      from './pages/driver/StudentList';
+import EmergencyPage    from './pages/driver/EmergencyPage';
 
 // ── PrivateRoute: redirects to /login if not authenticated ───────────────────
 function PrivateRoute({ children, allowedRoles }) {
@@ -39,17 +42,25 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
 
-          {/* Driver module (Phase 2) */}
+          {/*
+           * Driver module — nested routes with <Outlet />.
+           * DriverLayout renders <Layout><Outlet /></Layout>.
+           * Each child Route swaps only the main content area.
+           */}
           <Route
-            path="/driver/*"
+            path="/driver"
             element={
               <PrivateRoute allowedRoles={['driver']}>
-                <DriverDashboard />
+                <DriverLayout />
               </PrivateRoute>
             }
-          />
+          >
+            <Route index        element={<DriverDashboard />} />
+            <Route path="roster"    element={<StudentList />} />
+            <Route path="emergency" element={<EmergencyPage />} />
+          </Route>
 
-          {/* Phase 3+ placeholders — add routes here */}
+          {/* Phase 3+ routes will be added here */}
 
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -31,6 +31,11 @@ import ProvVehicleList      from './pages/province/ProvVehicleList';
 import ProvDailyStatus      from './pages/province/ProvDailyStatus';
 import ProvEmergencyList    from './pages/province/ProvEmergencyList';
 
+import ReportsLayout  from './pages/reports/ReportsLayout';
+import DailyReport    from './pages/reports/DailyReport';
+import MonthlyReport  from './pages/reports/MonthlyReport';
+import SummaryReport  from './pages/reports/SummaryReport';
+
 // ── PrivateRoute: redirects to /login if not authenticated ───────────────────
 function PrivateRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -135,7 +140,22 @@ export default function App() {
             <Route path="emergencies"   element={<ProvEmergencyList />} />
           </Route>
 
-          {/* Phase 6+ routes will be added here */}
+          {/* Reports module — shared across school/affiliation/province */}
+          <Route
+            path="/reports"
+            element={
+              <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'admin']}>
+                <ReportsLayout />
+              </PrivateRoute>
+            }
+          >
+            <Route index          element={<DailyReport />} />
+            <Route path="daily"   element={<DailyReport />} />
+            <Route path="monthly" element={<MonthlyReport />} />
+            <Route path="summary" element={<SummaryReport />} />
+          </Route>
+
+          {/* Phase 7+ routes will be added here */}
 
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />

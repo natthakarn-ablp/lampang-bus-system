@@ -13,6 +13,7 @@ const SCHOOL_NAV = [
   { to: '/school/vehicles',    label: 'รถรับส่ง' },
   { to: '/school/status',      label: 'สถานะวันนี้' },
   { to: '/school/emergencies', label: 'เหตุฉุกเฉิน' },
+  { to: '/reports/daily',      label: 'รายงาน' },
 ];
 
 const AFFILIATION_NAV = [
@@ -22,6 +23,7 @@ const AFFILIATION_NAV = [
   { to: '/affiliation/vehicles',    label: 'รถรับส่ง' },
   { to: '/affiliation/status',      label: 'สถานะวันนี้' },
   { to: '/affiliation/emergencies', label: 'เหตุฉุกเฉิน' },
+  { to: '/reports/daily',           label: 'รายงาน' },
 ];
 
 const PROVINCE_NAV = [
@@ -32,6 +34,7 @@ const PROVINCE_NAV = [
   { to: '/province/vehicles',     label: 'รถรับส่ง' },
   { to: '/province/status',       label: 'สถานะวันนี้' },
   { to: '/province/emergencies',  label: 'เหตุฉุกเฉิน' },
+  { to: '/reports/daily',         label: 'รายงาน' },
 ];
 
 export default function Sidebar() {

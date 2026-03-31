@@ -10,6 +10,7 @@ const driverRoutes = require('./routes/driver.routes');
 const schoolRoutes      = require('./routes/school.routes');
 const affiliationRoutes = require('./routes/affiliation.routes');
 const provinceRoutes    = require('./routes/province.routes');
+const reportRoutes      = require('./routes/report.routes');
 
 const app = express();
 
@@ -30,8 +31,9 @@ app.use('/api/driver', driverRoutes);
 app.use('/api/school',      schoolRoutes);
 app.use('/api/affiliation', affiliationRoutes);
 app.use('/api/province',    provinceRoutes);
+app.use('/api/reports',     reportRoutes);
 
-// Phase 6+ routes will be added here:
+// Phase 7+ routes will be added here:
 // app.use('/api/district',  require('./routes/district.routes'));
 // app.use('/api/central',   require('./routes/central.routes'));
 // app.use('/api/transport', require('./routes/transport.routes'));

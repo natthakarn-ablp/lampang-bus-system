@@ -34,7 +34,7 @@ module.exports = async function globalTeardown() {
 
   // test users
   await conn.query(
-    `DELETE FROM users WHERE username IN ('__test_province', '__test_school', '__TEST PLATE 9999')`
+    `DELETE FROM users WHERE username IN ('__test_province', '__test_school', '__test_affiliation', '__TEST PLATE 9999')`
   );
 
   // test driver record (seeded by setup for the assignment — no FK to users now)

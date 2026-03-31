@@ -15,11 +15,30 @@ const SCHOOL_NAV = [
   { to: '/school/emergencies', label: 'เหตุฉุกเฉิน' },
 ];
 
+const AFFILIATION_NAV = [
+  { to: '/affiliation',             label: 'ภาพรวมเขตพื้นที่' },
+  { to: '/affiliation/schools',     label: 'โรงเรียนในสังกัด' },
+  { to: '/affiliation/students',    label: 'ค้นหานักเรียน' },
+  { to: '/affiliation/vehicles',    label: 'รถรับส่ง' },
+  { to: '/affiliation/status',      label: 'สถานะวันนี้' },
+  { to: '/affiliation/emergencies', label: 'เหตุฉุกเฉิน' },
+];
+
+const PROVINCE_NAV = [
+  { to: '/province',              label: 'ภาพรวมจังหวัด' },
+  { to: '/province/affiliations', label: 'เขตพื้นที่' },
+  { to: '/province/schools',      label: 'โรงเรียน' },
+  { to: '/province/students',     label: 'ค้นหานักเรียน' },
+  { to: '/province/vehicles',     label: 'รถรับส่ง' },
+  { to: '/province/status',       label: 'สถานะวันนี้' },
+  { to: '/province/emergencies',  label: 'เหตุฉุกเฉิน' },
+];
+
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV };
+  const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATION_NAV, province: PROVINCE_NAV, admin: PROVINCE_NAV };
   const navItems = NAV_MAP[user?.role] || [];
 
   async function handleLogout() {

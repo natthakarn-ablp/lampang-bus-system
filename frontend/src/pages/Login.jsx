@@ -5,10 +5,10 @@ import { useAuth } from '../hooks/useAuth';
 const ROLE_HOME = {
   driver:      '/driver',
   school:      '/school',
-  affiliation: '/district',
-  province:    '/central',
+  affiliation: '/affiliation',
+  province:    '/province',
   transport:   '/transport',
-  admin:       '/central',
+  admin:       '/province',
 };
 
 export default function Login() {

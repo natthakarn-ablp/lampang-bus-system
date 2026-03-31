@@ -62,8 +62,9 @@ module.exports = async function globalSetup() {
   // ── Test users ───────────────────────────────────────────────────────────
   // __test_driver username = plate_no of test vehicle — required by new resolution strategy
   const users = [
-    { username: '__test_province',   role: 'province',    scope_type: 'PROVINCE',    scope_id: 'LPG'     },
+    { username: '__test_province',    role: 'province',    scope_type: 'PROVINCE',    scope_id: 'LPG'     },
     { username: '__test_school',     role: 'school',      scope_type: 'SCHOOL',      scope_id: '__TSCH'  },
+    { username: '__test_affiliation',role: 'affiliation', scope_type: 'AFFILIATION', scope_id: '__TAFF'  },
     { username: '__TEST PLATE 9999', role: 'driver',      scope_type: null,          scope_id: null      },
   ];
 

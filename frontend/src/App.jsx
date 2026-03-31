@@ -14,6 +14,23 @@ import VehicleList      from './pages/school/VehicleList';
 import DailyStatus      from './pages/school/DailyStatus';
 import EmergencyList    from './pages/school/EmergencyList';
 
+import AffiliationLayout    from './pages/affiliation/AffiliationLayout';
+import AffiliationDashboard from './pages/affiliation/AffiliationDashboard';
+import SchoolList           from './pages/affiliation/SchoolList';
+import AffStudentSearch     from './pages/affiliation/AffStudentSearch';
+import AffVehicleList       from './pages/affiliation/AffVehicleList';
+import AffDailyStatus       from './pages/affiliation/AffDailyStatus';
+import AffEmergencyList     from './pages/affiliation/AffEmergencyList';
+
+import ProvinceLayout       from './pages/province/ProvinceLayout';
+import ProvinceDashboard    from './pages/province/ProvinceDashboard';
+import ProvAffiliationList  from './pages/province/ProvAffiliationList';
+import ProvSchoolList       from './pages/province/ProvSchoolList';
+import ProvStudentSearch    from './pages/province/ProvStudentSearch';
+import ProvVehicleList      from './pages/province/ProvVehicleList';
+import ProvDailyStatus      from './pages/province/ProvDailyStatus';
+import ProvEmergencyList    from './pages/province/ProvEmergencyList';
+
 // ── PrivateRoute: redirects to /login if not authenticated ───────────────────
 function PrivateRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -34,10 +51,10 @@ function RootRedirect() {
   const roleHome = {
     driver:      '/driver',
     school:      '/school',       // Phase 3
-    affiliation: '/district',     // Phase 4
-    province:    '/central',      // Phase 4
+    affiliation: '/affiliation',   // Phase 4
+    province:    '/province',     // Phase 5
     transport:   '/transport',    // Phase 5
-    admin:       '/central',
+    admin:       '/province',
   };
   return <Navigate to={roleHome[user.role] || '/login'} replace />;
 }
@@ -83,7 +100,42 @@ export default function App() {
             <Route path="emergencies" element={<EmergencyList />} />
           </Route>
 
-          {/* Phase 4+ routes will be added here */}
+          {/* Affiliation module — nested routes with <Outlet /> */}
+          <Route
+            path="/affiliation"
+            element={
+              <PrivateRoute allowedRoles={['affiliation']}>
+                <AffiliationLayout />
+              </PrivateRoute>
+            }
+          >
+            <Route index              element={<AffiliationDashboard />} />
+            <Route path="schools"     element={<SchoolList />} />
+            <Route path="students"    element={<AffStudentSearch />} />
+            <Route path="vehicles"    element={<AffVehicleList />} />
+            <Route path="status"      element={<AffDailyStatus />} />
+            <Route path="emergencies" element={<AffEmergencyList />} />
+          </Route>
+
+          {/* Province module — nested routes with <Outlet /> */}
+          <Route
+            path="/province"
+            element={
+              <PrivateRoute allowedRoles={['province', 'admin']}>
+                <ProvinceLayout />
+              </PrivateRoute>
+            }
+          >
+            <Route index                element={<ProvinceDashboard />} />
+            <Route path="affiliations"  element={<ProvAffiliationList />} />
+            <Route path="schools"       element={<ProvSchoolList />} />
+            <Route path="students"      element={<ProvStudentSearch />} />
+            <Route path="vehicles"      element={<ProvVehicleList />} />
+            <Route path="status"        element={<ProvDailyStatus />} />
+            <Route path="emergencies"   element={<ProvEmergencyList />} />
+          </Route>
+
+          {/* Phase 6+ routes will be added here */}
 
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />

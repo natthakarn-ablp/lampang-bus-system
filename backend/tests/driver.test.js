@@ -17,7 +17,7 @@
 require('dotenv').config();
 const request = require('supertest');
 const mysql   = require('mysql2/promise');
-const app     = require('../src/index');
+const app     = require('../src/app');
 
 // username = plate_no — matches the new vehicle-based resolution strategy
 const DRIVER   = { username: '__TEST PLATE 9999', password: 'testpass123' };

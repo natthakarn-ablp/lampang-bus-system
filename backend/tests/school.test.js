@@ -15,7 +15,7 @@
 
 require('dotenv').config();
 const request = require('supertest');
-const app     = require('../src/index');
+const app     = require('../src/app');
 
 const SCHOOL   = { username: '__test_school',     password: 'testpass123' };
 const DRIVER   = { username: '__TEST PLATE 9999', password: 'testpass123' };

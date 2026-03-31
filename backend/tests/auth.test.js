@@ -18,10 +18,7 @@
 require('dotenv').config();
 const request = require('supertest');
 
-// Import the app without starting the server (index.js exports app)
-// We need to suppress the server .listen() — index.js calls start() automatically.
-// To avoid port conflicts, tests use supertest which doesn't need a real port.
-const app = require('../src/index');
+const app = require('../src/app');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

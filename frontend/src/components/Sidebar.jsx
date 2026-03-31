@@ -4,15 +4,21 @@ import { useAuth } from '../hooks/useAuth';
 const DRIVER_NAV = [
   { to: '/driver',           label: 'ภาพรวมวันนี้' },
   { to: '/driver/roster',    label: 'รายชื่อนักเรียน' },
+  { to: '/driver/leaves',    label: 'แจ้งลา' },
+  { to: '/driver/requests',  label: 'คำขอรายชื่อ' },
   { to: '/driver/emergency', label: 'แจ้งเหตุฉุกเฉิน' },
+  { to: '/driver/profile',   label: 'ข้อมูลคนขับ' },
 ];
 
 const SCHOOL_NAV = [
   { to: '/school',             label: 'ภาพรวมโรงเรียน' },
+  { to: '/school/missing',     label: 'ยังไม่ได้ดำเนินการ' },
   { to: '/school/students',    label: 'ค้นหานักเรียน' },
   { to: '/school/vehicles',    label: 'รถรับส่ง' },
   { to: '/school/status',      label: 'สถานะวันนี้' },
-  { to: '/school/emergencies', label: 'เหตุฉุกเฉิน' },
+  { to: '/school/approvals',      label: 'คำขอรายชื่อ' },
+  { to: '/school/bulk-vehicles', label: 'เพิ่มรถ (กลุ่ม)' },
+  { to: '/school/emergencies',   label: 'เหตุฉุกเฉิน' },
   { to: '/reports/daily',      label: 'รายงาน' },
 ];
 
@@ -22,6 +28,7 @@ const AFFILIATION_NAV = [
   { to: '/affiliation/students',    label: 'ค้นหานักเรียน' },
   { to: '/affiliation/vehicles',    label: 'รถรับส่ง' },
   { to: '/affiliation/status',      label: 'สถานะวันนี้' },
+  { to: '/affiliation/accounts',    label: 'จัดการบัญชีโรงเรียน' },
   { to: '/affiliation/emergencies', label: 'เหตุฉุกเฉิน' },
   { to: '/reports/daily',           label: 'รายงาน' },
 ];

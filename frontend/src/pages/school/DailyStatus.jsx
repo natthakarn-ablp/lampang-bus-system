@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import PlateSearchInput from '../../components/PlateSearchInput';
 
 export default function DailyStatus() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expandedVehicle, setExpandedVehicle] = useState(null);
+  const [plateSearch, setPlateSearch] = useState('');
 
   useEffect(() => {
     api.get('/school/status-today')
@@ -20,13 +22,16 @@ export default function DailyStatus() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-xl font-bold text-gray-800">สถานะวันนี้</h1>
-        {data?.date && (
-          <span className="text-sm text-gray-500">
-            {new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          <PlateSearchInput value={plateSearch} onChange={setPlateSearch} />
+          {data?.date && (
+            <span className="text-sm text-gray-500 whitespace-nowrap">
+              {new Date(data.date).toLocaleDateString('th-TH', { month: 'short', day: 'numeric' })}
+            </span>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -41,7 +46,9 @@ export default function DailyStatus() {
         <p className="text-gray-400 py-10 text-center">ไม่มีข้อมูล</p>
       ) : (
         <div className="space-y-3">
-          {data.vehicles.map((vehicle) => {
+          {data.vehicles
+            .filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase()))
+            .map((vehicle) => {
             const morningDone = vehicle.students.filter(
               (s) => s.morning_enabled && s.morning_done
             ).length;

@@ -51,12 +51,12 @@ router.get('/schools', async (req, res, next) => {
  */
 router.get('/students', async (req, res, next) => {
   try {
-    const { search, grade, school_id, affiliation_id, sort, order } = req.query;
+    const { search, grade, school_id, affiliation_id, vehicle_id, sort, order } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
 
     const result = await provSvc.getStudents({
-      search, grade, school_id, affiliation_id, page, per_page, sort, order,
+      search, grade, school_id, affiliation_id, vehicle_id, page, per_page, sort, order,
     });
     return sendSuccess(res, result.students, 'OK', result.meta);
   } catch (err) { next(err); }

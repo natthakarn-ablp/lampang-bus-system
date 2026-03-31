@@ -1,11 +1,15 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { ToastProvider } from './components/Toast';
 
 import Login            from './pages/Login';
 import DriverLayout     from './pages/driver/DriverLayout';
 import DriverDashboard  from './pages/driver/DriverDashboard';
 import StudentList      from './pages/driver/StudentList';
 import EmergencyPage    from './pages/driver/EmergencyPage';
+import DriverProfile    from './pages/driver/DriverProfile';
+import DriverLeaves     from './pages/driver/DriverLeaves';
+import DriverRosterRequests from './pages/driver/DriverRosterRequests';
 
 import SchoolLayout     from './pages/school/SchoolLayout';
 import SchoolDashboard  from './pages/school/SchoolDashboard';
@@ -13,6 +17,9 @@ import StudentSearch    from './pages/school/StudentSearch';
 import VehicleList      from './pages/school/VehicleList';
 import DailyStatus      from './pages/school/DailyStatus';
 import EmergencyList    from './pages/school/EmergencyList';
+import SchoolMissing    from './pages/school/SchoolMissing';
+import SchoolApprovals  from './pages/school/SchoolApprovals';
+import SchoolBulkVehicles from './pages/school/SchoolBulkVehicles';
 
 import AffiliationLayout    from './pages/affiliation/AffiliationLayout';
 import AffiliationDashboard from './pages/affiliation/AffiliationDashboard';
@@ -21,6 +28,7 @@ import AffStudentSearch     from './pages/affiliation/AffStudentSearch';
 import AffVehicleList       from './pages/affiliation/AffVehicleList';
 import AffDailyStatus       from './pages/affiliation/AffDailyStatus';
 import AffEmergencyList     from './pages/affiliation/AffEmergencyList';
+import AffSchoolAccounts   from './pages/affiliation/AffSchoolAccounts';
 
 import ProvinceLayout       from './pages/province/ProvinceLayout';
 import ProvinceDashboard    from './pages/province/ProvinceDashboard';
@@ -67,6 +75,7 @@ function RootRedirect() {
 export default function App() {
   return (
     <AuthProvider>
+      <ToastProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -87,6 +96,9 @@ export default function App() {
             <Route index        element={<DriverDashboard />} />
             <Route path="roster"    element={<StudentList />} />
             <Route path="emergency" element={<EmergencyPage />} />
+            <Route path="profile"  element={<DriverProfile />} />
+            <Route path="leaves"   element={<DriverLeaves />} />
+            <Route path="requests" element={<DriverRosterRequests />} />
           </Route>
 
           {/* School module — nested routes with <Outlet /> */}
@@ -103,6 +115,9 @@ export default function App() {
             <Route path="vehicles"  element={<VehicleList />} />
             <Route path="status"    element={<DailyStatus />} />
             <Route path="emergencies" element={<EmergencyList />} />
+            <Route path="missing"     element={<SchoolMissing />} />
+            <Route path="approvals"   element={<SchoolApprovals />} />
+            <Route path="bulk-vehicles" element={<SchoolBulkVehicles />} />
           </Route>
 
           {/* Affiliation module — nested routes with <Outlet /> */}
@@ -120,6 +135,7 @@ export default function App() {
             <Route path="vehicles"    element={<AffVehicleList />} />
             <Route path="status"      element={<AffDailyStatus />} />
             <Route path="emergencies" element={<AffEmergencyList />} />
+            <Route path="accounts"   element={<AffSchoolAccounts />} />
           </Route>
 
           {/* Province module — nested routes with <Outlet /> */}
@@ -161,6 +177,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }

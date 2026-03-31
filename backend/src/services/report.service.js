@@ -140,20 +140,36 @@ async function getDailyReport(user, filters) {
 }
 
 /**
- * Monthly report for a specific month (YYYY-MM).
+ * Compute KPI percentage safely (avoid division by zero).
+ */
+function pct(done, expected) {
+  if (!expected || expected === 0) return 0;
+  return Math.round((done / expected) * 10000) / 100; // 2 decimal places
+}
+
+/**
+ * Monthly report for a specific month (YYYY-MM) — KPI-oriented.
  */
 async function getMonthlyReport(user, filters) {
   const month = filters.month || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }).substring(0, 7);
   const startDate = `${month}-01`;
   const { where, params } = buildScopeFilter(user, filters);
 
-  // Total students
+  // Total students + morning/evening expected
   const [[{ total_students }]] = await pool.query(
     `SELECT COUNT(*) AS total_students FROM students s
      JOIN schools sc ON sc.id = s.school_id WHERE ${where}`, params
   );
+  const [[{ morning_expected }]] = await pool.query(
+    `SELECT COUNT(*) AS morning_expected FROM students s
+     JOIN schools sc ON sc.id = s.school_id WHERE ${where} AND s.morning_enabled = TRUE`, params
+  );
+  const [[{ evening_expected }]] = await pool.query(
+    `SELECT COUNT(*) AS evening_expected FROM students s
+     JOIN schools sc ON sc.id = s.school_id WHERE ${where} AND s.evening_enabled = TRUE`, params
+  );
 
-  // Daily trend for the month
+  // Daily trend with per-day expected counts for KPI
   const [dailyTrend] = await pool.query(
     `SELECT ds.check_date AS date,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
@@ -167,17 +183,25 @@ async function getMonthlyReport(user, filters) {
     [startDate, startDate, ...params]
   );
 
-  // Total checkins in the month
-  const [[monthTotals]] = await pool.query(
-    `SELECT
-       COUNT(DISTINCT CASE WHEN cl.session = 'morning' AND cl.status = 'CHECKED_IN' THEN CONCAT(cl.check_date, '-', cl.student_id) END) AS total_morning_checkins,
-       COUNT(DISTINCT CASE WHEN cl.session = 'evening' AND cl.status = 'CHECKED_IN' THEN CONCAT(cl.check_date, '-', cl.student_id) END) AS total_evening_checkins
-     FROM checkin_logs cl
-     JOIN students s ON s.id = cl.student_id
-     JOIN schools sc ON sc.id = s.school_id
-     WHERE cl.check_date >= ? AND cl.check_date < DATE_ADD(?, INTERVAL 1 MONTH) AND ${where}`,
-    [startDate, startDate, ...params]
-  );
+  // Enrich daily trend with percentages
+  const enrichedTrend = dailyTrend.map((d) => ({
+    ...d,
+    morning_expected,
+    evening_expected,
+    morning_pct: pct(d.morning_done, morning_expected),
+    evening_pct: pct(d.evening_done, evening_expected),
+  }));
+
+  // Derive monthly totals from same data source
+  const total_morning_done = dailyTrend.reduce((sum, d) => sum + (d.morning_done || 0), 0);
+  const total_evening_done = dailyTrend.reduce((sum, d) => sum + (d.evening_done || 0), 0);
+  const days_with_data = dailyTrend.length;
+  const total_morning_expected = morning_expected * days_with_data;
+  const total_evening_expected = evening_expected * days_with_data;
+
+  // Days at 100%
+  const days_morning_100 = dailyTrend.filter((d) => morning_expected > 0 && d.morning_done >= morning_expected).length;
+  const days_evening_100 = dailyTrend.filter((d) => evening_expected > 0 && d.evening_done >= evening_expected).length;
 
   // Emergency count for the month
   const [[{ emergency_count }]] = await pool.query(
@@ -190,41 +214,185 @@ async function getMonthlyReport(user, filters) {
     [startDate, startDate, ...params]
   );
 
-  // Per-school summary
+  // Per-school KPI summary (morning + evening done from daily_status)
   const [schoolSummary] = await pool.query(
     `SELECT sc.id AS school_id, sc.name AS school_name,
             COUNT(DISTINCT s.id) AS student_count,
-            (SELECT COUNT(DISTINCT CONCAT(cl2.check_date, '-', cl2.student_id))
-             FROM checkin_logs cl2
-             JOIN students s2 ON s2.id = cl2.student_id AND s2.school_id = sc.id AND s2.is_deleted = FALSE
-             WHERE cl2.session = 'morning' AND cl2.status = 'CHECKED_IN'
-               AND cl2.check_date >= ? AND cl2.check_date < DATE_ADD(?, INTERVAL 1 MONTH)
-            ) AS total_morning
+            SUM(CASE WHEN s.morning_enabled THEN 1 ELSE 0 END) AS school_morning_expected,
+            SUM(CASE WHEN s.evening_enabled THEN 1 ELSE 0 END) AS school_evening_expected
      FROM schools sc
      JOIN students s ON s.school_id = sc.id AND s.is_deleted = FALSE
      WHERE sc.is_deleted = FALSE AND ${where}
      GROUP BY sc.id, sc.name
      ORDER BY sc.name`,
+    params
+  );
+
+  // Per-school daily aggregates for KPI
+  const [schoolDailyAgg] = await pool.query(
+    `SELECT s.school_id,
+            SUM(CASE WHEN ds.morning_done = TRUE THEN 1 ELSE 0 END) AS total_morning_done,
+            SUM(CASE WHEN ds.evening_done = TRUE THEN 1 ELSE 0 END) AS total_evening_done,
+            COUNT(DISTINCT ds.check_date) AS days_with_data
+     FROM daily_status ds
+     JOIN students s ON s.id = ds.student_id
+     JOIN schools sc ON sc.id = s.school_id
+     WHERE ds.check_date >= ? AND ds.check_date < DATE_ADD(?, INTERVAL 1 MONTH) AND ${where}
+     GROUP BY s.school_id`,
     [startDate, startDate, ...params]
   );
+
+  // Per-school: days at 100% morning
+  const [schoolDays100] = await pool.query(
+    `SELECT s.school_id, ds.check_date,
+            COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS md,
+            COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS ed
+     FROM daily_status ds
+     JOIN students s ON s.id = ds.student_id
+     JOIN schools sc ON sc.id = s.school_id
+     WHERE ds.check_date >= ? AND ds.check_date < DATE_ADD(?, INTERVAL 1 MONTH) AND ${where}
+     GROUP BY s.school_id, ds.check_date`,
+    [startDate, startDate, ...params]
+  );
+
+  // Build per-school days-at-100% lookup
+  const schoolDays100Map = {};
+  for (const row of schoolDays100) {
+    const key = row.school_id;
+    if (!schoolDays100Map[key]) schoolDays100Map[key] = { morning: 0, evening: 0 };
+    const sch = schoolSummary.find((s) => s.school_id === key);
+    if (sch) {
+      if (sch.school_morning_expected > 0 && row.md >= sch.school_morning_expected) schoolDays100Map[key].morning++;
+      if (sch.school_evening_expected > 0 && row.ed >= sch.school_evening_expected) schoolDays100Map[key].evening++;
+    }
+  }
+
+  const aggMap = {};
+  for (const row of schoolDailyAgg) aggMap[row.school_id] = row;
+
+  const enrichedSchools = schoolSummary.map((s) => {
+    const agg = aggMap[s.school_id] || { total_morning_done: 0, total_evening_done: 0, days_with_data: 0 };
+    const d100 = schoolDays100Map[s.school_id] || { morning: 0, evening: 0 };
+    const mExp = s.school_morning_expected * (agg.days_with_data || 1);
+    const eExp = s.school_evening_expected * (agg.days_with_data || 1);
+    return {
+      school_id: s.school_id,
+      school_name: s.school_name,
+      student_count: s.student_count,
+      morning_expected: s.school_morning_expected,
+      evening_expected: s.school_evening_expected,
+      total_morning_done: agg.total_morning_done,
+      total_evening_done: agg.total_evening_done,
+      morning_kpi: pct(agg.total_morning_done, mExp),
+      evening_kpi: pct(agg.total_evening_done, eExp),
+      days_morning_100: d100.morning,
+      days_evening_100: d100.evening,
+      days_with_data: agg.days_with_data,
+    };
+  });
+
+  // Per-vehicle KPI
+  const [vehicleAgg] = await pool.query(
+    `SELECT v.id AS vehicle_id, v.plate_no,
+            COUNT(DISTINCT s2.id) AS student_count,
+            SUM(CASE WHEN ds.morning_done = TRUE THEN 1 ELSE 0 END) AS total_morning_done,
+            SUM(CASE WHEN ds.evening_done = TRUE THEN 1 ELSE 0 END) AS total_evening_done,
+            COUNT(DISTINCT ds.check_date) AS days_with_data
+     FROM vehicles v
+     JOIN students s2 ON s2.vehicle_id = v.id AND s2.is_deleted = FALSE
+     JOIN schools sc ON sc.id = s2.school_id
+     LEFT JOIN daily_status ds ON ds.student_id = s2.id
+       AND ds.check_date >= ? AND ds.check_date < DATE_ADD(?, INTERVAL 1 MONTH)
+     WHERE v.is_deleted = FALSE AND ${where.replace(/\bs\./g, 's2.')}
+     GROUP BY v.id, v.plate_no
+     ORDER BY v.plate_no`,
+    [startDate, startDate, ...params]
+  );
+
+  const enrichedVehicles = vehicleAgg.map((v) => {
+    const mExp = v.student_count * (v.days_with_data || 1);
+    const eExp = v.student_count * (v.days_with_data || 1);
+    return {
+      ...v,
+      morning_kpi: pct(v.total_morning_done, mExp),
+      evening_kpi: pct(v.total_evening_done, eExp),
+    };
+  });
 
   return {
     month,
     total_students,
-    total_morning_checkins: monthTotals?.total_morning_checkins ?? 0,
-    total_evening_checkins: monthTotals?.total_evening_checkins ?? 0,
+    morning_expected,
+    evening_expected,
+    total_morning_done,
+    total_evening_done,
+    total_morning_expected,
+    total_evening_expected,
+    morning_kpi: pct(total_morning_done, total_morning_expected),
+    evening_kpi: pct(total_evening_done, total_evening_expected),
+    days_with_data,
+    days_morning_100,
+    days_evening_100,
     emergency_count,
-    daily_trend: dailyTrend,
-    schools: schoolSummary,
+    daily_trend: enrichedTrend,
+    schools: enrichedSchools,
+    vehicles: enrichedVehicles,
   };
 }
 
 /**
- * Summary report — high-level overview (used for export base data too).
+ * Summary report — executive KPI view for today.
  */
 async function getSummaryReport(user, filters) {
   const daily = await getDailyReport(user, filters);
-  return daily; // summary reuses daily structure
+  const date = daily.date;
+  const { where, params } = buildScopeFilter(user, filters);
+
+  // Add KPI percentages
+  daily.morning_kpi = pct(daily.morning_done, daily.morning_total);
+  daily.evening_kpi = pct(daily.evening_done, daily.evening_total);
+
+  // Per-school KPI
+  if (daily.schools) {
+    daily.schools = daily.schools.map((s) => ({
+      ...s,
+      morning_kpi: pct(s.morning_done, s.student_count),
+      evening_kpi: pct(s.evening_done, s.student_count),
+    }));
+  }
+
+  // Per-vehicle KPI
+  if (daily.vehicles) {
+    daily.vehicles = daily.vehicles.map((v) => ({
+      ...v,
+      morning_kpi: pct(v.morning_done, v.student_count),
+      evening_kpi: pct(v.evening_done, v.student_count),
+    }));
+  }
+
+  // Per-affiliation KPI (for province/admin users seeing multiple affiliations)
+  const [affRows] = await pool.query(
+    `SELECT a.id AS affiliation_id, a.name AS affiliation_name,
+            COUNT(DISTINCT s.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
+            COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
+     FROM affiliations a
+     JOIN schools sc ON sc.affiliation_id = a.id AND sc.is_deleted = FALSE
+     JOIN students s ON s.school_id = sc.id AND s.is_deleted = FALSE
+     LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
+     WHERE a.is_deleted = FALSE AND ${where}
+     GROUP BY a.id, a.name
+     ORDER BY a.name`,
+    [date, ...params]
+  );
+
+  daily.affiliations = affRows.map((a) => ({
+    ...a,
+    morning_kpi: pct(a.morning_done, a.student_count),
+    evening_kpi: pct(a.evening_done, a.student_count),
+  }));
+
+  return daily;
 }
 
 /**

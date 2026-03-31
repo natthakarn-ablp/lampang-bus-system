@@ -74,6 +74,35 @@ async function getDashboard(affiliationId) {
     [affiliationId]
   );
 
+  // Students on leave today
+  const [[{ leave_count }]] = await pool.query(
+    `SELECT COUNT(DISTINCT sl.student_id) AS leave_count
+     FROM student_leaves sl
+     JOIN students s ON s.id = sl.student_id
+     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
+     WHERE sl.leave_date = ? AND sl.cancelled = FALSE AND s.is_deleted = FALSE`,
+    [affiliationId, today]
+  );
+
+  // Schools not yet 100% morning
+  const [schoolCompleteness] = await pool.query(
+    `SELECT sc.id, sc.name,
+            COUNT(DISTINCT CASE WHEN s.morning_enabled THEN s.id END) AS m_expected,
+            COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS m_done,
+            COUNT(DISTINCT CASE WHEN s.evening_enabled THEN s.id END) AS e_expected,
+            COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS e_done
+     FROM schools sc
+     JOIN students s ON s.school_id = sc.id AND s.is_deleted = FALSE
+     LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
+     WHERE sc.affiliation_id = ? AND sc.is_deleted = FALSE
+     GROUP BY sc.id, sc.name`,
+    [today, affiliationId]
+  );
+
+  const schools_not_complete = schoolCompleteness.filter(
+    s => (s.m_expected > 0 && s.m_done < s.m_expected) || (s.e_expected > 0 && s.e_done < s.e_expected)
+  );
+
   return {
     affiliation: affiliation || null,
     date: today,
@@ -87,6 +116,12 @@ async function getDashboard(affiliationId) {
     morning_pending: morning_total - (todayStats?.morning_done ?? 0),
     evening_pending: evening_total - (todayStats?.evening_done ?? 0),
     recent_emergencies,
+    leave_count,
+    schools_not_complete: schools_not_complete.map(s => ({
+      school_id: s.id, school_name: s.name,
+      morning_pending: s.m_expected - s.m_done,
+      evening_pending: s.e_expected - s.e_done,
+    })),
   };
 }
 
@@ -112,7 +147,7 @@ async function getSchools(affiliationId) {
 /**
  * Search/list students across all schools in an affiliation.
  */
-async function getStudents(affiliationId, { search, grade, school_id, page = 1, per_page = 20, sort = 'first_name', order = 'asc' }) {
+async function getStudents(affiliationId, { search, grade, school_id, vehicle_id, page = 1, per_page = 20, sort = 'first_name', order = 'asc' }) {
   const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'school_id', 'vehicle_id'];
   const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
   const sortDir = order === 'desc' ? 'DESC' : 'ASC';
@@ -132,6 +167,10 @@ async function getStudents(affiliationId, { search, grade, school_id, page = 1, 
   if (school_id) {
     where += ' AND s.school_id = ?';
     params.push(school_id);
+  }
+  if (vehicle_id) {
+    where += ' AND s.vehicle_id = ?';
+    params.push(vehicle_id);
   }
 
   const [[{ total }]] = await pool.query(

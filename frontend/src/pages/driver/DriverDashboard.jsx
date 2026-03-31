@@ -15,11 +15,12 @@ export default function DriverDashboard() {
 
   const [status,  setStatus]  = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
 
   useEffect(() => {
     api.get('/driver/status-today')
       .then((res) => setStatus(res.data.data))
-      .catch(() => {})
+      .catch((err) => setError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลได้'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -30,7 +31,7 @@ export default function DriverDashboard() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-800">ภาพรวมวันนี้</h1>
           {status?.vehicle && (
@@ -58,6 +59,10 @@ export default function DriverDashboard() {
           🚨 แจ้งเหตุฉุกเฉิน
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>
+      )}
 
       {loading ? (
         <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>

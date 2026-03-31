@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import api from '../../api/axios';
 import { ACTION_LABEL } from '../../utils/session';
+import { useToast } from '../../components/Toast';
 
 export default function CheckinPanel({ student, session, onDone }) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  const toast = useToast();
 
   const isDone = session === 'morning' ? !!student.morning_done : !!student.evening_done;
 
@@ -13,6 +15,7 @@ export default function CheckinPanel({ student, session, onDone }) {
     setLoading(true);
     try {
       await api.post('/driver/checkin', { student_id: student.id, session });
+      toast.success(`${student.first_name} — ${ACTION_LABEL[session]}`);
       onDone?.();
     } catch (err) {
       setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');

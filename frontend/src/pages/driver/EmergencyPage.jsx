@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { useToast } from '../../components/Toast';
 
 export default function EmergencyPage() {
   const navigate = useNavigate();
+  const toast = useToast();
 
   const [detail,  setDetail]  = useState('');
   const [note,    setNote]    = useState('');
@@ -17,6 +19,7 @@ export default function EmergencyPage() {
     setLoading(true);
     try {
       await api.post('/driver/emergency', { detail, note });
+      toast.success('แจ้งเหตุฉุกเฉินสำเร็จ');
       setSuccess(true);
     } catch (err) {
       setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');

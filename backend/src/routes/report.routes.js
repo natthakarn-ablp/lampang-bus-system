@@ -5,24 +5,43 @@ const router = express.Router();
 const ExcelJS = require('exceljs');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
-const { sendSuccess } = require('../utils/response');
+const { sendSuccess, sendError } = require('../utils/response');
 const reportSvc = require('../services/report.service');
 
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
 
+const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/;
+const MONTH_RE = /^\d{4}-\d{2}$/;
+
 /**
- * Extract common filter params from query string.
+ * Extract and validate common filter params from query string.
  */
 function extractFilters(query) {
-  return {
-    date: query.date || undefined,
-    month: query.month || undefined,
-    school_id: query.school_id || undefined,
-    affiliation_id: query.affiliation_id || undefined,
-    vehicle_id: query.vehicle_id || undefined,
-  };
+  const filters = {};
+  if (query.date) {
+    if (!DATE_RE.test(query.date)) return { _error: 'date ต้องเป็นรูปแบบ YYYY-MM-DD' };
+    filters.date = query.date;
+  }
+  if (query.month) {
+    if (!MONTH_RE.test(query.month)) return { _error: 'month ต้องเป็นรูปแบบ YYYY-MM' };
+    filters.month = query.month;
+  }
+  if (query.school_id)      filters.school_id = query.school_id;
+  if (query.affiliation_id) filters.affiliation_id = query.affiliation_id;
+  if (query.vehicle_id)     filters.vehicle_id = query.vehicle_id;
+  return filters;
 }
+
+/**
+ * Middleware: parse and validate filters, attach to req.filters.
+ */
+router.use((req, res, next) => {
+  const filters = extractFilters(req.query);
+  if (filters._error) return sendError(res, filters._error, [], 400);
+  req.filters = filters;
+  next();
+});
 
 // ─── JSON report endpoints ──────────────────────────────────────────────────
 
@@ -31,7 +50,7 @@ function extractFilters(query) {
  */
 router.get('/daily', async (req, res, next) => {
   try {
-    const data = await reportSvc.getDailyReport(req.user, extractFilters(req.query));
+    const data = await reportSvc.getDailyReport(req.user, req.filters);
     return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
@@ -41,7 +60,7 @@ router.get('/daily', async (req, res, next) => {
  */
 router.get('/monthly', async (req, res, next) => {
   try {
-    const data = await reportSvc.getMonthlyReport(req.user, extractFilters(req.query));
+    const data = await reportSvc.getMonthlyReport(req.user, req.filters);
     return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
@@ -51,7 +70,7 @@ router.get('/monthly', async (req, res, next) => {
  */
 router.get('/summary', async (req, res, next) => {
   try {
-    const data = await reportSvc.getSummaryReport(req.user, extractFilters(req.query));
+    const data = await reportSvc.getSummaryReport(req.user, req.filters);
     return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
@@ -70,7 +89,7 @@ const CSV_HEADERS = [
  */
 router.get('/export/csv', async (req, res, next) => {
   try {
-    const { date, rows } = await reportSvc.getExportRows(req.user, extractFilters(req.query));
+    const { date, rows } = await reportSvc.getExportRows(req.user, req.filters);
     const filename = `report-${date}.csv`;
 
     const BOM = '\uFEFF';
@@ -105,7 +124,7 @@ router.get('/export/csv', async (req, res, next) => {
  */
 router.get('/export/excel', async (req, res, next) => {
   try {
-    const { date, rows } = await reportSvc.getExportRows(req.user, extractFilters(req.query));
+    const { date, rows } = await reportSvc.getExportRows(req.user, req.filters);
     const filename = `report-${date}.xlsx`;
 
     const workbook = new ExcelJS.Workbook();
@@ -157,8 +176,7 @@ router.get('/export/excel', async (req, res, next) => {
  */
 router.get('/export/pdf', async (req, res, next) => {
   try {
-    const filters = extractFilters(req.query);
-    const report = await reportSvc.getDailyReport(req.user, filters);
+    const report = await reportSvc.getDailyReport(req.user, req.filters);
     const filename = `report-${report.date}.pdf`;
 
     // Lazy-require pdfkit so tests can still run without the font file

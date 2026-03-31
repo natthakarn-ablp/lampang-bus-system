@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import PlateSearchInput from '../../components/PlateSearchInput';
 
 export default function VehicleList() {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [plateSearch, setPlateSearch] = useState('');
+  const [expandedVehicle, setExpandedVehicle] = useState(null);
+  const [studentCache, setStudentCache] = useState({});
 
   useEffect(() => {
     api.get('/school/vehicles')
@@ -15,7 +19,10 @@ export default function VehicleList() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">รถรับส่งนักเรียน</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <h1 className="text-xl font-bold text-gray-800">รถรับส่งนักเรียน</h1>
+        <PlateSearchInput value={plateSearch} onChange={setPlateSearch} />
+      </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">
@@ -29,7 +36,9 @@ export default function VehicleList() {
         <p className="text-gray-400 py-10 text-center">ไม่มีรถรับส่ง</p>
       ) : (
         <div className="grid gap-4">
-          {vehicles.map((v) => (
+          {vehicles
+            .filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase()))
+            .map((v) => (
             <div
               key={`${v.id}-${v.driver_name || ''}-${v.attendant_name || ''}`}
               className="bg-white rounded-xl border border-gray-200 p-5"
@@ -90,6 +99,40 @@ export default function VehicleList() {
                   </div>
                 </div>
               </div>
+
+              {/* Collapsible student list */}
+              <button
+                onClick={async () => {
+                  if (expandedVehicle === v.id) { setExpandedVehicle(null); return; }
+                  setExpandedVehicle(v.id);
+                  if (!studentCache[v.id]) {
+                    try {
+                      const res = await api.get(`/school/students?vehicle_id=${v.id}&per_page=100`);
+                      setStudentCache(c => ({ ...c, [v.id]: res.data.data }));
+                    } catch {}
+                  }
+                }}
+                className="mt-3 text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+              >
+                {expandedVehicle === v.id ? '▲ ซ่อนรายชื่อนักเรียน' : '▼ แสดงรายชื่อนักเรียน'}
+              </button>
+
+              {expandedVehicle === v.id && studentCache[v.id] && (
+                <div className="mt-2 border-t border-gray-100 pt-2">
+                  {studentCache[v.id].length === 0 ? (
+                    <p className="text-xs text-gray-400 py-2">ไม่มีนักเรียน</p>
+                  ) : (
+                    <div className="divide-y divide-gray-50">
+                      {studentCache[v.id].map(s => (
+                        <div key={s.id} className="py-1.5 text-xs flex justify-between">
+                          <span className="text-gray-700">{s.prefix}{s.first_name} {s.last_name}</span>
+                          <span className="text-gray-400">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

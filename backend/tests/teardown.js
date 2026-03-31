@@ -19,12 +19,16 @@ module.exports = async function globalTeardown() {
     charset:  'utf8mb4',
   });
 
+  // Phase 8 tables
+  await conn.query(`DELETE FROM student_leaves WHERE student_id = 99999`).catch(() => {});
+  await conn.query(`DELETE FROM roster_change_requests WHERE student_id = 99999`).catch(() => {});
+
   // checkin_logs for the test vehicle (written during driver tests)
   await conn.query(`DELETE FROM checkin_logs   WHERE vehicle_id = 'V-test000000ab'`);
   await conn.query(`DELETE FROM daily_status   WHERE vehicle_id = 'V-test000000ab'`);
   await conn.query(`DELETE FROM emergency_logs WHERE vehicle_id = 'V-test000000ab'`);
   await conn.query(`DELETE FROM notifications  WHERE student_id = 99999`);
-  await conn.query(`DELETE FROM audit_logs     WHERE entity_type IN ('checkin','emergency') AND entity_id IS NOT NULL`);
+  await conn.query(`DELETE FROM audit_logs     WHERE entity_type IN ('checkin','emergency','leave','roster_request','driver') AND entity_id IS NOT NULL`);
 
   // test student
   await conn.query(`DELETE FROM students WHERE id = 99999`);
@@ -48,4 +52,10 @@ module.exports = async function globalTeardown() {
   await conn.query(`DELETE FROM affiliations WHERE id = '__TAFF'`);
 
   await conn.end();
+
+  // Close the application pool to prevent Jest open-handle warnings
+  try {
+    const { pool } = require('../src/config/database');
+    await pool.end();
+  } catch { /* pool may not have been initialized */ }
 };

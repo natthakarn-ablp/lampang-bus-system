@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import PlateSearchInput from '../../components/PlateSearchInput';
 
 export default function AffDailyStatus() {
   const [data, setData] = useState(null);
@@ -7,6 +8,7 @@ export default function AffDailyStatus() {
   const [error, setError] = useState('');
   const [expandedSchool, setExpandedSchool] = useState(null);
   const [expandedVehicle, setExpandedVehicle] = useState(null);
+  const [plateSearch, setPlateSearch] = useState('');
 
   useEffect(() => {
     api.get('/affiliation/status-today')
@@ -26,13 +28,16 @@ export default function AffDailyStatus() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-xl font-bold text-gray-800">สถานะวันนี้</h1>
-        {data?.date && (
-          <span className="text-sm text-gray-500">
-            {new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          <PlateSearchInput value={plateSearch} onChange={setPlateSearch} />
+          {data?.date && (
+            <span className="text-sm text-gray-500 whitespace-nowrap">
+              {new Date(data.date).toLocaleDateString('th-TH', { month: 'short', day: 'numeric' })}
+            </span>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -82,7 +87,7 @@ export default function AffDailyStatus() {
                 {/* Expanded vehicles */}
                 {isSchoolExpanded && (
                   <div className="border-t border-gray-100">
-                    {school.vehicles.map((vehicle) => {
+                    {school.vehicles.filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase())).map((vehicle) => {
                       const vMorningDone = vehicle.students.filter((s) => s.morning_enabled && s.morning_done).length;
                       const vMorningTotal = vehicle.students.filter((s) => s.morning_enabled).length;
                       const vEveningDone = vehicle.students.filter((s) => s.evening_enabled && s.evening_done).length;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../components/Toast';
 
 const ROLE_HOME = {
   driver:      '/driver',
@@ -14,6 +15,7 @@ const ROLE_HOME = {
 export default function Login() {
   const { login } = useAuth();
   const navigate  = useNavigate();
+  const toast     = useToast();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +28,7 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await login(username.trim(), password);
+      toast.success('เข้าสู่ระบบสำเร็จ');
       navigate(ROLE_HOME[user.role] || '/', { replace: true });
     } catch (err) {
       const msg = err.response?.data?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่';

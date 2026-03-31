@@ -8,8 +8,10 @@ const { sendError } = require('../utils/response');
  */
 // eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
-  // Log internals only in non-production
-  if (process.env.NODE_ENV !== 'production') {
+  // Log internals only in non-production, skip in test to reduce noise
+  if (process.env.JEST_WORKER_ID) {
+    // silent — expected errors during testing
+  } else if (process.env.NODE_ENV !== 'production') {
     console.error('[errorHandler]', err);
   } else {
     console.error('[errorHandler]', err.message);

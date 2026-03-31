@@ -7,6 +7,13 @@ import DriverDashboard  from './pages/driver/DriverDashboard';
 import StudentList      from './pages/driver/StudentList';
 import EmergencyPage    from './pages/driver/EmergencyPage';
 
+import SchoolLayout     from './pages/school/SchoolLayout';
+import SchoolDashboard  from './pages/school/SchoolDashboard';
+import StudentSearch    from './pages/school/StudentSearch';
+import VehicleList      from './pages/school/VehicleList';
+import DailyStatus      from './pages/school/DailyStatus';
+import EmergencyList    from './pages/school/EmergencyList';
+
 // ── PrivateRoute: redirects to /login if not authenticated ───────────────────
 function PrivateRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
@@ -60,7 +67,23 @@ export default function App() {
             <Route path="emergency" element={<EmergencyPage />} />
           </Route>
 
-          {/* Phase 3+ routes will be added here */}
+          {/* School module — nested routes with <Outlet /> */}
+          <Route
+            path="/school"
+            element={
+              <PrivateRoute allowedRoles={['school']}>
+                <SchoolLayout />
+              </PrivateRoute>
+            }
+          >
+            <Route index            element={<SchoolDashboard />} />
+            <Route path="students"  element={<StudentSearch />} />
+            <Route path="vehicles"  element={<VehicleList />} />
+            <Route path="status"    element={<DailyStatus />} />
+            <Route path="emergencies" element={<EmergencyList />} />
+          </Route>
+
+          {/* Phase 4+ routes will be added here */}
 
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />

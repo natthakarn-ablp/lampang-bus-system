@@ -7,11 +7,20 @@ const DRIVER_NAV = [
   { to: '/driver/emergency', label: 'แจ้งเหตุฉุกเฉิน' },
 ];
 
+const SCHOOL_NAV = [
+  { to: '/school',             label: 'ภาพรวมโรงเรียน' },
+  { to: '/school/students',    label: 'ค้นหานักเรียน' },
+  { to: '/school/vehicles',    label: 'รถรับส่ง' },
+  { to: '/school/status',      label: 'สถานะวันนี้' },
+  { to: '/school/emergencies', label: 'เหตุฉุกเฉิน' },
+];
+
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const navItems = user?.role === 'driver' ? DRIVER_NAV : [];
+  const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV };
+  const navItems = NAV_MAP[user?.role] || [];
 
   async function handleLogout() {
     await logout();

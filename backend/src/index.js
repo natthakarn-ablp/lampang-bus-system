@@ -9,6 +9,7 @@ const { testConnection } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
 const authRoutes   = require('./routes/auth.routes');
 const driverRoutes = require('./routes/driver.routes');
+const schoolRoutes = require('./routes/school.routes');
 
 const app = express();
 
@@ -26,9 +27,9 @@ app.get('/health', (_req, res) => {
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth',   authRoutes);
 app.use('/api/driver', driverRoutes);
+app.use('/api/school', schoolRoutes);
 
-// Phase 3+ routes will be added here:
-// app.use('/api/school',    require('./routes/school.routes'));
+// Phase 4+ routes will be added here:
 // app.use('/api/district',  require('./routes/district.routes'));
 // app.use('/api/central',   require('./routes/central.routes'));
 // app.use('/api/transport', require('./routes/transport.routes'));

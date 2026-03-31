@@ -87,8 +87,7 @@ export default function StudentSearch() {
                 <tr className="bg-gray-50 text-gray-500 text-left">
                   <th className="px-4 py-3 font-medium">รหัส</th>
                   <th className="px-4 py-3 font-medium">ชื่อ-นามสกุล</th>
-                  <th className="px-4 py-3 font-medium">ชั้น</th>
-                  <th className="px-4 py-3 font-medium">ห้อง</th>
+                  <th className="px-4 py-3 font-medium">ชั้น/ห้อง</th>
                   <th className="px-4 py-3 font-medium">ทะเบียนรถ</th>
                   <th className="px-4 py-3 font-medium">เช้า</th>
                   <th className="px-4 py-3 font-medium">เย็น</th>
@@ -102,8 +101,7 @@ export default function StudentSearch() {
                     <td className="px-4 py-3 text-gray-800">
                       {s.prefix}{s.first_name} {s.last_name}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{s.grade || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{s.classroom || '-'}</td>
+                    <td className="px-4 py-3 text-gray-600">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{s.plate_no || '-'}</td>
                     <td className="px-4 py-3">
                       {s.morning_enabled

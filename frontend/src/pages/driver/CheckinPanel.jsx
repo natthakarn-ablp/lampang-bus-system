@@ -36,7 +36,7 @@ export default function CheckinPanel({ student, session, onDone }) {
             {student.prefix} {student.first_name} {student.last_name}
           </p>
           <p className="text-xs text-gray-500 mt-0.5">
-            ชั้น {student.grade}/{student.classroom} · {student.dropoff_address || 'ไม่ระบุที่อยู่'}
+            ชั้น {student.grade && student.classroom ? `${student.grade}/${student.classroom}` : student.grade || student.classroom || '-'} · {student.dropoff_address || 'ไม่ระบุที่อยู่'}
           </p>
         </div>
 

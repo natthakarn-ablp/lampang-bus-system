@@ -95,7 +95,7 @@ export default function DailyStatus() {
                         {vehicle.students.map((s) => (
                           <tr key={s.id} className="hover:bg-gray-50">
                             <td className="px-5 py-2 text-gray-700">{s.name}</td>
-                            <td className="px-5 py-2 text-gray-500">{s.grade} {s.classroom}</td>
+                            <td className="px-5 py-2 text-gray-500">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}</td>
                             <td className="px-5 py-2 text-center">
                               {!s.morning_enabled ? (
                                 <span className="text-gray-300 text-xs">-</span>

@@ -150,18 +150,26 @@ async function getVehicles(schoolId) {
     `SELECT v.id, v.plate_no, v.vehicle_type,
             v.owner_name, v.owner_phone,
             v.insurance_status, v.insurance_type, v.insurance_expiry,
-            d.name AS driver_name, d.phone AS driver_phone,
-            va.name AS attendant_name, va.phone AS attendant_phone,
-            COUNT(DISTINCT s.id) AS student_count
+            (SELECT d.name FROM driver_vehicle_assignments dva
+             JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
+             WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE
+             LIMIT 1) AS driver_name,
+            (SELECT d.phone FROM driver_vehicle_assignments dva
+             JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
+             WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE
+             LIMIT 1) AS driver_phone,
+            (SELECT va.name FROM vehicle_attendants va
+             WHERE va.vehicle_id = v.id LIMIT 1) AS attendant_name,
+            (SELECT va.phone FROM vehicle_attendants va
+             WHERE va.vehicle_id = v.id LIMIT 1) AS attendant_phone,
+            (SELECT COUNT(*) FROM students s
+             WHERE s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE) AS student_count
      FROM vehicles v
-     JOIN students s ON s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE
-     LEFT JOIN driver_vehicle_assignments dva ON dva.vehicle_id = v.id AND dva.is_active = TRUE
-     LEFT JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
-     LEFT JOIN vehicle_attendants va ON va.vehicle_id = v.id
      WHERE v.is_deleted = FALSE
-     GROUP BY v.id, d.id, va.id
+       AND v.id IN (SELECT DISTINCT s.vehicle_id FROM students s
+                    WHERE s.school_id = ? AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL)
      ORDER BY v.plate_no`,
-    [schoolId]
+    [schoolId, schoolId]
   );
 
   return vehicles;

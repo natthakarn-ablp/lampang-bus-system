@@ -18,7 +18,11 @@ const app = express();
 // ─── Security & parsing middleware ──────────────────────────────────────────
 app.use(helmet());
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use((req, res, next) => {
+  // Skip JSON parsing for LINE webhook (needs raw body for signature verification)
+  if (req.path === '/api/line/webhook') return next();
+  express.json({ limit: '10mb' })(req, res, next);
+});
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Static uploads ─────────────────────────────────────────────────────────
@@ -42,7 +46,7 @@ app.use('/api/reports',     reportRoutes);
 // app.use('/api/central',   require('./routes/central.routes'));
 // app.use('/api/transport', require('./routes/transport.routes'));
 // app.use('/api/parent',    require('./routes/parent.routes'));
-// app.use('/api/line',      require('./routes/line.routes'));
+app.use('/api/line',      require('./routes/line.routes'));
 // app.use('/api/reports',   require('./routes/report.routes'));
 
 // ─── 404 fallback ────────────────────────────────────────────────────────────

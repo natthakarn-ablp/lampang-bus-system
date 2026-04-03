@@ -81,7 +81,7 @@ export default function ProvStudentSearch() {
         </select>
         <select value={affFilter} onChange={(e) => { setAffFilter(e.target.value); setSchoolFilter(''); }}
           className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-          <option value="">ทุกเขตพื้นที่</option>
+          <option value="">ทุกสังกัด</option>
           {affiliations.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
@@ -113,7 +113,7 @@ export default function ProvStudentSearch() {
                   <th className="px-4 py-3 font-medium">ชื่อ-นามสกุล</th>
                   <th className="px-4 py-3 font-medium">ชั้น/ห้อง</th>
                   <th className="px-4 py-3 font-medium">โรงเรียน</th>
-                  <th className="px-4 py-3 font-medium">เขตพื้นที่</th>
+                  <th className="px-4 py-3 font-medium">สังกัด</th>
                   <th className="px-4 py-3 font-medium whitespace-nowrap text-center">ทะเบียนรถ</th>
                   <th className="px-4 py-3 font-medium">เช้า</th>
                   <th className="px-4 py-3 font-medium">เย็น</th>

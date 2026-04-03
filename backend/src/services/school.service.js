@@ -33,18 +33,32 @@ async function getDashboard(schoolId) {
     [today, schoolId]
   );
 
-  // Students with morning service
-  const [[{ morning_total }]] = await pool.query(
-    `SELECT COUNT(*) AS morning_total FROM students
+  // Students with morning service (excluding leave)
+  const [[{ morning_total, morning_leave }]] = await pool.query(
+    `SELECT
+       COUNT(*) AS morning_total,
+       (SELECT COUNT(*) FROM student_leaves sl
+        WHERE sl.student_id IN (SELECT id FROM students WHERE school_id = ? AND is_deleted = FALSE AND morning_enabled = TRUE)
+          AND sl.leave_date = ? AND sl.cancelled = FALSE
+          AND (sl.session = 'morning' OR sl.session = 'both')
+       ) AS morning_leave
+     FROM students
      WHERE school_id = ? AND is_deleted = FALSE AND morning_enabled = TRUE`,
-    [schoolId]
+    [schoolId, today, schoolId]
   );
 
-  // Students with evening service
-  const [[{ evening_total }]] = await pool.query(
-    `SELECT COUNT(*) AS evening_total FROM students
+  // Students with evening service (excluding leave)
+  const [[{ evening_total, evening_leave }]] = await pool.query(
+    `SELECT
+       COUNT(*) AS evening_total,
+       (SELECT COUNT(*) FROM student_leaves sl
+        WHERE sl.student_id IN (SELECT id FROM students WHERE school_id = ? AND is_deleted = FALSE AND evening_enabled = TRUE)
+          AND sl.leave_date = ? AND sl.cancelled = FALSE
+          AND (sl.session = 'evening' OR sl.session = 'both')
+       ) AS evening_leave
+     FROM students
      WHERE school_id = ? AND is_deleted = FALSE AND evening_enabled = TRUE`,
-    [schoolId]
+    [schoolId, today, schoolId]
   );
 
   // Recent emergencies count (last 7 days)
@@ -74,8 +88,10 @@ async function getDashboard(schoolId) {
     evening_total,
     morning_done: todayStats?.morning_done ?? 0,
     evening_done: todayStats?.evening_done ?? 0,
-    morning_pending: morning_total - (todayStats?.morning_done ?? 0),
-    evening_pending: evening_total - (todayStats?.evening_done ?? 0),
+    morning_pending: (morning_total - morning_leave) - (todayStats?.morning_done ?? 0),
+    evening_pending: (evening_total - evening_leave) - (todayStats?.evening_done ?? 0),
+    morning_leave,
+    evening_leave,
     recent_emergencies,
   };
 }

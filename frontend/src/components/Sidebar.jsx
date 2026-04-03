@@ -1,15 +1,16 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { PAGE_TITLES } from '../constants/uiLabels';
 
 const DRIVER_NAV = [
-  { to: '/driver',           label: 'ภาพรวมวันนี้' },
+  { to: '/driver',           label: PAGE_TITLES.DRIVER_DASHBOARD },
   { to: '/driver/requests',  label: 'คำขอรายชื่อ' },
   { to: '/driver/emergency', label: 'แจ้งเหตุฉุกเฉิน' },
   { to: '/driver/profile',   label: 'ข้อมูลคนขับ' },
 ];
 
 const SCHOOL_NAV = [
-  { to: '/school',             label: 'ภาพรวมโรงเรียน' },
+  { to: '/school',             label: PAGE_TITLES.SCHOOL_DASHBOARD },
   { to: '/school/students',    label: 'ค้นหานักเรียน' },
   { to: '/school/vehicles',    label: 'รถรับส่ง' },
   { to: '/school/approvals',      label: 'คำขอรายชื่อ' },
@@ -20,7 +21,7 @@ const SCHOOL_NAV = [
 ];
 
 const AFFILIATION_NAV = [
-  { to: '/affiliation',             label: 'ภาพรวมเขตพื้นที่' },
+  { to: '/affiliation',             label: PAGE_TITLES.AFFILIATION_DASHBOARD },
   { to: '/affiliation/schools',     label: 'โรงเรียนในสังกัด' },
   { to: '/affiliation/students',    label: 'ค้นหานักเรียน' },
   { to: '/affiliation/vehicles',    label: 'รถรับส่ง' },
@@ -32,8 +33,8 @@ const AFFILIATION_NAV = [
 ];
 
 const PROVINCE_NAV = [
-  { to: '/province',              label: 'ภาพรวมจังหวัด' },
-  { to: '/province/affiliations', label: 'เขตพื้นที่' },
+  { to: '/province',              label: PAGE_TITLES.PROVINCE_DASHBOARD },
+  { to: '/province/affiliations', label: 'สังกัด' },
   { to: '/province/schools',      label: 'โรงเรียน' },
   { to: '/province/students',     label: 'ค้นหานักเรียน' },
   { to: '/province/vehicles',     label: 'รถรับส่ง' },

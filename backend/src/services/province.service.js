@@ -52,9 +52,12 @@ async function getDashboard() {
   // Per-affiliation KPI for dashboard
   const affiliations = await getAffiliations();
 
-  // Leave count today
-  const [[{ leave_count }]] = await pool.query(
-    `SELECT COUNT(DISTINCT sl.student_id) AS leave_count
+  // Leave counts by session
+  const [[{ leave_count, morning_leave, evening_leave }]] = await pool.query(
+    `SELECT
+       COUNT(DISTINCT sl.student_id) AS leave_count,
+       COUNT(DISTINCT CASE WHEN sl.session IN ('morning','both') THEN sl.student_id END) AS morning_leave,
+       COUNT(DISTINCT CASE WHEN sl.session IN ('evening','both') THEN sl.student_id END) AS evening_leave
      FROM student_leaves sl
      JOIN students s ON s.id = sl.student_id
      WHERE sl.leave_date = ? AND sl.cancelled = FALSE AND s.is_deleted = FALSE`,
@@ -85,6 +88,8 @@ async function getDashboard() {
     evening_kpi: evening_total > 0 ? Math.round((eDone / evening_total) * 10000) / 100 : 0,
     recent_emergencies,
     leave_count,
+    morning_leave,
+    evening_leave,
     affiliations,
     schools: allSchools,
   };

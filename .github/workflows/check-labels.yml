@@ -1,0 +1,32 @@
+name: Check UI Labels
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/src/**'
+      - 'LABEL_STANDARDS.md'
+      - 'scripts/check-ui-labels.js'
+      - 'frontend/src/constants/uiLabels.js'
+
+jobs:
+  label-check:
+    name: UI Label Standards Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run label check (strict)
+        run: node scripts/check-ui-labels.js --strict --verbose
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## UI Label Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Ran \`check-ui-labels.js --strict\` against frontend source files." >> $GITHUB_STEP_SUMMARY
+          echo "Reference: \`LABEL_STANDARDS.md §5\`" >> $GITHUB_STEP_SUMMARY

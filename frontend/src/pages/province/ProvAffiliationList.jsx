@@ -18,8 +18,8 @@ export default function ProvAffiliationList() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-800">เขตพื้นที่ทั้งหมด</h1>
-        <p className="text-sm text-gray-500 mt-0.5">สรุป KPI รายเขตพื้นที่/สังกัด</p>
+        <h1 className="text-xl font-bold text-gray-800">สังกัดทั้งหมด</h1>
+        <p className="text-sm text-gray-500 mt-0.5">สรุป KPI รายสังกัด</p>
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>}
@@ -27,7 +27,7 @@ export default function ProvAffiliationList() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
       ) : affiliations.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่มีเขตพื้นที่</p>
+        <p className="text-gray-400 py-10 text-center">ไม่มีสังกัด</p>
       ) : (
         <>
           {/* Full KPI table */}
@@ -35,7 +35,7 @@ export default function ProvAffiliationList() {
             <table className="w-full text-sm min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-left">
-                  <th className="px-4 py-3 font-medium">เขตพื้นที่</th>
+                  <th className="px-4 py-3 font-medium">สังกัด</th>
                   <th className="px-4 py-3 font-medium text-center">โรงเรียน</th>
                   <th className="px-4 py-3 font-medium text-center">นักเรียน</th>
                   <th className="px-4 py-3 font-medium text-center">รถ</th>
@@ -74,7 +74,7 @@ export default function ProvAffiliationList() {
           </div>
 
           {/* Per-affiliation KPI cards */}
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">KPI รายเขตพื้นที่</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">KPI รายสังกัด</h2>
           <div className="grid gap-4">
             {sortByKpi(affiliations).map((a) => {
               const badge = levelBadge(a.morning_kpi, a.evening_kpi);

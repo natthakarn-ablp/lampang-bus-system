@@ -288,7 +288,7 @@ export default function DriverRosterRequests() {
           )}
           {resolved.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-gray-500 mb-2">ดำเนินการแล้ว ({resolved.length})</h2>
+              <h2 className="text-sm font-semibold text-gray-500 mb-2">สำเร็จแล้ว ({resolved.length})</h2>
               <div className="space-y-2">
                 {resolved.map(r => <RequestCard key={r.id} r={r} typeLabel={TYPE_LABEL} />)}
               </div>

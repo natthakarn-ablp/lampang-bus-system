@@ -50,7 +50,7 @@ export default function ProvSchoolList() {
           onChange={(e) => setAffFilter(e.target.value)}
           className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
         >
-          <option value="">ทุกเขตพื้นที่</option>
+          <option value="">ทุกสังกัด</option>
           {affiliations.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
@@ -72,7 +72,7 @@ export default function ProvSchoolList() {
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-left">
                   <th className="px-4 py-3 font-medium">โรงเรียน</th>
-                  <th className="px-4 py-3 font-medium">เขตพื้นที่</th>
+                  <th className="px-4 py-3 font-medium">สังกัด</th>
                   <th className="px-4 py-3 font-medium text-center">นักเรียน</th>
                   <th className="px-4 py-3 font-medium text-center">รถ</th>
                 </tr>

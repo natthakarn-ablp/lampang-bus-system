@@ -11,7 +11,7 @@ const SummaryPrintView = forwardRef(function SummaryPrintView({ data, user }, re
     : now;
 
   const roleLabel = {
-    driver: 'คนขับรถ', school: 'โรงเรียน', affiliation: 'เขตพื้นที่', province: 'จังหวัด', admin: 'ผู้ดูแลระบบ',
+    driver: 'คนขับรถ', school: 'โรงเรียน', affiliation: 'สังกัด', province: 'จังหวัด', admin: 'ผู้ดูแลระบบ',
   }[user?.role] || user?.role;
 
   return (

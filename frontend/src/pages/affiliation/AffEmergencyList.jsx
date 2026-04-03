@@ -42,7 +42,7 @@ export default function AffEmergencyList() {
       ) : emergencies.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-gray-400 text-lg mb-1">ไม่มีเหตุฉุกเฉิน</p>
-          <p className="text-gray-300 text-sm">ยังไม่มีรายงานเหตุฉุกเฉินจากรถในเขตพื้นที่นี้</p>
+          <p className="text-gray-300 text-sm">ยังไม่มีรายงานเหตุฉุกเฉินจากรถในสังกัดนี้</p>
         </div>
       ) : (
         <>

@@ -74,9 +74,12 @@ async function getDashboard(affiliationId) {
     [affiliationId]
   );
 
-  // Students on leave today
-  const [[{ leave_count }]] = await pool.query(
-    `SELECT COUNT(DISTINCT sl.student_id) AS leave_count
+  // Students on leave today — by session
+  const [[{ leave_count, morning_leave, evening_leave }]] = await pool.query(
+    `SELECT
+       COUNT(DISTINCT sl.student_id) AS leave_count,
+       COUNT(DISTINCT CASE WHEN sl.session IN ('morning','both') THEN sl.student_id END) AS morning_leave,
+       COUNT(DISTINCT CASE WHEN sl.session IN ('evening','both') THEN sl.student_id END) AS evening_leave
      FROM student_leaves sl
      JOIN students s ON s.id = sl.student_id
      JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
@@ -117,6 +120,8 @@ async function getDashboard(affiliationId) {
     evening_pending: evening_total - (todayStats?.evening_done ?? 0),
     recent_emergencies,
     leave_count,
+    morning_leave,
+    evening_leave,
     schools_not_complete: schools_not_complete.map(s => ({
       school_id: s.id, school_name: s.name,
       morning_pending: s.m_expected - s.m_done,

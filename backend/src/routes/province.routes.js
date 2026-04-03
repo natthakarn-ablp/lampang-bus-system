@@ -101,6 +101,47 @@ router.get('/status-today', async (req, res, next) => {
 });
 
 /**
+ * GET /api/province/trend?days=7
+ * Daily checkin trend for province dashboard chart.
+ */
+router.get('/trend', async (req, res, next) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 30);
+
+    const [rows] = await pool.query(
+      `SELECT ds.check_date AS date,
+              COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
+              COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
+       FROM daily_status ds
+       JOIN students s ON s.id = ds.student_id AND s.is_deleted = FALSE
+       WHERE ds.check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       GROUP BY ds.check_date
+       ORDER BY ds.check_date`,
+      [days]
+    );
+
+    const [[{ morning_total }]] = await pool.query(
+      'SELECT COUNT(*) AS morning_total FROM students WHERE is_deleted = FALSE AND morning_enabled = TRUE'
+    );
+    const [[{ evening_total }]] = await pool.query(
+      'SELECT COUNT(*) AS evening_total FROM students WHERE is_deleted = FALSE AND evening_enabled = TRUE'
+    );
+
+    const trend = rows.map(r => ({
+      date: r.date,
+      morning_done: r.morning_done,
+      evening_done: r.evening_done,
+      morning_total,
+      evening_total,
+      morning_pct: morning_total > 0 ? Math.round((r.morning_done / morning_total) * 100) : 0,
+      evening_pct: evening_total > 0 ? Math.round((r.evening_done / evening_total) * 100) : 0,
+    }));
+
+    return sendSuccess(res, trend);
+  } catch (err) { next(err); }
+});
+
+/**
  * GET /api/province/emergencies
  * Query: page, per_page
  */

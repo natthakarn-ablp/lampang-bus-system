@@ -586,7 +586,7 @@ router.get('/audit-logs', async (req, res, next) => {
 
     let scopeWhere = `((u.scope_id = ? AND u.scope_type = 'SCHOOL')
        OR (al.entity_type IN ('student','roster_request') AND al.entity_id IN (
-         SELECT CAST(s.id AS CHAR) FROM students s WHERE s.school_id = ?
+         SELECT CAST(s.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci FROM students s WHERE s.school_id = ?
        )))`;
     const params = [schoolId, schoolId];
 

@@ -254,7 +254,7 @@ router.get('/audit-logs', async (req, res, next) => {
       (u.scope_id IN (SELECT sc.id FROM schools sc WHERE sc.affiliation_id = ?) AND u.scope_type = 'SCHOOL')
       OR (u.scope_id = ? AND u.scope_type = 'AFFILIATION')
       OR (al.entity_type IN ('student','roster_request') AND al.entity_id IN (
-        SELECT CAST(s.id AS CHAR) FROM students s JOIN schools sc2 ON sc2.id = s.school_id WHERE sc2.affiliation_id = ?
+        SELECT CAST(s.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci FROM students s JOIN schools sc2 ON sc2.id = s.school_id WHERE sc2.affiliation_id = ?
       ))
     )`;
     const params = [affId, affId, affId];

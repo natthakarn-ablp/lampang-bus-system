@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import DashboardCard from '../../components/DashboardCard';
 import KpiCard from '../../components/KpiCard';
-import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
 
@@ -34,14 +33,9 @@ export default function ProvinceDashboard() {
           <p className="text-sm text-gray-500 mt-0.5">สรุปผลการดำเนินงานรถรับส่งนักเรียนภาพรวมจังหวัด</p>
         </div>
         {data && (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <span className="text-xs text-gray-400">
-              ข้อมูล ณ {new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </span>
-            <div className="sm:ml-auto">
-              <ExportButtons filenamePrefix="province-summary" />
-            </div>
-          </div>
+          <p className="text-xs text-gray-400">
+            ข้อมูล ณ {new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
+          </p>
         )}
       </div>
 

@@ -7,11 +7,17 @@ const FORMATS = [
   { key: 'pdf',   label: 'PDF',   ext: 'pdf',  style: 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200' },
 ];
 
-export default function ExportButtons({ queryParams = '', filenamePrefix = 'report' }) {
+export default function ExportButtons({ queryParams = '', filenamePrefix = 'report', onPdf }) {
   const [downloading, setDownloading] = useState(null);
   const toast = useToast();
 
   async function handleExport(fmt) {
+    // Use custom PDF handler if provided
+    if (fmt.key === 'pdf' && onPdf) {
+      onPdf();
+      return;
+    }
+
     setDownloading(fmt.key);
     try {
       const token = localStorage.getItem('access_token');

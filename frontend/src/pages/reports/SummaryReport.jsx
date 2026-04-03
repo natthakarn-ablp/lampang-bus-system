@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../api/axios';
+import { useAuth } from '../../hooks/useAuth';
 import DashboardCard from '../../components/DashboardCard';
 import KpiCard from '../../components/KpiCard';
 import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
+import SummaryPrintView from '../../components/SummaryPrintView';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
 
 export default function SummaryReport() {
+  const { user } = useAuth();
+  const printRef = useRef(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -17,6 +21,43 @@ export default function SummaryReport() {
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
   }, []);
+
+  function handlePrintPdf() {
+    if (!printRef.current) return;
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>รายงานสรุปภาพรวม</title>
+      <style>
+        @page { size: A4 landscape; margin: 12mm; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'TH Sarabun New', 'TH SarabunPSK', 'Sarabun', 'Tahoma', sans-serif; font-size: 16px; color: #1a1a1a; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 4px 8px; }
+        th { background: #f3f4f6; font-weight: bold; }
+        .text-center { text-align: center; }
+        .text-left { text-align: left; }
+        .font-bold { font-weight: bold; }
+        .mb-4 { margin-bottom: 16px; }
+        .mb-2 { margin-bottom: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 12px; margin-bottom: 16px; }
+        .header h1 { font-size: 22px; font-weight: bold; }
+        .header h2 { font-size: 18px; }
+        .header .meta { display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-top: 8px; }
+        .section-title { font-size: 16px; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-bottom: 8px; }
+        .kpi-table td { padding: 6px 10px; }
+        .kpi-table .label { background: #f0f7ff; font-weight: 600; }
+        .kpi-table .value { text-align: center; font-weight: bold; font-size: 16px; }
+        .footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #999; font-size: 10px; color: #666; display: flex; justify-content: space-between; }
+        .page-break { page-break-before: always; }
+      </style></head><body>`);
+    printWindow.document.write(printRef.current.innerHTML);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+  }
 
   const schools100 = data?.schools?.filter(s => (s.morning_kpi ?? 0) >= 100 && (s.evening_kpi ?? 0) >= 100).length ?? 0;
   const totalSchools = data?.schools?.length ?? 0;
@@ -46,7 +87,7 @@ export default function SummaryReport() {
           </button>
           {data && (
             <div className="sm:ml-auto">
-              <ExportButtons filenamePrefix="summary" />
+              <ExportButtons filenamePrefix="summary" onPdf={handlePrintPdf} />
             </div>
           )}
         </div>
@@ -270,6 +311,11 @@ export default function SummaryReport() {
           </details>
         </>
       )}
+
+      {/* Hidden print view */}
+      <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+        <SummaryPrintView ref={printRef} data={data} user={user} />
+      </div>
     </div>
   );
 }

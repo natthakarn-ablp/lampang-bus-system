@@ -467,45 +467,107 @@ router.post('/vehicles', async (req, res, next) => {
     if (!plate_no) return sendError(res, 'กรุณากรอกทะเบียนรถ', [], 400);
 
     const crypto = require('crypto');
-    const vehicleId = 'V-' + crypto.createHash('sha256').update(plate_no).digest('hex').substring(0, 12);
+    const bcrypt = require('bcrypt');
+    const trimmedPlate = plate_no.trim();
+    const vehicleId = 'V-' + crypto.createHash('sha256').update(trimmedPlate).digest('hex').substring(0, 12);
 
-    // Check if vehicle exists
-    const [[existing]] = await pool.query(`SELECT id FROM vehicles WHERE plate_no = ?`, [plate_no.trim()]);
-    if (!existing) {
-      await pool.query(
-        `INSERT INTO vehicles (id, plate_no, vehicle_type) VALUES (?, ?, ?)`,
-        [vehicleId, plate_no.trim(), vehicle_type || 'รถตู้']
-      );
+    const conn = await pool.getConnection();
+    let driverAccountCreated = false;
+
+    try {
+      await conn.beginTransaction();
+
+      // 1. Create or reuse vehicle
+      const [[existingVehicle]] = await conn.query(`SELECT id FROM vehicles WHERE plate_no = ?`, [trimmedPlate]);
+      const vId = existingVehicle ? existingVehicle.id : vehicleId;
+      if (!existingVehicle) {
+        await conn.query(
+          `INSERT INTO vehicles (id, plate_no, vehicle_type) VALUES (?, ?, ?)`,
+          [vehicleId, trimmedPlate, vehicle_type || 'รถตู้']
+        );
+      }
+
+      // 2. Create driver + assignment + user account if driver info provided
+      if (driver_name) {
+        // Check if a driver user account already exists for this plate
+        const [[existingUser]] = await conn.query(
+          `SELECT id FROM users WHERE username = ? AND role = 'driver' AND is_deleted = FALSE`, [trimmedPlate]
+        );
+
+        if (!existingUser) {
+          // Create driver record
+          const [dResult] = await conn.query(
+            `INSERT INTO drivers (name, phone) VALUES (?, ?)`,
+            [driver_name.trim(), driver_phone?.trim() || null]
+          );
+
+          // Create assignment
+          await conn.query(
+            `INSERT INTO driver_vehicle_assignments (driver_id, vehicle_id, start_date, is_active) VALUES (?, ?, CURDATE(), TRUE)`,
+            [dResult.insertId, vId]
+          );
+
+          // Create user account: username = plate_no, password = plate_no, must change on first login
+          const hash = await bcrypt.hash(trimmedPlate, 12);
+          await conn.query(
+            `INSERT INTO users (username, password_hash, role, display_name, must_change_password)
+             VALUES (?, ?, 'driver', ?, TRUE)`,
+            [trimmedPlate, hash, driver_name.trim()]
+          );
+          driverAccountCreated = true;
+        } else {
+          // User exists — just ensure assignment exists for this vehicle
+          const [[existingAssignment]] = await conn.query(
+            `SELECT dva.id FROM driver_vehicle_assignments dva
+             JOIN users u ON u.role = 'driver' AND u.username = ?
+             JOIN drivers d ON d.id = dva.driver_id
+             WHERE dva.vehicle_id = ? AND dva.is_active = TRUE LIMIT 1`,
+            [trimmedPlate, vId]
+          );
+          if (!existingAssignment) {
+            // Find driver_id from existing assignments for this plate
+            const [[driverRow]] = await conn.query(
+              `SELECT dva.driver_id FROM driver_vehicle_assignments dva
+               JOIN vehicles v ON v.id = dva.vehicle_id AND v.plate_no = ?
+               WHERE dva.is_active = TRUE LIMIT 1`,
+              [trimmedPlate]
+            );
+            if (driverRow) {
+              await conn.query(
+                `INSERT INTO driver_vehicle_assignments (driver_id, vehicle_id, start_date, is_active) VALUES (?, ?, CURDATE(), TRUE)`,
+                [driverRow.driver_id, vId]
+              );
+            }
+          }
+        }
+      }
+
+      await logAudit({
+        userId: req.user.id, action: 'CREATE', entityType: 'vehicle', entityId: vId,
+        newValue: { plate_no: trimmedPlate, vehicle_type, driver_name, driverAccountCreated },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+      });
+
+      await conn.commit();
+
+      const responseData = { vehicle_id: vId, plate_no: trimmedPlate };
+      if (driverAccountCreated) {
+        responseData.driver_credentials = {
+          username: trimmedPlate,
+          temporary_password: trimmedPlate,
+          message: 'คนขับใช้ทะเบียนรถเป็นชื่อผู้ใช้และรหัสผ่านเริ่มต้น ต้องเปลี่ยนรหัสผ่านหลัง login ครั้งแรก',
+        };
+      }
+
+      return sendSuccess(res, responseData,
+        driverAccountCreated ? 'เพิ่มรถและสร้างบัญชีคนขับสำเร็จ' : 'เพิ่มรถสำเร็จ',
+        null, 201);
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
     }
-    const vId = existing ? existing.id : vehicleId;
-
-    // Create driver + assignment if driver name provided
-    if (driver_name) {
-      const [dResult] = await pool.query(
-        `INSERT INTO drivers (name, phone) VALUES (?, ?)`,
-        [driver_name.trim(), driver_phone?.trim() || null]
-      );
-      await pool.query(
-        `INSERT INTO driver_vehicle_assignments (driver_id, vehicle_id, start_date, is_active) VALUES (?, ?, CURDATE(), TRUE)`,
-        [dResult.insertId, vId]
-      );
-
-      // Create driver user account: username = plate_no, password = 1234
-      const bcrypt = require('bcrypt');
-      const hash = await bcrypt.hash('1234', 12);
-      await pool.query(
-        `INSERT INTO users (username, password_hash, role, display_name)
-         VALUES (?, ?, 'driver', ?) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name)`,
-        [plate_no.trim(), hash, driver_name.trim()]
-      ).catch(() => {}); // ignore if username already exists
-    }
-
-    await logAudit({
-      userId: req.user.id, action: 'CREATE', entityType: 'vehicle', entityId: vId,
-      newValue: { plate_no, vehicle_type, driver_name }, ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-
-    return sendSuccess(res, { vehicle_id: vId, plate_no: plate_no.trim() }, 'เพิ่มรถสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
 

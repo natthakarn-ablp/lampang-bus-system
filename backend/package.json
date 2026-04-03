@@ -10,7 +10,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "jest --testEnvironment=node --runInBand --forceExit",
-    "migrate": "node scripts/migrate-from-excel.js"
+    "migrate": "node scripts/migrate-from-excel.js",
+    "create:admin": "node scripts/create-admin.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",

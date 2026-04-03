@@ -28,6 +28,11 @@ export default function Login() {
     setLoading(true);
     try {
       const user = await login(username.trim(), password);
+      if (user.must_change_password) {
+        toast.success('กรุณาเปลี่ยนรหัสผ่านเริ่มต้น');
+        navigate('/change-password', { replace: true });
+        return;
+      }
       toast.success('เข้าสู่ระบบสำเร็จ');
       navigate(ROLE_HOME[user.role] || '/', { replace: true });
     } catch (err) {

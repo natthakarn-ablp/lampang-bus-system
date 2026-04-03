@@ -67,7 +67,7 @@ export default function SchoolBulkVehicles() {
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-1">เพิ่มรถรับส่ง (กลุ่ม)</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-1">เพิ่มรถรับส่ง</h1>
       <p className="text-sm text-gray-500 mb-4">เพิ่มได้สูงสุด 10 คันต่อครั้ง · เฉพาะโรงเรียนของตนเอง</p>
 
       {/* Search existing vehicle */}

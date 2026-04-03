@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import DashboardCard from '../../components/DashboardCard';
 
 export default function AffiliationDashboard() {
-  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -106,23 +104,6 @@ export default function AffiliationDashboard() {
             </div>
           )}
 
-          {/* Quick links */}
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">เมนูลัด</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {[
-              { label: 'โรงเรียนในสังกัด', to: '/affiliation/schools',     icon: '🏫' },
-              { label: 'ค้นหานักเรียน',   to: '/affiliation/students',    icon: '🔍' },
-              { label: 'รถรับส่ง',        to: '/affiliation/vehicles',    icon: '🚐' },
-              { label: 'สถานะวันนี้',     to: '/affiliation/status',      icon: '📋' },
-              { label: 'จัดการบัญชี',     to: '/affiliation/accounts',    icon: '👤' },
-              { label: 'เหตุฉุกเฉิน',    to: '/affiliation/emergencies', icon: '🚨' },
-            ].map(({ label, to, icon }) => (
-              <button key={to} onClick={() => navigate(to)}
-                className="flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl px-4 py-3 text-sm text-gray-700 transition">
-                <span>{icon}</span> {label}
-              </button>
-            ))}
-          </div>
         </>
       )}
     </div>

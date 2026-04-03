@@ -3,23 +3,22 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import { ToastProvider } from './components/Toast';
 
 import Login            from './pages/Login';
+import ChangePassword   from './pages/ChangePassword';
 import DriverLayout     from './pages/driver/DriverLayout';
 import DriverDashboard  from './pages/driver/DriverDashboard';
 import StudentList      from './pages/driver/StudentList';
 import EmergencyPage    from './pages/driver/EmergencyPage';
 import DriverProfile    from './pages/driver/DriverProfile';
-import DriverLeaves     from './pages/driver/DriverLeaves';
 import DriverRosterRequests from './pages/driver/DriverRosterRequests';
 
 import SchoolLayout     from './pages/school/SchoolLayout';
 import SchoolDashboard  from './pages/school/SchoolDashboard';
 import StudentSearch    from './pages/school/StudentSearch';
 import VehicleList      from './pages/school/VehicleList';
-import DailyStatus      from './pages/school/DailyStatus';
 import EmergencyList    from './pages/school/EmergencyList';
-import SchoolMissing    from './pages/school/SchoolMissing';
 import SchoolApprovals  from './pages/school/SchoolApprovals';
 import SchoolBulkVehicles from './pages/school/SchoolBulkVehicles';
+import SchoolAuditLog from './pages/school/SchoolAuditLog';
 
 import AffiliationLayout    from './pages/affiliation/AffiliationLayout';
 import AffiliationDashboard from './pages/affiliation/AffiliationDashboard';
@@ -29,6 +28,7 @@ import AffVehicleList       from './pages/affiliation/AffVehicleList';
 import AffDailyStatus       from './pages/affiliation/AffDailyStatus';
 import AffEmergencyList     from './pages/affiliation/AffEmergencyList';
 import AffSchoolAccounts   from './pages/affiliation/AffSchoolAccounts';
+import AffAuditLog         from './pages/affiliation/AffAuditLog';
 
 import ProvinceLayout       from './pages/province/ProvinceLayout';
 import ProvinceDashboard    from './pages/province/ProvinceDashboard';
@@ -38,6 +38,7 @@ import ProvStudentSearch    from './pages/province/ProvStudentSearch';
 import ProvVehicleList      from './pages/province/ProvVehicleList';
 import ProvDailyStatus      from './pages/province/ProvDailyStatus';
 import ProvEmergencyList    from './pages/province/ProvEmergencyList';
+import ProvAuditLog        from './pages/province/ProvAuditLog';
 
 import ReportsLayout  from './pages/reports/ReportsLayout';
 import DailyReport    from './pages/reports/DailyReport';
@@ -79,6 +80,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/change-password" element={<ChangePassword />} />
 
           {/*
            * Driver module — nested routes with <Outlet />.
@@ -97,7 +99,7 @@ export default function App() {
             <Route path="roster"    element={<StudentList />} />
             <Route path="emergency" element={<EmergencyPage />} />
             <Route path="profile"  element={<DriverProfile />} />
-            <Route path="leaves"   element={<DriverLeaves />} />
+            <Route path="leaves"   element={<Navigate to="/driver" replace />} />
             <Route path="requests" element={<DriverRosterRequests />} />
           </Route>
 
@@ -113,11 +115,12 @@ export default function App() {
             <Route index            element={<SchoolDashboard />} />
             <Route path="students"  element={<StudentSearch />} />
             <Route path="vehicles"  element={<VehicleList />} />
-            <Route path="status"    element={<DailyStatus />} />
+            <Route path="status"    element={<Navigate to="/school" replace />} />
             <Route path="emergencies" element={<EmergencyList />} />
-            <Route path="missing"     element={<SchoolMissing />} />
+            <Route path="missing"     element={<Navigate to="/school" replace />} />
             <Route path="approvals"   element={<SchoolApprovals />} />
             <Route path="bulk-vehicles" element={<SchoolBulkVehicles />} />
+            <Route path="audit-log" element={<SchoolAuditLog />} />
           </Route>
 
           {/* Affiliation module — nested routes with <Outlet /> */}
@@ -136,6 +139,7 @@ export default function App() {
             <Route path="status"      element={<AffDailyStatus />} />
             <Route path="emergencies" element={<AffEmergencyList />} />
             <Route path="accounts"   element={<AffSchoolAccounts />} />
+            <Route path="audit-log"  element={<AffAuditLog />} />
           </Route>
 
           {/* Province module — nested routes with <Outlet /> */}
@@ -154,6 +158,7 @@ export default function App() {
             <Route path="vehicles"      element={<ProvVehicleList />} />
             <Route path="status"        element={<ProvDailyStatus />} />
             <Route path="emergencies"   element={<ProvEmergencyList />} />
+            <Route path="audit-log"     element={<ProvAuditLog />} />
           </Route>
 
           {/* Reports module — shared across school/affiliation/province */}

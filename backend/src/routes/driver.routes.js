@@ -241,6 +241,7 @@ router.get('/profile', async (req, res, next) => {
     const [[driver]] = await pool.query(
       `SELECT d.id, d.name, d.phone, d.photo_url,
               v.plate_no, v.vehicle_type, v.owner_name, v.owner_phone,
+              v.insurance_status, v.insurance_type, v.insurance_expiry,
               va.name AS attendant_name, va.phone AS attendant_phone
        FROM drivers d
        JOIN driver_vehicle_assignments dva ON dva.driver_id = d.id AND dva.is_active = TRUE
@@ -258,7 +259,13 @@ router.get('/profile', async (req, res, next) => {
 
 router.put('/profile', async (req, res, next) => {
   try {
-    const { name, phone } = req.body;
+    const {
+      name, phone,
+      vehicle_type, owner_name, owner_phone,
+      insurance_type, insurance_status, insurance_expiry,
+      attendant_name, attendant_phone,
+    } = req.body;
+
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
 
     // Find driver id
@@ -268,21 +275,73 @@ router.put('/profile', async (req, res, next) => {
     );
     if (!dva) return sendError(res, 'ไม่พบข้อมูลคนขับ', [], 404);
 
-    const updates = [];
-    const params = [];
-    if (name) { updates.push('name = ?'); params.push(name); }
-    if (phone) { updates.push('phone = ?'); params.push(phone); }
-    if (updates.length === 0) return sendError(res, 'ไม่มีข้อมูลที่ต้องการแก้ไข', [], 400);
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
 
-    params.push(dva.driver_id);
-    await pool.query(`UPDATE drivers SET ${updates.join(', ')} WHERE id = ?`, params);
+      // 1. Update driver fields
+      const driverUpdates = [];
+      const driverParams = [];
+      if (name !== undefined) { driverUpdates.push('name = ?'); driverParams.push(name); }
+      if (phone !== undefined) { driverUpdates.push('phone = ?'); driverParams.push(phone); }
+      if (driverUpdates.length > 0) {
+        driverParams.push(dva.driver_id);
+        await conn.query(`UPDATE drivers SET ${driverUpdates.join(', ')} WHERE id = ?`, driverParams);
+      }
 
-    await logAudit({
-      userId: req.user.id, action: 'UPDATE', entityType: 'driver', entityId: dva.driver_id,
-      newValue: { name, phone }, ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
+      // 2. Update vehicle fields
+      const vehUpdates = [];
+      const vehParams = [];
+      if (vehicle_type !== undefined) { vehUpdates.push('vehicle_type = ?'); vehParams.push(vehicle_type); }
+      if (owner_name !== undefined) { vehUpdates.push('owner_name = ?'); vehParams.push(owner_name); }
+      if (owner_phone !== undefined) { vehUpdates.push('owner_phone = ?'); vehParams.push(owner_phone); }
+      if (insurance_type !== undefined) { vehUpdates.push('insurance_type = ?'); vehParams.push(insurance_type); }
+      if (insurance_status !== undefined) { vehUpdates.push('insurance_status = ?'); vehParams.push(insurance_status); }
+      if (insurance_expiry !== undefined) { vehUpdates.push('insurance_expiry = ?'); vehParams.push(insurance_expiry || null); }
+      if (vehUpdates.length > 0) {
+        vehParams.push(vehicle.vehicle_id);
+        await conn.query(`UPDATE vehicles SET ${vehUpdates.join(', ')} WHERE id = ?`, vehParams);
+      }
 
-    return sendSuccess(res, { driver_id: dva.driver_id }, 'อัปเดตข้อมูลสำเร็จ');
+      // 3. Update/insert vehicle attendant
+      if (attendant_name !== undefined || attendant_phone !== undefined) {
+        const [[existingAtt]] = await conn.query(
+          `SELECT id FROM vehicle_attendants WHERE vehicle_id = ? LIMIT 1`, [vehicle.vehicle_id]
+        );
+        if (existingAtt) {
+          const attUpdates = [];
+          const attParams = [];
+          if (attendant_name !== undefined) { attUpdates.push('name = ?'); attParams.push(attendant_name); }
+          if (attendant_phone !== undefined) { attUpdates.push('phone = ?'); attParams.push(attendant_phone); }
+          attParams.push(existingAtt.id);
+          await conn.query(`UPDATE vehicle_attendants SET ${attUpdates.join(', ')} WHERE id = ?`, attParams);
+        } else {
+          await conn.query(
+            `INSERT INTO vehicle_attendants (vehicle_id, name, phone) VALUES (?, ?, ?)`,
+            [vehicle.vehicle_id, attendant_name || null, attendant_phone || null]
+          );
+        }
+      }
+
+      if (driverUpdates.length === 0 && vehUpdates.length === 0 && attendant_name === undefined && attendant_phone === undefined) {
+        await conn.rollback();
+        return sendError(res, 'ไม่มีข้อมูลที่ต้องการแก้ไข', [], 400);
+      }
+
+      await logAudit({
+        userId: req.user.id, action: 'UPDATE', entityType: 'driver_profile', entityId: dva.driver_id,
+        newValue: { name, phone, vehicle_type, owner_name, owner_phone, insurance_type, insurance_status, insurance_expiry, attendant_name, attendant_phone },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+      });
+
+      await conn.commit();
+      return sendSuccess(res, { driver_id: dva.driver_id }, 'อัปเดตข้อมูลสำเร็จ');
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
   } catch (err) { return next(err); }
 });
 
@@ -377,19 +436,72 @@ router.get('/leaves', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+// ─── GET /search-students ───────────────────────────────────────────────────
+// Search students NOT already on this driver's vehicle (for "add" requests)
+
+router.get('/search-students', async (req, res, next) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (!q || q.length < 2) return sendSuccess(res, []);
+
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const like = `%${q}%`;
+
+    const [rows] = await pool.query(
+      `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+              sc.name AS school_name, v.plate_no AS current_plate
+       FROM students s
+       LEFT JOIN schools sc ON sc.id = s.school_id
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id
+       WHERE s.is_deleted = FALSE
+         AND (s.vehicle_id IS NULL OR s.vehicle_id != ?)
+         AND (
+           CAST(s.id AS CHAR) LIKE ?
+           OR s.first_name LIKE ?
+           OR s.last_name LIKE ?
+           OR CONCAT(s.first_name, ' ', s.last_name) LIKE ?
+           OR s.grade LIKE ?
+         )
+       ORDER BY s.first_name
+       LIMIT 20`,
+      [vehicle.vehicle_id, like, like, like, like, like]
+    );
+
+    return sendSuccess(res, rows);
+  } catch (err) { return next(err); }
+});
+
+// ─── GET /schools ───────────────────────────────────────────────────────────
+// Schools dropdown for add-student request form
+
+router.get('/schools', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, name FROM schools WHERE is_deleted = FALSE ORDER BY name`
+    );
+    return sendSuccess(res, rows);
+  } catch (err) { return next(err); }
+});
+
 // ─── POST /roster-request ────────────────────────────────────────────────────
 
 router.post('/roster-request', async (req, res, next) => {
   try {
-    const { student_id, request_type, reason } = req.body;
-    if (!student_id || !request_type) return sendError(res, 'student_id and request_type are required', [], 400);
+    const { student_id, request_type, reason, new_student_data } = req.body;
+    if (!request_type) return sendError(res, 'request_type is required', [], 400);
     if (!['add', 'remove'].includes(request_type)) return sendError(res, "request_type ต้องเป็น 'add' หรือ 'remove'", [], 400);
+
+    // For remove: student_id is required
+    if (request_type === 'remove' && !student_id) return sendError(res, 'กรุณาเลือกนักเรียนที่ต้องการถอน', [], 400);
+    // For add: either student_id (existing) or new_student_data (new) is required
+    if (request_type === 'add' && !student_id && !new_student_data) return sendError(res, 'กรุณากรอกข้อมูลนักเรียน', [], 400);
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
 
     const result = await rosterReqSvc.createRequest({
-      vehicleId: vehicle.vehicle_id, studentId: student_id,
+      vehicleId: vehicle.vehicle_id, studentId: student_id || null,
       requestType: request_type, reason, userId: req.user.id,
+      newStudentData: new_student_data || null,
     });
     return sendSuccess(res, result, 'ส่งคำขอสำเร็จ', null, 201);
   } catch (err) { return next(err); }

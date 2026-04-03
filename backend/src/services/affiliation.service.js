@@ -184,10 +184,13 @@ async function getStudents(affiliationId, { search, grade, school_id, vehicle_id
   const [students] = await pool.query(
     `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.school_id, sc.name AS school_name,
-            s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled
+            s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled,
+            p.name AS parent_name, p.phone AS parent_phone
      FROM students s
      JOIN schools sc ON sc.id = s.school_id
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
+     LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.approved = TRUE
+     LEFT JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
      WHERE ${where}
      ORDER BY s.${sortCol} ${sortDir}
      LIMIT ? OFFSET ?`,

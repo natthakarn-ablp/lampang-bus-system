@@ -110,14 +110,25 @@ async function getRoster(pool, vehicleId, session) {
             s.grade,
             s.classroom,
             s.school_id,
+            sc.name AS school_name,
             s.dropoff_address,
             s.morning_enabled,
             s.evening_enabled,
             COALESCE(ds.morning_done, FALSE) AS morning_done,
             ds.morning_ts,
             COALESCE(ds.evening_done, FALSE) AS evening_done,
-            ds.evening_ts
+            ds.evening_ts,
+            (SELECT CASE
+               WHEN COUNT(*) = 0 THEN NULL
+               WHEN MAX(sl2.session = 'both') = 1 THEN 'both'
+               WHEN COUNT(DISTINCT sl2.session) > 1 THEN 'both'
+               ELSE MAX(sl2.session)
+             END
+             FROM student_leaves sl2
+             WHERE sl2.student_id = s.id AND sl2.leave_date = CURDATE() AND sl2.cancelled = FALSE
+            ) AS leave_session
      FROM   students s
+     LEFT JOIN schools sc ON sc.id = s.school_id
      LEFT JOIN daily_status ds
                ON ds.student_id = s.id
                AND ds.check_date = CURDATE()
@@ -321,6 +332,10 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
 
   const doneColumn = session === 'morning' ? 'ds.morning_done' : 'ds.evening_done';
 
+  const leaveExclude = session === 'morning'
+    ? "AND NOT EXISTS (SELECT 1 FROM student_leaves sl WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE AND (sl.session = 'morning' OR sl.session = 'both'))"
+    : "AND NOT EXISTS (SELECT 1 FROM student_leaves sl WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE AND (sl.session = 'evening' OR sl.session = 'both'))";
+
   const [students] = await pool.query(
     `SELECT s.id
      FROM   students s
@@ -329,7 +344,8 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
      WHERE  s.vehicle_id  = ?
        AND  s.is_deleted  = FALSE
        AND  (${doneColumn} IS NULL OR ${doneColumn} = FALSE)
-       ${sessionFilter}`,
+       ${sessionFilter}
+       ${leaveExclude}`,
     [vehicleId]
   );
 
@@ -372,8 +388,24 @@ async function getStatusToday(pool, vehicleId) {
        COUNT(*)                                                         AS total,
        SUM(COALESCE(ds.morning_done, 0))                               AS morning_done,
        SUM(COALESCE(ds.evening_done, 0))                               AS evening_done,
-       SUM(s.morning_enabled = TRUE AND COALESCE(ds.morning_done,0)=0) AS morning_pending,
-       SUM(s.evening_enabled = TRUE AND COALESCE(ds.evening_done,0)=0) AS evening_pending
+       SUM(
+         s.morning_enabled = TRUE
+         AND COALESCE(ds.morning_done, 0) = 0
+         AND NOT EXISTS (
+           SELECT 1 FROM student_leaves sl
+           WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE
+             AND (sl.session = 'morning' OR sl.session = 'both')
+         )
+       ) AS morning_pending,
+       SUM(
+         s.evening_enabled = TRUE
+         AND COALESCE(ds.evening_done, 0) = 0
+         AND NOT EXISTS (
+           SELECT 1 FROM student_leaves sl
+           WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE
+             AND (sl.session = 'evening' OR sl.session = 'both')
+         )
+       ) AS evening_pending
      FROM   students s
      LEFT JOIN daily_status ds
                ON ds.student_id = s.id AND ds.check_date = CURDATE()

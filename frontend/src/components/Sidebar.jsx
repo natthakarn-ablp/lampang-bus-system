@@ -3,8 +3,6 @@ import { useAuth } from '../hooks/useAuth';
 
 const DRIVER_NAV = [
   { to: '/driver',           label: 'ภาพรวมวันนี้' },
-  { to: '/driver/roster',    label: 'รายชื่อนักเรียน' },
-  { to: '/driver/leaves',    label: 'แจ้งลา' },
   { to: '/driver/requests',  label: 'คำขอรายชื่อ' },
   { to: '/driver/emergency', label: 'แจ้งเหตุฉุกเฉิน' },
   { to: '/driver/profile',   label: 'ข้อมูลคนขับ' },
@@ -12,13 +10,12 @@ const DRIVER_NAV = [
 
 const SCHOOL_NAV = [
   { to: '/school',             label: 'ภาพรวมโรงเรียน' },
-  { to: '/school/missing',     label: 'ยังไม่ได้ดำเนินการ' },
   { to: '/school/students',    label: 'ค้นหานักเรียน' },
   { to: '/school/vehicles',    label: 'รถรับส่ง' },
-  { to: '/school/status',      label: 'สถานะวันนี้' },
   { to: '/school/approvals',      label: 'คำขอรายชื่อ' },
-  { to: '/school/bulk-vehicles', label: 'เพิ่มรถ (กลุ่ม)' },
+  { to: '/school/bulk-vehicles', label: 'เพิ่มรถรับส่ง' },
   { to: '/school/emergencies',   label: 'เหตุฉุกเฉิน' },
+  { to: '/school/audit-log',    label: 'ประวัติการแก้ไข' },
   { to: '/reports/daily',      label: 'รายงาน' },
 ];
 
@@ -30,6 +27,7 @@ const AFFILIATION_NAV = [
   { to: '/affiliation/status',      label: 'สถานะวันนี้' },
   { to: '/affiliation/accounts',    label: 'จัดการบัญชีโรงเรียน' },
   { to: '/affiliation/emergencies', label: 'เหตุฉุกเฉิน' },
+  { to: '/affiliation/audit-log',  label: 'ประวัติการแก้ไข' },
   { to: '/reports/daily',           label: 'รายงาน' },
 ];
 
@@ -41,6 +39,7 @@ const PROVINCE_NAV = [
   { to: '/province/vehicles',     label: 'รถรับส่ง' },
   { to: '/province/status',       label: 'สถานะวันนี้' },
   { to: '/province/emergencies',  label: 'เหตุฉุกเฉิน' },
+  { to: '/province/audit-log',    label: 'ประวัติการแก้ไข' },
   { to: '/reports/daily',         label: 'รายงาน' },
 ];
 
@@ -57,21 +56,21 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-56 min-h-screen bg-blue-800 text-white flex flex-col">
+    <aside className="w-56 shrink-0 h-full bg-blue-800 text-white flex flex-col">
       {/* Brand */}
-      <div className="px-5 py-6 border-b border-blue-700">
+      <div className="px-5 py-6 border-b border-blue-700 shrink-0">
         <p className="font-bold text-sm leading-tight">ระบบรถรับส่งนักเรียน</p>
         <p className="text-blue-300 text-xs mt-0.5">จังหวัดลำปาง</p>
       </div>
 
       {/* User info */}
-      <div className="px-5 py-4 border-b border-blue-700">
+      <div className="px-5 py-4 border-b border-blue-700 shrink-0">
         <p className="text-xs text-blue-300">เข้าสู่ระบบในฐานะ</p>
         <p className="font-semibold text-sm truncate">{user?.display_name || user?.username}</p>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      {/* Navigation — scrollable if menu items exceed available space */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {navItems.map(({ to, label }) => (
           <NavLink
             key={to}
@@ -90,14 +89,22 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Logout */}
-      <div className="px-5 py-5">
+      {/* Logout — always pinned to bottom */}
+      <div className="px-5 py-5 border-t border-blue-700 shrink-0">
         <button
           onClick={handleLogout}
           className="w-full text-sm text-blue-200 hover:text-white hover:bg-blue-700 rounded-lg px-4 py-2 transition"
         >
           ออกจากระบบ
         </button>
+      </div>
+
+      {/* Developer credit */}
+      <div className="px-5 pb-4 shrink-0">
+        <div className="border-t border-blue-700/40 pt-3">
+          <p className="text-[11px] text-blue-300/80 leading-relaxed">Copyright © 2024 Natthakarn S. | v1.4</p>
+          <p className="text-[10px] text-blue-400/60 leading-relaxed mt-0.5">รร.อนุบาลลำปางเขลางค์รัตน์อนุสรณ์</p>
+        </div>
       </div>
     </aside>
   );

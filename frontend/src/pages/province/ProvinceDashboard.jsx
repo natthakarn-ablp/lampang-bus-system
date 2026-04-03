@@ -209,25 +209,6 @@ export default function ProvinceDashboard() {
             </section>
           )}
 
-          {/* ── 7. Existing School + Vehicle links ─────────── */}
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">เมนูลัด</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: 'เขตพื้นที่',     to: '/province/affiliations', icon: '🏛️' },
-              { label: 'โรงเรียน',       to: '/province/schools',      icon: '🏫' },
-              { label: 'รถรับส่ง',       to: '/province/vehicles',     icon: '🚐' },
-              { label: 'สถานะวันนี้',    to: '/province/status',       icon: '📋' },
-              { label: 'เหตุฉุกเฉิน',   to: '/province/emergencies',  icon: '🚨' },
-              { label: 'ค้นหานักเรียน',  to: '/province/students',     icon: '🔍' },
-              { label: 'รายงานรายวัน',   to: '/reports/daily',         icon: '📊' },
-              { label: 'รายงานรายเดือน', to: '/reports/monthly',       icon: '📈' },
-            ].map(({ label, to, icon }) => (
-              <button key={to} onClick={() => navigate(to)}
-                className="flex items-center gap-2 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-xl px-4 py-3 text-sm text-gray-700 transition">
-                <span>{icon}</span> {label}
-              </button>
-            ))}
-          </div>
         </>
       )}
     </div>

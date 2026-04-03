@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 
 export default function AffStudentSearch() {
+  const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -108,7 +110,7 @@ export default function AffStudentSearch() {
                   <th className="px-4 py-3 font-medium">ชื่อ-นามสกุล</th>
                   <th className="px-4 py-3 font-medium">ชั้น/ห้อง</th>
                   <th className="px-4 py-3 font-medium">โรงเรียน</th>
-                  <th className="px-4 py-3 font-medium">ทะเบียนรถ</th>
+                  <th className="px-4 py-3 font-medium whitespace-nowrap text-center">ทะเบียนรถ</th>
                   <th className="px-4 py-3 font-medium">เช้า</th>
                   <th className="px-4 py-3 font-medium">เย็น</th>
                 </tr>
@@ -124,7 +126,14 @@ export default function AffStudentSearch() {
                       {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{s.school_name || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{s.plate_no || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-center align-middle">
+                      {s.plate_no ? (
+                        <button onClick={() => navigate(`/affiliation/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline text-sm whitespace-nowrap">
+                          {s.plate_no}
+                        </button>
+                      ) : <span className="text-gray-400">-</span>}
+                    </td>
                     <td className="px-4 py-3">
                       {s.morning_enabled
                         ? <span className="text-green-600 text-xs font-medium">ใช้</span>

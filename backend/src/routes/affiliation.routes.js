@@ -9,6 +9,23 @@ const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
 const affAdminSvc = require('../services/affiliationAdmin.service');
 
+// Shared CSV helper for audit export
+function auditRowsToCsv(rows) {
+  const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
+  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน' };
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
+  const lines = rows.map(r => [
+    esc(new Date(r.created_at).toLocaleString('th-TH')),
+    esc(r.actor_name || '-'), esc(r.actor_role || '-'),
+    esc(ACTION_TH[r.action] || r.action), esc(ENTITY_TH[r.entity_type] || r.entity_type || '-'),
+    esc(r.entity_id || '-'),
+    esc(r.old_value ? JSON.stringify(r.old_value) : '-'),
+    esc(r.new_value ? JSON.stringify(r.new_value) : '-'),
+  ].join(','));
+  return [header, ...lines].join('\n');
+}
+
 // All affiliation routes require authentication + role 'affiliation'
 router.use(authenticate, requireRole('affiliation'));
 
@@ -163,14 +180,32 @@ router.post('/school-accounts', async (req, res, next) => {
   try {
     const affId = req.user.scopeId;
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
-    const { school_id, username, password, display_name } = req.body;
-    if (!school_id || !username || !password) return sendError(res, 'school_id, username, password จำเป็น', [], 400);
+    const { school_id, username, display_name } = req.body;
+    if (!school_id || !username) return sendError(res, 'school_id และ username จำเป็น', [], 400);
 
     const result = await affAdminSvc.createSchoolAccount({
-      affiliationId: affId, schoolId: school_id, username, password,
+      affiliationId: affId, schoolId: school_id, username,
       displayName: display_name, userId: req.user.id,
     });
     return sendSuccess(res, result, 'สร้างบัญชีสำเร็จ', null, 201);
+  } catch (err) { next(err); }
+});
+
+// Create new school + account in one step
+router.post('/school-accounts/new-school', async (req, res, next) => {
+  try {
+    const affId = req.user.scopeId;
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const { school_code, school_name, username } = req.body;
+    if (!school_code || !school_name || !username) {
+      return sendError(res, 'กรุณากรอก รหัสโรงเรียน, ชื่อโรงเรียน และชื่อผู้ใช้', [], 400);
+    }
+
+    const result = await affAdminSvc.createSchoolWithAccount({
+      affiliationId: affId, schoolCode: school_code, schoolName: school_name,
+      username, userId: req.user.id,
+    });
+    return sendSuccess(res, result, 'เพิ่มโรงเรียนและสร้างบัญชีสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
 
@@ -200,6 +235,66 @@ router.put('/school-accounts/:id', async (req, res, next) => {
       isActive: is_active, userId: req.user.id,
     });
     return sendSuccess(res, result, 'อัปเดตสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+// ─── GET /audit-logs ─────────────────────────────────────────────────────────
+
+router.get('/audit-logs', async (req, res, next) => {
+  try {
+    const affId = req.user.scopeId;
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 30));
+    const offset = (page - 1) * per_page;
+    const { action, date_from, date_to } = req.query;
+
+    let scopeWhere = `(
+      (u.scope_id IN (SELECT sc.id FROM schools sc WHERE sc.affiliation_id = ?) AND u.scope_type = 'SCHOOL')
+      OR (u.scope_id = ? AND u.scope_type = 'AFFILIATION')
+      OR (al.entity_type IN ('student','roster_request') AND al.entity_id IN (
+        SELECT CAST(s.id AS CHAR) FROM students s JOIN schools sc2 ON sc2.id = s.school_id WHERE sc2.affiliation_id = ?
+      ))
+    )`;
+    const params = [affId, affId, affId];
+
+    if (action) { scopeWhere += ' AND al.action = ?'; params.push(action); }
+    if (date_from) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
+    if (date_to) { scopeWhere += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }
+
+    // CSV export mode
+    if (req.query.format === 'csv') {
+      const [rows] = await pool.query(
+        `SELECT al.id, al.action, al.entity_type, al.entity_id,
+                al.old_value, al.new_value, al.created_at,
+                u.display_name AS actor_name, u.role AS actor_role
+         FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id
+         WHERE ${scopeWhere} ORDER BY al.created_at DESC LIMIT 5000`, params
+      );
+      const csv = auditRowsToCsv(rows);
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=audit_affiliation_${new Date().toISOString().split('T')[0]}.csv`);
+      return res.send('\uFEFF' + csv);
+    }
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id WHERE ${scopeWhere}`, params
+    );
+
+    const [rows] = await pool.query(
+      `SELECT al.id, al.user_id, al.action, al.entity_type, al.entity_id,
+              al.old_value, al.new_value, al.created_at,
+              u.display_name AS actor_name, u.role AS actor_role
+       FROM audit_logs al
+       LEFT JOIN users u ON u.id = al.user_id
+       WHERE ${scopeWhere}
+       ORDER BY al.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, per_page, offset]
+    );
+
+    return sendSuccess(res, rows, 'OK', { page, per_page, total });
   } catch (err) { next(err); }
 });
 

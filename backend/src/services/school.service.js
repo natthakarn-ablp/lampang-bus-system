@@ -49,7 +49,7 @@ async function getDashboard(schoolId) {
 
   // Recent emergencies count (last 7 days)
   const [[{ recent_emergencies }]] = await pool.query(
-    `SELECT COUNT(*) AS recent_emergencies FROM emergency_logs el
+    `SELECT COUNT(DISTINCT el.id) AS recent_emergencies FROM emergency_logs el
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE
      WHERE el.reported_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
@@ -186,13 +186,22 @@ async function getStatusToday(schoolId) {
             s.grade, s.classroom, s.vehicle_id, v.plate_no,
             s.morning_enabled, s.evening_enabled,
             ds.morning_done, ds.morning_ts,
-            ds.evening_done, ds.evening_ts
+            ds.evening_done, ds.evening_ts,
+            (SELECT CASE
+               WHEN COUNT(*) = 0 THEN NULL
+               WHEN MAX(sl2.session = 'both') = 1 THEN 'both'
+               WHEN COUNT(DISTINCT sl2.session) > 1 THEN 'both'
+               ELSE MAX(sl2.session)
+             END
+             FROM student_leaves sl2
+             WHERE sl2.student_id = s.id AND sl2.leave_date = ? AND sl2.cancelled = FALSE
+            ) AS leave_session
      FROM students s
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
      LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
      WHERE s.school_id = ? AND s.is_deleted = FALSE
      ORDER BY v.plate_no, s.first_name`,
-    [today, schoolId]
+    [today, today, schoolId]
   );
 
   // Group by vehicle
@@ -217,6 +226,7 @@ async function getStatusToday(schoolId) {
       morning_ts: row.morning_ts,
       evening_done: !!row.evening_done,
       evening_ts: row.evening_ts,
+      leave_session: row.leave_session || null,
     });
   }
 

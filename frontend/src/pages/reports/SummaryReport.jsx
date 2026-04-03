@@ -249,10 +249,7 @@ export default function SummaryReport() {
             </section>
           )}
 
-          {/* ── SECTION 9 — Export Footer ───────────────────── */}
-          <ExportButtons filenamePrefix="summary" />
-
-          {/* ── SECTION 10 — หมายเหตุ KPI ──────────────────── */}
+          {/* ── SECTION 9 — หมายเหตุ KPI ──────────────────── */}
           <details className="mt-6 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500">
             <summary className="px-4 py-3 cursor-pointer font-semibold text-gray-600 hover:text-gray-800 select-none">
               หมายเหตุ KPI

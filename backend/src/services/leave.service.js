@@ -22,11 +22,22 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
       throw err;
     }
 
-    const [result] = await conn.query(
-      `INSERT INTO student_leaves (student_id, vehicle_id, leave_date, session, reason, reported_by, reported_role)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [studentId, vehicleId, leaveDate, session, reason || null, userId, userRole]
-    );
+    let result;
+    try {
+      [result] = await conn.query(
+        `INSERT INTO student_leaves (student_id, vehicle_id, leave_date, session, reason, reported_by, reported_role)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [studentId, vehicleId, leaveDate, session, reason || null, userId, userRole]
+      );
+    } catch (dbErr) {
+      if (dbErr.code === 'ER_DUP_ENTRY') {
+        const sessionLabel = { morning: 'เช้า', evening: 'เย็น', both: 'ทั้งวัน' }[session] || session;
+        const err = new Error(`นักเรียนคนนี้ถูกบันทึกการลา${sessionLabel}ในวันนี้แล้ว`);
+        err.statusCode = 409;
+        throw err;
+      }
+      throw dbErr;
+    }
 
     await logAudit({
       userId, action: 'CREATE', entityType: 'leave', entityId: result.insertId,

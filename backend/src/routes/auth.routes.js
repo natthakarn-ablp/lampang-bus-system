@@ -72,7 +72,7 @@ router.post('/login', async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT id, username, password_hash, role, scope_type, scope_id,
-              display_name, is_active, is_deleted
+              display_name, is_active, is_deleted, must_change_password
        FROM users
        WHERE username = ? AND is_deleted = FALSE
        LIMIT 1`,
@@ -123,6 +123,7 @@ router.post('/login', async (req, res, next) => {
           scope_type: user.scope_type,
           scope_id: user.scope_id,
           display_name: user.display_name,
+          must_change_password: !!user.must_change_password,
         },
       },
       'Login successful',
@@ -186,7 +187,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
 
     const newHash = await bcrypt.hash(String(new_password), BCRYPT_COST);
 
-    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, req.user.id]);
+    await pool.query('UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?', [newHash, req.user.id]);
 
     await logAudit({
       userId: req.user.id,

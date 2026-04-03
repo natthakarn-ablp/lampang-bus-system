@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
 
 export default function VehicleList() {
+  const [searchParams] = useSearchParams();
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [plateSearch, setPlateSearch] = useState('');
+  const [plateSearch, setPlateSearch] = useState(searchParams.get('plate') || '');
   const [expandedVehicle, setExpandedVehicle] = useState(null);
   const [studentCache, setStudentCache] = useState({});
 
@@ -118,18 +120,30 @@ export default function VehicleList() {
               </button>
 
               {expandedVehicle === v.id && studentCache[v.id] && (
-                <div className="mt-2 border-t border-gray-100 pt-2">
+                <div className="mt-2 border-t border-gray-100 pt-2 overflow-x-auto">
                   {studentCache[v.id].length === 0 ? (
                     <p className="text-xs text-gray-400 py-2">ไม่มีนักเรียน</p>
                   ) : (
-                    <div className="divide-y divide-gray-50">
-                      {studentCache[v.id].map(s => (
-                        <div key={s.id} className="py-1.5 text-xs flex justify-between">
-                          <span className="text-gray-700">{s.prefix}{s.first_name} {s.last_name}</span>
-                          <span className="text-gray-400">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}</span>
-                        </div>
-                      ))}
-                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="text-gray-400 text-left">
+                          <th className="py-1.5 pr-3 font-medium">ชื่อ-นามสกุล</th>
+                          <th className="py-1.5 pr-3 font-medium">ชั้น/ห้อง</th>
+                          <th className="py-1.5 pr-3 font-medium">ผู้ปกครอง</th>
+                          <th className="py-1.5 font-medium">เบอร์โทร</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {studentCache[v.id].map(s => (
+                          <tr key={s.id}>
+                            <td className="py-1.5 pr-3 text-gray-700">{s.prefix}{s.first_name} {s.last_name}</td>
+                            <td className="py-1.5 pr-3 text-gray-500">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}</td>
+                            <td className="py-1.5 pr-3 text-gray-600">{s.parent_name || '-'}</td>
+                            <td className="py-1.5 text-gray-400">{s.parent_phone || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   )}
                 </div>
               )}

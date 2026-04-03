@@ -2,7 +2,7 @@ import Sidebar from './Sidebar';
 
 export default function Layout({ children }) {
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar />
       <main className="flex-1 overflow-y-auto bg-gray-50">
         {children}

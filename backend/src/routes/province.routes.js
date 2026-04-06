@@ -164,11 +164,12 @@ router.get('/audit-logs', async (req, res, next) => {
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
 
+    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
     let where = '1=1';
     const params = [];
     if (action) { where += ' AND al.action = ?'; params.push(action); }
-    if (date_from) { where += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
-    if (date_to) { where += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }
+    if (date_from && isValidDate(date_from)) { where += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
+    if (date_to && isValidDate(date_to)) { where += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }
 
     // CSV export mode
     if (req.query.format === 'csv') {

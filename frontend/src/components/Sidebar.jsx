@@ -44,11 +44,17 @@ const PROVINCE_NAV = [
   { to: '/reports/daily',         label: 'รายงาน' },
 ];
 
+const TRANSPORT_NAV = [
+  { to: '/transport',              label: 'ภาพรวมตรวจสภาพรถ' },
+  { to: '/transport/vehicles',     label: 'รถรับส่ง' },
+  { to: '/transport/inspections',  label: 'บันทึกตรวจสภาพ' },
+];
+
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATION_NAV, province: PROVINCE_NAV, admin: PROVINCE_NAV };
+  const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATION_NAV, province: PROVINCE_NAV, transport: TRANSPORT_NAV, admin: PROVINCE_NAV };
   const navItems = NAV_MAP[user?.role] || [];
 
   async function handleLogout() {

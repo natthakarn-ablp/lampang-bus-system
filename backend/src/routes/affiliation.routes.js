@@ -259,9 +259,10 @@ router.get('/audit-logs', async (req, res, next) => {
     )`;
     const params = [affId, affId, affId];
 
+    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (action) { scopeWhere += ' AND al.action = ?'; params.push(action); }
-    if (date_from) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
-    if (date_to) { scopeWhere += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }
+    if (date_from && isValidDate(date_from)) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
+    if (date_to && isValidDate(date_to)) { scopeWhere += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }
 
     // CSV export mode
     if (req.query.format === 'csv') {

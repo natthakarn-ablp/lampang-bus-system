@@ -34,11 +34,31 @@ async function removeLineUser(lineUserId) {
 // ─── Linking Flow ───────────────────────────────────────────────────────────
 
 // State machine: per-user linking state stored in memory (MVP — no Redis needed for small scale)
-const linkingState = new Map(); // lineUserId -> { step, phone }
+// States expire after 10 minutes to prevent memory leaks from abandoned linking flows.
+const linkingState = new Map(); // lineUserId -> { step, phone, createdAt }
+const LINKING_STATE_TTL = 10 * 60 * 1000; // 10 minutes
 
-function getLinkState(lineUserId) { return linkingState.get(lineUserId) || null; }
-function setLinkState(lineUserId, state) { linkingState.set(lineUserId, state); }
+function getLinkState(lineUserId) {
+  const state = linkingState.get(lineUserId);
+  if (!state) return null;
+  if (Date.now() - state.createdAt > LINKING_STATE_TTL) {
+    linkingState.delete(lineUserId);
+    return null;
+  }
+  return state;
+}
+function setLinkState(lineUserId, state) {
+  linkingState.set(lineUserId, { ...state, createdAt: Date.now() });
+}
 function clearLinkState(lineUserId) { linkingState.delete(lineUserId); }
+
+// Periodic cleanup of expired states (every 5 minutes)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, state] of linkingState) {
+    if (now - state.createdAt > LINKING_STATE_TTL) linkingState.delete(key);
+  }
+}, 5 * 60 * 1000);
 
 async function tryLinkByPhoneAndStudentId(lineUserId, phone, studentId) {
   // Find parent by phone

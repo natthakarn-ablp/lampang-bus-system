@@ -191,8 +191,8 @@ router.get('/export/pdf', async (req, res, next) => {
     const env = require('../config/env');
     const fs = require('fs');
     let fontName = 'Helvetica';
-    if (env.app.pdfFontPath && fs.existsSync(env.app.pdfFontPath)) {
-      doc.registerFont('ThaiFont', env.app.pdfFontPath);
+    if (env.export.pdfFontPath && fs.existsSync(env.export.pdfFontPath)) {
+      doc.registerFont('ThaiFont', env.export.pdfFontPath);
       fontName = 'ThaiFont';
     }
 

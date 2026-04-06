@@ -4,6 +4,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
+const rateLimit = require('express-rate-limit');
 
 const { pool } = require('../config/database');
 const env = require('../config/env');
@@ -14,6 +15,23 @@ const { logAudit } = require('../utils/audit');
 const router = express.Router();
 
 const BCRYPT_COST = 12;
+
+// ─── Rate limiters ──────────────────────────────────────────────────────────
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,                   // 20 attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts. Try again in 15 minutes.', errors: [], data: null },
+});
+
+const refreshLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests. Try again shortly.', errors: [], data: null },
+});
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -62,7 +80,7 @@ function expToDate(exp) {
 
 // ─── POST /api/auth/login ────────────────────────────────────────────────────
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     const { username, password } = req.body;
 
@@ -187,7 +205,22 @@ router.post('/change-password', authenticate, async (req, res, next) => {
 
     const newHash = await bcrypt.hash(String(new_password), BCRYPT_COST);
 
-    await pool.query('UPDATE users SET password_hash = ?, must_change_password = FALSE WHERE id = ?', [newHash, req.user.id]);
+    await pool.query(
+      'UPDATE users SET password_hash = ?, must_change_password = FALSE, password_changed_at = NOW() WHERE id = ?',
+      [newHash, req.user.id]
+    );
+
+    // Also revoke the specific refresh token sent with this request (belt + suspenders)
+    const clientRefreshToken = req.body.refresh_token;
+    if (clientRefreshToken) {
+      const rtPayload = decodeRefreshToken(clientRefreshToken);
+      if (rtPayload && rtPayload.jti) {
+        await pool.query(
+          'INSERT INTO revoked_tokens (jti, user_id, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE revoked_at = revoked_at',
+          [rtPayload.jti, req.user.id, expToDate(rtPayload.exp)]
+        );
+      }
+    }
 
     await logAudit({
       userId: req.user.id,
@@ -207,7 +240,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
 
 // ─── POST /api/auth/refresh-token ────────────────────────────────────────────
 
-router.post('/refresh-token', async (req, res, next) => {
+router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
   try {
     const { refresh_token } = req.body;
 
@@ -232,7 +265,7 @@ router.post('/refresh-token', async (req, res, next) => {
 
     // Check user still active
     const [rows] = await pool.query(
-      `SELECT id, role, scope_type, scope_id, display_name
+      `SELECT id, username, role, scope_type, scope_id, display_name, password_changed_at
        FROM users
        WHERE id = ? AND is_deleted = FALSE AND is_active = TRUE
        LIMIT 1`,
@@ -242,7 +275,16 @@ router.post('/refresh-token', async (req, res, next) => {
       return sendError(res, 'User not found or account disabled', [], 401);
     }
 
-    const accessToken = generateAccessToken(rows[0]);
+    // Reject tokens issued before the last password change
+    const user = rows[0];
+    if (user.password_changed_at && payload.iat) {
+      const changedAtUnix = Math.floor(new Date(user.password_changed_at).getTime() / 1000);
+      if (payload.iat < changedAtUnix) {
+        return sendError(res, 'Token invalidated by password change. Please login again.', [], 401);
+      }
+    }
+
+    const accessToken = generateAccessToken(user);
 
     return sendSuccess(
       res,

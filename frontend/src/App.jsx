@@ -40,6 +40,13 @@ import ProvDailyStatus      from './pages/province/ProvDailyStatus';
 import ProvEmergencyList    from './pages/province/ProvEmergencyList';
 import ProvAuditLog        from './pages/province/ProvAuditLog';
 
+import TransportLayout     from './pages/transport/TransportLayout';
+import TransportDashboard  from './pages/transport/TransportDashboard';
+import TransportVehicleList from './pages/transport/TransportVehicleList';
+import InspectionForm      from './pages/transport/InspectionForm';
+
+import ParentStatus from './pages/parent/ParentStatus';
+
 import ReportsLayout  from './pages/reports/ReportsLayout';
 import DailyReport    from './pages/reports/DailyReport';
 import MonthlyReport  from './pages/reports/MonthlyReport';
@@ -176,7 +183,22 @@ export default function App() {
             <Route path="summary" element={<SummaryReport />} />
           </Route>
 
-          {/* Phase 7+ routes will be added here */}
+          {/* Transport module — vehicle inspections */}
+          <Route
+            path="/transport"
+            element={
+              <PrivateRoute allowedRoles={['transport', 'admin']}>
+                <TransportLayout />
+              </PrivateRoute>
+            }
+          >
+            <Route index             element={<TransportDashboard />} />
+            <Route path="vehicles"   element={<TransportVehicleList />} />
+            <Route path="inspections" element={<InspectionForm />} />
+          </Route>
+
+          {/* Parent status — standalone page, no auth needed (LIFF / LINE) */}
+          <Route path="/parent" element={<ParentStatus />} />
 
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />

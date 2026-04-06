@@ -44,6 +44,7 @@ export default function ChangePassword() {
       await api.post('/auth/change-password', {
         current_password: form.current_password,
         new_password: form.new_password,
+        refresh_token: localStorage.getItem('refresh_token'),
       });
 
       // Clear must_change_password in both AuthContext and localStorage

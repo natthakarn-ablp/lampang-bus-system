@@ -395,6 +395,11 @@ router.post('/students/move', async (req, res, next) => {
     );
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
 
+    if (vehicle_id) {
+      const [[veh]] = await pool.query('SELECT id FROM vehicles WHERE id = ? AND is_deleted = FALSE', [vehicle_id]);
+      if (!veh) return sendError(res, 'ไม่พบรถที่ระบุ', [], 404);
+    }
+
     await pool.query(`UPDATE students SET vehicle_id = ? WHERE id = ?`, [vehicle_id || null, student_id]);
 
     await logAudit({
@@ -583,6 +588,7 @@ router.get('/audit-logs', async (req, res, next) => {
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 30));
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
+    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 
     let scopeWhere = `((u.scope_id = ? AND u.scope_type = 'SCHOOL')
        OR (al.entity_type IN ('student','roster_request') AND al.entity_id IN (
@@ -591,8 +597,8 @@ router.get('/audit-logs', async (req, res, next) => {
     const params = [schoolId, schoolId];
 
     if (action) { scopeWhere += ' AND al.action = ?'; params.push(action); }
-    if (date_from) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
-    if (date_to) { scopeWhere += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }
+    if (date_from && isValidDate(date_from)) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
+    if (date_to && isValidDate(date_to)) { scopeWhere += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }
 
     // CSV export mode
     if (req.query.format === 'csv') {

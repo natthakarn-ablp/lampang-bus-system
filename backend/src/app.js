@@ -41,18 +41,24 @@ app.use('/api/affiliation', affiliationRoutes);
 app.use('/api/province',    provinceRoutes);
 app.use('/api/reports',     reportRoutes);
 
-// Phase 7+ routes will be added here:
-// app.use('/api/district',  require('./routes/district.routes'));
-// app.use('/api/central',   require('./routes/central.routes'));
-// app.use('/api/transport', require('./routes/transport.routes'));
-// app.use('/api/parent',    require('./routes/parent.routes'));
+// ─── Phase 7+ routes ────────────────────────────────────────────────────────
+app.use('/api/transport', require('./routes/transport.routes'));
+app.use('/api/parent',    require('./routes/parent.routes'));
 app.use('/api/line',      require('./routes/line.routes'));
-// app.use('/api/reports',   require('./routes/report.routes'));
 
-// ─── 404 fallback ────────────────────────────────────────────────────────────
-app.use((_req, res) => {
-  res.status(404).json({ success: false, message: 'Route not found', errors: [], data: null });
-});
+// ─── Serve frontend build in production ──────────────────────────────────────
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+} else {
+  // ─── 404 fallback (dev only — frontend has its own dev server) ─────────
+  app.use((_req, res) => {
+    res.status(404).json({ success: false, message: 'Route not found', errors: [], data: null });
+  });
+}
 
 // ─── Global error handler (must be last) ────────────────────────────────────
 app.use(errorHandler);

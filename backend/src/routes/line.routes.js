@@ -192,8 +192,16 @@ async function handleTextMessage(lineUserId, text) {
 }
 
 // ─── Notification processing endpoint (called by cron or manually) ──────────
+// Protected by API key header to prevent unauthorized trigger.
+// Set CRON_API_KEY env var and pass it as x-api-key header.
 
-router.post('/process-notifications', async (req, res) => {
+router.post('/process-notifications', (req, res, next) => {
+  const cronKey = process.env.CRON_API_KEY;
+  if (cronKey && req.headers['x-api-key'] !== cronKey) {
+    return res.status(401).json({ success: false, message: 'Invalid API key' });
+  }
+  next();
+}, async (req, res) => {
   try {
     const result = await lineSvc.processUnsentNotifications();
     res.json({ success: true, data: result });

@@ -89,33 +89,55 @@ async function handleEvent(event) {
 
 /**
  * Handle text message commands.
+ *
+ * State machine steps:
+ *   (none)            → idle, process commands
+ *   await_phone       → waiting for phone number (bind flow)
+ *   await_student_id  → waiting for student ID (bind flow)
+ *   confirm_unlink    → waiting for "ยืนยันยกเลิก"
+ *   confirm_rebind    → waiting for "ยืนยันเปลี่ยนบัญชี"
  */
 async function handleTextMessage(lineUserId, text) {
-  // ── Linking flow state machine ──
+  const cmd = text.trim();
+  const cmdLower = cmd.toLowerCase();
+
+  // ── "ยกเลิก" resets any pending state ──
+  if (cmdLower === 'ยกเลิก' || cmdLower === 'cancel') {
+    const state = lineSvc.getLinkState(lineUserId);
+    if (state) {
+      lineSvc.clearLinkState(lineUserId);
+      await lineSvc.sendTextMessage(lineUserId, 'ยกเลิกคำสั่งแล้ว');
+    } else {
+      await lineSvc.sendTextMessage(lineUserId, 'ไม่มีคำสั่งค้างอยู่');
+    }
+    return;
+  }
+
+  // ── State machine: process pending states first ──
   const state = lineSvc.getLinkState(lineUserId);
 
   if (state?.step === 'await_phone') {
-    const phone = text.replace(/-/g, '').trim();
+    const phone = cmd.replace(/-/g, '').trim();
     if (!/^\d{9,10}$/.test(phone)) {
-      await lineSvc.sendTextMessage(lineUserId, 'เบอร์โทรไม่ถูกต้อง กรุณาพิมพ์เบอร์โทร 10 หลัก เช่น 0812345678');
+      await lineSvc.sendTextMessage(lineUserId, 'เบอร์โทรไม่ถูกต้อง กรุณาพิมพ์เบอร์โทร 10 หลัก เช่น 0812345678\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก');
       return;
     }
-    // Auto-pad leading zero
     const normalized = phone.length === 9 && (phone[0] === '8' || phone[0] === '9') ? '0' + phone : phone;
     lineSvc.setLinkState(lineUserId, { step: 'await_student_id', phone: normalized });
-    await lineSvc.sendTextMessage(lineUserId, 'กรุณาพิมพ์รหัสนักเรียนของบุตรหลาน (ตัวเลข)');
+    await lineSvc.sendTextMessage(lineUserId, 'กรุณาพิมพ์รหัสนักเรียนของบุตรหลาน (ตัวเลข)\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก');
     return;
   }
 
   if (state?.step === 'await_student_id') {
-    const studentId = parseInt(text, 10);
+    const studentId = parseInt(cmd, 10);
     if (!studentId || isNaN(studentId)) {
-      await lineSvc.sendTextMessage(lineUserId, 'รหัสนักเรียนไม่ถูกต้อง กรุณาพิมพ์เป็นตัวเลข');
+      await lineSvc.sendTextMessage(lineUserId, 'รหัสนักเรียนไม่ถูกต้อง กรุณาพิมพ์เป็นตัวเลข\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก');
       return;
     }
     const result = await lineSvc.tryLinkByPhoneAndStudentId(lineUserId, state.phone, studentId);
     lineSvc.clearLinkState(lineUserId);
     if (result.success) {
+      await lineSvc.logMessage(lineUserId, 'system', 'bind_success', 'ok', `parent_id=${result.parentId}`);
       await lineSvc.sendTextMessage(lineUserId,
         '✅ ผูกบัญชีสำเร็จ!\n\nคุณจะได้รับแจ้งเตือนเมื่อบุตรหลานขึ้น-ลงรถ\n\nพิมพ์ "สถานะ" เพื่อดูสถานะวันนี้'
       );
@@ -125,16 +147,111 @@ async function handleTextMessage(lineUserId, text) {
     return;
   }
 
-  // ── Commands ──
-  const cmd = text.toLowerCase();
-
-  if (cmd === 'ผูกบัญชี' || cmd === 'ลงทะเบียน' || cmd === 'link') {
-    lineSvc.setLinkState(lineUserId, { step: 'await_phone' });
-    await lineSvc.sendTextMessage(lineUserId, 'กรุณาพิมพ์เบอร์โทรที่ลงทะเบียนไว้กับโรงเรียน (10 หลัก)');
+  if (state?.step === 'confirm_unlink') {
+    if (cmdLower === 'ยืนยันยกเลิก') {
+      lineSvc.clearLinkState(lineUserId);
+      const result = await lineSvc.unlinkAccount(lineUserId);
+      if (result.success) {
+        await lineSvc.logMessage(lineUserId, 'system', 'unlink_success', 'ok', `parent_id=${result.unlinkedParentId}`);
+        await lineSvc.sendTextMessage(lineUserId,
+          '✅ ยกเลิกการผูกบัญชีเรียบร้อยแล้ว\n\nคุณจะไม่ได้รับแจ้งเตือนอีกจนกว่าจะผูกบัญชีใหม่\n\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้นใหม่'
+        );
+      } else {
+        await lineSvc.sendTextMessage(lineUserId, '❌ ' + result.message);
+      }
+    } else {
+      lineSvc.clearLinkState(lineUserId);
+      await lineSvc.sendTextMessage(lineUserId, 'ยกเลิกคำสั่ง — ไม่มีการเปลี่ยนแปลง');
+    }
     return;
   }
 
-  if (cmd === 'สถานะ' || cmd === 'status') {
+  if (state?.step === 'confirm_rebind') {
+    if (cmdLower === 'ยืนยันเปลี่ยนบัญชี') {
+      const unlinkResult = await lineSvc.unlinkAccount(lineUserId);
+      if (unlinkResult.success) {
+        await lineSvc.logMessage(lineUserId, 'system', 'rebind_unlink', 'ok', `old_parent_id=${unlinkResult.unlinkedParentId}`);
+        lineSvc.setLinkState(lineUserId, { step: 'await_phone' });
+        await lineSvc.sendTextMessage(lineUserId,
+          '✅ ยกเลิกการผูกบัญชีเดิมแล้ว\n\nเริ่มผูกบัญชีใหม่…\nกรุณาพิมพ์เบอร์โทรที่ลงทะเบียนไว้กับโรงเรียน (10 หลัก)\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก'
+        );
+      } else {
+        lineSvc.clearLinkState(lineUserId);
+        await lineSvc.sendTextMessage(lineUserId, '❌ ไม่สามารถยกเลิกการผูกบัญชีเดิมได้ กรุณาลองใหม่');
+      }
+    } else {
+      lineSvc.clearLinkState(lineUserId);
+      await lineSvc.sendTextMessage(lineUserId, 'ยกเลิกคำสั่ง — ไม่มีการเปลี่ยนแปลง');
+    }
+    return;
+  }
+
+  // ── Commands (no pending state) ──
+
+  if (cmdLower === 'ผูกบัญชี' || cmdLower === 'ลงทะเบียน' || cmdLower === 'link') {
+    // Check if already linked
+    const linked = await lineSvc.getLinkedParentId(lineUserId);
+    if (linked) {
+      const summary = await lineSvc.getLinkedParentSummary(lineUserId);
+      let msg = '⚠️ บัญชี LINE นี้ผูกอยู่แล้ว\n';
+      if (summary?.children?.length > 0) {
+        msg += '\nบุตรหลานที่ผูกอยู่:';
+        for (const c of summary.children) {
+          msg += `\n• ${c.first_name} ${c.last_name} (${c.grade || '-'}) — ${c.school_name || '-'}`;
+        }
+      }
+      msg += '\n\n📌 คำสั่งที่ใช้ได้:';
+      msg += '\n• "สถานะ" — ดูสถานะรับ-ส่งวันนี้';
+      msg += '\n• "ยกเลิกผูกบัญชี" — ยกเลิกการเชื่อม';
+      msg += '\n• "เปลี่ยนบัญชี" — เปลี่ยนเป็นผู้ปกครองอื่น';
+      await lineSvc.sendTextMessage(lineUserId, msg);
+      return;
+    }
+    lineSvc.setLinkState(lineUserId, { step: 'await_phone' });
+    await lineSvc.sendTextMessage(lineUserId, 'กรุณาพิมพ์เบอร์โทรที่ลงทะเบียนไว้กับโรงเรียน (10 หลัก)\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก');
+    return;
+  }
+
+  if (cmdLower === 'ยกเลิกผูกบัญชี' || cmdLower === 'unlink') {
+    const linked = await lineSvc.getLinkedParentId(lineUserId);
+    if (!linked) {
+      await lineSvc.sendTextMessage(lineUserId, 'บัญชี LINE นี้ยังไม่ได้ผูกกับข้อมูลใด\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้น');
+      return;
+    }
+    const summary = await lineSvc.getLinkedParentSummary(lineUserId);
+    let msg = '⚠️ คุณกำลังจะยกเลิกการผูกบัญชี\n';
+    if (summary?.children?.length > 0) {
+      msg += '\nบุตรหลานที่ผูกอยู่:';
+      for (const c of summary.children) {
+        msg += `\n• ${c.first_name} ${c.last_name}`;
+      }
+    }
+    msg += '\n\n❗ หลังยกเลิก คุณจะไม่ได้รับแจ้งเตือนรับ-ส่งอีก';
+    msg += '\n\nพิมพ์ "ยืนยันยกเลิก" เพื่อดำเนินการ';
+    msg += '\nพิมพ์ "ยกเลิก" เพื่อยกเลิกคำสั่ง';
+    lineSvc.setLinkState(lineUserId, { step: 'confirm_unlink' });
+    await lineSvc.sendTextMessage(lineUserId, msg);
+    return;
+  }
+
+  if (cmdLower === 'เปลี่ยนบัญชี' || cmdLower === 'rebind') {
+    const linked = await lineSvc.getLinkedParentId(lineUserId);
+    if (!linked) {
+      await lineSvc.sendTextMessage(lineUserId, 'บัญชี LINE นี้ยังไม่ได้ผูกกับข้อมูลใด\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้น');
+      return;
+    }
+    const summary = await lineSvc.getLinkedParentSummary(lineUserId);
+    let msg = '⚠️ คุณกำลังจะเปลี่ยนบัญชีผู้ปกครอง\n';
+    if (summary?.parent) msg += `\nบัญชีปัจจุบัน: ${summary.parent.name || '-'} (${summary.parent.phone || '-'})`;
+    msg += '\n\nระบบจะยกเลิกการผูกบัญชีเดิม แล้วเริ่มผูกใหม่';
+    msg += '\n\nพิมพ์ "ยืนยันเปลี่ยนบัญชี" เพื่อดำเนินการ';
+    msg += '\nพิมพ์ "ยกเลิก" เพื่อยกเลิกคำสั่ง';
+    lineSvc.setLinkState(lineUserId, { step: 'confirm_rebind' });
+    await lineSvc.sendTextMessage(lineUserId, msg);
+    return;
+  }
+
+  if (cmdLower === 'สถานะ' || cmdLower === 'status') {
     const children = await lineSvc.getLinkedChildren(lineUserId);
     if (children.length === 0) {
       await lineSvc.sendTextMessage(lineUserId, 'ยังไม่ได้ผูกบัญชี\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้น');
@@ -156,7 +273,7 @@ async function handleTextMessage(lineUserId, text) {
     return;
   }
 
-  if (cmd === 'ข้อมูลบุตร' || cmd === 'children' || cmd === 'ลูก') {
+  if (cmdLower === 'ข้อมูลบุตร' || cmdLower === 'children' || cmdLower === 'ลูก') {
     const children = await lineSvc.getLinkedChildren(lineUserId);
     if (children.length === 0) {
       await lineSvc.sendTextMessage(lineUserId, 'ยังไม่ได้ผูกบัญชี\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้น');
@@ -174,14 +291,18 @@ async function handleTextMessage(lineUserId, text) {
     return;
   }
 
-  if (cmd === 'ช่วยเหลือ' || cmd === 'help' || cmd === 'เมนู' || cmd === 'menu') {
-    await lineSvc.sendTextMessage(lineUserId,
-      '📌 คำสั่งที่ใช้ได้:\n\n' +
-      '• "ผูกบัญชี" — เชื่อมข้อมูลบุตรหลาน\n' +
-      '• "สถานะ" — ดูสถานะรับ-ส่งวันนี้\n' +
-      '• "ข้อมูลบุตร" — ดูข้อมูลนักเรียน\n' +
-      '• "ช่วยเหลือ" — แสดงเมนูนี้'
-    );
+  if (cmdLower === 'ช่วยเหลือ' || cmdLower === 'help' || cmdLower === 'เมนู' || cmdLower === 'menu') {
+    const linked = await lineSvc.getLinkedParentId(lineUserId);
+    let msg = '📌 คำสั่งที่ใช้ได้:\n\n';
+    msg += '• "ผูกบัญชี" — เชื่อมข้อมูลบุตรหลาน\n';
+    msg += '• "สถานะ" — ดูสถานะรับ-ส่งวันนี้\n';
+    msg += '• "ข้อมูลบุตร" — ดูข้อมูลนักเรียน\n';
+    if (linked) {
+      msg += '• "ยกเลิกผูกบัญชี" — ยกเลิกการเชื่อม\n';
+      msg += '• "เปลี่ยนบัญชี" — เปลี่ยนผู้ปกครอง\n';
+    }
+    msg += '• "ช่วยเหลือ" — แสดงเมนูนี้';
+    await lineSvc.sendTextMessage(lineUserId, msg);
     return;
   }
 

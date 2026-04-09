@@ -84,7 +84,6 @@ export default function StudentSearch() {
     setSelectedVehicle('');
   }
 
-  // Save student info
   async function handleSaveProfile() {
     if (!editStudent) return;
     if (!form.first_name.trim()) { toast.error('กรุณากรอกชื่อนักเรียน'); return; }
@@ -104,7 +103,6 @@ export default function StudentSearch() {
     } finally { setSaving(false); }
   }
 
-  // Save vehicle change
   async function handleSaveVehicle() {
     if (!editStudent) return;
     setSaving(true);
@@ -123,7 +121,6 @@ export default function StudentSearch() {
     } finally { setSaving(false); }
   }
 
-  // Withdraw (soft delete)
   async function handleWithdraw() {
     if (!editStudent) return;
     if (!window.confirm(`ยืนยันลบ "${editStudent.prefix}${editStudent.first_name} ${editStudent.last_name}" ออกจากระบบ?\n\nนักเรียนจะถูกซ่อนจากรายการทั้งหมด ข้อมูลประวัติยังคงอยู่`)) return;
@@ -138,7 +135,6 @@ export default function StudentSearch() {
     } finally { setSaving(false); }
   }
 
-  // Import handlers
   function handleDownloadTemplate() {
     const link = document.createElement('a');
     link.href = '/templates/student_import_template_th.csv';
@@ -171,29 +167,30 @@ export default function StudentSearch() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
+      {/* Header + actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-xl font-bold text-gray-800">ค้นหานักเรียน</h1>
         <div className="flex gap-2">
           <button onClick={handleDownloadTemplate}
-            className="text-xs bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg transition">
-            ดาวน์โหลดไฟล์ตัวอย่าง
+            className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">
+            ดาวน์โหลดตัวอย่าง
           </button>
           <button onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }}
-            className="text-xs bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-3 py-1.5 rounded-lg transition">
-            นำเข้าข้อมูลนักเรียน
+            className="text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-3 py-2 rounded-lg transition">
+            นำเข้าข้อมูล
           </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-5">
+      {/* Search + filter */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <input
           type="text" value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="ค้นหาชื่อ นามสกุล หรือรหัส…"
-          className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
         />
         <select value={grade} onChange={(e) => setGrade(e.target.value)}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+          className="border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400 sm:w-40">
           <option value="">ทุกระดับชั้น</option>
           {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map((g) => (
             <option key={g} value={g}>{g}</option>
@@ -206,12 +203,13 @@ export default function StudentSearch() {
       )}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : students.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่พบนักเรียน</p>
+        <p className="text-gray-400 py-10 text-center text-lg">ไม่พบนักเรียน</p>
       ) : (
         <>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          {/* ── Desktop table (hidden on mobile) ── */}
+          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-left">
@@ -231,7 +229,7 @@ export default function StudentSearch() {
                     <td className="px-4 py-3 text-gray-600">{s.id}</td>
                     <td className="px-4 py-3 text-gray-800">{s.prefix}{s.first_name} {s.last_name}</td>
                     <td className="px-4 py-3 text-gray-600">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center align-middle">
+                    <td className="px-4 py-3 whitespace-nowrap text-center">
                       {s.plate_no ? (
                         <button onClick={() => navigate(`/school/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
                           className="text-blue-600 hover:text-blue-800 hover:underline text-sm whitespace-nowrap">{s.plate_no}</button>
@@ -258,15 +256,61 @@ export default function StudentSearch() {
             </table>
           </div>
 
+          {/* ── Mobile card view (hidden on desktop) ── */}
+          <div className="md:hidden space-y-3">
+            {students.map((s) => (
+              <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <p className="text-base font-bold text-gray-900 leading-snug">
+                      {s.first_name} {s.last_name}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
+                      <span className="text-gray-300"> · </span>
+                      <span className="text-gray-400">รหัส {s.id}</span>
+                    </p>
+                  </div>
+                  <button onClick={() => openEdit(s)}
+                    className="text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition shrink-0">
+                    แก้ไข
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mt-2">
+                  {s.plate_no ? (
+                    <span className="text-blue-600">
+                      🚌 <button onClick={() => navigate(`/school/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
+                        className="hover:underline">{s.plate_no}</button>
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">🚌 ไม่มีรถ</span>
+                  )}
+                  <span className="text-gray-500">
+                    เช้า {s.morning_enabled ? '✅' : '—'}
+                    {' '}เย็น {s.evening_enabled ? '✅' : '—'}
+                  </span>
+                </div>
+
+                {s.parent_name && (
+                  <p className="text-sm text-gray-500 mt-1.5">
+                    👤 {s.parent_name}
+                    {s.parent_phone && <span className="text-gray-400 ml-1">{s.parent_phone}</span>}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
           {/* Pagination */}
           <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-            <span>แสดง {students.length} จาก {meta.total} รายการ</span>
+            <span>แสดง {students.length} จาก {meta.total}</span>
             <div className="flex gap-2">
               <button onClick={() => fetchStudents(meta.page - 1)} disabled={meta.page <= 1}
-                className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-              <span className="px-3 py-1">หน้า {meta.page}/{totalPages}</span>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 text-sm">ก่อนหน้า</button>
+              <span className="px-3 py-2">{meta.page}/{totalPages}</span>
               <button onClick={() => fetchStudents(meta.page + 1)} disabled={meta.page >= totalPages}
-                className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 text-sm">ถัดไป</button>
             </div>
           </div>
         </>
@@ -274,69 +318,52 @@ export default function StudentSearch() {
 
       {/* ── Import Modal ── */}
       {showImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowImport(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowImport(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-800 mb-1">นำเข้าข้อมูลนักเรียน</h2>
-            <p className="text-xs text-gray-400 mb-5">อัปโหลดไฟล์ CSV หรือ Excel (.xlsx) ที่กรอกข้อมูลตาม Template</p>
+            <p className="text-sm text-gray-400 mb-5">อัปโหลดไฟล์ CSV หรือ Excel (.xlsx)</p>
 
             {!importResult ? (
               <div className="space-y-4">
                 <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
+                  <input type="file" accept=".xlsx,.xls,.csv"
                     onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                    className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-200 file:text-sm file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100"
-                  />
-                  {importFile && (
-                    <p className="text-sm text-green-600 mt-2">{importFile.name}</p>
-                  )}
+                    className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-200 file:text-sm file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100" />
+                  {importFile && <p className="text-sm text-green-600 mt-2">{importFile.name}</p>}
                 </div>
-
                 <div className="flex gap-2">
                   <button onClick={handleImport} disabled={importing || !importFile}
-                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium py-2.5 rounded-lg transition">
+                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium py-3 rounded-lg transition">
                     {importing ? 'กำลังนำเข้า…' : 'นำเข้าข้อมูล'}
                   </button>
                   <button onClick={() => setShowImport(false)}
-                    className="px-4 text-gray-500 hover:text-gray-700 text-sm py-2.5 transition">
-                    ยกเลิก
-                  </button>
+                    className="px-4 text-gray-500 hover:text-gray-700 text-sm py-3 transition">ยกเลิก</button>
                 </div>
-
                 <button onClick={handleDownloadTemplate}
-                  className="w-full text-xs text-blue-600 hover:text-blue-800 py-1">
-                  ยังไม่มีไฟล์? ดาวน์โหลดไฟล์ตัวอย่างก่อน
+                  className="w-full text-sm text-blue-600 hover:text-blue-800 py-1">
+                  ดาวน์โหลดไฟล์ตัวอย่าง
                 </button>
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Success summary */}
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <p className="text-green-800 font-medium text-sm">
                     นำเข้าสำเร็จ {importResult.success} รายการ
                     {importResult.vehicle_linked > 0 && ` (ผูกรถ ${importResult.vehicle_linked} คน)`}
                   </p>
                 </div>
-
-                {/* Error details */}
                 {importResult.errors?.length > 0 && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                     <p className="text-red-700 font-medium text-sm mb-2">ไม่สำเร็จ {importResult.errors.length} รายการ</p>
                     <div className="max-h-40 overflow-y-auto space-y-1">
                       {importResult.errors.map((e, i) => (
-                        <p key={i} className="text-xs text-red-600">
-                          แถวที่ {e.row}: {e.message}
-                        </p>
+                        <p key={i} className="text-xs text-red-600">แถวที่ {e.row}: {e.message}</p>
                       ))}
                     </div>
                   </div>
                 )}
-
                 <button onClick={() => { setShowImport(false); setImportResult(null); }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2.5 rounded-lg transition">
-                  ปิด
-                </button>
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-3 rounded-lg transition">ปิด</button>
               </div>
             )}
           </div>
@@ -345,41 +372,42 @@ export default function StudentSearch() {
 
       {/* ── Edit Modal ── */}
       {editStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={closeEdit}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeEdit}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-800 mb-1">แก้ไขข้อมูลนักเรียน</h2>
-            <p className="text-xs text-gray-400 mb-5">รหัส: {editStudent.id}</p>
+            <p className="text-sm text-gray-400 mb-5">รหัส: {editStudent.id}</p>
 
-            {/* ── Section 1: ข้อมูลนักเรียน ── */}
+            {/* Section 1: ข้อมูลนักเรียน */}
             <fieldset className="space-y-3 mb-6">
-              <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">ข้อมูลนักเรียน</legend>
+              <legend className="text-sm font-semibold text-gray-600 mb-2">ข้อมูลนักเรียน</legend>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">คำนำหน้า</label>
+                <select value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  <option value="">-</option>
+                  {PREFIX_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">คำนำหน้า</label>
-                  <select value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-                    <option value="">-</option>
-                    {PREFIX_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">ชื่อ <span className="text-red-500">*</span></label>
+                  <label className="block text-sm text-gray-500 mb-1">ชื่อ <span className="text-red-500">*</span></label>
                   <input type="text" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">นามสกุล <span className="text-red-500">*</span></label>
+                  <label className="block text-sm text-gray-500 mb-1">นามสกุล <span className="text-red-500">*</span></label>
                   <input type="text" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">ระดับชั้น</label>
+                  <label className="block text-sm text-gray-500 mb-1">ระดับชั้น</label>
                   <select value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
                     <option value="">-</option>
                     {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => (
                       <option key={g} value={g}>{g}</option>
@@ -387,55 +415,55 @@ export default function StudentSearch() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">ห้อง</label>
+                  <label className="block text-sm text-gray-500 mb-1">ห้อง</label>
                   <input type="text" value={form.classroom} onChange={(e) => setForm({ ...form, classroom: e.target.value })}
                     placeholder="เช่น 1, 2/1"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex items-center gap-2 text-sm text-gray-700">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <label className="flex items-center gap-2 text-base text-gray-700">
                   <input type="checkbox" checked={form.morning_enabled} onChange={(e) => setForm({ ...form, morning_enabled: e.target.checked })}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
                   ใช้บริการรอบเช้า
                 </label>
-                <label className="flex items-center gap-2 text-sm text-gray-700">
+                <label className="flex items-center gap-2 text-base text-gray-700">
                   <input type="checkbox" checked={form.evening_enabled} onChange={(e) => setForm({ ...form, evening_enabled: e.target.checked })}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
                   ใช้บริการรอบเย็น
                 </label>
               </div>
             </fieldset>
 
-            {/* ── Section 2: ผู้ปกครอง ── */}
+            {/* Section 2: ผู้ปกครอง */}
             <fieldset className="space-y-3 mb-6">
-              <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">ผู้ปกครอง</legend>
-              <div className="grid grid-cols-2 gap-3">
+              <legend className="text-sm font-semibold text-gray-600 mb-2">ผู้ปกครอง</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">ชื่อผู้ปกครอง</label>
+                  <label className="block text-sm text-gray-500 mb-1">ชื่อผู้ปกครอง</label>
                   <input type="text" value={form.parent_name} onChange={(e) => setForm({ ...form, parent_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">เบอร์โทรผู้ปกครอง</label>
+                  <label className="block text-sm text-gray-500 mb-1">เบอร์โทรผู้ปกครอง</label>
                   <input type="tel" value={form.parent_phone} maxLength={10}
                     onChange={(e) => setForm({ ...form, parent_phone: e.target.value.replace(/\D/g, '') })}
                     placeholder="0812345678"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
               </div>
             </fieldset>
 
-            {/* ── Section 3: รถรับส่ง ── */}
+            {/* Section 3: รถรับส่ง */}
             <fieldset className="space-y-3 mb-6">
-              <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">รถรับส่ง</legend>
+              <legend className="text-sm font-semibold text-gray-600 mb-2">รถรับส่ง</legend>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">
+                <label className="block text-sm text-gray-500 mb-1">
                   รถปัจจุบัน: <span className="text-gray-700 font-medium">{editStudent.plate_no || 'ยังไม่มีรถ'}</span>
                 </label>
                 <select value={selectedVehicle} onChange={(e) => setSelectedVehicle(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
                   <option value="">— ไม่มีรถ —</option>
                   {vehicles.map(v => (
                     <option key={v.id} value={v.id}>{v.plate_no}{v.vehicle_type ? ` (${v.vehicle_type})` : ''}</option>
@@ -444,31 +472,23 @@ export default function StudentSearch() {
               </div>
             </fieldset>
 
-            {/* ── Actions ── */}
+            {/* Actions */}
             <div className="flex flex-col gap-2">
-              {/* Save profile */}
               <button onClick={handleSaveProfile} disabled={saving}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-medium py-2.5 rounded-lg transition">
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-medium py-3 rounded-lg transition">
                 {saving ? 'กำลังบันทึก…' : 'บันทึกข้อมูลนักเรียน'}
               </button>
-
-              {/* Save vehicle (only if changed) */}
               {selectedVehicle !== (editStudent.vehicle_id || '') && (
                 <button onClick={handleSaveVehicle} disabled={saving}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium py-2.5 rounded-lg transition">
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white font-medium py-3 rounded-lg transition">
                   {saving ? 'กำลังบันทึก…' : selectedVehicle ? (editStudent.vehicle_id ? 'เปลี่ยนรถ' : 'เพิ่มเข้ารถ') : 'ลบออกจากรถ'}
                 </button>
               )}
-
-              {/* Withdraw */}
               <button onClick={handleWithdraw} disabled={saving}
-                className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-sm py-2 rounded-lg transition disabled:opacity-40">
+                className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2.5 rounded-lg transition disabled:opacity-40">
                 ลาออก / ลบออกจากระบบ
               </button>
-
-              <button onClick={closeEdit} className="w-full text-gray-500 hover:text-gray-700 text-sm py-2 transition">
-                ยกเลิก
-              </button>
+              <button onClick={closeEdit} className="w-full text-gray-500 hover:text-gray-700 py-2 transition">ยกเลิก</button>
             </div>
           </div>
         </div>

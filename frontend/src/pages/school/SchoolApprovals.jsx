@@ -39,7 +39,7 @@ export default function SchoolApprovals() {
       <div className="flex gap-2 mb-4">
         {['pending', 'approved', 'rejected'].map(s => (
           <button key={s} onClick={() => setFilter(s)}
-            className={`px-4 py-2 text-sm rounded-lg transition ${filter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            className={`flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium rounded-lg transition ${filter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             {s === 'pending' ? 'รออนุมัติ' : s === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว'}
           </button>
         ))}
@@ -71,11 +71,11 @@ export default function SchoolApprovals() {
               {r.status === 'pending' && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
                   <button onClick={() => handleReview(r.id, 'approved')}
-                    className="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition">
+                    className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white font-medium px-5 py-2.5 rounded-lg transition">
                     อนุมัติ
                   </button>
                   <button onClick={() => handleReview(r.id, 'rejected')}
-                    className="bg-red-100 hover:bg-red-200 text-red-700 text-sm font-medium px-4 py-1.5 rounded-lg transition">
+                    className="flex-1 sm:flex-none bg-red-100 hover:bg-red-200 text-red-700 font-medium px-5 py-2.5 rounded-lg transition">
                     ปฏิเสธ
                   </button>
                 </div>

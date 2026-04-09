@@ -85,7 +85,7 @@ export default function SchoolDashboard() {
 
           {/* ── Charts Row ── */}
           {vehicles.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               {/* Morning donut */}
               <div className="bg-white rounded-xl border border-gray-200 p-4">
                 <p className="text-xs font-semibold text-gray-500 mb-3 text-center">{CHART_TITLES.MORNING_STATUS}</p>
@@ -160,19 +160,19 @@ export default function SchoolDashboard() {
                   <div key={vehicle.vehicle_id || '__none'} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <button
                       onClick={() => toggleVehicle(vehicle.vehicle_id)}
-                      className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50/50 transition"
+                      className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-gray-50/50 transition"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-2 h-8 rounded-full shrink-0 ${allMorningDone && allEveningDone ? 'bg-green-400' : mPending + ePending > 0 ? 'bg-amber-400' : 'bg-gray-300'}`} />
+                        <div className={`w-2.5 h-9 rounded-full shrink-0 ${allMorningDone && allEveningDone ? 'bg-green-400' : mPending + ePending > 0 ? 'bg-amber-400' : 'bg-gray-300'}`} />
                         <div className="min-w-0">
-                          <h3 className="font-semibold text-gray-800 text-sm truncate">{vehicle.plate_no}</h3>
-                          <p className="text-xs text-gray-400">{vehicle.students.length} คน{leaveCount > 0 ? ` · ลา ${leaveCount}` : ''}</p>
+                          <h3 className="font-bold text-gray-800 text-base truncate">{vehicle.plate_no}</h3>
+                          <p className="text-sm text-gray-400">{vehicle.students.length} คน{leaveCount > 0 ? ` · ลา ${leaveCount}` : ''}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0 text-xs">
+                      <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs">
                         <StatusPill label="เช้า" done={mDone} total={mEnabled.length} pending={mPending} session="morning" />
                         <StatusPill label="เย็น" done={eDone} total={eEnabled.length} pending={ePending} session="evening" />
-                        <span className="text-gray-300 text-[10px]">{isExpanded ? '▲' : '▼'}</span>
+                        <span className="text-gray-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
                       </div>
                     </button>
 
@@ -229,7 +229,7 @@ function StatCard({ icon, label, value, sub, accent = 'blue' }) {
         <span className={`text-xs font-medium ${text[accent] || text.blue} opacity-80`}>{label}</span>
       </div>
       <p className={`text-2xl font-bold ${text[accent] || text.blue}`}>{value ?? '–'}</p>
-      {sub && <p className="text-[10px] mt-0.5 text-gray-400">{sub}</p>}
+      {sub && <p className="text-xs mt-0.5 text-gray-400">{sub}</p>}
     </div>
   );
 }

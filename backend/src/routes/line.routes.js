@@ -260,8 +260,8 @@ async function handleTextMessage(lineUserId, text) {
     let msg = '📋 สถานะรับ-ส่งวันนี้\n';
     for (const child of children) {
       const st = await lineSvc.getChildStatusToday(child.id);
-      const mLabel = st.morning_done ? `✅ ส่งแล้ว ${st.morning_ts ? new Date(st.morning_ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}` : '⏳ ยังไม่ส่ง';
-      const eLabel = st.evening_done ? `✅ รับแล้ว ${st.evening_ts ? new Date(st.evening_ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}` : '⏳ ยังไม่รับ';
+      const mLabel = st.morning_done ? `✅ ส่งแล้ว ${st.morning_ts ? new Date(st.morning_ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) : ''}` : '⏳ ยังไม่ส่ง';
+      const eLabel = st.evening_done ? `✅ รับแล้ว ${st.evening_ts ? new Date(st.evening_ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) : ''}` : '⏳ ยังไม่รับ';
       msg += `\n👦 ${child.prefix || ''}${child.first_name} ${child.last_name}`;
       msg += `\n   ${child.grade || ''}${child.classroom ? '/' + child.classroom : ''} - ${child.school_name || ''}`;
       msg += `\n   เช้า: ${mLabel}`;

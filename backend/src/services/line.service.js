@@ -235,7 +235,7 @@ async function processUnsentNotifications(limit = 50) {
       `นักเรียน: ${data.studentName || '-'}\n` +
       `สถานะ: ${data.status || '-'}\n` +
       `รอบ: ${data.session === 'morning' ? 'เช้า' : 'เย็น'}\n` +
-      `เวลา: ${data.checkedAt ? new Date(data.checkedAt).toLocaleString('th-TH') : '-'}`;
+      `เวลา: ${data.checkedAt ? new Date(data.checkedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-'}`;
 
     const result = await sendTextMessage(n.target_line_user_id, text);
     if (result.sent || result.dryRun) {

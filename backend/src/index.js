@@ -1,5 +1,8 @@
 'use strict';
 
+// Set timezone BEFORE any other code — ensures all Date operations use Bangkok time
+process.env.TZ = 'Asia/Bangkok';
+
 const env = require('./config/env');
 const { testConnection } = require('./config/database');
 const app = require('./app');

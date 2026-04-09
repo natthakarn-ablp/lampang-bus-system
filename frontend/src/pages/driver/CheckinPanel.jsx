@@ -24,46 +24,50 @@ export default function CheckinPanel({ student, session, onDone }) {
     }
   }
 
-  // Done badge wording: morning = "ส่งแล้ว", evening = "รับแล้ว"
   const doneText = session === 'morning' ? 'ส่งแล้ว' : 'รับแล้ว';
 
   return (
-    <div
-      className={`flex flex-col bg-white rounded-xl border px-5 py-4 shadow-sm transition
-        ${isDone ? 'border-green-200' : 'border-gray-200'}`}
-    >
-      <div className="flex items-center justify-between">
-        {/* Student info */}
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-800 truncate">
-            {student.prefix} {student.first_name} {student.last_name}
-          </p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            ชั้น {student.grade && student.classroom ? `${student.grade}/${student.classroom}` : student.grade || student.classroom || '-'} · {student.dropoff_address || 'ไม่ระบุที่อยู่'}
-          </p>
-        </div>
+    <div className={`rounded-2xl border-2 overflow-hidden transition ${isDone ? 'border-green-300 bg-green-50/50' : 'border-gray-200'}`}>
+      {/* Student info */}
+      <div className="px-4 pt-3 pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-base font-bold text-gray-900 leading-snug">
+              {student.first_name} {student.last_name}
+            </p>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {student.grade && student.classroom ? `${student.grade}/${student.classroom}` : student.grade || '-'}
+              {student.school_name && <span className="text-gray-400"> · {student.school_name}</span>}
+            </p>
+          </div>
 
-        {/* Action / done state */}
-        <div className="ml-4 flex-shrink-0">
-          {isDone ? (
-            <span className="text-green-700 bg-green-100 text-xs font-medium px-3 py-1 rounded-full">
+          {isDone && (
+            <span className="text-green-700 bg-green-100 border border-green-300 text-sm font-bold px-3 py-1 rounded-full shrink-0">
               ✓ {doneText}
             </span>
-          ) : (
-            <button
-              onClick={handleAction}
-              disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition"
-            >
-              {loading ? '…' : ACTION_LABEL[session]}
-            </button>
           )}
         </div>
       </div>
 
-      {/* Inline error */}
+      {/* Action button */}
+      {!isDone && (
+        <div className="px-3 pb-3">
+          <button
+            onClick={handleAction}
+            disabled={loading}
+            className={`w-full text-white font-bold text-base py-3 rounded-xl transition ${
+              session === 'morning'
+                ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+                : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800'
+            } disabled:opacity-50`}
+          >
+            {loading ? 'กำลังบันทึก…' : ACTION_LABEL[session]}
+          </button>
+        </div>
+      )}
+
       {error && (
-        <p className="text-xs text-red-600 mt-2">{error}</p>
+        <p className="text-sm text-red-600 px-4 pb-3">{error}</p>
       )}
     </div>
   );

@@ -41,7 +41,7 @@ export default function ProvSchoolList() {
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <h1 className="text-xl font-bold text-gray-800 mb-4">โรงเรียนทั้งหมด</h1>
 
       <div className="flex flex-wrap gap-3 mb-5">

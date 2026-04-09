@@ -50,7 +50,7 @@ const TRANSPORT_NAV = [
   { to: '/transport/inspections',  label: 'บันทึกตรวจสภาพ' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -63,11 +63,24 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="w-56 shrink-0 h-full bg-blue-800 text-white flex flex-col">
+    <aside className="w-64 md:w-56 shrink-0 h-full bg-blue-800 text-white flex flex-col">
       {/* Brand */}
-      <div className="px-5 py-6 border-b border-blue-700 shrink-0">
-        <p className="font-bold text-sm leading-tight">ระบบรถรับส่งนักเรียน</p>
-        <p className="text-blue-300 text-xs mt-0.5">จังหวัดลำปาง</p>
+      <div className="px-5 py-6 border-b border-blue-700 shrink-0 flex items-start justify-between">
+        <div>
+          <p className="font-bold text-sm leading-tight">ระบบรถรับส่งนักเรียน</p>
+          <p className="text-blue-300 text-xs mt-0.5">จังหวัดลำปาง</p>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="md:hidden p-1 -mr-1 -mt-1 rounded-md hover:bg-blue-700 transition"
+            aria-label="ปิดเมนู"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* User info */}

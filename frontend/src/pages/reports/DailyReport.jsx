@@ -27,7 +27,7 @@ export default function DailyReport() {
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-gray-800">รายงานรายวัน</h1>
         <div className="flex items-center gap-3">

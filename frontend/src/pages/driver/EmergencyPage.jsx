@@ -30,7 +30,7 @@ export default function EmergencyPage() {
 
   if (success) {
     return (
-      <div className="p-6 max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="p-3 sm:p-6 max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh]">
         <div className="text-6xl mb-5">✅</div>
         <h2 className="text-xl font-bold text-gray-800 mb-2">แจ้งเหตุฉุกเฉินแล้ว</h2>
         <p className="text-gray-500 text-sm mb-8">ทีมงานจะดำเนินการโดยเร็ว</p>
@@ -45,7 +45,7 @@ export default function EmergencyPage() {
   }
 
   return (
-    <div className="p-6 max-w-lg mx-auto">
+    <div className="p-3 sm:p-6 max-w-lg mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-red-700">🚨 แจ้งเหตุฉุกเฉิน</h1>
         <p className="text-sm text-gray-500 mt-1">กรอกรายละเอียดเหตุการณ์ที่เกิดขึ้น</p>

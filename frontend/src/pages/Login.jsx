@@ -44,8 +44,8 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-blue-50">
-      <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-blue-50 px-4">
+      <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-10 w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-blue-700">ระบบรถรับส่งนักเรียน</h1>

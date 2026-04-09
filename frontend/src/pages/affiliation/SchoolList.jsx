@@ -15,7 +15,7 @@ export default function SchoolList() {
   }, []);
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       <h1 className="text-xl font-bold text-gray-800 mb-4">โรงเรียนในสังกัด</h1>
 
       {error && (

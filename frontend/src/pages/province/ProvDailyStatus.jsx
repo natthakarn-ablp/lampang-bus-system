@@ -44,7 +44,7 @@ export default function ProvDailyStatus() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-xl font-bold text-gray-800">สถานะวันนี้</h1>
         <div className="flex items-center gap-3">

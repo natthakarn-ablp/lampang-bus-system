@@ -8,12 +8,21 @@ import {
   ALL_DONE_LABEL,
 } from '../../utils/session';
 
-const POLL_INTERVAL = 30_000; // 30 seconds
+const POLL_INTERVAL = 30_000;
+
+/** Group students by school_name */
+function groupBySchool(students) {
+  const groups = {};
+  for (const st of students) {
+    const key = st.school_name || 'ไม่ระบุโรงเรียน';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(st);
+  }
+  return Object.entries(groups);
+}
 
 export default function StudentList() {
-  // Session is resolved from the backend (source of truth) then falls back to
-  // local browser time. Stored in a ref so polling doesn't change it mid-shift.
-  const [session, setSession] = useState(null); // null = not yet resolved
+  const [session, setSession] = useState(null);
   const sessionRef = useRef(null);
 
   const [data,    setData]    = useState(null);
@@ -22,7 +31,6 @@ export default function StudentList() {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkMsg,     setBulkMsg]     = useState('');
 
-  // ── Step 1: resolve session from backend status-today ──────────────────────
   useEffect(() => {
     api.get('/driver/status-today')
       .then((res) => {
@@ -31,14 +39,12 @@ export default function StudentList() {
         setSession(resolved);
       })
       .catch(() => {
-        // Backend unreachable — fall back to local browser time
         const fallback = resolveSession(null);
         sessionRef.current = fallback;
         setSession(fallback);
       });
-  }, []); // run once on mount
+  }, []);
 
-  // ── Step 2: fetch roster once session is known, then poll ─────────────────
   const fetchRoster = useCallback(async () => {
     const s = sessionRef.current;
     if (!s) return;
@@ -51,17 +57,16 @@ export default function StudentList() {
     } finally {
       setLoading(false);
     }
-  }, []); // stable — reads session via ref
+  }, []);
 
   useEffect(() => {
-    if (!session) return; // wait until session is resolved
+    if (!session) return;
     setLoading(true);
     fetchRoster();
     const timer = setInterval(fetchRoster, POLL_INTERVAL);
     return () => clearInterval(timer);
   }, [session, fetchRoster]);
 
-  // ── Bulk action ───────────────────────────────────────────────────────────
   async function handleBulkAction() {
     setBulkLoading(true);
     setBulkMsg('');
@@ -81,103 +86,102 @@ export default function StudentList() {
   }
 
   const students = data?.students || [];
-  const pending  = students.filter(s => session === 'morning' ? !s.morning_done : !s.evening_done);
-  const done     = students.filter(s => session === 'morning' ? !!s.morning_done : !!s.evening_done);
+  const pending  = students.filter(st => session === 'morning' ? !st.morning_done : !st.evening_done);
+  const done     = students.filter(st => session === 'morning' ? !!st.morning_done : !!st.evening_done);
   const allDone  = !loading && students.length > 0 && pending.length === 0;
 
-  // ── Render ────────────────────────────────────────────────────────────────
   if (!session) {
-    return <div className="p-6 text-center text-gray-400">กำลังตรวจสอบโหมด…</div>;
+    return <div className="p-6 text-center text-lg text-gray-400">กำลังตรวจสอบโหมด…</div>;
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
+    <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">รายชื่อนักเรียน</h1>
+      <div className="mb-4">
+        <h1 className="text-xl font-bold text-gray-800">รายชื่อนักเรียน</h1>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
           {data?.vehicle && (
-            <p className="text-sm text-gray-500 mt-1">
-              รถ: <span className="font-medium text-gray-700">{data.vehicle.plate_no}</span>
-              {' · '}วันที่: {data.date}
-            </p>
+            <span className="text-sm text-gray-600">
+              🚌 <span className="font-bold">{data.vehicle.plate_no}</span>
+            </span>
           )}
-        </div>
-
-        {/* Current mode badge */}
-        <span
-          className={`text-sm font-semibold px-4 py-1.5 rounded-full flex-shrink-0 ${
+          <span className={`text-sm font-bold px-3 py-1 rounded-full ${
             session === 'morning'
               ? 'bg-orange-100 text-orange-700'
               : 'bg-indigo-100 text-indigo-700'
-          }`}
-        >
-          {session === 'morning' ? '🌅' : '🌆'} โหมดปัจจุบัน: {SESSION_LABEL[session]}
-        </span>
+          }`}>
+            {session === 'morning' ? '🌅' : '🌆'} {SESSION_LABEL[session]}
+          </span>
+        </div>
       </div>
 
-      {/* Bulk action / all-done banner */}
-      <div className="flex items-center gap-3 mb-5">
+      {/* Bulk action */}
+      <div className="mb-5">
         {allDone ? (
-          <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 px-5 py-2 rounded-lg text-sm font-medium">
+          <div className="bg-green-100 border-2 border-green-300 text-green-800 rounded-xl px-4 py-3 text-center text-lg font-bold">
             ✅ {ALL_DONE_LABEL[session]}
           </div>
         ) : (
           <button
             onClick={handleBulkAction}
             disabled={bulkLoading || pending.length === 0}
-            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition"
+            className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:opacity-50 text-white text-lg font-bold px-5 py-4 rounded-xl transition"
           >
             {bulkLoading
               ? 'กำลังดำเนินการ…'
               : `${BULK_LABEL[session]} (${pending.length} คน)`}
           </button>
         )}
-        {bulkMsg && <span className="text-sm text-gray-600">{bulkMsg}</span>}
+        {bulkMsg && <p className="text-center text-sm text-gray-600 mt-2">{bulkMsg}</p>}
       </div>
 
-      {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">
+        <div className="bg-red-50 border-2 border-red-200 text-red-700 rounded-xl px-4 py-3 mb-4 text-base font-medium">
           {error}
         </div>
       )}
 
-      {/* Loading */}
       {loading && (
-        <div className="text-center text-gray-400 py-10">กำลังโหลด…</div>
+        <div className="text-center text-gray-400 py-10 text-lg">กำลังโหลด…</div>
       )}
 
-      {/* Pending students */}
+      {/* Pending students — grouped by school */}
       {!loading && pending.length > 0 && (
         <section className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-            รอดำเนินการ ({pending.length})
+          <h2 className="text-base font-bold text-gray-600 mb-3">
+            ⏳ รอดำเนินการ ({pending.length})
           </h2>
-          <div className="space-y-3">
-            {pending.map((s) => (
-              <CheckinPanel key={s.id} student={s} session={session} onDone={fetchRoster} />
-            ))}
-          </div>
+          {groupBySchool(pending).map(([school, sts]) => (
+            <div key={school} className="mb-4">
+              <p className="text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5 mb-2">
+                🏫 {school}
+              </p>
+              <div className="space-y-3">
+                {sts.map((st) => (
+                  <CheckinPanel key={st.id} student={st} session={session} onDone={fetchRoster} />
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
       )}
 
       {/* Done students */}
       {!loading && done.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-            เสร็จแล้ว ({done.length})
+        <section className="mb-6">
+          <h2 className="text-base font-bold text-green-600 mb-3">
+            ✅ เสร็จแล้ว ({done.length})
           </h2>
-          <div className="space-y-3">
-            {done.map((s) => (
-              <CheckinPanel key={s.id} student={s} session={session} onDone={fetchRoster} />
+          <div className="space-y-2">
+            {done.map((st) => (
+              <CheckinPanel key={st.id} student={st} session={session} onDone={fetchRoster} />
             ))}
           </div>
         </section>
       )}
 
       {!loading && students.length === 0 && (
-        <p className="text-center text-gray-400 py-10">ไม่มีนักเรียนในรถ</p>
+        <p className="text-center text-gray-400 py-10 text-lg">ไม่มีนักเรียนในรถ</p>
       )}
 
       <p className="text-center text-xs text-gray-300 mt-8">

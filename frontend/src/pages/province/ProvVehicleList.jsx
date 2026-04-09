@@ -20,7 +20,7 @@ export default function ProvVehicleList() {
   }, []);
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-xl font-bold text-gray-800">รถรับส่งนักเรียนทั้งจังหวัด</h1>
         <PlateSearchInput value={plateSearch} onChange={setPlateSearch} />

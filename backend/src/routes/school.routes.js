@@ -49,7 +49,7 @@ function auditRowsToCsv(rows) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
   const lines = rows.map(r => [
-    esc(new Date(r.created_at).toLocaleString('th-TH')),
+    esc(new Date(r.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })),
     esc(r.actor_name || '-'),
     esc(r.actor_role || '-'),
     esc(ACTION_TH[r.action] || r.action),
@@ -328,14 +328,27 @@ router.put('/students/:id', async (req, res, next) => {
             await conn.query(`UPDATE parents SET ${pUpdates.join(', ')} WHERE id = ?`, pParams);
           }
         } else if (parent_name || normalizedParentPhone) {
-          const [parentResult] = await conn.query(
-            `INSERT INTO parents (name, phone) VALUES (?, ?)`,
-            [parent_name || null, normalizedParentPhone || null]
-          );
+          // Check for existing parent by phone to avoid duplicates
+          let parentId;
+          if (normalizedParentPhone) {
+            const [[ep]] = await conn.query(
+              `SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1`,
+              [normalizedParentPhone]
+            );
+            parentId = ep?.id;
+          }
+          if (!parentId) {
+            const [parentResult] = await conn.query(
+              `INSERT INTO parents (name, phone) VALUES (?, ?)`,
+              [parent_name || null, normalizedParentPhone || null]
+            );
+            parentId = parentResult.insertId;
+          }
           await conn.query(
             `INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at)
-             VALUES (?, ?, TRUE, ?, NOW())`,
-            [parentResult.insertId, studentId, req.user.id]
+             VALUES (?, ?, TRUE, ?, NOW())
+             ON DUPLICATE KEY UPDATE approved = TRUE`,
+            [parentId, studentId, req.user.id]
           );
         }
       }

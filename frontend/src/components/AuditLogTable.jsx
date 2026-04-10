@@ -126,38 +126,42 @@ export default function AuditLogTable({ apiPath, title = 'ประวัติ�
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <h1 className="text-xl font-bold text-gray-800 mb-4">{title}</h1>
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-end gap-3 mb-4">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">การกระทำ</label>
-          <select value={action} onChange={(e) => setAction(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-            {ACTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
+      <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-end sm:gap-3 mb-4">
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-xs text-gray-500 mb-1">การกระทำ</label>
+            <select value={action} onChange={(e) => setAction(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              {ACTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-xs text-gray-500 mb-1">ตั้งแต่</label>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <div className="flex-1 min-w-[120px]">
+            <label className="block text-xs text-gray-500 mb-1">ถึง</label>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
         </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">ตั้งแต่วันที่</label>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">ถึงวันที่</label>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-        </div>
-        {hasFilters && (
-          <button onClick={clearFilters}
-            className="text-xs text-gray-500 hover:text-red-600 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
-            ล้างตัวกรอง
+        <div className="flex gap-2">
+          {hasFilters && (
+            <button onClick={clearFilters}
+              className="text-sm text-gray-500 hover:text-red-600 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+              ล้างตัวกรอง
+            </button>
+          )}
+          <button onClick={handleExportCsv}
+            className="text-sm text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-4 py-2.5 rounded-lg transition sm:ml-auto">
+            Export CSV
           </button>
-        )}
-        <button onClick={handleExportCsv}
-          className="text-xs text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-3 py-2 rounded-lg transition ml-auto">
-          Export CSV
-        </button>
+        </div>
       </div>
 
       {loading ? (
@@ -202,13 +206,13 @@ export default function AuditLogTable({ apiPath, title = 'ประวัติ�
           </div>
 
           <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-            <span>แสดง {logs.length} จาก {meta.total} รายการ</span>
+            <span>แสดง {logs.length} จาก {meta.total}</span>
             <div className="flex gap-2">
               <button onClick={() => fetchLogs(meta.page - 1)} disabled={meta.page <= 1}
-                className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-              <span className="px-3 py-1">หน้า {meta.page}/{totalPages}</span>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
+              <span className="px-3 py-2">{meta.page}/{totalPages}</span>
               <button onClick={() => fetchLogs(meta.page + 1)} disabled={meta.page >= totalPages}
-                className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
             </div>
           </div>
         </>

@@ -15,7 +15,7 @@ function auditRowsToCsv(rows) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
   const lines = rows.map(r => [
-    esc(new Date(r.created_at).toLocaleString('th-TH')),
+    esc(new Date(r.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })),
     esc(r.actor_name || '-'), esc(r.actor_role || '-'),
     esc(ACTION_TH[r.action] || r.action), esc(ENTITY_TH[r.entity_type] || r.entity_type || '-'),
     esc(r.entity_id || '-'),

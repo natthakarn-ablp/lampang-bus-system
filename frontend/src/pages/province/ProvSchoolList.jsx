@@ -44,12 +44,9 @@ export default function ProvSchoolList() {
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <h1 className="text-xl font-bold text-gray-800 mb-4">โรงเรียนทั้งหมด</h1>
 
-      <div className="flex flex-wrap gap-3 mb-5">
-        <select
-          value={affFilter}
-          onChange={(e) => setAffFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-        >
+      <div className="mb-5">
+        <select value={affFilter} onChange={(e) => setAffFilter(e.target.value)}
+          className="w-full sm:w-auto border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
           <option value="">ทุกสังกัด</option>
           {affiliations.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
@@ -62,12 +59,13 @@ export default function ProvSchoolList() {
       )}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : schools.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่พบโรงเรียน</p>
+        <p className="text-gray-400 py-10 text-center text-lg">ไม่พบโรงเรียน</p>
       ) : (
         <>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-left">
@@ -90,15 +88,29 @@ export default function ProvSchoolList() {
             </table>
           </div>
 
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-3">
+            {schools.map((s) => (
+              <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                <p className="text-base font-bold text-gray-900 mb-0.5">{s.name}</p>
+                <p className="text-sm text-gray-500 mb-2">{s.affiliation_name || '-'}</p>
+                <div className="flex gap-4 text-sm">
+                  <span className="text-blue-600 font-medium">👨‍🎓 {s.student_count} คน</span>
+                  <span className="text-blue-600 font-medium">🚌 {s.vehicle_count} คัน</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-              <span>แสดง {schools.length} จาก {meta.total} รายการ</span>
+              <span>แสดง {schools.length} จาก {meta.total}</span>
               <div className="flex gap-2">
                 <button onClick={() => fetchSchools(meta.page - 1)} disabled={meta.page <= 1}
-                  className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-                <span className="px-3 py-1">หน้า {meta.page}/{totalPages}</span>
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
+                <span className="px-3 py-2">{meta.page}/{totalPages}</span>
                 <button onClick={() => fetchSchools(meta.page + 1)} disabled={meta.page >= totalPages}
-                  className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
+                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
               </div>
             </div>
           )}

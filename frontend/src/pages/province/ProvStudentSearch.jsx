@@ -64,35 +64,36 @@ export default function ProvStudentSearch() {
     <div className="p-3 sm:p-6 max-w-6xl mx-auto">
       <h1 className="text-xl font-bold text-gray-800 mb-4">ค้นหานักเรียน</h1>
 
-      <div className="flex flex-wrap gap-3 mb-5">
+      {/* Filters */}
+      <div className="space-y-3 mb-5">
         <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          type="text" value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="ค้นหาชื่อ นามสกุล หรือรหัส…"
-          className="flex-1 min-w-[200px] border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
         />
-        <select value={grade} onChange={(e) => setGrade(e.target.value)}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-          <option value="">ทุกระดับชั้น</option>
-          {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map((g) => (
-            <option key={g} value={g}>{g}</option>
-          ))}
-        </select>
-        <select value={affFilter} onChange={(e) => { setAffFilter(e.target.value); setSchoolFilter(''); }}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-          <option value="">ทุกสังกัด</option>
-          {affiliations.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
-        <select value={schoolFilter} onChange={(e) => setSchoolFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-          <option value="">ทุกโรงเรียน</option>
-          {schools.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap gap-2">
+          <select value={grade} onChange={(e) => setGrade(e.target.value)}
+            className="flex-1 min-w-[100px] border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="">ทุกชั้น</option>
+            {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map((g) => (
+              <option key={g} value={g}>{g}</option>
+            ))}
+          </select>
+          <select value={affFilter} onChange={(e) => { setAffFilter(e.target.value); setSchoolFilter(''); }}
+            className="flex-1 min-w-[120px] border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="">ทุกสังกัด</option>
+            {affiliations.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <select value={schoolFilter} onChange={(e) => setSchoolFilter(e.target.value)}
+            className="flex-1 min-w-[120px] border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="">ทุกโรงเรียน</option>
+            {schools.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error && (
@@ -100,12 +101,13 @@ export default function ProvStudentSearch() {
       )}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : students.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่พบนักเรียน</p>
+        <p className="text-gray-400 py-10 text-center text-lg">ไม่พบนักเรียน</p>
       ) : (
         <>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          {/* Desktop table */}
+          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-left">
@@ -124,28 +126,20 @@ export default function ProvStudentSearch() {
                   <tr key={s.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-600">{s.id}</td>
                     <td className="px-4 py-3 text-gray-800">{s.prefix}{s.first_name} {s.last_name}</td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}
-                    </td>
+                    <td className="px-4 py-3 text-gray-600">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}</td>
                     <td className="px-4 py-3 text-gray-600 text-xs">{s.school_name || '-'}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{s.affiliation_name || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center align-middle">
+                    <td className="px-4 py-3 whitespace-nowrap text-center">
                       {s.plate_no ? (
                         <button onClick={() => navigate(`/province/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
-                          className="text-blue-600 hover:text-blue-800 hover:underline text-sm whitespace-nowrap">
-                          {s.plate_no}
-                        </button>
+                          className="text-blue-600 hover:underline text-sm">{s.plate_no}</button>
                       ) : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-4 py-3">
-                      {s.morning_enabled
-                        ? <span className="text-green-600 text-xs font-medium">ใช้</span>
-                        : <span className="text-gray-400 text-xs">-</span>}
+                      {s.morning_enabled ? <span className="text-green-600 text-xs font-medium">ใช้</span> : <span className="text-gray-400 text-xs">-</span>}
                     </td>
                     <td className="px-4 py-3">
-                      {s.evening_enabled
-                        ? <span className="text-green-600 text-xs font-medium">ใช้</span>
-                        : <span className="text-gray-400 text-xs">-</span>}
+                      {s.evening_enabled ? <span className="text-green-600 text-xs font-medium">ใช้</span> : <span className="text-gray-400 text-xs">-</span>}
                     </td>
                   </tr>
                 ))}
@@ -153,14 +147,42 @@ export default function ProvStudentSearch() {
             </table>
           </div>
 
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-3">
+            {students.map((s) => (
+              <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-start justify-between gap-2 mb-1">
+                  <p className="text-base font-bold text-gray-900">{s.first_name} {s.last_name}</p>
+                  <span className="text-sm text-gray-400 shrink-0">#{s.id}</span>
+                </div>
+                <p className="text-sm text-gray-500">
+                  {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
+                  <span className="text-gray-300"> · </span>
+                  {s.school_name || '-'}
+                </p>
+                {s.affiliation_name && (
+                  <p className="text-xs text-gray-400 mt-0.5">{s.affiliation_name}</p>
+                )}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mt-2">
+                  {s.plate_no ? (
+                    <button onClick={() => navigate(`/province/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
+                      className="text-blue-600 hover:underline">🚌 {s.plate_no}</button>
+                  ) : <span className="text-gray-400">🚌 ไม่มีรถ</span>}
+                  <span className="text-gray-500">เช้า {s.morning_enabled ? '✅' : '—'} เย็น {s.evening_enabled ? '✅' : '—'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
           <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-            <span>แสดง {students.length} จาก {meta.total} รายการ</span>
+            <span>แสดง {students.length} จาก {meta.total}</span>
             <div className="flex gap-2">
               <button onClick={() => fetchStudents(meta.page - 1)} disabled={meta.page <= 1}
-                className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-              <span className="px-3 py-1">หน้า {meta.page}/{totalPages}</span>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
+              <span className="px-3 py-2">{meta.page}/{totalPages}</span>
               <button onClick={() => fetchStudents(meta.page + 1)} disabled={meta.page >= totalPages}
-                className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
             </div>
           </div>
         </>

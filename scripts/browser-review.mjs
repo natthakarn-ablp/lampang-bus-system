@@ -56,6 +56,100 @@ async function shoot(page, name) {
   await page.waitForTimeout(800);
 }
 
+// Route-specific mock payloads. Routes not matched fall through to the
+// empty-data response, which is fine for shell-only captures.
+const MOCK = {
+  '/api/reports/monthly': {
+    data: {
+      morning_kpi: 96.4, evening_kpi: 97.1,
+      total_morning_done: 4820, total_morning_expected: 5000,
+      total_evening_done:  4855, total_evening_expected: 5000,
+      days_with_data: 22, days_morning_100: 14, days_evening_100: 16,
+      emergency_count: 1, total_students: 268,
+      schools: [
+        { school_id: 'SCH001', school_name: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์', morning_kpi: 99.1, evening_kpi: 99.5, emergency_count: 0 },
+        { school_id: 'SCH002', school_name: 'โรงเรียนเทศบาล 1',                morning_kpi: 95.8, evening_kpi: 96.4, emergency_count: 0 },
+        { school_id: 'SCH003', school_name: 'โรงเรียนทดสอบชื่อยาวมากๆ',          morning_kpi: 87.2, evening_kpi: 90.3, emergency_count: 1 },
+        { school_id: 'SCH004', school_name: 'โรงเรียน A',                       morning_kpi: 75.5, evening_kpi: 78.0, emergency_count: 0 },
+        { school_id: 'SCH005', school_name: 'โรงเรียน B',                       morning_kpi: 60.2, evening_kpi: 65.0, emergency_count: 2 },
+      ],
+      vehicles: [
+        { vehicle_id: 'V-001', plate_no: 'นข 1111 ลำปาง', school_names: 'อนุบาลลำปาง, เทศบาล 1',     morning_kpi: 99.0, evening_kpi: 99.5, emergency_count: 0 },
+        { vehicle_id: 'V-002', plate_no: 'นข 2210 ลำปาง', school_names: 'อนุบาลลำปาง',                 morning_kpi: 94.2, evening_kpi: 95.0, emergency_count: 0 },
+        { vehicle_id: 'V-003', plate_no: 'นข 3333 ลำปาง', school_names: 'โรงเรียน A, B, C',           morning_kpi: 80.5, evening_kpi: 82.0, emergency_count: 1 },
+        { vehicle_id: 'V-004', plate_no: 'นข 4444 ลำปาง', school_names: 'โรงเรียน B',                  morning_kpi: 70.1, evening_kpi: 72.0, emergency_count: 0 },
+        { vehicle_id: 'V-005', plate_no: 'นข 5555 ลำปาง', school_names: 'โรงเรียนทดสอบชื่อยาวมากๆ',     morning_kpi: 55.0, evening_kpi: 58.5, emergency_count: 2 },
+      ],
+      daily_trend: [],
+    },
+  },
+  '/api/reports/summary': {
+    data: {
+      total_students: 268, total_vehicles: 50, total_schools: 2, total_affiliations: 5,
+      morning_kpi: 96.4, evening_kpi: 97.1,
+      total_morning_done: 4820, total_morning_expected: 5000,
+      total_evening_done:  4855, total_evening_expected: 5000,
+      affiliations: [
+        { id: 'AFF001', name: 'สพป.ลำปาง เขต 1', school_count: 5, student_count: 120, vehicle_count: 22, morning_kpi: 98.5, evening_kpi: 99.0, emergency_count: 0 },
+        { id: 'AFF002', name: 'สพป.ลำปาง เขต 2', school_count: 4, student_count:  90, vehicle_count: 16, morning_kpi: 92.3, evening_kpi: 93.0, emergency_count: 1 },
+        { id: 'AFF003', name: 'สพป.ลำปาง เขต 3', school_count: 3, student_count:  58, vehicle_count: 12, morning_kpi: 80.0, evening_kpi: 82.5, emergency_count: 0 },
+      ],
+      schools: [
+        { school_id: 'SCH001', school_name: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์', morning_kpi: 99.1, evening_kpi: 99.5, emergency_count: 0 },
+        { school_id: 'SCH002', school_name: 'โรงเรียนเทศบาล 1',                morning_kpi: 95.8, evening_kpi: 96.4, emergency_count: 0 },
+        { school_id: 'SCH003', school_name: 'โรงเรียนทดสอบชื่อยาว',             morning_kpi: 87.2, evening_kpi: 90.3, emergency_count: 1 },
+        { school_id: 'SCH004', school_name: 'โรงเรียน A',                       morning_kpi: 75.5, evening_kpi: 78.0, emergency_count: 0 },
+        { school_id: 'SCH005', school_name: 'โรงเรียน B',                       morning_kpi: 60.2, evening_kpi: 65.0, emergency_count: 2 },
+      ],
+      vehicles: [
+        { vehicle_id: 'V-001', plate_no: 'นข 1111 ลำปาง', school_names: 'อนุบาลลำปาง', morning_kpi: 99.0, evening_kpi: 99.5, emergency_count: 0 },
+        { vehicle_id: 'V-002', plate_no: 'นข 2210 ลำปาง', school_names: 'อนุบาลลำปาง', morning_kpi: 94.2, evening_kpi: 95.0, emergency_count: 0 },
+        { vehicle_id: 'V-003', plate_no: 'นข 3333 ลำปาง', school_names: 'โรงเรียน A',  morning_kpi: 80.5, evening_kpi: 82.0, emergency_count: 1 },
+        { vehicle_id: 'V-004', plate_no: 'นข 4444 ลำปาง', school_names: 'โรงเรียน B',  morning_kpi: 70.1, evening_kpi: 72.0, emergency_count: 0 },
+        { vehicle_id: 'V-005', plate_no: 'นข 5555 ลำปาง', school_names: 'โรงเรียนทดสอบ', morning_kpi: 55.0, evening_kpi: 58.5, emergency_count: 2 },
+      ],
+    },
+  },
+  '/api/admin/audit-logs': {
+    data: [
+      { id: 1, created_at: '2026-05-09T08:30:00Z', actor_name: 'admin@lampang.go.th', action: 'CREATE',  entity_type: 'student',         entity_id: 'STU-001', new_value: { first_name: 'สมชาย', last_name: 'ใจดี' } },
+      { id: 2, created_at: '2026-05-09T09:15:00Z', actor_name: 'admin@lampang.go.th', action: 'UPDATE',  entity_type: 'vehicle',         entity_id: 'V-002',   old_value: { plate_no: 'นข 2210 ลำปาง', vehicle_id: 'V-002' }, new_value: { plate_no: 'นข 2211 ลำปาง' } },
+      { id: 3, created_at: '2026-05-09T10:42:00Z', actor_name: 'school01',            action: 'IMPORT',  entity_type: 'student',         entity_id: null,      new_value: { success: 28, errors: 2 } },
+      { id: 4, created_at: '2026-05-09T11:05:00Z', actor_name: 'school01',            action: 'APPROVE', entity_type: 'roster_request', entity_id: 'REQ-014', new_value: { status: 'approved', requestType: 'add' } },
+      { id: 5, created_at: '2026-05-09T11:50:00Z', actor_name: 'driver-tester',       action: 'LOGIN',   entity_type: 'user',           entity_id: null,      new_value: {} },
+      { id: 6, created_at: '2026-05-09T13:20:00Z', actor_name: 'admin@lampang.go.th', action: 'DELETE',  entity_type: 'student',        entity_id: 'STU-099', old_value: { first_name: 'นักเรียนทดสอบ' } },
+      { id: 7, created_at: '2026-05-09T14:00:00Z', actor_name: 'province01',          action: 'EXPORT',  entity_type: 'checkin',        entity_id: null,      new_value: { format: 'csv', rows: 1240 } },
+    ],
+    meta: { page: 1, per_page: 30, total: 7 },
+  },
+  '/api/province/audit-logs': {
+    data: [
+      { id: 1, created_at: '2026-05-09T08:30:00Z', actor_name: 'admin@lampang.go.th', action: 'CREATE',  entity_type: 'student',  entity_id: 'STU-001', new_value: { first_name: 'สมชาย' } },
+      { id: 2, created_at: '2026-05-09T09:15:00Z', actor_name: 'admin@lampang.go.th', action: 'UPDATE',  entity_type: 'vehicle',  entity_id: 'V-002',   old_value: { plate_no: 'นข 2210 ลำปาง' }, new_value: { plate_no: 'นข 2211 ลำปาง' } },
+      { id: 3, created_at: '2026-05-09T10:42:00Z', actor_name: 'school01',            action: 'APPROVE', entity_type: 'roster_request', entity_id: 'REQ-014', new_value: { status: 'approved', requestType: 'add' } },
+    ],
+    meta: { page: 1, per_page: 30, total: 3 },
+  },
+};
+
+function mockFor(url) {
+  // Strip query string + fragment to match by pathname only.
+  try {
+    const u = new URL(url);
+    return MOCK[u.pathname] || null;
+  } catch { return null; }
+}
+
+async function attachApiStub(page) {
+  await page.route(`${BASE}/api/**`, async (route) => {
+    const m = mockFor(route.request().url());
+    const body = m
+      ? JSON.stringify({ success: true, message: 'OK', ...m })
+      : JSON.stringify({ success: true, message: 'OK', data: {} });
+    await route.fulfill({ status: 200, contentType: 'application/json', body });
+  });
+}
+
 async function pageWithUser(browser, user, viewport) {
   const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
@@ -65,13 +159,7 @@ async function pageWithUser(browser, user, viewport) {
 
   // Stub out /api/** so unauth'd dashboard pages don't 401-loop and exhaust
   // resources during visual QA. We're testing UI shell, not backend.
-  await page.route(`${BASE}/api/**`, async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ success: true, message: 'OK', data: {} }),
-    });
-  });
+  await attachApiStub(page);
 
   return { ctx, page };
 }
@@ -91,13 +179,7 @@ async function pageWithUser(browser, user, viewport) {
   for (const [name, vp] of Object.entries({ desktop: VIEWPORTS.desktop, mobile: VIEWPORTS.mobile })) {
     const ctx  = await browser.newContext({ viewport: vp });
     const page = await ctx.newPage();
-    await page.route(`${BASE}/api/**`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ success: true, message: 'OK', data: {} }),
-      });
-    });
+    await attachApiStub(page);
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 20000 });
     await shoot(page, `01-login-${name}`);
     await ctx.close();
@@ -206,6 +288,28 @@ async function pageWithUser(browser, user, viewport) {
     });
     console.log(`    toast container computed: ${JSON.stringify(toast)}`);
     console.log(`    bottom-nav rect:           ${JSON.stringify(nav)}`);
+    await ctx.close();
+  }
+
+  // Phase 3.3 — Reports (RankingTable → LeaderboardRow cards)
+  for (const [vname, vp] of Object.entries({ desktop: VIEWPORTS.desktop, mobile: VIEWPORTS.mobile })) {
+    const { ctx, page } = await pageWithUser(browser, USERS.province, vp);
+    await page.goto(`${BASE}/reports/monthly`, { waitUntil: 'networkidle', timeout: 20000 });
+    await shoot(page, `08-reports-monthly-${vname}`);
+    await ctx.close();
+  }
+  for (const [vname, vp] of Object.entries({ desktop: VIEWPORTS.desktop, mobile: VIEWPORTS.mobile })) {
+    const { ctx, page } = await pageWithUser(browser, USERS.province, vp);
+    await page.goto(`${BASE}/reports/summary`, { waitUntil: 'networkidle', timeout: 20000 });
+    await shoot(page, `09-reports-summary-${vname}`);
+    await ctx.close();
+  }
+
+  // Phase 3.3 — Audit log (AuditLogTable → AuditEntry cards)
+  for (const [vname, vp] of Object.entries({ desktop: VIEWPORTS.desktop, mobile: VIEWPORTS.mobile })) {
+    const { ctx, page } = await pageWithUser(browser, USERS.admin, vp);
+    await page.goto(`${BASE}/admin/audit-logs`, { waitUntil: 'networkidle', timeout: 20000 });
+    await shoot(page, `10-admin-audit-${vname}`);
     await ctx.close();
   }
 

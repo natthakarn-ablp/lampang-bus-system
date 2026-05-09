@@ -47,8 +47,13 @@ const VIEWPORTS = {
 
 async function shoot(page, name) {
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
+  // viewport-only (not fullPage) — full-page captures crash chromium-headless
+  // on small VMs because the entire scrollable area must be rasterized into
+  // one buffer. Viewport screenshots stream tile-by-tile and stay bounded.
+  await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false });
   console.log(`  ✓ ${name}.png`);
+  // Settle between captures to let chromium reclaim memory before next page.
+  await page.waitForTimeout(800);
 }
 
 async function pageWithUser(browser, user, viewport) {
@@ -57,16 +62,42 @@ async function pageWithUser(browser, user, viewport) {
   await page.addInitScript(injectScript(user));
   page.on('console',   m => { if (m.type() === 'error') console.log(`    [console.error] ${m.text()}`); });
   page.on('pageerror', e => console.log(`    [pageerror] ${e.message}`));
+
+  // Stub out /api/** so unauth'd dashboard pages don't 401-loop and exhaust
+  // resources during visual QA. We're testing UI shell, not backend.
+  await page.route('**/api/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, message: 'OK', data: {} }),
+    });
+  });
+
   return { ctx, page };
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
+      '--disable-dev-shm-usage',     // /dev/shm is small in containers/VMs
+      '--disable-gpu',                // no GPU in headless server
+      '--disable-software-rasterizer',
+      '--no-sandbox',                 // some environments lack user-ns
+    ],
+  });
 
   // Login (no auth)
   for (const [name, vp] of Object.entries({ desktop: VIEWPORTS.desktop, mobile: VIEWPORTS.mobile })) {
     const ctx  = await browser.newContext({ viewport: vp });
     const page = await ctx.newPage();
+    await page.route('**/api/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, message: 'OK', data: {} }),
+      });
+    });
     await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 20000 });
     await shoot(page, `01-login-${name}`);
     await ctx.close();

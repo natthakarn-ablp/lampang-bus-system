@@ -257,10 +257,20 @@ function CompletenessCard({ c }) {
 }
 
 function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
-  const allDone = pending === 0 && total > 0;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const barCls = allDone ? 'bg-success' : pct >= 80 ? 'bg-warn' : 'bg-danger';
-  const pctTone = allDone ? 'text-success' : pct >= 80 ? 'text-warn' : 'text-danger';
+  const notStarted = total === 0;
+  const allDone    = !notStarted && pending === 0;
+  const pct        = notStarted ? 0 : Math.round((done / total) * 100);
+
+  // Semantic state mapping — neutral when nothing has happened yet,
+  // never danger for "0% before the day started."
+  const barCls  = notStarted ? 'bg-surface-border'
+                : allDone    ? 'bg-success'
+                : pct >= 80  ? 'bg-warn'
+                : 'bg-danger';
+  const pctTone = notStarted ? 'text-ink-muted'
+                : allDone    ? 'text-success'
+                : pct >= 80  ? 'text-warn'
+                : 'text-danger';
 
   return (
     <AppCard padding="md" className={allDone ? 'border-success/40' : ''}>
@@ -269,18 +279,22 @@ function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
           {Icon && <Icon className="w-4 h-4 text-ink-muted" strokeWidth={2} />}
           <span className="text-sm font-semibold text-ink">{label}</span>
         </div>
-        <span className={`text-xs font-bold tabular-nums ${pctTone}`}>{pct}%</span>
+        <span className={`text-xs font-semibold tabular-nums ${pctTone}`}>
+          {notStarted ? 'ยังไม่เริ่ม' : `${pct}%`}
+        </span>
       </div>
       <div className="w-full bg-surface rounded-full h-2 mb-2">
-        <div className={`h-2 rounded-full transition-all ${barCls}`} style={{ width: `${pct}%` }} />
+        {!notStarted && (
+          <div className={`h-2 rounded-full transition-all ${barCls}`} style={{ width: `${pct}%` }} />
+        )}
       </div>
       <div className="flex items-center justify-between text-xs">
-        <span className={allDone ? 'text-success font-medium' : 'text-ink-muted'}>
-          {allDone ? `${label}ครบแล้ว ✓` : `${done}/${total - leave} คน`}
+        <span className={notStarted ? 'text-ink-muted' : allDone ? 'text-success font-medium' : 'text-ink-muted'}>
+          {notStarted ? 'รอเริ่มรอบ' : allDone ? `${label}ครบแล้ว ✓` : `${done}/${total - leave} คน`}
         </span>
         <div className="flex gap-2">
           {pending > 0 && <span className="text-danger font-medium">{STATUS.PENDING} {pending}</span>}
-          {leave > 0 && <span className="text-warn">{STATUS.LEAVE} {leave}</span>}
+          {leave > 0   && <span className="text-warn">{STATUS.LEAVE} {leave}</span>}
         </div>
       </div>
     </AppCard>

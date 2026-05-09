@@ -45,7 +45,7 @@ export function ToastProvider({ children }) {
             key={t.id}
             className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg text-white text-sm shadow-lg animate-slide-in ${COLORS[t.type]}`}
           >
-            <span className="font-bold text-base leading-none">{ICONS[t.type]}</span>
+            <span className="font-semibold text-base leading-none">{ICONS[t.type]}</span>
             <span>{t.message}</span>
           </div>
         ))}

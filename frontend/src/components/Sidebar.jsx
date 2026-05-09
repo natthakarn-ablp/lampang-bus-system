@@ -185,7 +185,7 @@ export default function Sidebar({ onClose }) {
       {/* Brand */}
       <div className="px-5 py-5 border-b border-blue-700 shrink-0 flex items-start justify-between">
         <div>
-          <p className="font-bold text-sm leading-tight">ระบบรถรับส่งนักเรียน</p>
+          <p className="font-semibold text-sm leading-tight">ระบบรถรับส่งนักเรียน</p>
           <p className="text-blue-300 text-xs mt-0.5">จังหวัดลำปาง</p>
         </div>
         {onClose && (
@@ -217,7 +217,7 @@ export default function Sidebar({ onClose }) {
                   onClick={() => toggleSection(key)}
                   aria-expanded={isOpen}
                   aria-controls={panelId}
-                  className={`w-full flex items-center justify-between px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-blue-400 hover:text-blue-200 transition ${gi === 0 ? 'pt-1' : 'pt-4'}`}
+                  className={`w-full flex items-center justify-between px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-blue-400 hover:text-blue-200 transition ${gi === 0 ? 'pt-1' : 'pt-4'}`}
                 >
                   <span>{group.section}</span>
                   <ChevronDown
@@ -228,7 +228,7 @@ export default function Sidebar({ onClose }) {
                 </button>
               )}
               {hasHeader && !sectionCollapsible && (
-                <p className={`px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-blue-400 ${gi === 0 ? 'pt-1' : 'pt-4'}`}>
+                <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-blue-400 ${gi === 0 ? 'pt-1' : 'pt-4'}`}>
                   {group.section}
                 </p>
               )}

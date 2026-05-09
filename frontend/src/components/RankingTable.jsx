@@ -1,50 +1,43 @@
-import { kpiColor, safePct } from '../utils/kpi';
+import { Trophy } from 'lucide-react';
+import LeaderboardRow from './LeaderboardRow';
+import EmptyState from './EmptyState';
 
 /**
- * Compact ranking card with tabular layout.
- * Used by both MonthlyReport and SummaryReport for top/bottom rankings.
+ * Ranking section header + leaderboard rows.
+ * Used by MonthlyReport and SummaryReport for top/bottom rankings.
+ *
+ * Public API preserved from the original table-based version:
+ *   title       — section heading
+ *   items       — array of school or vehicle records
+ *   nameKey     — 'school_name' (default) or 'plate_no'
+ *   showSchool  — when true, render item.school_names as subtext
+ *                 (used for vehicle rankings to show the schools served)
  */
 export default function RankingTable({ title, items, nameKey = 'school_name', showSchool = false }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-700">{title}</h3>
-      </div>
+    <section>
+      <header className="px-1 pb-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-muted">{title}</h3>
+      </header>
+
       {items.length === 0 ? (
-        <p className="px-4 py-4 text-xs text-gray-400">ไม่มีข้อมูล</p>
+        <EmptyState icon={Trophy} title="ไม่มีข้อมูล" compact />
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-gray-400">
-              <th className="px-4 py-2 text-left font-medium">#</th>
-              <th className="px-2 py-2 text-left font-medium">{showSchool ? 'ทะเบียนรถ' : 'โรงเรียน'}</th>
-              <th className="px-2 py-2 text-center font-medium">KPI เช้า</th>
-              <th className="px-2 py-2 text-center font-medium">KPI เย็น</th>
-              <th className="px-2 py-2 text-center font-medium">ฉุกเฉิน</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {items.map((item, i) => (
-              <tr key={item.school_id || item.vehicle_id} className="hover:bg-gray-50">
-                <td className="px-4 py-2 text-gray-400 text-xs">{i + 1}</td>
-                <td className="px-2 py-2 text-gray-700 text-xs">
-                  {item[nameKey]}
-                  {showSchool && item.school_names && (
-                    <span className="block text-gray-400 text-[10px]">{item.school_names}</span>
-                  )}
-                </td>
-                <td className={`px-2 py-2 text-center text-xs font-medium ${kpiColor(item.morning_kpi ?? 0)}`}>
-                  {safePct(item.morning_kpi)}
-                </td>
-                <td className={`px-2 py-2 text-center text-xs font-medium ${kpiColor(item.evening_kpi ?? 0)}`}>
-                  {safePct(item.evening_kpi)}
-                </td>
-                <td className="px-2 py-2 text-center text-xs text-gray-500">-</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="space-y-2">
+          {items.map((item, i) => (
+            <LeaderboardRow
+              key={item.school_id || item.vehicle_id || i}
+              rank={i + 1}
+              name={item[nameKey]}
+              subtext={showSchool ? item.school_names : null}
+              morningKpi={item.morning_kpi}
+              eveningKpi={item.evening_kpi}
+              emergency={item.emergency_count ?? 0}
+              highlighted={i === 0}
+            />
+          ))}
+        </div>
       )}
-    </div>
+    </section>
   );
 }

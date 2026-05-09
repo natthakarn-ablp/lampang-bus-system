@@ -65,7 +65,7 @@ async function pageWithUser(browser, user, viewport) {
 
   // Stub out /api/** so unauth'd dashboard pages don't 401-loop and exhaust
   // resources during visual QA. We're testing UI shell, not backend.
-  await page.route('**/api/**', async (route) => {
+  await page.route(`${BASE}/api/**`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -91,7 +91,7 @@ async function pageWithUser(browser, user, viewport) {
   for (const [name, vp] of Object.entries({ desktop: VIEWPORTS.desktop, mobile: VIEWPORTS.mobile })) {
     const ctx  = await browser.newContext({ viewport: vp });
     const page = await ctx.newPage();
-    await page.route('**/api/**', async (route) => {
+    await page.route(`${BASE}/api/**`, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -133,10 +133,13 @@ async function pageWithUser(browser, user, viewport) {
       { name: 'home',      href: '/driver'           },
     ];
 
+    // Navigate by URL instead of clicking the bottom-nav link. The pretrip
+    // modal renders as a fixed overlay on first driver visit and intercepts
+    // taps on the bottom nav, causing Playwright click() to time out. We're
+    // capturing visual state per route, not testing the click handler.
     for (const tab of driverTabs) {
       try {
-        await page.locator(`nav[aria-label="เมนูหลัก"] a[href="${tab.href}"]`).first().click({ timeout: 3000 });
-        await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+        await page.goto(`${BASE}${tab.href}`, { waitUntil: 'networkidle', timeout: 20000 });
         await shoot(page, `04-driver-mobile-${tab.name}`);
       } catch (e) { console.log(`    skip "${tab.name}": ${e.message.split('\n')[0]}`); }
     }

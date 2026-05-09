@@ -76,26 +76,26 @@ export default function ProvinceDashboard() {
       <KPIGrid cols={4}>
         <KPIStat
           label="รถรับส่ง"
-          value={data.total_vehicles}
+          value={data.total_vehicles ?? 0}
           icon={Bus}
           variant="brand"
-          hint={data.total_students > 0
+          hint={(data.total_students ?? 0) > 0 && (data.total_vehicles ?? 0) > 0
             ? `เฉลี่ย ${Math.round(data.total_students / data.total_vehicles)} คน/คัน`
             : null}
         />
         <KPIStat
           label="นักเรียน"
-          value={data.total_students}
+          value={data.total_students ?? 0}
           icon={GraduationCap}
           variant="brand"
-          hint={`${data.total_schools} ร.ร. · ${data.total_vehicles} คัน`}
+          hint={`${data.total_schools ?? 0} ร.ร. · ${data.total_vehicles ?? 0} คัน`}
         />
         <KPIStat
           label="โรงเรียน"
-          value={data.total_schools}
+          value={data.total_schools ?? 0}
           icon={Building2}
           variant={problemSchools.length > 0 ? 'warn' : 'brand'}
-          hint={`${data.total_affiliations} สังกัด · ค้าง ${problemSchools.length}`}
+          hint={`${data.total_affiliations ?? 0} สังกัด · ค้าง ${problemSchools.length}`}
         />
         {(() => {
           const base = (data.morning_total ?? 0) + (data.evening_total ?? 0);
@@ -212,10 +212,16 @@ export default function ProvinceDashboard() {
 /* ── Domain-specific sub-components ── */
 
 function SessionProgress({ label, icon: Icon, done, total, pending, leave, kpi }) {
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const pendingPct = total > 0 ? Math.round((pending / total) * 100) : 0;
-  const isComplete = pending === 0 && total > 0;
-  const kpiTone = isComplete ? 'text-success' : pct >= 80 ? 'text-warn' : 'text-danger';
+  const notStarted = total === 0;
+  const pct = notStarted ? 0 : Math.round((done / total) * 100);
+  const pendingPct = notStarted ? 0 : Math.round((pending / total) * 100);
+  const isComplete = !notStarted && pending === 0;
+
+  // Neutral when nothing has happened yet — never danger for "0% before day started."
+  const kpiTone = notStarted ? 'text-ink-muted'
+                : isComplete ? 'text-success'
+                : pct >= 80  ? 'text-warn'
+                : 'text-danger';
 
   return (
     <AppCard padding="md" className={isComplete ? 'border-success/40 bg-success-soft/40' : ''}>
@@ -224,17 +230,21 @@ function SessionProgress({ label, icon: Icon, done, total, pending, leave, kpi }
           {Icon && <Icon className="w-4 h-4 text-ink-muted" strokeWidth={2} />}
           <span className="text-sm font-semibold text-ink">{label}</span>
         </div>
-        <span className={`text-xl font-bold tabular-nums ${kpiTone}`}>{safePct(kpi)}</span>
+        <span className={`text-xl font-semibold tabular-nums ${kpiTone}`}>
+          {notStarted ? 'ยังไม่เริ่ม' : safePct(kpi)}
+        </span>
       </div>
       <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-surface mb-2">
         {done > 0 && <div className="bg-success h-full transition-all" style={{ width: `${pct}%` }} />}
         {pending > 0 && <div className="bg-danger/80 h-full" style={{ width: `${pendingPct}%` }} />}
       </div>
       <div className="flex justify-between text-xs">
-        <span className="text-success font-medium tabular-nums">{done}/{total}</span>
+        <span className={notStarted ? 'text-ink-muted tabular-nums' : 'text-success font-medium tabular-nums'}>
+          {notStarted ? 'รอเริ่มรอบ' : `${done}/${total}`}
+        </span>
         <div className="flex gap-3">
           {pending > 0 && <span className="text-danger font-medium">รอ {pending}</span>}
-          {leave > 0 && <span className="text-warn">ลา {leave}</span>}
+          {leave > 0   && <span className="text-warn">ลา {leave}</span>}
         </div>
       </div>
     </AppCard>

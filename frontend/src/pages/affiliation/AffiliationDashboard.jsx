@@ -56,19 +56,19 @@ export default function AffiliationDashboard() {
           <KPIGrid cols={5} gap="sm">
             <KPIStat
               label={CARD_LABELS.SCHOOLS}
-              value={data.total_schools}
+              value={data.total_schools ?? 0}
               icon={Building2}
               variant="brand"
             />
             <KPIStat
               label={CARD_LABELS.TOTAL_STUDENTS}
-              value={data.total_students}
+              value={data.total_students ?? 0}
               icon={GraduationCap}
               variant="brand"
             />
             <KPIStat
               label={CARD_LABELS.VEHICLES}
-              value={data.total_vehicles}
+              value={data.total_vehicles ?? 0}
               icon={Bus}
               variant="brand"
             />
@@ -80,9 +80,9 @@ export default function AffiliationDashboard() {
             />
             <KPIStat
               label={CARD_LABELS.EMERGENCY_7D}
-              value={data.recent_emergencies}
+              value={data.recent_emergencies ?? 0}
               icon={AlertTriangle}
-              variant={data.recent_emergencies > 0 ? 'danger' : 'neutral'}
+              variant={(data.recent_emergencies ?? 0) > 0 ? 'danger' : 'neutral'}
             />
           </KPIGrid>
 
@@ -178,20 +178,27 @@ function StatusBanner({ data }) {
 
 /* ── Session donut card ── */
 function SessionDonut({ title, done, total, pending, leave, segments, doneLabel }) {
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const notStarted = total === 0;
+  const pct = notStarted ? 0 : Math.round((done / total) * 100);
   return (
     <AppCard padding="lg">
       <p className="text-sm font-semibold text-ink-muted mb-4 text-center">{title}</p>
       <DonutChart
         size={160} thickness={22}
-        label={`${pct}%`}
-        sublabel={`${doneLabel} ${done}/${total} คน`}
+        label={notStarted ? '–' : `${pct}%`}
+        sublabel={notStarted ? 'รอเริ่มรอบ' : `${doneLabel} ${done}/${total} คน`}
         segments={segments}
       />
       <div className="flex justify-center gap-6 mt-3 text-sm">
-        <span className="text-success font-medium">{doneLabel} {done}</span>
-        <span className="text-warn">ลา {leave}</span>
-        <span className="text-danger font-medium">รอ {pending}</span>
+        {notStarted ? (
+          <span className="text-ink-muted">ยังไม่เริ่ม</span>
+        ) : (
+          <>
+            <span className="text-success font-medium">{doneLabel} {done}</span>
+            <span className="text-warn">ลา {leave}</span>
+            <span className="text-danger font-medium">รอ {pending}</span>
+          </>
+        )}
       </div>
     </AppCard>
   );

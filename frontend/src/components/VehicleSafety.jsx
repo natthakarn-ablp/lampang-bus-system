@@ -1,12 +1,13 @@
 /**
  * Shared vehicle safety display components for all roles.
  */
+import { CheckCircle2, XCircle, AlertTriangle, Clock } from 'lucide-react';
 
 const INSPECTION_MAP = {
-  PASSED:    { label: 'ผ่าน', cls: 'bg-green-100 text-green-700 border-green-200', icon: '✅' },
-  FAILED:    { label: 'ไม่ผ่าน', cls: 'bg-red-100 text-red-700 border-red-200', icon: '❌' },
-  NEEDS_FIX: { label: 'ต้องแก้ไข', cls: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: '⚠️' },
-  PENDING:   { label: 'รอตรวจ', cls: 'bg-gray-100 text-gray-600 border-gray-200', icon: '⏳' },
+  PASSED:    { label: 'ผ่าน',     cls: 'bg-green-100 text-green-700 border-green-200',   Icon: CheckCircle2 },
+  FAILED:    { label: 'ไม่ผ่าน',  cls: 'bg-red-100 text-red-700 border-red-200',         Icon: XCircle },
+  NEEDS_FIX: { label: 'ต้องแก้ไข', cls: 'bg-yellow-100 text-yellow-700 border-yellow-200', Icon: AlertTriangle },
+  PENDING:   { label: 'รอตรวจ',    cls: 'bg-gray-100 text-gray-600 border-gray-200',     Icon: Clock },
 };
 
 function getInsuranceStatus(expiry) {
@@ -31,12 +32,14 @@ export function VehicleSafetySection({ vehicle }) {
         <div>
           <span className="text-gray-500">ตรวจสภาพ: </span>
           {inspInfo ? (
-            <span className={`font-medium px-2 py-0.5 rounded-full text-xs border ${inspInfo.cls}`}>
-              {inspInfo.icon} {inspInfo.label}
+            <span className={`inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded-full text-xs border ${inspInfo.cls}`}>
+              <inspInfo.Icon className="w-3 h-3" strokeWidth={2.2} />
+              {inspInfo.label}
             </span>
           ) : (
-            <span className="font-medium px-2 py-0.5 rounded-full text-xs border bg-red-100 text-red-600 border-red-200">
-              ⚠️ ยังไม่ตรวจ
+            <span className="inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded-full text-xs border bg-red-100 text-red-600 border-red-200">
+              <AlertTriangle className="w-3 h-3" strokeWidth={2.2} />
+              ยังไม่ตรวจ
             </span>
           )}
         </div>

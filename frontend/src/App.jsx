@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { AdminContextProvider } from './hooks/useAdminContext';
 import { ToastProvider } from './components/Toast';
@@ -99,7 +100,7 @@ function PrivateRoute({ children, allowedRoles }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
-          <p className="text-4xl mb-4">🔒</p>
+          <Lock className="w-12 h-12 mx-auto mb-4 text-ink-muted" strokeWidth={1.6} />
           <h1 className="text-xl font-bold text-gray-800 mb-2">ไม่มีสิทธิ์เข้าถึง</h1>
           <p className="text-gray-600 mb-6">คุณไม่มีสิทธิ์เข้าถึงหน้านี้ กรุณากลับไปหน้าหลักของคุณ</p>
           <button onClick={() => window.location.href = '/'}

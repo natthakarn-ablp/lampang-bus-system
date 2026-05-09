@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Bus, Clock, Lock, WifiOff, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/Toast';
 import { ROLE_HOME } from '../App';
@@ -70,8 +71,8 @@ export default function Login() {
       <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-10 w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
-            <span className="text-3xl">🚌</span>
+          <div className="w-16 h-16 bg-brand-700 rounded-2xl flex items-center justify-center mx-auto mb-3">
+            <Bus className="w-8 h-8 text-white" strokeWidth={2} aria-hidden="true" />
           </div>
           <h1 className="text-2xl font-bold text-blue-800">ระบบรถรับส่งนักเรียน</h1>
           <p className="text-gray-500 text-sm mt-1">จังหวัดลำปาง</p>
@@ -114,7 +115,16 @@ export default function Login() {
               : error.type === 'network' ? 'bg-blue-50 border-blue-200 text-blue-700'
               : 'bg-red-50 border-red-200 text-red-700'
             }`}>
-              <p className="font-medium">{error.type === 'rate' ? '⏳' : error.type === 'disabled' ? '🔒' : error.type === 'network' ? '📡' : '⚠️'} {error.msg}</p>
+              <p className="font-medium inline-flex items-center gap-1.5">
+                {(() => {
+                  const ErrIcon = error.type === 'rate' ? Clock
+                              : error.type === 'disabled' ? Lock
+                              : error.type === 'network' ? WifiOff
+                              : AlertTriangle;
+                  return <ErrIcon className="w-4 h-4 shrink-0" strokeWidth={2} aria-hidden="true" />;
+                })()}
+                <span>{error.msg}</span>
+              </p>
               {error.hint && (
                 <p className="mt-1 text-xs opacity-80 whitespace-pre-line">{error.hint}</p>
               )}

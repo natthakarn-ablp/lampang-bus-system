@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Key, Search } from 'lucide-react';
 import api from '../api/axios';
 import { useAdminContext } from '../hooks/useAdminContext';
 
@@ -24,8 +25,9 @@ export function AdminSchoolSelector() {
   return (
     <div className="bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-3 mb-4">
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-        <label className="text-sm font-semibold text-amber-800 shrink-0">
-          🔑 Admin — เลือกโรงเรียน:
+        <label className="text-sm font-semibold text-amber-800 shrink-0 inline-flex items-center gap-1.5">
+          <Key className="w-4 h-4" strokeWidth={2} />
+          Admin — เลือกโรงเรียน:
         </label>
         <select
           value={schoolId}
@@ -64,8 +66,9 @@ export function AdminAffiliationSelector() {
   return (
     <div className="bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-3 mb-4">
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-        <label className="text-sm font-semibold text-amber-800 shrink-0">
-          🔑 Admin — เลือกสังกัด:
+        <label className="text-sm font-semibold text-amber-800 shrink-0 inline-flex items-center gap-1.5">
+          <Key className="w-4 h-4" strokeWidth={2} />
+          Admin — เลือกสังกัด:
         </label>
         <select
           value={affiliationId}
@@ -90,7 +93,7 @@ export function AdminNoScopeMessage({ type }) {
   const label = type === 'school' ? 'โรงเรียน' : 'สังกัด';
   return (
     <div className="text-center py-16">
-      <p className="text-4xl mb-4">🔍</p>
+      <Search className="w-10 h-10 mx-auto mb-4 text-ink-muted" strokeWidth={1.6} />
       <p className="text-lg font-semibold text-gray-600 mb-2">กรุณาเลือก{label}ก่อน</p>
       <p className="text-sm text-gray-400">เลือก{label}จากเมนูด้านบนเพื่อดูข้อมูล</p>
     </div>

@@ -28,14 +28,18 @@ export default function DriverRosterRequests() {
   const fetchRequests = useCallback(async () => {
     try {
       const res = await api.get('/driver/roster-requests');
-      setRequests(res.data.data);
+      const list = res?.data?.data;
+      setRequests(Array.isArray(list) ? list : []);
     } catch {} finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
     fetchRequests();
-    api.get('/driver/roster').then(r => setStudents(r.data.data.students || [])).catch(() => {});
-    api.get('/driver/schools').then(r => setSchools(r.data.data || [])).catch(() => {});
+    api.get('/driver/roster').then(r => setStudents(r?.data?.data?.students || [])).catch(() => {});
+    api.get('/driver/schools').then(r => {
+      const s = r?.data?.data;
+      setSchools(Array.isArray(s) ? s : []);
+    }).catch(() => {});
   }, [fetchRequests]);
 
   function validatePhone(val) {

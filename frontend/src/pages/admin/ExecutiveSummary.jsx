@@ -86,7 +86,7 @@ export default function ExecutiveSummary() {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs text-blue-200 uppercase tracking-wider">Executive Summary</p>
-            <h1 className="text-xl font-bold mt-1">สรุปภาพรวมการประเมินระบบ</h1>
+            <h1 className="text-xl font-semibold mt-1">สรุปภาพรวมการประเมินระบบ</h1>
             <p className="text-sm text-blue-200 mt-1">Baseline • Current • Role Readiness • Key Risks</p>
           </div>
           <button onClick={() => navigate('/admin/executive-print')}
@@ -113,13 +113,13 @@ export default function ExecutiveSummary() {
 
       {/* Role readiness */}
       <section className="mb-5">
-        <h2 className="text-sm font-bold text-gray-700 mb-2">สถานะความพร้อมรายสิทธิ์</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-2">สถานะความพร้อมรายสิทธิ์</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {roleStats.map(r => (
             <div key={r.id} className="bg-white rounded-xl border border-gray-200 p-3">
               <div className="flex items-center gap-2 mb-1">
-                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold ${r.color}`}>{r.code}</span>
-                <span className="font-bold text-gray-800 text-sm">{r.name}</span>
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-semibold ${r.color}`}>{r.code}</span>
+                <span className="font-semibold text-gray-800 text-sm">{r.name}</span>
               </div>
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.status.cls}`}>{r.status.label}</span>
               <p className="text-xs text-gray-400 mt-1">{r.actions.total} actions · {r.exports} exports</p>
@@ -132,12 +132,12 @@ export default function ExecutiveSummary() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         {/* Improvements */}
         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <h2 className="text-sm font-bold text-green-800 mb-2">✅ สิ่งที่ดีขึ้นจาก Baseline</h2>
+          <h2 className="text-sm font-semibold text-green-800 mb-2">✅ สิ่งที่ดีขึ้นจาก Baseline</h2>
           {improvements.length > 0 ? (
             <ul className="space-y-1">
               {improvements.map(m => (
                 <li key={m.key} className="text-sm text-green-700">
-                  <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-bold">▲ +{m.delta}%</span>
+                  <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold">▲ +{m.delta}%</span>
                 </li>
               ))}
             </ul>
@@ -148,13 +148,13 @@ export default function ExecutiveSummary() {
 
         {/* Risks */}
         <div className={`border rounded-xl p-4 ${risks.length > 0 || lowCoverage.length > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-          <h2 className={`text-sm font-bold mb-2 ${risks.length > 0 ? 'text-red-800' : 'text-gray-700'}`}>
+          <h2 className={`text-sm font-semibold mb-2 ${risks.length > 0 ? 'text-red-800' : 'text-gray-700'}`}>
             {risks.length > 0 ? '⚠️ จุดเสี่ยง / ต้องติดตาม' : '✅ ไม่มีจุดเสี่ยงจากข้อมูลปัจจุบัน'}
           </h2>
           <ul className="space-y-1">
             {risks.map(m => (
               <li key={m.key} className="text-sm text-red-700">
-                <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-bold">▼ {m.delta}%</span>
+                <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold">▼ {m.delta}%</span>
               </li>
             ))}
             {lowCoverage.map(m => (
@@ -171,7 +171,7 @@ export default function ExecutiveSummary() {
 
       {/* Recommended actions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
-        <h2 className="text-sm font-bold text-blue-800 mb-2">📋 สิ่งที่ควรดำเนินการต่อ</h2>
+        <h2 className="text-sm font-semibold text-blue-800 mb-2">📋 สิ่งที่ควรดำเนินการต่อ</h2>
         <ul className="space-y-1.5 text-sm text-blue-700">
           {missingCount > 0 && (
             <li>• เพิ่มการเก็บ evidence สำหรับ <strong>{missingCount} role</strong> ที่ยังมีข้อมูลไม่เพียงพอ</li>
@@ -205,7 +205,7 @@ function MiniKpi({ label, value, color }) {
   const bg = { green: 'bg-green-50 text-green-700', amber: 'bg-amber-50 text-amber-700', red: 'bg-red-50 text-red-700', gray: 'bg-gray-50 text-gray-600' };
   return (
     <div className={`rounded-lg p-2 text-center ${bg[color] || bg.gray}`}>
-      <p className="text-lg font-bold">{value}</p>
+      <p className="text-lg font-semibold">{value}</p>
       <p className="text-xs">{label}</p>
     </div>
   );

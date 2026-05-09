@@ -40,7 +40,7 @@ export default function DailyReport() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <p className="text-xs text-blue-200 uppercase tracking-wider">รายงานรายวัน</p>
-            <h1 className="text-lg font-bold">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
+            <h1 className="text-lg font-semibold">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
             <p className="text-sm text-blue-200 mt-0.5">{thaiDate}</p>
           </div>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
@@ -76,12 +76,12 @@ export default function DailyReport() {
             if (data.emergency_count > 0) alerts.push(`🚨 เหตุฉุกเฉิน ${data.emergency_count} รายการ`);
             return alerts.length > 0 ? (
               <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 mb-5">
-                <p className="text-sm font-bold text-amber-800 mb-1">⚠️ จุดที่ต้องติดตาม</p>
+                <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ จุดที่ต้องติดตาม</p>
                 {alerts.map((a, i) => <p key={i} className="text-sm text-amber-700">{a}</p>)}
               </div>
             ) : (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-5 text-center">
-                <p className="text-sm font-bold text-green-700">✅ ดำเนินการครบทุกรายการ</p>
+                <p className="text-sm font-semibold text-green-700">✅ ดำเนินการครบทุกรายการ</p>
               </div>
             );
           })()}
@@ -89,7 +89,7 @@ export default function DailyReport() {
           {/* ── สรุปรายโรงเรียน ── */}
           {data.schools?.length > 0 && (
             <section className="mb-5">
-              <h2 className="text-sm font-bold text-gray-700 mb-2">สรุปรายโรงเรียน</h2>
+              <h2 className="text-sm font-semibold text-gray-700 mb-2">สรุปรายโรงเรียน</h2>
               <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -116,7 +116,7 @@ export default function DailyReport() {
                             {s.evening_done}/{s.student_count}
                           </td>
                           <td className="px-4 py-2.5 text-center">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                               mOk && eOk ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                             }`}>
                               {mOk && eOk ? 'ครบ' : 'ค้าง'}
@@ -134,7 +134,7 @@ export default function DailyReport() {
           {/* ── สรุปรายรถ ── */}
           {data.vehicles?.length > 0 && (
             <section className="mb-5">
-              <h2 className="text-sm font-bold text-gray-700 mb-2">สรุปรายรถ</h2>
+              <h2 className="text-sm font-semibold text-gray-700 mb-2">สรุปรายรถ</h2>
               <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -161,7 +161,7 @@ export default function DailyReport() {
                             {v.evening_done}/{v.student_count}
                           </td>
                           <td className="px-4 py-2.5 text-center">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                               mOk && eOk ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                             }`}>
                               {mOk && eOk ? 'ครบ' : 'ค้าง'}
@@ -222,7 +222,7 @@ function DecisionLogModal({ onSubmit, onSkip, onCancel }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-2">บันทึกการตัดสินใจ</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">บันทึกการตัดสินใจ</h3>
         <p className="text-sm text-gray-500 mb-4">บันทึกสั้นๆ ก่อนดาวน์โหลด PDF (ไม่บังคับ)</p>
         <div className="mb-3">
           <label className="block text-xs font-medium text-gray-600 mb-1">ประเภทการตัดสินใจ</label>

@@ -75,7 +75,7 @@ export default function ExecutivePrint() {
       {/* Print button — hidden in print */}
       <div className="print:hidden fixed top-4 right-4 z-50 flex gap-2">
         <button onClick={() => window.print()}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition">
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg transition">
           🖨️ พิมพ์ / Save PDF
         </button>
         <button onClick={() => window.history.back()}
@@ -89,7 +89,7 @@ export default function ExecutivePrint() {
 
         {/* 1. Header */}
         <div className="border-b-4 border-blue-800 pb-3 mb-4">
-          <h1 className="text-xl font-bold text-blue-800">สรุปผลการประเมินระบบรถรับส่งนักเรียน</h1>
+          <h1 className="text-xl font-semibold text-blue-800">สรุปผลการประเมินระบบรถรับส่งนักเรียน</h1>
           <p className="text-sm text-gray-500">ระบบรถรับส่งนักเรียนจังหวัดลำปาง — สำหรับการประชุมผู้บริหาร</p>
           <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-xs text-gray-500">
             <span>📌 Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
@@ -100,7 +100,7 @@ export default function ExecutivePrint() {
 
         {/* 2. Executive summary box */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm">
-          <p className="font-bold text-blue-800 mb-1">สรุปสำหรับผู้บริหาร</p>
+          <p className="font-semibold text-blue-800 mb-1">สรุปสำหรับผู้บริหาร</p>
           <p>จาก 6 สิทธิ์ในระบบ มี <strong>{readyCount} สิทธิ์</strong>ที่พร้อมประเมินผล, <strong>{partialCount} สิทธิ์</strong>ประเมินได้บางส่วน
             {improvements.length > 0 ? ` — มี ${improvements.length} ตัวชี้วัดที่ดีขึ้นจาก baseline` : ' — ยังไม่มีการเปลี่ยนแปลงจาก baseline (อาจเพิ่งเริ่มเก็บข้อมูล)'}
             {lowCoverage.length > 0 ? ` · ${lowCoverage.length} ตัวชี้วัดที่ยังต่ำกว่า 50%` : ''}.
@@ -119,7 +119,7 @@ export default function ExecutivePrint() {
 
         {/* 4. Role readiness table */}
         <div className="mb-4">
-          <p className="font-bold text-sm text-gray-700 mb-1">สถานะความพร้อมรายสิทธิ์</p>
+          <p className="font-semibold text-sm text-gray-700 mb-1">สถานะความพร้อมรายสิทธิ์</p>
           <table className="w-full text-xs border border-gray-300">
             <thead>
               <tr className="bg-gray-100">
@@ -146,7 +146,7 @@ export default function ExecutivePrint() {
 
         {/* 5. Metric comparison table */}
         <div className="mb-4">
-          <p className="font-bold text-sm text-gray-700 mb-1">ตัวชี้วัดหลัก — Baseline เทียบปัจจุบัน</p>
+          <p className="font-semibold text-sm text-gray-700 mb-1">ตัวชี้วัดหลัก — Baseline เทียบปัจจุบัน</p>
           <table className="w-full text-xs border border-gray-300">
             <thead>
               <tr className="bg-gray-100">
@@ -178,7 +178,7 @@ export default function ExecutivePrint() {
         {/* 6+7. Improvements + Risks side by side */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="border border-gray-300 rounded-lg p-3">
-            <p className="font-bold text-sm text-green-800 mb-1">✅ ประเด็นที่ดีขึ้น</p>
+            <p className="font-semibold text-sm text-green-800 mb-1">✅ ประเด็นที่ดีขึ้น</p>
             {improvements.length > 0 ? (
               <ul className="text-xs space-y-0.5">
                 {improvements.map(m => <li key={m.label}>• {m.label}: +{m.delta}%</li>)}
@@ -186,7 +186,7 @@ export default function ExecutivePrint() {
             ) : <p className="text-xs text-gray-500">ยังไม่มีการเปลี่ยนแปลงจาก baseline</p>}
           </div>
           <div className="border border-gray-300 rounded-lg p-3">
-            <p className="font-bold text-sm text-red-800 mb-1">⚠️ ประเด็นที่ต้องติดตาม</p>
+            <p className="font-semibold text-sm text-red-800 mb-1">⚠️ ประเด็นที่ต้องติดตาม</p>
             <ul className="text-xs space-y-0.5">
               {risks.map(m => <li key={m.label}>• {m.label}: {m.delta}%</li>)}
               {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {m.current}%</li>)}
@@ -197,7 +197,7 @@ export default function ExecutivePrint() {
 
         {/* 8. Recommended actions */}
         <div className="border border-blue-300 bg-blue-50 rounded-lg p-3 mb-4">
-          <p className="font-bold text-sm text-blue-800 mb-1">📋 ข้อเสนอเพื่อการสั่งการ</p>
+          <p className="font-semibold text-sm text-blue-800 mb-1">📋 ข้อเสนอเพื่อการสั่งการ</p>
           <ul className="text-xs text-blue-700 space-y-0.5">
             {(6 - readyCount - partialCount) > 0 && <li>• เพิ่มการเก็บ evidence สำหรับ {6 - readyCount - partialCount} สิทธิ์ที่ยังมีข้อมูลไม่เพียงพอ</li>}
             {lowCoverage.length > 0 && <li>• เร่งเพิ่ม coverage ใน: {lowCoverage.map(m => m.label).join(', ')}</li>}
@@ -240,7 +240,7 @@ export default function ExecutivePrint() {
 function KpiCell({ label, value }) {
   return (
     <div className="border border-gray-300 rounded p-2 text-center">
-      <p className="text-lg font-bold text-gray-800">{value}</p>
+      <p className="text-lg font-semibold text-gray-800">{value}</p>
       <p className="text-[10px] text-gray-500">{label}</p>
     </div>
   );

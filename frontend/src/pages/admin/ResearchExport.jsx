@@ -71,7 +71,7 @@ export default function ResearchExport() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
             <p className="text-xs text-blue-200 uppercase tracking-wider">Research Dataset</p>
-            <h1 className="text-lg font-bold">ส่งออกชุดข้อมูลวิจัย</h1>
+            <h1 className="text-lg font-semibold">ส่งออกชุดข้อมูลวิจัย</h1>
             <p className="text-sm text-blue-200 mt-0.5">Snapshot • Action Logs • Export Evidence • Summary</p>
           </div>
           <span className="bg-blue-600 text-blue-100 text-xs font-medium px-3 py-1.5 rounded-full shrink-0">Admin only</span>
@@ -80,7 +80,7 @@ export default function ResearchExport() {
 
       {/* Export form */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5 space-y-4">
-        <h2 className="text-sm font-bold text-gray-700">ตั้งค่าการส่งออก</h2>
+        <h2 className="text-sm font-semibold text-gray-700">ตั้งค่าการส่งออก</h2>
 
         {/* Date range */}
         <div className="grid grid-cols-2 gap-3">
@@ -110,7 +110,7 @@ export default function ResearchExport() {
 
       {/* Preview */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <h2 className="text-sm font-bold text-gray-700 mb-3">ตัวอย่างข้อมูลที่จะส่งออก</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">ตัวอย่างข้อมูลที่จะส่งออก</h2>
         {loading ? (
           <p className="text-gray-400 text-center py-4">กำลังตรวจสอบ…</p>
         ) : preview ? (
@@ -127,18 +127,18 @@ export default function ResearchExport() {
 
       {/* Export buttons */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <h2 className="text-sm font-bold text-gray-700 mb-3">ดาวน์โหลดชุดข้อมูล</h2>
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">ดาวน์โหลดชุดข้อมูล</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
           <button onClick={() => handleExport('json')} disabled={exporting !== null}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl transition text-base">
+            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
             {exporting === 'json' ? 'กำลังสร้าง…' : '📦 JSON'}
           </button>
           <button onClick={() => handleExport('csv')} disabled={exporting !== null}
-            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl transition text-base">
+            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
             {exporting === 'csv' ? 'กำลังสร้าง…' : '📄 CSV'}
           </button>
           <button onClick={() => handleExport('excel')} disabled={exporting !== null}
-            className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl transition text-base">
+            className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
             {exporting === 'excel' ? 'กำลังสร้าง…' : '📊 Excel'}
           </button>
         </div>
@@ -155,23 +155,23 @@ export default function ResearchExport() {
         <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-600">📖 คำอธิบายชุดข้อมูล (Data Dictionary)</summary>
         <div className="border-t border-gray-200 px-4 py-3 text-xs text-gray-600 space-y-3">
           <div>
-            <p className="font-bold text-gray-700">snapshots[]</p>
+            <p className="font-semibold text-gray-700">snapshots[]</p>
             <p>ข้อมูลสรุปรายวัน: จำนวนนักเรียน, รถ, ประกัน, ผลตรวจ, ความครบถ้วน, completion rate</p>
             <p className="text-gray-400">Fields: snapshot_date, total_students, students_with_vehicle, students_with_parent, total_vehicles, vehicles_with_insurance, vehicles_inspected, vehicles_passed, morning_total/done, evening_total/done, emergency_count, active_users, total_users, is_baseline, baseline_note, run_type</p>
           </div>
           <div>
-            <p className="font-bold text-gray-700">audit_logs[]</p>
+            <p className="font-semibold text-gray-700">audit_logs[]</p>
             <p>ประวัติ action ทั้งหมด: login, create, update, delete, export, import, approve</p>
             <p className="text-gray-400">Fields: id, user_id, user_role, action, entity_type, entity_id, new_value, created_at</p>
             <p className="text-amber-600">⚠️ ไม่รวม: ip_address, user_agent, old_value (privacy)</p>
           </div>
           <div>
-            <p className="font-bold text-gray-700">export_evidence[]</p>
+            <p className="font-semibold text-gray-700">export_evidence[]</p>
             <p>เฉพาะ action=EXPORT — หลักฐานการดาวน์โหลดรายงาน</p>
             <p className="text-gray-400">Fields: id, user_id, user_role, entity_type (report_csv/report_excel/report_pdf), entity_id, new_value, created_at</p>
           </div>
           <div>
-            <p className="font-bold text-gray-700">summary{}</p>
+            <p className="font-semibold text-gray-700">summary{}</p>
             <p>สรุป aggregate: จำนวนรวม, แยกตาม action type, แยกตาม role</p>
           </div>
         </div>
@@ -201,7 +201,7 @@ function Toggle({ label, checked, onChange, desc }) {
 function PreviewCard({ label, value, sub, small }) {
   return (
     <div className="bg-gray-50 rounded-lg p-3 text-center">
-      <p className={`font-bold text-gray-800 ${small ? 'text-sm' : 'text-xl'}`}>{value}</p>
+      <p className={`font-semibold text-gray-800 ${small ? 'text-sm' : 'text-xl'}`}>{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
       {sub && <p className="text-xs text-gray-400">{sub}</p>}
     </div>

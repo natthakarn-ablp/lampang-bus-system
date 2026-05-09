@@ -83,7 +83,7 @@ export default function EvaluationDashboard() {
       {/* Header */}
       <div className="bg-blue-800 text-white rounded-xl px-5 py-4 mb-5">
         <p className="text-xs text-blue-200 uppercase tracking-wider">Role-by-Role Evaluation</p>
-        <h1 className="text-lg font-bold">แดชบอร์ดประเมินผลแยกตามสิทธิ์</h1>
+        <h1 className="text-lg font-semibold">แดชบอร์ดประเมินผลแยกตามสิทธิ์</h1>
         <p className="text-sm text-blue-200 mt-0.5">Snapshot • Action Logs • Export Evidence</p>
       </div>
 
@@ -108,12 +108,12 @@ export default function EvaluationDashboard() {
               {/* Card header */}
               <button onClick={() => setExpanded(isOpen ? '' : role.id)}
                 className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 transition">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 ${CODE_BG[role.color]}`}>
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0 ${CODE_BG[role.color]}`}>
                   {role.code}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="font-bold text-gray-800">{role.name}</p>
+                    <p className="font-semibold text-gray-800">{role.name}</p>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.cls}`}>{status.label}</span>
                   </div>
                   <p className="text-xs text-gray-500">{role.focus} · {actions.total || 0} actions · {exports} exports</p>
@@ -185,8 +185,8 @@ export default function EvaluationDashboard() {
                                 <tr key={m.label} className="border-t border-gray-100">
                                   <td className="px-3 py-2 text-gray-700 font-medium">{m.label}</td>
                                   <td className="px-3 py-2 text-center text-gray-500">{bv}%</td>
-                                  <td className="px-3 py-2 text-center font-bold text-gray-800">{cv}%</td>
-                                  <td className={`px-3 py-2 text-center font-bold ${t.cls}`}>
+                                  <td className="px-3 py-2 text-center font-semibold text-gray-800">{cv}%</td>
+                                  <td className={`px-3 py-2 text-center font-semibold ${t.cls}`}>
                                     {t.icon} {d > 0 ? '+' : ''}{d}%
                                   </td>
                                 </tr>
@@ -216,7 +216,7 @@ function SummaryPill({ label, value, color }) {
   const bg = { blue: 'bg-blue-50 text-blue-700', green: 'bg-green-50 text-green-700', amber: 'bg-amber-50 text-amber-700', gray: 'bg-gray-50 text-gray-600' };
   return (
     <div className={`rounded-xl p-3 text-center ${bg[color] || bg.gray}`}>
-      <p className="text-sm font-bold">{value}</p>
+      <p className="text-sm font-semibold">{value}</p>
       <p className="text-xs mt-0.5 opacity-70">{label}</p>
     </div>
   );

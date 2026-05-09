@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import AppCard from '../../components/ui/AppCard';
 
 const RESULT_OPTIONS = [
   { value: 'PASSED',   label: 'ผ่าน' },
@@ -297,21 +298,22 @@ export default function InspectionForm() {
       ) : (
         <>
           {/* Desktop table */}
-          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <AppCard padding="none" className="hidden md:block overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-left">
-                  <th className="px-4 py-3 font-medium">ทะเบียนรถ</th>
-                  <th className="px-4 py-3 font-medium text-center">ผลตรวจ</th>
-                  <th className="px-4 py-3 font-medium">วันที่ตรวจ</th>
-                  <th className="px-4 py-3 font-medium">หมดอายุ</th>
-                  <th className="px-4 py-3 font-medium">ผู้ตรวจ</th>
-                  <th className="px-4 py-3 font-medium">หมายเหตุ</th>
+              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                <tr className="text-left">
+                  <th className="px-4 py-3">ทะเบียนรถ</th>
+                  <th className="px-4 py-3 text-center">ผลตรวจ</th>
+                  <th className="px-4 py-3">วันที่ตรวจ</th>
+                  <th className="px-4 py-3">หมดอายุ</th>
+                  <th className="px-4 py-3">ผู้ตรวจ</th>
+                  <th className="px-4 py-3">หมายเหตุ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-surface-border">
                 {inspections.map(ins => (
-                  <tr key={ins.id} className="hover:bg-gray-50">
+                  <tr key={ins.id} className="hover:bg-surface transition">
                     <td className="px-4 py-3 font-medium text-gray-800">{ins.plate_no}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${RESULT_BADGE[ins.result] || 'bg-gray-100'}`}>
@@ -326,7 +328,8 @@ export default function InspectionForm() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </AppCard>
 
           {/* Mobile cards */}
           <div className="md:hidden space-y-3">

@@ -119,15 +119,15 @@ export default function VehicleList() {
                     <p className="text-xs text-gray-400 py-2">ไม่มีนักเรียน</p>
                   ) : (
                     <table className="w-full text-xs">
-                      <thead>
-                        <tr className="text-gray-400 text-left">
-                          <th className="py-1.5 pr-3 font-medium">ชื่อ-นามสกุล</th>
-                          <th className="py-1.5 pr-3 font-medium">ชั้น/ห้อง</th>
-                          <th className="py-1.5 pr-3 font-medium">ผู้ปกครอง</th>
-                          <th className="py-1.5 font-medium">เบอร์โทร</th>
+                      <thead className="text-ink-muted text-[10px] font-semibold uppercase tracking-wide">
+                        <tr className="text-left">
+                          <th className="py-1.5 pr-3">ชื่อ-นามสกุล</th>
+                          <th className="py-1.5 pr-3">ชั้น/ห้อง</th>
+                          <th className="py-1.5 pr-3">ผู้ปกครอง</th>
+                          <th className="py-1.5">เบอร์โทร</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-50">
+                      <tbody className="divide-y divide-surface-border">
                         {studentCache[v.id].map(s => (
                           <tr key={s.id}>
                             <td className="py-1.5 pr-3 text-gray-700">{s.prefix}{s.first_name} {s.last_name}</td>

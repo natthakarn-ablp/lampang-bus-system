@@ -3,6 +3,7 @@ import { Users } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
+import AppCard from '../../components/ui/AppCard';
 
 const ROLE_LABELS = {
   driver: 'คนขับ', school: 'โรงเรียน', affiliation: 'สังกัด',
@@ -161,21 +162,22 @@ export default function UserManagement() {
       ) : (
         <>
           {/* Desktop table */}
-          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <AppCard padding="none" className="hidden md:block overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-left">
-                  <th className="px-4 py-3 font-medium">ชื่อผู้ใช้</th>
-                  <th className="px-4 py-3 font-medium">ชื่อแสดง</th>
-                  <th className="px-4 py-3 font-medium">บทบาท</th>
-                  <th className="px-4 py-3 font-medium">หน่วยงาน</th>
-                  <th className="px-4 py-3 font-medium text-center">สถานะ</th>
-                  <th className="px-4 py-3 font-medium text-center">จัดการ</th>
+              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                <tr className="text-left">
+                  <th className="px-4 py-3">ชื่อผู้ใช้</th>
+                  <th className="px-4 py-3">ชื่อแสดง</th>
+                  <th className="px-4 py-3">บทบาท</th>
+                  <th className="px-4 py-3">หน่วยงาน</th>
+                  <th className="px-4 py-3 text-center">สถานะ</th>
+                  <th className="px-4 py-3 text-center">จัดการ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-surface-border">
                 {users.map(u => (
-                  <tr key={u.id} className="hover:bg-gray-50">
+                  <tr key={u.id} className="hover:bg-surface transition">
                     <td className="px-4 py-3 text-gray-800 font-medium">{u.username}</td>
                     <td className="px-4 py-3 text-gray-600">{u.display_name || '-'}</td>
                     <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
@@ -194,7 +196,8 @@ export default function UserManagement() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </AppCard>
 
           {/* Mobile cards */}
           <div className="md:hidden space-y-3">

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
 import ExportButtons from '../../components/ExportButtons';
+import AppCard from '../../components/ui/AppCard';
 
 export default function DailyReport() {
   const { user } = useAuth();
@@ -90,23 +91,24 @@ export default function DailyReport() {
           {data.schools?.length > 0 && (
             <section className="mb-5">
               <h2 className="text-sm font-semibold text-gray-700 mb-2">สรุปรายโรงเรียน</h2>
-              <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+              <AppCard padding="none" className="overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-left">
-                      <th className="px-4 py-2.5 font-medium">โรงเรียน</th>
-                      <th className="px-4 py-2.5 font-medium text-center">นักเรียน</th>
-                      <th className="px-4 py-2.5 font-medium text-center">ส่งเช้า</th>
-                      <th className="px-4 py-2.5 font-medium text-center">รับเย็น</th>
-                      <th className="px-4 py-2.5 font-medium text-center">สถานะ</th>
+                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                    <tr className="text-left">
+                      <th className="px-4 py-2.5">โรงเรียน</th>
+                      <th className="px-4 py-2.5 text-center">นักเรียน</th>
+                      <th className="px-4 py-2.5 text-center">ส่งเช้า</th>
+                      <th className="px-4 py-2.5 text-center">รับเย็น</th>
+                      <th className="px-4 py-2.5 text-center">สถานะ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-surface-border">
                     {data.schools.map((s) => {
                       const mOk = s.morning_done >= s.student_count;
                       const eOk = s.evening_done >= s.student_count;
                       return (
-                        <tr key={s.school_id} className="hover:bg-gray-50">
+                        <tr key={s.school_id} className="hover:bg-surface transition">
                           <td className="px-4 py-2.5 text-gray-800 font-medium">{s.school_name}</td>
                           <td className="px-4 py-2.5 text-center text-gray-600">{s.student_count}</td>
                           <td className={`px-4 py-2.5 text-center font-medium ${mOk ? 'text-green-600' : 'text-amber-600'}`}>
@@ -127,7 +129,8 @@ export default function DailyReport() {
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </AppCard>
             </section>
           )}
 
@@ -135,23 +138,24 @@ export default function DailyReport() {
           {data.vehicles?.length > 0 && (
             <section className="mb-5">
               <h2 className="text-sm font-semibold text-gray-700 mb-2">สรุปรายรถ</h2>
-              <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+              <AppCard padding="none" className="overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-left">
-                      <th className="px-4 py-2.5 font-medium">ทะเบียนรถ</th>
-                      <th className="px-4 py-2.5 font-medium text-center">นักเรียน</th>
-                      <th className="px-4 py-2.5 font-medium text-center">ส่งเช้า</th>
-                      <th className="px-4 py-2.5 font-medium text-center">รับเย็น</th>
-                      <th className="px-4 py-2.5 font-medium text-center">สถานะ</th>
+                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                    <tr className="text-left">
+                      <th className="px-4 py-2.5">ทะเบียนรถ</th>
+                      <th className="px-4 py-2.5 text-center">นักเรียน</th>
+                      <th className="px-4 py-2.5 text-center">ส่งเช้า</th>
+                      <th className="px-4 py-2.5 text-center">รับเย็น</th>
+                      <th className="px-4 py-2.5 text-center">สถานะ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-surface-border">
                     {data.vehicles.map((v) => {
                       const mOk = v.morning_done >= v.student_count;
                       const eOk = v.evening_done >= v.student_count;
                       return (
-                        <tr key={v.vehicle_id} className="hover:bg-gray-50">
+                        <tr key={v.vehicle_id} className="hover:bg-surface transition">
                           <td className="px-4 py-2.5 text-gray-800 font-medium">{v.plate_no}</td>
                           <td className="px-4 py-2.5 text-center text-gray-600">{v.student_count}</td>
                           <td className={`px-4 py-2.5 text-center font-medium ${mOk ? 'text-green-600' : 'text-amber-600'}`}>
@@ -172,7 +176,8 @@ export default function DailyReport() {
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </AppCard>
             </section>
           )}
 

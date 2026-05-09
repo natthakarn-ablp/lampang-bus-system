@@ -4,6 +4,7 @@ import DashboardCard from '../../components/DashboardCard';
 import KpiCard from '../../components/KpiCard';
 import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
+import AppCard from '../../components/ui/AppCard';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
 
 export default function MonthlyReport() {
@@ -145,21 +146,22 @@ export default function MonthlyReport() {
           {data.daily_trend?.length > 0 && (
             <section className="mb-6">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">แนวโน้มรายวัน</h2>
-              <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+              <AppCard padding="none" className="overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[650px]">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-left">
-                      <th className="px-4 py-3 font-medium">วันที่</th>
-                      <th className="px-4 py-3 font-medium text-center">ส่งเช้า %</th>
-                      <th className="px-4 py-3 font-medium text-center">รับเย็น %</th>
-                      <th className="px-4 py-3 font-medium text-center">ส่งเช้า (คน)</th>
-                      <th className="px-4 py-3 font-medium text-center">รับเย็น (คน)</th>
-                      <th className="px-4 py-3 font-medium text-center">ฉุกเฉิน</th>
+                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                    <tr className="text-left">
+                      <th className="px-4 py-3">วันที่</th>
+                      <th className="px-4 py-3 text-center">ส่งเช้า %</th>
+                      <th className="px-4 py-3 text-center">รับเย็น %</th>
+                      <th className="px-4 py-3 text-center">ส่งเช้า (คน)</th>
+                      <th className="px-4 py-3 text-center">รับเย็น (คน)</th>
+                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-surface-border">
                     {data.daily_trend.map((d) => (
-                      <tr key={d.date} className={`hover:bg-gray-50 ${d.morning_pct >= 100 && d.evening_pct >= 100 ? 'bg-green-50/50' : ''}`}>
+                      <tr key={d.date} className={`hover:bg-surface transition ${d.morning_pct >= 100 && d.evening_pct >= 100 ? 'bg-success-soft/40' : ''}`}>
                         <td className="px-4 py-2.5 text-gray-800">
                           {new Date(d.date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' })}
                         </td>
@@ -172,7 +174,8 @@ export default function MonthlyReport() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </AppCard>
             </section>
           )}
 
@@ -202,23 +205,24 @@ export default function MonthlyReport() {
           {data.schools?.length > 0 && (
             <section className="mb-6">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามโรงเรียน</h2>
-              <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+              <AppCard padding="none" className="overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[700px]">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-left">
-                      <th className="px-4 py-3 font-medium">โรงเรียน</th>
-                      <th className="px-4 py-3 font-medium text-center">ส่งเช้า %</th>
-                      <th className="px-4 py-3 font-medium text-center">รับเย็น %</th>
-                      <th className="px-4 py-3 font-medium text-center">วันครบ 100%</th>
-                      <th className="px-4 py-3 font-medium text-center">ฉุกเฉิน</th>
-                      <th className="px-4 py-3 font-medium text-center">ระดับ</th>
+                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                    <tr className="text-left">
+                      <th className="px-4 py-3">โรงเรียน</th>
+                      <th className="px-4 py-3 text-center">ส่งเช้า %</th>
+                      <th className="px-4 py-3 text-center">รับเย็น %</th>
+                      <th className="px-4 py-3 text-center">วันครบ 100%</th>
+                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
+                      <th className="px-4 py-3 text-center">ระดับ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-surface-border">
                     {sortByKpi(data.schools).map((s) => {
                       const badge = levelBadge(s.morning_kpi, s.evening_kpi);
                       return (
-                        <tr key={s.school_id} className="hover:bg-gray-50">
+                        <tr key={s.school_id} className="hover:bg-surface transition">
                           <td className="px-4 py-3">
                             <p className="text-gray-800 font-medium">{s.school_name}</p>
                             <p className="text-xs text-gray-400">{s.student_count} คน</p>
@@ -244,7 +248,8 @@ export default function MonthlyReport() {
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </AppCard>
             </section>
           )}
 
@@ -252,24 +257,25 @@ export default function MonthlyReport() {
           {data.vehicles?.length > 0 && (
             <section className="mb-6">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามรถ</h2>
-              <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+              <AppCard padding="none" className="overflow-hidden">
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[750px]">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-left">
-                      <th className="px-4 py-3 font-medium">ทะเบียนรถ</th>
-                      <th className="px-4 py-3 font-medium">โรงเรียน</th>
-                      <th className="px-4 py-3 font-medium text-center">ส่งเช้า %</th>
-                      <th className="px-4 py-3 font-medium text-center">รับเย็น %</th>
-                      <th className="px-4 py-3 font-medium text-center">วันครบ 100%</th>
-                      <th className="px-4 py-3 font-medium text-center">ฉุกเฉิน</th>
-                      <th className="px-4 py-3 font-medium text-center">ระดับ</th>
+                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                    <tr className="text-left">
+                      <th className="px-4 py-3">ทะเบียนรถ</th>
+                      <th className="px-4 py-3">โรงเรียน</th>
+                      <th className="px-4 py-3 text-center">ส่งเช้า %</th>
+                      <th className="px-4 py-3 text-center">รับเย็น %</th>
+                      <th className="px-4 py-3 text-center">วันครบ 100%</th>
+                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
+                      <th className="px-4 py-3 text-center">ระดับ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-surface-border">
                     {sortByKpi(data.vehicles).map((v) => {
                       const badge = levelBadge(v.morning_kpi, v.evening_kpi);
                       return (
-                        <tr key={v.vehicle_id} className="hover:bg-gray-50">
+                        <tr key={v.vehicle_id} className="hover:bg-surface transition">
                           <td className="px-4 py-3">
                             <p className="text-gray-800 font-medium">{v.plate_no}</p>
                             <p className="text-xs text-gray-400">{v.student_count} คน</p>
@@ -293,7 +299,8 @@ export default function MonthlyReport() {
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </AppCard>
             </section>
           )}
 

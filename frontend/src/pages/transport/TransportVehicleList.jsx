@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Bus } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
+import AppCard from '../../components/ui/AppCard';
 
 const RESULT_BADGE = {
   PASSED:   { label: 'ผ่าน',      cls: 'bg-green-100 text-green-700' },
@@ -56,25 +57,26 @@ export default function TransportVehicleList() {
         />
       ) : (
         <>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <AppCard padding="none" className="overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-left">
-                  <th className="px-4 py-3 font-medium">ทะเบียนรถ</th>
-                  <th className="px-4 py-3 font-medium">ประเภท</th>
-                  <th className="px-4 py-3 font-medium">คนขับ</th>
-                  <th className="px-4 py-3 font-medium text-center">นักเรียน</th>
-                  <th className="px-4 py-3 font-medium text-center">ผลตรวจล่าสุด</th>
-                  <th className="px-4 py-3 font-medium">วันตรวจ</th>
-                  <th className="px-4 py-3 font-medium">ประกันหมดอายุ</th>
+              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                <tr className="text-left">
+                  <th className="px-4 py-3">ทะเบียนรถ</th>
+                  <th className="px-4 py-3">ประเภท</th>
+                  <th className="px-4 py-3">คนขับ</th>
+                  <th className="px-4 py-3 text-center">นักเรียน</th>
+                  <th className="px-4 py-3 text-center">ผลตรวจล่าสุด</th>
+                  <th className="px-4 py-3">วันตรวจ</th>
+                  <th className="px-4 py-3">ประกันหมดอายุ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-surface-border">
                 {vehicles.map(v => {
                   const badge = RESULT_BADGE[v.latest_inspection_result] || { label: 'ยังไม่ตรวจ', cls: 'bg-gray-50 text-gray-400' };
                   const insExpired = v.insurance_expiry && new Date(v.insurance_expiry) < new Date();
                   return (
-                    <tr key={v.id} className="hover:bg-gray-50">
+                    <tr key={v.id} className="hover:bg-surface transition">
                       <td className="px-4 py-3 font-medium text-gray-800">{v.plate_no}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{v.vehicle_type || '-'}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{v.driver_name || '-'}</td>
@@ -91,7 +93,8 @@ export default function TransportVehicleList() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </AppCard>
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4 text-sm text-gray-500">

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import AppCard from '../../components/ui/AppCard';
 
 const PREFIX_OPTIONS = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นางสาว', 'นาง'];
 
@@ -209,23 +210,24 @@ export default function StudentSearch() {
       ) : (
         <>
           {/* ── Desktop table (hidden on mobile) ── */}
-          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <AppCard padding="none" className="hidden md:block overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-left">
-                  <th className="px-4 py-3 font-medium">รหัส</th>
-                  <th className="px-4 py-3 font-medium">ชื่อ-นามสกุล</th>
-                  <th className="px-4 py-3 font-medium">ชั้น/ห้อง</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap text-center">ทะเบียนรถ</th>
-                  <th className="px-4 py-3 font-medium">เช้า</th>
-                  <th className="px-4 py-3 font-medium">เย็น</th>
-                  <th className="px-4 py-3 font-medium">ผู้ปกครอง</th>
-                  <th className="px-4 py-3 font-medium text-center">จัดการ</th>
+              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
+                <tr className="text-left">
+                  <th className="px-4 py-3">รหัส</th>
+                  <th className="px-4 py-3">ชื่อ-นามสกุล</th>
+                  <th className="px-4 py-3">ชั้น/ห้อง</th>
+                  <th className="px-4 py-3 whitespace-nowrap text-center">ทะเบียนรถ</th>
+                  <th className="px-4 py-3">เช้า</th>
+                  <th className="px-4 py-3">เย็น</th>
+                  <th className="px-4 py-3">ผู้ปกครอง</th>
+                  <th className="px-4 py-3 text-center">จัดการ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-surface-border">
                 {students.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50">
+                  <tr key={s.id} className="hover:bg-surface transition">
                     <td className="px-4 py-3 text-gray-600">{s.id}</td>
                     <td className="px-4 py-3 text-gray-800">{s.prefix}{s.first_name} {s.last_name}</td>
                     <td className="px-4 py-3 text-gray-600">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}</td>
@@ -254,7 +256,8 @@ export default function StudentSearch() {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </AppCard>
 
           {/* ── Mobile card view (hidden on desktop) ── */}
           <div className="md:hidden space-y-3">

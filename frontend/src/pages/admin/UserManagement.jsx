@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Users } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import EmptyState from '../../components/EmptyState';
 
 const ROLE_LABELS = {
   driver: 'คนขับ', school: 'โรงเรียน', affiliation: 'สังกัด',
@@ -151,7 +153,11 @@ export default function UserManagement() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : users.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center text-lg">ไม่พบผู้ใช้</p>
+        <EmptyState
+          icon={Users}
+          title="ไม่พบผู้ใช้"
+          description="ลองเปลี่ยนคำค้นหรือตัวกรองบทบาท"
+        />
       ) : (
         <>
           {/* Desktop table */}

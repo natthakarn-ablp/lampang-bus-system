@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Building2 } from 'lucide-react';
 import api from '../../api/axios';
+import EmptyState from '../../components/EmptyState';
 
 export default function ProvSchoolList() {
   const [schools, setSchools] = useState([]);
@@ -61,7 +63,11 @@ export default function ProvSchoolList() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : schools.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center text-lg">ไม่พบโรงเรียน</p>
+        <EmptyState
+          icon={Building2}
+          title="ไม่พบโรงเรียน"
+          description={affFilter ? 'ลองเลือกสังกัดอื่น' : 'ยังไม่มีโรงเรียนในระบบ'}
+        />
       ) : (
         <>
           {/* Desktop table */}

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
+import EmptyState from '../../components/EmptyState';
 
 export default function AffStudentSearch() {
   const navigate = useNavigate();
@@ -89,7 +91,11 @@ export default function AffStudentSearch() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : students.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center text-lg">ไม่พบนักเรียน</p>
+        <EmptyState
+          icon={GraduationCap}
+          title="ไม่พบนักเรียน"
+          description="ลองเปลี่ยนคำค้นหรือตัวกรอง"
+        />
       ) : (
         <>
           {/* Desktop table */}

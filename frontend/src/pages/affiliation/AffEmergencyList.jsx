@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ShieldCheck } from 'lucide-react';
 import api from '../../api/axios';
+import EmptyState from '../../components/EmptyState';
 
 export default function AffEmergencyList() {
   const [emergencies, setEmergencies] = useState([]);
@@ -40,10 +42,12 @@ export default function AffEmergencyList() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
       ) : emergencies.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-gray-400 text-lg mb-1">ไม่มีเหตุฉุกเฉิน</p>
-          <p className="text-gray-300 text-sm">ยังไม่มีรายงานเหตุฉุกเฉินจากรถในสังกัดนี้</p>
-        </div>
+        <EmptyState
+          icon={ShieldCheck}
+          variant="success"
+          title="ไม่มีเหตุฉุกเฉิน"
+          description="ยังไม่มีรายงานเหตุฉุกเฉินจากรถในสังกัดนี้"
+        />
       ) : (
         <>
           <div className="space-y-3">

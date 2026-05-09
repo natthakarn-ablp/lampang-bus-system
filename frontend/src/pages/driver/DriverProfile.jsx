@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { User } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import EmptyState from '../../components/EmptyState';
 
 const VEHICLE_TYPE_OPTIONS = [
   'รถตู้',
@@ -151,10 +153,11 @@ export default function DriverProfile() {
 
   if (loading) return <p className="p-6 text-center text-gray-400">กำลังโหลด…</p>;
   if (!profile) return (
-    <div className="p-6 text-center">
-      <p className="text-gray-400 text-base">ไม่พบข้อมูลโปรไฟล์</p>
-      <p className="text-xs text-gray-300 mt-1">กรุณาลองรีเฟรชหน้าจอ</p>
-    </div>
+    <EmptyState
+      icon={User}
+      title="ไม่พบข้อมูลโปรไฟล์"
+      description="กรุณาลองรีเฟรชหน้าจอ"
+    />
   );
 
   const expiryDisplay = profile.insurance_expiry

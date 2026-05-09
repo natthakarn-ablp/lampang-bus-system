@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Bus } from 'lucide-react';
 import api from '../../api/axios';
+import EmptyState from '../../components/EmptyState';
 
 const RESULT_BADGE = {
   PASSED:   { label: 'ผ่าน',      cls: 'bg-green-100 text-green-700' },
@@ -47,7 +49,11 @@ export default function TransportVehicleList() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
       ) : vehicles.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่พบรถ</p>
+        <EmptyState
+          icon={Bus}
+          title="ไม่พบรถในระบบ"
+          description={statusFilter ? 'ลองเปลี่ยนตัวกรองเพื่อดูผลอื่น' : 'ยังไม่มีรถในรายการให้ตรวจ'}
+        />
       ) : (
         <>
           <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">

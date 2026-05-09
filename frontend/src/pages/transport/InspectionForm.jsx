@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { ClipboardList } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import EmptyState from '../../components/EmptyState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 
@@ -295,7 +297,7 @@ export default function InspectionForm() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : inspections.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center text-lg">ไม่มีบันทึกการตรวจ</p>
+        <EmptyState icon={ClipboardList} title="ไม่มีบันทึกการตรวจ" description="เริ่มบันทึกผลตรวจรถคันใหม่จากฟอร์มด้านบน" />
       ) : (
         <>
           {/* Desktop table */}

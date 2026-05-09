@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { FileBarChart } from 'lucide-react';
 import api from '../../api/axios';
 import DashboardCard from '../../components/DashboardCard';
 import KpiCard from '../../components/KpiCard';
 import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
+import EmptyState from '../../components/EmptyState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
@@ -63,7 +65,7 @@ export default function MonthlyReport() {
 
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>}
       {loading ? <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
-      : !data ? <p className="text-gray-400 py-10 text-center">ไม่มีข้อมูล</p>
+      : !data ? <EmptyState icon={FileBarChart} title="ไม่มีข้อมูล" description="ลองเปลี่ยนเดือนอื่น" />
       : (
         <>
           {/* ── SECTION 2 — KPI Cards ──────────────────────── */}

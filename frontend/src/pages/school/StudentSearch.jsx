@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import EmptyState from '../../components/EmptyState';
 import AppCard from '../../components/ui/AppCard';
 
 const PREFIX_OPTIONS = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นางสาว', 'นาง'];
@@ -206,7 +208,7 @@ export default function StudentSearch() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : students.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center text-lg">ไม่พบนักเรียน</p>
+        <EmptyState icon={GraduationCap} title="ไม่พบนักเรียน" description="ลองเปลี่ยนคำค้นหรือตัวกรอง" />
       ) : (
         <>
           {/* ── Desktop table (hidden on mobile) ── */}

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { FileBarChart } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
 import ExportButtons from '../../components/ExportButtons';
+import EmptyState from '../../components/EmptyState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 
@@ -55,7 +57,7 @@ export default function DailyReport() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : !data ? (
-        <p className="text-gray-400 py-10 text-center text-lg">ไม่มีข้อมูล</p>
+        <EmptyState icon={FileBarChart} title="ไม่มีข้อมูล" description="ลองเปลี่ยนวันที่หรือช่วงเวลาอื่น" />
       ) : (
         <>
           {/* ── KPI 4 CARDS ── */}

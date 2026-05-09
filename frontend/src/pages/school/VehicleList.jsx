@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Bus } from 'lucide-react';
 import api from '../../api/axios';
 import { VehicleSafetySection } from '../../components/VehicleSafety';
 import PlateSearchInput from '../../components/PlateSearchInput';
+import EmptyState from '../../components/EmptyState';
 
 export default function VehicleList() {
   const [searchParams] = useSearchParams();
@@ -36,7 +38,7 @@ export default function VehicleList() {
       {loading ? (
         <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
       ) : vehicles.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่มีรถรับส่ง</p>
+        <EmptyState icon={Bus} title="ไม่มีรถรับส่ง" description={plateSearch ? 'ลองค้นด้วยทะเบียนอื่น' : 'ยังไม่มีรถในระบบ'} />
       ) : (
         <div className="grid gap-4">
           {vehicles

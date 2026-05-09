@@ -86,7 +86,12 @@ router.get('/students', async (req, res, next) => {
 router.get('/vehicles', async (req, res, next) => {
   try {
     const data = await provSvc.getVehicles();
-    return sendSuccess(res, data);
+    // Province role: strip phone numbers (summary-level visibility)
+    const sanitized = data.map(v => {
+      const { driver_phone, attendant_phone, owner_phone, ...rest } = v;
+      return rest;
+    });
+    return sendSuccess(res, sanitized);
   } catch (err) { next(err); }
 });
 
@@ -183,6 +188,8 @@ router.get('/audit-logs', async (req, res, next) => {
       const csv = auditRowsToCsv(rows);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=audit_province_${new Date().toISOString().split('T')[0]}.csv`);
+      logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'audit_csv', entityId: 'province',
+        newValue: { role: req.user.role }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
       return res.send('\uFEFF' + csv);
     }
 

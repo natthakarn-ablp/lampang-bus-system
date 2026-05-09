@@ -90,6 +90,8 @@ async function getDashboard(affiliationId) {
   // Schools not yet 100% morning
   const [schoolCompleteness] = await pool.query(
     `SELECT sc.id, sc.name,
+            COUNT(DISTINCT s.id) AS student_count,
+            COUNT(DISTINCT s.vehicle_id) AS vehicle_count,
             COUNT(DISTINCT CASE WHEN s.morning_enabled THEN s.id END) AS m_expected,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS m_done,
             COUNT(DISTINCT CASE WHEN s.evening_enabled THEN s.id END) AS e_expected,
@@ -124,7 +126,13 @@ async function getDashboard(affiliationId) {
     evening_leave,
     schools_not_complete: schools_not_complete.map(s => ({
       school_id: s.id, school_name: s.name,
+      student_count: s.student_count,
+      vehicle_count: s.vehicle_count,
+      morning_done: s.m_done,
+      morning_expected: s.m_expected,
       morning_pending: s.m_expected - s.m_done,
+      evening_done: s.e_done,
+      evening_expected: s.e_expected,
       evening_pending: s.e_expected - s.e_done,
     })),
   };
@@ -231,7 +239,11 @@ async function getVehicles(affiliationId) {
             (SELECT GROUP_CONCAT(DISTINCT sc3.name ORDER BY sc3.name SEPARATOR ', ')
              FROM students s3
              JOIN schools sc3 ON sc3.id = s3.school_id
-             WHERE s3.vehicle_id = v.id AND sc3.affiliation_id = ? AND s3.is_deleted = FALSE) AS school_names
+             WHERE s3.vehicle_id = v.id AND sc3.affiliation_id = ? AND s3.is_deleted = FALSE) AS school_names,
+            (SELECT vi.result FROM vehicle_inspections vi
+             WHERE vi.vehicle_id = v.id ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_result,
+            (SELECT vi.inspection_date FROM vehicle_inspections vi
+             WHERE vi.vehicle_id = v.id ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_date
      FROM vehicles v
      WHERE v.is_deleted = FALSE
        AND v.id IN (

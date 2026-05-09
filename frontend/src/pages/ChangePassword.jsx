@@ -3,15 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/Toast';
 import api from '../api/axios';
-
-const ROLE_HOME = {
-  driver: '/driver',
-  school: '/school',
-  affiliation: '/affiliation',
-  province: '/province',
-  transport: '/transport',
-  admin: '/province',
-};
+import { ROLE_HOME } from '../App';
 
 export default function ChangePassword() {
   const { user, updateUser } = useAuth();

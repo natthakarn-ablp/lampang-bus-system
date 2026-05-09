@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
+import { VehicleSafetySection } from '../../components/VehicleSafety';
 import PlateSearchInput from '../../components/PlateSearchInput';
 
 export default function VehicleList() {
@@ -57,12 +58,19 @@ export default function VehicleList() {
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                 {/* Driver */}
-                <div>
-                  <p className="text-xs text-gray-400 mb-0.5">คนขับ</p>
-                  <p className="text-gray-700">{v.driver_name || '-'}</p>
-                  {v.driver_phone && (
-                    <p className="text-xs text-gray-400">{v.driver_phone}</p>
+                <div className="flex items-start gap-2">
+                  {v.driver_photo ? (
+                    <img src={`/uploads/drivers/${v.driver_photo}`} alt="" className="w-10 h-10 rounded-full object-cover shrink-0 border border-gray-200" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 text-lg shrink-0">👤</div>
                   )}
+                  <div>
+                    <p className="text-xs text-gray-400 mb-0.5">คนขับ</p>
+                    <p className="text-gray-700 font-medium">{v.driver_name || '-'}</p>
+                    {v.driver_phone && (
+                      <a href={`tel:${v.driver_phone}`} className="text-blue-600 hover:underline text-xs">{v.driver_phone}</a>
+                    )}
+                  </div>
                 </div>
 
                 {/* Attendant */}
@@ -83,24 +91,10 @@ export default function VehicleList() {
                   )}
                 </div>
 
-                {/* Insurance */}
-                <div className="col-span-2 md:col-span-3 border-t border-gray-100 pt-3 mt-1">
-                  <p className="text-xs text-gray-400 mb-0.5">ประกันภัย</p>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className={`font-medium ${v.insurance_status === 'มี' ? 'text-green-600' : 'text-red-600'}`}>
-                      {v.insurance_status || 'ไม่ระบุ'}
-                    </span>
-                    {v.insurance_type && (
-                      <span className="text-gray-500">({v.insurance_type})</span>
-                    )}
-                    {v.insurance_expiry && (
-                      <span className="text-gray-400 text-xs">
-                        หมดอายุ: {new Date(v.insurance_expiry).toLocaleDateString('th-TH')}
-                      </span>
-                    )}
-                  </div>
-                </div>
               </div>
+
+              {/* Safety: inspection + insurance */}
+              <VehicleSafetySection vehicle={v} />
 
               {/* Collapsible student list */}
               <button

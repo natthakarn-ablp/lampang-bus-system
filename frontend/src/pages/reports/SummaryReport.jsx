@@ -29,9 +29,11 @@ export default function SummaryReport() {
       <meta charset="utf-8">
       <title>รายงานสรุปภาพรวม</title>
       <style>
+        @font-face { font-family: 'Sarabun'; src: url('/fonts/Sarabun-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+        @font-face { font-family: 'Sarabun'; src: url('/fonts/Sarabun-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
         @page { size: A4 landscape; margin: 12mm; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'TH Sarabun New', 'TH SarabunPSK', 'Sarabun', 'Tahoma', sans-serif; font-size: 16px; color: #1a1a1a; }
+        body { font-family: 'Sarabun', 'TH Sarabun New', 'Tahoma', sans-serif; font-size: 16px; color: #1a1a1a; }
         table { border-collapse: collapse; width: 100%; }
         th, td { border: 1px solid #ccc; padding: 4px 8px; }
         th { background: #f3f4f6; font-weight: bold; }
@@ -153,8 +155,8 @@ export default function SummaryReport() {
             </section>
           )}
 
-          {/* ── SECTION 6 — สรุปตามสังกัด ──────────────────── */}
-          {data.affiliations?.length > 0 && (
+          {/* ── SECTION 6 — สรุปตามสังกัด (hidden for affiliation — they see only their own) ── */}
+          {data.affiliations?.length > 0 && user?.role !== 'affiliation' && (
             <section className="mb-6">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามสังกัด</h2>
               <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">

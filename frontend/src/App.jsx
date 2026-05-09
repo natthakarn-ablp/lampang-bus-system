@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { AdminContextProvider } from './hooks/useAdminContext';
 import { ToastProvider } from './components/Toast';
 
 import Login            from './pages/Login';
@@ -10,6 +11,7 @@ import StudentList      from './pages/driver/StudentList';
 import EmergencyPage    from './pages/driver/EmergencyPage';
 import DriverProfile    from './pages/driver/DriverProfile';
 import DriverRosterRequests from './pages/driver/DriverRosterRequests';
+import DriverPretrip    from './pages/driver/DriverPretrip';
 
 import SchoolLayout     from './pages/school/SchoolLayout';
 import SchoolDashboard  from './pages/school/SchoolDashboard';
@@ -46,6 +48,28 @@ import TransportVehicleList from './pages/transport/TransportVehicleList';
 import InspectionForm      from './pages/transport/InspectionForm';
 
 import ParentStatus from './pages/parent/ParentStatus';
+import UserManagement from './pages/admin/UserManagement';
+import AdminAuditLog from './pages/admin/AdminAuditLog';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import MeasurementFramework from './pages/admin/MeasurementFramework';
+import ResearchMetrics from './pages/admin/ResearchMetrics';
+import ResearchExport from './pages/admin/ResearchExport';
+import EvaluationDashboard from './pages/admin/EvaluationDashboard';
+import ExecutiveSummary from './pages/admin/ExecutiveSummary';
+import ExecutivePrint from './pages/admin/ExecutivePrint';
+import SystemHealth from './pages/admin/SystemHealth';
+import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
+import { useVisitTracker } from './hooks/useVisitTracker';
+
+export const ROLE_HOME = {
+  driver:      '/driver',
+  school:      '/school',
+  affiliation: '/affiliation',
+  province:    '/province',
+  transport:   '/transport',
+  admin:       '/admin',
+};
 
 import ReportsLayout  from './pages/reports/ReportsLayout';
 import DailyReport    from './pages/reports/DailyReport';
@@ -58,9 +82,27 @@ function PrivateRoute({ children, allowedRoles }) {
   if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">กำลังโหลด…</div>;
   if (!user)   return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <div className="p-8 text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
+          <p className="text-4xl mb-4">🔒</p>
+          <h1 className="text-xl font-bold text-gray-800 mb-2">ไม่มีสิทธิ์เข้าถึง</h1>
+          <p className="text-gray-600 mb-6">คุณไม่มีสิทธิ์เข้าถึงหน้านี้ กรุณากลับไปหน้าหลักของคุณ</p>
+          <button onClick={() => window.location.href = '/'}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl transition">
+            กลับหน้าหลัก
+          </button>
+        </div>
+      </div>
+    );
   }
   return children;
+}
+
+// ── VisitTracker: fires once per browser tab session ────────────────────────
+function VisitTracker() {
+  useVisitTracker();
+  return null;
 }
 
 // ── Role-based redirect after login ─────────────────────────────────────────
@@ -69,20 +111,15 @@ function RootRedirect() {
   if (loading) return null;
   if (!user)   return <Navigate to="/login" replace />;
 
-  const roleHome = {
-    driver:      '/driver',
-    school:      '/school',       // Phase 3
-    affiliation: '/affiliation',   // Phase 4
-    province:    '/province',     // Phase 5
-    transport:   '/transport',    // Phase 5
-    admin:       '/province',
-  };
-  return <Navigate to={roleHome[user.role] || '/login'} replace />;
+  return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />;
 }
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
+      <VisitTracker />
+      <AdminContextProvider>
       <ToastProvider>
       <BrowserRouter>
         <Routes>
@@ -108,13 +145,14 @@ export default function App() {
             <Route path="profile"  element={<DriverProfile />} />
             <Route path="leaves"   element={<Navigate to="/driver" replace />} />
             <Route path="requests" element={<DriverRosterRequests />} />
+            <Route path="pretrip"  element={<DriverPretrip />} />
           </Route>
 
           {/* School module — nested routes with <Outlet /> */}
           <Route
             path="/school"
             element={
-              <PrivateRoute allowedRoles={['school']}>
+              <PrivateRoute allowedRoles={['school', 'admin']}>
                 <SchoolLayout />
               </PrivateRoute>
             }
@@ -134,7 +172,7 @@ export default function App() {
           <Route
             path="/affiliation"
             element={
-              <PrivateRoute allowedRoles={['affiliation']}>
+              <PrivateRoute allowedRoles={['affiliation', 'admin']}>
                 <AffiliationLayout />
               </PrivateRoute>
             }
@@ -197,6 +235,58 @@ export default function App() {
             <Route path="inspections" element={<InspectionForm />} />
           </Route>
 
+          {/* Admin pages */}
+          <Route path="/admin" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><AdminDashboard /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/users" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><UserManagement /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/audit-logs" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><AdminAuditLog /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/measurement" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><MeasurementFramework /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/research" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><ResearchMetrics /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/research-export" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><ResearchExport /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/evaluation" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><EvaluationDashboard /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/executive" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><ExecutiveSummary /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/system-health" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><SystemHealth /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/executive-print" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <ExecutivePrint />
+            </PrivateRoute>
+          } />
+
           {/* Parent status — standalone page, no auth needed (LIFF / LINE) */}
           <Route path="/parent" element={<ParentStatus />} />
 
@@ -205,6 +295,8 @@ export default function App() {
         </Routes>
       </BrowserRouter>
       </ToastProvider>
+      </AdminContextProvider>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }

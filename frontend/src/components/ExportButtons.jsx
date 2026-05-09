@@ -7,11 +7,20 @@ const FORMATS = [
   { key: 'pdf',   label: 'PDF',   ext: 'pdf',  style: 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200' },
 ];
 
-export default function ExportButtons({ queryParams = '', filenamePrefix = 'report', onPdf }) {
+export default function ExportButtons({ queryParams = '', filenamePrefix = 'report', onPdf, onBeforeExport }) {
   const [downloading, setDownloading] = useState(null);
   const toast = useToast();
 
   async function handleExport(fmt) {
+    // Call onBeforeExport hook if provided (returns a promise)
+    if (onBeforeExport) {
+      try {
+        await onBeforeExport(fmt.key);
+      } catch {
+        return; // User cancelled
+      }
+    }
+
     // Use custom PDF handler if provided
     if (fmt.key === 'pdf' && onPdf) {
       onPdf();

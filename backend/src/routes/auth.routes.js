@@ -22,7 +22,7 @@ const loginLimiter = rateLimit({
   max: 20,                   // 20 attempts per IP per window
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many login attempts. Try again in 15 minutes.', errors: [], data: null },
+  message: { success: false, message: 'มีการพยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 15 นาที', errors: [], data: null },
 });
 
 const refreshLimiter = rateLimit({
@@ -98,18 +98,27 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     );
 
     if (rows.length === 0) {
-      return sendError(res, 'Invalid username or password', [], 401);
+      await logAudit({ userId: null, action: 'LOGIN', entityType: 'user', entityId: null,
+        newValue: { username: String(username).trim(), result: 'failed', reason: 'user_not_found' },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+      return sendError(res, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', [], 401);
     }
 
     const user = rows[0];
 
     if (!user.is_active) {
-      return sendError(res, 'Account is disabled', [], 401);
+      await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
+        newValue: { username: user.username, result: 'failed', reason: 'account_disabled' },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+      return sendError(res, 'บัญชีนี้ถูกปิดการใช้งาน (Account disabled)', [], 401);
     }
 
     const passwordMatch = await bcrypt.compare(String(password), user.password_hash);
     if (!passwordMatch) {
-      return sendError(res, 'Invalid username or password', [], 401);
+      await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
+        newValue: { username: user.username, result: 'failed', reason: 'wrong_password' },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+      return sendError(res, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', [], 401);
     }
 
     // Update last_login

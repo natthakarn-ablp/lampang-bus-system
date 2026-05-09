@@ -8,6 +8,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
 const affAdminSvc = require('../services/affiliationAdmin.service');
+const { logAudit } = require('../utils/audit');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
@@ -26,15 +27,20 @@ function auditRowsToCsv(rows) {
   return [header, ...lines].join('\n');
 }
 
-// All affiliation routes require authentication + role 'affiliation'
-router.use(authenticate, requireRole('affiliation'));
+// All affiliation routes require authentication + role 'affiliation' or 'admin'
+router.use(authenticate, requireRole('affiliation', 'admin'));
+
+function resolveAffiliationId(req) {
+  if (req.user.role === 'admin') return req.query.affiliation_id || null;
+  return req.user.scopeId;
+}
 
 /**
  * GET /api/affiliation/dashboard
  */
 router.get('/dashboard', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
     const data = await affSvc.getDashboard(affId);
@@ -49,7 +55,7 @@ router.get('/dashboard', async (req, res, next) => {
  */
 router.get('/schools', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
     const schools = await affSvc.getSchools(affId);
@@ -65,7 +71,7 @@ router.get('/schools', async (req, res, next) => {
  */
 router.get('/students', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
     const { search, grade, school_id, vehicle_id, sort, order } = req.query;
@@ -86,7 +92,7 @@ router.get('/students', async (req, res, next) => {
  */
 router.get('/vehicles', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
     const vehicles = await affSvc.getVehicles(affId);
@@ -101,7 +107,7 @@ router.get('/vehicles', async (req, res, next) => {
  */
 router.get('/status-today', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
     const data = await affSvc.getStatusToday(affId);
@@ -117,7 +123,7 @@ router.get('/status-today', async (req, res, next) => {
  */
 router.get('/emergencies', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -134,7 +140,7 @@ router.get('/emergencies', async (req, res, next) => {
 
 router.get('/missing', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     const session = req.query.session;
@@ -169,7 +175,7 @@ router.get('/missing', async (req, res, next) => {
 
 router.get('/school-accounts', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
     const accounts = await affAdminSvc.getSchoolAccounts(affId);
     return sendSuccess(res, accounts);
@@ -178,7 +184,7 @@ router.get('/school-accounts', async (req, res, next) => {
 
 router.post('/school-accounts', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
     const { school_id, username, display_name } = req.body;
     if (!school_id || !username) return sendError(res, 'school_id และ username จำเป็น', [], 400);
@@ -194,7 +200,7 @@ router.post('/school-accounts', async (req, res, next) => {
 // Create new school + account in one step
 router.post('/school-accounts/new-school', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
     const { school_code, school_name, username } = req.body;
     if (!school_code || !school_name || !username) {
@@ -211,7 +217,7 @@ router.post('/school-accounts/new-school', async (req, res, next) => {
 
 router.post('/school-accounts/:id/reset-password', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
     const { password } = req.body;
     if (!password) return sendError(res, 'password จำเป็น', [], 400);
@@ -226,7 +232,7 @@ router.post('/school-accounts/:id/reset-password', async (req, res, next) => {
 
 router.put('/school-accounts/:id', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
     const { is_active } = req.body;
 
@@ -242,7 +248,7 @@ router.put('/school-accounts/:id', async (req, res, next) => {
 
 router.get('/audit-logs', async (req, res, next) => {
   try {
-    const affId = req.user.scopeId;
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
@@ -276,6 +282,8 @@ router.get('/audit-logs', async (req, res, next) => {
       const csv = auditRowsToCsv(rows);
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=audit_affiliation_${new Date().toISOString().split('T')[0]}.csv`);
+      logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'audit_csv', entityId: 'affiliation',
+        newValue: { role: req.user.role }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
       return res.send('\uFEFF' + csv);
     }
 
@@ -296,6 +304,26 @@ router.get('/audit-logs', async (req, res, next) => {
     );
 
     return sendSuccess(res, rows, 'OK', { page, per_page, total });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /notify-school — Log notification sent to school ──────────────────
+router.post('/notify-school', async (req, res, next) => {
+  try {
+    const { school_id, school_name, message, method } = req.body;
+    if (!school_id) return sendError(res, 'กรุณาระบุ school_id', [], 400);
+
+    await logAudit({
+      userId: req.user.id,
+      action: 'CREATE',
+      entityType: 'school_notification',
+      entityId: school_id,
+      newValue: { school_id, school_name, message, method: method || 'copy', notified_at: new Date().toISOString() },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, { school_id, notified_at: new Date().toISOString() }, 'บันทึกการแจ้งเตือนสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
 

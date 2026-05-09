@@ -53,6 +53,19 @@ export default function DriverDashboard() {
   const [bulkMsg, setBulkMsg] = useState('');
   const [actionLoading, setActionLoading] = useState({});
   const [leaveLoading, setLeaveLoading] = useState({});
+  const [showIndividual, setShowIndividual] = useState(false);
+
+  // Pre-trip gate
+  const [pretripDone, setPretripDone] = useState(null); // null=loading, object={done,checked_at,all_pass}
+  const [pretripLoading, setPretripLoading] = useState(true);
+
+  // Fetch pretrip status
+  useEffect(() => {
+    api.get('/driver/pretrip-status')
+      .then(r => setPretripDone(r.data?.data || { done: false }))
+      .catch(() => setPretripDone({ done: false }))
+      .finally(() => setPretripLoading(false));
+  }, []);
 
   useEffect(() => {
     api.get('/driver/status-today')
@@ -96,7 +109,17 @@ export default function DriverDashboard() {
     return () => clearInterval(timer);
   }, [session, fetchData]);
 
+  // Derived state
+  const students = roster?.students || [];
+  const onLeave = students.filter((st) => isOnLeave(st, session));
+  const notOnLeave = students.filter((st) => !isOnLeave(st, session));
+  const pending = notOnLeave.filter((st) => (session === 'morning' ? !st.morning_done : !st.evening_done));
+  const done = notOnLeave.filter((st) => (session === 'morning' ? !!st.morning_done : !!st.evening_done));
+  const allDone = !loading && notOnLeave.length > 0 && pending.length === 0;
+  const pretripBlocked = !pretripLoading && (!pretripDone || !pretripDone.done);
+
   async function handleCheckin(studentId) {
+    if (pretripBlocked) { toast.error('กรุณาตรวจรถก่อนออกก่อนเช็กชื่อ'); return; }
     setActionLoading((p) => ({ ...p, [studentId]: true }));
     try {
       await api.post('/driver/checkin', { student_id: studentId, session });
@@ -122,7 +145,19 @@ export default function DriverDashboard() {
     }
   }
 
+  async function handleCancelLeave(leaveId) {
+    if (!leaveId) return;
+    try {
+      await api.delete(`/driver/leave/${leaveId}`);
+      toast.success('ยกเลิกการลาสำเร็จ');
+      await fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ไม่สามารถยกเลิกได้');
+    }
+  }
+
   async function handleBulkAction() {
+    if (pretripBlocked) { toast.error('กรุณาตรวจรถก่อนออกก่อนเช็กชื่อ'); return; }
     setBulkLoading(true);
     setBulkMsg('');
     try {
@@ -140,14 +175,7 @@ export default function DriverDashboard() {
     }
   }
 
-  const students = roster?.students || [];
   const s = status?.summary;
-
-  const onLeave = students.filter((st) => isOnLeave(st, session));
-  const notOnLeave = students.filter((st) => !isOnLeave(st, session));
-  const pending = notOnLeave.filter((st) => (session === 'morning' ? !st.morning_done : !st.evening_done));
-  const done = notOnLeave.filter((st) => (session === 'morning' ? !!st.morning_done : !!st.evening_done));
-  const allDone = !loading && notOnLeave.length > 0 && pending.length === 0;
 
   if (!session) {
     return <div className="p-6 text-center text-lg text-gray-400">กำลังตรวจสอบโหมด…</div>;
@@ -155,6 +183,29 @@ export default function DriverDashboard() {
 
   return (
     <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
+      {/* ══ BLOCKING PRE-TRIP MODAL (inline checklist) ══ */}
+      {pretripBlocked && !pretripLoading && (
+        <PretripModal
+          onComplete={(result) => {
+            setPretripDone({ done: true, checked_at: new Date().toISOString(), all_pass: result.all_pass });
+          }}
+        />
+      )}
+
+      {/* ── Pre-trip status badge ── */}
+      {pretripDone?.done && (
+        <div className="bg-green-50 border-2 border-green-300 rounded-2xl px-4 py-3 mb-4 flex items-center gap-3">
+          <span className="text-2xl">✅</span>
+          <div>
+            <p className="text-base font-bold text-green-800">ตรวจรถแล้ววันนี้</p>
+            <p className="text-sm text-green-600">
+              เวลา {pretripDone.checked_at ? new Date(pretripDone.checked_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) : '-'} น.
+              {pretripDone.all_pass === false && ' · มีรายการผิดปกติ'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Top info bar ── */}
       <div className={`rounded-2xl p-4 mb-4 ${session === 'morning' ? 'bg-orange-50 border-2 border-orange-200' : 'bg-indigo-50 border-2 border-indigo-200'}`}>
         <div className="flex items-center justify-between mb-2">
@@ -183,44 +234,87 @@ export default function DriverDashboard() {
         <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
       ) : (
         <>
-          {/* ── Compact summary row ── */}
-          <div className="grid grid-cols-4 gap-2 mb-4">
-            <SummaryPill label="ทั้งหมด" value={s?.total ?? students.length} color="blue" />
-            <SummaryPill label={session === 'morning' ? 'ส่งแล้ว' : 'รับแล้ว'} value={done.length} color="green" />
-            <SummaryPill label="ลา" value={onLeave.length} color="amber" />
-            <SummaryPill label="รอ" value={pending.length} color={pending.length > 0 ? 'red' : 'green'} />
-          </div>
+          {/* ── Big progress indicator ── */}
+          {(() => {
+            const total = notOnLeave.length;
+            const pct = total > 0 ? Math.round((done.length / total) * 100) : 0;
+            return (
+              <div className="mb-4">
+                <div className="flex justify-between items-end mb-1">
+                  <span className="text-lg font-bold text-gray-800">
+                    {session === 'morning' ? 'ส่งแล้ว' : 'รับแล้ว'} {done.length}/{total} คน
+                  </span>
+                  <span className={`text-2xl font-bold ${pct === 100 ? 'text-green-600' : pct >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{pct}%</span>
+                </div>
+                <div className="flex w-full h-4 rounded-full overflow-hidden bg-gray-200">
+                  {done.length > 0 && <div className="bg-green-500 h-full transition-all" style={{ width: `${pct}%` }} />}
+                  {pending.length > 0 && <div className="bg-red-400 h-full" style={{ width: `${100 - pct}%` }} />}
+                </div>
+                {onLeave.length > 0 && (
+                  <p className="text-sm text-amber-600 mt-1">ลาวันนี้ {onLeave.length} คน</p>
+                )}
+              </div>
+            );
+          })()}
 
-          {/* ── Bulk action ── */}
+          {/* ── Primary action area ── */}
           <div className="mb-5">
             {allDone ? (
               <div className="bg-green-100 border-2 border-green-300 text-green-800 rounded-xl px-4 py-3 text-center text-lg font-bold">
                 ✅ {ALL_DONE_LABEL[session]}
               </div>
+            ) : !showIndividual ? (
+              /* Default: bulk-first UX */
+              <div className="space-y-3">
+                <button
+                  onClick={handleBulkAction}
+                  disabled={bulkLoading || pending.length === 0}
+                  className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:opacity-50 text-white text-xl font-bold px-5 py-5 rounded-2xl shadow-lg transition"
+                >
+                  {bulkLoading
+                    ? 'กำลังดำเนินการ…'
+                    : `✅ นักเรียนขึ้นรถครบทุกคน (${pending.length} คน)`}
+                </button>
+                <button
+                  onClick={() => setShowIndividual(true)}
+                  className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-lg py-4 rounded-2xl border-2 border-amber-300 transition"
+                >
+                  ⚠️ มีข้อยกเว้น — เลือกทีละคน
+                </button>
+              </div>
             ) : (
-              <button
-                onClick={handleBulkAction}
-                disabled={bulkLoading || pending.length === 0}
-                className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:opacity-50 text-white text-lg font-bold px-5 py-4 rounded-xl transition"
-              >
-                {bulkLoading
-                  ? 'กำลังดำเนินการ…'
-                  : `${BULK_LABEL[session]} (${pending.length} คน)`}
-              </button>
+              /* Individual mode header */
+              <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={handleBulkAction}
+                  disabled={bulkLoading || pending.length === 0}
+                  className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-base font-bold px-5 py-3 rounded-xl transition"
+                >
+                  {bulkLoading ? '...' : `${BULK_LABEL[session]} (${pending.length} คน)`}
+                </button>
+                <button onClick={() => setShowIndividual(false)}
+                  className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">
+                  ← กลับโหมดรวม
+                </button>
+              </div>
             )}
-            {bulkMsg && <p className="text-center text-sm text-gray-600 mt-2">{bulkMsg}</p>}
+            {bulkMsg && (
+              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mt-2 text-center">
+                <p className="text-sm text-green-700 font-medium">{bulkMsg}</p>
+              </div>
+            )}
           </div>
 
-          {/* ── Pending students (grouped by school) ── */}
-          {pending.length > 0 && (
+          {/* ── Pending students (shown in individual mode or when needed) ── */}
+          {pending.length > 0 && showIndividual && (
             <section className="mb-6">
               <h2 className="text-base font-bold text-gray-600 mb-3">
                 ⏳ รอดำเนินการ ({pending.length})
               </h2>
-              {groupBySchool(pending).map(([school, sts]) => (
-                <div key={school} className="mb-4">
-                  <p className="text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5 mb-2">
-                    🏫 {school}
+              {groupBySchool(pending).map(([school, sts], idx) => (
+                <div key={school} className={`mb-5 border-l-4 pl-3 ${idx % 2 === 0 ? 'border-blue-400' : 'border-teal-400'}`}>
+                  <p className={`text-base font-bold mb-2 ${idx % 2 === 0 ? 'text-blue-700' : 'text-teal-700'}`}>
+                    🏫 {school} ({sts.length} คน)
                   </p>
                   <div className="space-y-3">
                     {sts.map((st) => (
@@ -265,7 +359,8 @@ export default function DriverDashboard() {
               </h2>
               <div className="space-y-2">
                 {onLeave.map((st) => (
-                  <StudentCard key={st.id} student={st} session={session} state="leave" />
+                  <StudentCard key={st.id} student={st} session={session} state="leave"
+                    onCancelLeave={() => handleCancelLeave(st.leave_id)} />
                 ))}
               </div>
             </section>
@@ -295,13 +390,13 @@ function SummaryPill({ label, value, color }) {
   return (
     <div className={`rounded-xl border-2 text-center py-2 px-1 ${cls[color] || cls.blue}`}>
       <p className="text-2xl font-bold leading-tight">{value}</p>
-      <p className="text-xs font-medium mt-0.5">{label}</p>
+      <p className="text-sm font-medium mt-0.5">{label}</p>
     </div>
   );
 }
 
 /* ── Student card — big, readable, elderly-friendly ── */
-function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoading, leaveLoading, partialLeaveLabel }) {
+function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoading, leaveLoading, partialLeaveLabel, onCancelLeave }) {
   const [showLeave, setShowLeave] = useState(false);
 
   const doneText = session === 'morning' ? 'ส่งแล้ว' : 'รับแล้ว';
@@ -339,7 +434,7 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
             </span>
           )}
           {partialLeaveLabel && state !== 'leave' && (
-            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
+            <span className="text-sm text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full shrink-0">
               {partialLeaveLabel}
             </span>
           )}
@@ -404,6 +499,156 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
           </button>
         </div>
       )}
+
+      {/* ── Cancel leave (on-leave students) ── */}
+      {state === 'leave' && onCancelLeave && (
+        <div className="px-3 pb-3">
+          <button
+            onClick={onCancelLeave}
+            className="w-full bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-700 font-bold text-base py-3 rounded-xl transition border border-gray-300"
+          >
+            ↩️ ยกเลิกการลา
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   PretripModal — blocking inline checklist modal (no navigation)
+   ══════════════════════════════════════════════════════════════════════════ */
+const PRETRIP_ITEMS = [
+  { id: 'tires', label: 'ยางรถ / ลมยาง' },
+  { id: 'lights', label: 'ไฟหน้า-ไฟท้าย' },
+  { id: 'mirrors', label: 'กระจก / กระจกมองข้าง' },
+  { id: 'brakes', label: 'เบรก' },
+  { id: 'seatbelts', label: 'เข็มขัดนิรภัย / ที่นั่ง' },
+  { id: 'clean', label: 'ความสะอาดภายในรถ' },
+];
+
+function PretripModal({ onComplete }) {
+  const toast = useToast();
+  const [mode, setMode] = useState('summary'); // 'summary' | 'detail'
+  const [items, setItems] = useState(() => PRETRIP_ITEMS.map(c => ({ ...c, ok: true })));
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const failedItems = items.filter(i => !i.ok);
+
+  function toggleItem(id) {
+    setItems(prev => prev.map(i => i.id === id ? { ...i, ok: !i.ok } : i));
+  }
+
+  async function handleSubmit(forceAllPass = false) {
+    setSubmitting(true);
+    try {
+      const allPass = forceAllPass || items.every(i => i.ok);
+      const submitItems = forceAllPass
+        ? PRETRIP_ITEMS.map(c => ({ label: c.label, ok: true }))
+        : items.map(i => ({ label: i.label, ok: i.ok }));
+
+      await api.post('/driver/pretrip', {
+        all_pass: allPass,
+        items: submitItems,
+        note: forceAllPass ? null : (note || null),
+      });
+
+      toast.success('บันทึกผลตรวจรถสำเร็จ');
+      onComplete({ all_pass: allPass });
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ไม่สำเร็จ');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+
+        {/* ── Mode: Summary (default) ── */}
+        {mode === 'summary' && (
+          <div className="p-6 text-center">
+            <p className="text-5xl mb-3">🚌</p>
+            <h2 className="text-xl font-bold text-gray-800 mb-1">ตรวจรถก่อนออก</h2>
+            <p className="text-base text-gray-500 mb-5">เพื่อความปลอดภัยของนักเรียน</p>
+
+            {/* Checklist preview */}
+            <div className="bg-gray-50 rounded-2xl p-4 mb-5 text-left">
+              <p className="text-sm font-medium text-gray-600 mb-2">รายการตรวจ 6 รายการ:</p>
+              <ul className="space-y-1.5">
+                {PRETRIP_ITEMS.map(c => (
+                  <li key={c.id} className="flex items-center gap-2 text-base text-gray-700">
+                    <span className="text-green-500">✓</span>
+                    <span>{c.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <button onClick={() => handleSubmit(true)} disabled={submitting}
+              className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-xl py-5 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
+              {submitting ? 'กำลังบันทึก…' : '✅ ทุกรายการปกติ — ออกได้'}
+            </button>
+
+            <button onClick={() => setMode('detail')}
+              className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-lg py-4 rounded-2xl border-2 border-amber-300 transition">
+              ⚠️ มีรายการผิดปกติ
+            </button>
+          </div>
+        )}
+
+        {/* ── Mode: Detail (toggle items) ── */}
+        {mode === 'detail' && (
+          <div className="p-5">
+            <h2 className="text-lg font-bold text-gray-800 mb-1">ระบุรายการผิดปกติ</h2>
+            <p className="text-sm text-gray-500 mb-4">กดรายการที่ <strong>ผิดปกติ</strong></p>
+
+            <div className="space-y-2 mb-4">
+              {items.map(item => (
+                <button key={item.id} onClick={() => toggleItem(item.id)}
+                  className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left text-base font-medium transition ${
+                    item.ok
+                      ? 'bg-green-50 border-green-300 text-green-800'
+                      : 'bg-red-50 border-red-400 text-red-800'
+                  }`}>
+                  <span className="text-2xl shrink-0">{item.ok ? '✅' : '❌'}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {failedItems.length > 0 && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  รายละเอียด (ถ้ามี)
+                </label>
+                <textarea value={note} onChange={e => setNote(e.target.value)}
+                  rows={2} placeholder="เช่น ยางหลังขวาลมอ่อน…"
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+            )}
+
+            {failedItems.length > 0 ? (
+              <button onClick={() => handleSubmit(false)} disabled={submitting}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
+                {submitting ? 'กำลังบันทึก…' : `⚠️ บันทึกรายการผิดปกติ (${failedItems.length} รายการ)`}
+              </button>
+            ) : (
+              <button onClick={() => handleSubmit(true)} disabled={submitting}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
+                {submitting ? 'กำลังบันทึก…' : '✅ ทุกรายการปกติ — ออกได้'}
+              </button>
+            )}
+
+            <button onClick={() => { setMode('summary'); setItems(PRETRIP_ITEMS.map(c => ({ ...c, ok: true }))); setNote(''); }}
+              className="w-full text-gray-500 hover:text-gray-700 text-base py-3 transition">
+              ← กลับ
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

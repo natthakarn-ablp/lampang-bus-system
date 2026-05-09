@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
 import { resolveLineUserId } from '../../utils/liff';
 
 const STATUS_MAP = {

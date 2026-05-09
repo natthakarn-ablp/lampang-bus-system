@@ -1,0 +1,247 @@
+import { useState, useEffect } from 'react';
+import api from '../../api/axios';
+
+function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'; }
+function fmtNow() { return new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'long', timeStyle: 'short' }); }
+
+const METRICS = [
+  { label: 'นักเรียนมีรถ', num: 'students_with_vehicle', den: 'total_students' },
+  { label: 'ผู้ปกครองครบ', num: 'students_with_parent', den: 'total_students' },
+  { label: 'ประกันครอบคลุม', num: 'vehicles_with_insurance', den: 'total_vehicles' },
+  { label: 'ตรวจสภาพรถ', num: 'vehicles_inspected', den: 'total_vehicles' },
+  { label: 'ผ่านตรวจ', num: 'vehicles_passed', den: 'total_vehicles' },
+  { label: 'ส่งเช้าครบ', num: 'morning_done', den: 'morning_total' },
+  { label: 'รับเย็นครบ', num: 'evening_done', den: 'evening_total' },
+  { label: 'ผู้ใช้ active', num: 'active_users', den: 'total_users' },
+];
+
+const ROLES = [
+  { id: 'driver', name: 'คนขับ', focus: 'ความสม่ำเสมอ + UX' },
+  { id: 'school', name: 'โรงเรียน', focus: 'ข้อมูลครบถ้วน' },
+  { id: 'affiliation', name: 'สังกัด', focus: 'ตรวจจับเชิงรุก' },
+  { id: 'province', name: 'จังหวัด', focus: 'คุณภาพการตัดสินใจ' },
+  { id: 'transport', name: 'ขนส่ง', focus: 'ปิดความเสี่ยง' },
+  { id: 'admin', name: 'แอดมิน', focus: 'สุขภาพระบบ' },
+];
+
+function roleStatus(actions, hasSnap) {
+  const t = actions?.total || 0;
+  if (!hasSnap || t < 5) return 'ยังต้องเพิ่มหลักฐาน';
+  if (t >= 20) return 'พร้อมประเมิน';
+  return 'ประเมินได้บางส่วน';
+}
+
+export default function ExecutivePrint() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/admin/evaluation-summary')
+      .then(r => setData(r.data?.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p style={{ textAlign: 'center', padding: '40px', color: '#999' }}>กำลังโหลด…</p>;
+  if (!data) return <p style={{ textAlign: 'center', padding: '40px', color: '#999' }}>ไม่มีข้อมูล</p>;
+
+  const { baseline, latest, role_actions, role_exports } = data;
+  const bD = baseline?.data || {};
+  const lD = latest?.data || {};
+  const hasSnap = !!baseline && !!latest;
+
+  const roleStats = ROLES.map(r => ({
+    ...r,
+    status: roleStatus(role_actions[r.id], hasSnap),
+    actions: role_actions[r.id]?.total || 0,
+    exports: role_exports[r.id] || 0,
+  }));
+  const readyCount = roleStats.filter(r => r.status === 'พร้อมประเมิน').length;
+  const partialCount = roleStats.filter(r => r.status === 'ประเมินได้บางส่วน').length;
+
+  const metricChanges = METRICS.map(m => {
+    const bv = pct(bD[m.num] || 0, bD[m.den] || 0);
+    const cv = pct(lD[m.num] || 0, lD[m.den] || 0);
+    const d = Math.round((cv - bv) * 100) / 100;
+    return { ...m, baseline: bv, current: cv, delta: d, improved: d > 0, declined: d < 0 };
+  });
+  const improvements = metricChanges.filter(m => m.improved);
+  const risks = metricChanges.filter(m => m.declined);
+  const lowCoverage = metricChanges.filter(m => m.current < 50);
+
+  return (
+    <>
+      {/* Print button — hidden in print */}
+      <div className="print:hidden fixed top-4 right-4 z-50 flex gap-2">
+        <button onClick={() => window.print()}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition">
+          🖨️ พิมพ์ / Save PDF
+        </button>
+        <button onClick={() => window.history.back()}
+          className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium px-4 py-3 rounded-xl shadow transition">
+          ← กลับ
+        </button>
+      </div>
+
+      {/* Print-optimized layout */}
+      <div className="max-w-[210mm] mx-auto p-6 print:p-8 bg-white print:shadow-none font-[Sarabun,sans-serif] text-[13px] leading-relaxed text-gray-800">
+
+        {/* 1. Header */}
+        <div className="border-b-4 border-blue-800 pb-3 mb-4">
+          <h1 className="text-xl font-bold text-blue-800">สรุปผลการประเมินระบบรถรับส่งนักเรียน</h1>
+          <p className="text-sm text-gray-500">ระบบรถรับส่งนักเรียนจังหวัดลำปาง — สำหรับการประชุมผู้บริหาร</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-xs text-gray-500">
+            <span>📌 Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
+            <span>📊 Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
+            <span>🗓️ จัดทำเมื่อ: {fmtNow()}</span>
+          </div>
+        </div>
+
+        {/* 2. Executive summary box */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm">
+          <p className="font-bold text-blue-800 mb-1">สรุปสำหรับผู้บริหาร</p>
+          <p>จาก 6 สิทธิ์ในระบบ มี <strong>{readyCount} สิทธิ์</strong>ที่พร้อมประเมินผล, <strong>{partialCount} สิทธิ์</strong>ประเมินได้บางส่วน
+            {improvements.length > 0 ? ` — มี ${improvements.length} ตัวชี้วัดที่ดีขึ้นจาก baseline` : ' — ยังไม่มีการเปลี่ยนแปลงจาก baseline (อาจเพิ่งเริ่มเก็บข้อมูล)'}
+            {lowCoverage.length > 0 ? ` · ${lowCoverage.length} ตัวชี้วัดที่ยังต่ำกว่า 50%` : ''}.
+          </p>
+        </div>
+
+        {/* 3. KPI strip */}
+        <div className="grid grid-cols-6 gap-2 mb-4">
+          <KpiCell label="พร้อมประเมิน" value={readyCount} />
+          <KpiCell label="บางส่วน" value={partialCount} />
+          <KpiCell label="ยังต้องเพิ่ม" value={6 - readyCount - partialCount} />
+          <KpiCell label="ดีขึ้น" value={improvements.length} />
+          <KpiCell label="ลดลง" value={risks.length} />
+          <KpiCell label="ต่ำ (<50%)" value={lowCoverage.length} />
+        </div>
+
+        {/* 4. Role readiness table */}
+        <div className="mb-4">
+          <p className="font-bold text-sm text-gray-700 mb-1">สถานะความพร้อมรายสิทธิ์</p>
+          <table className="w-full text-xs border border-gray-300">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-gray-300 px-2 py-1 text-left">สิทธิ์</th>
+                <th className="border border-gray-300 px-2 py-1 text-left">เน้นวัด</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">สถานะ</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">Actions</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">Exports</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roleStats.map(r => (
+                <tr key={r.id}>
+                  <td className="border border-gray-300 px-2 py-1 font-medium">{r.name}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-gray-600">{r.focus}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">{r.status}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">{r.actions}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">{r.exports}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 5. Metric comparison table */}
+        <div className="mb-4">
+          <p className="font-bold text-sm text-gray-700 mb-1">ตัวชี้วัดหลัก — Baseline เทียบปัจจุบัน</p>
+          <table className="w-full text-xs border border-gray-300">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border border-gray-300 px-2 py-1 text-left">ตัวชี้วัด</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">Baseline</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">ปัจจุบัน</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">เปลี่ยนแปลง</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">แนวโน้ม</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metricChanges.map(m => (
+                <tr key={m.label}>
+                  <td className="border border-gray-300 px-2 py-1">{m.label}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">{m.baseline}%</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center font-medium">{m.current}%</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">
+                    {m.delta > 0 ? '+' : ''}{m.delta}%
+                  </td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">
+                    {m.improved ? '▲ ดีขึ้น' : m.declined ? '▼ ลดลง' : '= คงเดิม'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 6+7. Improvements + Risks side by side */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="border border-gray-300 rounded-lg p-3">
+            <p className="font-bold text-sm text-green-800 mb-1">✅ ประเด็นที่ดีขึ้น</p>
+            {improvements.length > 0 ? (
+              <ul className="text-xs space-y-0.5">
+                {improvements.map(m => <li key={m.label}>• {m.label}: +{m.delta}%</li>)}
+              </ul>
+            ) : <p className="text-xs text-gray-500">ยังไม่มีการเปลี่ยนแปลงจาก baseline</p>}
+          </div>
+          <div className="border border-gray-300 rounded-lg p-3">
+            <p className="font-bold text-sm text-red-800 mb-1">⚠️ ประเด็นที่ต้องติดตาม</p>
+            <ul className="text-xs space-y-0.5">
+              {risks.map(m => <li key={m.label}>• {m.label}: {m.delta}%</li>)}
+              {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {m.current}%</li>)}
+              {risks.length === 0 && lowCoverage.length === 0 && <li className="text-gray-500">ไม่พบจุดเสี่ยงจากข้อมูลปัจจุบัน</li>}
+            </ul>
+          </div>
+        </div>
+
+        {/* 8. Recommended actions */}
+        <div className="border border-blue-300 bg-blue-50 rounded-lg p-3 mb-4">
+          <p className="font-bold text-sm text-blue-800 mb-1">📋 ข้อเสนอเพื่อการสั่งการ</p>
+          <ul className="text-xs text-blue-700 space-y-0.5">
+            {(6 - readyCount - partialCount) > 0 && <li>• เพิ่มการเก็บ evidence สำหรับ {6 - readyCount - partialCount} สิทธิ์ที่ยังมีข้อมูลไม่เพียงพอ</li>}
+            {lowCoverage.length > 0 && <li>• เร่งเพิ่ม coverage ใน: {lowCoverage.map(m => m.label).join(', ')}</li>}
+            {risks.length > 0 && <li>• ตรวจสอบ metric ที่ลดลง: {risks.map(m => m.label).join(', ')}</li>}
+            {partialCount > 0 && <li>• ให้ {partialCount} สิทธิ์ที่ประเมินได้บางส่วนเพิ่มการใช้งานระบบ</li>}
+            <li>• ให้รัน snapshot ใหม่เป็นประจำเพื่อเห็นแนวโน้มการเปลี่ยนแปลง</li>
+          </ul>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t-2 border-gray-300 pt-3 mt-4 text-xs text-gray-400">
+          <p><strong>หมายเหตุ:</strong> รายงานนี้สรุปจาก snapshot, logs และ export evidence ในระบบ — บางตัวชี้วัดยังต้องใช้หลักฐานภายนอก (แบบสอบถาม, สัมภาษณ์, บันทึกประชุม) ร่วมด้วยจึงจะประเมินได้ครบถ้วน</p>
+          <div className="flex justify-between mt-4">
+            <div>
+              <p className="text-gray-500">ผู้จัดทำ: .......................................</p>
+              <p className="text-gray-500 mt-3">ผู้ตรวจสอบ: .......................................</p>
+            </div>
+            <div className="text-right">
+              <p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง</p>
+              <p>{fmtNow()}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          body { margin: 0; padding: 0; font-family: 'Sarabun', sans-serif; }
+          .print\\:hidden { display: none !important; }
+          .print\\:p-8 { padding: 8mm !important; }
+          .print\\:shadow-none { box-shadow: none !important; }
+          @page { size: A4 portrait; margin: 10mm; }
+        }
+      `}</style>
+    </>
+  );
+}
+
+function KpiCell({ label, value }) {
+  return (
+    <div className="border border-gray-300 rounded p-2 text-center">
+      <p className="text-lg font-bold text-gray-800">{value}</p>
+      <p className="text-[10px] text-gray-500">{label}</p>
+    </div>
+  );
+}

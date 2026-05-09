@@ -5,10 +5,35 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// ── Request interceptor: inject access token ──────────────────────────────────
+// ── Request interceptor: inject access token + admin scope ──────────────────
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // Auto-inject admin scope params for school/affiliation APIs
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user.role === 'admin') {
+      const url = config.url || '';
+      if (url.startsWith('/school/') || url === '/school') {
+        const sid = sessionStorage.getItem('admin_school_id');
+        if (sid) {
+          config.params = { ...config.params, school_id: sid };
+          // Also inject into body for POST/PUT
+          if (config.data && typeof config.data === 'object' && !config.data.school_id) {
+            config.data.school_id = sid;
+          }
+        }
+      }
+      if (url.startsWith('/affiliation/') || url === '/affiliation') {
+        const aid = sessionStorage.getItem('admin_affiliation_id');
+        if (aid) {
+          config.params = { ...config.params, affiliation_id: aid };
+        }
+      }
+    }
+  } catch { /* ignore parse errors */ }
+
   return config;
 });
 
@@ -53,7 +78,6 @@ api.interceptors.response.use(
         });
         const newToken = res.data.data.access_token;
         localStorage.setItem('access_token', newToken);
-        api.defaults.headers.Authorization = `Bearer ${newToken}`;
         processQueue(null, newToken);
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);

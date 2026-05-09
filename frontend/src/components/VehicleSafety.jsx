@@ -1,0 +1,57 @@
+/**
+ * Shared vehicle safety display components for all roles.
+ */
+
+const INSPECTION_MAP = {
+  PASSED:    { label: 'ผ่าน', cls: 'bg-green-100 text-green-700 border-green-200', icon: '✅' },
+  FAILED:    { label: 'ไม่ผ่าน', cls: 'bg-red-100 text-red-700 border-red-200', icon: '❌' },
+  NEEDS_FIX: { label: 'ต้องแก้ไข', cls: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: '⚠️' },
+  PENDING:   { label: 'รอตรวจ', cls: 'bg-gray-100 text-gray-600 border-gray-200', icon: '⏳' },
+};
+
+function getInsuranceStatus(expiry) {
+  if (!expiry) return { label: 'ไม่ระบุ', cls: 'text-gray-400', level: 'unknown' };
+  const days = Math.ceil((new Date(expiry) - new Date()) / (1000 * 60 * 60 * 24));
+  if (days < 0) return { label: 'หมดแล้ว', cls: 'text-red-600 font-bold', level: 'expired' };
+  if (days <= 30) return { label: `อีก ${days} วัน`, cls: 'text-amber-600 font-medium', level: 'expiring' };
+  return { label: 'ปกติ', cls: 'text-green-600', level: 'ok' };
+}
+
+export function VehicleSafetySection({ vehicle }) {
+  const insp = vehicle.latest_inspection_result;
+  const inspInfo = INSPECTION_MAP[insp] || null;
+  const insStatus = getInsuranceStatus(vehicle.insurance_expiry);
+
+  const hasRisk = !insp || insp === 'FAILED' || insp === 'NEEDS_FIX' || insStatus.level === 'expired';
+
+  return (
+    <div className={`rounded-lg p-3 mt-2 ${hasRisk ? 'bg-red-50 border border-red-200' : 'bg-green-50/50 border border-green-100'}`}>
+      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        {/* Inspection */}
+        <div>
+          <span className="text-gray-500">ตรวจสภาพ: </span>
+          {inspInfo ? (
+            <span className={`font-medium px-2 py-0.5 rounded-full text-xs border ${inspInfo.cls}`}>
+              {inspInfo.icon} {inspInfo.label}
+            </span>
+          ) : (
+            <span className="font-medium px-2 py-0.5 rounded-full text-xs border bg-red-100 text-red-600 border-red-200">
+              ⚠️ ยังไม่ตรวจ
+            </span>
+          )}
+        </div>
+
+        {/* Insurance */}
+        <div>
+          <span className="text-gray-500">ประกัน: </span>
+          <span className={insStatus.cls}>{vehicle.insurance_status || '-'}</span>
+          {vehicle.insurance_expiry && (
+            <span className={`ml-1 text-xs ${insStatus.cls}`}>
+              ({insStatus.label})
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
+import { VehicleSafetySection } from '../../components/VehicleSafety';
 import PlateSearchInput from '../../components/PlateSearchInput';
 
 export default function ProvVehicleList() {
@@ -55,34 +56,17 @@ export default function ProvVehicleList() {
                 <div>
                   <p className="text-xs text-gray-400 mb-0.5">คนขับ</p>
                   <p className="text-gray-700">{v.driver_name || '-'}</p>
-                  {v.driver_phone && <p className="text-xs text-gray-400">{v.driver_phone}</p>}
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 mb-0.5">ผู้ดูแลรถ</p>
                   <p className="text-gray-700">{v.attendant_name || '-'}</p>
-                  {v.attendant_phone && <p className="text-xs text-gray-400">{v.attendant_phone}</p>}
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 mb-0.5">เจ้าของรถ</p>
                   <p className="text-gray-700">{v.owner_name || '-'}</p>
-                  {v.owner_phone && <p className="text-xs text-gray-400">{v.owner_phone}</p>}
-                </div>
-
-                <div className="col-span-2 md:col-span-3 border-t border-gray-100 pt-3 mt-1">
-                  <p className="text-xs text-gray-400 mb-0.5">ประกันภัย</p>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className={`font-medium ${v.insurance_status === 'มี' ? 'text-green-600' : 'text-red-600'}`}>
-                      {v.insurance_status || 'ไม่ระบุ'}
-                    </span>
-                    {v.insurance_type && <span className="text-gray-500">({v.insurance_type})</span>}
-                    {v.insurance_expiry && (
-                      <span className="text-gray-400 text-xs">
-                        หมดอายุ: {new Date(v.insurance_expiry).toLocaleDateString('th-TH')}
-                      </span>
-                    )}
-                  </div>
                 </div>
               </div>
+              <VehicleSafetySection vehicle={v} />
 
               <button
                 onClick={async () => {

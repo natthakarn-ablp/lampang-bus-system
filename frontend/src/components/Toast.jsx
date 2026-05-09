@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import { useState, useCallback, createContext, useContext } from 'react';
 
 const ToastContext = createContext(null);
 
@@ -25,13 +25,7 @@ export function ToastProvider({ children }) {
     }, duration);
   }, []);
 
-  const toast = useCallback({
-    success: (msg) => addToast(msg, 'success'),
-    error: (msg) => addToast(msg, 'error', 5000),
-    info: (msg) => addToast(msg, 'info'),
-  }, [addToast]);
-
-  // Wrap in a stable object
+  // Stable context object — getter pattern ensures addToast is always current
   const [ctx] = useState(() => ({
     get success() { return (msg) => addToast(msg, 'success'); },
     get error() { return (msg) => addToast(msg, 'error', 5000); },
@@ -41,8 +35,11 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={ctx}>
       {children}
-      {/* Toast container — fixed bottom-right */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+      {/* Toast container — fixed bottom-right; lifts above bottom nav when --app-bottom-nav is set */}
+      <div
+        className="fixed right-4 z-50 flex flex-col gap-2 pointer-events-none"
+        style={{ bottom: 'calc(1rem + var(--app-bottom-nav, 0px))' }}
+      >
         {toasts.map((t) => (
           <div
             key={t.id}

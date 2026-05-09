@@ -79,6 +79,37 @@ async function getDashboard(schoolId) {
     [schoolId]
   );
 
+  // Data completeness metrics
+  const [[completeness]] = await pool.query(
+    `SELECT
+       COUNT(*) AS total,
+       SUM(vehicle_id IS NOT NULL) AS has_vehicle,
+       SUM(vehicle_id IS NULL) AS no_vehicle,
+       (SELECT COUNT(DISTINCT ps.student_id) FROM parent_student ps
+        JOIN students st ON st.id = ps.student_id AND st.school_id = ? AND st.is_deleted = FALSE
+        WHERE ps.approved = TRUE) AS has_parent
+     FROM students WHERE school_id = ? AND is_deleted = FALSE`,
+    [schoolId, schoolId]
+  );
+
+  const [[vehicleCompleteness]] = await pool.query(
+    `SELECT
+       COUNT(DISTINCT v.id) AS total_v,
+       SUM(CASE WHEN v.insurance_expiry IS NOT NULL AND v.insurance_expiry >= CURDATE() THEN 1 ELSE 0 END) AS insured,
+       SUM(CASE WHEN v.insurance_expiry IS NOT NULL AND v.insurance_expiry < CURDATE() THEN 1 ELSE 0 END) AS ins_expired,
+       (SELECT COUNT(DISTINCT vi.vehicle_id) FROM vehicle_inspections vi
+        WHERE vi.vehicle_id IN (
+          SELECT DISTINCT s2.vehicle_id FROM students s2
+          WHERE s2.school_id = ? AND s2.is_deleted = FALSE AND s2.vehicle_id IS NOT NULL
+        )) AS inspected
+     FROM vehicles v
+     WHERE v.is_deleted = FALSE AND v.id IN (
+       SELECT DISTINCT s3.vehicle_id FROM students s3
+       WHERE s3.school_id = ? AND s3.is_deleted = FALSE AND s3.vehicle_id IS NOT NULL
+     )`,
+    [schoolId, schoolId]
+  );
+
   return {
     school: school || null,
     date: today,
@@ -93,6 +124,16 @@ async function getDashboard(schoolId) {
     morning_leave,
     evening_leave,
     recent_emergencies,
+    completeness: {
+      students_total: Number(completeness.total) || 0,
+      students_with_vehicle: Number(completeness.has_vehicle) || 0,
+      students_no_vehicle: Number(completeness.no_vehicle) || 0,
+      students_with_parent: Number(completeness.has_parent) || 0,
+      vehicles_total: Number(vehicleCompleteness.total_v) || 0,
+      vehicles_insured: Number(vehicleCompleteness.insured) || 0,
+      vehicles_ins_expired: Number(vehicleCompleteness.ins_expired) || 0,
+      vehicles_inspected: Number(vehicleCompleteness.inspected) || 0,
+    },
   };
 }
 
@@ -179,7 +220,11 @@ async function getVehicles(schoolId) {
             (SELECT va.phone FROM vehicle_attendants va
              WHERE va.vehicle_id = v.id LIMIT 1) AS attendant_phone,
             (SELECT COUNT(*) FROM students s
-             WHERE s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE) AS student_count
+             WHERE s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE) AS student_count,
+            (SELECT vi.result FROM vehicle_inspections vi
+             WHERE vi.vehicle_id = v.id ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_result,
+            (SELECT vi.inspection_date FROM vehicle_inspections vi
+             WHERE vi.vehicle_id = v.id ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_date
      FROM vehicles v
      WHERE v.is_deleted = FALSE
        AND v.id IN (SELECT DISTINCT s.vehicle_id FROM students s

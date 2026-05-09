@@ -8,7 +8,8 @@
  *   sub      — optional subtitle e.g. "ครบ 100% จำนวน 18 วัน"
  */
 export default function KpiCard({ label, pct, detail, sub }) {
-  const value = pct ?? 0;
+  const raw = Number(pct);
+  const value = Number.isFinite(raw) ? raw : 0;
   const color =
     value >= 95   ? 'green'  :
     value >= 85   ? 'yellow' :

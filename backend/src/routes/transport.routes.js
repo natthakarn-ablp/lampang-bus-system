@@ -12,6 +12,48 @@ const transportSvc = require('../services/transport.service');
 // All routes require transport or admin role
 router.use(authenticate, requireRole('transport', 'admin'));
 
+// ─── POST /api/transport/vehicles (create new vehicle for inspection) ───────
+router.post('/vehicles', async (req, res, next) => {
+  try {
+    const { plate_no, vehicle_type } = req.body;
+    if (!plate_no || !plate_no.trim()) return sendError(res, 'กรุณาระบุทะเบียนรถ', [], 400);
+
+    const { pool } = require('../config/database');
+    const { generateVehicleId } = require('../utils/hash');
+    const { logAudit } = require('../utils/audit');
+
+    const trimmed = plate_no.trim();
+    // Check duplicate
+    const [[existing]] = await pool.query('SELECT id FROM vehicles WHERE plate_no = ? AND is_deleted = FALSE', [trimmed]);
+    if (existing) return sendSuccess(res, { id: existing.id, plate_no: trimmed, existed: true }, 'รถคันนี้มีในระบบแล้ว');
+
+    const id = generateVehicleId(trimmed);
+    await pool.query(
+      'INSERT INTO vehicles (id, plate_no, vehicle_type) VALUES (?, ?, ?)',
+      [id, trimmed, vehicle_type || null]
+    );
+
+    await logAudit({
+      userId: req.user.id, action: 'CREATE', entityType: 'vehicle', entityId: id,
+      newValue: { plate_no: trimmed, source: 'transport_inspection' },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+
+    sendSuccess(res, { id, plate_no: trimmed, existed: false }, 'เพิ่มรถใหม่เรียบร้อย', null, 201);
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/transport/schools (read-only list for dropdowns) ──────────────
+router.get('/schools', async (req, res, next) => {
+  try {
+    const { pool } = require('../config/database');
+    const [schools] = await pool.query(
+      `SELECT id, name FROM schools WHERE is_deleted = FALSE ORDER BY name`
+    );
+    sendSuccess(res, schools);
+  } catch (err) { next(err); }
+});
+
 // ─── GET /api/transport/dashboard ───────────────────────────────────────────
 router.get('/dashboard', async (req, res, next) => {
   try {
@@ -71,7 +113,7 @@ router.get('/inspections', async (req, res, next) => {
 // ─── POST /api/transport/inspections ────────────────────────────────────────
 router.post('/inspections', async (req, res, next) => {
   try {
-    const { vehicle_id, inspection_date, expiry_date, result, notes } = req.body;
+    const { vehicle_id, inspection_date, expiry_date, result, notes, certifying_school_id } = req.body;
     if (!vehicle_id || !inspection_date || !result) {
       return sendError(res, 'vehicle_id, inspection_date, and result are required', [], 400);
     }
@@ -92,6 +134,7 @@ router.post('/inspections', async (req, res, next) => {
       expiryDate: expiry_date,
       result,
       notes,
+      certifyingSchoolId: certifying_school_id || null,
       userId: req.user.id,
     });
 

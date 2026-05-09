@@ -72,6 +72,33 @@ async function getDashboard() {
      WHERE sc.is_deleted = FALSE ORDER BY a.name, sc.name`
   );
 
+  // Per-school completeness for "critical" section
+  const [schoolCompleteness] = await pool.query(
+    `SELECT sc.id, sc.name, a.name AS affiliation_name,
+            COUNT(DISTINCT s.id) AS student_count,
+            COUNT(DISTINCT s.vehicle_id) AS vehicle_count,
+            COUNT(DISTINCT CASE WHEN s.morning_enabled THEN s.id END) AS m_expected,
+            COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS m_done,
+            COUNT(DISTINCT CASE WHEN s.evening_enabled THEN s.id END) AS e_expected,
+            COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS e_done
+     FROM schools sc
+     JOIN students s ON s.school_id = sc.id AND s.is_deleted = FALSE
+     LEFT JOIN affiliations a ON a.id = sc.affiliation_id
+     LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
+     WHERE sc.is_deleted = FALSE
+     GROUP BY sc.id, sc.name, a.name`,
+    [today]
+  );
+  const schools_not_complete = schoolCompleteness
+    .filter(s => (s.m_expected > 0 && s.m_done < s.m_expected) || (s.e_expected > 0 && s.e_done < s.e_expected))
+    .map(s => ({
+      school_id: s.id, school_name: s.name, affiliation_name: s.affiliation_name,
+      student_count: s.student_count, vehicle_count: s.vehicle_count,
+      morning_done: s.m_done, morning_expected: s.m_expected, morning_pending: s.m_expected - s.m_done,
+      evening_done: s.e_done, evening_expected: s.e_expected, evening_pending: s.e_expected - s.e_done,
+    }))
+    .sort((a, b) => (b.morning_pending + b.evening_pending) - (a.morning_pending + a.evening_pending));
+
   return {
     date: today,
     total_affiliations,
@@ -92,6 +119,7 @@ async function getDashboard() {
     evening_leave,
     affiliations,
     schools: allSchools,
+    schools_not_complete,
   };
 }
 
@@ -317,7 +345,11 @@ async function getVehicles() {
             (SELECT GROUP_CONCAT(DISTINCT sc.name ORDER BY sc.name SEPARATOR ', ')
              FROM students s
              JOIN schools sc ON sc.id = s.school_id
-             WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE) AS school_names
+             WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE) AS school_names,
+            (SELECT vi.result FROM vehicle_inspections vi
+             WHERE vi.vehicle_id = v.id ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_result,
+            (SELECT vi.inspection_date FROM vehicle_inspections vi
+             WHERE vi.vehicle_id = v.id ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_date
      FROM vehicles v
      WHERE v.is_deleted = FALSE
        AND v.id IN (

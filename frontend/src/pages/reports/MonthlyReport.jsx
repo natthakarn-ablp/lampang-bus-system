@@ -38,28 +38,24 @@ export default function MonthlyReport() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
 
-      {/* ── SECTION 1 — Header ─────────────────────────────── */}
-      <div className="flex flex-col gap-3 mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">รายงานรายเดือน</h1>
-          <p className="text-sm text-gray-500 mt-0.5">สรุปผลการดำเนินงานรถรับส่งนักเรียนรายเดือน</p>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          />
-          <button onClick={resetMonth}
-            className="text-sm text-gray-500 hover:text-blue-600 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
-            เดือนปัจจุบัน
-          </button>
-          {data && (
-            <div className="sm:ml-auto">
-              <ExportButtons queryParams={`date=${month}-01`} filenamePrefix={`report-${month}`} />
-            </div>
-          )}
+      {/* ── HEADER ── */}
+      <div className="bg-blue-800 text-white rounded-xl px-5 py-4 mb-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-xs text-blue-200 uppercase tracking-wider">รายงานรายเดือน</p>
+            <h1 className="text-lg font-bold">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
+            <p className="text-sm text-blue-200 mt-0.5">
+              {month ? new Date(month + '-01').toLocaleDateString('th-TH', { year: 'numeric', month: 'long' }) : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+              className="border border-blue-600 bg-blue-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            <button onClick={resetMonth}
+              className="text-sm text-blue-200 hover:text-white px-3 py-2 border border-blue-600 rounded-lg hover:bg-blue-700 transition">
+              ปัจจุบัน
+            </button>
+          </div>
         </div>
       </div>
 
@@ -101,6 +97,51 @@ export default function MonthlyReport() {
           </div>
 
           {/* ── SECTION 4 — Daily Trend Table ──────────────── */}
+          {/* ── Weekly Trend ── */}
+          {data.daily_trend?.length > 0 && (() => {
+            const weeks = [];
+            const sorted = [...data.daily_trend].sort((a, b) => a.date.localeCompare(b.date));
+            for (let i = 0; i < sorted.length; i += 7) {
+              const chunk = sorted.slice(i, i + 7);
+              const mAvg = chunk.length > 0 ? Math.round(chunk.reduce((s, d) => s + (d.morning_pct || 0), 0) / chunk.length) : 0;
+              const eAvg = chunk.length > 0 ? Math.round(chunk.reduce((s, d) => s + (d.evening_pct || 0), 0) / chunk.length) : 0;
+              weeks.push({ label: `สัปดาห์ ${weeks.length + 1}`, days: chunk.length, mAvg, eAvg });
+            }
+            return weeks.length > 1 ? (
+              <section className="mb-6">
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">แนวโน้มรายสัปดาห์</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {weeks.map((w, i) => (
+                    <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+                      <p className="text-xs font-semibold text-gray-500 mb-2">{w.label}</p>
+                      <div className="space-y-2">
+                        <div>
+                          <div className="flex justify-between text-xs mb-0.5">
+                            <span className="text-gray-500">เช้า</span>
+                            <span className={`font-bold ${w.mAvg >= 95 ? 'text-green-600' : w.mAvg >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{w.mAvg}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-2.5">
+                            <div className={`h-2.5 rounded-full ${w.mAvg >= 95 ? 'bg-green-500' : w.mAvg >= 80 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${w.mAvg}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex justify-between text-xs mb-0.5">
+                            <span className="text-gray-500">เย็น</span>
+                            <span className={`font-bold ${w.eAvg >= 95 ? 'text-green-600' : w.eAvg >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{w.eAvg}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-2.5">
+                            <div className={`h-2.5 rounded-full ${w.eAvg >= 95 ? 'bg-green-500' : w.eAvg >= 80 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${w.eAvg}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">{w.days} วัน</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null;
+          })()}
+
           {data.daily_trend?.length > 0 && (
             <section className="mb-6">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">แนวโน้มรายวัน</h2>
@@ -275,6 +316,14 @@ export default function MonthlyReport() {
               </ul>
             </div>
           </details>
+
+          {/* ── FOOTER ── */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 mt-6">
+            <ExportButtons queryParams={`date=${month}-01`} filenamePrefix={`report-${month}`} />
+            <p className="text-xs text-gray-400">
+              สร้างจากระบบรถรับส่งนักเรียนจังหวัดลำปาง · {new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
+            </p>
+          </div>
         </>
       )}
     </div>

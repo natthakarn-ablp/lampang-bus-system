@@ -2,15 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/Toast';
-
-const ROLE_HOME = {
-  driver:      '/driver',
-  school:      '/school',
-  affiliation: '/affiliation',
-  province:    '/province',
-  transport:   '/transport',
-  admin:       '/province',
-};
+import { ROLE_HOME } from '../App';
 
 export default function Login() {
   const { login } = useAuth();
@@ -19,12 +11,12 @@ export default function Login() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error,    setError]    = useState('');
+  const [error,    setError]    = useState(null); // { msg, hint?, type? }
   const [loading,  setLoading]  = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError('');
+    setError(null);
     setLoading(true);
     try {
       const user = await login(username.trim(), password);
@@ -36,8 +28,38 @@ export default function Login() {
       toast.success('เข้าสู่ระบบสำเร็จ');
       navigate(ROLE_HOME[user.role] || '/', { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่';
-      setError(msg);
+      const status = err.response?.status;
+      const serverMsg = err.response?.data?.message || '';
+
+      if (status === 429) {
+        setError({
+          msg: 'มีการพยายามเข้าสู่ระบบหลายครั้งจากเครือข่ายนี้',
+          hint: 'ระบบระงับชั่วคราวเพื่อความปลอดภัย กรุณาลองใหม่อีกประมาณ 15 นาที\nบัญชีของคุณไม่ได้ถูกปิดใช้งานถาวร',
+          type: 'rate',
+        });
+      } else if (status === 401 && serverMsg.toLowerCase().includes('disabled')) {
+        setError({
+          msg: 'บัญชีนี้ถูกปิดการใช้งาน',
+          hint: 'กรุณาติดต่อผู้ดูแลระบบ',
+          type: 'disabled',
+        });
+      } else if (status === 401) {
+        setError({
+          msg: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+          type: 'auth',
+        });
+      } else if (!err.response) {
+        setError({
+          msg: 'ไม่สามารถเชื่อมต่อระบบได้',
+          hint: 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง',
+          type: 'network',
+        });
+      } else {
+        setError({
+          msg: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+          type: 'server',
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -48,7 +70,10 @@ export default function Login() {
       <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-10 w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-blue-700">ระบบรถรับส่งนักเรียน</h1>
+          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+            <span className="text-3xl">🚌</span>
+          </div>
+          <h1 className="text-2xl font-bold text-blue-800">ระบบรถรับส่งนักเรียน</h1>
           <p className="text-gray-500 text-sm mt-1">จังหวัดลำปาง</p>
         </div>
 
@@ -83,9 +108,17 @@ export default function Login() {
           </div>
 
           {error && (
-            <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-              {error}
-            </p>
+            <div className={`rounded-lg px-4 py-3 text-sm border ${
+              error.type === 'rate' ? 'bg-amber-50 border-amber-200 text-amber-800'
+              : error.type === 'disabled' ? 'bg-gray-50 border-gray-300 text-gray-700'
+              : error.type === 'network' ? 'bg-blue-50 border-blue-200 text-blue-700'
+              : 'bg-red-50 border-red-200 text-red-700'
+            }`}>
+              <p className="font-medium">{error.type === 'rate' ? '⏳' : error.type === 'disabled' ? '🔒' : error.type === 'network' ? '📡' : '⚠️'} {error.msg}</p>
+              {error.hint && (
+                <p className="mt-1 text-xs opacity-80 whitespace-pre-line">{error.hint}</p>
+              )}
+            </div>
           )}
 
           <button

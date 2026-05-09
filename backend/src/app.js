@@ -45,6 +45,8 @@ app.use('/api/reports',     reportRoutes);
 app.use('/api/transport', require('./routes/transport.routes'));
 app.use('/api/parent',    require('./routes/parent.routes'));
 app.use('/api/line',      require('./routes/line.routes'));
+app.use('/api/admin',     require('./routes/admin.routes'));
+app.use('/api/visits',    require('./routes/visits.routes'));
 
 // ─── Serve frontend build in production ──────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {

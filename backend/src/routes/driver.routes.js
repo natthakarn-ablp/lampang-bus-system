@@ -520,4 +520,85 @@ router.get('/roster-requests', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+// ─── GET /pretrip-status — Check if today's pretrip is done ─────────────────
+router.get('/pretrip-status', async (req, res, next) => {
+  try {
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    const entityId = `${vehicle.vehicle_id}_${today}`;
+
+    const [[row]] = await pool.query(
+      `SELECT id, new_value, created_at FROM audit_logs
+       WHERE entity_type = 'pretrip_checklist' AND entity_id = ? AND user_id = ?
+       ORDER BY created_at DESC LIMIT 1`,
+      [entityId, req.user.id]
+    );
+
+    if (row) {
+      let parsed = null;
+      try { parsed = typeof row.new_value === 'string' ? JSON.parse(row.new_value) : row.new_value; } catch {}
+      return sendSuccess(res, {
+        done: true,
+        date: today,
+        all_pass: parsed?.all_pass ?? true,
+        checked_at: row.created_at,
+      });
+    }
+
+    return sendSuccess(res, { done: false, date: today });
+  } catch (err) { next(err); }
+});
+
+// ─── POST /pretrip — Log pre-trip checklist result ──────────────────────────
+const PRETRIP_ITEMS = [
+  'ยางรถ / ลมยาง',
+  'ไฟหน้า-ไฟท้าย',
+  'กระจก / กระจกมองข้าง',
+  'เบรก',
+  'เข็มขัดนิรภัย / ที่นั่ง',
+  'ความสะอาดภายในรถ',
+];
+
+router.post('/pretrip', async (req, res, next) => {
+  try {
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const { items, all_pass, note } = req.body;
+
+    if (typeof all_pass !== 'boolean') {
+      return sendError(res, 'กรุณาระบุผลตรวจ (all_pass)', [], 400);
+    }
+
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+
+    await logAudit({
+      userId: req.user.id,
+      action: 'CREATE',
+      entityType: 'pretrip_checklist',
+      entityId: `${vehicle.vehicle_id}_${today}`,
+      newValue: {
+        vehicle_id: vehicle.vehicle_id,
+        plate_no: vehicle.plate_no,
+        date: today,
+        all_pass,
+        items: items || PRETRIP_ITEMS.map(label => ({ label, ok: all_pass })),
+        note: note || null,
+      },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    // If not all pass, also create an emergency log for follow-up
+    if (!all_pass && note) {
+      await pool.query(
+        `INSERT INTO emergency_logs (reported_by, channel, vehicle_id, plate_no, detail, note)
+         VALUES (?, 'web', ?, ?, ?, ?)`,
+        [req.user.id, vehicle.vehicle_id, vehicle.plate_no,
+         `ตรวจรถก่อนออก: พบรายการผิดปกติ`, note]
+      );
+    }
+
+    return sendSuccess(res, { date: today, all_pass }, 'บันทึกผลตรวจรถก่อนออกสำเร็จ', null, 201);
+  } catch (err) { return next(err); }
+});
+
 module.exports = router;

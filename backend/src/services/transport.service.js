@@ -36,18 +36,14 @@ async function getDashboard() {
      ) sub`
   );
 
-  const [[{ expiring_insurance }]] = await pool.query(
-    `SELECT COUNT(*) AS expiring_insurance FROM vehicles
-     WHERE is_deleted = FALSE
-       AND insurance_expiry IS NOT NULL
-       AND insurance_expiry BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)`
-  );
-
-  const [[{ expired_insurance }]] = await pool.query(
-    `SELECT COUNT(*) AS expired_insurance FROM vehicles
-     WHERE is_deleted = FALSE
-       AND insurance_expiry IS NOT NULL
-       AND insurance_expiry < CURDATE()`
+  // Insurance breakdown
+  const [[ins]] = await pool.query(
+    `SELECT
+       SUM(CASE WHEN insurance_expiry IS NOT NULL AND insurance_expiry >= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS insurance_ok,
+       SUM(CASE WHEN insurance_expiry IS NOT NULL AND insurance_expiry BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS expiring_insurance,
+       SUM(CASE WHEN insurance_expiry IS NOT NULL AND insurance_expiry < CURDATE() THEN 1 ELSE 0 END) AS expired_insurance,
+       SUM(CASE WHEN insurance_expiry IS NULL THEN 1 ELSE 0 END) AS no_insurance_data
+     FROM vehicles WHERE is_deleted = FALSE`
   );
 
   return {
@@ -59,8 +55,10 @@ async function getDashboard() {
     failed: Number(failed) || 0,
     needs_fix: Number(needs_fix) || 0,
     pending: Number(pending) || 0,
-    expiring_insurance: expiring_insurance || 0,
-    expired_insurance: expired_insurance || 0,
+    insurance_ok: Number(ins.insurance_ok) || 0,
+    expiring_insurance: Number(ins.expiring_insurance) || 0,
+    expired_insurance: Number(ins.expired_insurance) || 0,
+    no_insurance_data: Number(ins.no_insurance_data) || 0,
   };
 }
 
@@ -83,6 +81,7 @@ async function getVehicles({ status, page = 1, per_page = 50 } = {}) {
     `SELECT v.id, v.plate_no, v.vehicle_type,
             v.owner_name, v.owner_phone,
             v.insurance_status, v.insurance_type, v.insurance_expiry,
+            v.created_at,
             (SELECT d.name FROM driver_vehicle_assignments dva
              JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
              WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE LIMIT 1) AS driver_name,
@@ -138,11 +137,11 @@ async function getInspections({ vehicle_id, result, page = 1, per_page = 20 } = 
   return { inspections, meta: { page, per_page, total } };
 }
 
-async function createInspection({ vehicleId, inspectionDate, expiryDate, result, notes, userId }) {
+async function createInspection({ vehicleId, inspectionDate, expiryDate, result, notes, certifyingSchoolId, userId }) {
   const [res] = await pool.query(
-    `INSERT INTO vehicle_inspections (vehicle_id, inspected_by, inspection_date, expiry_date, result, notes)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [vehicleId, userId, inspectionDate, expiryDate || null, result, notes || null]
+    `INSERT INTO vehicle_inspections (vehicle_id, inspected_by, inspection_date, expiry_date, result, notes, certifying_school_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [vehicleId, userId, inspectionDate, expiryDate || null, result, notes || null, certifyingSchoolId || null]
   );
   return res.insertId;
 }

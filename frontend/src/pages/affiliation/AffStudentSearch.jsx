@@ -55,7 +55,7 @@ export default function AffStudentSearch() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">ค้นหานักเรียน</h1>
+      <h1 className="text-xl font-bold text-gray-800 mb-4">ข้อมูลนักเรียน</h1>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">

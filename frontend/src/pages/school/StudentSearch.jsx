@@ -138,7 +138,7 @@ export default function StudentSearch() {
   function handleDownloadTemplate() {
     const link = document.createElement('a');
     link.href = '/templates/student_import_template_th.csv';
-    link.download = 'student_import_template_th.csv';
+    link.download = 'แบบฟอร์มนำเข้านักเรียน.csv';
     link.click();
   }
 
@@ -169,7 +169,7 @@ export default function StudentSearch() {
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       {/* Header + actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 className="text-xl font-bold text-gray-800">ค้นหานักเรียน</h1>
+        <h1 className="text-xl font-bold text-gray-800">ข้อมูลนักเรียน</h1>
         <div className="flex gap-2">
           <button onClick={handleDownloadTemplate}
             className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">

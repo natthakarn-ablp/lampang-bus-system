@@ -7,6 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const reportSvc = require('../services/report.service');
+const { logAudit } = require('../utils/audit');
 
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
@@ -115,6 +116,9 @@ router.get('/export/csv', async (req, res, next) => {
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_csv', entityId: date,
+      newValue: { format: 'csv', role: req.user.role, scope: req.user.scopeId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
     return res.send(csv);
   } catch (err) { next(err); }
 });
@@ -165,6 +169,9 @@ router.get('/export/excel', async (req, res, next) => {
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_excel', entityId: date,
+      newValue: { format: 'excel', role: req.user.role, scope: req.user.scopeId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) { next(err); }
@@ -177,71 +184,175 @@ router.get('/export/excel', async (req, res, next) => {
 router.get('/export/pdf', async (req, res, next) => {
   try {
     const report = await reportSvc.getDailyReport(req.user, req.filters);
+    const thaiDate = new Date(report.date).toLocaleDateString('th-TH', {
+      year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Bangkok',
+    });
     const filename = `report-${report.date}.pdf`;
 
-    // Lazy-require pdfkit so tests can still run without the font file
     const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     doc.pipe(res);
 
-    // Try to load Thai font, fall back to Helvetica
+    // Load Thai font
     const env = require('../config/env');
     const fs = require('fs');
+    const path = require('path');
     let fontName = 'Helvetica';
-    if (env.export.pdfFontPath && fs.existsSync(env.export.pdfFontPath)) {
-      doc.registerFont('ThaiFont', env.export.pdfFontPath);
-      fontName = 'ThaiFont';
+    let fontBold = 'Helvetica-Bold';
+    const fontPath = env.export.pdfFontPath;
+    const boldPath = fontPath ? fontPath.replace('-Regular', '-Bold') : null;
+    if (fontPath && fs.existsSync(fontPath)) {
+      doc.registerFont('Thai', fontPath);
+      fontName = 'Thai';
+      fontBold = 'Thai';
+      if (boldPath && fs.existsSync(boldPath)) {
+        doc.registerFont('ThaiBold', boldPath);
+        fontBold = 'ThaiBold';
+      }
     }
 
-    doc.font(fontName).fontSize(18).text('Report - ' + report.date, { align: 'center' });
-    doc.moveDown();
+    const pageW = doc.page.width - 80;
 
-    doc.fontSize(12);
-    doc.text(`Total Students: ${report.total_students}`);
-    doc.text(`Total Vehicles: ${report.total_vehicles}`);
-    doc.moveDown(0.5);
-    doc.text(`Morning Done: ${report.morning_done} / ${report.morning_total}`);
-    doc.text(`Morning Pending: ${report.morning_pending}`);
-    doc.text(`Evening Done: ${report.evening_done} / ${report.evening_total}`);
-    doc.text(`Evening Pending: ${report.evening_pending}`);
-    doc.text(`Emergencies: ${report.emergency_count}`);
+    // ── Header ──
+    doc.font(fontBold).fontSize(16).text('รายงานสถานะรับ-ส่งนักเรียน', { align: 'center' });
+    doc.font(fontName).fontSize(11).text(`ระบบรถรับส่งนักเรียนจังหวัดลำปาง`, { align: 'center' });
+    doc.fontSize(11).text(`วันที่ ${thaiDate}`, { align: 'center' });
+    doc.moveDown(1.2);
 
-    // Per-school table
+    // ── Summary box ──
+    doc.font(fontBold).fontSize(13).text('สรุปภาพรวม');
+    doc.moveDown(0.3);
+    doc.font(fontName).fontSize(11);
+
+    const sumData = [
+      ['นักเรียนทั้งหมด', `${report.total_students} คน`],
+      ['รถรับส่งทั้งหมด', `${report.total_vehicles} คัน`],
+      ['ส่งเช้าแล้ว', `${report.morning_done} / ${report.morning_total} คน`],
+      ['รอส่งเช้า', `${report.morning_pending} คน`],
+      ['รับเย็นแล้ว', `${report.evening_done} / ${report.evening_total} คน`],
+      ['รอรับเย็น', `${report.evening_pending} คน`],
+      ['เหตุฉุกเฉิน', `${report.emergency_count} รายการ`],
+    ];
+
+    for (const [label, value] of sumData) {
+      const y = doc.y;
+      doc.font(fontName).text(label, 60, y, { width: 180 });
+      doc.font(fontBold).text(value, 240, y, { width: 200 });
+      doc.y = y + 18;
+    }
+    doc.moveDown(0.8);
+
+    // ── Per-school ──
     if (report.schools && report.schools.length > 0) {
-      doc.moveDown();
-      doc.fontSize(14).text('Per-School Summary', { underline: true });
-      doc.moveDown(0.5);
-      doc.fontSize(10);
+      doc.font(fontBold).fontSize(13).text('สรุปรายโรงเรียน');
+      doc.moveDown(0.3);
 
+      // Table header
+      const cols = [{ l: 'โรงเรียน', w: 200 }, { l: 'นักเรียน', w: 60 }, { l: 'ส่งเช้า', w: 60 }, { l: 'รับเย็น', w: 60 }, { l: 'รอเช้า', w: 55 }, { l: 'รอเย็น', w: 55 }];
+      let tx = 45;
+      const hy = doc.y;
+      doc.rect(40, hy - 2, pageW, 18).fill('#2563eb');
+      doc.fill('#ffffff').font(fontBold).fontSize(9);
+      for (const c of cols) { doc.text(c.l, tx, hy + 2, { width: c.w, align: 'center' }); tx += c.w; }
+      doc.y = hy + 20;
+      doc.fill('#000000');
+
+      doc.font(fontName).fontSize(9);
+      let alt = false;
       for (const s of report.schools) {
-        doc.text(
-          `${s.school_name}: ${s.student_count} students, ` +
-          `Morning ${s.morning_done}/${s.student_count}, ` +
-          `Evening ${s.evening_done}/${s.student_count}`
-        );
+        const ry = doc.y;
+        if (ry > 750) { doc.addPage(); }
+        const rowY = doc.y;
+        if (alt) doc.rect(40, rowY - 1, pageW, 16).fill('#f3f4f6').fill('#000000');
+        alt = !alt;
+        tx = 45;
+        const vals = [
+          { v: s.school_name || '-', a: 'left' },
+          { v: `${s.student_count}`, a: 'center' },
+          { v: `${s.morning_done}`, a: 'center' },
+          { v: `${s.evening_done}`, a: 'center' },
+          { v: `${(s.student_count || 0) - (s.morning_done || 0)}`, a: 'center' },
+          { v: `${(s.student_count || 0) - (s.evening_done || 0)}`, a: 'center' },
+        ];
+        for (let i = 0; i < cols.length; i++) {
+          doc.text(vals[i].v, tx, rowY + 1, { width: cols[i].w, align: vals[i].a });
+          tx += cols[i].w;
+        }
+        doc.y = rowY + 17;
       }
+      doc.moveDown(0.8);
     }
 
-    // Per-vehicle table
+    // ── Per-vehicle ──
     if (report.vehicles && report.vehicles.length > 0) {
-      doc.moveDown();
-      doc.fontSize(14).text('Per-Vehicle Summary', { underline: true });
-      doc.moveDown(0.5);
-      doc.fontSize(10);
+      if (doc.y > 650) doc.addPage();
+      doc.font(fontBold).fontSize(13).text('สรุปรายคัน');
+      doc.moveDown(0.3);
 
+      const cols2 = [{ l: 'ทะเบียนรถ', w: 160 }, { l: 'นักเรียน', w: 60 }, { l: 'ส่งเช้า', w: 65 }, { l: 'รับเย็น', w: 65 }, { l: 'รอเช้า', w: 65 }, { l: 'รอเย็น', w: 65 }];
+      let tx2 = 45;
+      const hy2 = doc.y;
+      doc.rect(40, hy2 - 2, pageW, 18).fill('#2563eb');
+      doc.fill('#ffffff').font(fontBold).fontSize(9);
+      for (const c of cols2) { doc.text(c.l, tx2, hy2 + 2, { width: c.w, align: 'center' }); tx2 += c.w; }
+      doc.y = hy2 + 20;
+      doc.fill('#000000');
+
+      doc.font(fontName).fontSize(9);
+      let alt2 = false;
       for (const v of report.vehicles) {
-        doc.text(
-          `${v.plate_no}: ${v.student_count} students, ` +
-          `Morning ${v.morning_done}/${v.student_count}, ` +
-          `Evening ${v.evening_done}/${v.student_count}`
-        );
+        if (doc.y > 750) doc.addPage();
+        const rowY = doc.y;
+        if (alt2) doc.rect(40, rowY - 1, pageW, 16).fill('#f3f4f6').fill('#000000');
+        alt2 = !alt2;
+        tx2 = 45;
+        const vals = [
+          { v: v.plate_no || '-', a: 'left' },
+          { v: `${v.student_count}`, a: 'center' },
+          { v: `${v.morning_done}`, a: 'center' },
+          { v: `${v.evening_done}`, a: 'center' },
+          { v: `${(v.student_count || 0) - (v.morning_done || 0)}`, a: 'center' },
+          { v: `${(v.student_count || 0) - (v.evening_done || 0)}`, a: 'center' },
+        ];
+        for (let i = 0; i < cols2.length; i++) {
+          doc.text(vals[i].v, tx2, rowY + 1, { width: cols2[i].w, align: vals[i].a });
+          tx2 += cols2[i].w;
+        }
+        doc.y = rowY + 17;
       }
     }
 
+    // ── Footer ──
+    doc.moveDown(1);
+    doc.font(fontName).fontSize(8).fillColor('#999999')
+      .text(`พิมพ์จากระบบรถรับส่งนักเรียนจังหวัดลำปาง — ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`, { align: 'center' });
+
+    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_pdf', entityId: report.date,
+      newValue: { format: 'pdf', role: req.user.role, scope: req.user.scopeId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
     doc.end();
+  } catch (err) { next(err); }
+});
+
+// ─── POST /decision-log — Log province decision before export ────────────────
+router.post('/decision-log', async (req, res, next) => {
+  try {
+    const { decision_type, decision_note, report_type, report_date } = req.body;
+
+    await logAudit({
+      userId: req.user.id,
+      action: 'CREATE',
+      entityType: 'decision_log',
+      entityId: `${report_type || 'report'}_${report_date || 'unknown'}`,
+      newValue: { decision_type, decision_note, report_type, report_date, role: req.user.role },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, { logged: true }, 'บันทึกการตัดสินใจสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
 

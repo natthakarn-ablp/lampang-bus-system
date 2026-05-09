@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import { DonutChart, HBarChart } from '../../components/MiniCharts';
+import PageHeader from '../../components/PageHeader';
+import { SkeletonKpiGrid } from '../../components/Skeleton';
+import { IconBuilding } from '../../components/icons';
 import { PAGE_TITLES, CARD_LABELS, CHART_TITLES, SECTION_TITLES, STATUS, UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS } from '../../constants/uiLabels';
 
 export default function SchoolDashboard() {
@@ -30,32 +34,89 @@ export default function SchoolDashboard() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
-      {/* ── Header ── */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{PAGE_TITLES.SCHOOL_DASHBOARD}</h1>
-        {data?.school && (
-          <p className="text-sm text-gray-500 mt-1">
-            {data.school.name}
-            {data.school.affiliation_name && (
-              <span className="text-gray-400"> · {data.school.affiliation_name}</span>
-            )}
-          </p>
-        )}
-        {data?.date && (
-          <p className="text-xs text-gray-400 mt-0.5">
-            วันที่ {new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
-        )}
-      </div>
+      <PageHeader
+        title={PAGE_TITLES.SCHOOL_DASHBOARD}
+        subtitle={data?.school
+          ? `${data.school.name}${data.school.affiliation_name ? ' · ' + data.school.affiliation_name : ''}`
+          : null}
+        meta={data?.date
+          ? `วันที่ ${new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
+          : null}
+        icon={IconBuilding}
+        iconColor="green"
+      />
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-          <span className="ml-3 text-gray-400">{UI_MESSAGES.LOADING}</span>
+        <div className="space-y-4">
+          <SkeletonKpiGrid count={4} />
+          <SkeletonKpiGrid count={2} />
         </div>
       ) : (
         <>
-          {/* ── Summary Cards — Row 1: Overview ── */}
+          {/* ── หมวด 1: สิ่งที่ต้องติดตามทันที ── */}
+          {(() => {
+            const issues = [];
+            if ((data?.morning_pending ?? 0) > 0) issues.push(`🌅 รอส่งเช้า ${data.morning_pending} คน`);
+            if ((data?.evening_pending ?? 0) > 0) issues.push(`🌆 รอรับเย็น ${data.evening_pending} คน`);
+            if ((data?.recent_emergencies ?? 0) > 0) issues.push(`🚨 เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง (7 วัน)`);
+            return issues.length > 0 ? (
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 mb-4">
+                <p className="text-sm font-bold text-amber-800 mb-1">สิ่งที่ต้องติดตามวันนี้</p>
+                {issues.map((msg, i) => <p key={i} className="text-sm text-amber-700">{msg}</p>)}
+              </div>
+            ) : (
+              <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2 mb-4 text-center">
+                <p className="text-sm font-bold text-green-700">✅ ดำเนินการครบแล้ว ไม่มีรายการค้าง</p>
+              </div>
+            );
+          })()}
+
+          {/* ── ความครบถ้วนข้อมูล ── */}
+          {data?.completeness && (() => {
+            const c = data.completeness;
+            const items = [
+              { label: 'นักเรียนมีรถ', done: c.students_with_vehicle, total: c.students_total, link: '/school/students', linkLabel: 'ดูรายชื่อ' },
+              { label: 'ผู้ปกครองครบ', done: c.students_with_parent, total: c.students_total, link: '/school/students', linkLabel: 'ดูรายชื่อ' },
+              { label: 'รถผ่านตรวจสภาพ', done: c.vehicles_inspected, total: c.vehicles_total, link: '/school/vehicles', linkLabel: 'ดูรถ' },
+              { label: 'ประกันภัยครบ', done: c.vehicles_insured, total: c.vehicles_total, link: '/school/vehicles', linkLabel: 'ดูรถ' },
+            ];
+            const overallPct = items.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / items.length * 100;
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-bold text-gray-700">ความครบถ้วนข้อมูล</h2>
+                  <span className={`text-sm font-bold ${overallPct >= 90 ? 'text-green-600' : overallPct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                    {Math.round(overallPct)}%
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {items.map(item => {
+                    const pct = item.total > 0 ? Math.round((item.done / item.total) * 100) : 100;
+                    const missing = item.total - item.done;
+                    return (
+                      <div key={item.label}>
+                        <div className="flex justify-between text-xs mb-0.5">
+                          <span className="text-gray-600">{item.label}</span>
+                          <span className={`font-medium ${pct >= 90 ? 'text-green-600' : pct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {item.done}/{item.total} ({pct}%)
+                            {missing > 0 && (
+                              <Link to={item.link} className="ml-1 text-blue-500 hover:underline">{item.linkLabel}</Link>
+                            )}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-2">
+                          <div className={`h-2 rounded-full transition-all ${pct >= 90 ? 'bg-green-500' : pct >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                            style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── หมวด 2: ภาพรวม ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <StatCard icon="👨‍🎓" label={CARD_LABELS.TOTAL_STUDENTS} value={data?.total_students ?? 0} accent="blue" />
             <StatCard icon="🚐" label={CARD_LABELS.VEHICLES} value={data?.total_vehicles ?? 0} accent="blue" />
@@ -63,7 +124,7 @@ export default function SchoolDashboard() {
             <StatCard icon="🚨" label={CARD_LABELS.EMERGENCY} value={data?.recent_emergencies ?? 0} sub="7 วันล่าสุด" accent={data?.recent_emergencies > 0 ? 'red' : 'gray'} />
           </div>
 
-          {/* ── Summary Cards — Row 2: Morning/Evening Status ── */}
+          {/* ── หมวด 3: สถานะเช้า/เย็น ── */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
             <SessionCard
               session="morning"

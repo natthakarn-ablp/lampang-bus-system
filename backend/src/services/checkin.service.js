@@ -126,7 +126,11 @@ async function getRoster(pool, vehicleId, session) {
              END
              FROM student_leaves sl2
              WHERE sl2.student_id = s.id AND sl2.leave_date = CURDATE() AND sl2.cancelled = FALSE
-            ) AS leave_session
+            ) AS leave_session,
+            (SELECT sl3.id FROM student_leaves sl3
+             WHERE sl3.student_id = s.id AND sl3.leave_date = CURDATE() AND sl3.cancelled = FALSE
+             ORDER BY sl3.id DESC LIMIT 1
+            ) AS leave_id
      FROM   students s
      LEFT JOIN schools sc ON sc.id = s.school_id
      LEFT JOIN daily_status ds

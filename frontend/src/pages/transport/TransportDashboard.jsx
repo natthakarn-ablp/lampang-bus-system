@@ -1,7 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  AlertTriangle, ClipboardList, CheckCircle2, Lightbulb,
+  FileText, Phone, X, Search,
+} from 'lucide-react';
 import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
+import {
+  AppCard, AlertBanner, KPIGrid, KPIStat,
+  StatusBadge, DashboardSection,
+} from '../../components/ui';
 
 // SLA configuration — days allowed to resolve a risk item
 const SLA_DAYS = 7;
@@ -11,13 +19,11 @@ function formatThaiDate(d) {
   return new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-/** Compute SLA deadline and remaining days for a risk item */
 function slaInfo(v) {
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const insp = v.latest_inspection_result;
 
-  // Determine the "risk start date" for SLA calculation
   let riskStart = null;
   let reason = '';
 
@@ -28,7 +34,6 @@ function slaInfo(v) {
     riskStart = v.latest_inspection_date ? new Date(v.latest_inspection_date) : null;
     reason = 'ตั้งแต่วันที่ต้องแก้ไข';
   } else if (!insp) {
-    // Never inspected — use vehicle creation date or fallback to 30 days ago
     riskStart = v.created_at ? new Date(v.created_at) : new Date(now.getTime() - 30 * 86400000);
     reason = 'ยังไม่เคยตรวจ';
   } else if (v.insurance_expiry && new Date(v.insurance_expiry) < now) {
@@ -43,12 +48,13 @@ function slaInfo(v) {
   const daysLeft = Math.ceil((deadline - now) / 86400000);
   const overdue = daysLeft < 0;
 
-  let color = 'text-green-600 bg-green-50 border-green-200';
-  if (daysLeft <= 0) color = 'text-red-800 bg-red-100 border-red-300 font-bold';
-  else if (daysLeft <= 2) color = 'text-red-600 bg-red-50 border-red-200';
-  else if (daysLeft <= 5) color = 'text-amber-700 bg-amber-50 border-amber-200';
+  // Variant for StatusBadge based on remaining days
+  let variant = 'success';
+  if (daysLeft <= 0) variant = 'danger';
+  else if (daysLeft <= 2) variant = 'danger';
+  else if (daysLeft <= 5) variant = 'warn';
 
-  return { deadline, daysLeft, overdue, color, reason };
+  return { deadline, daysLeft, overdue, variant, reason };
 }
 
 function riskScore(v) {
@@ -69,20 +75,20 @@ function riskScore(v) {
 function riskTags(v) {
   const tags = [];
   const insp = v.latest_inspection_result;
-  if (insp === 'FAILED') tags.push({ text: 'ไม่ผ่านตรวจ', cls: 'bg-red-600 text-white' });
-  else if (!insp) tags.push({ text: 'ยังไม่ตรวจ', cls: 'bg-red-100 text-red-700 border border-red-200' });
-  else if (insp === 'NEEDS_FIX') tags.push({ text: 'ต้องแก้ไข', cls: 'bg-yellow-100 text-yellow-800 border border-yellow-200' });
+  if (insp === 'FAILED')        tags.push({ text: 'ไม่ผ่านตรวจ',    variant: 'danger' });
+  else if (!insp)               tags.push({ text: 'ยังไม่ตรวจ',     variant: 'danger' });
+  else if (insp === 'NEEDS_FIX') tags.push({ text: 'ต้องแก้ไข',     variant: 'warn' });
   const hasIns = v.insurance_expiry != null;
-  if (hasIns && new Date(v.insurance_expiry) < new Date()) tags.push({ text: 'ประกันหมด', cls: 'bg-red-600 text-white' });
-  else if (!hasIns) tags.push({ text: 'ไม่มีข้อมูลประกัน', cls: 'bg-gray-200 text-gray-700' });
-  else if (new Date(v.insurance_expiry) < new Date(Date.now() + 30*86400000)) tags.push({ text: 'ประกันใกล้หมด', cls: 'bg-yellow-100 text-yellow-800 border border-yellow-200' });
+  if (hasIns && new Date(v.insurance_expiry) < new Date())                                  tags.push({ text: 'ประกันหมด',      variant: 'danger' });
+  else if (!hasIns)                                                                          tags.push({ text: 'ไม่มีข้อมูลประกัน', variant: 'neutral' });
+  else if (new Date(v.insurance_expiry) < new Date(Date.now() + 30*86400000))                tags.push({ text: 'ประกันใกล้หมด',    variant: 'warn' });
   return tags;
 }
 
 function suggestion(v) {
   const insp = v.latest_inspection_result;
-  if (insp === 'FAILED') return 'ควรตรวจซ้ำ/แก้ไขทันที';
-  if (!insp) return 'ควรบันทึกผลตรวจ';
+  if (insp === 'FAILED')   return 'ควรตรวจซ้ำ/แก้ไขทันที';
+  if (!insp)               return 'ควรบันทึกผลตรวจ';
   if (insp === 'NEEDS_FIX') return 'ควรแก้ไขแล้วตรวจซ้ำ';
   const hasIns = v.insurance_expiry != null;
   if (hasIns && new Date(v.insurance_expiry) < new Date()) return 'ควรต่อประกัน';
@@ -92,23 +98,22 @@ function suggestion(v) {
 }
 
 function priorityLevel(score) {
-  if (score >= 100) return { text: 'เร่งด่วน', cls: 'bg-red-600 text-white' };
-  if (score >= 60) return { text: 'ต้องติดตาม', cls: 'bg-amber-500 text-white' };
-  if (score >= 20) return { text: 'ข้อมูลไม่ครบ', cls: 'bg-gray-400 text-white' };
-  return { text: 'พร้อมใช้งาน', cls: 'bg-green-600 text-white' };
+  if (score >= 100) return { text: 'เร่งด่วน',     variant: 'danger' };
+  if (score >= 60)  return { text: 'ต้องติดตาม',  variant: 'warn' };
+  if (score >= 20)  return { text: 'ข้อมูลไม่ครบ', variant: 'neutral' };
+  return              { text: 'พร้อมใช้งาน',     variant: 'success' };
 }
 
-// Filter definitions
 const FILTERS = [
-  { key: 'all', label: 'ทั้งหมด', fn: () => true },
-  { key: 'urgent', label: 'เร่งด่วน', fn: v => riskScore(v) >= 100 },
-  { key: 'not_inspected', label: 'ยังไม่ตรวจ', fn: v => !v.latest_inspection_result },
-  { key: 'failed', label: 'ไม่ผ่าน', fn: v => v.latest_inspection_result === 'FAILED' },
-  { key: 'needs_fix', label: 'ต้องแก้ไข', fn: v => v.latest_inspection_result === 'NEEDS_FIX' },
-  { key: 'ins_expired', label: 'ประกันหมด', fn: v => v.insurance_expiry && new Date(v.insurance_expiry) < new Date() },
-  { key: 'no_ins', label: 'ไม่มีข้อมูลประกัน', fn: v => !v.insurance_expiry },
-  { key: 'ins_expiring', label: 'ใกล้หมดอายุ', fn: v => v.insurance_expiry && new Date(v.insurance_expiry) >= new Date() && new Date(v.insurance_expiry) < new Date(Date.now() + 30*86400000) },
-  { key: 'ready', label: 'พร้อมใช้งาน', fn: v => riskScore(v) === 0 },
+  { key: 'all',           label: 'ทั้งหมด',           fn: () => true },
+  { key: 'urgent',        label: 'เร่งด่วน',          fn: v => riskScore(v) >= 100 },
+  { key: 'not_inspected', label: 'ยังไม่ตรวจ',         fn: v => !v.latest_inspection_result },
+  { key: 'failed',        label: 'ไม่ผ่าน',           fn: v => v.latest_inspection_result === 'FAILED' },
+  { key: 'needs_fix',     label: 'ต้องแก้ไข',         fn: v => v.latest_inspection_result === 'NEEDS_FIX' },
+  { key: 'ins_expired',   label: 'ประกันหมด',         fn: v => v.insurance_expiry && new Date(v.insurance_expiry) < new Date() },
+  { key: 'no_ins',        label: 'ไม่มีข้อมูลประกัน',   fn: v => !v.insurance_expiry },
+  { key: 'ins_expiring',  label: 'ใกล้หมดอายุ',        fn: v => v.insurance_expiry && new Date(v.insurance_expiry) >= new Date() && new Date(v.insurance_expiry) < new Date(Date.now() + 30*86400000) },
+  { key: 'ready',         label: 'พร้อมใช้งาน',       fn: v => riskScore(v) === 0 },
 ];
 
 export default function TransportDashboard() {
@@ -134,7 +139,6 @@ export default function TransportDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Auto-scroll to highlighted vehicle + auto-clear after 6 seconds
   useEffect(() => {
     if (highlightId && !loading && highlightRef.current) {
       highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -148,14 +152,12 @@ export default function TransportDashboard() {
     }
   }, [highlightId, loading]);
 
-  // Filter counts
   const filterCounts = useMemo(() => {
     const counts = {};
     FILTERS.forEach(f => { counts[f.key] = vehicles.filter(f.fn).length; });
     return counts;
   }, [vehicles]);
 
-  // Apply active filter + search
   const currentFilter = FILTERS.find(f => f.key === activeFilter) || FILTERS[0];
   const filtered = useMemo(() => {
     let list = vehicles.filter(currentFilter.fn);
@@ -163,223 +165,260 @@ export default function TransportDashboard() {
     return list.map(v => ({ ...v, _score: riskScore(v) })).sort((a, b) => b._score - a._score);
   }, [vehicles, activeFilter, vSearch, currentFilter]);
 
-  if (loading) return <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>;
-  if (!data) return <p className="text-gray-400 py-10 text-center text-lg">ไม่มีข้อมูล</p>;
+  if (loading) return <p className="text-ink-muted py-10 text-center text-lg">กำลังโหลด…</p>;
+  if (!data)   return <p className="text-ink-muted py-10 text-center text-lg">ไม่มีข้อมูล</p>;
 
   const urgentCount = vehicles.filter(v => riskScore(v) >= 100).length;
   const readyCount = data.passed || 0;
   const readyPct = data.total_vehicles > 0 ? Math.round((readyCount / data.total_vehicles) * 100) : 0;
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
-      <div className="mb-5">
-        <h1 className="text-xl font-bold text-gray-800">ภาพรวมตรวจสภาพรถ</h1>
-        <p className="text-sm text-gray-500">สรุปสถานะรถรับส่งนักเรียนทั้งจังหวัด</p>
-      </div>
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
+      <header>
+        <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight">ภาพรวมตรวจสภาพรถ</h1>
+        <p className="text-sm text-ink-muted mt-1">สรุปสถานะรถรับส่งนักเรียนทั้งจังหวัด</p>
+      </header>
 
       {/* Save success banner */}
       {highlightId && (() => {
         const sv = vehicles.find(v => v.id === highlightId);
         return sv ? (
-          <div className="bg-green-50 border-2 border-green-300 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
-            <p className="text-sm text-green-700 font-medium">✅ บันทึกผลตรวจของรถ <strong>{sv.plate_no}</strong> เรียบร้อยแล้ว</p>
-            <button onClick={() => { setHighlightId(''); setSearchParams({}, { replace: true }); }} className="text-xs text-green-600 hover:text-green-800">✕</button>
-          </div>
+          <AlertBanner
+            variant="success"
+            title={`บันทึกผลตรวจของรถ ${sv.plate_no} เรียบร้อยแล้ว`}
+            onClose={() => { setHighlightId(''); setSearchParams({}, { replace: true }); }}
+          />
         ) : null;
       })()}
 
-      {/* ── 1. Hero ── */}
+      {/* Hero status */}
       {urgentCount > 0 ? (
-        <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-5 mb-6">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">🚨</span>
-            <div>
-              <p className="text-2xl font-bold text-red-700">{urgentCount} คัน ต้องจัดการเร่งด่วน</p>
-              <p className="text-sm text-red-600">ยังไม่ตรวจ {data.not_inspected} · ไม่มีข้อมูลประกัน {data.no_insurance_data}</p>
-            </div>
-          </div>
-        </div>
+        <AlertBanner variant="danger" title={`${urgentCount} คัน ต้องจัดการเร่งด่วน`}>
+          ยังไม่ตรวจ {data.not_inspected} · ไม่มีข้อมูลประกัน {data.no_insurance_data}
+        </AlertBanner>
       ) : (
-        <div className="bg-green-50 border-2 border-green-300 rounded-2xl p-5 mb-6 text-center">
-          <p className="text-lg font-bold text-green-700">✅ รถทุกคันพร้อมใช้งาน</p>
-        </div>
+        <AlertBanner variant="success" title="รถทุกคันพร้อมใช้งาน" />
       )}
 
-      {/* ── 2. KPI Cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <KpiBox icon="🚨" label="เร่งด่วน" value={urgentCount}
-          sub={`จาก ${data.total_vehicles} คัน`} color={urgentCount > 0 ? 'red' : 'green'} />
-        <KpiBox icon="⚠️" label="ยังไม่ตรวจ" value={data.not_inspected}
-          sub={data.total_vehicles > 0 ? `${Math.round((data.not_inspected / data.total_vehicles) * 100)}% ของทั้งหมด` : ''} color={data.not_inspected > 0 ? 'red' : 'green'} />
-        <KpiBox icon="📋" label="ไม่มีข้อมูลประกัน" value={data.no_insurance_data}
-          sub={`ปกติ ${data.insurance_ok || 0} คัน`} color={data.no_insurance_data > 0 ? 'yellow' : 'green'} />
-        <KpiBox icon="✅" label="พร้อมใช้งาน" value={readyCount}
-          sub={data.total_vehicles > 0 ? `${readyPct}% ของทั้งหมด` : ''} color="green" />
-      </div>
+      {/* KPI grid */}
+      <KPIGrid cols={4} gap="sm">
+        <KPIStat
+          label="เร่งด่วน"
+          value={urgentCount}
+          icon={AlertTriangle}
+          variant={urgentCount > 0 ? 'danger' : 'success'}
+          hint={`จาก ${data.total_vehicles} คัน`}
+        />
+        <KPIStat
+          label="ยังไม่ตรวจ"
+          value={data.not_inspected}
+          icon={ClipboardList}
+          variant={data.not_inspected > 0 ? 'danger' : 'success'}
+          hint={data.total_vehicles > 0
+            ? `${Math.round((data.not_inspected / data.total_vehicles) * 100)}% ของทั้งหมด`
+            : null}
+        />
+        <KPIStat
+          label="ไม่มีข้อมูลประกัน"
+          value={data.no_insurance_data}
+          icon={FileText}
+          variant={data.no_insurance_data > 0 ? 'warn' : 'success'}
+          hint={`ปกติ ${data.insurance_ok || 0} คัน`}
+        />
+        <KPIStat
+          label="พร้อมใช้งาน"
+          value={readyCount}
+          icon={CheckCircle2}
+          variant="success"
+          hint={data.total_vehicles > 0 ? `${readyPct}% ของทั้งหมด` : null}
+        />
+      </KPIGrid>
 
-      {/* ── 3. Quick Filters ── */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {/* Quick filters */}
+      <div className="flex flex-wrap gap-2">
         {FILTERS.map(f => {
           const count = filterCounts[f.key];
           const isActive = activeFilter === f.key;
           return (
-            <button key={f.key} onClick={() => setActiveFilter(f.key)}
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => setActiveFilter(f.key)}
               className={`text-sm font-medium px-3 py-2 rounded-lg transition border ${
-                isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}>
-              {f.label} <span className={`ml-1 text-xs font-bold ${isActive ? 'text-blue-100' : 'text-gray-400'}`}>{count}</span>
+                isActive
+                  ? 'bg-brand-700 text-white border-brand-700'
+                  : 'bg-surface-raised text-ink-muted border-surface-border hover:bg-surface'
+              }`}
+            >
+              {f.label}{' '}
+              <span className={`ml-1 text-xs font-bold ${isActive ? 'text-brand-100' : 'text-ink-muted'}`}>{count}</span>
             </button>
           );
         })}
       </div>
 
       {/* Search */}
-      <div className="mb-4">
-        <input type="text" value={vSearch} onChange={e => setVSearch(e.target.value)}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" strokeWidth={2} aria-hidden="true" />
+        <input
+          type="text"
+          value={vSearch}
+          onChange={e => setVSearch(e.target.value)}
           placeholder="ค้นหาทะเบียนรถ…"
-          className="w-full sm:w-72 border-2 border-gray-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          className="w-full border border-surface-border rounded-xl pl-9 pr-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-400"
+        />
       </div>
 
-      {/* ── 4. Filtered Vehicle List ── */}
-      <section className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-500 mb-3">
-          {currentFilter.label} — {filtered.length} คัน
-          {vSearch && ` (ค้นหา "${vSearch}")`}
-        </h2>
-
+      {/* Vehicle list */}
+      <DashboardSection
+        title={`${currentFilter.label} — ${filtered.length} คัน`}
+        description={vSearch ? `ค้นหา "${vSearch}"` : null}
+      >
         {filtered.length === 0 ? (
-          <p className="text-gray-400 py-8 text-center">ไม่พบรถในกลุ่มนี้</p>
+          <AppCard padding="lg" className="text-center">
+            <p className="text-ink-muted">ไม่พบรถในกลุ่มนี้</p>
+          </AppCard>
         ) : (
           <div className="space-y-2">
-            {filtered.slice(0, 20).map(v => {
-              const tags = riskTags(v);
-              const prio = priorityLevel(v._score);
-              const sug = suggestion(v);
-              const isHighlighted = v.id === highlightId;
-              return (
-                <div key={v.id} ref={isHighlighted ? highlightRef : null}
-                  className={`rounded-xl border p-4 transition-all ${isHighlighted ? 'bg-green-50 border-2 border-green-400 ring-2 ring-green-300' : 'bg-white border-gray-200'}`}>
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-base font-bold text-gray-900">{v.plate_no}</p>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${prio.cls}`}>{prio.text}</span>
-                      </div>
-                      <p className="text-sm text-gray-500">
-                        {v.driver_name || 'ไม่ระบุคนขับ'} · {v.student_count || 0} คน
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {tags.map((t, i) => (
-                        <span key={i} className={`text-xs font-medium px-2.5 py-1 rounded-full ${t.cls}`}>{t.text}</span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Info row + SLA */}
-                  <div className="flex flex-wrap gap-4 text-xs text-gray-500 mb-2">
-                    <span>ตรวจ: {v.latest_inspection_result ? formatThaiDate(v.latest_inspection_date) : 'ยังไม่เคยตรวจ'}</span>
-                    <span>ประกัน: {v.insurance_expiry ? formatThaiDate(v.insurance_expiry) : 'ไม่มีข้อมูล'}</span>
-                    {v._score > 0 && (() => {
-                      const sla = slaInfo(v);
-                      if (!sla) return null;
-                      return (
-                        <span className={`px-2 py-0.5 rounded-full border text-xs ${sla.color}`}>
-                          {sla.overdue
-                            ? `เกิน SLA ${Math.abs(sla.daysLeft)} วัน`
-                            : sla.daysLeft === 0
-                              ? 'ครบกำหนด SLA วันนี้'
-                              : `SLA เหลือ ${sla.daysLeft} วัน`}
-                        </span>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Suggestion + Action shortcuts */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    {sug && (
-                      <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
-                        💡 {sug}
-                      </span>
-                    )}
-                    <button onClick={() => navigate(`/transport/inspections?vehicle_id=${v.id}`)}
-                      className="text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-lg transition">
-                      📝 บันทึกตรวจ
-                    </button>
-                    {v.driver_phone && (
-                      <a href={`tel:${v.driver_phone}`}
-                        className="text-xs text-green-600 bg-green-50 hover:bg-green-100 border border-green-200 px-2.5 py-1 rounded-lg transition">
-                        📞 โทรคนขับ
-                      </a>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {filtered.slice(0, 20).map(v => (
+              <VehicleRiskRow
+                key={v.id}
+                vehicle={v}
+                isHighlighted={v.id === highlightId}
+                rowRef={v.id === highlightId ? highlightRef : null}
+                onRecord={() => navigate(`/transport/inspections?vehicle_id=${v.id}`)}
+              />
+            ))}
             {filtered.length > 20 && (
-              <p className="text-sm text-gray-400 text-center py-2">... แสดง 20 จาก {filtered.length} คัน</p>
+              <p className="text-sm text-ink-muted text-center py-2">… แสดง 20 จาก {filtered.length} คัน</p>
             )}
           </div>
         )}
-      </section>
+      </DashboardSection>
 
-      {/* ── 5. Charts ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm font-semibold text-gray-600 mb-3 text-center">ผลตรวจสภาพรถ</p>
-          <DonutChart size={140} thickness={20}
+      {/* Charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <AppCard padding="lg">
+          <p className="text-sm font-semibold text-ink-muted mb-3 text-center">ผลตรวจสภาพรถ</p>
+          <DonutChart
+            size={140} thickness={20}
             label={`${readyPct}%`} sublabel="พร้อมใช้งาน"
             segments={[
-              { value: data.passed || 0, color: '#22c55e' },
-              { value: data.needs_fix || 0, color: '#eab308' },
-              { value: data.failed || 0, color: '#ef4444' },
-              { value: data.not_inspected || 0, color: '#d1d5db' },
+              { value: data.passed || 0,         color: '#10B981' },
+              { value: data.needs_fix || 0,      color: '#F59E0B' },
+              { value: data.failed || 0,         color: '#EF4444' },
+              { value: data.not_inspected || 0,  color: '#CBD5E1' },
             ]}
           />
           <div className="flex flex-wrap justify-center gap-3 mt-3 text-sm">
-            <span className="text-green-600 font-medium">● ผ่าน {data.passed}</span>
-            <span className="text-yellow-600">● แก้ไข {data.needs_fix}</span>
-            <span className="text-red-600">● ไม่ผ่าน {data.failed}</span>
-            <span className="text-gray-400">● ยังไม่ตรวจ {data.not_inspected}</span>
+            <span className="text-success font-medium">● ผ่าน {data.passed}</span>
+            <span className="text-warn">● แก้ไข {data.needs_fix}</span>
+            <span className="text-danger">● ไม่ผ่าน {data.failed}</span>
+            <span className="text-ink-muted">● ยังไม่ตรวจ {data.not_inspected}</span>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm font-semibold text-gray-600 mb-4">สถานะประกันภัย</p>
+        </AppCard>
+        <AppCard padding="lg">
+          <p className="text-sm font-semibold text-ink-muted mb-4">สถานะประกันภัย</p>
           <div className="space-y-3">
-            <InsBar label="มีประกัน (ปกติ)" value={data.insurance_ok || 0} total={data.total_vehicles} color="bg-green-500" />
-            <InsBar label="ใกล้หมดอายุ" value={data.expiring_insurance || 0} total={data.total_vehicles} color="bg-yellow-400" />
-            <InsBar label="หมดอายุแล้ว" value={data.expired_insurance || 0} total={data.total_vehicles} color="bg-red-500" />
-            <InsBar label="ยังไม่กรอกข้อมูล" value={data.no_insurance_data || 0} total={data.total_vehicles} color="bg-gray-400" />
+            <InsBar label="มีประกัน (ปกติ)"  value={data.insurance_ok || 0}        total={data.total_vehicles} tone="success" />
+            <InsBar label="ใกล้หมดอายุ"      value={data.expiring_insurance || 0}  total={data.total_vehicles} tone="warn" />
+            <InsBar label="หมดอายุแล้ว"      value={data.expired_insurance || 0}   total={data.total_vehicles} tone="danger" />
+            <InsBar label="ยังไม่กรอกข้อมูล"  value={data.no_insurance_data || 0}   total={data.total_vehicles} tone="neutral" />
           </div>
-        </div>
+        </AppCard>
       </div>
     </div>
   );
 }
 
-function KpiBox({ icon, label, value, sub, color }) {
-  const bg = { red: 'bg-red-50 border-red-300', green: 'bg-green-50 border-green-300', yellow: 'bg-yellow-50 border-yellow-300', blue: 'bg-blue-50 border-blue-200' };
-  const text = { red: 'text-red-700', green: 'text-green-700', yellow: 'text-yellow-700', blue: 'text-blue-700' };
+/* ── Domain row: vehicle with risk tags + SLA + action shortcuts ── */
+function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
+  const tags = riskTags(v);
+  const prio = priorityLevel(v._score);
+  const sug = suggestion(v);
+  const sla = v._score > 0 ? slaInfo(v) : null;
+
   return (
-    <div className={`rounded-xl border-2 p-4 text-center ${bg[color]}`}>
-      <p className="text-2xl mb-1">{icon}</p>
-      <p className={`text-2xl font-bold ${text[color]}`}>{value}</p>
-      <p className="text-sm text-gray-600 mt-0.5">{label}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-    </div>
+    <AppCard
+      as="div"
+      ref={rowRef}
+      padding="md"
+      className={isHighlighted ? 'border-success ring-2 ring-success/40' : ''}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+            <p className="text-base font-semibold text-ink">{v.plate_no}</p>
+            <StatusBadge variant={prio.variant} size="sm">{prio.text}</StatusBadge>
+          </div>
+          <p className="text-sm text-ink-muted">
+            {v.driver_name || 'ไม่ระบุคนขับ'} · {v.student_count || 0} คน
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map((t, i) => (
+            <StatusBadge key={i} variant={t.variant} size="sm">{t.text}</StatusBadge>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted mb-2">
+        <span>ตรวจ: {v.latest_inspection_result ? formatThaiDate(v.latest_inspection_date) : 'ยังไม่เคยตรวจ'}</span>
+        <span>ประกัน: {v.insurance_expiry ? formatThaiDate(v.insurance_expiry) : 'ไม่มีข้อมูล'}</span>
+        {sla && (
+          <StatusBadge variant={sla.variant} size="sm">
+            {sla.overdue
+              ? `เกิน SLA ${Math.abs(sla.daysLeft)} วัน`
+              : sla.daysLeft === 0
+                ? 'ครบกำหนด SLA วันนี้'
+                : `SLA เหลือ ${sla.daysLeft} วัน`}
+          </StatusBadge>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {sug && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-warn bg-warn-soft border border-warn/30 px-2 py-1 rounded-lg">
+            <Lightbulb className="w-3.5 h-3.5" strokeWidth={2} />
+            {sug}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onRecord}
+          className="inline-flex items-center gap-1.5 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2.5 py-1 rounded-lg transition"
+        >
+          <FileText className="w-3.5 h-3.5" strokeWidth={2} />
+          บันทึกตรวจ
+        </button>
+        {v.driver_phone && (
+          <a
+            href={`tel:${v.driver_phone}`}
+            className="inline-flex items-center gap-1.5 text-xs text-success bg-success-soft hover:bg-success/20 border border-success/30 px-2.5 py-1 rounded-lg transition"
+          >
+            <Phone className="w-3.5 h-3.5" strokeWidth={2} />
+            โทรคนขับ
+          </a>
+        )}
+      </div>
+    </AppCard>
   );
 }
 
-function InsBar({ label, value, total, color }) {
+function InsBar({ label, value, total, tone }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  const bar = tone === 'success' ? 'bg-success'
+            : tone === 'warn'    ? 'bg-warn'
+            : tone === 'danger'  ? 'bg-danger'
+            : 'bg-ink-muted';
   return (
     <div>
       <div className="flex justify-between text-sm mb-1">
-        <span className="text-gray-600">{label}</span>
-        <span className="font-medium">{value} ({pct}%)</span>
+        <span className="text-ink-muted">{label}</span>
+        <span className="font-medium text-ink tabular-nums">{value} ({pct}%)</span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-3">
-        <div className={`h-3 rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      <div className="w-full bg-surface rounded-full h-2.5">
+        <div className={`h-2.5 rounded-full ${bar}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

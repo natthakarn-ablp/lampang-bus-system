@@ -16,4 +16,18 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    chunkSizeWarningLimit: 350,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Stable vendor: React + router. Cached across deploys that don't
+          // touch React/Router. ~140 KB raw / ~45 KB gzip.
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          // Icon set used across every authed page. ~30 KB raw.
+          'lucide':       ['lucide-react'],
+        },
+      },
+    },
+  },
 });

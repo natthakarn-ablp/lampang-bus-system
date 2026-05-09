@@ -1,66 +1,85 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { AdminContextProvider } from './hooks/useAdminContext';
 import { ToastProvider } from './components/Toast';
-
-import Login            from './pages/Login';
-import ChangePassword   from './pages/ChangePassword';
-import DriverLayout     from './pages/driver/DriverLayout';
-import DriverDashboard  from './pages/driver/DriverDashboard';
-import StudentList      from './pages/driver/StudentList';
-import EmergencyPage    from './pages/driver/EmergencyPage';
-import DriverProfile    from './pages/driver/DriverProfile';
-import DriverRosterRequests from './pages/driver/DriverRosterRequests';
-import DriverPretrip    from './pages/driver/DriverPretrip';
-
-import SchoolLayout     from './pages/school/SchoolLayout';
-import SchoolDashboard  from './pages/school/SchoolDashboard';
-import StudentSearch    from './pages/school/StudentSearch';
-import VehicleList      from './pages/school/VehicleList';
-import EmergencyList    from './pages/school/EmergencyList';
-import SchoolApprovals  from './pages/school/SchoolApprovals';
-import SchoolBulkVehicles from './pages/school/SchoolBulkVehicles';
-import SchoolAuditLog from './pages/school/SchoolAuditLog';
-
-import AffiliationLayout    from './pages/affiliation/AffiliationLayout';
-import AffiliationDashboard from './pages/affiliation/AffiliationDashboard';
-import SchoolList           from './pages/affiliation/SchoolList';
-import AffStudentSearch     from './pages/affiliation/AffStudentSearch';
-import AffVehicleList       from './pages/affiliation/AffVehicleList';
-import AffDailyStatus       from './pages/affiliation/AffDailyStatus';
-import AffEmergencyList     from './pages/affiliation/AffEmergencyList';
-import AffSchoolAccounts   from './pages/affiliation/AffSchoolAccounts';
-import AffAuditLog         from './pages/affiliation/AffAuditLog';
-
-import ProvinceLayout       from './pages/province/ProvinceLayout';
-import ProvinceDashboard    from './pages/province/ProvinceDashboard';
-import ProvAffiliationList  from './pages/province/ProvAffiliationList';
-import ProvSchoolList       from './pages/province/ProvSchoolList';
-import ProvStudentSearch    from './pages/province/ProvStudentSearch';
-import ProvVehicleList      from './pages/province/ProvVehicleList';
-import ProvDailyStatus      from './pages/province/ProvDailyStatus';
-import ProvEmergencyList    from './pages/province/ProvEmergencyList';
-import ProvAuditLog        from './pages/province/ProvAuditLog';
-
-import TransportLayout     from './pages/transport/TransportLayout';
-import TransportDashboard  from './pages/transport/TransportDashboard';
-import TransportVehicleList from './pages/transport/TransportVehicleList';
-import InspectionForm      from './pages/transport/InspectionForm';
-
-import ParentStatus from './pages/parent/ParentStatus';
-import UserManagement from './pages/admin/UserManagement';
-import AdminAuditLog from './pages/admin/AdminAuditLog';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import MeasurementFramework from './pages/admin/MeasurementFramework';
-import ResearchMetrics from './pages/admin/ResearchMetrics';
-import ResearchExport from './pages/admin/ResearchExport';
-import EvaluationDashboard from './pages/admin/EvaluationDashboard';
-import ExecutiveSummary from './pages/admin/ExecutiveSummary';
-import ExecutivePrint from './pages/admin/ExecutivePrint';
-import SystemHealth from './pages/admin/SystemHealth';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useVisitTracker } from './hooks/useVisitTracker';
+
+// Eager: Login is the entry path for unauthed users. Lazy-loading it would add
+// a Suspense flash on first paint for the most common cold-start state.
+import Login from './pages/Login';
+
+// Lazy: everything past auth. Chunks are grouped by role so each user only
+// downloads what their role uses.
+const ChangePassword       = lazy(() => import('./pages/ChangePassword'));
+const ParentStatus         = lazy(() => import('./pages/parent/ParentStatus'));
+
+// Driver
+const DriverLayout         = lazy(() => import('./pages/driver/DriverLayout'));
+const DriverDashboard      = lazy(() => import('./pages/driver/DriverDashboard'));
+const StudentList          = lazy(() => import('./pages/driver/StudentList'));
+const EmergencyPage        = lazy(() => import('./pages/driver/EmergencyPage'));
+const DriverProfile        = lazy(() => import('./pages/driver/DriverProfile'));
+const DriverRosterRequests = lazy(() => import('./pages/driver/DriverRosterRequests'));
+const DriverPretrip        = lazy(() => import('./pages/driver/DriverPretrip'));
+
+// School
+const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
+const SchoolDashboard      = lazy(() => import('./pages/school/SchoolDashboard'));
+const StudentSearch        = lazy(() => import('./pages/school/StudentSearch'));
+const VehicleList          = lazy(() => import('./pages/school/VehicleList'));
+const EmergencyList        = lazy(() => import('./pages/school/EmergencyList'));
+const SchoolApprovals      = lazy(() => import('./pages/school/SchoolApprovals'));
+const SchoolBulkVehicles   = lazy(() => import('./pages/school/SchoolBulkVehicles'));
+const SchoolAuditLog       = lazy(() => import('./pages/school/SchoolAuditLog'));
+
+// Affiliation
+const AffiliationLayout    = lazy(() => import('./pages/affiliation/AffiliationLayout'));
+const AffiliationDashboard = lazy(() => import('./pages/affiliation/AffiliationDashboard'));
+const SchoolList           = lazy(() => import('./pages/affiliation/SchoolList'));
+const AffStudentSearch     = lazy(() => import('./pages/affiliation/AffStudentSearch'));
+const AffVehicleList       = lazy(() => import('./pages/affiliation/AffVehicleList'));
+const AffDailyStatus       = lazy(() => import('./pages/affiliation/AffDailyStatus'));
+const AffEmergencyList     = lazy(() => import('./pages/affiliation/AffEmergencyList'));
+const AffSchoolAccounts    = lazy(() => import('./pages/affiliation/AffSchoolAccounts'));
+const AffAuditLog          = lazy(() => import('./pages/affiliation/AffAuditLog'));
+
+// Province
+const ProvinceLayout       = lazy(() => import('./pages/province/ProvinceLayout'));
+const ProvinceDashboard    = lazy(() => import('./pages/province/ProvinceDashboard'));
+const ProvAffiliationList  = lazy(() => import('./pages/province/ProvAffiliationList'));
+const ProvSchoolList       = lazy(() => import('./pages/province/ProvSchoolList'));
+const ProvStudentSearch    = lazy(() => import('./pages/province/ProvStudentSearch'));
+const ProvVehicleList      = lazy(() => import('./pages/province/ProvVehicleList'));
+const ProvDailyStatus      = lazy(() => import('./pages/province/ProvDailyStatus'));
+const ProvEmergencyList    = lazy(() => import('./pages/province/ProvEmergencyList'));
+const ProvAuditLog         = lazy(() => import('./pages/province/ProvAuditLog'));
+
+// Reports (charts-heavy — own chunk per page)
+const ReportsLayout        = lazy(() => import('./pages/reports/ReportsLayout'));
+const DailyReport          = lazy(() => import('./pages/reports/DailyReport'));
+const MonthlyReport        = lazy(() => import('./pages/reports/MonthlyReport'));
+const SummaryReport        = lazy(() => import('./pages/reports/SummaryReport'));
+
+// Transport
+const TransportLayout      = lazy(() => import('./pages/transport/TransportLayout'));
+const TransportDashboard   = lazy(() => import('./pages/transport/TransportDashboard'));
+const TransportVehicleList = lazy(() => import('./pages/transport/TransportVehicleList'));
+const InspectionForm       = lazy(() => import('./pages/transport/InspectionForm'));
+
+// Admin (heaviest cluster — research/measurement/executive)
+const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
+const AdminAuditLog        = lazy(() => import('./pages/admin/AdminAuditLog'));
+const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'));
+const MeasurementFramework = lazy(() => import('./pages/admin/MeasurementFramework'));
+const ResearchMetrics      = lazy(() => import('./pages/admin/ResearchMetrics'));
+const ResearchExport       = lazy(() => import('./pages/admin/ResearchExport'));
+const EvaluationDashboard  = lazy(() => import('./pages/admin/EvaluationDashboard'));
+const ExecutiveSummary     = lazy(() => import('./pages/admin/ExecutiveSummary'));
+const ExecutivePrint       = lazy(() => import('./pages/admin/ExecutivePrint'));
+const SystemHealth         = lazy(() => import('./pages/admin/SystemHealth'));
 
 export const ROLE_HOME = {
   driver:      '/driver',
@@ -71,15 +90,10 @@ export const ROLE_HOME = {
   admin:       '/admin',
 };
 
-import ReportsLayout  from './pages/reports/ReportsLayout';
-import DailyReport    from './pages/reports/DailyReport';
-import MonthlyReport  from './pages/reports/MonthlyReport';
-import SummaryReport  from './pages/reports/SummaryReport';
-
 // ── PrivateRoute: redirects to /login if not authenticated ───────────────────
 function PrivateRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex items-center justify-center h-screen text-gray-500">กำลังโหลด…</div>;
+  if (loading) return <RouteFallback />;
   if (!user)   return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return (
@@ -97,6 +111,11 @@ function PrivateRoute({ children, allowedRoles }) {
     );
   }
   return children;
+}
+
+// ── Suspense fallback for lazy-loaded routes ────────────────────────────────
+function RouteFallback() {
+  return <div className="flex items-center justify-center h-screen text-ink-muted">กำลังโหลด…</div>;
 }
 
 // ── VisitTracker: fires once per browser tab session ────────────────────────
@@ -122,15 +141,12 @@ export default function App() {
       <AdminContextProvider>
       <ToastProvider>
       <BrowserRouter>
+        <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/change-password" element={<ChangePassword />} />
 
-          {/*
-           * Driver module — nested routes with <Outlet />.
-           * DriverLayout renders <Layout><Outlet /></Layout>.
-           * Each child Route swaps only the main content area.
-           */}
+          {/* Driver module */}
           <Route
             path="/driver"
             element={
@@ -139,16 +155,16 @@ export default function App() {
               </PrivateRoute>
             }
           >
-            <Route index        element={<DriverDashboard />} />
+            <Route index           element={<DriverDashboard />} />
             <Route path="roster"    element={<StudentList />} />
             <Route path="emergency" element={<EmergencyPage />} />
-            <Route path="profile"  element={<DriverProfile />} />
-            <Route path="leaves"   element={<Navigate to="/driver" replace />} />
-            <Route path="requests" element={<DriverRosterRequests />} />
-            <Route path="pretrip"  element={<DriverPretrip />} />
+            <Route path="profile"   element={<DriverProfile />} />
+            <Route path="leaves"    element={<Navigate to="/driver" replace />} />
+            <Route path="requests"  element={<DriverRosterRequests />} />
+            <Route path="pretrip"   element={<DriverPretrip />} />
           </Route>
 
-          {/* School module — nested routes with <Outlet /> */}
+          {/* School module */}
           <Route
             path="/school"
             element={
@@ -157,18 +173,18 @@ export default function App() {
               </PrivateRoute>
             }
           >
-            <Route index            element={<SchoolDashboard />} />
-            <Route path="students"  element={<StudentSearch />} />
-            <Route path="vehicles"  element={<VehicleList />} />
-            <Route path="status"    element={<Navigate to="/school" replace />} />
-            <Route path="emergencies" element={<EmergencyList />} />
-            <Route path="missing"     element={<Navigate to="/school" replace />} />
-            <Route path="approvals"   element={<SchoolApprovals />} />
+            <Route index               element={<SchoolDashboard />} />
+            <Route path="students"     element={<StudentSearch />} />
+            <Route path="vehicles"     element={<VehicleList />} />
+            <Route path="status"       element={<Navigate to="/school" replace />} />
+            <Route path="emergencies"  element={<EmergencyList />} />
+            <Route path="missing"      element={<Navigate to="/school" replace />} />
+            <Route path="approvals"    element={<SchoolApprovals />} />
             <Route path="bulk-vehicles" element={<SchoolBulkVehicles />} />
-            <Route path="audit-log" element={<SchoolAuditLog />} />
+            <Route path="audit-log"    element={<SchoolAuditLog />} />
           </Route>
 
-          {/* Affiliation module — nested routes with <Outlet /> */}
+          {/* Affiliation module */}
           <Route
             path="/affiliation"
             element={
@@ -183,11 +199,11 @@ export default function App() {
             <Route path="vehicles"    element={<AffVehicleList />} />
             <Route path="status"      element={<AffDailyStatus />} />
             <Route path="emergencies" element={<AffEmergencyList />} />
-            <Route path="accounts"   element={<AffSchoolAccounts />} />
-            <Route path="audit-log"  element={<AffAuditLog />} />
+            <Route path="accounts"    element={<AffSchoolAccounts />} />
+            <Route path="audit-log"   element={<AffAuditLog />} />
           </Route>
 
-          {/* Province module — nested routes with <Outlet /> */}
+          {/* Province module */}
           <Route
             path="/province"
             element={
@@ -196,17 +212,17 @@ export default function App() {
               </PrivateRoute>
             }
           >
-            <Route index                element={<ProvinceDashboard />} />
-            <Route path="affiliations"  element={<ProvAffiliationList />} />
-            <Route path="schools"       element={<ProvSchoolList />} />
-            <Route path="students"      element={<ProvStudentSearch />} />
-            <Route path="vehicles"      element={<ProvVehicleList />} />
-            <Route path="status"        element={<ProvDailyStatus />} />
-            <Route path="emergencies"   element={<ProvEmergencyList />} />
-            <Route path="audit-log"     element={<ProvAuditLog />} />
+            <Route index               element={<ProvinceDashboard />} />
+            <Route path="affiliations" element={<ProvAffiliationList />} />
+            <Route path="schools"      element={<ProvSchoolList />} />
+            <Route path="students"     element={<ProvStudentSearch />} />
+            <Route path="vehicles"     element={<ProvVehicleList />} />
+            <Route path="status"       element={<ProvDailyStatus />} />
+            <Route path="emergencies"  element={<ProvEmergencyList />} />
+            <Route path="audit-log"    element={<ProvAuditLog />} />
           </Route>
 
-          {/* Reports module — shared across school/affiliation/province */}
+          {/* Reports module */}
           <Route
             path="/reports"
             element={
@@ -221,7 +237,7 @@ export default function App() {
             <Route path="summary" element={<SummaryReport />} />
           </Route>
 
-          {/* Transport module — vehicle inspections */}
+          {/* Transport module */}
           <Route
             path="/transport"
             element={
@@ -287,12 +303,13 @@ export default function App() {
             </PrivateRoute>
           } />
 
-          {/* Parent status — standalone page, no auth needed (LIFF / LINE) */}
+          {/* Parent status — standalone (LIFF / LINE webview) */}
           <Route path="/parent" element={<ParentStatus />} />
 
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
       </ToastProvider>
       </AdminContextProvider>

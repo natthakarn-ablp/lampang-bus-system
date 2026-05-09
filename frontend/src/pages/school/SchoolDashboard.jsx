@@ -143,7 +143,7 @@ export default function SchoolDashboard() {
           {/* Charts row */}
           {vehicles.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <AppCard padding="md">
+              <AppCard padding="lg">
                 <p className="text-xs font-semibold text-ink-muted mb-3 text-center">{CHART_TITLES.MORNING_STATUS}</p>
                 <DonutChart
                   size={110} thickness={16}
@@ -152,7 +152,7 @@ export default function SchoolDashboard() {
                   segments={MORNING_SEGMENTS(data?.morning_done ?? 0, data?.morning_leave ?? 0, data?.morning_pending ?? 0)}
                 />
               </AppCard>
-              <AppCard padding="md">
+              <AppCard padding="lg">
                 <p className="text-xs font-semibold text-ink-muted mb-3 text-center">{CHART_TITLES.EVENING_STATUS}</p>
                 <DonutChart
                   size={110} thickness={16}
@@ -161,7 +161,7 @@ export default function SchoolDashboard() {
                   segments={EVENING_SEGMENTS(data?.evening_done ?? 0, data?.evening_leave ?? 0, data?.evening_pending ?? 0)}
                 />
               </AppCard>
-              <AppCard padding="md">
+              <AppCard padding="lg">
                 <HBarChart
                   label="รถที่มีรายการค้างมากที่สุด"
                   items={(() => {

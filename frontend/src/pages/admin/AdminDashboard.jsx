@@ -40,7 +40,7 @@ export default function AdminDashboard() {
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
       <header>
-        <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight">ศูนย์ควบคุมระบบ</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">ศูนย์ควบคุมระบบ</h1>
         <p className="text-sm text-ink-muted mt-1">ภาพรวมระบบรถรับส่งนักเรียนจังหวัดลำปาง</p>
       </header>
 

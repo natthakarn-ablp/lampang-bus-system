@@ -98,14 +98,14 @@ export default function StudentList() {
     <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
       {/* Header */}
       <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-800">รายชื่อนักเรียน</h1>
+        <h1 className="text-xl font-semibold text-gray-800">รายชื่อนักเรียน</h1>
         <div className="flex flex-wrap items-center gap-2 mt-2">
           {data?.vehicle && (
             <span className="text-sm text-gray-600">
-              🚌 <span className="font-bold">{data.vehicle.plate_no}</span>
+              🚌 <span className="font-semibold">{data.vehicle.plate_no}</span>
             </span>
           )}
-          <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+          <span className={`text-sm font-semibold px-3 py-1 rounded-full ${
             session === 'morning'
               ? 'bg-orange-100 text-orange-700'
               : 'bg-indigo-100 text-indigo-700'
@@ -118,14 +118,14 @@ export default function StudentList() {
       {/* Bulk action */}
       <div className="mb-5">
         {allDone ? (
-          <div className="bg-green-100 border-2 border-green-300 text-green-800 rounded-xl px-4 py-3 text-center text-lg font-bold">
+          <div className="bg-green-100 border-2 border-green-300 text-green-800 rounded-xl px-4 py-3 text-center text-lg font-semibold">
             ✅ {ALL_DONE_LABEL[session]}
           </div>
         ) : (
           <button
             onClick={handleBulkAction}
             disabled={bulkLoading || pending.length === 0}
-            className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:opacity-50 text-white text-lg font-bold px-5 py-4 rounded-xl transition"
+            className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:opacity-50 text-white text-lg font-semibold px-5 py-4 rounded-xl transition"
           >
             {bulkLoading
               ? 'กำลังดำเนินการ…'
@@ -148,7 +148,7 @@ export default function StudentList() {
       {/* Pending students — grouped by school */}
       {!loading && pending.length > 0 && (
         <section className="mb-6">
-          <h2 className="text-base font-bold text-gray-600 mb-3">
+          <h2 className="text-base font-semibold text-gray-600 mb-3">
             ⏳ รอดำเนินการ ({pending.length})
           </h2>
           {groupBySchool(pending).map(([school, sts]) => (
@@ -169,7 +169,7 @@ export default function StudentList() {
       {/* Done students */}
       {!loading && done.length > 0 && (
         <section className="mb-6">
-          <h2 className="text-base font-bold text-green-600 mb-3">
+          <h2 className="text-base font-semibold text-green-600 mb-3">
             ✅ เสร็จแล้ว ({done.length})
           </h2>
           <div className="space-y-2">

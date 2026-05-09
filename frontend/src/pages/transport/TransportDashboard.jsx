@@ -175,7 +175,7 @@ export default function TransportDashboard() {
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
       <header>
-        <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight">ภาพรวมตรวจสภาพรถ</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">ภาพรวมตรวจสภาพรถ</h1>
         <p className="text-sm text-ink-muted mt-1">สรุปสถานะรถรับส่งนักเรียนทั้งจังหวัด</p>
       </header>
 
@@ -262,7 +262,7 @@ export default function TransportDashboard() {
               }`}
             >
               {f.label}{' '}
-              <span className={`ml-1 text-xs font-bold ${isActive ? 'text-brand-100' : 'text-ink-muted'}`}>{count}</span>
+              <span className={`ml-1 text-xs font-semibold ${isActive ? 'text-brand-100' : 'text-ink-muted'}`}>{count}</span>
             </button>
           );
         })}

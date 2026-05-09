@@ -226,7 +226,7 @@ function CompletenessCard({ c }) {
     <AppCard padding="md">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-ink">ความครบถ้วนข้อมูล</h2>
-        <span className={`text-sm font-bold tabular-nums ${overallTone}`}>{Math.round(overallPct)}%</span>
+        <span className={`text-sm font-semibold tabular-nums ${overallTone}`}>{Math.round(overallPct)}%</span>
       </div>
       <div className="space-y-2.5">
         {items.map(item => {
@@ -378,7 +378,7 @@ function SessionPill({ label, done, total, pending }) {
   return (
     <StatusBadge variant={allDone ? 'success' : 'warn'} size="sm">
       {label} {done}/{total}
-      {pending > 0 && <span className="text-danger font-bold ml-0.5">({pending})</span>}
+      {pending > 0 && <span className="text-danger font-semibold ml-0.5">({pending})</span>}
     </StatusBadge>
   );
 }

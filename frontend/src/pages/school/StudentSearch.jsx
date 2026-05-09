@@ -169,7 +169,7 @@ export default function StudentSearch() {
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       {/* Header + actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 className="text-xl font-bold text-gray-800">ข้อมูลนักเรียน</h1>
+        <h1 className="text-xl font-semibold text-gray-800">ข้อมูลนักเรียน</h1>
         <div className="flex gap-2">
           <button onClick={handleDownloadTemplate}
             className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">
@@ -262,7 +262,7 @@ export default function StudentSearch() {
               <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
-                    <p className="text-base font-bold text-gray-900 leading-snug">
+                    <p className="text-base font-semibold text-gray-900 leading-snug">
                       {s.first_name} {s.last_name}
                     </p>
                     <p className="text-sm text-gray-500">
@@ -320,7 +320,7 @@ export default function StudentSearch() {
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowImport(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-800 mb-1">นำเข้าข้อมูลนักเรียน</h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">นำเข้าข้อมูลนักเรียน</h2>
             <p className="text-sm text-gray-400 mb-5">อัปโหลดไฟล์ CSV หรือ Excel (.xlsx)</p>
 
             {!importResult ? (
@@ -374,7 +374,7 @@ export default function StudentSearch() {
       {editStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeEdit}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-gray-800 mb-1">แก้ไขข้อมูลนักเรียน</h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">แก้ไขข้อมูลนักเรียน</h2>
             <p className="text-sm text-gray-400 mb-5">รหัส: {editStudent.id}</p>
 
             {/* Section 1: ข้อมูลนักเรียน */}

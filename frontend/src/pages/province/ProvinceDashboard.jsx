@@ -53,7 +53,7 @@ export default function ProvinceDashboard() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
       <header>
-        <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight">{PAGE_TITLES.PROVINCE_DASHBOARD}</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">{PAGE_TITLES.PROVINCE_DASHBOARD}</h1>
         {dateLabel && <p className="text-sm text-ink-muted mt-1">ข้อมูล ณ {dateLabel}</p>}
       </header>
 

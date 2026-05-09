@@ -65,10 +65,10 @@ export default function DriverPretrip() {
     return (
       <div className="p-5 max-w-lg mx-auto text-center py-20">
         <p className="text-5xl mb-4">✅</p>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">ตรวจรถแล้ววันนี้</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">ตรวจรถแล้ววันนี้</h2>
         <p className="text-sm text-gray-500 mb-6">สามารถใช้งานระบบได้ทันที</p>
         <button onClick={() => navigate('/driver')}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg px-8 py-4 rounded-2xl transition">
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg px-8 py-4 rounded-2xl transition">
           กลับหน้าหลัก
         </button>
       </div>
@@ -80,7 +80,7 @@ export default function DriverPretrip() {
     return (
       <div className="p-5 max-w-lg mx-auto text-center py-20">
         <p className="text-5xl mb-4">{allPass ? '✅' : '⚠️'}</p>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">
           {allPass ? 'ตรวจรถเรียบร้อย — ออกเดินทางได้' : 'บันทึกรายการผิดปกติแล้ว'}
         </h2>
         <p className="text-sm text-gray-500 mb-6">
@@ -89,7 +89,7 @@ export default function DriverPretrip() {
             : 'ระบบได้แจ้งรายการผิดปกติแล้ว กรุณาดำเนินการแก้ไขก่อนออกเดินทาง'}
         </p>
         <button onClick={() => navigate('/driver')}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg px-8 py-4 rounded-2xl transition">
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg px-8 py-4 rounded-2xl transition">
           กลับหน้าหลัก
         </button>
       </div>
@@ -100,7 +100,7 @@ export default function DriverPretrip() {
   if (!showDetail) {
     return (
       <div className="p-4 sm:p-5 max-w-lg mx-auto pb-8">
-        <h1 className="text-xl font-bold text-gray-800 mb-1">ตรวจรถก่อนออก</h1>
+        <h1 className="text-xl font-semibold text-gray-800 mb-1">ตรวจรถก่อนออก</h1>
         <p className="text-sm text-gray-500 mb-6">ตรวจสอบความพร้อมของรถก่อนออกรับส่งนักเรียน</p>
 
         {/* Checklist preview */}
@@ -118,13 +118,13 @@ export default function DriverPretrip() {
 
         {/* Big "All OK" button */}
         <button onClick={() => handleSubmit(true)} disabled={submitting}
-          className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold text-xl py-5 rounded-2xl shadow-lg transition disabled:opacity-50 mb-4">
+          className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold text-xl py-5 rounded-2xl shadow-lg transition disabled:opacity-50 mb-4">
           {submitting ? 'กำลังบันทึก...' : '✅ ทุกรายการปกติ — ออกได้'}
         </button>
 
         {/* Secondary "has issues" button */}
         <button onClick={() => setShowDetail(true)}
-          className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-lg py-4 rounded-2xl border-2 border-amber-300 transition">
+          className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-lg py-4 rounded-2xl border-2 border-amber-300 transition">
           ⚠️ มีรายการผิดปกติ
         </button>
       </div>
@@ -134,7 +134,7 @@ export default function DriverPretrip() {
   // Detail mode: toggle items
   return (
     <div className="p-4 sm:p-5 max-w-lg mx-auto pb-8">
-      <h1 className="text-xl font-bold text-gray-800 mb-1">ตรวจรถก่อนออก</h1>
+      <h1 className="text-xl font-semibold text-gray-800 mb-1">ตรวจรถก่อนออก</h1>
       <p className="text-sm text-gray-500 mb-4">กดรายการที่ <strong>ผิดปกติ</strong> เพื่อระบุปัญหา</p>
 
       <div className="space-y-2 mb-5">
@@ -166,12 +166,12 @@ export default function DriverPretrip() {
       {/* Submit */}
       {failedItems.length > 0 ? (
         <button onClick={() => handleSubmit(false)} disabled={submitting}
-          className="w-full bg-red-600 hover:bg-red-700 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
+          className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
           {submitting ? 'กำลังบันทึก...' : `⚠️ บันทึกรายการผิดปกติ (${failedItems.length} รายการ)`}
         </button>
       ) : (
         <button onClick={() => handleSubmit(true)} disabled={submitting}
-          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
           {submitting ? 'กำลังบันทึก...' : '✅ ทุกรายการปกติ — ออกได้'}
         </button>
       )}

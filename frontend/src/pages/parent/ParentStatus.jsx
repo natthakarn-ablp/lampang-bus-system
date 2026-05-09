@@ -75,7 +75,7 @@ export default function ParentStatus() {
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 max-w-sm w-full text-center">
           <p className="text-5xl mb-4">🔗</p>
-          <h1 className="text-xl font-bold text-gray-800 mb-3">ยังไม่ได้ผูกบัญชี LINE</h1>
+          <h1 className="text-xl font-semibold text-gray-800 mb-3">ยังไม่ได้ผูกบัญชี LINE</h1>
           <p className="text-base text-gray-600 mb-6">ทำตามขั้นตอนด้านล่าง เพื่อดูสถานะรับ-ส่งบุตรหลาน</p>
 
           <div className="text-left space-y-4 mb-6">
@@ -125,7 +125,7 @@ export default function ParentStatus() {
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 max-w-sm w-full text-center">
           <p className="text-5xl mb-4">👨‍👩‍👧‍👦</p>
-          <h1 className="text-xl font-bold text-gray-800 mb-3">ไม่พบข้อมูลบุตรหลาน</h1>
+          <h1 className="text-xl font-semibold text-gray-800 mb-3">ไม่พบข้อมูลบุตรหลาน</h1>
           <p className="text-base text-gray-600 mb-2">
             บัญชี LINE ของคุณยังไม่ได้ผูกกับนักเรียน
           </p>
@@ -141,7 +141,7 @@ export default function ParentStatus() {
           </div>
 
           <button onClick={() => window.location.reload()}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition">
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition">
             รีเฟรชข้อมูล
           </button>
         </div>
@@ -156,12 +156,12 @@ export default function ParentStatus() {
       <div className="bg-green-600 text-white px-4 py-4 shadow-md">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
-            <h1 className="font-bold text-lg">ระบบรถรับส่งนักเรียน</h1>
+            <h1 className="font-semibold text-lg">ระบบรถรับส่งนักเรียน</h1>
             <p className="text-green-100 text-sm">สำหรับผู้ปกครอง</p>
           </div>
           {view !== 'list' ? (
             <button onClick={goBack}
-              className="bg-green-500 hover:bg-green-400 active:bg-green-300 font-bold text-base px-5 py-2.5 rounded-xl transition">
+              className="bg-green-500 hover:bg-green-400 active:bg-green-300 font-semibold text-base px-5 py-2.5 rounded-xl transition">
               ← กลับ
             </button>
           ) : (
@@ -184,7 +184,7 @@ export default function ParentStatus() {
               <div key={child.id} className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm overflow-hidden">
                 {/* Child info */}
                 <div className="p-4 pb-3">
-                  <p className="text-lg font-bold text-gray-900">
+                  <p className="text-lg font-semibold text-gray-900">
                     {child.first_name} {child.last_name}
                   </p>
                   <p className="text-base text-gray-500 mt-0.5">
@@ -204,11 +204,11 @@ export default function ParentStatus() {
                 {/* Action buttons */}
                 <div className="flex gap-2 px-4 pb-4">
                   <button onClick={() => viewStatus(child)}
-                    className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-bold py-3 rounded-xl transition text-base">
+                    className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-3 rounded-xl transition text-base">
                     📋 สถานะวันนี้
                   </button>
                   <button onClick={() => viewHistory(child)}
-                    className="flex-1 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 font-bold py-3 rounded-xl transition border-2 border-blue-200 text-base">
+                    className="flex-1 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 font-semibold py-3 rounded-xl transition border-2 border-blue-200 text-base">
                     📅 ย้อนหลัง
                   </button>
                 </div>
@@ -222,7 +222,7 @@ export default function ParentStatus() {
           <div className="space-y-4">
             {/* Child header */}
             <div className="bg-white rounded-2xl border-2 border-gray-100 p-4">
-              <p className="text-lg font-bold text-gray-900">
+              <p className="text-lg font-semibold text-gray-900">
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
               <p className="text-base text-gray-500">
@@ -272,7 +272,7 @@ export default function ParentStatus() {
           <div className="space-y-4">
             {/* Child header */}
             <div className="bg-white rounded-2xl border-2 border-gray-100 p-4">
-              <p className="text-lg font-bold text-gray-900">
+              <p className="text-lg font-semibold text-gray-900">
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
               <p className="text-base text-gray-500">
@@ -302,7 +302,7 @@ export default function ParentStatus() {
                         </p>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className={`inline-block text-sm font-bold px-3 py-1 rounded-full border ${st.cls}`}>
+                        <span className={`inline-block text-sm font-semibold px-3 py-1 rounded-full border ${st.cls}`}>
                           {st.icon} {st.label}
                         </span>
                         <p className="text-sm text-gray-400 mt-0.5">{timeStr}</p>
@@ -323,7 +323,7 @@ export default function ParentStatus() {
 function StepItem({ number, text }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="bg-green-600 text-white font-bold w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0">
+      <span className="bg-green-600 text-white font-semibold w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0">
         {number}
       </span>
       <p className="text-base text-gray-700 leading-snug pt-0.5">{text}</p>
@@ -338,12 +338,12 @@ function StatusCard({ label, icon, done, time, doneText, pendingText }) {
   return (
     <div className={`rounded-2xl border-2 p-4 text-center ${done ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
       <p className="text-3xl mb-2">{done ? '✅' : '⏳'}</p>
-      <p className="text-base font-bold text-gray-700">{icon} {label}</p>
+      <p className="text-base font-semibold text-gray-700">{icon} {label}</p>
       <p className={`text-sm font-medium mt-1 ${done ? 'text-green-700' : 'text-gray-400'}`}>
         {done ? doneText : pendingText}
       </p>
       {done && timeStr && (
-        <p className="text-lg font-bold text-green-800 mt-1">{timeStr} น.</p>
+        <p className="text-lg font-semibold text-green-800 mt-1">{timeStr} น.</p>
       )}
     </div>
   );

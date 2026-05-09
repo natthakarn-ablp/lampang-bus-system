@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
+import AuditEntry from './AuditEntry';
+import EmptyState from './EmptyState';
+import { ClipboardList } from 'lucide-react';
 
 const ACTION_OPTIONS = [
   { value: '', label: 'ทุกการกระทำ' },
@@ -11,17 +14,6 @@ const ACTION_OPTIONS = [
   { value: 'EXPORT', label: 'ส่งออก' },
   { value: 'LOGIN', label: 'เข้าสู่ระบบ' },
 ];
-
-const ACTION_LABEL = {
-  CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ',
-  EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ',
-};
-
-const ENTITY_LABEL = {
-  student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้',
-  roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน',
-  driver: 'คนขับ', driver_profile: 'ข้อมูลคนขับ', emergency: 'เหตุฉุกเฉิน',
-};
 
 const FIELD_LABEL = {
   prefix: 'คำนำหน้า', first_name: 'ชื่อ', last_name: 'นามสกุล',
@@ -60,14 +52,6 @@ function summarize(row) {
   return '-';
 }
 
-const ACTION_CLASS = {
-  CREATE: 'bg-green-100 text-green-700',
-  UPDATE: 'bg-blue-100 text-blue-700',
-  DELETE: 'bg-red-100 text-red-700',
-  APPROVE: 'bg-purple-100 text-purple-700',
-  IMPORT: 'bg-amber-100 text-amber-700',
-};
-
 export default function AuditLogTable({ apiPath, title = 'ประวัติการแก้ไข' }) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,8 +73,8 @@ export default function AuditLogTable({ apiPath, title = 'ประวัติ�
       if (dateTo) params.set('date_to', dateTo);
 
       const res = await api.get(`${apiPath}?${params}`);
-      setLogs(res.data.data);
-      setMeta(res.data.meta);
+      setLogs(Array.isArray(res?.data?.data) ? res.data.data : []);
+      setMeta(res?.data?.meta || { page: 1, per_page: 30, total: 0 });
     } catch {} finally { setLoading(false); }
   }, [apiPath, action, dateFrom, dateTo]);
 
@@ -127,7 +111,7 @@ export default function AuditLogTable({ apiPath, title = 'ประวัติ�
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">{title}</h1>
+      <h1 className="text-xl font-semibold text-gray-800 mb-4">{title}</h1>
 
       {/* Filter bar */}
       <div className="space-y-3 sm:space-y-0 sm:flex sm:flex-wrap sm:items-end sm:gap-3 mb-4">
@@ -167,42 +151,25 @@ export default function AuditLogTable({ apiPath, title = 'ประวัติ�
       {loading ? (
         <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
       ) : logs.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">{hasFilters ? 'ไม่พบรายการตามตัวกรอง' : 'ยังไม่มีประวัติ'}</p>
+        <EmptyState
+          icon={ClipboardList}
+          title={hasFilters ? 'ไม่พบรายการตามตัวกรอง' : 'ยังไม่มีประวัติ'}
+          description={hasFilters ? 'ลองเปลี่ยนตัวกรองหรือล้างเพื่อดูทั้งหมด' : null}
+        />
       ) : (
         <>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-left">
-                  <th className="px-4 py-3 font-medium">วันเวลา</th>
-                  <th className="px-4 py-3 font-medium">ผู้ดำเนินการ</th>
-                  <th className="px-4 py-3 font-medium">การกระทำ</th>
-                  <th className="px-4 py-3 font-medium">ประเภท</th>
-                  <th className="px-4 py-3 font-medium">รหัส</th>
-                  <th className="px-4 py-3 font-medium">รายละเอียด</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {logs.map(l => (
-                  <tr key={l.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                      {new Date(l.created_at).toLocaleString('th-TH', {
-                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
-                      })}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 text-xs">{l.actor_name || '-'}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ACTION_CLASS[l.action] || 'bg-gray-100 text-gray-600'}`}>
-                        {ACTION_LABEL[l.action] || l.action}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{ENTITY_LABEL[l.entity_type] || l.entity_type || '-'}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{l.entity_id || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{summarize(l)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {logs.map(l => (
+              <AuditEntry
+                key={l.id}
+                timestamp={l.created_at}
+                actor={l.actor_name}
+                action={l.action}
+                entityType={l.entity_type}
+                entityId={l.entity_id}
+                summary={summarize(l)}
+              />
+            ))}
           </div>
 
           <div className="flex items-center justify-between mt-4 text-sm text-gray-500">

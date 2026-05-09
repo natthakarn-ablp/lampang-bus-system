@@ -67,8 +67,8 @@ const SummaryPrintView = forwardRef(function SummaryPrintView({ data, user }, re
               </tr>
             </thead>
             <tbody>
-              {sortByKpi(data.affiliations).map(a => (
-                <tr key={a.affiliation_id}>
+              {sortByKpi(data.affiliations).map((a, i) => (
+                <tr key={a.affiliation_id ?? a.id ?? a.affiliation_name ?? i}>
                   <td>{a.affiliation_name}</td>
                   <td className="text-center">{a.student_count}</td>
                   <td className="text-center">{safePct(a.morning_kpi)}</td>
@@ -96,8 +96,8 @@ const SummaryPrintView = forwardRef(function SummaryPrintView({ data, user }, re
               </tr>
             </thead>
             <tbody>
-              {sortByKpi(data.schools).map(s => (
-                <tr key={s.school_id}>
+              {sortByKpi(data.schools).map((s, i) => (
+                <tr key={s.school_id ?? s.id ?? s.school_name ?? i}>
                   <td>{s.school_name}</td>
                   <td className="text-center">{s.student_count}</td>
                   <td className="text-center">{safePct(s.morning_kpi)}</td>
@@ -125,8 +125,8 @@ const SummaryPrintView = forwardRef(function SummaryPrintView({ data, user }, re
               </tr>
             </thead>
             <tbody>
-              {sortByKpi(data.vehicles).map(v => (
-                <tr key={v.vehicle_id}>
+              {sortByKpi(data.vehicles).map((v, i) => (
+                <tr key={v.vehicle_id ?? v.id ?? v.plate_no ?? i}>
                   <td>{v.plate_no}</td>
                   <td className="text-center">{v.student_count}</td>
                   <td className="text-center">{safePct(v.morning_kpi)}</td>

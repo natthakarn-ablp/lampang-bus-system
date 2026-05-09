@@ -172,10 +172,10 @@ export default function SummaryReport() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {sortByKpi(data.affiliations).map((a) => {
+                    {sortByKpi(data.affiliations).map((a, i) => {
                       const badge = levelBadge(a.morning_kpi, a.evening_kpi);
                       return (
-                        <tr key={a.affiliation_id} className="hover:bg-gray-50">
+                        <tr key={a.affiliation_id ?? a.id ?? a.affiliation_name ?? i} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-gray-800">{a.affiliation_name}</td>
                           <td className="px-4 py-3 text-center text-gray-600">{a.student_count}</td>
                           <td className={`px-4 py-3 text-center font-medium ${kpiColor(a.morning_kpi)}`}>
@@ -216,10 +216,10 @@ export default function SummaryReport() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {sortByKpi(data.schools).map((s) => {
+                    {sortByKpi(data.schools).map((s, i) => {
                       const badge = levelBadge(s.morning_kpi, s.evening_kpi);
                       return (
-                        <tr key={s.school_id} className="hover:bg-gray-50">
+                        <tr key={s.school_id ?? s.id ?? s.school_name ?? i} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
                             <p className="text-gray-800 font-medium">{s.school_name}</p>
                           </td>
@@ -262,10 +262,10 @@ export default function SummaryReport() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {sortByKpi(data.vehicles).map((v) => {
+                    {sortByKpi(data.vehicles).map((v, i) => {
                       const badge = levelBadge(v.morning_kpi, v.evening_kpi);
                       return (
-                        <tr key={v.vehicle_id} className="hover:bg-gray-50">
+                        <tr key={v.vehicle_id ?? v.id ?? v.plate_no ?? i} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
                             <p className="text-gray-800 font-medium">{v.plate_no}</p>
                             <p className="text-xs text-gray-400">{v.student_count} คน</p>

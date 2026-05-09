@@ -42,12 +42,16 @@ export default function SchoolDashboard() {
   const vehicles = statusData?.vehicles || [];
   const filtered = vehicles.filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase()));
   const totalLeave = (data?.morning_leave ?? 0) + (data?.evening_leave ?? 0);
+  const totalBase  = (data?.morning_total  ?? 0) + (data?.evening_total  ?? 0);
+  const hasEmerg   = (data?.recent_emergencies ?? 0) > 0;
 
   // Build issue lines for alert banner
   const issues = [];
   if ((data?.morning_pending ?? 0) > 0) issues.push(`รอส่งเช้า ${data.morning_pending} คน`);
   if ((data?.evening_pending ?? 0) > 0) issues.push(`รอรับเย็น ${data.evening_pending} คน`);
-  if ((data?.recent_emergencies ?? 0) > 0) issues.push(`เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง (7 วัน)`);
+  if (hasEmerg) issues.push(`เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง (7 วัน)`);
+
+  const notStarted = totalBase === 0 && !hasEmerg;
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
@@ -71,7 +75,9 @@ export default function SchoolDashboard() {
       ) : (
         <>
           {/* Status banner */}
-          {issues.length > 0 ? (
+          {notStarted ? (
+            <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>
+          ) : issues.length > 0 ? (
             <AlertBanner variant="warn" title="สิ่งที่ต้องติดตามวันนี้">
               <ul className="space-y-0.5 mt-1">
                 {issues.map((msg, i) => <li key={i}>{msg}</li>)}

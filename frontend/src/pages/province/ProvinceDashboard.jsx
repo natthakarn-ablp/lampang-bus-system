@@ -29,7 +29,9 @@ export default function ProvinceDashboard() {
   const problemSchools = data.schools_not_complete ?? [];
   const hasEmergency = data.recent_emergencies > 0;
   const totalPending = (data.morning_pending || 0) + (data.evening_pending || 0);
-  const allClear = problemSchools.length === 0 && !hasEmergency && totalPending === 0;
+  const totalBase    = (data.morning_total   || 0) + (data.evening_total   || 0);
+  const notStarted   = totalBase === 0 && problemSchools.length === 0 && !hasEmergency;
+  const allClear     = !notStarted && problemSchools.length === 0 && !hasEmergency && totalPending === 0;
 
   const dateLabel = data.date
     ? new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -56,7 +58,9 @@ export default function ProvinceDashboard() {
       </header>
 
       {/* Status banner */}
-      {allClear ? (
+      {notStarted ? (
+        <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>
+      ) : allClear ? (
         <AlertBanner variant="success" title="ระบบปกติ — ทุกโรงเรียนดำเนินการครบ" />
       ) : (
         <AlertBanner variant={bannerVariant} title="สิ่งที่ต้องติดตามทันที">
@@ -93,15 +97,27 @@ export default function ProvinceDashboard() {
           variant={problemSchools.length > 0 ? 'warn' : 'brand'}
           hint={`${data.total_affiliations} สังกัด · ค้าง ${problemSchools.length}`}
         />
-        <KPIStat
-          label={totalPending > 0 ? 'รอดำเนินการ' : 'ครบแล้ว'}
-          value={totalPending > 0 ? totalPending : '✓'}
-          icon={totalPending > 0 ? Clock : null}
-          variant={totalPending > 50 ? 'danger' : totalPending > 0 ? 'warn' : 'success'}
-          hint={totalPending > 0
-            ? `เช้า ${data.morning_pending} · เย็น ${data.evening_pending}`
-            : 'ทุกรายการ'}
-        />
+        {(() => {
+          const base = (data.morning_total ?? 0) + (data.evening_total ?? 0);
+          const notStarted = base === 0;
+          const variant = notStarted ? 'neutral'
+                        : totalPending > 50 ? 'danger'
+                        : totalPending > 0  ? 'warn'
+                        : 'success';
+          return (
+            <KPIStat
+              label={notStarted ? 'ยังไม่เริ่ม' : totalPending > 0 ? 'รอดำเนินการ' : 'ครบแล้ว'}
+              value={notStarted ? '–' : totalPending > 0 ? totalPending : '✓'}
+              icon={!notStarted && totalPending > 0 ? Clock : null}
+              variant={variant}
+              hint={notStarted
+                ? 'รอเริ่มรอบเช้า'
+                : totalPending > 0
+                  ? `เช้า ${data.morning_pending} · เย็น ${data.evening_pending}`
+                  : 'ทุกรายการ'}
+            />
+          );
+        })()}
       </KPIGrid>
 
       {/* Session progress */}

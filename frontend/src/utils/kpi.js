@@ -2,13 +2,25 @@
  * Shared KPI utilities for report pages.
  * Ensures consistent formatting, colors, and labels across
  * MonthlyReport and SummaryReport.
+ *
+ * Semantic state mapping (do not change without UX review):
+ *   not-started → neutral (ink-muted)   — value is null / NaN / undefined
+ *   risk        → warn (≥85%)
+ *   good        → success (≥95%)
+ *   critical    → danger (rest of the numeric range, i.e. has-data-but-low)
+ *
+ * "0.0% before any operations have happened" must read as neutral, not
+ * critical. We can't tell from the percentage alone whether 0 means
+ * "nothing has started" or "everything has failed" — but null/NaN means
+ * the denominator was zero, which is the not-started signal.
  */
 
-/** KPI text color class by threshold. */
+/** KPI text color class by threshold. Neutral when value is missing. */
 export function kpiColor(v) {
-  if (v >= 95) return 'text-green-600';
-  if (v >= 85) return 'text-yellow-600';
-  return 'text-red-600';
+  if (v == null || !isFinite(v)) return 'text-ink-muted';
+  if (v >= 95) return 'text-success';
+  if (v >= 85) return 'text-warn';
+  return 'text-danger';
 }
 
 /** Safe percentage display — returns "-" for null/NaN/Infinity/zero-denom. */
@@ -17,12 +29,23 @@ export function safePct(v) {
   return v.toFixed(1) + '%';
 }
 
-/** Level badge (ดีมาก / ดี / เฝ้าระวัง) from average of morning + evening KPI. */
+/** Variant key (for StatusBadge / KPIStat / etc.) by KPI threshold. */
+export function kpiVariant(v) {
+  if (v == null || !isFinite(v)) return 'neutral';
+  if (v >= 95) return 'success';
+  if (v >= 85) return 'warn';
+  return 'danger';
+}
+
+/** Level badge (ดีมาก / ดี / เฝ้าระวัง / ยังไม่เริ่ม) from morning + evening KPI. */
 export function levelBadge(morningKpi, eveningKpi) {
+  const mMissing = morningKpi == null || !isFinite(morningKpi);
+  const eMissing = eveningKpi == null || !isFinite(eveningKpi);
+  if (mMissing && eMissing) return { label: 'ยังไม่เริ่ม', cls: 'bg-surface text-ink-muted' };
   const avg = ((morningKpi ?? 0) + (eveningKpi ?? 0)) / 2;
-  if (avg >= 95) return { label: 'ดีมาก', cls: 'bg-green-100 text-green-700' };
-  if (avg >= 85) return { label: 'ดี', cls: 'bg-yellow-100 text-yellow-700' };
-  return { label: 'เฝ้าระวัง', cls: 'bg-red-100 text-red-700' };
+  if (avg >= 95) return { label: 'ดีมาก',     cls: 'bg-success-soft text-success' };
+  if (avg >= 85) return { label: 'ดี',        cls: 'bg-warn-soft text-warn' };
+  return            { label: 'เฝ้าระวัง',  cls: 'bg-danger-soft text-danger' };
 }
 
 /** Top N items sorted descending by key. */

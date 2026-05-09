@@ -151,16 +151,22 @@ export default function AffiliationDashboard() {
 /* ── Status banner: consolidated severity-driven alert ── */
 function StatusBanner({ data }) {
   const schoolsPending = data.schools_not_complete?.length ?? 0;
+  const totalBase = (data.morning_total ?? 0) + (data.evening_total ?? 0);
+  const hasEmerg  = (data.recent_emergencies ?? 0) > 0;
+
   const issues = [];
   if (schoolsPending > 0)              issues.push(`${schoolsPending} โรงเรียนยังมีรายการค้าง`);
   if ((data.morning_pending ?? 0) > 0) issues.push(`รอส่งเช้า ${data.morning_pending} คน`);
   if ((data.evening_pending ?? 0) > 0) issues.push(`รอรับเย็น ${data.evening_pending} คน`);
-  if ((data.recent_emergencies ?? 0) > 0) issues.push(`เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง`);
+  if (hasEmerg)                        issues.push(`เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง`);
 
+  if (totalBase === 0 && schoolsPending === 0 && !hasEmerg) {
+    return <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>;
+  }
   if (issues.length === 0) {
     return <AlertBanner variant="success" title="ทุกโรงเรียนในสังกัดดำเนินการครบ" />;
   }
-  const variant = schoolsPending > 0 || data.recent_emergencies > 0 ? 'danger' : 'warn';
+  const variant = schoolsPending > 0 || hasEmerg ? 'danger' : 'warn';
   return (
     <AlertBanner variant={variant} title="สิ่งที่ต้องติดตามวันนี้">
       <ul className="space-y-0.5 mt-1">

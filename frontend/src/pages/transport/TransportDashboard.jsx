@@ -192,47 +192,58 @@ export default function TransportDashboard() {
       })()}
 
       {/* Hero status */}
-      {urgentCount > 0 ? (
-        <AlertBanner variant="danger" title={`${urgentCount} คัน ต้องจัดการเร่งด่วน`}>
-          ยังไม่ตรวจ {data.not_inspected} · ไม่มีข้อมูลประกัน {data.no_insurance_data}
-        </AlertBanner>
-      ) : (
-        <AlertBanner variant="success" title="รถทุกคันพร้อมใช้งาน" />
-      )}
+      {(() => {
+        if ((data.total_vehicles ?? 0) === 0) {
+          return <AlertBanner variant="info" title="ยังไม่มีรถในระบบ">เพิ่มรถผ่านโรงเรียนเพื่อเริ่มตรวจสภาพ</AlertBanner>;
+        }
+        if (urgentCount > 0) {
+          return (
+            <AlertBanner variant="danger" title={`${urgentCount} คัน ต้องจัดการเร่งด่วน`}>
+              ยังไม่ตรวจ {data.not_inspected} · ไม่มีข้อมูลประกัน {data.no_insurance_data}
+            </AlertBanner>
+          );
+        }
+        return <AlertBanner variant="success" title="รถทุกคันพร้อมใช้งาน" />;
+      })()}
 
-      {/* KPI grid */}
-      <KPIGrid cols={4} gap="sm">
-        <KPIStat
-          label="เร่งด่วน"
-          value={urgentCount}
-          icon={AlertTriangle}
-          variant={urgentCount > 0 ? 'danger' : 'success'}
-          hint={`จาก ${data.total_vehicles} คัน`}
-        />
-        <KPIStat
-          label="ยังไม่ตรวจ"
-          value={data.not_inspected}
-          icon={ClipboardList}
-          variant={data.not_inspected > 0 ? 'danger' : 'success'}
-          hint={data.total_vehicles > 0
-            ? `${Math.round((data.not_inspected / data.total_vehicles) * 100)}% ของทั้งหมด`
-            : null}
-        />
-        <KPIStat
-          label="ไม่มีข้อมูลประกัน"
-          value={data.no_insurance_data}
-          icon={FileText}
-          variant={data.no_insurance_data > 0 ? 'warn' : 'success'}
-          hint={`ปกติ ${data.insurance_ok || 0} คัน`}
-        />
-        <KPIStat
-          label="พร้อมใช้งาน"
-          value={readyCount}
-          icon={CheckCircle2}
-          variant="success"
-          hint={data.total_vehicles > 0 ? `${readyPct}% ของทั้งหมด` : null}
-        />
-      </KPIGrid>
+      {/* KPI grid — neutral when no vehicles in scope yet */}
+      {(() => {
+        const noFleet = (data.total_vehicles ?? 0) === 0;
+        return (
+          <KPIGrid cols={4} gap="sm">
+            <KPIStat
+              label="เร่งด่วน"
+              value={noFleet ? '–' : urgentCount}
+              icon={AlertTriangle}
+              variant={noFleet ? 'neutral' : urgentCount > 0 ? 'danger' : 'success'}
+              hint={noFleet ? 'ยังไม่มีรถในระบบ' : `จาก ${data.total_vehicles} คัน`}
+            />
+            <KPIStat
+              label="ยังไม่ตรวจ"
+              value={noFleet ? '–' : data.not_inspected}
+              icon={ClipboardList}
+              variant={noFleet ? 'neutral' : data.not_inspected > 0 ? 'danger' : 'success'}
+              hint={noFleet
+                ? null
+                : `${Math.round((data.not_inspected / data.total_vehicles) * 100)}% ของทั้งหมด`}
+            />
+            <KPIStat
+              label="ไม่มีข้อมูลประกัน"
+              value={noFleet ? '–' : data.no_insurance_data}
+              icon={FileText}
+              variant={noFleet ? 'neutral' : data.no_insurance_data > 0 ? 'warn' : 'success'}
+              hint={noFleet ? null : `ปกติ ${data.insurance_ok || 0} คัน`}
+            />
+            <KPIStat
+              label="พร้อมใช้งาน"
+              value={noFleet ? '–' : readyCount}
+              icon={CheckCircle2}
+              variant={noFleet ? 'neutral' : 'success'}
+              hint={noFleet ? null : `${readyPct}% ของทั้งหมด`}
+            />
+          </KPIGrid>
+        );
+      })()}
 
       {/* Quick filters */}
       <div className="flex flex-wrap gap-2">

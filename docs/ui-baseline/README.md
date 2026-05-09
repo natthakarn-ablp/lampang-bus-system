@@ -8,13 +8,13 @@ comparison in future phases.
 
 | | |
 |---|---|
-| Captured at HEAD | `923110b` |
+| Captured at HEAD | `8e6a7df` |
 | Capture method | `scripts/browser-review.mjs` (Playwright + chromium-headless-shell) |
 | Auth | mock JWT injected via `localStorage` (see script header) |
 | API | stubbed via `page.route('**/api/**', …)` returning `{ success: true, data: {} }` |
 | Screenshot mode | viewport-only (not full-page; see script comment) |
-| Total images | 17 |
-| Total size | ~872 KB |
+| Total images | 23 |
+| Total size | ~1.3 MB |
 
 ## Viewports
 
@@ -40,6 +40,9 @@ comparison in future phases.
 | `06-admin-province-section-toggled.png` | `/admin` | sidebar "ข้อมูลจังหวัด" section expanded |
 | `06-admin-profile-dropdown.png` | `/admin` | topbar profile dropdown open |
 | `07-province-mobile-drawer-{open,closed}.png` | `/province` | mobile sidebar drawer interaction |
+| `08-reports-monthly-{desktop,mobile}.png` | `/reports/monthly` | LeaderboardRow cards in monthly rankings |
+| `09-reports-summary-{desktop,mobile}.png` | `/reports/summary` | LeaderboardRow cards in summary rankings |
+| `10-admin-audit-{desktop,mobile}.png` | `/admin/audit-logs` | AuditEntry cards + filter bar + pagination |
 
 ## How to re-capture
 

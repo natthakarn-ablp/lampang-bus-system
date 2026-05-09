@@ -7,6 +7,7 @@ import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
 import SummaryPrintView from '../../components/SummaryPrintView';
 import AppCard from '../../components/ui/AppCard';
+import StatusBadge from '../../components/ui/StatusBadge';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
 
 export default function SummaryReport() {
@@ -311,9 +312,9 @@ export default function SummaryReport() {
                 <li><span className="font-medium">โรงเรียนครบ 100%:</span> โรงเรียนที่ดำเนินการครบตามเป้าหมายทั้งหมดในขอบเขตที่เลือก</li>
                 <li>
                   <span className="font-medium">เกณฑ์ระดับ:</span>{' '}
-                  <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">ดีมาก</span> = 95–100% ·{' '}
-                  <span className="bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-medium">ดี</span> = 85–94.99% ·{' '}
-                  <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium">เฝ้าระวัง</span> = ต่ำกว่า 85%
+                  <StatusBadge variant="success" size="sm">ดีมาก</StatusBadge> = 95–100% ·{' '}
+                  <StatusBadge variant="warn"    size="sm">ดี</StatusBadge> = 85–94.99% ·{' '}
+                  <StatusBadge variant="danger"  size="sm">เฝ้าระวัง</StatusBadge> = ต่ำกว่า 85%
                 </li>
               </ul>
             </div>

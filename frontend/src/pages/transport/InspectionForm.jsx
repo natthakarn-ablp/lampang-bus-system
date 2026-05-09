@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import AppCard from '../../components/ui/AppCard';
+import StatusBadge from '../../components/ui/StatusBadge';
 
 const RESULT_OPTIONS = [
   { value: 'PASSED',   label: 'ผ่าน' },
@@ -11,11 +12,11 @@ const RESULT_OPTIONS = [
   { value: 'PENDING',  label: 'รอตรวจ' },
 ];
 
-const RESULT_BADGE = {
-  PASSED:    'bg-green-100 text-green-700',
-  FAILED:    'bg-red-100 text-red-700',
-  NEEDS_FIX: 'bg-yellow-100 text-yellow-700',
-  PENDING:   'bg-gray-100 text-gray-600',
+const RESULT_VARIANT = {
+  PASSED:    'success',
+  FAILED:    'danger',
+  NEEDS_FIX: 'warn',
+  PENDING:   'neutral',
 };
 
 const PROVINCES = [
@@ -316,9 +317,9 @@ export default function InspectionForm() {
                   <tr key={ins.id} className="hover:bg-surface transition">
                     <td className="px-4 py-3 font-medium text-gray-800">{ins.plate_no}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${RESULT_BADGE[ins.result] || 'bg-gray-100'}`}>
+                      <StatusBadge variant={RESULT_VARIANT[ins.result] || 'neutral'} size="sm">
                         {RESULT_OPTIONS.find(o => o.value === ins.result)?.label || ins.result}
-                      </span>
+                      </StatusBadge>
                     </td>
                     <td className="px-4 py-3 text-gray-600">{formatThaiDate(ins.inspection_date)}</td>
                     <td className="px-4 py-3 text-gray-600">{formatThaiDate(ins.expiry_date)}</td>
@@ -337,9 +338,9 @@ export default function InspectionForm() {
               <div key={ins.id} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <p className="text-base font-bold text-gray-900">{ins.plate_no}</p>
-                  <span className={`text-sm font-bold px-3 py-1 rounded-full shrink-0 ${RESULT_BADGE[ins.result] || 'bg-gray-100'}`}>
+                  <StatusBadge variant={RESULT_VARIANT[ins.result] || 'neutral'} size="lg" className="shrink-0">
                     {RESULT_OPTIONS.find(o => o.value === ins.result)?.label || ins.result}
-                  </span>
+                  </StatusBadge>
                 </div>
                 <p className="text-sm text-gray-500">
                   ตรวจ: {formatThaiDate(ins.inspection_date)}

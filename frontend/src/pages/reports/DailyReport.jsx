@@ -3,6 +3,7 @@ import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
 import ExportButtons from '../../components/ExportButtons';
 import AppCard from '../../components/ui/AppCard';
+import StatusBadge from '../../components/ui/StatusBadge';
 
 export default function DailyReport() {
   const { user } = useAuth();
@@ -118,11 +119,9 @@ export default function DailyReport() {
                             {s.evening_done}/{s.student_count}
                           </td>
                           <td className="px-4 py-2.5 text-center">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              mOk && eOk ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                            }`}>
+                            <StatusBadge variant={mOk && eOk ? 'success' : 'warn'} size="sm">
                               {mOk && eOk ? 'ครบ' : 'ค้าง'}
-                            </span>
+                            </StatusBadge>
                           </td>
                         </tr>
                       );
@@ -165,11 +164,9 @@ export default function DailyReport() {
                             {v.evening_done}/{v.student_count}
                           </td>
                           <td className="px-4 py-2.5 text-center">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              mOk && eOk ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                            }`}>
+                            <StatusBadge variant={mOk && eOk ? 'success' : 'warn'} size="sm">
                               {mOk && eOk ? 'ครบ' : 'ค้าง'}
-                            </span>
+                            </StatusBadge>
                           </td>
                         </tr>
                       );

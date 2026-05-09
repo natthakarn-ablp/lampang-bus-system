@@ -3,12 +3,13 @@ import { Bus } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
 import AppCard from '../../components/ui/AppCard';
+import StatusBadge from '../../components/ui/StatusBadge';
 
 const RESULT_BADGE = {
-  PASSED:   { label: 'ผ่าน',      cls: 'bg-green-100 text-green-700' },
-  FAILED:   { label: 'ไม่ผ่าน',   cls: 'bg-red-100 text-red-700' },
-  NEEDS_FIX:{ label: 'ต้องแก้ไข', cls: 'bg-yellow-100 text-yellow-700' },
-  PENDING:  { label: 'รอตรวจ',    cls: 'bg-gray-100 text-gray-600' },
+  PASSED:   { label: 'ผ่าน',      variant: 'success' },
+  FAILED:   { label: 'ไม่ผ่าน',   variant: 'danger' },
+  NEEDS_FIX:{ label: 'ต้องแก้ไข', variant: 'warn' },
+  PENDING:  { label: 'รอตรวจ',    variant: 'neutral' },
 };
 
 export default function TransportVehicleList() {
@@ -73,7 +74,7 @@ export default function TransportVehicleList() {
               </thead>
               <tbody className="divide-y divide-surface-border">
                 {vehicles.map(v => {
-                  const badge = RESULT_BADGE[v.latest_inspection_result] || { label: 'ยังไม่ตรวจ', cls: 'bg-gray-50 text-gray-400' };
+                  const badge = RESULT_BADGE[v.latest_inspection_result] || { label: 'ยังไม่ตรวจ', variant: 'neutral' };
                   const insExpired = v.insurance_expiry && new Date(v.insurance_expiry) < new Date();
                   return (
                     <tr key={v.id} className="hover:bg-surface transition">
@@ -82,7 +83,7 @@ export default function TransportVehicleList() {
                       <td className="px-4 py-3 text-gray-600 text-xs">{v.driver_name || '-'}</td>
                       <td className="px-4 py-3 text-center text-gray-600">{v.student_count}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
+                        <StatusBadge variant={badge.variant} size="sm">{badge.label}</StatusBadge>
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{v.latest_inspection_date || '-'}</td>
                       <td className={`px-4 py-3 text-xs ${insExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>

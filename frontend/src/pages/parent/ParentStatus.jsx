@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
 import { resolveLineUserId } from '../../utils/liff';
+import AppCard from '../../components/ui/AppCard';
 
 const STATUS_MAP = {
   CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-green-100 text-green-700 border-green-200', icon: '✅' },
@@ -73,7 +74,7 @@ export default function ParentStatus() {
   if (!loading && !lineUserId) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 max-w-sm w-full text-center">
+        <AppCard padding="lg" className="max-w-sm w-full text-center">
           <p className="text-5xl mb-4">🔗</p>
           <h1 className="text-xl font-semibold text-gray-800 mb-3">ยังไม่ได้ผูกบัญชี LINE</h1>
           <p className="text-base text-gray-600 mb-6">ทำตามขั้นตอนด้านล่าง เพื่อดูสถานะรับ-ส่งบุตรหลาน</p>
@@ -86,7 +87,7 @@ export default function ParentStatus() {
           </div>
 
           <p className="text-sm text-gray-400">หลังอนุมัติแล้ว เปิดหน้านี้อีกครั้ง</p>
-        </div>
+        </AppCard>
       </div>
     );
   }
@@ -107,14 +108,14 @@ export default function ParentStatus() {
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-6 max-w-sm w-full text-center">
+        <AppCard padding="lg" className="max-w-sm w-full text-center border-danger/30">
           <p className="text-4xl mb-3">⚠️</p>
           <p className="text-base text-red-600 font-medium mb-4">{error}</p>
           <button onClick={() => window.location.reload()}
             className="bg-red-50 hover:bg-red-100 text-red-700 font-medium px-6 py-3 rounded-xl transition border border-red-200">
             ลองใหม่อีกครั้ง
           </button>
-        </div>
+        </AppCard>
       </div>
     );
   }
@@ -123,7 +124,7 @@ export default function ParentStatus() {
   if (children.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 max-w-sm w-full text-center">
+        <AppCard padding="lg" className="max-w-sm w-full text-center">
           <p className="text-5xl mb-4">👨‍👩‍👧‍👦</p>
           <h1 className="text-xl font-semibold text-gray-800 mb-3">ไม่พบข้อมูลบุตรหลาน</h1>
           <p className="text-base text-gray-600 mb-2">
@@ -144,7 +145,7 @@ export default function ParentStatus() {
             className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition">
             รีเฟรชข้อมูล
           </button>
-        </div>
+        </AppCard>
       </div>
     );
   }
@@ -181,7 +182,7 @@ export default function ParentStatus() {
               บุตรหลานของคุณ ({children.length} คน)
             </p>
             {children.map(child => (
-              <div key={child.id} className="bg-white rounded-2xl border-2 border-gray-100 shadow-sm overflow-hidden">
+              <AppCard key={child.id} padding="none" className="overflow-hidden">
                 {/* Child info */}
                 <div className="p-4 pb-3">
                   <p className="text-lg font-semibold text-gray-900">
@@ -212,7 +213,7 @@ export default function ParentStatus() {
                     📅 ย้อนหลัง
                   </button>
                 </div>
-              </div>
+              </AppCard>
             ))}
           </div>
         )}
@@ -221,7 +222,7 @@ export default function ParentStatus() {
         {view === 'status' && selectedChild && (
           <div className="space-y-4">
             {/* Child header */}
-            <div className="bg-white rounded-2xl border-2 border-gray-100 p-4">
+            <AppCard padding="md">
               <p className="text-lg font-semibold text-gray-900">
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
@@ -229,7 +230,7 @@ export default function ParentStatus() {
                 {selectedChild.grade && selectedChild.classroom ? `${selectedChild.grade}/${selectedChild.classroom}` : selectedChild.grade || '-'}
                 {selectedChild.school_name && ` · ${selectedChild.school_name}`}
               </p>
-            </div>
+            </AppCard>
 
             <p className="text-base font-semibold text-gray-600">สถานะวันนี้</p>
 
@@ -271,21 +272,21 @@ export default function ParentStatus() {
         {view === 'history' && selectedChild && (
           <div className="space-y-4">
             {/* Child header */}
-            <div className="bg-white rounded-2xl border-2 border-gray-100 p-4">
+            <AppCard padding="md">
               <p className="text-lg font-semibold text-gray-900">
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
               <p className="text-base text-gray-500">
                 {selectedChild.school_name || '-'}
               </p>
-            </div>
+            </AppCard>
 
             <p className="text-base font-semibold text-gray-600">ประวัติ 7 วันล่าสุด</p>
 
             {history.length === 0 ? (
-              <div className="text-center py-10 bg-white rounded-2xl border border-gray-100">
+              <AppCard padding="lg" className="text-center">
                 <p className="text-gray-400 text-lg">ไม่มีประวัติในช่วงนี้</p>
-              </div>
+              </AppCard>
             ) : (
               <div className="space-y-2">
                 {history.map((h, i) => {
@@ -294,7 +295,7 @@ export default function ParentStatus() {
                   const timeStr = h.checked_at ? new Date(h.checked_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '-';
 
                   return (
-                    <div key={i} className="bg-white rounded-xl border border-gray-100 px-4 py-3 flex items-center justify-between gap-3">
+                    <AppCard key={i} padding="sm" className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-base font-medium text-gray-800">{dateStr}</p>
                         <p className="text-sm text-gray-500">
@@ -307,7 +308,7 @@ export default function ParentStatus() {
                         </span>
                         <p className="text-sm text-gray-400 mt-0.5">{timeStr}</p>
                       </div>
-                    </div>
+                    </AppCard>
                   );
                 })}
               </div>

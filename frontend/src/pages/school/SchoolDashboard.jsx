@@ -1,12 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Building2, GraduationCap, Bus, ClipboardList, AlertTriangle,
+  Sunrise, Sunset, ChevronDown,
+} from 'lucide-react';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import { DonutChart, HBarChart } from '../../components/MiniCharts';
 import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
-import { IconBuilding } from '../../components/icons';
-import { PAGE_TITLES, CARD_LABELS, CHART_TITLES, SECTION_TITLES, STATUS, UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS } from '../../constants/uiLabels';
+import {
+  AppCard, AlertBanner, KPIGrid, KPIStat,
+  StatusBadge, DashboardSection, SectionTitle,
+} from '../../components/ui';
+import {
+  PAGE_TITLES, CARD_LABELS, CHART_TITLES, SECTION_TITLES,
+  STATUS, UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS,
+} from '../../constants/uiLabels';
 
 export default function SchoolDashboard() {
   const [data, setData] = useState(null);
@@ -31,9 +41,16 @@ export default function SchoolDashboard() {
 
   const vehicles = statusData?.vehicles || [];
   const filtered = vehicles.filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase()));
+  const totalLeave = (data?.morning_leave ?? 0) + (data?.evening_leave ?? 0);
+
+  // Build issue lines for alert banner
+  const issues = [];
+  if ((data?.morning_pending ?? 0) > 0) issues.push(`รอส่งเช้า ${data.morning_pending} คน`);
+  if ((data?.evening_pending ?? 0) > 0) issues.push(`รอรับเย็น ${data.evening_pending} คน`);
+  if ((data?.recent_emergencies ?? 0) > 0) issues.push(`เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง (7 วัน)`);
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
       <PageHeader
         title={PAGE_TITLES.SCHOOL_DASHBOARD}
         subtitle={data?.school
@@ -42,7 +59,7 @@ export default function SchoolDashboard() {
         meta={data?.date
           ? `วันที่ ${new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
           : null}
-        icon={IconBuilding}
+        icon={Building2}
         iconColor="green"
       />
 
@@ -53,81 +70,54 @@ export default function SchoolDashboard() {
         </div>
       ) : (
         <>
-          {/* ── หมวด 1: สิ่งที่ต้องติดตามทันที ── */}
-          {(() => {
-            const issues = [];
-            if ((data?.morning_pending ?? 0) > 0) issues.push(`🌅 รอส่งเช้า ${data.morning_pending} คน`);
-            if ((data?.evening_pending ?? 0) > 0) issues.push(`🌆 รอรับเย็น ${data.evening_pending} คน`);
-            if ((data?.recent_emergencies ?? 0) > 0) issues.push(`🚨 เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง (7 วัน)`);
-            return issues.length > 0 ? (
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-3 mb-4">
-                <p className="text-sm font-bold text-amber-800 mb-1">สิ่งที่ต้องติดตามวันนี้</p>
-                {issues.map((msg, i) => <p key={i} className="text-sm text-amber-700">{msg}</p>)}
-              </div>
-            ) : (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2 mb-4 text-center">
-                <p className="text-sm font-bold text-green-700">✅ ดำเนินการครบแล้ว ไม่มีรายการค้าง</p>
-              </div>
-            );
-          })()}
+          {/* Status banner */}
+          {issues.length > 0 ? (
+            <AlertBanner variant="warn" title="สิ่งที่ต้องติดตามวันนี้">
+              <ul className="space-y-0.5 mt-1">
+                {issues.map((msg, i) => <li key={i}>{msg}</li>)}
+              </ul>
+            </AlertBanner>
+          ) : (
+            <AlertBanner variant="success" title="ดำเนินการครบแล้ว ไม่มีรายการค้าง" />
+          )}
 
-          {/* ── ความครบถ้วนข้อมูล ── */}
-          {data?.completeness && (() => {
-            const c = data.completeness;
-            const items = [
-              { label: 'นักเรียนมีรถ', done: c.students_with_vehicle, total: c.students_total, link: '/school/students', linkLabel: 'ดูรายชื่อ' },
-              { label: 'ผู้ปกครองครบ', done: c.students_with_parent, total: c.students_total, link: '/school/students', linkLabel: 'ดูรายชื่อ' },
-              { label: 'รถผ่านตรวจสภาพ', done: c.vehicles_inspected, total: c.vehicles_total, link: '/school/vehicles', linkLabel: 'ดูรถ' },
-              { label: 'ประกันภัยครบ', done: c.vehicles_insured, total: c.vehicles_total, link: '/school/vehicles', linkLabel: 'ดูรถ' },
-            ];
-            const overallPct = items.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / items.length * 100;
-            return (
-              <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-bold text-gray-700">ความครบถ้วนข้อมูล</h2>
-                  <span className={`text-sm font-bold ${overallPct >= 90 ? 'text-green-600' : overallPct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
-                    {Math.round(overallPct)}%
-                  </span>
-                </div>
-                <div className="space-y-2.5">
-                  {items.map(item => {
-                    const pct = item.total > 0 ? Math.round((item.done / item.total) * 100) : 100;
-                    const missing = item.total - item.done;
-                    return (
-                      <div key={item.label}>
-                        <div className="flex justify-between text-xs mb-0.5">
-                          <span className="text-gray-600">{item.label}</span>
-                          <span className={`font-medium ${pct >= 90 ? 'text-green-600' : pct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
-                            {item.done}/{item.total} ({pct}%)
-                            {missing > 0 && (
-                              <Link to={item.link} className="ml-1 text-blue-500 hover:underline">{item.linkLabel}</Link>
-                            )}
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-2">
-                          <div className={`h-2 rounded-full transition-all ${pct >= 90 ? 'bg-green-500' : pct >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
-                            style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
+          {/* Data completeness */}
+          {data?.completeness && <CompletenessCard c={data.completeness} />}
 
-          {/* ── หมวด 2: ภาพรวม ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <StatCard icon="👨‍🎓" label={CARD_LABELS.TOTAL_STUDENTS} value={data?.total_students ?? 0} accent="blue" />
-            <StatCard icon="🚐" label={CARD_LABELS.VEHICLES} value={data?.total_vehicles ?? 0} accent="blue" />
-            <StatCard icon="📝" label={CARD_LABELS.STUDENT_LEAVE} value={(data?.morning_leave ?? 0) + (data?.evening_leave ?? 0) > 0 ? `${data?.morning_leave ?? 0}/${data?.evening_leave ?? 0}` : '0'} sub={((data?.morning_leave ?? 0) + (data?.evening_leave ?? 0)) > 0 ? 'เช้า/เย็น' : 'ไม่มีคนลา'} accent="amber" />
-            <StatCard icon="🚨" label={CARD_LABELS.EMERGENCY} value={data?.recent_emergencies ?? 0} sub="7 วันล่าสุด" accent={data?.recent_emergencies > 0 ? 'red' : 'gray'} />
-          </div>
+          {/* Headline KPIs */}
+          <KPIGrid cols={4} gap="sm">
+            <KPIStat
+              label={CARD_LABELS.TOTAL_STUDENTS}
+              value={data?.total_students ?? 0}
+              icon={GraduationCap}
+              variant="brand"
+            />
+            <KPIStat
+              label={CARD_LABELS.VEHICLES}
+              value={data?.total_vehicles ?? 0}
+              icon={Bus}
+              variant="brand"
+            />
+            <KPIStat
+              label={CARD_LABELS.STUDENT_LEAVE}
+              value={totalLeave > 0 ? `${data?.morning_leave ?? 0}/${data?.evening_leave ?? 0}` : '0'}
+              icon={ClipboardList}
+              variant={totalLeave > 0 ? 'warn' : 'neutral'}
+              hint={totalLeave > 0 ? 'เช้า/เย็น' : 'ไม่มีคนลา'}
+            />
+            <KPIStat
+              label={CARD_LABELS.EMERGENCY}
+              value={data?.recent_emergencies ?? 0}
+              icon={AlertTriangle}
+              variant={data?.recent_emergencies > 0 ? 'danger' : 'neutral'}
+              hint="7 วันล่าสุด"
+            />
+          </KPIGrid>
 
-          {/* ── หมวด 3: สถานะเช้า/เย็น ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+          {/* Session progress */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SessionCard
-              session="morning"
+              icon={Sunrise}
               label="ส่งเช้า"
               done={data?.morning_done ?? 0}
               total={data?.morning_total ?? 0}
@@ -135,7 +125,7 @@ export default function SchoolDashboard() {
               leave={data?.morning_leave ?? 0}
             />
             <SessionCard
-              session="evening"
+              icon={Sunset}
               label="รับเย็น"
               done={data?.evening_done ?? 0}
               total={data?.evening_total ?? 0}
@@ -144,31 +134,28 @@ export default function SchoolDashboard() {
             />
           </div>
 
-          {/* ── Charts Row ── */}
+          {/* Charts row */}
           {vehicles.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              {/* Morning donut */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <p className="text-xs font-semibold text-gray-500 mb-3 text-center">{CHART_TITLES.MORNING_STATUS}</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <AppCard padding="md">
+                <p className="text-xs font-semibold text-ink-muted mb-3 text-center">{CHART_TITLES.MORNING_STATUS}</p>
                 <DonutChart
                   size={110} thickness={16}
                   label={`${data?.morning_total > 0 ? Math.round(((data?.morning_done ?? 0) / data.morning_total) * 100) : 0}%`}
                   sublabel={STATUS.DONE}
                   segments={MORNING_SEGMENTS(data?.morning_done ?? 0, data?.morning_leave ?? 0, data?.morning_pending ?? 0)}
                 />
-              </div>
-              {/* Evening donut */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <p className="text-xs font-semibold text-gray-500 mb-3 text-center">{CHART_TITLES.EVENING_STATUS}</p>
+              </AppCard>
+              <AppCard padding="md">
+                <p className="text-xs font-semibold text-ink-muted mb-3 text-center">{CHART_TITLES.EVENING_STATUS}</p>
                 <DonutChart
                   size={110} thickness={16}
                   label={`${data?.evening_total > 0 ? Math.round(((data?.evening_done ?? 0) / data.evening_total) * 100) : 0}%`}
                   sublabel={STATUS.DONE}
                   segments={EVENING_SEGMENTS(data?.evening_done ?? 0, data?.evening_leave ?? 0, data?.evening_pending ?? 0)}
                 />
-              </div>
-              {/* Top pending vehicles */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
+              </AppCard>
+              <AppCard padding="md">
                 <HBarChart
                   label="รถที่มีรายการค้างมากที่สุด"
                   items={(() => {
@@ -177,176 +164,218 @@ export default function SchoolDashboard() {
                       .map(v => {
                         const mE = v.students.filter(s => s.morning_enabled && !isMLeave(s));
                         const mP = mE.length - mE.filter(s => s.morning_done).length;
-                        return { label: v.plate_no, value: mP, color: mP > 5 ? '#ef4444' : mP > 0 ? '#f97316' : '#22c55e' };
+                        return { label: v.plate_no, value: mP, color: mP > 5 ? '#EF4444' : mP > 0 ? '#F59E0B' : '#10B981' };
                       })
                       .sort((a, b) => b.value - a.value)
                       .slice(0, 6);
                   })()}
                   valueLabel=" คน"
                 />
+              </AppCard>
+            </div>
+          )}
+
+          {/* Vehicle status section */}
+          <DashboardSection
+            title={SECTION_TITLES.VEHICLE_STATUS}
+            description={`${filtered.length} คัน${plateSearch ? ' (กรอง)' : ''}`}
+            action={<PlateSearchInput value={plateSearch} onChange={setPlateSearch} />}
+          >
+            {filtered.length === 0 ? (
+              <AppCard padding="lg" className="py-12 text-center">
+                <p className="text-ink-muted">{UI_MESSAGES.VEHICLE_NOT_FOUND}</p>
+              </AppCard>
+            ) : (
+              <div className="space-y-2">
+                {filtered.map(vehicle => (
+                  <VehicleRow
+                    key={vehicle.vehicle_id || '__none'}
+                    vehicle={vehicle}
+                    isExpanded={expandedVehicle === vehicle.vehicle_id}
+                    onToggle={() => toggleVehicle(vehicle.vehicle_id)}
+                  />
+                ))}
               </div>
-            </div>
-          )}
-
-          {/* ── Vehicle Status Section ── */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-gray-800">{SECTION_TITLES.VEHICLE_STATUS}</h2>
-              <p className="text-xs text-gray-400">{filtered.length} คัน{plateSearch ? ' (กรอง)' : ''}</p>
-            </div>
-            <PlateSearchInput value={plateSearch} onChange={setPlateSearch} />
-          </div>
-
-          {filtered.length === 0 ? (
-            <div className="bg-gray-50 rounded-xl border border-gray-200 py-12 text-center">
-              <p className="text-gray-400">{UI_MESSAGES.VEHICLE_NOT_FOUND}</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filtered.map((vehicle) => {
-                const isMorningLeave = (s) => s.leave_session === 'morning' || s.leave_session === 'both';
-                const isEveningLeave = (s) => s.leave_session === 'evening' || s.leave_session === 'both';
-                const mEnabled = vehicle.students.filter(s => s.morning_enabled && !isMorningLeave(s));
-                const mDone = mEnabled.filter(s => s.morning_done).length;
-                const mPending = mEnabled.length - mDone;
-                const eEnabled = vehicle.students.filter(s => s.evening_enabled && !isEveningLeave(s));
-                const eDone = eEnabled.filter(s => s.evening_done).length;
-                const ePending = eEnabled.length - eDone;
-                const leaveCount = vehicle.students.filter(s => s.leave_session).length;
-                const isExpanded = expandedVehicle === vehicle.vehicle_id;
-                const allMorningDone = mPending === 0 && mEnabled.length > 0;
-                const allEveningDone = ePending === 0 && eEnabled.length > 0;
-
-                return (
-                  <div key={vehicle.vehicle_id || '__none'} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <button
-                      onClick={() => toggleVehicle(vehicle.vehicle_id)}
-                      className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-gray-50/50 transition"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-2.5 h-9 rounded-full shrink-0 ${allMorningDone && allEveningDone ? 'bg-green-400' : mPending + ePending > 0 ? 'bg-amber-400' : 'bg-gray-300'}`} />
-                        <div className="min-w-0">
-                          <h3 className="font-bold text-gray-800 text-base truncate">{vehicle.plate_no}</h3>
-                          <p className="text-sm text-gray-400">{vehicle.students.length} คน{leaveCount > 0 ? ` · ลา ${leaveCount}` : ''}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-xs">
-                        <StatusPill label="เช้า" done={mDone} total={mEnabled.length} pending={mPending} session="morning" />
-                        <StatusPill label="เย็น" done={eDone} total={eEnabled.length} pending={ePending} session="evening" />
-                        <span className="text-gray-400 text-sm">{isExpanded ? '▲' : '▼'}</span>
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="border-t border-gray-100 overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-gray-50/80 text-gray-500 text-xs">
-                              <th className="px-4 py-2 text-left font-medium">ชื่อนักเรียน</th>
-                              <th className="px-4 py-2 text-left font-medium">ชั้น/ห้อง</th>
-                              <th className="px-4 py-2 text-center font-medium">ส่งเช้า</th>
-                              <th className="px-4 py-2 text-center font-medium">รับเย็น</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-50">
-                            {vehicle.students.map((s) => (
-                              <tr key={s.id} className={`${s.leave_session ? 'bg-amber-50/40' : ''} hover:bg-gray-50/50`}>
-                                <td className="px-4 py-2 text-gray-800 text-sm">{s.name}</td>
-                                <td className="px-4 py-2 text-gray-500 text-xs">
-                                  {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
-                                </td>
-                                <td className="px-4 py-2 text-center">
-                                  <StudentStatus enabled={s.morning_enabled} done={s.morning_done} ts={s.morning_ts} leave={s.leave_session === 'morning' || s.leave_session === 'both'} />
-                                </td>
-                                <td className="px-4 py-2 text-center">
-                                  <StudentStatus enabled={s.evening_enabled} done={s.evening_done} ts={s.evening_ts} leave={s.leave_session === 'evening' || s.leave_session === 'both'} />
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+            )}
+          </DashboardSection>
         </>
       )}
     </div>
   );
 }
 
-/* ── Sub-components ── */
+/* ── Domain-specific sub-components ── */
 
-function StatCard({ icon, label, value, sub, accent = 'blue' }) {
-  const bg = { blue: 'bg-blue-50 border-blue-100', amber: 'bg-amber-50 border-amber-100', red: 'bg-red-50 border-red-100', gray: 'bg-gray-50 border-gray-100', green: 'bg-green-50 border-green-100' };
-  const text = { blue: 'text-blue-700', amber: 'text-amber-700', red: 'text-red-700', gray: 'text-gray-600', green: 'text-green-700' };
+function CompletenessCard({ c }) {
+  const items = [
+    { label: 'นักเรียนมีรถ',     done: c.students_with_vehicle, total: c.students_total, link: '/school/students', linkLabel: 'ดูรายชื่อ' },
+    { label: 'ผู้ปกครองครบ',     done: c.students_with_parent,  total: c.students_total, link: '/school/students', linkLabel: 'ดูรายชื่อ' },
+    { label: 'รถผ่านตรวจสภาพ',   done: c.vehicles_inspected,    total: c.vehicles_total, link: '/school/vehicles', linkLabel: 'ดูรถ' },
+    { label: 'ประกันภัยครบ',     done: c.vehicles_insured,      total: c.vehicles_total, link: '/school/vehicles', linkLabel: 'ดูรถ' },
+  ];
+  const overallPct = items.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / items.length * 100;
+  const overallTone = overallPct >= 90 ? 'text-success' : overallPct >= 60 ? 'text-warn' : 'text-danger';
+
   return (
-    <div className={`rounded-xl border p-4 ${bg[accent] || bg.blue}`}>
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-base">{icon}</span>
-        <span className={`text-xs font-medium ${text[accent] || text.blue} opacity-80`}>{label}</span>
+    <AppCard padding="md">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-ink">ความครบถ้วนข้อมูล</h2>
+        <span className={`text-sm font-bold tabular-nums ${overallTone}`}>{Math.round(overallPct)}%</span>
       </div>
-      <p className={`text-2xl font-bold ${text[accent] || text.blue}`}>{value ?? '–'}</p>
-      {sub && <p className="text-xs mt-0.5 text-gray-400">{sub}</p>}
-    </div>
+      <div className="space-y-2.5">
+        {items.map(item => {
+          const pct = item.total > 0 ? Math.round((item.done / item.total) * 100) : 100;
+          const missing = item.total - item.done;
+          const tone = pct >= 90 ? 'text-success' : pct >= 60 ? 'text-warn' : 'text-danger';
+          const bar  = pct >= 90 ? 'bg-success' : pct >= 60 ? 'bg-warn'    : 'bg-danger';
+          return (
+            <div key={item.label}>
+              <div className="flex justify-between text-xs mb-0.5">
+                <span className="text-ink-muted">{item.label}</span>
+                <span className={`font-medium ${tone}`}>
+                  {item.done}/{item.total} ({pct}%)
+                  {missing > 0 && (
+                    <Link to={item.link} className="ml-1 text-brand-700 hover:underline">{item.linkLabel}</Link>
+                  )}
+                </span>
+              </div>
+              <div className="w-full bg-surface rounded-full h-2">
+                <div className={`h-2 rounded-full transition-all ${bar}`} style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </AppCard>
   );
 }
 
-function SessionCard({ session, label, done, total, pending, leave }) {
+function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
   const allDone = pending === 0 && total > 0;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const colors = session === 'morning'
-    ? { bg: 'bg-orange-50', border: 'border-orange-200', bar: 'bg-orange-400', text: 'text-orange-700', icon: '🌅' }
-    : { bg: 'bg-indigo-50', border: 'border-indigo-200', bar: 'bg-indigo-400', text: 'text-indigo-700', icon: '🌆' };
+  const barCls = allDone ? 'bg-success' : pct >= 80 ? 'bg-warn' : 'bg-danger';
+  const pctTone = allDone ? 'text-success' : pct >= 80 ? 'text-warn' : 'text-danger';
 
   return (
-    <div className={`rounded-xl border p-4 ${allDone ? 'bg-green-50 border-green-200' : `${colors.bg} ${colors.border}`}`}>
+    <AppCard padding="md" className={allDone ? 'border-success/40' : ''}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <span>{allDone ? '✅' : colors.icon}</span>
-          <span className={`text-sm font-semibold ${allDone ? 'text-green-700' : colors.text}`}>{label}</span>
+          {Icon && <Icon className="w-4 h-4 text-ink-muted" strokeWidth={2} />}
+          <span className="text-sm font-semibold text-ink">{label}</span>
         </div>
-        <span className={`text-xs font-bold ${allDone ? 'text-green-600' : colors.text}`}>{pct}%</span>
+        <span className={`text-xs font-bold tabular-nums ${pctTone}`}>{pct}%</span>
       </div>
-      {/* Progress bar */}
-      <div className="w-full bg-white/60 rounded-full h-2 mb-2">
-        <div className={`h-2 rounded-full transition-all ${allDone ? 'bg-green-400' : colors.bar}`} style={{ width: `${pct}%` }} />
+      <div className="w-full bg-surface rounded-full h-2 mb-2">
+        <div className={`h-2 rounded-full transition-all ${barCls}`} style={{ width: `${pct}%` }} />
       </div>
       <div className="flex items-center justify-between text-xs">
-        <span className={allDone ? 'text-green-600 font-medium' : 'text-gray-500'}>
+        <span className={allDone ? 'text-success font-medium' : 'text-ink-muted'}>
           {allDone ? `${label}ครบแล้ว ✓` : `${done}/${total - leave} คน`}
         </span>
         <div className="flex gap-2">
-          {pending > 0 && <span className="text-red-500 font-medium">{STATUS.PENDING} {pending}</span>}
-          {leave > 0 && <span className="text-amber-500">{STATUS.LEAVE} {leave}</span>}
+          {pending > 0 && <span className="text-danger font-medium">{STATUS.PENDING} {pending}</span>}
+          {leave > 0 && <span className="text-warn">{STATUS.LEAVE} {leave}</span>}
         </div>
       </div>
-    </div>
+    </AppCard>
   );
 }
 
-function StatusPill({ label, done, total, pending, session }) {
-  if (total === 0) return <span className="text-gray-300">{label} -</span>;
+function VehicleRow({ vehicle, isExpanded, onToggle }) {
+  const isMorningLeave = (s) => s.leave_session === 'morning' || s.leave_session === 'both';
+  const isEveningLeave = (s) => s.leave_session === 'evening' || s.leave_session === 'both';
+  const mEnabled = vehicle.students.filter(s => s.morning_enabled && !isMorningLeave(s));
+  const mDone = mEnabled.filter(s => s.morning_done).length;
+  const mPending = mEnabled.length - mDone;
+  const eEnabled = vehicle.students.filter(s => s.evening_enabled && !isEveningLeave(s));
+  const eDone = eEnabled.filter(s => s.evening_done).length;
+  const ePending = eEnabled.length - eDone;
+  const leaveCount = vehicle.students.filter(s => s.leave_session).length;
+  const allMorningDone = mPending === 0 && mEnabled.length > 0;
+  const allEveningDone = ePending === 0 && eEnabled.length > 0;
+  const railColor = allMorningDone && allEveningDone ? 'bg-success'
+                  : mPending + ePending > 0 ? 'bg-warn'
+                  : 'bg-surface-border';
+
+  return (
+    <AppCard padding="none" className="overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-surface transition"
+        aria-expanded={isExpanded}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`w-1.5 h-9 rounded-full shrink-0 ${railColor}`} />
+          <div className="min-w-0">
+            <h3 className="font-semibold text-ink text-base truncate">{vehicle.plate_no}</h3>
+            <p className="text-sm text-ink-muted">{vehicle.students.length} คน{leaveCount > 0 ? ` · ลา ${leaveCount}` : ''}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <SessionPill label="เช้า" done={mDone} total={mEnabled.length} pending={mPending} />
+          <SessionPill label="เย็น" done={eDone} total={eEnabled.length} pending={ePending} />
+          <ChevronDown className={`w-4 h-4 text-ink-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`} strokeWidth={2} />
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="border-t border-surface-border overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-surface text-ink-muted text-xs">
+                <th className="px-4 py-2 text-left font-medium">ชื่อนักเรียน</th>
+                <th className="px-4 py-2 text-left font-medium">ชั้น/ห้อง</th>
+                <th className="px-4 py-2 text-center font-medium">ส่งเช้า</th>
+                <th className="px-4 py-2 text-center font-medium">รับเย็น</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-border">
+              {vehicle.students.map(s => (
+                <tr key={s.id} className={`${s.leave_session ? 'bg-warn-soft/40' : ''} hover:bg-surface`}>
+                  <td className="px-4 py-2 text-ink text-sm">{s.name}</td>
+                  <td className="px-4 py-2 text-ink-muted text-xs">
+                    {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    <StudentStatus enabled={s.morning_enabled} done={s.morning_done} ts={s.morning_ts} leave={isMorningLeave(s)} />
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    <StudentStatus enabled={s.evening_enabled} done={s.evening_done} ts={s.evening_ts} leave={isEveningLeave(s)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </AppCard>
+  );
+}
+
+function SessionPill({ label, done, total, pending }) {
+  if (total === 0) return <span className="text-ink-muted text-xs">{label} -</span>;
   const allDone = pending === 0;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${allDone ? 'bg-green-100 text-green-700' : session === 'morning' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'}`}>
+    <StatusBadge variant={allDone ? 'success' : 'warn'} size="sm">
       {label} {done}/{total}
-      {pending > 0 && <span className="text-red-500 font-bold">({pending})</span>}
-    </span>
+      {pending > 0 && <span className="text-danger font-bold ml-0.5">({pending})</span>}
+    </StatusBadge>
   );
 }
 
 function StudentStatus({ enabled, done, ts, leave }) {
-  if (!enabled) return <span className="text-gray-300 text-xs">-</span>;
-  if (leave) return <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-medium bg-amber-100 px-2 py-0.5 rounded-full">{STATUS.LEAVE}</span>;
+  if (!enabled) return <span className="text-ink-muted text-xs">-</span>;
+  if (leave) return <StatusBadge variant="warn" size="sm">{STATUS.LEAVE}</StatusBadge>;
   if (done) return (
-    <span className="inline-flex items-center gap-1 text-green-600 text-xs font-medium">
-      <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+    <span className="inline-flex items-center gap-1 text-success text-xs font-medium">
+      <span className="w-1.5 h-1.5 bg-success rounded-full" />
       {ts ? new Date(ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '✓'}
     </span>
   );
-  return <span className="inline-flex items-center gap-1 text-orange-500 text-xs"><span className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse" />{STATUS.PENDING}</span>;
+  return (
+    <span className="inline-flex items-center gap-1 text-warn text-xs">
+      <span className="w-1.5 h-1.5 bg-warn rounded-full animate-pulse" />
+      {STATUS.PENDING}
+    </span>
+  );
 }

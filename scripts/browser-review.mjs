@@ -124,12 +124,21 @@ async function pageWithUser(browser, user, viewport) {
     const { ctx, page } = await pageWithUser(browser, USERS.driver, VIEWPORTS.mobile);
     await page.goto(`${BASE}/driver`, { waitUntil: 'networkidle', timeout: 20000 });
     await shoot(page, `04-driver-mobile-home`);
-    for (const label of ['คำขอ', 'ฉุกเฉิน', 'โปรไฟล์', 'หน้าแรก']) {
+
+    // Locate by href (i18n-stable) rather than visible label, scoped to the bottom nav.
+    const driverTabs = [
+      { name: 'requests',  href: '/driver/requests'  },
+      { name: 'emergency', href: '/driver/emergency' },
+      { name: 'profile',   href: '/driver/profile'   },
+      { name: 'home',      href: '/driver'           },
+    ];
+
+    for (const tab of driverTabs) {
       try {
-        await page.getByRole('link', { name: label }).first().click({ timeout: 3000 });
+        await page.locator(`nav[aria-label="เมนูหลัก"] a[href="${tab.href}"]`).first().click({ timeout: 3000 });
         await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-        await shoot(page, `04-driver-mobile-${label}`);
-      } catch (e) { console.log(`    skip "${label}": ${e.message.split('\n')[0]}`); }
+        await shoot(page, `04-driver-mobile-${tab.name}`);
+      } catch (e) { console.log(`    skip "${tab.name}": ${e.message.split('\n')[0]}`); }
     }
     await ctx.close();
   }
@@ -168,7 +177,8 @@ async function pageWithUser(browser, user, viewport) {
       await page.getByRole('button', { name: 'เปิดเมนู' }).click({ timeout: 3000 });
       await page.waitForTimeout(400);
       await shoot(page, `07-province-mobile-drawer-open`);
-      await page.getByRole('button', { name: 'ปิดเมนู' }).click({ timeout: 3000 });
+      // Two buttons match "ปิดเมนู" (sidebar X + topbar mobile menu) — pick the visible drawer X.
+      await page.getByRole('button', { name: 'ปิดเมนู' }).first().click({ timeout: 3000 });
       await page.waitForTimeout(400);
       await shoot(page, `07-province-mobile-drawer-closed`);
     } catch (e) { console.log(`    skip drawer: ${e.message.split('\n')[0]}`); }

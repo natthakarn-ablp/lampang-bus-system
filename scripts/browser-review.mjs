@@ -470,6 +470,33 @@ const MOCK = {
       { id: 'V-A03', plate_no: 'นข 3030 ลำปาง' },
     ],
   },
+  // Phase 6.1 — driver/school workflow correction.
+  // Three new lightweight list endpoints that drive the create-pickup
+  // modals' pre-loaded student/vehicle checklists.
+  '/api/driver/pickup-students': {
+    data: [
+      { id: 11, prefix: 'ด.ช. ', first_name: 'สมชาย',  last_name: 'ใจดี',   grade: 'ป.4', classroom: '4/1', morning_enabled: true,  evening_enabled: true  },
+      { id: 12, prefix: 'ด.ญ. ', first_name: 'มานี',   last_name: 'รักเด็ก', grade: 'ป.4', classroom: '4/2', morning_enabled: true,  evening_enabled: true  },
+      { id: 13, prefix: 'ด.ญ. ', first_name: 'อรอุมา', last_name: 'พัฒนา',  grade: 'ป.5', classroom: '5/1', morning_enabled: true,  evening_enabled: false },
+      { id: 14, prefix: 'ด.ช. ', first_name: 'ดนัย',   last_name: 'แก้วใส', grade: 'ม.1', classroom: '1/1', morning_enabled: true,  evening_enabled: true  },
+      { id: 15, prefix: 'ด.ญ. ', first_name: 'ปรียา', last_name: 'มาดี',   grade: 'ม.1', classroom: '1/2', morning_enabled: false, evening_enabled: true  },
+    ],
+  },
+  '/api/school/pickup-vehicles': {
+    data: [
+      { id: 'V-S01', plate_no: 'นข 1010 ลำปาง', student_count: 12 },
+      { id: 'V-S02', plate_no: 'นข 2020 ลำปาง', student_count: 8  },
+      { id: 'V-S03', plate_no: 'นข 3030 ลำปาง', student_count: 5  },
+    ],
+  },
+  '/api/school/pickup-students': {
+    data: [
+      { id: 21, prefix: 'ด.ช. ', first_name: 'ภูมิ',   last_name: 'พูนสุข',  grade: 'ม.2', classroom: '2/1', morning_enabled: true,  evening_enabled: true  },
+      { id: 22, prefix: 'ด.ญ. ', first_name: 'พิชญา', last_name: 'จันทร์',  grade: 'ม.2', classroom: '2/2', morning_enabled: true,  evening_enabled: true  },
+      { id: 23, prefix: 'ด.ช. ', first_name: 'ธนกร',  last_name: 'ดีใจ',    grade: 'ม.3', classroom: '3/1', morning_enabled: true,  evening_enabled: false },
+      { id: 24, prefix: 'ด.ญ. ', first_name: 'ลลิตา', last_name: 'งามตา',   grade: 'ม.3', classroom: '3/2', morning_enabled: true,  evening_enabled: true  },
+    ],
+  },
 };
 
 function mockFor(url) {
@@ -700,6 +727,39 @@ async function pageWithUser(browser, user, viewport) {
     await page.goto(`${BASE}/admin/pickup-points`, { waitUntil: 'networkidle', timeout: 25000 });
     await page.waitForTimeout(500); // no map on the table view; minimal settle
     await shoot(page, `14-admin-pickup-points-desktop`);
+    await ctx.close();
+  }
+
+  // Phase 6.1 — modal-open captures showcasing the new create flow.
+  // Open the "+ เพิ่มจุดรับส่ง" modal on Driver (mobile) and School
+  // (desktop after picking a vehicle) so the pre-loaded student
+  // checklist is visible in the screenshot.
+  {
+    const { ctx, page } = await pageWithUser(browser, USERS.driver, VIEWPORTS.mobile);
+    await page.goto(`${BASE}/driver/pickup-map`, { waitUntil: 'networkidle', timeout: 25000 });
+    await page.waitForTimeout(TILE_SETTLE);
+    try {
+      await page.getByRole('button', { name: /เพิ่ม/ }).first().click({ timeout: 3000 });
+      await page.waitForTimeout(800);   // student fetch + render
+      await shoot(page, `15-driver-pickup-create-modal-mobile`);
+    } catch (e) { console.log(`    skip 15: ${e.message.split('\n')[0]}`); }
+    await ctx.close();
+  }
+  {
+    const { ctx, page } = await pageWithUser(browser, USERS.school, VIEWPORTS.desktop);
+    await page.goto(`${BASE}/school/pickup-map`, { waitUntil: 'networkidle', timeout: 25000 });
+    await page.waitForTimeout(TILE_SETTLE);
+    try {
+      await page.getByRole('button', { name: /เพิ่มจุดรับส่ง/ }).first().click({ timeout: 3000 });
+      // Wait for the modal to mount, then pick the first vehicle from
+      // the modal's select (scoped via the modal overlay container so we
+      // don't accidentally target the page-level vehicle filter).
+      await page.waitForTimeout(500);
+      const modal = page.locator('.fixed.inset-0.z-50');
+      await modal.locator('select').first().selectOption({ index: 1 });
+      await page.waitForTimeout(800);   // student fetch + render
+      await shoot(page, `16-school-pickup-create-modal-desktop`);
+    } catch (e) { console.log(`    skip 16: ${e.message.split('\n')[0]}`); }
     await ctx.close();
   }
 

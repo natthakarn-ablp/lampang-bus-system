@@ -55,10 +55,10 @@ export default function AdminPickupPointManagement() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
             <MapIcon className="w-6 h-6 text-brand" strokeWidth={2} />
-            จัดการจุดรับส่ง
+            ตรวจสอบจุดรับส่ง
           </h1>
           <p className="text-sm text-ink-muted mt-1">
-            เพิ่ม แก้ไข ลบ จุดรับส่งของรถแต่ละคัน · {meta.total} จุดทั้งหมด
+            ภาพรวมจุดรับส่งของรถทั้งหมดในระบบ · {meta.total} จุด
           </p>
         </div>
         <button
@@ -67,9 +67,18 @@ export default function AdminPickupPointManagement() {
           className="shrink-0 inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} />
-          เพิ่มจุดรับส่ง
+          เพิ่มกรณีพิเศษ
         </button>
       </header>
+
+      {/* Phase 6.1 — admin override role banner.
+          The primary creator of pickup points is Driver or School.
+          This page exists for governance review + emergency overrides
+          when those primary roles can't act (e.g., a school account
+          temporarily disabled). */}
+      <AlertBanner variant="info" title="หน้าตรวจสอบและกรณีพิเศษ">
+        การเพิ่มจุดรับส่งหลักทำผ่าน Driver หรือ School. หน้านี้สำหรับผู้ดูแลระบบใช้ตรวจสอบภาพรวม และเพิ่ม/แก้ไขในกรณีพิเศษเท่านั้น.
+      </AlertBanner>
 
       {/* Filter */}
       <div className="flex items-center gap-3">
@@ -91,7 +100,7 @@ export default function AdminPickupPointManagement() {
         <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
       ) : rows.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีจุดรับส่งในระบบ">
-          กดปุ่ม "เพิ่มจุดรับส่ง" เพื่อสร้างจุดแรก
+          Driver หรือ School สามารถเริ่มสร้างจุดรับส่งได้จากแผนที่ของตนเอง — หน้านี้จะแสดงเมื่อมีจุดให้ตรวจสอบ
         </AlertBanner>
       ) : (
         <>
@@ -254,7 +263,7 @@ function EditPickupPointModal({ row, vehicles, onClose, onSaved }) {
   }, [form.latitude, form.longitude]);
 
   return (
-    <Modal onClose={onClose} title={isNew ? 'เพิ่มจุดรับส่ง' : 'แก้ไขจุดรับส่ง'}>
+    <Modal onClose={onClose} title={isNew ? 'เพิ่มกรณีพิเศษ' : 'แก้ไขจุดรับส่ง'}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <Field label="ทะเบียนรถ">
           <select

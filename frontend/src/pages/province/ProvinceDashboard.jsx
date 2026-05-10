@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Bus, GraduationCap, Building2, Clock, AlertTriangle,
-  Sunrise, Sunset, FileText, RotateCw,
+  Sunrise, Sunset, FileText, RotateCw, Truck,
 } from 'lucide-react';
 
 const POLL_INTERVAL = 30_000; // 30s background refresh
@@ -17,6 +17,7 @@ import {
 export default function ProvinceDashboard() {
   const [data, setData] = useState(null);
   const [incidents, setIncidents] = useState([]);
+  const [atRiskVehicles, setAtRiskVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -25,13 +26,16 @@ export default function ProvinceDashboard() {
   const fetchAll = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [dashRes, incRes] = await Promise.all([
+      const [dashRes, incRes, atRiskRes] = await Promise.all([
         api.get('/province/dashboard').catch(() => null),
         api.get('/province/emergencies?per_page=5&page=1').catch(() => null),
+        api.get('/province/vehicles-at-risk?limit=10').catch(() => null),
       ]);
       if (dashRes) setData(dashRes.data.data);
       const incList = incRes?.data?.data;
       setIncidents(Array.isArray(incList) ? incList : []);
+      const atRiskList = atRiskRes?.data?.data;
+      setAtRiskVehicles(Array.isArray(atRiskList) ? atRiskList : []);
       setLastSyncedAt(Date.now());
     } finally {
       setRefreshing(false);
@@ -241,6 +245,18 @@ export default function ProvinceDashboard() {
         </DashboardSection>
       )}
 
+      {/* Priority vehicles — top 10 by risk score (hidden when API returns empty) */}
+      {atRiskVehicles.length > 0 && (
+        <DashboardSection
+          title="รถสำคัญต้องติดตาม"
+          description={`${atRiskVehicles.length} คัน เรียงตามความเร่งด่วน`}
+        >
+          <div className="space-y-2">
+            {atRiskVehicles.map(v => <VehicleAtRiskRow key={v.id} vehicle={v} />)}
+          </div>
+        </DashboardSection>
+      )}
+
       {/* Executive summary */}
       <AlertBanner variant="info" title="สรุปผู้บริหาร" icon={FileText}>
         <ul className="space-y-1 mt-1 list-disc pl-4">
@@ -317,6 +333,59 @@ function IncidentEntry({ em }) {
           <span className="ml-auto text-xs text-ink-muted whitespace-nowrap">{when}</span>
         </div>
         {em.detail && <p className="text-sm text-ink-muted truncate">{em.detail}</p>}
+      </div>
+    </AppCard>
+  );
+}
+
+/* ── Priority vehicle row: plate + driver + roster + priority badge + reasons ── */
+const REASON_VARIANT = {
+  'ไม่ผ่านตรวจ':      'danger',
+  'ประกันหมด':        'danger',
+  'ยังไม่ตรวจ':       'warn',
+  'ต้องแก้ไข':        'warn',
+  'ประกันใกล้หมด':    'warn',
+  'ไม่มีข้อมูลประกัน': 'neutral',
+};
+
+function priorityBadge(score) {
+  if (score >= 100) return { variant: 'danger',  label: 'เร่งด่วน' };
+  if (score >=  60) return { variant: 'warn',    label: 'ต้องติดตาม' };
+  if (score >=  20) return { variant: 'neutral', label: 'ข้อมูลไม่ครบ' };
+  return                   { variant: 'success', label: 'พร้อมใช้งาน' };
+}
+
+function VehicleAtRiskRow({ vehicle: v }) {
+  const priority = priorityBadge(v.risk_score);
+  return (
+    <AppCard padding="sm">
+      <div className="flex items-start gap-3">
+        <Truck className="w-4 h-4 text-ink-muted shrink-0 mt-0.5" strokeWidth={2} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 mb-0.5">
+            <div className="min-w-0">
+              <p className="font-semibold text-ink truncate">{v.plate_no}</p>
+              <p className="text-xs text-ink-muted truncate">
+                {v.driver_name} · {v.student_count} คน
+              </p>
+            </div>
+            <StatusBadge variant={priority.variant} size="sm">
+              {priority.label}
+            </StatusBadge>
+          </div>
+          {v.school_names && v.school_names !== '-' && (
+            <p className="text-xs text-ink-muted truncate mt-0.5">{v.school_names}</p>
+          )}
+          {Array.isArray(v.risk_reasons) && v.risk_reasons.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {v.risk_reasons.map(r => (
+                <StatusBadge key={r} variant={REASON_VARIANT[r] || 'neutral'} size="sm">
+                  {r}
+                </StatusBadge>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </AppCard>
   );

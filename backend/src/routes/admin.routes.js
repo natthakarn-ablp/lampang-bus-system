@@ -10,6 +10,7 @@ const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const adminSvc = require('../services/admin.service');
 const ppSvc = require('../services/pickupPoint.service');
+const vllSvc = require('../services/vehicleLocation.service');
 const ExcelJS = require('exceljs');
 
 function calcDelta(baseline, latest, numField, denField) {
@@ -1106,6 +1107,19 @@ router.get('/research-export/preview', async (req, res, next) => {
     );
 
     return sendSuccess(res, { from, to, ...counts });
+  } catch (err) { next(err); }
+});
+
+// ─── Phase 7.2 — GET /api/admin/live-vehicles ───────────────────────────────
+// All vehicles. Aggregate viewer (admin support tool): audited.
+router.get('/live-vehicles', async (req, res, next) => {
+  try {
+    const vehicles = await vllSvc.listAll();
+    vllSvc.maybeAuditView({
+      userId: req.user.id, entityId: 'admin-all',
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
   } catch (err) { next(err); }
 });
 

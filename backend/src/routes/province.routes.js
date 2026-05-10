@@ -7,6 +7,7 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess } = require('../utils/response');
 const { pool } = require('../config/database');
 const provSvc = require('../services/province.service');
+const vllSvc = require('../services/vehicleLocation.service');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
@@ -226,6 +227,19 @@ router.get('/audit-logs', async (req, res, next) => {
     );
 
     return sendSuccess(res, rows, 'OK', { page, per_page, total });
+  } catch (err) { next(err); }
+});
+
+// ─── Phase 7.2 — GET /api/province/live-vehicles ────────────────────────────
+// All vehicles in the province. Aggregate viewer: audited.
+router.get('/live-vehicles', async (req, res, next) => {
+  try {
+    const vehicles = await vllSvc.listAll();
+    vllSvc.maybeAuditView({
+      userId: req.user.id, entityId: 'province',
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
   } catch (err) { next(err); }
 });
 

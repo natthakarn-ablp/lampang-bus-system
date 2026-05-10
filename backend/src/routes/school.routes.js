@@ -16,6 +16,7 @@ const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
 const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
+const vllSvc = require('../services/vehicleLocation.service');
 
 /**
  * Resolve school scope: admin uses ?school_id query param, school role uses scopeId.
@@ -1159,6 +1160,21 @@ router.post('/students/import', importUpload.single('file'), async (req, res, ne
       (results.errors.length > 0 ? ` · ไม่สำเร็จ ${results.errors.length} รายการ` : '');
 
     return sendSuccess(res, results, message, null, results.success > 0 ? 201 : 200);
+  } catch (err) { next(err); }
+});
+
+// ─── Phase 7.2 — GET /api/school/live-vehicles ──────────────────────────────
+// Vehicles serving this school. No audit (single-scope, not aggregate).
+router.get('/live-vehicles', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) {
+      return sendError(res,
+        req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน',
+        [], req.user.role === 'admin' ? 400 : 403);
+    }
+    const vehicles = await vllSvc.listForSchool(schoolId);
+    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
   } catch (err) { next(err); }
 });
 

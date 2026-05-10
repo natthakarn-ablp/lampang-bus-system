@@ -18,6 +18,7 @@ const express = require('express');
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
+const rateLimit = require('express-rate-limit');
 const { pool }          = require('../config/database');
 const { authenticate }  = require('../middleware/auth');
 const { requireRole }   = require('../middleware/roleGuard');
@@ -27,6 +28,22 @@ const checkinSvc        = require('../services/checkin.service');
 const ppSvc             = require('../services/pickupPoint.service');
 const leaveSvc          = require('../services/leave.service');
 const rosterReqSvc      = require('../services/rosterRequest.service');
+const vllSvc            = require('../services/vehicleLocation.service');
+
+// Phase 7.2 — per-driver rate limit on the location-write endpoint.
+// Keyed on req.user.id (NOT IP) so multiple drivers behind one NAT
+// don't share quota. 6 writes per 60s = one every ~10s allowed
+// (frontend will only send every 15s + 30m-moved; this gives headroom
+// for retries after a transient network hiccup).
+const driverLocationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `drv-loc:${req.user?.id || req.ip}`,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { success: false, message: 'ส่งตำแหน่งถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+});
 
 // Photo upload config
 const uploadDir = path.join(__dirname, '../../uploads/drivers');
@@ -778,6 +795,71 @@ router.post('/pretrip', async (req, res, next) => {
     }
 
     return sendSuccess(res, { date: today, all_pass }, 'บันทึกผลตรวจรถก่อนออกสำเร็จ', null, 201);
+  } catch (err) { return next(err); }
+});
+
+// ─── Phase 7.2 — Live Vehicle Location (sender) ─────────────────────────────
+//
+// POST   /api/driver/vehicle-location  → UPSERT this driver's vehicle
+// DELETE /api/driver/vehicle-location  → flip to PAUSED (driver hit Stop)
+//
+// Server-trusted scope: vehicle_id is resolved from the JWT (via the
+// driver's username = plate_no), NEVER from request body. No audit
+// log on writes — would balloon audit_logs to thousands per day.
+
+router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) => {
+  try {
+    const { latitude, longitude, accuracy_meters, speed_mps, heading_deg, recorded_at } = req.body || {};
+
+    // Validate body
+    const errors = [];
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      errors.push({ field: 'latitude', message: 'latitude must be a number in [-90, 90]' });
+    }
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      errors.push({ field: 'longitude', message: 'longitude must be a number in [-180, 180]' });
+    }
+    if (recorded_at && Number.isNaN(Date.parse(recorded_at))) {
+      errors.push({ field: 'recorded_at', message: 'recorded_at must be ISO 8601' });
+    }
+    if (errors.length) return sendError(res, 'ข้อมูลตำแหน่งไม่ถูกต้อง', errors, 400);
+
+    // Resolve vehicle from JWT scope — server-trusted
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    const driverId = await vllSvc.getActiveDriverIdForVehicle(vehicle.vehicle_id);
+    if (!driverId) return sendError(res, 'ไม่พบการมอบหมายคนขับสำหรับรถคันนี้', [], 400);
+
+    const recordedAtSql = recorded_at
+      ? new Date(recorded_at).toISOString().slice(0, 23).replace('T', ' ')
+      : new Date().toISOString().slice(0, 23).replace('T', ' ');
+
+    await vllSvc.upsertLocation({
+      vehicleId: vehicle.vehicle_id,
+      driverId,
+      latitude: lat,
+      longitude: lng,
+      accuracyMeters: Number.isFinite(Number(accuracy_meters)) ? Math.round(Number(accuracy_meters)) : null,
+      speedMps:       Number.isFinite(Number(speed_mps))       ? Number(speed_mps)                  : null,
+      headingDeg:     Number.isFinite(Number(heading_deg))     ? Number(heading_deg)                : null,
+      recordedAt: recordedAtSql,
+      source: 'web',
+    });
+
+    return sendSuccess(res, { received_at: new Date().toISOString() }, 'OK');
+  } catch (err) { return next(err); }
+});
+
+router.delete('/vehicle-location', async (req, res, next) => {
+  try {
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    await vllSvc.pauseLocation(vehicle.vehicle_id);
+    return sendSuccess(res, null, 'หยุดส่งตำแหน่งแล้ว');
   } catch (err) { return next(err); }
 });
 

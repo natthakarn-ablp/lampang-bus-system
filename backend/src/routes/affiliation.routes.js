@@ -8,6 +8,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
 const affAdminSvc = require('../services/affiliationAdmin.service');
+const vllSvc = require('../services/vehicleLocation.service');
 const { logAudit } = require('../utils/audit');
 
 // Shared CSV helper for audit export
@@ -345,6 +346,26 @@ router.post('/notify-school', async (req, res, next) => {
     });
 
     return sendSuccess(res, { school_id, notified_at: new Date().toISOString() }, 'บันทึกการแจ้งเตือนสำเร็จ', null, 201);
+  } catch (err) { next(err); }
+});
+
+// ─── Phase 7.2 — GET /api/affiliation/live-vehicles ─────────────────────────
+// Vehicles serving any school in this affiliation. Aggregate viewer:
+// audited once per 5-minute window per user.
+router.get('/live-vehicles', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) {
+      return sendError(res,
+        req.user.role === 'admin' ? 'กรุณาระบุ affiliation_id' : 'ไม่พบข้อมูลสังกัด',
+        [], req.user.role === 'admin' ? 400 : 403);
+    }
+    const vehicles = await vllSvc.listForAffiliation(affId);
+    vllSvc.maybeAuditView({
+      userId: req.user.id, entityId: affId,
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
   } catch (err) { next(err); }
 });
 

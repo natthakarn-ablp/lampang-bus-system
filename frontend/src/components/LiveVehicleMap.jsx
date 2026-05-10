@@ -2,41 +2,37 @@ import { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import './PickupMap.css';
+import {
+  getStatusMeta,
+  getStatusHelpText,
+  formatRelativeTime,
+  LOW_ACCURACY_RING,
+  LOW_ACCURACY_LABEL,
+} from '../utils/liveVehicleStatus';
 
 // Lampang centroid — fallback when no live coordinates yet.
 const LAMPANG_CENTER = [18.2884, 99.4906];
 
-// Status → color (hex). Mirrors the project palette so the marker dot
-// reads consistently with the StatusBadge variants used elsewhere.
-const STATUS_COLOR = {
-  ONLINE:  '#16a34a',  // success
-  STALE:   '#d97706',  // warn
-  OFFLINE: '#6b7280',  // neutral
-  PAUSED:  '#475569',  // slate
-};
-const LOW_ACCURACY_RING = '#0284c7'; // info — overlay ring when low_accuracy
-
-const STATUS_LABEL = {
-  ONLINE:  'ออนไลน์',
-  STALE:   'สัญญาณเก่า',
-  OFFLINE: 'ออฟไลน์',
-  PAUSED:  'หยุดส่ง',
-};
-
 /**
- * Build a small DivIcon dot whose fill color reflects the vehicle's
- * status. A second concentric ring is drawn when low_accuracy is true
- * so it's visible at a glance without claiming a separate status.
+ * Phase 7.8 — DivIcon now varies fill-opacity by status so STALE /
+ * OFFLINE / PAUSED markers fade into the map relative to fully-bright
+ * ONLINE markers. PAUSED keeps a distinct slate hue so a deliberate
+ * driver Stop reads differently from a lost connection on the map.
  */
 function buildVehicleIcon(status, lowAccuracy) {
-  const color = STATUS_COLOR[status] || STATUS_COLOR.OFFLINE;
-  const ring = lowAccuracy
+  const meta = getStatusMeta(status);
+  const fill = meta.color;
+  const opacity = meta.opacity;
+  // PAUSED gets a dashed inner ring to look "intentional" vs OFFLINE solid
+  const innerStroke = status === 'PAUSED' ? 'stroke-dasharray="2 2"' : '';
+  const accRing = lowAccuracy
     ? `<circle cx="14" cy="14" r="12" fill="none" stroke="${LOW_ACCURACY_RING}" stroke-width="2" stroke-dasharray="3 3"/>`
     : '';
   const html = `
     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-      ${ring}
-      <circle cx="14" cy="14" r="8" fill="${color}" stroke="#ffffff" stroke-width="2"/>
+      ${accRing}
+      <circle cx="14" cy="14" r="8" fill="${fill}" fill-opacity="${opacity}"
+              stroke="#ffffff" stroke-width="2" ${innerStroke}/>
     </svg>`;
   return L.divIcon({
     className: 'live-vehicle-marker',
@@ -48,36 +44,16 @@ function buildVehicleIcon(status, lowAccuracy) {
 }
 
 /**
- * Format Thai relative-time given seconds_since_seen (server-computed).
- * null → "ยังไม่มีข้อมูล".
- */
-function formatRelative(secs) {
-  if (secs == null) return 'ยังไม่มีข้อมูล';
-  if (secs < 60)   return `เมื่อ ${secs} วินาทีที่แล้ว`;
-  if (secs < 3600) return `เมื่อ ${Math.floor(secs / 60)} นาทีที่แล้ว`;
-  const hrs = Math.floor(secs / 3600);
-  return `เมื่อ ${hrs} ชั่วโมงที่แล้ว`;
-}
-
-/**
- * Phase 7.4 — Reusable live vehicle map.
+ * Reusable live vehicle map (used by School / Affiliation / Province /
+ * Admin viewer pages).
  *
  * Props:
  *   vehicles  [{ vehicle_id, plate_no, vehicle_type, driver_name,
  *                latitude, longitude, accuracy_meters, recorded_at,
  *                received_at, seconds_since_seen, status, low_accuracy }]
- *   selectedVehicleId  string | null  — when set, fly to this marker
+ *   selectedVehicleId  string | null
  *   onMarkerClick      (vehicle) => void
  *   className          string
- *
- * Behavior:
- *   • only vehicles with finite latitude+longitude are rendered as
- *     markers; rows without coords are caller's responsibility (list)
- *   • auto-fit bounds ONCE on first valid marker load only — markers
- *     moving on subsequent polls do NOT re-pan the map (privacy of
- *     scroll context + UX)
- *   • Popup lists plate / type / driver / status / time + accuracy.
- *     Never PII.
  */
 export default function LiveVehicleMap({
   vehicles = [],
@@ -111,12 +87,15 @@ export default function LiveVehicleMap({
         {validVehicles.map(v => {
           const lat = Number(v.latitude);
           const lng = Number(v.longitude);
+          const meta = getStatusMeta(v.status);
+          const help = getStatusHelpText(v);
           const icon = buildVehicleIcon(v.status, !!v.low_accuracy);
           return (
             <Marker
               key={v.vehicle_id}
               position={[lat, lng]}
               icon={icon}
+              title={`${v.plate_no || v.vehicle_id} · ${meta.label}`}
               eventHandlers={{
                 click: () => onMarkerClick && onMarkerClick(v),
               }}
@@ -132,17 +111,20 @@ export default function LiveVehicleMap({
                   )}
                   <p className="text-xs mb-1">
                     สถานะ:{' '}
-                    <span className="font-medium" style={{ color: STATUS_COLOR[v.status] || STATUS_COLOR.OFFLINE }}>
-                      {STATUS_LABEL[v.status] || v.status || 'ไม่ทราบ'}
+                    <span className="font-medium" style={{ color: meta.color }}>
+                      {meta.label}
                     </span>
                     {v.low_accuracy && (
                       <span className="ml-1 text-xs" style={{ color: LOW_ACCURACY_RING }}>
-                        · ความแม่นยำต่ำ
+                        · {LOW_ACCURACY_LABEL}
                       </span>
                     )}
                   </p>
+                  {help && (
+                    <p className="text-xs text-ink-muted mb-1 italic">{help}</p>
+                  )}
                   <p className="text-xs text-ink-muted">
-                    {formatRelative(v.seconds_since_seen)}
+                    {formatRelativeTime(v.seconds_since_seen)}
                   </p>
                   {v.accuracy_meters != null && (
                     <p className="text-xs text-ink-muted">
@@ -169,13 +151,6 @@ export default function LiveVehicleMap({
   );
 }
 
-/**
- * Fit-to-bounds exactly once: the first time we receive ≥1 valid
- * vehicle. After that, marker movement does not re-pan the map (the
- * spec says explicitly "auto fit bounds on first valid marker load
- * only — do not keep re-centering every 15s because marker movement
- * should not make map jump").
- */
 function FitOnce({ vehicles }) {
   const map = useMap();
   const fittedRef = useRef(false);
@@ -191,11 +166,6 @@ function FitOnce({ vehicles }) {
   return null;
 }
 
-/**
- * Imperative fly-to when a list-row is clicked. Decoupled from
- * FitOnce so the user-driven selection always pans even after the
- * initial fit has completed.
- */
 function FlyToSelected({ vehicles, selectedVehicleId }) {
   const map = useMap();
   useEffect(() => {

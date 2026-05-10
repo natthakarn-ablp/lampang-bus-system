@@ -4,9 +4,9 @@ import api from '../api/axios';
 import { AppCard, AlertBanner, StatusBadge } from './ui';
 
 /**
- * Phase 7.3 — Driver location sender.
+ * Phase 7.3 + 7.8 — Driver location sender.
  *
- * Hard guarantees:
+ * Hard guarantees (preserved from 7.3):
  *   • starts OFF on every page load (no localStorage / sessionStorage)
  *   • does NOT call navigator.geolocation before the user taps Start
  *   • single watchPosition; cleared on Stop / unmount / beforeunload
@@ -14,6 +14,14 @@ import { AppCard, AlertBanner, StatusBadge } from './ui';
  *   • POST throttle: send when ≥15s have passed OR distance moved >30m
  *   • never includes vehicle_id in the body — backend resolves from JWT
  *   • never logs full lat/lng (privacy)
+ *
+ * 7.8 polish:
+ *   • new browser_offline state + window online/offline listeners
+ *   • Permissions API probe on mount surfaces a pre-denied permission
+ *     so the driver gets explicit copy without having to tap Start first
+ *   • clearer Thai copy per error code (incl. settings hint when denied)
+ *   • DELETE-failure message reframed: "หยุดในเครื่องแล้ว แต่แจ้ง
+ *     เซิร์ฟเวอร์ไม่สำเร็จ — ข้อมูลจะกลายเป็นออฟไลน์เมื่อเกินเวลา"
  */
 
 const SEND_MIN_INTERVAL_MS = 15_000;
@@ -23,10 +31,11 @@ const STATUS = {
   idle:                  { variant: 'neutral', label: 'ยังไม่ได้ส่งตำแหน่ง' },
   requesting_permission: { variant: 'info',    label: 'กำลังขออนุญาตตำแหน่ง' },
   sending:               { variant: 'success', label: 'กำลังส่งตำแหน่ง' },
-  permission_denied:     { variant: 'danger',  label: 'ไม่ได้รับอนุญาตให้เข้าถึงตำแหน่ง' },
+  permission_denied:     { variant: 'danger',  label: 'ไม่ได้รับอนุญาตตำแหน่ง' },
   position_unavailable:  { variant: 'warn',    label: 'ไม่พบสัญญาณตำแหน่ง' },
-  timeout:               { variant: 'warn',    label: 'ใช้เวลาค้นหาตำแหน่งนานเกินไป' },
+  timeout:               { variant: 'warn',    label: 'ค้นหาตำแหน่งนานเกินไป' },
   network_error:         { variant: 'warn',    label: 'ส่งตำแหน่งไม่สำเร็จ' },
+  browser_offline:       { variant: 'warn',    label: 'อุปกรณ์ออฟไลน์' },
   stopped:               { variant: 'neutral', label: 'หยุดส่งตำแหน่งแล้ว' },
 };
 
@@ -43,23 +52,40 @@ function getDistanceMeters(lat1, lng1, lat2, lng2) {
 
 export default function LiveLocationToggle() {
   const [status, setStatus]         = useState('idle');
-  const [lastSentAt, setLastSentAt] = useState(null);   // Date | null (UI display only)
-  const [accuracy, setAccuracy]     = useState(null);   // meters
-  const [errorMsg, setErrorMsg]     = useState(null);   // detail string for danger banner
+  const [lastSentAt, setLastSentAt] = useState(null);
+  const [accuracy, setAccuracy]     = useState(null);
+  const [errorMsg, setErrorMsg]     = useState(null);
+  // Whether the OS-level permission was probed and is currently 'denied'.
+  // Drives a pre-flight banner so the driver isn't surprised by a wasted
+  // Start tap on a device that previously refused permission.
+  const [permPreDenied, setPermPreDenied] = useState(false);
+  // Soft hint shown briefly after the browser regains online connectivity
+  // — purely informational, not a status-state.
+  const [showRecoveryHint, setShowRecoveryHint] = useState(false);
 
-  // Refs avoid stale-closure issues inside watchPosition callbacks
   const watchIdRef       = useRef(null);
   const lastSentRef      = useRef({ ts: 0, lat: null, lng: null });
-  const isSendingRef     = useRef(false);              // tracks whether toggle is ON
+  const isSendingRef     = useRef(false);
   const beforeUnloadRef  = useRef(null);
+  const onlineHandlerRef = useRef(null);
+  const offlineHandlerRef = useRef(null);
 
   const isOn = status === 'sending' || status === 'requesting_permission'
             || status === 'position_unavailable' || status === 'timeout'
-            || status === 'network_error';
+            || status === 'network_error' || status === 'browser_offline';
 
   /* ── send helpers ───────────────────────────────────────────────────────── */
 
   const postPosition = async (coords, recordedAt) => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      // Skip the network call when we know we're offline; the next
+      // position callback will retry once we're back online.
+      if (isSendingRef.current) {
+        setStatus('browser_offline');
+        setErrorMsg('ไม่มีสัญญาณอินเทอร์เน็ตในขณะนี้ ระบบจะลองส่งใหม่เมื่อกลับมาออนไลน์');
+      }
+      return;
+    }
     try {
       await api.post('/driver/vehicle-location', {
         latitude:        coords.latitude,
@@ -72,20 +98,19 @@ export default function LiveLocationToggle() {
       lastSentRef.current = { ts: Date.now(), lat: coords.latitude, lng: coords.longitude };
       setLastSentAt(new Date());
       setAccuracy(coords.accuracy != null ? Math.round(coords.accuracy) : null);
-      // Recover from a previous transient error
       if (isSendingRef.current) setStatus('sending');
       setErrorMsg(null);
     } catch (err) {
-      // Network/server failure — keep watching but flag a retry-on-next-tick state
       if (isSendingRef.current) {
         setStatus('network_error');
-        setErrorMsg(err?.response?.data?.message || 'ส่งตำแหน่งไม่สำเร็จ จะลองใหม่ในรอบถัดไป');
+        setErrorMsg(err?.response?.data?.message
+          || 'อินเทอร์เน็ตอาจไม่เสถียร ระบบยังคงรอสัญญาณ GPS และจะลองส่งใหม่เมื่อเชื่อมต่อได้');
       }
     }
   };
 
   const onPosition = (pos) => {
-    if (!isSendingRef.current) return;       // race: user may have stopped
+    if (!isSendingRef.current) return;
     const c = pos.coords;
     const now = Date.now();
     const last = lastSentRef.current;
@@ -94,7 +119,6 @@ export default function LiveLocationToggle() {
       : getDistanceMeters(last.lat, last.lng, c.latitude, c.longitude);
     const aged = now - last.ts;
     if (last.ts !== 0 && aged < SEND_MIN_INTERVAL_MS && moved < SEND_MIN_DISTANCE_M) {
-      // Still within throttle window AND hasn't moved enough — skip POST
       return;
     }
     const recordedAt = new Date(pos.timestamp || now).toISOString();
@@ -104,20 +128,20 @@ export default function LiveLocationToggle() {
   const onPositionError = (err) => {
     if (!isSendingRef.current) return;
     if (err.code === err.PERMISSION_DENIED) {
-      // Hard stop — clear watch immediately and require re-tap to retry
       stopInternal();
       setStatus('permission_denied');
-      setErrorMsg('กรุณาอนุญาตการเข้าถึงตำแหน่งในเบราว์เซอร์ เพื่อส่งตำแหน่งรถขณะปฏิบัติงาน');
+      setPermPreDenied(true);
+      setErrorMsg('กรุณาอนุญาตการเข้าถึงตำแหน่งในเบราว์เซอร์ แล้วกดเริ่มส่งตำแหน่งอีกครั้ง');
       return;
     }
     if (err.code === err.POSITION_UNAVAILABLE) {
       setStatus('position_unavailable');
-      setErrorMsg('ไม่พบสัญญาณตำแหน่ง — ระบบจะลองใหม่อัตโนมัติ');
+      setErrorMsg('กรุณาอยู่ในพื้นที่เปิดโล่ง หรือเปิด GPS/Location Services ของอุปกรณ์ ระบบจะลองใหม่โดยอัตโนมัติ');
       return;
     }
     if (err.code === err.TIMEOUT) {
       setStatus('timeout');
-      setErrorMsg('ใช้เวลาค้นหาตำแหน่งนานเกินไป — ระบบจะลองใหม่อัตโนมัติ');
+      setErrorMsg('สัญญาณอาจอ่อนหรืออุปกรณ์ประหยัดพลังงานเกินไป ระบบจะลองใหม่ในรอบถัดไป');
       return;
     }
   };
@@ -132,8 +156,11 @@ export default function LiveLocationToggle() {
       return;
     }
     isSendingRef.current = true;
-    setStatus('requesting_permission');
-    setErrorMsg(null);
+    setStatus(navigator.onLine === false ? 'browser_offline' : 'requesting_permission');
+    setErrorMsg(navigator.onLine === false
+      ? 'ไม่มีสัญญาณอินเทอร์เน็ตในขณะนี้ ระบบจะลองส่งใหม่เมื่อกลับมาออนไลน์'
+      : null);
+    setShowRecoveryHint(false);
     lastSentRef.current = { ts: 0, lat: null, lng: null };
 
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -142,16 +169,35 @@ export default function LiveLocationToggle() {
       { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 },
     );
 
-    // Cleanup hook for tab close — clears watch synchronously (privacy first)
+    // beforeunload — privacy-first cleanup
     beforeUnloadRef.current = () => {
       if (watchIdRef.current != null) {
         try { navigator.geolocation.clearWatch(watchIdRef.current); } catch { /* noop */ }
         watchIdRef.current = null;
       }
-      // Best-effort: ask backend to mark PAUSED; no sendBeacon, no retries.
       try { api.delete('/driver/vehicle-location'); } catch { /* noop */ }
     };
     window.addEventListener('beforeunload', beforeUnloadRef.current);
+
+    // Online/offline listeners — only attached while toggle is ON
+    offlineHandlerRef.current = () => {
+      if (!isSendingRef.current) return;
+      setStatus('browser_offline');
+      setErrorMsg('ไม่มีสัญญาณอินเทอร์เน็ตในขณะนี้ ระบบจะลองส่งใหม่เมื่อกลับมาออนไลน์');
+      setShowRecoveryHint(false);
+    };
+    onlineHandlerRef.current = () => {
+      if (!isSendingRef.current) return;
+      setShowRecoveryHint(true);
+      // Don't force-set 'sending' — the next watchPosition tick will move
+      // us forward naturally. But clear the offline error so the UI
+      // doesn't keep claiming we're offline.
+      setStatus('sending');
+      setErrorMsg(null);
+      setTimeout(() => setShowRecoveryHint(false), 4_000);
+    };
+    window.addEventListener('offline', offlineHandlerRef.current);
+    window.addEventListener('online',  onlineHandlerRef.current);
   };
 
   const stopInternal = () => {
@@ -164,26 +210,54 @@ export default function LiveLocationToggle() {
       window.removeEventListener('beforeunload', beforeUnloadRef.current);
       beforeUnloadRef.current = null;
     }
+    if (onlineHandlerRef.current) {
+      window.removeEventListener('online', onlineHandlerRef.current);
+      onlineHandlerRef.current = null;
+    }
+    if (offlineHandlerRef.current) {
+      window.removeEventListener('offline', offlineHandlerRef.current);
+      offlineHandlerRef.current = null;
+    }
   };
 
   const stop = async () => {
     stopInternal();
     setStatus('stopped');
+    setShowRecoveryHint(false);
     try {
       await api.delete('/driver/vehicle-location');
       setErrorMsg(null);
     } catch (err) {
-      // Even if the DELETE fails, local watch is already cleared (privacy).
+      // Local watch is already cleared above (privacy first).
       setErrorMsg(err?.response?.data?.message
-        || 'หยุดติดตามในเครื่องเรียบร้อย แต่แจ้งเซิร์ฟเวอร์ไม่สำเร็จ');
+        || 'หยุดการส่งจากอุปกรณ์แล้ว แต่แจ้งเซิร์ฟเวอร์ไม่สำเร็จ ข้อมูลจะเปลี่ยนเป็นออฟไลน์เมื่อเกินเวลาที่กำหนด');
     }
   };
+
+  /* ── mount: probe browser permission state (read-only — does NOT prompt) ─── */
+  useEffect(() => {
+    let cancelled = false;
+    if (typeof navigator !== 'undefined' && navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'geolocation' })
+        .then(result => {
+          if (cancelled) return;
+          if (result.state === 'denied') setPermPreDenied(true);
+          // Listen for runtime changes (driver toggles permission in
+          // browser settings while the page is open).
+          result.onchange = () => {
+            if (cancelled) return;
+            setPermPreDenied(result.state === 'denied');
+          };
+        })
+        .catch(() => { /* feature not supported — ignore */ });
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   /* ── unmount: hard cleanup ──────────────────────────────────────────────── */
   useEffect(() => {
     return () => {
       stopInternal();
-      // Best-effort backend pause — fire and forget; no await on unmount.
       try { api.delete('/driver/vehicle-location'); } catch { /* noop */ }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,7 +266,11 @@ export default function LiveLocationToggle() {
   /* ── render ─────────────────────────────────────────────────────────────── */
 
   const meta = STATUS[status] || STATUS.idle;
-  const showRetryHint = status === 'position_unavailable' || status === 'timeout' || status === 'network_error';
+  const showRetryHint =
+       status === 'position_unavailable'
+    || status === 'timeout'
+    || status === 'network_error'
+    || status === 'browser_offline';
 
   return (
     <AppCard padding="md" className="mb-4">
@@ -206,8 +284,6 @@ export default function LiveLocationToggle() {
         </StatusBadge>
       </div>
 
-      {/* Last-update + accuracy strip — visible whenever we have a value
-          (kept after Stop so the driver can see what was last sent) */}
       {(lastSentAt || accuracy != null) && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted mb-3 tabular-nums">
           {lastSentAt && (
@@ -218,24 +294,53 @@ export default function LiveLocationToggle() {
             </span>
           )}
           {accuracy != null && (
-            <span>ความแม่นยำ ±{accuracy} เมตร</span>
+            <span>
+              ความแม่นยำ ±{accuracy} เมตร
+              {accuracy > 200 && (
+                <span className="ml-1 text-warn font-medium">· ความแม่นยำต่ำ</span>
+              )}
+            </span>
           )}
         </div>
       )}
 
-      {/* Error / hint banners */}
-      {status === 'permission_denied' && (
+      {/* Pre-flight banner: permission was previously denied at the OS / browser level */}
+      {!isOn && permPreDenied && status !== 'permission_denied' && (
         <AlertBanner variant="danger" title="ไม่ได้รับอนุญาตตำแหน่ง" className="mb-3">
-          {errorMsg}
+          <p>กรุณาอนุญาตการเข้าถึงตำแหน่งในเบราว์เซอร์ แล้วกดเริ่มส่งตำแหน่งอีกครั้ง</p>
+          <p className="mt-1 text-xs text-ink-muted">
+            หากปิดสิทธิ์ถาวร ให้กดไอคอนกุญแจ/ตั้งค่าเว็บไซต์บนแถบที่อยู่ แล้วอนุญาตตำแหน่ง
+          </p>
         </AlertBanner>
       )}
+
+      {status === 'permission_denied' && (
+        <AlertBanner variant="danger" title="ไม่ได้รับอนุญาตตำแหน่ง" className="mb-3">
+          <p>{errorMsg}</p>
+          <p className="mt-1 text-xs text-ink-muted">
+            หากปิดสิทธิ์ถาวร ให้กดไอคอนกุญแจ/ตั้งค่าเว็บไซต์บนแถบที่อยู่ แล้วอนุญาตตำแหน่ง
+          </p>
+        </AlertBanner>
+      )}
+
       {showRetryHint && errorMsg && (
         <AlertBanner variant="warn" title={meta.label} className="mb-3">
           {errorMsg}
         </AlertBanner>
       )}
 
-      {/* Big mobile-friendly button */}
+      {showRecoveryHint && (
+        <AlertBanner variant="info" title="กลับมาออนไลน์แล้ว" className="mb-3">
+          ระบบจะลองส่งตำแหน่งในรอบถัดไป
+        </AlertBanner>
+      )}
+
+      {status === 'stopped' && errorMsg && (
+        <AlertBanner variant="warn" title="แจ้งเซิร์ฟเวอร์ไม่สำเร็จ" className="mb-3">
+          {errorMsg}
+        </AlertBanner>
+      )}
+
       {!isOn ? (
         <button
           type="button"

@@ -1,36 +1,34 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, Bus, Activity, Pause, WifiOff, AlertTriangle } from 'lucide-react';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
+import {
+  getStatusMeta,
+  getStatusHelpText,
+  formatRelativeTime,
+  formatThaiTime,
+  hasVehicleCoords,
+  isViewerDataStale,
+} from '../../utils/liveVehicleStatus';
 
 const POLL_INTERVAL_MS = 15_000;
-
-const STATUS_META = {
-  ONLINE:  { label: 'ออนไลน์',     variant: 'success' },
-  STALE:   { label: 'สัญญาณเก่า',  variant: 'warn'    },
-  OFFLINE: { label: 'ออฟไลน์',     variant: 'neutral' },
-  PAUSED:  { label: 'หยุดส่ง',     variant: 'neutral' },
-};
-
-function formatRelative(secs) {
-  if (secs == null) return 'ยังไม่มีข้อมูล';
-  if (secs < 60)   return `เมื่อ ${secs} วินาทีที่แล้ว`;
-  if (secs < 3600) return `เมื่อ ${Math.floor(secs / 60)} นาทีที่แล้ว`;
-  const hrs = Math.floor(secs / 3600);
-  return `เมื่อ ${hrs} ชั่วโมงที่แล้ว`;
-}
-
-function hasCoords(v) {
-  return Number.isFinite(Number(v.latitude)) && Number.isFinite(Number(v.longitude));
-}
+const STALE_THRESHOLD_MS = 45_000;
 
 export default function SchoolLiveVehicles() {
   const [vehicles, setVehicles]       = useState([]);
   const [generatedAt, setGeneratedAt] = useState(null);
   const [loading, setLoading]         = useState(true);     // first-load only
-  const [error, setError]             = useState(null);
+  const [firstLoadError, setFirstLoadError] = useState(null);
+  const [pollWarn, setPollWarn]       = useState(null);
+  const [browserOnline, setBrowserOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine !== false : true
+  );
   const [selectedId, setSelectedId]   = useState(null);
+  // Used to drive the stale-data ribbon when the last successful poll
+  // is older than STALE_THRESHOLD_MS (browser tab backgrounded etc).
+  const [lastFetchAt, setLastFetchAt] = useState(null);
+  const hasDataRef = useRef(false);
 
   const fetchOnce = useCallback(async () => {
     try {
@@ -38,13 +36,21 @@ export default function SchoolLiveVehicles() {
       const list = res.data?.data?.vehicles;
       setVehicles(Array.isArray(list) ? list : []);
       setGeneratedAt(res.data?.data?.generated_at || null);
-      setError(null);
+      setLastFetchAt(Date.now());
+      hasDataRef.current = true;
+      setPollWarn(null);
+      setFirstLoadError(null);
     } catch (err) {
-      setError(err?.response?.data?.message || 'โหลดข้อมูลตำแหน่งรถไม่สำเร็จ');
+      const msg = err?.response?.data?.message || 'โหลดข้อมูลตำแหน่งรถไม่สำเร็จ';
+      if (hasDataRef.current) {
+        // Subsequent poll failed — keep prior data, surface non-blocking warning.
+        setPollWarn('โหลดข้อมูลรอบล่าสุดไม่สำเร็จ กำลังใช้ข้อมูลครั้งล่าสุดที่โหลดได้');
+      } else {
+        setFirstLoadError(msg);
+      }
     }
   }, []);
 
-  // First load + 15s polling, with cancellation flag (mirrors DriverDashboard).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -54,9 +60,22 @@ export default function SchoolLiveVehicles() {
       if (!cancelled) fetchOnce();
     }, POLL_INTERVAL_MS);
 
+    const onOnline  = () => setBrowserOnline(true);
+    const onOffline = () => setBrowserOnline(false);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+
+    // Tick to refresh the "stale" ribbon visibility — the ribbon
+    // condition depends on Date.now(), so we need a periodic re-render
+    // even when no fetch happens.
+    const tick = setInterval(() => setLastFetchAt(prev => prev), 5_000);
+
     return () => {
       cancelled = true;
       clearInterval(id);
+      clearInterval(tick);
+      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('offline', onOffline);
     };
   }, [fetchOnce]);
 
@@ -74,7 +93,8 @@ export default function SchoolLiveVehicles() {
     return { online, stale, paused, offline };
   }, [vehicles]);
 
-  const hasAnyCoords = useMemo(() => vehicles.some(hasCoords), [vehicles]);
+  const hasAnyCoords = useMemo(() => vehicles.some(hasVehicleCoords), [vehicles]);
+  const dataStale = isViewerDataStale(lastFetchAt, STALE_THRESHOLD_MS);
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
@@ -87,15 +107,12 @@ export default function SchoolLiveVehicles() {
           แสดงตำแหน่งล่าสุดของรถที่ให้บริการโรงเรียนของคุณ · อัปเดตทุก 15 วินาที
           {generatedAt && (
             <span className="ml-1 text-ink-muted">
-              · ข้อมูล {new Date(generatedAt).toLocaleTimeString('th-TH', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Bangkok',
-              })} น.
+              · ข้อมูล {formatThaiTime(generatedAt)} น.
             </span>
           )}
         </p>
       </header>
 
-      {/* KPI strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KpiCard icon={Activity}        label="ออนไลน์"        value={counts.online}  variant="success" />
         <KpiCard icon={AlertTriangle}   label="สัญญาณเก่า"     value={counts.stale}   variant="warn"    />
@@ -103,13 +120,35 @@ export default function SchoolLiveVehicles() {
         <KpiCard icon={WifiOff}         label="ออฟไลน์ / ยังไม่มีข้อมูล" value={counts.offline} variant="neutral" />
       </div>
 
-      {error && (
-        <AlertBanner variant="danger" title="โหลดข้อมูลตำแหน่งรถไม่สำเร็จ">
-          {error}
+      {/* Browser offline — non-blocking */}
+      {!browserOnline && (
+        <AlertBanner variant="warn" title="อุปกรณ์ออฟไลน์">
+          ไม่สามารถอัปเดตตำแหน่งรถได้จนกว่าจะกลับมาออนไลน์
         </AlertBanner>
       )}
 
-      {loading ? (
+      {/* Stale-data ribbon — fires when client missed >2 polls */}
+      {browserOnline && dataStale && hasDataRef.current && (
+        <AlertBanner variant="warn" title="ข้อมูลอาจไม่เป็นปัจจุบัน">
+          ไม่ได้รับข้อมูลใหม่เกิน 45 วินาที อาจเกิดจากอินเทอร์เน็ตไม่เสถียรหรือแท็บเบราว์เซอร์พักการทำงาน
+        </AlertBanner>
+      )}
+
+      {/* Poll-failure (non-blocking; prior data retained) */}
+      {pollWarn && hasDataRef.current && (
+        <AlertBanner variant="warn" title="โหลดรอบล่าสุดไม่สำเร็จ">
+          {pollWarn}
+        </AlertBanner>
+      )}
+
+      {/* First-load error — only shown when we have no data at all */}
+      {firstLoadError && !hasDataRef.current && (
+        <AlertBanner variant="danger" title="โหลดข้อมูลตำแหน่งรถไม่สำเร็จ">
+          {firstLoadError}
+        </AlertBanner>
+      )}
+
+      {loading && !hasDataRef.current ? (
         <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
       ) : vehicles.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีรถรับส่งที่ผูกกับโรงเรียนนี้">
@@ -117,7 +156,6 @@ export default function SchoolLiveVehicles() {
         </AlertBanner>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
-          {/* Left: vehicle list */}
           <DashboardSection title="รายการรถ" description={`${vehicles.length} คัน`}>
             <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
               {vehicles.map(v => (
@@ -131,7 +169,6 @@ export default function SchoolLiveVehicles() {
             </div>
           </DashboardSection>
 
-          {/* Right: map */}
           <DashboardSection title="แผนที่">
             {!hasAnyCoords ? (
               <AlertBanner variant="info" title="ยังไม่มีรถที่กำลังส่งตำแหน่ง">
@@ -175,7 +212,8 @@ function KpiCard({ icon: Icon, label, value, variant }) {
 }
 
 function VehicleRow({ vehicle, selected, onClick }) {
-  const meta = STATUS_META[vehicle.status] || STATUS_META.OFFLINE;
+  const meta = getStatusMeta(vehicle.status);
+  const help = getStatusHelpText(vehicle);
   const handleKey = (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
   };
@@ -211,15 +249,13 @@ function VehicleRow({ vehicle, selected, onClick }) {
           )}
         </div>
         <div className="flex items-center gap-3 text-xs text-ink-muted tabular-nums">
-          <span>{formatRelative(vehicle.seconds_since_seen)}</span>
+          <span>{formatRelativeTime(vehicle.seconds_since_seen)}</span>
           {vehicle.accuracy_meters != null && (
             <span>±{vehicle.accuracy_meters} ม.</span>
           )}
         </div>
-        {!hasCoords(vehicle) && (
-          <p className="text-xs text-ink-muted mt-1 italic">
-            ยังไม่เคยส่งตำแหน่ง
-          </p>
+        {help && (
+          <p className="text-xs text-ink-muted mt-1 italic">{help}</p>
         )}
       </AppCard>
     </div>

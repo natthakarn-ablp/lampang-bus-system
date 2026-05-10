@@ -1,23 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Map as MapIcon, Bus, Activity, Pause, WifiOff, AlertTriangle,
+  Bus, Activity, Pause, WifiOff, AlertTriangle,
   Users, MapPin, Search, ShieldAlert,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
+import {
+  getStatusMeta,
+  getStatusHelpText,
+  formatRelativeTime,
+  formatAbsoluteThaiDateTime,
+  formatThaiTime,
+  hasVehicleCoords,
+  isViewerDataStale,
+} from '../../utils/liveVehicleStatus';
 
 const POLL_INTERVAL_MS = 15_000;
+const STALE_THRESHOLD_MS = 45_000;
 
-const STATUS_META = {
-  ONLINE:  { label: 'ออนไลน์',     variant: 'success' },
-  STALE:   { label: 'สัญญาณเก่า',  variant: 'warn'    },
-  OFFLINE: { label: 'ออฟไลน์',     variant: 'neutral' },
-  PAUSED:  { label: 'หยุดส่ง',     variant: 'neutral' },
-};
-
-// Sort priority: surface problematic vehicles first so support sees
-// trouble at the top of the list without needing to filter.
+// Sort priority: surface problematic vehicles first.
 const SORT_PRIORITY = {
   OFFLINE: 0,
   PAUSED:  1,
@@ -35,35 +37,20 @@ const FILTERS = [
   { key: 'never_sent',    label: 'ยังไม่เคยส่งตำแหน่ง' },
 ];
 
-function formatRelative(secs) {
-  if (secs == null) return 'ยังไม่มีข้อมูล';
-  if (secs < 60)   return `เมื่อ ${secs} วินาทีที่แล้ว`;
-  if (secs < 3600) return `เมื่อ ${Math.floor(secs / 60)} นาทีที่แล้ว`;
-  const hrs = Math.floor(secs / 3600);
-  return `เมื่อ ${hrs} ชั่วโมงที่แล้ว`;
-}
-
-function formatAbsolute(ts) {
-  if (!ts) return '—';
-  return new Date(ts).toLocaleString('th-TH', {
-    timeZone: 'Asia/Bangkok',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  });
-}
-
-function hasCoords(v) {
-  return Number.isFinite(Number(v.latitude)) && Number.isFinite(Number(v.longitude));
-}
-
 export default function AdminLiveVehicles() {
   const [vehicles, setVehicles]       = useState([]);
   const [generatedAt, setGeneratedAt] = useState(null);
   const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState(null);
+  const [firstLoadError, setFirstLoadError] = useState(null);
+  const [pollWarn, setPollWarn]       = useState(null);
+  const [browserOnline, setBrowserOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine !== false : true
+  );
   const [selectedId, setSelectedId]   = useState(null);
   const [search, setSearch]           = useState('');
   const [filter, setFilter]           = useState('all');
+  const [lastFetchAt, setLastFetchAt] = useState(null);
+  const hasDataRef = useRef(false);
 
   const fetchOnce = useCallback(async () => {
     try {
@@ -71,10 +58,18 @@ export default function AdminLiveVehicles() {
       const list = res.data?.data?.vehicles;
       setVehicles(Array.isArray(list) ? list : []);
       setGeneratedAt(res.data?.data?.generated_at || null);
-      setError(null);
+      setLastFetchAt(Date.now());
+      hasDataRef.current = true;
+      setPollWarn(null);
+      setFirstLoadError(null);
     } catch (err) {
-      setError(err?.response?.data?.message
-        || 'โหลดข้อมูลตำแหน่งรถสำหรับผู้ดูแลระบบไม่สำเร็จ');
+      const msg = err?.response?.data?.message
+        || 'โหลดข้อมูลตำแหน่งรถสำหรับผู้ดูแลระบบไม่สำเร็จ';
+      if (hasDataRef.current) {
+        setPollWarn('โหลดข้อมูลรอบล่าสุดไม่สำเร็จ กำลังใช้ข้อมูลครั้งล่าสุดที่โหลดได้');
+      } else {
+        setFirstLoadError(msg);
+      }
     }
   }, []);
 
@@ -87,9 +82,19 @@ export default function AdminLiveVehicles() {
       if (!cancelled) fetchOnce();
     }, POLL_INTERVAL_MS);
 
+    const onOnline  = () => setBrowserOnline(true);
+    const onOffline = () => setBrowserOnline(false);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+
+    const tick = setInterval(() => setLastFetchAt(prev => prev), 5_000);
+
     return () => {
       cancelled = true;
       clearInterval(id);
+      clearInterval(tick);
+      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('offline', onOffline);
     };
   }, [fetchOnce]);
 
@@ -107,10 +112,9 @@ export default function AdminLiveVehicles() {
         default:        offline++; break;
       }
       students += Number(v.student_count_in_scope || 0);
-      if (hasCoords(v))         withCoords++;
+      if (hasVehicleCoords(v))  withCoords++;
       if (!v.received_at)       neverSent++;
       if (v.low_accuracy)       lowAcc++;
-      // "ไม่อัปเดตเกิน 5 นาที" = age > 5min, regardless of PAUSED/ACTIVE
       if (v.seconds_since_seen != null && v.seconds_since_seen > 300) staleOver5++;
     }
     return { online, stale, paused, offline, students, withCoords, neverSent, lowAcc, staleOver5 };
@@ -139,7 +143,6 @@ export default function AdminLiveVehicles() {
       const pa = SORT_PRIORITY[a.status] ?? 99;
       const pb = SORT_PRIORITY[b.status] ?? 99;
       if (pa !== pb) return pa - pb;
-      // tiebreaker: never-sent above sent; otherwise older-last-seen first
       const ar = a.received_at ? 1 : 0;
       const br = b.received_at ? 1 : 0;
       if (ar !== br) return ar - br;
@@ -150,7 +153,8 @@ export default function AdminLiveVehicles() {
     return out;
   }, [vehicles, search, filter]);
 
-  const hasAnyCoords = useMemo(() => visible.some(hasCoords), [visible]);
+  const hasAnyCoords = useMemo(() => visible.some(hasVehicleCoords), [visible]);
+  const dataStale = isViewerDataStale(lastFetchAt, STALE_THRESHOLD_MS);
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
@@ -163,9 +167,7 @@ export default function AdminLiveVehicles() {
           หน้าสำหรับผู้ดูแลระบบใช้ตรวจสอบสถานะการส่งตำแหน่งของรถรับส่งทั้งหมด · อัปเดตทุก 15 วินาที
           {generatedAt && (
             <span className="ml-1 text-ink-muted">
-              · ข้อมูล {new Date(generatedAt).toLocaleTimeString('th-TH', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Bangkok',
-              })} น.
+              · ข้อมูล {formatThaiTime(generatedAt)} น.
             </span>
           )}
         </p>
@@ -176,7 +178,6 @@ export default function AdminLiveVehicles() {
         และทุกการเปิดดูจะถูกบันทึกใน audit log อัตโนมัติ
       </AlertBanner>
 
-      {/* Primary KPI strip — system-wide health */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard icon={Bus}            label="รถทั้งหมด"               value={vehicles.length} variant="neutral" />
         <KpiCard icon={Users}          label="นักเรียนที่เกี่ยวข้อง"     value={counts.students} variant="brand"   />
@@ -186,7 +187,6 @@ export default function AdminLiveVehicles() {
         <KpiCard icon={WifiOff}        label="ออฟไลน์ / ยังไม่มีข้อมูล"   value={counts.offline}  variant="neutral" />
       </div>
 
-      {/* Admin-specific support diagnostics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <KpiCard icon={MapPin}        label="กำลังมีพิกัดจริง"        value={counts.withCoords}  variant="success" />
         <KpiCard icon={WifiOff}       label="ยังไม่เคยส่งตำแหน่ง"     value={counts.neverSent}   variant="neutral" />
@@ -194,13 +194,26 @@ export default function AdminLiveVehicles() {
         <KpiCard icon={Pause}         label="ไม่อัปเดตเกิน 5 นาที"     value={counts.staleOver5}  variant="warn"    />
       </div>
 
-      {error && (
+      {!browserOnline && (
+        <AlertBanner variant="warn" title="อุปกรณ์ออฟไลน์">
+          ไม่สามารถอัปเดตตำแหน่งรถได้จนกว่าจะกลับมาออนไลน์
+        </AlertBanner>
+      )}
+      {browserOnline && dataStale && hasDataRef.current && (
+        <AlertBanner variant="warn" title="ข้อมูลอาจไม่เป็นปัจจุบัน">
+          ไม่ได้รับข้อมูลใหม่เกิน 45 วินาที อาจเกิดจากอินเทอร์เน็ตไม่เสถียรหรือแท็บเบราว์เซอร์พักการทำงาน
+        </AlertBanner>
+      )}
+      {pollWarn && hasDataRef.current && (
+        <AlertBanner variant="warn" title="โหลดรอบล่าสุดไม่สำเร็จ">{pollWarn}</AlertBanner>
+      )}
+      {firstLoadError && !hasDataRef.current && (
         <AlertBanner variant="danger" title="โหลดข้อมูลตำแหน่งรถสำหรับผู้ดูแลระบบไม่สำเร็จ">
-          {error}
+          {firstLoadError}
         </AlertBanner>
       )}
 
-      {loading ? (
+      {loading && !hasDataRef.current ? (
         <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
       ) : vehicles.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีรถรับส่งในระบบ">
@@ -208,7 +221,6 @@ export default function AdminLiveVehicles() {
         </AlertBanner>
       ) : (
         <>
-          {/* Support toolbar: search + status filter pills */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" strokeWidth={2} />
@@ -247,7 +259,6 @@ export default function AdminLiveVehicles() {
             </AlertBanner>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
-              {/* Left: vehicle list (sort: problematic first) */}
               <DashboardSection
                 title="รายการรถ"
                 description={`${visible.length} / ${vehicles.length} คัน`}
@@ -264,7 +275,6 @@ export default function AdminLiveVehicles() {
                 </div>
               </DashboardSection>
 
-              {/* Right: map */}
               <DashboardSection title="แผนที่">
                 {!hasAnyCoords ? (
                   <AlertBanner variant="info" title="ยังไม่มีรถที่กำลังส่งตำแหน่ง">
@@ -311,7 +321,8 @@ function KpiCard({ icon: Icon, label, value, variant }) {
 }
 
 function VehicleRow({ vehicle, selected, onClick }) {
-  const meta = STATUS_META[vehicle.status] || STATUS_META.OFFLINE;
+  const meta = getStatusMeta(vehicle.status);
+  const help = getStatusHelpText(vehicle);
   const handleKey = (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
   };
@@ -360,9 +371,9 @@ function VehicleRow({ vehicle, selected, onClick }) {
 
         {/* Last-seen — admin gets BOTH absolute (for support) + relative */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted tabular-nums">
-          <span>{formatRelative(vehicle.seconds_since_seen)}</span>
+          <span>{formatRelativeTime(vehicle.seconds_since_seen)}</span>
           <span className="text-ink-muted/70">·</span>
-          <span className="font-mono">{formatAbsolute(vehicle.received_at)}</span>
+          <span className="font-mono">{formatAbsoluteThaiDateTime(vehicle.received_at)}</span>
           {vehicle.accuracy_meters != null && (
             <>
               <span className="text-ink-muted/70">·</span>
@@ -371,10 +382,8 @@ function VehicleRow({ vehicle, selected, onClick }) {
           )}
         </div>
 
-        {!hasCoords(vehicle) && (
-          <p className="text-xs text-ink-muted mt-1 italic">
-            ยังไม่เคยส่งตำแหน่ง
-          </p>
+        {help && (
+          <p className="text-xs text-ink-muted mt-1 italic">{help}</p>
         )}
       </AppCard>
     </div>

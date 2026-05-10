@@ -16,19 +16,24 @@ import {
 
 export default function ProvinceDashboard() {
   const [data, setData] = useState(null);
+  const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
 
-  const fetchDashboard = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setRefreshing(true);
     try {
-      const r = await api.get('/province/dashboard');
-      setData(r.data.data);
+      const [dashRes, incRes] = await Promise.all([
+        api.get('/province/dashboard').catch(() => null),
+        api.get('/province/emergencies?per_page=5&page=1').catch(() => null),
+      ]);
+      if (dashRes) setData(dashRes.data.data);
+      const incList = incRes?.data?.data;
+      setIncidents(Array.isArray(incList) ? incList : []);
       setLastSyncedAt(Date.now());
-    } catch { /* silent — keep last known data, freshness dot will go stale */ }
-    finally {
+    } finally {
       setRefreshing(false);
       setLoading(false);
     }
@@ -36,10 +41,10 @@ export default function ProvinceDashboard() {
 
   // Background data refresh — silent, doesn't blank the page
   useEffect(() => {
-    fetchDashboard();
-    const t = setInterval(fetchDashboard, POLL_INTERVAL);
+    fetchAll();
+    const t = setInterval(fetchAll, POLL_INTERVAL);
     return () => clearInterval(t);
-  }, [fetchDashboard]);
+  }, [fetchAll]);
 
   // 1-second ticker for the freshness "X seconds ago" indicator
   useEffect(() => {
@@ -86,7 +91,7 @@ export default function ProvinceDashboard() {
           lastSyncedAt={lastSyncedAt}
           now={now}
           refreshing={refreshing}
-          onRefresh={fetchDashboard}
+          onRefresh={fetchAll}
         />
       </header>
 
@@ -227,6 +232,15 @@ export default function ProvinceDashboard() {
         </DashboardSection>
       )}
 
+      {/* Incident feed — last 5 emergencies (only render when there are any) */}
+      {incidents.length > 0 && (
+        <DashboardSection title="เหตุฉุกเฉินล่าสุด" description={`${incidents.length} รายการล่าสุด`}>
+          <div className="space-y-2">
+            {incidents.map(em => <IncidentEntry key={em.id} em={em} />)}
+          </div>
+        </DashboardSection>
+      )}
+
       {/* Executive summary */}
       <AlertBanner variant="info" title="สรุปผู้บริหาร" icon={FileText}>
         <ul className="space-y-1 mt-1 list-disc pl-4">
@@ -279,6 +293,30 @@ function SessionProgress({ label, icon: Icon, done, total, pending, leave, kpi }
           {pending > 0 && <span className="text-danger font-medium">รอ {pending}</span>}
           {leave > 0   && <span className="text-warn">ลา {leave}</span>}
         </div>
+      </div>
+    </AppCard>
+  );
+}
+
+/* ── Incident feed entry: compact emergency row ── */
+function IncidentEntry({ em }) {
+  const when = em.reported_at
+    ? new Date(em.reported_at).toLocaleString('th-TH', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+      })
+    : '-';
+  return (
+    <AppCard padding="sm" className="flex items-start gap-3">
+      <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" strokeWidth={2.2} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center flex-wrap gap-2 mb-0.5">
+          <span className="font-semibold text-ink">{em.plate_no || '-'}</span>
+          <StatusBadge variant={em.channel === 'line' ? 'info' : 'neutral'} size="sm">
+            {em.channel === 'line' ? 'LINE' : 'เว็บ'}
+          </StatusBadge>
+          <span className="ml-auto text-xs text-ink-muted whitespace-nowrap">{when}</span>
+        </div>
+        {em.detail && <p className="text-sm text-ink-muted truncate">{em.detail}</p>}
       </div>
     </AppCard>
   );

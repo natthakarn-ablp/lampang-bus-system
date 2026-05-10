@@ -171,6 +171,79 @@ const MOCK = {
     ],
     meta: { page: 1, per_page: 5, total: 3 },
   },
+  // Phase 3.6 — priority vehicles widget on Province dashboard.
+  // 5 fixtures hand-picked to cover every priority badge variant in
+  // VehicleAtRiskRow so a single capture confirms danger/warn/neutral/
+  // success styling all render correctly:
+  //   score 150 → danger  (เร่งด่วน)
+  //   score  80 → warn    (ต้องติดตาม)
+  //   score  60 → warn    (ต้องติดตาม)
+  //   score  20 → neutral (ข้อมูลไม่ครบ)
+  //   score   0 → success (พร้อมใช้งาน)
+  '/api/province/vehicles-at-risk': {
+    data: [
+      {
+        id: 'V-AR01',
+        plate_no: 'นข 1010 ลำปาง',
+        school_names: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์',
+        driver_name: 'สมชาย ใจดี',
+        student_count: 18,
+        latest_inspection_result: 'FAILED',
+        latest_inspection_date: '2026-05-05',
+        insurance_expiry: '2026-04-15',
+        risk_score: 150,
+        risk_reasons: ['ไม่ผ่านตรวจ', 'ประกันหมด'],
+      },
+      {
+        id: 'V-AR02',
+        plate_no: 'นข 2020 ลำปาง',
+        school_names: 'โรงเรียนเทศบาล 1',
+        driver_name: 'มานี รักดี',
+        student_count: 14,
+        latest_inspection_result: null,
+        latest_inspection_date: null,
+        insurance_expiry: '2026-12-31',
+        risk_score: 80,
+        risk_reasons: ['ยังไม่ตรวจ'],
+      },
+      {
+        id: 'V-AR03',
+        plate_no: 'นข 3030 ลำปาง',
+        school_names: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์, โรงเรียนเทศบาล 1',
+        driver_name: 'วิชัย ขับดี',
+        student_count: 22,
+        latest_inspection_result: 'NEEDS_FIX',
+        latest_inspection_date: '2026-04-20',
+        insurance_expiry: '2026-12-31',
+        risk_score: 60,
+        risk_reasons: ['ต้องแก้ไข'],
+      },
+      {
+        id: 'V-AR04',
+        plate_no: 'นข 4040 ลำปาง',
+        school_names: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์',
+        driver_name: 'นพดล ขยัน',
+        student_count: 9,
+        latest_inspection_result: 'PASSED',
+        latest_inspection_date: '2026-03-15',
+        insurance_expiry: '2026-05-25',
+        risk_score: 20,
+        risk_reasons: ['ประกันใกล้หมด'],
+      },
+      {
+        id: 'V-AR05',
+        plate_no: 'นข 5050 ลำปาง',
+        school_names: 'โรงเรียนเทศบาล 1',
+        driver_name: 'อนันต์ ดีเยี่ยม',
+        student_count: 12,
+        latest_inspection_result: 'PASSED',
+        latest_inspection_date: '2026-04-10',
+        insurance_expiry: '2027-01-31',
+        risk_score: 0,
+        risk_reasons: [],
+      },
+    ],
+  },
 };
 
 function mockFor(url) {

@@ -428,10 +428,10 @@ function AttentionCard({ icon: Icon, title, count, variant, items, onJump, empty
   return (
     <Wrapper {...wrapperProps}>
       <AppCard padding="md" className="h-full">
-        <div className="flex items-center gap-2 mb-2">
-          {Icon && <Icon className="w-4 h-4 text-ink-muted" strokeWidth={2} />}
-          <span className="text-sm font-semibold text-ink truncate">{title}</span>
-          <span className="ml-auto">
+        <div className="flex items-start gap-2 mb-2">
+          {Icon && <Icon className="w-4 h-4 text-ink-muted shrink-0 mt-0.5" strokeWidth={2} />}
+          <span className="text-sm font-semibold text-ink leading-tight">{title}</span>
+          <span className="ml-auto shrink-0">
             <StatusBadge variant={variant} size="sm">{count}</StatusBadge>
           </span>
         </div>

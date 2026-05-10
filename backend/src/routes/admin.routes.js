@@ -375,6 +375,62 @@ router.delete('/pickup-points/:id/students/:studentId', async (req, res, next) =
   } catch (err) { next(err); }
 });
 
+// GET /api/admin/pickup-points/:id/assignable-students
+// Phase 6.1 hotfix-8: parity with /driver/* and /school/* — feeds the
+// shared PickupStudentsModal. No scope filter (admin sees all students
+// on the point's vehicle); currently-assigned students are flagged so
+// the modal pre-checks them.
+router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
+  try {
+    const pointId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const point = await ppSvc.getPickupPointById(pointId);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+
+    const students = await ppSvc.getAssignableStudentsForPickupPoint(point);
+    return sendSuccess(res, { point, students });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/admin/pickup-points/:id/students  { student_ids: [...] }
+// Phase 6.1 hotfix-8: replace-the-whole-list workflow used by the shared
+// PickupStudentsModal. Admin scope: every student must belong to the
+// point's vehicle, no cross-point session conflicts (this point is
+// excluded from the duplicate check).
+router.put('/pickup-points/:id/students', async (req, res, next) => {
+  try {
+    const pointId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    if (!Array.isArray(req.body.student_ids)) {
+      return sendError(res, 'student_ids must be an array', [], 400);
+    }
+    const studentIds = req.body.student_ids.map(Number).filter(Number.isInteger);
+
+    const point = await ppSvc.getPickupPointById(pointId);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+
+    if (studentIds.length > 0) {
+      const ok = await ppSvc.validateStudentsBelongToVehicle(studentIds, point.vehicle_id);
+      if (!ok) return sendError(res, 'นักเรียนบางรายไม่ใช่ของรถคันนี้', [], 400);
+
+      const noDup = await ppSvc.validateNoDuplicateAssignmentsForVehicle(
+        studentIds, point.vehicle_id, point.session, { excludePointId: pointId }
+      );
+      if (!noDup) return sendError(res, 'นักเรียนบางรายมีจุดรับส่งในรอบนี้แล้ว', [], 400);
+    }
+
+    const result = await ppSvc.replacePickupPointStudents(pointId, studentIds, {
+      actorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, result, 'อัปเดตรายชื่อนักเรียนสำเร็จ');
+  } catch (err) { next(err); }
+});
+
 // ─── GET /api/admin/audit-logs ──────────────────────────────────────────────
 router.get('/audit-logs', async (req, res, next) => {
   try {

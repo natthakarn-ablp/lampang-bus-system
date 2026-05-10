@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Map as MapIcon, Plus, Pencil, Trash2, X, UserPlus, Users } from 'lucide-react';
+import { Map as MapIcon, Plus, Pencil, Trash2, X, Users } from 'lucide-react';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
-import { classroomLabel } from '../../utils/student';
+import PickupStudentsModal from '../../components/PickupStudentsModal';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
@@ -183,10 +183,11 @@ export default function AdminPickupPointManagement() {
         />
       )}
       {assigning && (
-        <AssignStudentsModal
-          row={assigning}
+        <PickupStudentsModal
+          apiBase="/admin"
+          point={assigning}
           onClose={() => setAssigning(null)}
-          onChanged={fetchRows}
+          onSaved={() => { setAssigning(null); fetchRows(); }}
         />
       )}
       {confirmDelete && (
@@ -368,99 +369,6 @@ function EditPickupPointModal({ row, vehicles, onClose, onSaved }) {
   );
 }
 
-/* ── Assign-students modal (search → click to assign; X to unassign) ── */
-function AssignStudentsModal({ row, onClose, onChanged }) {
-  const [assigned, setAssigned] = useState([]);
-  const [search, setSearch] = useState('');
-  const [results, setResults] = useState([]);
-  const [busy, setBusy] = useState(false);
-
-  // Load currently-assigned students by re-fetching the point row from
-  // the read-side endpoint. Admin doesn't have a "list students for a
-  // point" endpoint, so we use the school-scope-free province endpoint
-  // by way of refetching the parent list — but the parent list only
-  // has student_count, not names. Workaround: hit /admin/pickup-points
-  // with vehicle filter, then use the embedded /driver-style read.
-  // For v1, simplest: refetch the row's vehicle scope via the driver
-  // endpoint isn't possible from admin; instead show only the actions
-  // (assign/unassign) and let admin verify via the table's
-  // student_count after closing.
-  // → we still render an assigned-list using a quick GET on the
-  // existing read endpoint scoped by vehicle.
-  useEffect(() => {
-    let cancelled = false;
-    api.get(`/admin/pickup-points?vehicle_id=${row.vehicle_id}&per_page=100`)
-      .catch(() => null)
-      .then(() => { /* intentionally ignored — student names aren't on this endpoint */ });
-    return () => { cancelled = true; };
-  }, [row.vehicle_id]);
-
-  // Search students via admin-accessible province endpoint.
-  useEffect(() => {
-    if (!search.trim()) { setResults([]); return; }
-    const t = setTimeout(() => {
-      api.get(`/province/students?search=${encodeURIComponent(search)}&per_page=10`)
-        .then(r => setResults(Array.isArray(r.data?.data) ? r.data.data : []))
-        .catch(() => setResults([]));
-    }, 300);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  const assign = async (studentId) => {
-    setBusy(true);
-    try {
-      await api.post(`/admin/pickup-points/${row.id}/students`, { student_id: studentId });
-      setSearch('');
-      setResults([]);
-      onChanged();
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <Modal onClose={onClose} title={`จัดการนักเรียนของจุด: ${row.label}`}>
-      <p className="text-xs text-ink-muted mb-3">
-        ค้นหานักเรียนตามชื่อ แล้วกดเลือกเพื่อผูกกับจุดนี้
-      </p>
-      <input
-        type="text"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder="ค้นหาชื่อนักเรียน…"
-        className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 mb-3"
-      />
-      {results.length > 0 && (
-        <div className="border border-surface-border rounded-lg divide-y divide-surface-border max-h-60 overflow-y-auto">
-          {results.map(s => {
-            const cls = classroomLabel(s);
-            return (
-              <button
-                key={s.id}
-                type="button"
-                disabled={busy}
-                onClick={() => assign(s.id)}
-                className="block w-full text-left px-3 py-2 hover:bg-surface-border transition text-sm disabled:opacity-50"
-              >
-                <span className="font-medium">{s.first_name} {s.last_name}</span>
-                <span className="text-xs text-ink-muted ml-2">
-                  {s.school_name || s.school_id} · {cls || '-'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <p className="text-xs text-ink-muted mt-3">
-        การยกเลิกการผูก: ใช้ปุ่ม "แก้ไข" บนแถวนักเรียนที่มาจาก /school/students
-        (หรือใช้ DELETE /admin/pickup-points/{row.id}/students/:studentId โดยตรง)
-      </p>
-      <div className="flex justify-end pt-3">
-        <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border">
-          เสร็จสิ้น
-        </button>
-      </div>
-    </Modal>
-  );
-}
 
 /* ── Delete confirm modal ── */
 function DeleteConfirmModal({ row, onClose, onDeleted }) {

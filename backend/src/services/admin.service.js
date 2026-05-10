@@ -42,6 +42,43 @@ async function getUsersNeedingAction({ limit = 10 } = {}) {
   return { total, rows };
 }
 
+/**
+ * getPendingRosterRequestsSystemWide — top N pending roster_change_requests
+ * across the entire system, oldest first so longest-waiting requests
+ * (highest SLA risk) surface at the top.
+ *
+ * Today this data is only queryable at school scope (school owns
+ * approvals via /school/roster-requests). The Admin Attention Panel
+ * needs the system-wide count + preview to flag governance backlog.
+ *
+ * Returns { total, rows } same shape as getUsersNeedingAction so the
+ * frontend treats both signals uniformly.
+ */
+async function getPendingRosterRequestsSystemWide({ limit = 10 } = {}) {
+  const topN = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
+
+  const [[{ total }]] = await pool.query(`
+    SELECT COUNT(*) AS total FROM roster_change_requests
+    WHERE status = 'pending'
+  `);
+
+  const [rows] = await pool.query(`
+    SELECT rcr.id, rcr.school_id, rcr.vehicle_id, rcr.student_id,
+           rcr.request_type, rcr.reason, rcr.created_at,
+           sc.name     AS school_name,
+           v.plate_no  AS plate_no
+    FROM roster_change_requests rcr
+    LEFT JOIN schools  sc ON sc.id = rcr.school_id  AND sc.is_deleted = FALSE
+    LEFT JOIN vehicles v  ON v.id  = rcr.vehicle_id
+    WHERE rcr.status = 'pending'
+    ORDER BY rcr.created_at ASC   -- oldest first → longest-waiting first
+    LIMIT ?
+  `, [topN]);
+
+  return { total, rows };
+}
+
 module.exports = {
   getUsersNeedingAction,
+  getPendingRosterRequestsSystemWide,
 };

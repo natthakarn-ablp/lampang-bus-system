@@ -205,6 +205,18 @@ router.get('/users-needing-action', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── GET /api/admin/roster-requests-pending ─────────────────────────────────
+// Top N pending roster_change_requests across the whole system, oldest
+// first to surface SLA risk. School-scope endpoints already exist for
+// approvals; this is the admin's at-a-glance backlog visibility.
+// Returns { total, rows }; limit clamped to [1, 100] inside the service.
+router.get('/roster-requests-pending', async (req, res, next) => {
+  try {
+    const data = await adminSvc.getPendingRosterRequestsSystemWide({ limit: req.query.limit });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
 // ─── GET /api/admin/audit-logs ──────────────────────────────────────────────
 router.get('/audit-logs', async (req, res, next) => {
   try {

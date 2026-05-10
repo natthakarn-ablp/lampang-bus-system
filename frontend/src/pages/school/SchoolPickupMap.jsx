@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Map as MapIcon, Bus, Users, Sunrise, Sunset } from 'lucide-react';
+import { Map as MapIcon, Bus, Users, Sunrise, Sunset, Plus, X } from 'lucide-react';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
 import PickupMap from '../../components/PickupMap';
+import PickupCoordPicker from '../../components/PickupCoordPicker';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
@@ -13,6 +14,7 @@ export default function SchoolPickupMap() {
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [creating, setCreating] = useState(false);
 
   const fetchPoints = useCallback(async (sf) => {
     setLoading(true);
@@ -61,7 +63,7 @@ export default function SchoolPickupMap() {
         </p>
       </header>
 
-      {/* Filter strip */}
+      {/* Filter strip — session pills, vehicle dropdown, add button */}
       <div className="flex flex-wrap items-center gap-3">
         <SessionFilter value={sessionFilter} onChange={setSessionFilter} />
         {vehicleOptions.length > 0 && (
@@ -76,6 +78,14 @@ export default function SchoolPickupMap() {
             ))}
           </select>
         )}
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="ml-auto inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition"
+        >
+          <Plus className="w-4 h-4" strokeWidth={2.5} />
+          เพิ่มจุดรับส่ง
+        </button>
       </div>
 
       {error ? (
@@ -84,7 +94,7 @@ export default function SchoolPickupMap() {
         <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
       ) : filteredPoints.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีจุดรับส่ง">
-          ผู้ดูแลระบบจะเพิ่มจุดรับส่งของรถที่ให้บริการโรงเรียนนี้ในภายหลัง
+          กดปุ่ม "+ เพิ่มจุดรับส่ง" ด้านบนเพื่อเริ่มสร้างจุดแรกของโรงเรียน
         </AlertBanner>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
@@ -114,6 +124,340 @@ export default function SchoolPickupMap() {
           </DashboardSection>
         </div>
       )}
+
+      {creating && (
+        <CreatePickupModal
+          onClose={() => setCreating(false)}
+          onCreated={() => { setCreating(false); fetchPoints(sessionFilter); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Create-pickup modal: vehicle dropdown + per-vehicle student checklist ── */
+function CreatePickupModal({ onClose, onCreated }) {
+  const [vehicles, setVehicles] = useState([]);
+  const [vehiclesLoading, setVehiclesLoading] = useState(true);
+  const [vehiclesError, setVehiclesError] = useState(null);
+
+  const [form, setForm] = useState({
+    vehicle_id: '',
+    label: '',
+    latitude: '',
+    longitude: '',
+    session: 'both',
+    notes: '',
+  });
+
+  const [students, setStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsError, setStudentsError] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [filter, setFilter] = useState('');
+
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState([]);
+
+  // Pre-load the vehicle dropdown on mount.
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/school/pickup-vehicles')
+      .then(r => {
+        if (cancelled) return;
+        setVehicles(Array.isArray(r.data?.data) ? r.data.data : []);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setVehiclesError(err?.response?.data?.message || 'โหลดรายชื่อรถไม่สำเร็จ');
+      })
+      .finally(() => { if (!cancelled) setVehiclesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // When vehicle is picked, fetch the school's students on that vehicle.
+  // Reset the checklist on vehicle change to avoid stale student_ids
+  // from a previous selection.
+  useEffect(() => {
+    if (!form.vehicle_id) {
+      setStudents([]);
+      setSelectedIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    setStudentsLoading(true);
+    setStudentsError(null);
+    setSelectedIds(new Set());
+    api.get(`/school/pickup-students?vehicle_id=${encodeURIComponent(form.vehicle_id)}`)
+      .then(r => {
+        if (cancelled) return;
+        setStudents(Array.isArray(r.data?.data) ? r.data.data : []);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setStudentsError(err?.response?.data?.message || 'โหลดรายชื่อนักเรียนไม่สำเร็จ');
+        setStudents([]);
+      })
+      .finally(() => { if (!cancelled) setStudentsLoading(false); });
+    return () => { cancelled = true; };
+  }, [form.vehicle_id]);
+
+  const visibleStudents = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(s =>
+      `${s.first_name} ${s.last_name} ${s.classroom || ''}`.toLowerCase().includes(q)
+    );
+  }, [students, filter]);
+
+  const toggleStudent = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const allVisibleSelected = visibleStudents.length > 0
+    && visibleStudents.every(s => selectedIds.has(s.id));
+  const toggleAllVisible = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleStudents.forEach(s => next.delete(s.id));
+      } else {
+        visibleStudents.forEach(s => next.add(s.id));
+      }
+      return next;
+    });
+  };
+
+  const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const coords = useMemo(() => {
+    const lat = parseFloat(form.latitude), lng = parseFloat(form.longitude);
+    return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
+  }, [form.latitude, form.longitude]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true); setErrors([]);
+    try {
+      await api.post('/school/pickup-points', {
+        ...form,
+        latitude: parseFloat(form.latitude),
+        longitude: parseFloat(form.longitude),
+        student_ids: Array.from(selectedIds),
+      });
+      onCreated();
+    } catch (err) {
+      setErrors(err?.response?.data?.errors
+        || [{ message: err?.response?.data?.message || 'บันทึกไม่สำเร็จ' }]);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="bg-surface w-full max-w-lg rounded-2xl shadow-elevate max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between p-4 border-b border-surface-border sticky top-0 bg-surface">
+          <h2 className="font-semibold text-ink">เพิ่มจุดรับส่ง</h2>
+          <button type="button" onClick={onClose} className="p-1 rounded-full hover:bg-surface-border" aria-label="ปิด">
+            <X className="w-4 h-4 text-ink-muted" />
+          </button>
+        </header>
+
+        <form onSubmit={handleSubmit} className="p-4 space-y-3">
+          {/* Vehicle dropdown — drives the student-checklist fetch */}
+          <div>
+            <label className="block text-xs font-medium text-ink-muted mb-1">รถ</label>
+            {vehiclesLoading ? (
+              <p className="text-sm text-ink-muted">กำลังโหลดรายชื่อรถ…</p>
+            ) : vehiclesError ? (
+              <AlertBanner variant="danger" title="โหลดรายชื่อรถไม่สำเร็จ">{vehiclesError}</AlertBanner>
+            ) : (
+              <select
+                value={form.vehicle_id}
+                onChange={e => update('vehicle_id', e.target.value)}
+                required
+                className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink"
+              >
+                <option value="">เลือกรถ…</option>
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>
+                    {v.plate_no} {v.student_count != null && `(${v.student_count} คน)`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-ink-muted mb-1">ป้ายชื่อจุด</label>
+            <input
+              type="text" required maxLength={100}
+              value={form.label}
+              onChange={e => update('label', e.target.value)}
+              placeholder="เช่น หน้าโรงเรียน, ปาก ซ.5"
+              className="w-full text-sm border border-surface-border rounded-lg px-3 py-2"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-ink-muted mb-1">Latitude</label>
+              <input
+                type="number" step="any" required min={-90} max={90}
+                value={form.latitude}
+                onChange={e => update('latitude', e.target.value)}
+                className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 tabular-nums"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-ink-muted mb-1">Longitude</label>
+              <input
+                type="number" step="any" required min={-180} max={180}
+                value={form.longitude}
+                onChange={e => update('longitude', e.target.value)}
+                className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 tabular-nums"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-ink-muted">คลิกบนแผนที่เพื่อกำหนดพิกัด</p>
+          <div className="rounded-xl overflow-hidden border border-surface-border">
+            <PickupCoordPicker
+              value={coords}
+              onChange={([lat, lng]) => {
+                update('latitude', lat.toFixed(6));
+                update('longitude', lng.toFixed(6));
+              }}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-ink-muted mb-1">รอบ</label>
+            <div className="flex gap-1.5">
+              {['morning', 'evening', 'both'].map(s => (
+                <button
+                  type="button"
+                  key={s}
+                  onClick={() => update('session', s)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
+                    form.session === s
+                      ? 'bg-brand text-white border-brand'
+                      : 'bg-surface text-ink-muted border-surface-border'
+                  }`}
+                >
+                  {SESSION_LABEL[s]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Student checklist — appears AFTER vehicle is picked */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-medium text-ink-muted">
+                เลือกนักเรียนที่ขึ้นจุดนี้
+                {students.length > 0 && (
+                  <span className="ml-1 tabular-nums">
+                    ({selectedIds.size}/{students.length})
+                  </span>
+                )}
+              </label>
+              {visibleStudents.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleAllVisible}
+                  className="text-xs text-brand font-medium hover:underline"
+                >
+                  {allVisibleSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
+                </button>
+              )}
+            </div>
+
+            {!form.vehicle_id ? (
+              <p className="text-sm text-ink-muted py-3 text-center">เลือกรถก่อน เพื่อดูรายชื่อนักเรียน</p>
+            ) : studentsLoading ? (
+              <p className="text-sm text-ink-muted py-3 text-center">กำลังโหลดรายชื่อ…</p>
+            ) : studentsError ? (
+              <AlertBanner variant="danger" title="โหลดรายชื่อไม่สำเร็จ">{studentsError}</AlertBanner>
+            ) : students.length === 0 ? (
+              <p className="text-sm text-ink-muted py-3 text-center">ไม่มีนักเรียนของโรงเรียนในรถคันนี้</p>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={filter}
+                  onChange={e => setFilter(e.target.value)}
+                  placeholder="กรองตามชื่อ / ห้อง…"
+                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 mb-2"
+                />
+                <div className="border border-surface-border rounded-lg divide-y divide-surface-border max-h-56 overflow-y-auto">
+                  {visibleStudents.map(s => {
+                    const checked = selectedIds.has(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-surface-border/50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleStudent(s.id)}
+                          className="w-4 h-4 accent-brand"
+                        />
+                        <span className="flex-1 min-w-0 text-sm">
+                          <span className="font-medium text-ink">
+                            {s.prefix || ''}{s.first_name} {s.last_name}
+                          </span>
+                          {s.classroom && (
+                            <span className="text-xs text-ink-muted ml-2">{s.classroom}</span>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {visibleStudents.length === 0 && filter && (
+                    <p className="text-xs text-ink-muted py-3 text-center">ไม่พบนักเรียนตามที่กรอง</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-ink-muted mb-1">หมายเหตุ (ไม่บังคับ)</label>
+            <input
+              type="text" maxLength={255}
+              value={form.notes}
+              onChange={e => update('notes', e.target.value)}
+              className="w-full text-sm border border-surface-border rounded-lg px-3 py-2"
+            />
+          </div>
+
+          {errors.length > 0 && (
+            <AlertBanner variant="danger" title="บันทึกไม่สำเร็จ">
+              <ul className="list-disc pl-4 text-xs">
+                {errors.map((e, i) => <li key={i}>{e.field ? `${e.field}: ` : ''}{e.message}</li>)}
+              </ul>
+            </AlertBanner>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border">
+              ยกเลิก
+            </button>
+            <button type="submit" disabled={saving || !form.vehicle_id} className="px-4 py-2 text-sm rounded-lg bg-brand hover:bg-brand-700 text-white disabled:opacity-60">
+              {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

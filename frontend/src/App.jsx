@@ -75,6 +75,7 @@ const InspectionForm       = lazy(() => import('./pages/transport/InspectionForm
 // Admin (heaviest cluster — research/measurement/executive)
 const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
 const AdminAuditLog        = lazy(() => import('./pages/admin/AdminAuditLog'));
+const AdminPickupPointManagement = lazy(() => import('./pages/admin/AdminPickupPointManagement'));
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'));
 const MeasurementFramework = lazy(() => import('./pages/admin/MeasurementFramework'));
 const ResearchMetrics      = lazy(() => import('./pages/admin/ResearchMetrics'));
@@ -270,6 +271,11 @@ export default function App() {
           <Route path="/admin/audit-logs" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><AdminAuditLog /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/pickup-points" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><AdminPickupPointManagement /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/measurement" element={

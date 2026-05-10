@@ -2,27 +2,52 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bus, GraduationCap, Building2, User, Users, ClipboardList,
-  Wrench, ChevronRight, Sunrise, Sunset,
+  Wrench, ChevronRight, Sunrise, Sunset, Trash2,
 } from 'lucide-react';
 import api from '../../api/axios';
+import { relativeTime } from '../../utils/datetime';
 import {
-  AppCard, AlertBanner, KPIGrid, KPIStat, DashboardSection,
+  AppCard, AlertBanner, KPIGrid, KPIStat, DashboardSection, AttentionCard,
 } from '../../components/ui';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [users, setUsers] = useState(null);
+  const [usersNeedingAction, setUsersNeedingAction] = useState({ total: 0, rows: [] });
+  const [pendingRosterRequests, setPendingRosterRequests] = useState({ total: 0, rows: [] });
+  const [recentDeletes, setRecentDeletes] = useState({ total: 0, rows: [] });
   const [loading, setLoading] = useState(true);
 
+  // Yesterday in YYYY-MM-DD for the audit-DELETE 24h window. Computed once
+  // at mount via the useEffect below; also reused in the card 3 onJump
+  // navigation target so the deep-link filter matches what the panel is
+  // showing.
+  const yesterday = new Date(Date.now() - 86400_000).toISOString().split('T')[0];
+
   useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
     Promise.all([
       api.get('/province/dashboard').then(r => r.data.data).catch(() => null),
       api.get('/admin/users?per_page=5&is_active=false').then(r => r.data).catch(() => null),
+      api.get('/admin/users-needing-action?limit=3').then(r => r.data?.data ?? null).catch(() => null),
+      api.get('/admin/roster-requests-pending?limit=3').then(r => r.data?.data ?? null).catch(() => null),
+      // Card 3 reuses existing audit-logs endpoint with DELETE filter.
+      // Normalize the response to the same { total, rows } shape as cards
+      // 1+2 so all three setters share an Array.isArray guard pattern.
+      api.get(`/admin/audit-logs?action=DELETE&date_from=${yesterday}&date_to=${today}&per_page=3`)
+        .then(r => ({ total: r.data?.meta?.total ?? 0, rows: r.data?.data ?? [] }))
+        .catch(() => null),
     ])
-      .then(([dash, u]) => { setData(dash); setUsers(u); })
+      .then(([dash, u, una, prr, audit]) => {
+        setData(dash);
+        setUsers(u);
+        if (una && Array.isArray(una.rows)) setUsersNeedingAction(una);
+        if (prr && Array.isArray(prr.rows)) setPendingRosterRequests(prr);
+        if (audit && Array.isArray(audit.rows)) setRecentDeletes(audit);
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [yesterday]);
 
   if (loading) return <p className="text-ink-muted py-10 text-center text-lg">กำลังโหลด…</p>;
 
@@ -36,6 +61,13 @@ export default function AdminDashboard() {
 
   const totalBase = (data?.morning_total ?? 0) + (data?.evening_total ?? 0);
   const notStarted = totalBase === 0 && issues.length === 0;
+
+  // Render the attention panel only when one of the three governance
+  // signals has content. Empty-all = the existing AlertBanner success
+  // state covers it; no need for an empty hero panel.
+  const hasAnyAttention = usersNeedingAction.total > 0
+                       || pendingRosterRequests.total > 0
+                       || recentDeletes.total > 0;
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
@@ -55,6 +87,17 @@ export default function AdminDashboard() {
         </AlertBanner>
       ) : (
         <AlertBanner variant="success" title="ระบบปกติ ไม่มีสิ่งที่ต้องติดตามเร่งด่วน" />
+      )}
+
+      {/* Phase 5 — Executive Attention Panel: governance signals */}
+      {hasAnyAttention && (
+        <AdminAttentionPanel
+          usersNeedingAction={usersNeedingAction}
+          pendingRosterRequests={pendingRosterRequests}
+          recentDeletes={recentDeletes}
+          onJumpUsers={() => navigate('/admin/users?is_active=false')}
+          onJumpAudit={() => navigate(`/admin/audit-logs?action=DELETE&date_from=${yesterday}`)}
+        />
       )}
 
       {/* Quick stats */}
@@ -86,6 +129,67 @@ export default function AdminDashboard() {
           </AppCard>
         </DashboardSection>
       )}
+    </div>
+  );
+}
+
+/* ── Admin attention panel: 3 governance cards above the KPI grid ── */
+function AdminAttentionPanel({
+  usersNeedingAction,
+  pendingRosterRequests,
+  recentDeletes,
+  onJumpUsers,
+  onJumpAudit,
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <AttentionCard
+        icon={Users}
+        title="ผู้ใช้ต้องดูแล"
+        count={usersNeedingAction.total}
+        variant={usersNeedingAction.total > 0 ? 'warn' : 'neutral'}
+        items={usersNeedingAction.rows.slice(0, 3).map(u => ({
+          key: u.id,
+          primary: u.display_name || u.username,
+          secondary: !u.is_active           ? 'บัญชีถูกระงับ'
+                   : u.must_change_password ? 'ต้องเปลี่ยนรหัสผ่าน'
+                   :                           '-',
+        }))}
+        onJump={onJumpUsers}
+        emptyLabel="ผู้ใช้ทุกคนพร้อมใช้งาน"
+      />
+      <AttentionCard
+        icon={ClipboardList}
+        title="คำขอรออนุมัติ"
+        count={pendingRosterRequests.total}
+        variant={pendingRosterRequests.total > 5 ? 'danger'
+               : pendingRosterRequests.total > 0 ? 'warn'
+               :                                    'neutral'}
+        items={pendingRosterRequests.rows.slice(0, 3).map(r => ({
+          key: r.id,
+          primary: r.school_name || '-',
+          secondary: `${r.request_type === 'add' ? 'เพิ่ม' : 'ลบ'} · ${relativeTime(r.created_at)}`,
+        }))}
+        // No onJump — admin/roster-requests page doesn't exist yet
+        // (deferred to Phase 6). AttentionCard's no-jump-target branch
+        // omits the "ดูทั้งหมด →" affordance correctly.
+        emptyLabel="ไม่มีคำขอรอดำเนินการ"
+      />
+      <AttentionCard
+        icon={Trash2}
+        title="ลบข้อมูล (24 ชม.)"
+        count={recentDeletes.total}
+        variant={recentDeletes.total > 5 ? 'danger'
+               : recentDeletes.total > 0 ? 'warn'
+               :                            'neutral'}
+        items={recentDeletes.rows.slice(0, 3).map(a => ({
+          key: a.id,
+          primary: a.actor_name || '-',
+          secondary: `${a.entity_type || '-'} · ${relativeTime(a.created_at)}`,
+        }))}
+        onJump={onJumpAudit}
+        emptyLabel="ไม่มีการลบในรอบ 24 ชม."
+      />
     </div>
   );
 }

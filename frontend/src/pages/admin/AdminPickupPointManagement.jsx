@@ -310,15 +310,13 @@ function EditPickupPointModal({ row, vehicles, onClose, onSaved }) {
         </div>
 
         <p className="text-xs text-ink-muted">คลิกบนแผนที่เพื่อกำหนดพิกัด หรือกรอกตัวเลขโดยตรง</p>
-        <div className="rounded-xl overflow-hidden border border-surface-border">
-          <PickupCoordPicker
-            value={coords}
-            onChange={([lat, lng]) => {
-              update('latitude', lat.toFixed(6));
-              update('longitude', lng.toFixed(6));
-            }}
-          />
-        </div>
+        <PickupCoordPicker
+          value={coords}
+          onChange={([lat, lng]) => {
+            update('latitude', lat.toFixed(6));
+            update('longitude', lng.toFixed(6));
+          }}
+        />
 
         <Field label="รอบ">
           <div className="flex gap-1.5">

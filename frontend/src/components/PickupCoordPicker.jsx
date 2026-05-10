@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
+import './PickupCoordPicker.css';
 
 // Lampang centroid — sane default when the form has no coords yet.
 const LAMPANG_CENTER = [18.2884, 99.4906];
@@ -17,28 +18,41 @@ const LAMPANG_CENTER = [18.2884, 99.4906];
  *   onChange  — ([lat, lng]) => void
  *   height    — number | string      (default 240)
  *
- * Containment notes (Phase 6.1 fix):
- *  - Wrapper div has `position: relative` + `overflow: hidden`. Leaflet's
- *    tile/popup/control panes use `position: absolute` and walk up the
- *    DOM looking for the nearest positioned ancestor; without an
- *    explicit one, they can attach to the document body and escape the
- *    modal visually.
- *  - Wrapper has explicit `height` + `width: 100%` so Leaflet measures
- *    a real box at mount instead of falling back to the viewport.
- *  - <SizeInvalidator/> calls map.invalidateSize() after mount to
- *    correct the sizing if the modal was animating in when the map
- *    measured its container.
+ * Containment notes (Phase 6.1 hotfix-2 — escapes-the-modal bug):
+ *
+ *   Round 1 (commit 574ee2c) added `position: relative; overflow: hidden`
+ *   on the wrapper. That wasn't enough on production: bare `position:
+ *   relative` does NOT create a CSS stacking context. Leaflet's panes
+ *   have z-indices 200–700 and the control wrapper is z-1000 — they
+ *   stacked ABOVE sibling modal content (the student checklist, save
+ *   buttons), making the map appear to "escape" visually.
+ *
+ *   Round 2 (this commit) seals the picker into a real stacking context:
+ *
+ *     1. Wrapper: `relative isolate z-0` + the .pickup-coord-picker
+ *        scoping class. `isolation: isolate` + explicit `z-index: 0`
+ *        on a `position: relative` element CREATES a stacking context
+ *        — every Leaflet z-index inside is now contained.
+ *     2. MapContainer: forced `!relative !z-0` + `zIndex: 0` inline so
+ *        even a CSS conflict with leaflet.css's `.leaflet-container`
+ *        (which sets its own z-index/position) loses to ours.
+ *     3. PickupCoordPicker.css scopes Leaflet pane/control z-indices
+ *        to 1 inside `.pickup-coord-picker` so they can't outrank
+ *        anything in the modal.
+ *     4. <SizeInvalidator/> still corrects the "0×0 at mount" measure
+ *        bug for animating modals.
  */
 export default function PickupCoordPicker({ value, onChange, height = 240 }) {
   return (
     <div
-      className="relative overflow-hidden rounded-lg"
+      className="pickup-coord-picker relative isolate z-0 overflow-hidden rounded-lg border border-surface-border"
       style={{ height, width: '100%' }}
     >
       <MapContainer
         center={value || LAMPANG_CENTER}
         zoom={value ? 15 : 13}
-        style={{ height: '100%', width: '100%' }}
+        className="!relative !z-0 h-full w-full"
+        style={{ height: '100%', width: '100%', zIndex: 0 }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

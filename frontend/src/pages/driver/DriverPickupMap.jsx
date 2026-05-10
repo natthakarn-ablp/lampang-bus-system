@@ -261,15 +261,13 @@ function CreatePickupModal({ onClose, onCreated }) {
           </div>
 
           <p className="text-xs text-ink-muted">คลิกบนแผนที่เพื่อกำหนดพิกัด</p>
-          <div className="rounded-xl overflow-hidden border border-surface-border">
-            <PickupCoordPicker
-              value={coords}
-              onChange={([lat, lng]) => {
-                update('latitude', lat.toFixed(6));
-                update('longitude', lng.toFixed(6));
-              }}
-            />
-          </div>
+          <PickupCoordPicker
+            value={coords}
+            onChange={([lat, lng]) => {
+              update('latitude', lat.toFixed(6));
+              update('longitude', lng.toFixed(6));
+            }}
+          />
 
           <div>
             <label className="block text-xs font-medium text-ink-muted mb-1">รอบ</label>

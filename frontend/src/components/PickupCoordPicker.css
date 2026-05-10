@@ -1,0 +1,32 @@
+/*
+ * Phase 6.1 hotfix-2: clamp Leaflet's high pane/control z-indices
+ * inside the PickupCoordPicker so they can never stack above the
+ * picker's siblings inside a modal.
+ *
+ * Leaflet's defaults (from leaflet.css):
+ *   .leaflet-pane          z-index: 400
+ *   .leaflet-tile-pane     z-index: 200
+ *   .leaflet-overlay-pane  z-index: 400
+ *   .leaflet-shadow-pane   z-index: 500
+ *   .leaflet-marker-pane   z-index: 600
+ *   .leaflet-tooltip-pane  z-index: 650
+ *   .leaflet-popup-pane    z-index: 700
+ *   .leaflet-map-pane svg  z-index: 200
+ *   .leaflet-top, -bottom  z-index: 1000  (control containers)
+ *
+ * Inside the picker we don't need any of these stacking decisions to
+ * carry meaning — only ordering relative to the map's own children
+ * matters. Cap them all to z-index: 1 so the picker as a whole stays
+ * a flat layer that can't pierce above sibling modal content (form
+ * inputs, student checklist, save buttons).
+ *
+ * Combined with `isolation: isolate` + `z-index: 0` on the wrapper,
+ * this creates a sealed stacking context that no Leaflet child can
+ * escape from.
+ */
+.pickup-coord-picker .leaflet-pane,
+.pickup-coord-picker .leaflet-top,
+.pickup-coord-picker .leaflet-bottom,
+.pickup-coord-picker .leaflet-control {
+  z-index: 1 !important;
+}

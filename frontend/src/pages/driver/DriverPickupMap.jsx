@@ -4,6 +4,7 @@ import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge } from '../../components/ui';
 import PickupMap from '../../components/PickupMap';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
+import { classroomLabel } from '../../utils/student';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
@@ -343,6 +344,7 @@ function CreatePickupModal({ onClose, onCreated }) {
                 <div className="border border-surface-border rounded-lg divide-y divide-surface-border max-h-56 overflow-y-auto">
                   {visibleStudents.map(s => {
                     const checked = selectedIds.has(s.id);
+                    const cls = classroomLabel(s);
                     return (
                       <label
                         key={s.id}
@@ -358,8 +360,8 @@ function CreatePickupModal({ onClose, onCreated }) {
                           <span className="font-medium text-ink">
                             {s.prefix || ''}{s.first_name} {s.last_name}
                           </span>
-                          {s.classroom && (
-                            <span className="text-xs text-ink-muted ml-2">{s.classroom}</span>
+                          {cls && (
+                            <span className="text-xs text-ink-muted ml-2">· {cls}</span>
                           )}
                         </span>
                       </label>

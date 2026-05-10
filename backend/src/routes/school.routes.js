@@ -202,7 +202,14 @@ router.get('/pickup-students', async (req, res, next) => {
     const vehicleId = req.query.vehicle_id;
     if (!vehicleId) return sendError(res, 'vehicle_id required', [], 400);
 
-    const students = await ppSvc.getStudentsForSchoolAndVehicle(schoolId, vehicleId);
+    // Phase 6.1 hotfix-4: optional ?session filter excludes students
+    // already assigned on this vehicle with a conflicting session.
+    const session = req.query.session;
+    if (session && !['morning', 'evening', 'both'].includes(session)) {
+      return sendError(res, "session must be 'morning', 'evening', or 'both'", [], 400);
+    }
+
+    const students = await ppSvc.getStudentsForSchoolAndVehicle(schoolId, vehicleId, { session });
     return sendSuccess(res, students);
   } catch (err) { next(err); }
 });
@@ -257,6 +264,13 @@ router.post('/pickup-points', async (req, res, next) => {
         studentIds, schoolId, req.body.vehicle_id
       );
       if (!studentsOk) return sendError(res, 'นักเรียนบางรายไม่ใช่ของโรงเรียนหรือรถคันนี้', [], 400);
+
+      // Phase 6.1 hotfix-4: server-side duplicate-assignment guard.
+      // Same vehicle/session conflict logic as the driver POST flow.
+      const noDup = await ppSvc.validateNoDuplicateAssignmentsForVehicle(
+        studentIds, req.body.vehicle_id, req.body.session || 'both'
+      );
+      if (!noDup) return sendError(res, 'นักเรียนบางรายมีจุดรับส่งในรอบนี้แล้ว', [], 400);
     }
 
     const id = await ppSvc.createPickupPointWithStudents(req.body, studentIds, {

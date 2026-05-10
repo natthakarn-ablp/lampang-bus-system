@@ -101,12 +101,23 @@ router.get('/pickup-points', async (req, res, next) => {
 // ─── GET /api/driver/pickup-students ────────────────────────────────────────
 // Phase 6.1: pre-loaded student checklist for the create-pickup modal.
 // Lightweight roster of the driver's vehicle (no PII — no phone, no cid).
+//
+// Phase 6.1 hotfix-4: optional ?session=morning|evening|both filters out
+// students who are already assigned to another pickup point with a
+// conflicting session on the same vehicle. Frontend re-fetches when the
+// session radio changes. Without the param, returns the full roster
+// (backward compatible).
 router.get('/pickup-students', async (req, res, next) => {
   try {
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
 
-    const students = await ppSvc.getStudentsForVehicle(vehicle.vehicle_id);
+    const session = req.query.session;
+    if (session && !['morning', 'evening', 'both'].includes(session)) {
+      return sendError(res, "session must be 'morning', 'evening', or 'both'", [], 400);
+    }
+
+    const students = await ppSvc.getStudentsForVehicle(vehicle.vehicle_id, { session });
     return sendSuccess(res, students);
   } catch (err) { return next(err); }
 });
@@ -154,6 +165,15 @@ router.post('/pickup-points', async (req, res, next) => {
     if (studentIds.length > 0) {
       const ok = await ppSvc.validateStudentsBelongToVehicle(studentIds, vehicle.vehicle_id);
       if (!ok) return sendError(res, 'นักเรียนบางรายไม่ใช่ของรถคันนี้', [], 400);
+
+      // Phase 6.1 hotfix-4: server-side duplicate-assignment guard.
+      // Prevents the same student from being assigned to multiple pickup
+      // points with conflicting sessions on the same vehicle, even if
+      // the frontend filter was bypassed.
+      const noDup = await ppSvc.validateNoDuplicateAssignmentsForVehicle(
+        studentIds, vehicle.vehicle_id, input.session || 'both'
+      );
+      if (!noDup) return sendError(res, 'นักเรียนบางรายมีจุดรับส่งในรอบนี้แล้ว', [], 400);
     }
 
     const id = await ppSvc.createPickupPointWithStudents(input, studentIds, {

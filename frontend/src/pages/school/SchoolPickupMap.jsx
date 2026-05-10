@@ -175,9 +175,10 @@ function CreatePickupModal({ onClose, onCreated }) {
     return () => { cancelled = true; };
   }, []);
 
-  // When vehicle is picked, fetch the school's students on that vehicle.
-  // Reset the checklist on vehicle change to avoid stale student_ids
-  // from a previous selection.
+  // When vehicle OR session is picked/changed, refetch the available
+  // students for that combo. Server filters out students already
+  // assigned to a conflicting session on the selected vehicle, so the
+  // checklist only shows people eligible for the new point.
   useEffect(() => {
     if (!form.vehicle_id) {
       setStudents([]);
@@ -187,11 +188,21 @@ function CreatePickupModal({ onClose, onCreated }) {
     let cancelled = false;
     setStudentsLoading(true);
     setStudentsError(null);
-    setSelectedIds(new Set());
-    api.get(`/school/pickup-students?vehicle_id=${encodeURIComponent(form.vehicle_id)}`)
+    const url = `/school/pickup-students?vehicle_id=${encodeURIComponent(form.vehicle_id)}&session=${encodeURIComponent(form.session)}`;
+    api.get(url)
       .then(r => {
         if (cancelled) return;
-        setStudents(Array.isArray(r.data?.data) ? r.data.data : []);
+        const list = Array.isArray(r.data?.data) ? r.data.data : [];
+        setStudents(list);
+        // Trim selection to students still allowed (e.g. when session
+        // changes from 'morning' → 'both' and some students are now
+        // ineligible because they have evening assignments).
+        setSelectedIds(prev => {
+          const allowed = new Set(list.map(s => s.id));
+          const next = new Set();
+          prev.forEach(id => { if (allowed.has(id)) next.add(id); });
+          return next;
+        });
       })
       .catch(err => {
         if (cancelled) return;
@@ -200,7 +211,7 @@ function CreatePickupModal({ onClose, onCreated }) {
       })
       .finally(() => { if (!cancelled) setStudentsLoading(false); });
     return () => { cancelled = true; };
-  }, [form.vehicle_id]);
+  }, [form.vehicle_id, form.session]);
 
   const visibleStudents = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -360,7 +371,7 @@ function CreatePickupModal({ onClose, onCreated }) {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-medium text-ink-muted">
-                เลือกนักเรียนที่ขึ้นจุดนี้
+                เลือกนักเรียนที่ยังไม่มีจุดรับส่งในรอบนี้
                 {students.length > 0 && (
                   <span className="ml-1 tabular-nums">
                     ({selectedIds.size}/{students.length})
@@ -385,7 +396,7 @@ function CreatePickupModal({ onClose, onCreated }) {
             ) : studentsError ? (
               <AlertBanner variant="danger" title="โหลดรายชื่อไม่สำเร็จ">{studentsError}</AlertBanner>
             ) : students.length === 0 ? (
-              <p className="text-sm text-ink-muted py-3 text-center">ไม่มีนักเรียนของโรงเรียนในรถคันนี้</p>
+              <p className="text-sm text-ink-muted py-3 text-center">นักเรียนของโรงเรียนในรถคันนี้มีจุดรับส่งครบแล้ว</p>
             ) : (
               <>
                 <input

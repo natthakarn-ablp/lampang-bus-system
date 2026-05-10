@@ -285,14 +285,45 @@ async function unassignStudentFromPoint(pointId, studentId) {
  * attempted, return false (route returns 400).
  * ───────────────────────────────────────────────────────────────────────── */
 
-async function getStudentsForVehicle(vehicleId) {
+/**
+ * Resolve student IDs that ALREADY have a pickup-point assignment on
+ * this vehicle that conflicts with the target `session`.
+ *
+ * Conflict matrix:
+ *   target='morning' ↔ existing in {morning, both}
+ *   target='evening' ↔ existing in {evening, both}
+ *   target='both'    ↔ existing in {morning, evening, both} (anything)
+ *
+ * SQL expresses it as: existing.session = 'both' OR target = 'both'
+ *                       OR existing.session = target.
+ */
+async function getStudentIdsConflictingForVehicle(vehicleId, session) {
+  if (!session || !['morning', 'evening', 'both'].includes(session)) return [];
+  const [rows] = await pool.query(`
+    SELECT DISTINCT spp.student_id
+    FROM student_pickup_points spp
+    JOIN pickup_points pp ON pp.id = spp.pickup_point_id AND pp.is_deleted = FALSE
+    WHERE pp.vehicle_id = ?
+      AND (pp.session = 'both' OR ? = 'both' OR pp.session = ?)
+  `, [vehicleId, session, session]);
+  return rows.map(r => r.student_id);
+}
+
+async function getStudentsForVehicle(vehicleId, { session = null } = {}) {
+  const conflictIds = await getStudentIdsConflictingForVehicle(vehicleId, session);
+  let where = 'vehicle_id = ? AND is_deleted = FALSE';
+  const params = [vehicleId];
+  if (conflictIds.length > 0) {
+    where += ' AND id NOT IN (?)';
+    params.push(conflictIds);
+  }
   const [rows] = await pool.query(`
     SELECT id, prefix, first_name, last_name, grade, classroom,
            morning_enabled, evening_enabled
     FROM students
-    WHERE vehicle_id = ? AND is_deleted = FALSE
+    WHERE ${where}
     ORDER BY classroom ASC, first_name ASC
-  `, [vehicleId]);
+  `, params);
   return rows;
 }
 
@@ -310,15 +341,45 @@ async function getVehiclesForSchool(schoolId) {
   return rows;
 }
 
-async function getStudentsForSchoolAndVehicle(schoolId, vehicleId) {
+async function getStudentsForSchoolAndVehicle(schoolId, vehicleId, { session = null } = {}) {
+  const conflictIds = await getStudentIdsConflictingForVehicle(vehicleId, session);
+  let where = 'school_id = ? AND vehicle_id = ? AND is_deleted = FALSE';
+  const params = [schoolId, vehicleId];
+  if (conflictIds.length > 0) {
+    where += ' AND id NOT IN (?)';
+    params.push(conflictIds);
+  }
   const [rows] = await pool.query(`
     SELECT id, prefix, first_name, last_name, grade, classroom,
            morning_enabled, evening_enabled
     FROM students
-    WHERE school_id = ? AND vehicle_id = ? AND is_deleted = FALSE
+    WHERE ${where}
     ORDER BY classroom ASC, first_name ASC
-  `, [schoolId, vehicleId]);
+  `, params);
   return rows;
+}
+
+/**
+ * Reject if any of the supplied studentIds already has a pickup-point
+ * assignment on this vehicle that conflicts with the target session.
+ * Server-side ground truth — even if the frontend filter is bypassed,
+ * the POST handler must catch duplicates here.
+ */
+async function validateNoDuplicateAssignmentsForVehicle(studentIds, vehicleId, session) {
+  if (!Array.isArray(studentIds) || studentIds.length === 0) return true;
+  if (!['morning', 'evening', 'both'].includes(session)) {
+    // Defensive default: if session unknown, treat like 'both' (most strict)
+    // so we never accidentally accept a duplicate.
+    session = 'both';
+  }
+  const [[{ conflicts }]] = await pool.query(`
+    SELECT COUNT(*) AS conflicts FROM student_pickup_points spp
+    JOIN pickup_points pp ON pp.id = spp.pickup_point_id AND pp.is_deleted = FALSE
+    WHERE pp.vehicle_id = ?
+      AND spp.student_id IN (?)
+      AND (pp.session = 'both' OR ? = 'both' OR pp.session = ?)
+  `, [vehicleId, studentIds, session, session]);
+  return conflicts === 0;
 }
 
 async function validateStudentsBelongToVehicle(studentIds, vehicleId) {
@@ -435,4 +496,6 @@ module.exports = {
   validateStudentsBelongToSchoolAndVehicle,
   validateVehicleServesSchool,
   createPickupPointWithStudents,
+  // Phase 6.1 hotfix-4 — duplicate-assignment guard
+  validateNoDuplicateAssignmentsForVehicle,
 };

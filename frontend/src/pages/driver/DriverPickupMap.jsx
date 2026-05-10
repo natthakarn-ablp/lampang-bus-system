@@ -142,14 +142,28 @@ function CreatePickupModal({ onClose, onCreated }) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState([]);
 
-  // Pre-load students for the driver's vehicle on mount.
+  // Pre-load (and re-load on session change) the available students.
+  // Server filters out students already assigned to a conflicting
+  // session on this vehicle, so the checklist only ever shows people
+  // who can actually be added to the new point.
   useEffect(() => {
     let cancelled = false;
-    api.get('/driver/pickup-students')
+    setStudentsLoading(true);
+    setStudentsError(null);
+    api.get(`/driver/pickup-students?session=${encodeURIComponent(form.session)}`)
       .then(r => {
         if (cancelled) return;
         const list = Array.isArray(r.data?.data) ? r.data.data : [];
         setStudents(list);
+        // Trim selection to only students still in the new available
+        // list — when session changes, some previously-available
+        // students may no longer be selectable.
+        setSelectedIds(prev => {
+          const allowed = new Set(list.map(s => s.id));
+          const next = new Set();
+          prev.forEach(id => { if (allowed.has(id)) next.add(id); });
+          return next;
+        });
       })
       .catch(err => {
         if (cancelled) return;
@@ -157,7 +171,7 @@ function CreatePickupModal({ onClose, onCreated }) {
       })
       .finally(() => { if (!cancelled) setStudentsLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [form.session]);
 
   const visibleStudents = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -293,7 +307,7 @@ function CreatePickupModal({ onClose, onCreated }) {
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-medium text-ink-muted">
-                เลือกนักเรียนที่ขึ้นจุดนี้
+                เลือกนักเรียนที่ยังไม่มีจุดรับส่งในรอบนี้
                 {students.length > 0 && (
                   <span className="ml-1 tabular-nums">
                     ({selectedIds.size}/{students.length})
@@ -316,7 +330,7 @@ function CreatePickupModal({ onClose, onCreated }) {
             ) : studentsError ? (
               <AlertBanner variant="danger" title="โหลดรายชื่อไม่สำเร็จ">{studentsError}</AlertBanner>
             ) : students.length === 0 ? (
-              <p className="text-sm text-ink-muted py-3 text-center">ไม่มีนักเรียนในรถคันนี้</p>
+              <p className="text-sm text-ink-muted py-3 text-center">นักเรียนของรถคันนี้มีจุดรับส่งครบแล้ว</p>
             ) : (
               <>
                 <input

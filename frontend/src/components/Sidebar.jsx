@@ -79,7 +79,7 @@ const ADMIN_NAV = [
   { section: 'ระบบ' },
   { to: '/admin',                 icon: Home,        label: 'ศูนย์ควบคุมระบบ' },
   { to: '/admin/users',           icon: Users,       label: 'จัดการผู้ใช้งาน' },
-  { to: '/admin/pickup-points',   icon: Map,         label: 'จัดการจุดรับส่ง' },
+  { to: '/admin/pickup-points',   icon: Map,         label: 'ตรวจสอบจุดรับส่ง' },
   { to: '/admin/audit-logs',      icon: FileText,    label: 'ประวัติการใช้งาน' },
   { to: '/admin/system-health',   icon: Activity,    label: 'สุขภาพระบบ' },
   { section: 'การวิจัย' },

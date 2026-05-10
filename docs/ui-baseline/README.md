@@ -8,13 +8,13 @@ comparison in future phases.
 
 | | |
 |---|---|
-| Captured at HEAD | `c4541b3` |
+| Captured at HEAD | `e874db8` |
 | Capture method | `scripts/browser-review.mjs` (Playwright + chromium-headless-shell) |
 | Auth | mock JWT injected via `localStorage` (see script header) |
 | API | stubbed via `page.route('**/api/**', …)` returning `{ success: true, data: {} }` |
 | Screenshot mode | viewport-only (not full-page; see script comment) |
-| Total images | 31 |
-| Total size | ~3.1 MB (Phase 6 map captures push the total — OSM tile imagery is dense) |
+| Total images | 33 |
+| Total size | ~4.0 MB |
 
 ## Viewports
 
@@ -46,7 +46,9 @@ comparison in future phases.
 | `11-affiliation-{desktop,tablet,mobile}.png` | `/affiliation` | Phase 4 attention panel (schools jumpable, incidents/vehicles non-jumpable) + KPIGrid + session donuts |
 | `12-driver-pickup-map-{desktop,mobile}.png` | `/driver/pickup-map` | Phase 6 driver map: full-screen Leaflet + OSM, 3 markers, session pills, bottom-nav preserved |
 | `13-school-pickup-map-{desktop,mobile}.png` | `/school/pickup-map` | Phase 6 school summary: list panel + map (side-by-side desktop, stacked mobile), 4 points across 2 vehicles |
-| `14-admin-pickup-points-desktop.png` | `/admin/pickup-points` | Phase 6 admin CRUD: paginated table + filter dropdown + per-row Users/Edit/Delete actions |
+| `14-admin-pickup-points-desktop.png` | `/admin/pickup-points` | Phase 6.1: renamed "ตรวจสอบจุดรับส่ง" + override-role AlertBanner; CRUD preserved as "+ เพิ่มกรณีพิเศษ" |
+| `15-driver-pickup-create-modal-mobile.png` | `/driver/pickup-map` (modal open) | Phase 6.1 driver create flow: pre-loaded student checklist for own vehicle |
+| `16-school-pickup-create-modal-desktop.png` | `/school/pickup-map` (modal open) | Phase 6.1 school create flow: vehicle dropdown → per-vehicle student checklist for own school |
 
 ## How to re-capture
 

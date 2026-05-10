@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Bus, GraduationCap, Building2, Clock, AlertTriangle,
   Sunrise, Sunset, FileText, RotateCw, Truck,
@@ -22,6 +22,15 @@ export default function ProvinceDashboard() {
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
+
+  // Refs for the attention-panel scroll-to-section drill-down (mirrors the
+  // TransportDashboard scrollIntoView pattern). DashboardSection itself
+  // doesn't forward refs, so we attach via a wrapping div on each section.
+  const schoolsRef   = useRef(null);
+  const incidentsRef = useRef(null);
+  const vehiclesRef  = useRef(null);
+  const scrollTo = (ref) =>
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const fetchAll = useCallback(async () => {
     setRefreshing(true);
@@ -65,23 +74,19 @@ export default function ProvinceDashboard() {
   const totalPending = (data.morning_pending || 0) + (data.evening_pending || 0);
   const totalBase    = (data.morning_total   || 0) + (data.evening_total   || 0);
   const notStarted   = totalBase === 0 && problemSchools.length === 0 && !hasEmergency;
-  const allClear     = !notStarted && problemSchools.length === 0 && !hasEmergency && totalPending === 0;
+
+  // Hero state: the AttentionPanel takes over from the bulleted-text banner
+  // whenever any of the three entity-level signals has content. Pending and
+  // leave counts (which used to drive bulleted-text alerts) are already
+  // surfaced in the SessionProgress cards below — no need to duplicate them
+  // in the hero.
+  const hasAnyAttention = problemSchools.length > 0
+                       || incidents.length > 0
+                       || atRiskVehicles.length > 0;
 
   const dateLabel = data.date
     ? new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
     : null;
-
-  // Build alert lines (consolidated into one banner)
-  const alertLines = [];
-  if (problemSchools.length > 0) alertLines.push(`${problemSchools.length} โรงเรียนยังมีรายการค้าง`);
-  if (data.morning_pending > 20) alertLines.push(`รอส่งเช้า ${data.morning_pending} คน`);
-  if (data.evening_pending > 20) alertLines.push(`รอรับเย็น ${data.evening_pending} คน`);
-  if (hasEmergency) alertLines.push(`เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง (7 วัน)`);
-  if ((data.leave_count ?? 0) > 10) alertLines.push(`ลาวันนี้ ${data.leave_count} คน`);
-
-  const bannerVariant = problemSchools.length > 0 || hasEmergency ? 'danger'
-                      : alertLines.length > 0 ? 'warn'
-                      : 'success';
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
@@ -99,19 +104,22 @@ export default function ProvinceDashboard() {
         />
       </header>
 
-      {/* Status banner */}
+      {/* Hero: state ribbon (info / success) OR Executive Attention Panel */}
       {notStarted ? (
         <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>
-      ) : allClear ? (
+      ) : !hasAnyAttention ? (
         <AlertBanner variant="success" title="ระบบปกติ — ทุกโรงเรียนดำเนินการครบ" />
       ) : (
-        <AlertBanner variant={bannerVariant} title="สิ่งที่ต้องติดตามทันที">
-          <ul className="space-y-1 mt-1">
-            {alertLines.map((line, i) => (
-              <li key={i} className="text-ink">{line}</li>
-            ))}
-          </ul>
-        </AlertBanner>
+        <ExecutiveAttentionPanel
+          schools={problemSchools}
+          incidents={incidents}
+          vehicles={atRiskVehicles}
+          onJump={(section) => scrollTo(
+            section === 'schools'   ? schoolsRef
+            : section === 'incidents' ? incidentsRef
+            :                           vehiclesRef
+          )}
+        />
       )}
 
       {/* KPI Grid */}
@@ -186,29 +194,31 @@ export default function ProvinceDashboard() {
         </div>
       </DashboardSection>
 
-      {/* Risk schools */}
+      {/* Risk schools — wrapped div carries the scroll anchor for the attention panel */}
       {problemSchools.length > 0 && (
-        <DashboardSection
-          title="โรงเรียนเสี่ยง"
-          description={`${problemSchools.length} โรงเรียนมีรายการค้างวันนี้`}
-        >
-          <div className="space-y-2">
-            {problemSchools.map(s => {
-              const pending = (s.morning_pending || 0) + (s.evening_pending || 0);
-              const level = pending > 50 ? 'high' : pending > 20 ? 'medium' : 'low';
-              return (
-                <RiskCard
-                  key={s.school_id}
-                  level={level}
-                  icon={Building2}
-                  title={s.school_name}
-                  subtitle={`${s.student_count} คน · ${s.vehicle_count} คัน`}
-                  meta={`รอ ${pending}`}
-                />
-              );
-            })}
-          </div>
-        </DashboardSection>
+        <div ref={schoolsRef}>
+          <DashboardSection
+            title="โรงเรียนเสี่ยง"
+            description={`${problemSchools.length} โรงเรียนมีรายการค้างวันนี้`}
+          >
+            <div className="space-y-2">
+              {problemSchools.map(s => {
+                const pending = (s.morning_pending || 0) + (s.evening_pending || 0);
+                const level = pending > 50 ? 'high' : pending > 20 ? 'medium' : 'low';
+                return (
+                  <RiskCard
+                    key={s.school_id}
+                    level={level}
+                    icon={Building2}
+                    title={s.school_name}
+                    subtitle={`${s.student_count} คน · ${s.vehicle_count} คัน`}
+                    meta={`รอ ${pending}`}
+                  />
+                );
+              })}
+            </div>
+          </DashboardSection>
+        </div>
       )}
 
       {/* Affiliations */}
@@ -238,23 +248,27 @@ export default function ProvinceDashboard() {
 
       {/* Incident feed — last 5 emergencies (only render when there are any) */}
       {incidents.length > 0 && (
-        <DashboardSection title="เหตุฉุกเฉินล่าสุด" description={`${incidents.length} รายการล่าสุด`}>
-          <div className="space-y-2">
-            {incidents.map(em => <IncidentEntry key={em.id} em={em} />)}
-          </div>
-        </DashboardSection>
+        <div ref={incidentsRef}>
+          <DashboardSection title="เหตุฉุกเฉินล่าสุด" description={`${incidents.length} รายการล่าสุด`}>
+            <div className="space-y-2">
+              {incidents.map(em => <IncidentEntry key={em.id} em={em} />)}
+            </div>
+          </DashboardSection>
+        </div>
       )}
 
       {/* Priority vehicles — top 10 by risk score (hidden when API returns empty) */}
       {atRiskVehicles.length > 0 && (
-        <DashboardSection
-          title="รถสำคัญต้องติดตาม"
-          description={`${atRiskVehicles.length} คัน เรียงตามความเร่งด่วน`}
-        >
-          <div className="space-y-2">
-            {atRiskVehicles.map(v => <VehicleAtRiskRow key={v.id} vehicle={v} />)}
-          </div>
-        </DashboardSection>
+        <div ref={vehiclesRef}>
+          <DashboardSection
+            title="รถสำคัญต้องติดตาม"
+            description={`${atRiskVehicles.length} คัน เรียงตามความเร่งด่วน`}
+          >
+            <div className="space-y-2">
+              {atRiskVehicles.map(v => <VehicleAtRiskRow key={v.id} vehicle={v} />)}
+            </div>
+          </DashboardSection>
+        </div>
       )}
 
       {/* Executive summary */}
@@ -335,6 +349,109 @@ function IncidentEntry({ em }) {
         {em.detail && <p className="text-sm text-ink-muted truncate">{em.detail}</p>}
       </div>
     </AppCard>
+  );
+}
+
+/* ── Executive Attention Panel: 3-card hero grid for at-a-glance triage ── */
+/* Compact "X minutes ago" formatter used inside AttentionCard rows. The
+   detailed IncidentEntry below uses absolute datetimes — this helper is
+   intentionally terser to fit a card secondary line. */
+function relativeTime(iso) {
+  if (!iso) return '-';
+  const sec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  if (sec < 60)    return `${sec} วินาทีก่อน`;
+  if (sec < 3600)  return `${Math.floor(sec / 60)} นาทีก่อน`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} ชั่วโมงก่อน`;
+  return `${Math.floor(sec / 86400)} วันก่อน`;
+}
+
+function ExecutiveAttentionPanel({ schools, incidents, vehicles, onJump }) {
+  const vehicleVariant = vehicles.some(v => v.risk_score >= 100) ? 'danger'
+                       : vehicles.length > 0                     ? 'warn'
+                       :                                            'neutral';
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <AttentionCard
+        icon={Building2}
+        title="โรงเรียนเสี่ยง"
+        count={schools.length}
+        variant={schools.length > 0 ? 'warn' : 'neutral'}
+        items={schools.slice(0, 3).map(s => ({
+          key: s.school_id,
+          primary: s.school_name,
+          secondary: `รอ ${(s.morning_pending || 0) + (s.evening_pending || 0)}`,
+        }))}
+        onJump={() => onJump('schools')}
+        emptyLabel="ไม่มีโรงเรียนค้าง"
+      />
+      <AttentionCard
+        icon={AlertTriangle}
+        title="เหตุฉุกเฉินล่าสุด"
+        count={incidents.length}
+        variant={incidents.length > 0 ? 'danger' : 'neutral'}
+        items={incidents.slice(0, 3).map(em => ({
+          key: em.id,
+          primary: em.plate_no || '-',
+          secondary: relativeTime(em.reported_at),
+        }))}
+        onJump={() => onJump('incidents')}
+        emptyLabel="ไม่มีเหตุล่าสุด"
+      />
+      <AttentionCard
+        icon={Truck}
+        title="รถสำคัญ"
+        count={vehicles.length}
+        variant={vehicleVariant}
+        items={vehicles.slice(0, 3).map(v => ({
+          key: v.id,
+          primary: v.plate_no,
+          secondary: v.risk_reasons?.[0] || `คะแนน ${v.risk_score}`,
+        }))}
+        onJump={() => onJump('vehicles')}
+        emptyLabel="ไม่มีรถต้องติดตาม"
+      />
+    </div>
+  );
+}
+
+function AttentionCard({ icon: Icon, title, count, variant, items, onJump, emptyLabel }) {
+  const interactive = count > 0;
+  // Render as a real <button> when interactive so click + Enter + Space all
+  // fire onJump natively and screen readers announce "button". Fall back to
+  // a plain <div> for the empty state — there's nothing to navigate to.
+  const Wrapper = interactive ? 'button' : 'div';
+  const wrapperProps = interactive
+    ? { type: 'button', onClick: onJump,
+        className: 'block w-full text-left transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-xl' }
+    : { className: 'block w-full text-left' };
+
+  return (
+    <Wrapper {...wrapperProps}>
+      <AppCard padding="md" className="h-full">
+        <div className="flex items-center gap-2 mb-2">
+          {Icon && <Icon className="w-4 h-4 text-ink-muted" strokeWidth={2} />}
+          <span className="text-sm font-semibold text-ink truncate">{title}</span>
+          <span className="ml-auto">
+            <StatusBadge variant={variant} size="sm">{count}</StatusBadge>
+          </span>
+        </div>
+        {interactive ? (
+          <>
+            <ul className="space-y-1.5">
+              {items.map(it => (
+                <li key={it.key} className="min-w-0">
+                  <p className="text-sm font-medium text-ink truncate">{it.primary}</p>
+                  <p className="text-xs text-ink-muted truncate">{it.secondary}</p>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-brand font-medium mt-3">ดูทั้งหมด →</p>
+          </>
+        ) : (
+          <p className="text-xs text-ink-muted">{emptyLabel}</p>
+        )}
+      </AppCard>
+    </Wrapper>
   );
 }
 

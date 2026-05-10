@@ -3,6 +3,7 @@ import { Map as MapIcon, Plus, Pencil, Trash2, X, UserPlus, Users } from 'lucide
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
+import { classroomLabel } from '../../utils/student';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
@@ -429,20 +430,23 @@ function AssignStudentsModal({ row, onClose, onChanged }) {
       />
       {results.length > 0 && (
         <div className="border border-surface-border rounded-lg divide-y divide-surface-border max-h-60 overflow-y-auto">
-          {results.map(s => (
-            <button
-              key={s.id}
-              type="button"
-              disabled={busy}
-              onClick={() => assign(s.id)}
-              className="block w-full text-left px-3 py-2 hover:bg-surface-border transition text-sm disabled:opacity-50"
-            >
-              <span className="font-medium">{s.first_name} {s.last_name}</span>
-              <span className="text-xs text-ink-muted ml-2">
-                {s.school_name || s.school_id} · {s.classroom || '-'}
-              </span>
-            </button>
-          ))}
+          {results.map(s => {
+            const cls = classroomLabel(s);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                disabled={busy}
+                onClick={() => assign(s.id)}
+                className="block w-full text-left px-3 py-2 hover:bg-surface-border transition text-sm disabled:opacity-50"
+              >
+                <span className="font-medium">{s.first_name} {s.last_name}</span>
+                <span className="text-xs text-ink-muted ml-2">
+                  {s.school_name || s.school_id} · {cls || '-'}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
       <p className="text-xs text-ink-muted mt-3">

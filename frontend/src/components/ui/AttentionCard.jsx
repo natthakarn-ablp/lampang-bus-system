@@ -4,10 +4,15 @@ import StatusBadge from './StatusBadge';
 /**
  * AttentionCard — one cell of a dashboard attention panel.
  *
- * Composes AppCard + StatusBadge. When count > 0 the entire card is a real
- * <button> (so click + Enter + Space all fire onJump natively and screen
- * readers announce "button"); when count === 0 it falls back to a plain
- * <div> with a muted emptyLabel — there's nothing to navigate to.
+ * Composes AppCard + StatusBadge. Three render states:
+ *   - count === 0                  → muted emptyLabel, non-interactive <div>
+ *   - count > 0, onJump provided   → items list + "ดูทั้งหมด →" affordance
+ *                                    inside a real <button> so click + Enter
+ *                                    + Space all fire onJump natively
+ *   - count > 0, no onJump prop    → items list shown, but no button wrapper
+ *                                    and no "ดูทั้งหมด →" — for dashboards
+ *                                    that surface the signal but don't yet
+ *                                    have a detail section to drill into
  *
  * Caller-provided items[] each have { key, primary, secondary }; up to the
  * caller to slice to the desired top-N before passing in.
@@ -21,9 +26,10 @@ export default function AttentionCard({
   onJump,
   emptyLabel,
 }) {
-  const interactive = count > 0;
-  const Wrapper = interactive ? 'button' : 'div';
-  const wrapperProps = interactive
+  const hasContent = count > 0;
+  const isJumpable = hasContent && typeof onJump === 'function';
+  const Wrapper = isJumpable ? 'button' : 'div';
+  const wrapperProps = isJumpable
     ? { type: 'button', onClick: onJump,
         className: 'block w-full text-left transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-xl' }
     : { className: 'block w-full text-left' };
@@ -38,7 +44,7 @@ export default function AttentionCard({
             <StatusBadge variant={variant} size="sm">{count}</StatusBadge>
           </span>
         </div>
-        {interactive ? (
+        {hasContent ? (
           <>
             <ul className="space-y-1.5">
               {items.map(it => (
@@ -48,7 +54,7 @@ export default function AttentionCard({
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-brand font-medium mt-3">ดูทั้งหมด →</p>
+            {isJumpable && <p className="text-xs text-brand font-medium mt-3">ดูทั้งหมด →</p>}
           </>
         ) : (
           <p className="text-xs text-ink-muted">{emptyLabel}</p>

@@ -1,16 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Map, Building2, GraduationCap, Bus, ClipboardList, AlertTriangle,
-  Sunrise, Sunset, BellRing,
+  Sunrise, Sunset, BellRing, Truck,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
 import { useToast } from '../../components/Toast';
 import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
+import { relativeTime } from '../../utils/datetime';
 import {
   AppCard, AlertBanner, KPIGrid, KPIStat,
-  RiskCard, DashboardSection,
+  RiskCard, DashboardSection, AttentionCard,
 } from '../../components/ui';
 import {
   PAGE_TITLES, CARD_LABELS, CHART_TITLES,
@@ -20,14 +21,31 @@ import {
 export default function AffiliationDashboard() {
   const toast = useToast();
   const [data, setData] = useState(null);
+  const [incidents, setIncidents] = useState([]);
+  const [atRiskVehicles, setAtRiskVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notified, setNotified] = useState({});
 
+  // Schools is the only detail section that exists today on Affiliation,
+  // so it's the only attention-card jump target. Incidents + vehicles
+  // cards render their preview but stay non-jumpable until those detail
+  // sections land in a future phase.
+  const schoolsRef = useRef(null);
+  const scrollTo = (ref) =>
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   useEffect(() => {
-    api.get('/affiliation/dashboard')
-      .then(res => setData(res.data.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      api.get('/affiliation/dashboard').catch(() => null),
+      api.get('/affiliation/emergencies?per_page=5&page=1').catch(() => null),
+      api.get('/affiliation/vehicles-at-risk?limit=10').catch(() => null),
+    ]).then(([dashRes, incRes, atRiskRes]) => {
+      if (dashRes) setData(dashRes.data.data);
+      const incList = incRes?.data?.data;
+      setIncidents(Array.isArray(incList) ? incList : []);
+      const atRiskList = atRiskRes?.data?.data;
+      setAtRiskVehicles(Array.isArray(atRiskList) ? atRiskList : []);
+    }).finally(() => setLoading(false));
   }, []);
 
   const dateLabel = data?.date
@@ -48,9 +66,29 @@ export default function AffiliationDashboard() {
         <SkeletonKpiGrid count={5} />
       ) : !data ? (
         <p className="text-ink-muted py-10 text-center">{UI_MESSAGES.NO_DATA}</p>
-      ) : (
+      ) : (() => {
+        const problemSchools = data.schools_not_complete ?? [];
+        const totalBase  = (data.morning_total ?? 0) + (data.evening_total ?? 0);
+        const hasEmerg   = (data.recent_emergencies ?? 0) > 0;
+        const notStarted = totalBase === 0 && problemSchools.length === 0 && !hasEmerg;
+        const hasAnyAttention = problemSchools.length > 0
+                             || incidents.length > 0
+                             || atRiskVehicles.length > 0;
+        return (
         <>
-          <StatusBanner data={data} />
+          {/* Hero: state ribbon (info / success) OR Executive Attention Panel */}
+          {notStarted ? (
+            <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>
+          ) : !hasAnyAttention ? (
+            <AlertBanner variant="success" title="ทุกโรงเรียนในสังกัดดำเนินการครบ" />
+          ) : (
+            <ExecutiveAttentionPanel
+              schools={problemSchools}
+              incidents={incidents}
+              vehicles={atRiskVehicles}
+              onJumpSchools={() => scrollTo(schoolsRef)}
+            />
+          )}
 
           {/* Headline KPIs */}
           <KPIGrid cols={5} gap="sm">
@@ -110,69 +148,92 @@ export default function AffiliationDashboard() {
             </div>
           </DashboardSection>
 
-          {/* Schools with pending */}
-          <DashboardSection
-            title="โรงเรียนเสี่ยง"
-            description={data.schools_not_complete?.length > 0
-              ? `${data.schools_not_complete.length} โรงเรียนยังมีรายการค้าง`
-              : null}
-          >
-            {(!data.schools_not_complete || data.schools_not_complete.length === 0) ? (
-              <AlertBanner variant="success" title={UI_MESSAGES.ALL_SCHOOLS_DONE} />
-            ) : (
-              <div className="space-y-3">
-                {data.schools_not_complete.map(s => (
-                  <SchoolRiskRow
-                    key={s.school_id}
-                    school={s}
-                    notifiedAt={notified[s.school_id]}
-                    onNotify={async () => {
-                      const msg = `แจ้งเตือนจากสังกัด: โรงเรียน${s.school_name} ยังมีข้อมูลนักเรียนค้าง (เช้า ${s.morning_pending || 0} คน, เย็น ${s.evening_pending || 0} คน) กรุณาตรวจสอบและดำเนินการในระบบ`;
-                      try {
-                        await navigator.clipboard.writeText(msg);
-                        await api.post('/affiliation/notify-school', {
-                          school_id: s.school_id, school_name: s.school_name, message: msg, method: 'copy',
-                        });
-                        setNotified(prev => ({ ...prev, [s.school_id]: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) }));
-                        toast.success('คัดลอกข้อความแล้ว — ส่งผ่าน LINE/โทรศัพท์ได้เลย');
-                      } catch { toast.error('ไม่สำเร็จ'); }
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </DashboardSection>
+          {/* Schools with pending — wrapped div carries the scroll anchor for the attention panel */}
+          {problemSchools.length > 0 && (
+            <div ref={schoolsRef}>
+              <DashboardSection
+                title="โรงเรียนเสี่ยง"
+                description={`${problemSchools.length} โรงเรียนยังมีรายการค้าง`}
+              >
+                <div className="space-y-3">
+                  {problemSchools.map(s => (
+                    <SchoolRiskRow
+                      key={s.school_id}
+                      school={s}
+                      notifiedAt={notified[s.school_id]}
+                      onNotify={async () => {
+                        const msg = `แจ้งเตือนจากสังกัด: โรงเรียน${s.school_name} ยังมีข้อมูลนักเรียนค้าง (เช้า ${s.morning_pending || 0} คน, เย็น ${s.evening_pending || 0} คน) กรุณาตรวจสอบและดำเนินการในระบบ`;
+                        try {
+                          await navigator.clipboard.writeText(msg);
+                          await api.post('/affiliation/notify-school', {
+                            school_id: s.school_id, school_name: s.school_name, message: msg, method: 'copy',
+                          });
+                          setNotified(prev => ({ ...prev, [s.school_id]: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) }));
+                          toast.success('คัดลอกข้อความแล้ว — ส่งผ่าน LINE/โทรศัพท์ได้เลย');
+                        } catch { toast.error('ไม่สำเร็จ'); }
+                      }}
+                    />
+                  ))}
+                </div>
+              </DashboardSection>
+            </div>
+          )}
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }
 
-/* ── Status banner: consolidated severity-driven alert ── */
-function StatusBanner({ data }) {
-  const schoolsPending = data.schools_not_complete?.length ?? 0;
-  const totalBase = (data.morning_total ?? 0) + (data.evening_total ?? 0);
-  const hasEmerg  = (data.recent_emergencies ?? 0) > 0;
-
-  const issues = [];
-  if (schoolsPending > 0)              issues.push(`${schoolsPending} โรงเรียนยังมีรายการค้าง`);
-  if ((data.morning_pending ?? 0) > 0) issues.push(`รอส่งเช้า ${data.morning_pending} คน`);
-  if ((data.evening_pending ?? 0) > 0) issues.push(`รอรับเย็น ${data.evening_pending} คน`);
-  if (hasEmerg)                        issues.push(`เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง`);
-
-  if (totalBase === 0 && schoolsPending === 0 && !hasEmerg) {
-    return <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>;
-  }
-  if (issues.length === 0) {
-    return <AlertBanner variant="success" title="ทุกโรงเรียนในสังกัดดำเนินการครบ" />;
-  }
-  const variant = schoolsPending > 0 || hasEmerg ? 'danger' : 'warn';
+/* ── Executive Attention Panel: 3-card hero grid for at-a-glance triage ──
+   Affiliation flavor — schools card is jumpable; incidents/vehicles cards
+   stay non-jumpable until those detail sections land in a future phase. */
+function ExecutiveAttentionPanel({ schools, incidents, vehicles, onJumpSchools }) {
+  const vehicleVariant = vehicles.some(v => v.risk_score >= 100) ? 'danger'
+                       : vehicles.length > 0                     ? 'warn'
+                       :                                            'neutral';
   return (
-    <AlertBanner variant={variant} title="สิ่งที่ต้องติดตามวันนี้">
-      <ul className="space-y-0.5 mt-1">
-        {issues.map((msg, i) => <li key={i}>{msg}</li>)}
-      </ul>
-    </AlertBanner>
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <AttentionCard
+        icon={Building2}
+        title="โรงเรียนเสี่ยง"
+        count={schools.length}
+        variant={schools.length > 0 ? 'warn' : 'neutral'}
+        items={schools.slice(0, 3).map(s => ({
+          key: s.school_id,
+          primary: s.school_name,
+          secondary: `รอ ${(s.morning_pending || 0) + (s.evening_pending || 0)}`,
+        }))}
+        onJump={onJumpSchools}
+        emptyLabel="ไม่มีโรงเรียนค้าง"
+      />
+      <AttentionCard
+        icon={AlertTriangle}
+        title="เหตุฉุกเฉินล่าสุด"
+        count={incidents.length}
+        variant={incidents.length > 0 ? 'danger' : 'neutral'}
+        items={incidents.slice(0, 3).map(em => ({
+          key: em.id,
+          primary: em.plate_no || '-',
+          secondary: relativeTime(em.reported_at),
+        }))}
+        // No onJump — incidents detail section doesn't exist on Affiliation yet.
+        emptyLabel="ไม่มีเหตุล่าสุด"
+      />
+      <AttentionCard
+        icon={Truck}
+        title="รถสำคัญ"
+        count={vehicles.length}
+        variant={vehicleVariant}
+        items={vehicles.slice(0, 3).map(v => ({
+          key: v.id,
+          primary: v.plate_no,
+          secondary: v.risk_reasons?.[0] || `คะแนน ${v.risk_score}`,
+        }))}
+        // No onJump — vehicles detail section doesn't exist on Affiliation yet.
+        emptyLabel="ไม่มีรถต้องติดตาม"
+      />
+    </div>
   );
 }
 

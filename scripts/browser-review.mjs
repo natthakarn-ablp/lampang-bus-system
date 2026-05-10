@@ -123,6 +123,43 @@ const MOCK = {
     ],
     meta: { page: 1, per_page: 30, total: 7 },
   },
+  // Phase 5 — Admin Attention Panel mocks.
+  // 'data' returned to the panel is the { total, rows } service payload
+  // (which the route handler wraps in the standard { success, data, ... }
+  // envelope). The mockFor stub re-wraps via { success: true, ...m },
+  // so we stash the service payload under `data` here.
+  '/api/admin/users-needing-action': {
+    data: {
+      total: 7,
+      rows: [
+        { id: 101, username: 'driver42',    display_name: 'คนขับ ทดสอบ 42',    role: 'driver',      scope_type: null,             scope_id: null,        is_active: false, must_change_password: false, last_login: '2026-04-22T08:30:00Z', created_at: '2024-08-15T03:00:00Z' },
+        { id: 102, username: 'school05',    display_name: 'โรงเรียนเทศบาล 5',  role: 'school',      scope_type: 'SCHOOL',         scope_id: 'SCH0005',   is_active: true,  must_change_password: true,  last_login: null,                  created_at: '2026-05-08T09:00:00Z' },
+        { id: 103, username: 'province02',  display_name: 'รองผู้บริหารจังหวัด', role: 'province',   scope_type: 'PROVINCE',       scope_id: 'LPG',       is_active: true,  must_change_password: true,  last_login: '2026-04-15T14:22:00Z', created_at: '2026-04-10T10:00:00Z' },
+      ],
+    },
+  },
+  '/api/admin/roster-requests-pending': {
+    data: {
+      total: 11,
+      rows: [
+        { id: 201, school_id: 'SCH0001', vehicle_id: 'V-001', student_id: 4321, request_type: 'add',    reason: 'นักเรียนใหม่เพิ่งย้ายเข้า',   created_at: new Date(Date.now() - 3 * 86400_000).toISOString(),  school_name: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์', plate_no: 'นข 1010 ลำปาง' },
+        { id: 202, school_id: 'SCH0002', vehicle_id: 'V-002', student_id: 5432, request_type: 'remove', reason: 'ผู้ปกครองแจ้งหยุดบริการ',     created_at: new Date(Date.now() - 26 * 3600_000).toISOString(), school_name: 'โรงเรียนเทศบาล 1',                 plate_no: 'นข 2020 ลำปาง' },
+        { id: 203, school_id: 'SCH0001', vehicle_id: 'V-003', student_id: null, request_type: 'add',    reason: 'นักเรียนใหม่ — ยังไม่ลงทะเบียน', created_at: new Date(Date.now() - 4 * 3600_000).toISOString(),  school_name: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์', plate_no: 'นข 3030 ลำปาง' },
+      ],
+    },
+  },
+  // Card 3 reuses /api/admin/audit-logs but with ?action=DELETE filter.
+  // The query-aware mockFor() picks up this entry when action=DELETE is
+  // in the URL; otherwise the mixed-action /api/admin/audit-logs mock
+  // (above) wins for the un-filtered admin audit-logs page.
+  '/api/admin/audit-logs?action=DELETE': {
+    data: [
+      { id: 301, created_at: new Date(Date.now() - 2 * 3600_000).toISOString(),  actor_name: 'admin@lampang.go.th', action: 'DELETE', entity_type: 'student',        entity_id: 'STU-1042', old_value: { first_name: 'ทดสอบ' } },
+      { id: 302, created_at: new Date(Date.now() - 8 * 3600_000).toISOString(),  actor_name: 'school02',            action: 'DELETE', entity_type: 'vehicle',        entity_id: 'V-077',    old_value: { plate_no: 'นข 7777 ลำปาง' } },
+      { id: 303, created_at: new Date(Date.now() - 18 * 3600_000).toISOString(), actor_name: 'admin@lampang.go.th', action: 'DELETE', entity_type: 'roster_request', entity_id: 'REQ-099',  old_value: { status: 'pending' } },
+    ],
+    meta: { page: 1, per_page: 3, total: 4 },
+  },
   '/api/province/audit-logs': {
     data: [
       { id: 1, created_at: '2026-05-09T08:30:00Z', actor_name: 'admin@lampang.go.th', action: 'CREATE',  entity_type: 'student',  entity_id: 'STU-001', new_value: { first_name: 'สมชาย' } },
@@ -344,9 +381,17 @@ const MOCK = {
 };
 
 function mockFor(url) {
-  // Strip query string + fragment to match by pathname only.
   try {
     const u = new URL(url);
+    // Phase 5: allow `?action=X` overrides so an audit-logs DELETE
+    // filter can return DELETE-only fixtures while the un-filtered
+    // /admin/audit-logs page still gets the mixed-action mock.
+    // Falls back to pathname-only match if no action-keyed mock exists.
+    const action = u.searchParams.get('action');
+    if (action) {
+      const actionKey = `${u.pathname}?action=${action}`;
+      if (MOCK[actionKey]) return MOCK[actionKey];
+    }
     return MOCK[u.pathname] || null;
   } catch { return null; }
 }

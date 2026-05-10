@@ -6,3 +6,4 @@ export { default as KPIStat }          from './KPIStat';
 export { default as RiskCard }         from './RiskCard';
 export { default as SectionTitle }     from './SectionTitle';
 export { default as DashboardSection } from './DashboardSection';
+export { default as AttentionCard }    from './AttentionCard';

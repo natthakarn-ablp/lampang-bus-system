@@ -8,10 +8,11 @@ const POLL_INTERVAL = 30_000; // 30s background refresh
 const TICK_INTERVAL = 1_000;  // 1s freshness ticker (re-render only)
 import api from '../../api/axios';
 import { safePct, kpiColor } from '../../utils/kpi';
+import { relativeTime } from '../../utils/datetime';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
 import {
   AppCard, AlertBanner, KPIGrid, KPIStat,
-  RiskCard, DashboardSection, StatusBadge,
+  RiskCard, DashboardSection, StatusBadge, AttentionCard,
 } from '../../components/ui';
 
 export default function ProvinceDashboard() {
@@ -353,18 +354,6 @@ function IncidentEntry({ em }) {
 }
 
 /* ── Executive Attention Panel: 3-card hero grid for at-a-glance triage ── */
-/* Compact "X minutes ago" formatter used inside AttentionCard rows. The
-   detailed IncidentEntry below uses absolute datetimes — this helper is
-   intentionally terser to fit a card secondary line. */
-function relativeTime(iso) {
-  if (!iso) return '-';
-  const sec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  if (sec < 60)    return `${sec} วินาทีก่อน`;
-  if (sec < 3600)  return `${Math.floor(sec / 60)} นาทีก่อน`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)} ชั่วโมงก่อน`;
-  return `${Math.floor(sec / 86400)} วันก่อน`;
-}
-
 function ExecutiveAttentionPanel({ schools, incidents, vehicles, onJump }) {
   const vehicleVariant = vehicles.some(v => v.risk_score >= 100) ? 'danger'
                        : vehicles.length > 0                     ? 'warn'
@@ -411,47 +400,6 @@ function ExecutiveAttentionPanel({ schools, incidents, vehicles, onJump }) {
         emptyLabel="ไม่มีรถต้องติดตาม"
       />
     </div>
-  );
-}
-
-function AttentionCard({ icon: Icon, title, count, variant, items, onJump, emptyLabel }) {
-  const interactive = count > 0;
-  // Render as a real <button> when interactive so click + Enter + Space all
-  // fire onJump natively and screen readers announce "button". Fall back to
-  // a plain <div> for the empty state — there's nothing to navigate to.
-  const Wrapper = interactive ? 'button' : 'div';
-  const wrapperProps = interactive
-    ? { type: 'button', onClick: onJump,
-        className: 'block w-full text-left transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-xl' }
-    : { className: 'block w-full text-left' };
-
-  return (
-    <Wrapper {...wrapperProps}>
-      <AppCard padding="md" className="h-full">
-        <div className="flex items-start gap-2 mb-2">
-          {Icon && <Icon className="w-4 h-4 text-ink-muted shrink-0 mt-0.5" strokeWidth={2} />}
-          <span className="text-sm font-semibold text-ink leading-tight">{title}</span>
-          <span className="ml-auto shrink-0">
-            <StatusBadge variant={variant} size="sm">{count}</StatusBadge>
-          </span>
-        </div>
-        {interactive ? (
-          <>
-            <ul className="space-y-1.5">
-              {items.map(it => (
-                <li key={it.key} className="min-w-0">
-                  <p className="text-sm font-medium text-ink truncate">{it.primary}</p>
-                  <p className="text-xs text-ink-muted truncate">{it.secondary}</p>
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-brand font-medium mt-3">ดูทั้งหมด →</p>
-          </>
-        ) : (
-          <p className="text-xs text-ink-muted">{emptyLabel}</p>
-        )}
-      </AppCard>
-    </Wrapper>
   );
 }
 

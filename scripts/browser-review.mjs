@@ -130,6 +130,35 @@ const MOCK = {
     ],
     meta: { page: 1, per_page: 30, total: 3 },
   },
+  // Phase 3.7 — Province dashboard payload. Without this mock the route
+  // falls through to the empty data: {} fallback, which trips the
+  // "notStarted" branch (totalBase === 0) and the info AlertBanner
+  // takes over the hero — the new ExecutiveAttentionPanel never gets a
+  // chance to render. The mock seeds totals + 2 problem schools so:
+  //   - notStarted   = false (totalBase > 0)
+  //   - hasAnyAttention = true (schools + incidents + vehicles all > 0)
+  //   → ExecutiveAttentionPanel renders all 3 cards populated.
+  '/api/province/dashboard': {
+    data: {
+      date: '2026-05-10',
+      total_vehicles: 50,
+      total_students: 268,
+      total_schools: 2,
+      total_affiliations: 5,
+      morning_total: 248,  morning_done: 220,  morning_pending: 28, morning_leave: 5, morning_kpi: 88.7,
+      evening_total: 248,  evening_done: 234,  evening_pending: 14, evening_leave: 3, evening_kpi: 94.3,
+      leave_count: 8,
+      recent_emergencies: 3,
+      affiliations: [
+        { id: 'AFF001', name: 'สพป.ลำปาง เขต 1', school_count: 5, student_count: 120, vehicle_count: 22, morning_kpi: 95.5, evening_kpi: 96.2, emergency_count: 0 },
+        { id: 'AFF002', name: 'สพป.ลำปาง เขต 2', school_count: 4, student_count:  90, vehicle_count: 16, morning_kpi: 87.0, evening_kpi: 91.0, emergency_count: 1 },
+      ],
+      schools_not_complete: [
+        { school_id: 'SCH001', school_name: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์', student_count: 120, vehicle_count: 12, morning_pending: 18, evening_pending: 6 },
+        { school_id: 'SCH002', school_name: 'โรงเรียนเทศบาล 1', student_count: 80, vehicle_count: 8, morning_pending: 10, evening_pending: 8 },
+      ],
+    },
+  },
   // Phase 3.5 — incident feed widget on Province dashboard.
   // reported_at uses Date.now() relative offsets so the rendered
   // "X minutes ago" timestamps match the moment the QA run executed.

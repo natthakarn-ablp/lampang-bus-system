@@ -45,6 +45,7 @@ const AFFILIATION_NAV = [
   { section: 'ข้อมูล' },
   { to: '/affiliation/students',    icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/affiliation/vehicles',    icon: Bus,           label: 'รถรับส่ง' },
+  { to: '/affiliation/live-vehicles', icon: Activity,    label: 'ตำแหน่งปัจจุบัน' },
   { section: 'จัดการ' },
   { to: '/affiliation/accounts',    icon: Key,           label: 'จัดการบัญชีโรงเรียน' },
   { section: 'ติดตามและบันทึก' },

@@ -49,6 +49,7 @@ const AffDailyStatus       = lazy(() => import('./pages/affiliation/AffDailyStat
 const AffEmergencyList     = lazy(() => import('./pages/affiliation/AffEmergencyList'));
 const AffSchoolAccounts    = lazy(() => import('./pages/affiliation/AffSchoolAccounts'));
 const AffAuditLog          = lazy(() => import('./pages/affiliation/AffAuditLog'));
+const AffiliationLiveVehicles = lazy(() => import('./pages/affiliation/AffiliationLiveVehicles'));
 
 // Province
 const ProvinceLayout       = lazy(() => import('./pages/province/ProvinceLayout'));
@@ -209,6 +210,7 @@ export default function App() {
             <Route path="emergencies" element={<AffEmergencyList />} />
             <Route path="accounts"    element={<AffSchoolAccounts />} />
             <Route path="audit-log"   element={<AffAuditLog />} />
+            <Route path="live-vehicles" element={<AffiliationLiveVehicles />} />
           </Route>
 
           {/* Province module */}

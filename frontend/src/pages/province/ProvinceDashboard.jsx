@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Bus, GraduationCap, Building2, Clock, AlertTriangle,
-  Sunrise, Sunset, FileText,
+  Sunrise, Sunset, FileText, RotateCw,
 } from 'lucide-react';
+
+const POLL_INTERVAL = 30_000; // 30s background refresh
+const TICK_INTERVAL = 1_000;  // 1s freshness ticker (re-render only)
 import api from '../../api/axios';
 import { safePct, kpiColor } from '../../utils/kpi';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
@@ -14,12 +17,34 @@ import {
 export default function ProvinceDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
+  const fetchDashboard = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const r = await api.get('/province/dashboard');
+      setData(r.data.data);
+      setLastSyncedAt(Date.now());
+    } catch { /* silent — keep last known data, freshness dot will go stale */ }
+    finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, []);
+
+  // Background data refresh — silent, doesn't blank the page
   useEffect(() => {
-    api.get('/province/dashboard')
-      .then(r => setData(r.data.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    fetchDashboard();
+    const t = setInterval(fetchDashboard, POLL_INTERVAL);
+    return () => clearInterval(t);
+  }, [fetchDashboard]);
+
+  // 1-second ticker for the freshness "X seconds ago" indicator
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), TICK_INTERVAL);
+    return () => clearInterval(t);
   }, []);
 
   if (loading) return <p className="text-ink-muted py-10 text-center text-lg">{UI_MESSAGES.LOADING}</p>;
@@ -52,9 +77,17 @@ export default function ProvinceDashboard() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">{PAGE_TITLES.PROVINCE_DASHBOARD}</h1>
-        {dateLabel && <p className="text-sm text-ink-muted mt-1">ข้อมูล ณ {dateLabel}</p>}
+      <header className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">{PAGE_TITLES.PROVINCE_DASHBOARD}</h1>
+          {dateLabel && <p className="text-sm text-ink-muted mt-1">ข้อมูล ณ {dateLabel}</p>}
+        </div>
+        <FreshnessPill
+          lastSyncedAt={lastSyncedAt}
+          now={now}
+          refreshing={refreshing}
+          onRefresh={fetchDashboard}
+        />
       </header>
 
       {/* Status banner */}
@@ -248,5 +281,36 @@ function SessionProgress({ label, icon: Icon, done, total, pending, leave, kpi }
         </div>
       </div>
     </AppCard>
+  );
+}
+
+/* ── Freshness pill: live "X seconds ago" + colored dot + manual refresh ── */
+function FreshnessPill({ lastSyncedAt, now, refreshing, onRefresh }) {
+  if (!lastSyncedAt) return null;
+  const ageSec = Math.max(0, Math.floor((now - lastSyncedAt) / 1000));
+
+  const dotCls = ageSec < 60   ? 'bg-success'
+               : ageSec < 300  ? 'bg-warn'
+               :                  'bg-danger';
+
+  const ageLabel = ageSec < 5    ? 'อัปเดตล่าสุด'
+                 : ageSec < 60   ? `${ageSec} วินาทีที่แล้ว`
+                 : ageSec < 3600 ? `${Math.floor(ageSec / 60)} นาทีที่แล้ว`
+                 :                 `${Math.floor(ageSec / 3600)} ชั่วโมงที่แล้ว`;
+
+  return (
+    <div className="shrink-0 flex items-center gap-2 text-xs text-ink-muted bg-surface border border-surface-border rounded-full pl-2.5 pr-1 py-1">
+      <span className={`w-1.5 h-1.5 rounded-full ${dotCls}`} aria-hidden="true" />
+      <span className="hidden sm:inline tabular-nums">{ageLabel}</span>
+      <button
+        type="button"
+        onClick={onRefresh}
+        disabled={refreshing}
+        className="ml-1 p-1 rounded-full hover:bg-surface-border transition disabled:opacity-50"
+        aria-label="รีเฟรชข้อมูล"
+      >
+        <RotateCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2.2} />
+      </button>
+    </div>
   );
 }

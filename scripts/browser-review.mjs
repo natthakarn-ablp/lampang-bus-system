@@ -24,10 +24,11 @@ const SHOTS = process.env.SHOTS_DIR || '/tmp/lampang-shots';
 mkdirSync(SHOTS, { recursive: true });
 
 const USERS = {
-  driver:   { username: 'driver01',   display_name: 'คนขับ ทดสอบ',  role: 'driver',   driver_id: 1 },
-  school:   { username: 'school01',   display_name: 'อนุบาลลำปาง',   role: 'school',   scope_type: 'SCHOOL',   scope_id: 'SCH0001' },
-  province: { username: 'province01', display_name: 'จังหวัดลำปาง', role: 'province', scope_type: 'PROVINCE', scope_id: 'LPG' },
-  admin:    { username: 'admin',      display_name: 'ผู้ดูแลระบบ',   role: 'admin' },
+  driver:      { username: 'driver01',      display_name: 'คนขับ ทดสอบ',     role: 'driver',      driver_id: 1 },
+  school:      { username: 'school01',      display_name: 'อนุบาลลำปาง',      role: 'school',      scope_type: 'SCHOOL',      scope_id: 'SCH0001' },
+  province:    { username: 'province01',    display_name: 'จังหวัดลำปาง',    role: 'province',    scope_type: 'PROVINCE',    scope_id: 'LPG' },
+  affiliation: { username: 'affiliation01', display_name: 'สพป.ลำปาง เขต 1', role: 'affiliation', scope_type: 'AFFILIATION', scope_id: 'AFF001' },
+  admin:       { username: 'admin',         display_name: 'ผู้ดูแลระบบ',      role: 'admin' },
 };
 const FAKE_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.fake.signature';
 
@@ -273,6 +274,73 @@ const MOCK = {
       },
     ],
   },
+  // Phase 4 — Affiliation dashboard. Same shape as the Province mocks
+  // since the new Affiliation attention panel reads the same fields.
+  // Scoped fixtures: AFF001 (สพป.ลำปาง เขต 1) sub-tree only.
+  '/api/affiliation/dashboard': {
+    data: {
+      date: '2026-05-10',
+      affiliation: { id: 'AFF001', name: 'สพป.ลำปาง เขต 1' },
+      total_schools: 5,
+      total_students: 120,
+      total_vehicles: 22,
+      morning_total: 110,  morning_done:  98,  morning_pending: 12, morning_leave: 2,
+      evening_total: 110,  evening_done: 104,  evening_pending:  6, evening_leave: 1,
+      leave_count: 3,
+      recent_emergencies: 2,
+      schools_not_complete: [
+        { school_id: 'SCH001', school_name: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์', student_count: 60, vehicle_count: 8, morning_pending: 8, evening_pending: 4, morning_done: 52, morning_expected: 60, evening_done: 56, evening_expected: 60 },
+        { school_id: 'SCH002', school_name: 'โรงเรียนเทศบาล 1', student_count: 50, vehicle_count: 6, morning_pending: 4, evening_pending: 2, morning_done: 46, morning_expected: 50, evening_done: 48, evening_expected: 50 },
+      ],
+    },
+  },
+  '/api/affiliation/emergencies': {
+    data: [
+      {
+        id: 1, vehicle_id: 'V-A01', plate_no: 'กข 2001 ลำปาง',
+        detail: 'ผู้ปกครองแจ้งว่ารถมาถึงช้ากว่ากำหนด',
+        note: 'ตรวจสอบเส้นทาง', result: null,
+        reported_at: new Date(Date.now() - 12 * 60 * 1000).toISOString(),
+        reported_by_name: 'ผู้ปกครอง', channel: 'line',
+      },
+      {
+        id: 2, vehicle_id: 'V-A02', plate_no: 'กข 2002 ลำปาง',
+        detail: 'รถยางแบนระหว่างเดินทาง',
+        note: 'ส่งช่างเปลี่ยนยางแล้ว', result: 'แก้ไขแล้ว',
+        reported_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+        reported_by_name: 'คนขับ', channel: 'web',
+      },
+    ],
+    meta: { page: 1, per_page: 5, total: 2 },
+  },
+  '/api/affiliation/vehicles-at-risk': {
+    data: [
+      {
+        id: 'V-A-AR01', plate_no: 'กข 3001 ลำปาง',
+        school_names: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์',
+        driver_name: 'สมหมาย ใจดี', student_count: 14,
+        latest_inspection_result: 'FAILED', latest_inspection_date: '2026-05-02',
+        insurance_expiry: '2026-04-20',
+        risk_score: 150, risk_reasons: ['ไม่ผ่านตรวจ', 'ประกันหมด'],
+      },
+      {
+        id: 'V-A-AR02', plate_no: 'กข 3002 ลำปาง',
+        school_names: 'โรงเรียนเทศบาล 1',
+        driver_name: 'จิตรา รักเด็ก', student_count: 11,
+        latest_inspection_result: null, latest_inspection_date: null,
+        insurance_expiry: '2026-12-31',
+        risk_score: 80, risk_reasons: ['ยังไม่ตรวจ'],
+      },
+      {
+        id: 'V-A-AR03', plate_no: 'กข 3003 ลำปาง',
+        school_names: 'อนุบาลลำปางเขลางค์รัตน์อนุสรณ์',
+        driver_name: 'พรชัย รถดี', student_count: 9,
+        latest_inspection_result: 'PASSED', latest_inspection_date: '2026-04-08',
+        insurance_expiry: '2026-05-30',
+        risk_score: 20, risk_reasons: ['ประกันใกล้หมด'],
+      },
+    ],
+  },
 };
 
 function mockFor(url) {
@@ -453,6 +521,14 @@ async function pageWithUser(browser, user, viewport) {
     const { ctx, page } = await pageWithUser(browser, USERS.admin, vp);
     await page.goto(`${BASE}/admin/audit-logs`, { waitUntil: 'networkidle', timeout: 20000 });
     await shoot(page, `10-admin-audit-${vname}`);
+    await ctx.close();
+  }
+
+  // Phase 4 — Affiliation dashboard with executive attention panel
+  for (const [vname, vp] of Object.entries(VIEWPORTS)) {
+    const { ctx, page } = await pageWithUser(browser, USERS.affiliation, vp);
+    await page.goto(`${BASE}/affiliation`, { waitUntil: 'networkidle', timeout: 20000 });
+    await shoot(page, `11-affiliation-${vname}`);
     await ctx.close();
   }
 

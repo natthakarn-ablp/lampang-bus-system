@@ -8,13 +8,13 @@ comparison in future phases.
 
 | | |
 |---|---|
-| Captured at HEAD | `4cb3221` |
+| Captured at HEAD | `c4541b3` |
 | Capture method | `scripts/browser-review.mjs` (Playwright + chromium-headless-shell) |
 | Auth | mock JWT injected via `localStorage` (see script header) |
 | API | stubbed via `page.route('**/api/**', …)` returning `{ success: true, data: {} }` |
 | Screenshot mode | viewport-only (not full-page; see script comment) |
-| Total images | 26 |
-| Total size | ~1.7 MB |
+| Total images | 31 |
+| Total size | ~3.1 MB (Phase 6 map captures push the total — OSM tile imagery is dense) |
 
 ## Viewports
 
@@ -44,6 +44,9 @@ comparison in future phases.
 | `09-reports-summary-{desktop,mobile}.png` | `/reports/summary` | LeaderboardRow cards in summary rankings |
 | `10-admin-audit-{desktop,mobile}.png` | `/admin/audit-logs` | AuditEntry cards + filter bar + pagination |
 | `11-affiliation-{desktop,tablet,mobile}.png` | `/affiliation` | Phase 4 attention panel (schools jumpable, incidents/vehicles non-jumpable) + KPIGrid + session donuts |
+| `12-driver-pickup-map-{desktop,mobile}.png` | `/driver/pickup-map` | Phase 6 driver map: full-screen Leaflet + OSM, 3 markers, session pills, bottom-nav preserved |
+| `13-school-pickup-map-{desktop,mobile}.png` | `/school/pickup-map` | Phase 6 school summary: list panel + map (side-by-side desktop, stacked mobile), 4 points across 2 vehicles |
+| `14-admin-pickup-points-desktop.png` | `/admin/pickup-points` | Phase 6 admin CRUD: paginated table + filter dropdown + per-row Users/Edit/Delete actions |
 
 ## How to re-capture
 

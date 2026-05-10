@@ -63,6 +63,7 @@ const PROVINCE_NAV = [
   { to: '/province/schools',      icon: Building2,     label: 'โรงเรียน' },
   { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/province/vehicles',     icon: Bus,           label: 'รถรับส่ง' },
+  { to: '/province/live-vehicles', icon: Activity,     label: 'ตำแหน่งปัจจุบัน' },
   { section: 'ติดตาม' },
   { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },

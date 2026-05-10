@@ -61,6 +61,7 @@ const ProvVehicleList      = lazy(() => import('./pages/province/ProvVehicleList
 const ProvDailyStatus      = lazy(() => import('./pages/province/ProvDailyStatus'));
 const ProvEmergencyList    = lazy(() => import('./pages/province/ProvEmergencyList'));
 const ProvAuditLog         = lazy(() => import('./pages/province/ProvAuditLog'));
+const ProvinceLiveVehicles = lazy(() => import('./pages/province/ProvinceLiveVehicles'));
 
 // Reports (charts-heavy — own chunk per page)
 const ReportsLayout        = lazy(() => import('./pages/reports/ReportsLayout'));
@@ -230,6 +231,7 @@ export default function App() {
             <Route path="status"       element={<ProvDailyStatus />} />
             <Route path="emergencies"  element={<ProvEmergencyList />} />
             <Route path="audit-log"    element={<ProvAuditLog />} />
+            <Route path="live-vehicles" element={<ProvinceLiveVehicles />} />
           </Route>
 
           {/* Reports module */}

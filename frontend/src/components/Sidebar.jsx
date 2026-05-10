@@ -13,12 +13,13 @@ import { PAGE_TITLES } from '../constants/uiLabels';
 
 const DRIVER_NAV = [
   { section: 'ภาพรวม' },
-  { to: '/driver',           icon: BarChart3,      label: PAGE_TITLES.DRIVER_DASHBOARD },
+  { to: '/driver',             icon: BarChart3,      label: PAGE_TITLES.DRIVER_DASHBOARD },
   { section: 'งานประจำวัน' },
-  { to: '/driver/requests',  icon: ClipboardList,  label: 'คำขอรายชื่อ' },
-  { to: '/driver/emergency', icon: AlertTriangle,  label: 'แจ้งเหตุฉุกเฉิน' },
+  { to: '/driver/pickup-map',  icon: Map,            label: 'แผนที่จุดรับส่ง' },
+  { to: '/driver/requests',    icon: ClipboardList,  label: 'คำขอรายชื่อ' },
+  { to: '/driver/emergency',   icon: AlertTriangle,  label: 'แจ้งเหตุฉุกเฉิน' },
   { section: 'ข้อมูล' },
-  { to: '/driver/profile',   icon: User,           label: 'ข้อมูลคนขับ' },
+  { to: '/driver/profile',     icon: User,           label: 'ข้อมูลคนขับ' },
 ];
 
 const SCHOOL_NAV = [

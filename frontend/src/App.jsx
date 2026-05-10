@@ -25,6 +25,7 @@ const EmergencyPage        = lazy(() => import('./pages/driver/EmergencyPage'));
 const DriverProfile        = lazy(() => import('./pages/driver/DriverProfile'));
 const DriverRosterRequests = lazy(() => import('./pages/driver/DriverRosterRequests'));
 const DriverPretrip        = lazy(() => import('./pages/driver/DriverPretrip'));
+const DriverPickupMap      = lazy(() => import('./pages/driver/DriverPickupMap'));
 
 // School
 const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
@@ -161,8 +162,9 @@ export default function App() {
             <Route path="emergency" element={<EmergencyPage />} />
             <Route path="profile"   element={<DriverProfile />} />
             <Route path="leaves"    element={<Navigate to="/driver" replace />} />
-            <Route path="requests"  element={<DriverRosterRequests />} />
-            <Route path="pretrip"   element={<DriverPretrip />} />
+            <Route path="requests"    element={<DriverRosterRequests />} />
+            <Route path="pretrip"     element={<DriverPretrip />} />
+            <Route path="pickup-map"  element={<DriverPickupMap />} />
           </Route>
 
           {/* School module */}

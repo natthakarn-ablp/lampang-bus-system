@@ -1,0 +1,36 @@
+/*
+ * Phase 6.1 hotfix-3: scope page-level Leaflet z-indices.
+ *
+ * The full-page <PickupMap> renders inside a Leaflet container whose
+ * default z-indices are dangerously high:
+ *   .leaflet-pane          z-index: 400
+ *   .leaflet-tile-pane     z-index: 200
+ *   .leaflet-overlay-pane  z-index: 400
+ *   .leaflet-shadow-pane   z-index: 500
+ *   .leaflet-marker-pane   z-index: 600
+ *   .leaflet-tooltip-pane  z-index: 650
+ *   .leaflet-popup-pane    z-index: 700
+ *   .leaflet-top, -bottom  z-index: 1000  (control containers — zoom +/-, attribution)
+ *
+ * On /driver/pickup-map a create-pickup modal overlay sits at z-50.
+ * The map's controls at z-1000 then float ABOVE the modal overlay,
+ * making the page map appear to "cover" the modal.
+ *
+ * Fix: clamp every pane/control inside the page-level map to z-1.
+ * Internal pane ordering still works because Leaflet creates panes
+ * in the right DOM order (popup pane is the last child appended,
+ * so it stacks above tile pane via source order, not z-index).
+ *
+ * Combined with `relative z-0 isolate` on the wrapper, this seals
+ * the entire map's z-stack into a `z-0` bubble that can't poke
+ * above the modal at z-9999.
+ *
+ * Scoped via `.pickup-page-map` so the in-modal PickupCoordPicker
+ * (which has its own `.pickup-coord-picker` scoped CSS) is unaffected.
+ */
+.pickup-page-map .leaflet-pane,
+.pickup-page-map .leaflet-top,
+.pickup-page-map .leaflet-bottom,
+.pickup-page-map .leaflet-control {
+  z-index: 1 !important;
+}

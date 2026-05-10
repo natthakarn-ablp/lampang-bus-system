@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import './PickupMap.css';
 
 // Vite + Leaflet default-icon workaround. Without this the standard
 // blue marker icons resolve to broken URLs in production builds.
@@ -51,12 +52,16 @@ export default function PickupMap({
   );
 
   return (
+    <div
+      className={`pickup-page-map relative z-0 isolate ${className}`}
+      style={{ minHeight: 320 }}
+    >
     <MapContainer
       center={initialCenter}
       zoom={zoom}
       scrollWheelZoom
-      className={className}
-      style={{ minHeight: 320 }}
+      className="!relative !z-0 h-full w-full"
+      style={{ height: '100%', width: '100%', zIndex: 0 }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -104,6 +109,7 @@ export default function PickupMap({
       ))}
       <FitBounds points={validPoints} selectedPointId={selectedPointId} />
     </MapContainer>
+    </div>
   );
 }
 

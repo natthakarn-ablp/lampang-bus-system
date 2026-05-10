@@ -496,8 +496,8 @@ function DeleteConfirmModal({ row, onClose, onDeleted }) {
 /* ── Generic modal shell ── */
 function Modal({ title, onClose, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-surface w-full max-w-lg rounded-2xl shadow-elevate max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] isolate flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="relative z-[10000] bg-surface w-full max-w-lg rounded-2xl shadow-elevate max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <header className="flex items-center justify-between p-4 border-b border-surface-border">
           <h2 className="font-semibold text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="p-1 rounded-full hover:bg-surface-border" aria-label="ปิด">

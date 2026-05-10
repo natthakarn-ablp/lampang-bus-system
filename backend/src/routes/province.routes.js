@@ -96,6 +96,22 @@ router.get('/vehicles', async (req, res, next) => {
 });
 
 /**
+ * GET /api/province/vehicles-at-risk?limit=10
+ * Returns top N vehicles needing attention, scored by inspection +
+ * insurance state. Service intentionally does not select PII columns
+ * (driver_phone / attendant_phone / owner_phone), so no extra sanitization
+ * is needed at this handler.
+ *
+ * limit clamped to [1, 100] inside the service.
+ */
+router.get('/vehicles-at-risk', async (req, res, next) => {
+  try {
+    const data = await provSvc.getVehiclesAtRisk({ limit: req.query.limit });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+/**
  * GET /api/province/status-today
  */
 router.get('/status-today', async (req, res, next) => {

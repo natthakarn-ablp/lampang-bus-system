@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Map as MapIcon, Plus, Pencil, Trash2, X, UserPlus, Users } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
+import PickupCoordPicker from '../../components/PickupCoordPicker';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
-const LAMPANG_CENTER = [18.2884, 99.4906];
 
 export default function AdminPickupPointManagement() {
   const [rows, setRows] = useState([]);
@@ -303,7 +302,7 @@ function EditPickupPointModal({ row, vehicles, onClose, onSaved }) {
 
         <p className="text-xs text-ink-muted">คลิกบนแผนที่เพื่อกำหนดพิกัด หรือกรอกตัวเลขโดยตรง</p>
         <div className="rounded-xl overflow-hidden border border-surface-border">
-          <CoordPicker
+          <PickupCoordPicker
             value={coords}
             onChange={([lat, lng]) => {
               update('latitude', lat.toFixed(6));
@@ -359,24 +358,6 @@ function EditPickupPointModal({ row, vehicles, onClose, onSaved }) {
       </form>
     </Modal>
   );
-}
-
-/* ── Coord picker (small click-to-set Leaflet map) ── */
-function CoordPicker({ value, onChange }) {
-  return (
-    <MapContainer center={value || LAMPANG_CENTER} zoom={value ? 15 : 13} style={{ height: 240 }}>
-      <TileLayer
-        attribution='&copy; OpenStreetMap contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-      {value && <Marker position={value} />}
-      <ClickHandler onChange={onChange} />
-    </MapContainer>
-  );
-}
-function ClickHandler({ onChange }) {
-  useMapEvents({ click(e) { onChange([e.latlng.lat, e.latlng.lng]); } });
-  return null;
 }
 
 /* ── Assign-students modal (search → click to assign; X to unassign) ── */

@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { classroomLabel } from '../utils/student';
 import './PickupMap.css';
 
 // Vite + Leaflet default-icon workaround. Without this the standard
@@ -84,12 +85,15 @@ export default function PickupMap({
               </p>
               {Array.isArray(p.students) && p.students.length > 0 && (
                 <ul className="text-xs space-y-0.5 mb-2 max-h-32 overflow-y-auto">
-                  {p.students.slice(0, 5).map(s => (
-                    <li key={s.id} className="truncate">
-                      {s.first_name} {s.last_name}
-                      {s.classroom && <span className="text-ink-muted"> · {s.classroom}</span>}
-                    </li>
-                  ))}
+                  {p.students.slice(0, 5).map(s => {
+                    const cls = classroomLabel(s);
+                    return (
+                      <li key={s.id} className="truncate">
+                        {s.first_name} {s.last_name}
+                        {cls && <span className="text-ink-muted"> · {cls}</span>}
+                      </li>
+                    );
+                  })}
                   {p.students.length > 5 && (
                     <li className="text-ink-muted">…และอีก {p.students.length - 5} คน</li>
                   )}

@@ -466,14 +466,17 @@ function SelectedPointCard({ point, onClose }) {
 
       {Array.isArray(point.students) && point.students.length > 0 && (
         <ul className="text-sm space-y-1 mb-3 max-h-40 overflow-y-auto">
-          {point.students.map(s => (
-            <li key={s.id} className="flex items-center gap-2 min-w-0">
-              <span className="truncate text-ink">{s.first_name} {s.last_name}</span>
-              {s.classroom && (
-                <span className="text-xs text-ink-muted shrink-0">{s.classroom}</span>
-              )}
-            </li>
-          ))}
+          {point.students.map(s => {
+            const cls = classroomLabel(s);
+            return (
+              <li key={s.id} className="flex items-center gap-2 min-w-0">
+                <span className="truncate text-ink">{s.first_name} {s.last_name}</span>
+                {cls && (
+                  <span className="text-xs text-ink-muted shrink-0">· {cls}</span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
 

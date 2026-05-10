@@ -15,6 +15,7 @@ const env     = require('../config/env');
 const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
 const rosterReqSvc = require('../services/rosterRequest.service');
+const ppSvc = require('../services/pickupPoint.service');
 
 /**
  * Resolve school scope: admin uses ?school_id query param, school role uses scopeId.
@@ -144,6 +145,30 @@ router.get('/status-today', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+/**
+ * GET /api/school/pickup-points
+ * Phase 6: read-only list of pickup points serving this school's roster,
+ * with the assigned students embedded per point. Cross-school students
+ * at the same physical point are NOT exposed (filtered defensively in
+ * the inner SQL by school_id).
+ *
+ * Optional ?session=morning|evening narrows to that session.
+ */
+router.get('/pickup-points', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const session = req.query.session;
+    if (session && !['morning', 'evening'].includes(session)) {
+      return sendError(res, "session must be 'morning' or 'evening'", [], 400);
+    }
+
+    const points = await ppSvc.getPickupPointsForSchool(schoolId, { session });
+    return sendSuccess(res, points);
+  } catch (err) { next(err); }
 });
 
 /**

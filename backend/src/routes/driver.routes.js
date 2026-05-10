@@ -24,6 +24,7 @@ const { requireRole }   = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit }      = require('../utils/audit');
 const checkinSvc        = require('../services/checkin.service');
+const ppSvc             = require('../services/pickupPoint.service');
 const leaveSvc          = require('../services/leave.service');
 const rosterReqSvc      = require('../services/rosterRequest.service');
 
@@ -72,6 +73,29 @@ router.get('/roster', async (req, res, next) => {
   } catch (err) {
     return next(err);
   }
+});
+
+// ─── GET /api/driver/pickup-points ──────────────────────────────────────────
+// Phase 6: read-only list of pickup points + assigned students for the
+// driver's currently-assigned vehicle. Optional ?session=morning|evening
+// narrows to points serving that session (or 'both').
+router.get('/pickup-points', async (req, res, next) => {
+  try {
+    const session = req.query.session;
+    if (session && !['morning', 'evening'].includes(session)) {
+      return sendError(res, "session must be 'morning' or 'evening'", [], 400);
+    }
+
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    const points = await ppSvc.getPickupPointsForVehicle(vehicle.vehicle_id, { session });
+    return sendSuccess(res, {
+      vehicle: { id: vehicle.vehicle_id, plate_no: vehicle.plate_no },
+      session: session || 'all',
+      points,
+    });
+  } catch (err) { return next(err); }
 });
 
 // ─── POST /checkin ────────────────────────────────────────────────────────────

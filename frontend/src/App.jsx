@@ -87,6 +87,7 @@ const EvaluationDashboard  = lazy(() => import('./pages/admin/EvaluationDashboar
 const ExecutiveSummary     = lazy(() => import('./pages/admin/ExecutiveSummary'));
 const ExecutivePrint       = lazy(() => import('./pages/admin/ExecutivePrint'));
 const SystemHealth         = lazy(() => import('./pages/admin/SystemHealth'));
+const AdminLiveVehicles    = lazy(() => import('./pages/admin/AdminLiveVehicles'));
 
 export const ROLE_HOME = {
   driver:      '/driver',
@@ -282,6 +283,11 @@ export default function App() {
           <Route path="/admin/pickup-points" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><AdminPickupPointManagement /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/live-vehicles" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><AdminLiveVehicles /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/measurement" element={

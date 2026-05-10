@@ -4,6 +4,7 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { PAGE_TITLES } from '../constants/uiLabels';
@@ -83,6 +84,7 @@ const ADMIN_NAV = [
   { to: '/admin',                 icon: Home,        label: 'ศูนย์ควบคุมระบบ' },
   { to: '/admin/users',           icon: Users,       label: 'จัดการผู้ใช้งาน' },
   { to: '/admin/pickup-points',   icon: Map,         label: 'ตรวจสอบจุดรับส่ง' },
+  { to: '/admin/live-vehicles',   icon: ShieldAlert, label: 'ตรวจสอบตำแหน่งรถ' },
   { to: '/admin/audit-logs',      icon: FileText,    label: 'ประวัติการใช้งาน' },
   { to: '/admin/system-health',   icon: Activity,    label: 'สุขภาพระบบ' },
   { section: 'การวิจัย' },

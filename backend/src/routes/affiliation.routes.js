@@ -136,6 +136,27 @@ router.get('/emergencies', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/affiliation/vehicles-at-risk?limit=10
+ * Top N vehicles serving this affiliation, scored by inspection +
+ * insurance state. Same scoring formula as /province/vehicles-at-risk.
+ *
+ * Service intentionally does not select PII columns
+ * (driver_phone / attendant_phone / owner_phone), so no extra
+ * sanitization is needed at this handler.
+ *
+ * limit clamped to [1, 100] inside the service.
+ */
+router.get('/vehicles-at-risk', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
+
+    const data = await affSvc.getVehiclesAtRisk(affId, { limit: req.query.limit });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
 // ─── GET /missing ────────────────────────────────────────────────────────────
 
 router.get('/missing', async (req, res, next) => {

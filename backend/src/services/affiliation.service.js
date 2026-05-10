@@ -354,6 +354,99 @@ async function getEmergencies(affiliationId, { page = 1, per_page = 20 }) {
   return { emergencies: rows, meta: { page, per_page, total } };
 }
 
+/**
+ * getVehiclesAtRisk — affiliation-scoped twin of province.service.js's
+ * getVehiclesAtRisk. Same scoring formula and sort, scoped to vehicles
+ * that serve at least one student in a school under this affiliation.
+ *
+ * Scoring weights (additive — kept in sync with province):
+ *   FAILED inspection           +100  ('ไม่ผ่านตรวจ')
+ *   no inspection on record     +80   ('ยังไม่ตรวจ')
+ *   NEEDS_FIX                   +60   ('ต้องแก้ไข')
+ *   insurance expired           +50   ('ประกันหมด')
+ *   no insurance field          +40   ('ไม่มีข้อมูลประกัน')
+ *   insurance expiring < 30d    +20   ('ประกันใกล้หมด')
+ *
+ * The inner subqueries that pull school_names + student_count also
+ * filter by affiliation_id so the counts reflect only this affiliation's
+ * footprint on the vehicle (a vehicle may serve schools in multiple
+ * affiliations; this affiliation's view shows only its own students).
+ */
+async function getVehiclesAtRisk(affiliationId, { limit = 10 } = {}) {
+  const topN = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
+
+  const [rows] = await pool.query(`
+    SELECT
+      v.id,
+      v.plate_no,
+      v.insurance_expiry,
+      (SELECT GROUP_CONCAT(DISTINCT sc.name ORDER BY sc.name SEPARATOR ', ')
+        FROM students s
+        JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+        WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE
+          AND sc.affiliation_id = ?) AS school_names,
+      (SELECT COUNT(*) FROM students s
+        JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+        WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE
+          AND sc.affiliation_id = ?) AS student_count,
+      (SELECT d.name FROM driver_vehicle_assignments dva
+        JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
+        WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE
+        LIMIT 1) AS driver_name,
+      (SELECT vi.result FROM vehicle_inspections vi
+        WHERE vi.vehicle_id = v.id
+        ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_result,
+      (SELECT vi.inspection_date FROM vehicle_inspections vi
+        WHERE vi.vehicle_id = v.id
+        ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_date
+    FROM vehicles v
+    WHERE v.is_deleted = FALSE
+      AND EXISTS (SELECT 1 FROM students s
+                  JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+                  WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE
+                    AND sc.affiliation_id = ?)
+  `, [affiliationId, affiliationId, affiliationId]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const thirtyDays = new Date(today.getTime() + 30 * 86400000);
+
+  const scored = rows.map(v => {
+    let score = 0;
+    const reasons = [];
+    const insp = v.latest_inspection_result;
+    const expiry = v.insurance_expiry ? new Date(v.insurance_expiry) : null;
+    const insExpired       = expiry && expiry < today;
+    const insExpiring      = expiry && expiry >= today && expiry < thirtyDays;
+    const hasInsuranceField = v.insurance_expiry != null;
+
+    if (insp === 'FAILED')    { score += 100; reasons.push('ไม่ผ่านตรวจ'); }
+    if (!insp)                { score +=  80; reasons.push('ยังไม่ตรวจ'); }
+    if (insp === 'NEEDS_FIX') { score +=  60; reasons.push('ต้องแก้ไข'); }
+    if (insExpired)           { score +=  50; reasons.push('ประกันหมด'); }
+    if (!hasInsuranceField)   { score +=  40; reasons.push('ไม่มีข้อมูลประกัน'); }
+    if (insExpiring)          { score +=  20; reasons.push('ประกันใกล้หมด'); }
+
+    return {
+      id: v.id,
+      plate_no: v.plate_no,
+      school_names: v.school_names || '-',
+      driver_name: v.driver_name || '-',
+      student_count: v.student_count || 0,
+      latest_inspection_result: insp,
+      latest_inspection_date: v.latest_inspection_date,
+      insurance_expiry: v.insurance_expiry,
+      risk_score: score,
+      risk_reasons: reasons,
+    };
+  });
+
+  scored.sort((a, b) =>
+    (b.risk_score - a.risk_score) || a.plate_no.localeCompare(b.plate_no, 'th')
+  );
+  return scored.slice(0, topN);
+}
+
 module.exports = {
   getDashboard,
   getSchools,
@@ -361,4 +454,5 @@ module.exports = {
   getVehicles,
   getStatusToday,
   getEmergencies,
+  getVehiclesAtRisk,
 };

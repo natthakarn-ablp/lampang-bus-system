@@ -8,6 +8,7 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const adminSvc = require('../services/admin.service');
 const ExcelJS = require('exceljs');
 
 function calcDelta(baseline, latest, numField, denField) {
@@ -189,6 +190,18 @@ router.delete('/users/:id', async (req, res, next) => {
     });
 
     return sendSuccess(res, null, 'ลบผู้ใช้สำเร็จ');
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/admin/users-needing-action ────────────────────────────────────
+// Top N users where is_active=FALSE OR must_change_password=TRUE.
+// Returns { total, rows } so the Admin Attention Panel badge can show
+// the true total count even when only a top-N preview is rendered.
+// limit clamped to [1, 100] inside the service.
+router.get('/users-needing-action', async (req, res, next) => {
+  try {
+    const data = await adminSvc.getUsersNeedingAction({ limit: req.query.limit });
+    return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
 

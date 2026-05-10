@@ -8,13 +8,13 @@ comparison in future phases.
 
 | | |
 |---|---|
-| Captured at HEAD | `1404b58` |
+| Captured at HEAD | `fb1e5d2` |
 | Capture method | `scripts/browser-review.mjs` (Playwright + chromium-headless-shell) |
 | Auth | mock JWT injected via `localStorage` (see script header) |
 | API | stubbed via `page.route('**/api/**', …)` returning `{ success: true, data: {} }` |
 | Screenshot mode | viewport-only (not full-page; see script comment) |
 | Total images | 23 |
-| Total size | ~1.3 MB |
+| Total size | ~1.4 MB |
 
 ## Viewports
 

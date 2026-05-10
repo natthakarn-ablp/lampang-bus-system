@@ -135,7 +135,7 @@ export default function AdminPickupPointManagement() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
-                            <IconBtn icon={Users} title="ผูกนักเรียน" onClick={() => setAssigning(r)} />
+                            <IconBtn icon={Users} title="จัดการนักเรียน" onClick={() => setAssigning(r)} />
                             <IconBtn icon={Pencil} title="แก้ไข" onClick={() => setEditing(r)} />
                             <IconBtn icon={Trash2} title="ลบ" danger onClick={() => setConfirmDelete(r)} />
                           </div>
@@ -417,7 +417,7 @@ function AssignStudentsModal({ row, onClose, onChanged }) {
   };
 
   return (
-    <Modal onClose={onClose} title={`ผูกนักเรียนกับจุด: ${row.label}`}>
+    <Modal onClose={onClose} title={`จัดการนักเรียนของจุด: ${row.label}`}>
       <p className="text-xs text-ink-muted mb-3">
         ค้นหานักเรียนตามชื่อ แล้วกดเลือกเพื่อผูกกับจุดนี้
       </p>

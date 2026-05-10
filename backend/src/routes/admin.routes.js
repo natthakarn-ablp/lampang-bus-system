@@ -9,6 +9,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const adminSvc = require('../services/admin.service');
+const ppSvc = require('../services/pickupPoint.service');
 const ExcelJS = require('exceljs');
 
 function calcDelta(baseline, latest, numField, denField) {
@@ -214,6 +215,163 @@ router.get('/roster-requests-pending', async (req, res, next) => {
   try {
     const data = await adminSvc.getPendingRosterRequestsSystemWide({ limit: req.query.limit });
     return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+// ─── Pickup-point CRUD (Phase 6) ────────────────────────────────────────────
+// Validation helper — shared by POST + PUT routes.
+function validatePickupPointInput(input, { partial = false } = {}) {
+  const errors = [];
+  const isPresent = (k) => input[k] !== undefined && input[k] !== null && input[k] !== '';
+
+  if (!partial && !isPresent('vehicle_id')) errors.push({ field: 'vehicle_id', message: 'vehicle_id required' });
+
+  if (!partial || isPresent('label')) {
+    if (!isPresent('label')) errors.push({ field: 'label', message: 'label required' });
+    else if (String(input.label).length > 100) errors.push({ field: 'label', message: 'label must be ≤ 100 chars' });
+  }
+
+  if (!partial || isPresent('latitude')) {
+    const lat = parseFloat(input.latitude);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      errors.push({ field: 'latitude', message: 'latitude must be a number in [-90, 90]' });
+    }
+  }
+  if (!partial || isPresent('longitude')) {
+    const lng = parseFloat(input.longitude);
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      errors.push({ field: 'longitude', message: 'longitude must be a number in [-180, 180]' });
+    }
+  }
+  if (isPresent('session') && !['morning', 'evening', 'both'].includes(input.session)) {
+    errors.push({ field: 'session', message: "session must be 'morning', 'evening', or 'both'" });
+  }
+  return errors;
+}
+
+// GET /api/admin/pickup-points?vehicle_id=&page=&per_page=
+router.get('/pickup-points', async (req, res, next) => {
+  try {
+    const { vehicle_id, page, per_page } = req.query;
+    const result = await ppSvc.listPickupPoints({ vehicle_id, page, per_page });
+    return sendSuccess(res, result.rows, 'OK', result.meta);
+  } catch (err) { next(err); }
+});
+
+// POST /api/admin/pickup-points
+router.post('/pickup-points', async (req, res, next) => {
+  try {
+    const errors = validatePickupPointInput(req.body);
+    if (errors.length > 0) return sendError(res, 'ข้อมูลจุดรับส่งไม่ถูกต้อง', errors, 400);
+
+    if (!(await ppSvc.vehicleExists(req.body.vehicle_id))) {
+      return sendError(res, 'ไม่พบรถที่ระบุ', [], 400);
+    }
+
+    const id = await ppSvc.createPickupPoint(req.body);
+    await logAudit({
+      userId: req.user.id, action: 'CREATE', entityType: 'pickup_point', entityId: id,
+      newValue: {
+        vehicle_id: req.body.vehicle_id,
+        label: String(req.body.label).trim(),
+        latitude: parseFloat(req.body.latitude),
+        longitude: parseFloat(req.body.longitude),
+        session: req.body.session || 'both',
+      },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, { id }, 'สร้างจุดรับส่งสำเร็จ', null, 201);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/admin/pickup-points/:id
+router.put('/pickup-points/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const errors = validatePickupPointInput(req.body, { partial: true });
+    if (errors.length > 0) return sendError(res, 'ข้อมูลจุดรับส่งไม่ถูกต้อง', errors, 400);
+
+    const oldRow = await ppSvc.getPickupPointById(id);
+    if (!oldRow) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+
+    const ok = await ppSvc.updatePickupPoint(id, req.body);
+    if (!ok) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
+
+    const newRow = await ppSvc.getPickupPointById(id);
+    await logAudit({
+      userId: req.user.id, action: 'UPDATE', entityType: 'pickup_point', entityId: id,
+      oldValue: { label: oldRow.label, latitude: oldRow.latitude, longitude: oldRow.longitude, session: oldRow.session, sequence: oldRow.sequence, notes: oldRow.notes },
+      newValue: { label: newRow.label, latitude: newRow.latitude, longitude: newRow.longitude, session: newRow.session, sequence: newRow.sequence, notes: newRow.notes },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, null, 'อัปเดตจุดรับส่งสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/admin/pickup-points/:id (soft-delete)
+router.delete('/pickup-points/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const oldRow = await ppSvc.getPickupPointById(id);
+    if (!oldRow) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+
+    await ppSvc.softDeletePickupPoint(id);
+    await logAudit({
+      userId: req.user.id, action: 'DELETE', entityType: 'pickup_point', entityId: id,
+      oldValue: { vehicle_id: oldRow.vehicle_id, label: oldRow.label, latitude: oldRow.latitude, longitude: oldRow.longitude },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, null, 'ลบจุดรับส่งสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+// POST /api/admin/pickup-points/:id/students  { student_id }
+router.post('/pickup-points/:id/students', async (req, res, next) => {
+  try {
+    const pointId = parseInt(req.params.id, 10);
+    const studentId = parseInt(req.body.student_id, 10);
+    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid pickup point id', [], 400);
+    if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid student_id', [], 400);
+
+    const point = await ppSvc.getPickupPointById(pointId);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    if (!(await ppSvc.studentExists(studentId))) return sendError(res, 'ไม่พบนักเรียน', [], 404);
+
+    const inserted = await ppSvc.assignStudentToPoint(pointId, studentId);
+    if (inserted) {
+      await logAudit({
+        userId: req.user.id, action: 'CREATE', entityType: 'student_pickup_point',
+        entityId: `${pointId}:${studentId}`,
+        newValue: { pickup_point_id: pointId, student_id: studentId },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      });
+    }
+    return sendSuccess(res, null, inserted ? 'ผูกนักเรียนกับจุดรับส่งสำเร็จ' : 'ผูกอยู่แล้ว');
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/admin/pickup-points/:id/students/:studentId
+router.delete('/pickup-points/:id/students/:studentId', async (req, res, next) => {
+  try {
+    const pointId = parseInt(req.params.id, 10);
+    const studentId = parseInt(req.params.studentId, 10);
+    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid pickup point id', [], 400);
+    if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid student id', [], 400);
+
+    const removed = await ppSvc.unassignStudentFromPoint(pointId, studentId);
+    if (!removed) return sendError(res, 'ไม่พบการผูกนักเรียนกับจุดนี้', [], 404);
+
+    await logAudit({
+      userId: req.user.id, action: 'DELETE', entityType: 'student_pickup_point',
+      entityId: `${pointId}:${studentId}`,
+      oldValue: { pickup_point_id: pointId, student_id: studentId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, null, 'ยกเลิกการผูกนักเรียนสำเร็จ');
   } catch (err) { next(err); }
 });
 

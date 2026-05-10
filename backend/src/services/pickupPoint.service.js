@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { logAudit } = require('../utils/audit');
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Read functions (driver + school)
@@ -272,6 +273,146 @@ async function unassignStudentFromPoint(pointId, studentId) {
   return result.affectedRows > 0;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * Phase 6.1 — workflow correction helpers
+ *
+ * Driver/School create flows pre-load a student checklist scoped to the
+ * acting role. The helpers below do NOT select PII (no phone / cid_hash)
+ * and return only the minimal fields the modal needs.
+ *
+ * Validation helpers compare the supplied student_ids[] against the
+ * scope-allowed set via a single COUNT query — if mismatch, scope leak
+ * attempted, return false (route returns 400).
+ * ───────────────────────────────────────────────────────────────────────── */
+
+async function getStudentsForVehicle(vehicleId) {
+  const [rows] = await pool.query(`
+    SELECT id, prefix, first_name, last_name, grade, classroom,
+           morning_enabled, evening_enabled
+    FROM students
+    WHERE vehicle_id = ? AND is_deleted = FALSE
+    ORDER BY classroom ASC, first_name ASC
+  `, [vehicleId]);
+  return rows;
+}
+
+async function getVehiclesForSchool(schoolId) {
+  const [rows] = await pool.query(`
+    SELECT DISTINCT v.id, v.plate_no,
+           (SELECT COUNT(*) FROM students s2
+              WHERE s2.vehicle_id = v.id AND s2.school_id = ?
+                AND s2.is_deleted = FALSE) AS student_count
+    FROM vehicles v
+    JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE
+    WHERE v.is_deleted = FALSE AND s.school_id = ?
+    ORDER BY v.plate_no ASC
+  `, [schoolId, schoolId]);
+  return rows;
+}
+
+async function getStudentsForSchoolAndVehicle(schoolId, vehicleId) {
+  const [rows] = await pool.query(`
+    SELECT id, prefix, first_name, last_name, grade, classroom,
+           morning_enabled, evening_enabled
+    FROM students
+    WHERE school_id = ? AND vehicle_id = ? AND is_deleted = FALSE
+    ORDER BY classroom ASC, first_name ASC
+  `, [schoolId, vehicleId]);
+  return rows;
+}
+
+async function validateStudentsBelongToVehicle(studentIds, vehicleId) {
+  if (!Array.isArray(studentIds) || studentIds.length === 0) return true;
+  const [[{ matched }]] = await pool.query(`
+    SELECT COUNT(*) AS matched FROM students
+    WHERE id IN (?) AND vehicle_id = ? AND is_deleted = FALSE
+  `, [studentIds, vehicleId]);
+  return matched === studentIds.length;
+}
+
+async function validateStudentsBelongToSchoolAndVehicle(studentIds, schoolId, vehicleId) {
+  if (!Array.isArray(studentIds) || studentIds.length === 0) return true;
+  const [[{ matched }]] = await pool.query(`
+    SELECT COUNT(*) AS matched FROM students
+    WHERE id IN (?) AND school_id = ? AND vehicle_id = ? AND is_deleted = FALSE
+  `, [studentIds, schoolId, vehicleId]);
+  return matched === studentIds.length;
+}
+
+async function validateVehicleServesSchool(vehicleId, schoolId) {
+  const [[row]] = await pool.query(`
+    SELECT 1 FROM students
+    WHERE vehicle_id = ? AND school_id = ? AND is_deleted = FALSE
+    LIMIT 1
+  `, [vehicleId, schoolId]);
+  return !!row;
+}
+
+/**
+ * createPickupPointWithStudents — atomic create + assign-students.
+ *
+ * Wraps the INSERT pickup_point + N INSERT student_pickup_points + audit
+ * log in a single transaction so a failure mid-flow rolls back cleanly.
+ * INSERT IGNORE on the junction table makes duplicate (student, point)
+ * pairs a silent no-op; this matters if the route handler doesn't dedupe.
+ */
+async function createPickupPointWithStudents(input, studentIds, ctx = {}) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [result] = await conn.query(`
+      INSERT INTO pickup_points
+        (vehicle_id, sequence, label, latitude, longitude, session, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [
+      input.vehicle_id,
+      parseInt(input.sequence, 10) || 0,
+      String(input.label).trim(),
+      parseFloat(input.latitude),
+      parseFloat(input.longitude),
+      input.session || 'both',
+      input.notes ? String(input.notes).slice(0, 255) : null,
+    ]);
+    const pointId = result.insertId;
+
+    if (Array.isArray(studentIds) && studentIds.length > 0) {
+      // One bulk INSERT IGNORE — two columns × N rows.
+      const values = studentIds.map(sid => [sid, pointId]);
+      await conn.query(
+        `INSERT IGNORE INTO student_pickup_points (student_id, pickup_point_id) VALUES ?`,
+        [values]
+      );
+    }
+
+    await logAudit({
+      userId: ctx.actorId || null,
+      action: 'CREATE',
+      entityType: 'pickup_point',
+      entityId: pointId,
+      newValue: {
+        vehicle_id: input.vehicle_id,
+        label: String(input.label).trim(),
+        latitude: parseFloat(input.latitude),
+        longitude: parseFloat(input.longitude),
+        session: input.session || 'both',
+        student_ids: studentIds || [],
+      },
+      ipAddress: ctx.ipAddress || null,
+      userAgent: ctx.userAgent || null,
+      conn,
+    });
+
+    await conn.commit();
+    return pointId;
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* swallow */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 module.exports = {
   // Read (driver + school)
   getPickupPointsForVehicle,
@@ -286,4 +427,12 @@ module.exports = {
   softDeletePickupPoint,
   assignStudentToPoint,
   unassignStudentFromPoint,
+  // Phase 6.1 — driver/school workflow
+  getStudentsForVehicle,
+  getVehiclesForSchool,
+  getStudentsForSchoolAndVehicle,
+  validateStudentsBelongToVehicle,
+  validateStudentsBelongToSchoolAndVehicle,
+  validateVehicleServesSchool,
+  createPickupPointWithStudents,
 };

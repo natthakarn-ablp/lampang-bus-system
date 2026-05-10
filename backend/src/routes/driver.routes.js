@@ -98,6 +98,74 @@ router.get('/pickup-points', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+// ─── GET /api/driver/pickup-students ────────────────────────────────────────
+// Phase 6.1: pre-loaded student checklist for the create-pickup modal.
+// Lightweight roster of the driver's vehicle (no PII — no phone, no cid).
+router.get('/pickup-students', async (req, res, next) => {
+  try {
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    const students = await ppSvc.getStudentsForVehicle(vehicle.vehicle_id);
+    return sendSuccess(res, students);
+  } catch (err) { return next(err); }
+});
+
+// ─── POST /api/driver/pickup-points ─────────────────────────────────────────
+// Phase 6.1: driver creates a pickup point for THEIR OWN vehicle and
+// (optionally) assigns selected students in one atomic transaction.
+//
+// Scope is enforced server-side: vehicle_id is overwritten from the JWT
+// (any client-supplied value is ignored), and every student_id in the
+// payload is validated to belong to that vehicle.
+router.post('/pickup-points', async (req, res, next) => {
+  try {
+    // Input validation
+    const errors = [];
+    if (!req.body.label || String(req.body.label).trim().length === 0) {
+      errors.push({ field: 'label', message: 'label required' });
+    } else if (String(req.body.label).length > 100) {
+      errors.push({ field: 'label', message: 'label must be ≤ 100 chars' });
+    }
+    const lat = parseFloat(req.body.latitude);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      errors.push({ field: 'latitude', message: 'latitude must be a number in [-90, 90]' });
+    }
+    const lng = parseFloat(req.body.longitude);
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      errors.push({ field: 'longitude', message: 'longitude must be a number in [-180, 180]' });
+    }
+    if (req.body.session && !['morning', 'evening', 'both'].includes(req.body.session)) {
+      errors.push({ field: 'session', message: "session must be 'morning', 'evening', or 'both'" });
+    }
+    if (errors.length > 0) return sendError(res, 'ข้อมูลไม่ถูกต้อง', errors, 400);
+
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    // Driver can only create points for OWN vehicle — overwrite vehicle_id
+    // from JWT scope, ignoring any client-supplied value.
+    const input = { ...req.body, vehicle_id: vehicle.vehicle_id };
+
+    const studentIds = Array.isArray(req.body.student_ids)
+      ? req.body.student_ids.map(Number).filter(Number.isInteger)
+      : [];
+
+    if (studentIds.length > 0) {
+      const ok = await ppSvc.validateStudentsBelongToVehicle(studentIds, vehicle.vehicle_id);
+      if (!ok) return sendError(res, 'นักเรียนบางรายไม่ใช่ของรถคันนี้', [], 400);
+    }
+
+    const id = await ppSvc.createPickupPointWithStudents(input, studentIds, {
+      actorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, { id }, 'สร้างจุดรับส่งสำเร็จ', null, 201);
+  } catch (err) { return next(err); }
+});
+
 // ─── POST /checkin ────────────────────────────────────────────────────────────
 
 router.post('/checkin', async (req, res, next) => {

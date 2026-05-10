@@ -172,6 +172,104 @@ router.get('/pickup-points', async (req, res, next) => {
 });
 
 /**
+ * GET /api/school/pickup-vehicles
+ * Phase 6.1: lightweight list of vehicles that serve this school's
+ * roster — populates the create-pickup modal's vehicle dropdown.
+ * Returns only id + plate_no + student_count (no PII).
+ */
+router.get('/pickup-vehicles', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const vehicles = await ppSvc.getVehiclesForSchool(schoolId);
+    return sendSuccess(res, vehicles);
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/school/pickup-students?vehicle_id=...
+ * Phase 6.1: lightweight student roster filtered by school + vehicle —
+ * populates the create-pickup modal's student checklist after the
+ * school user picks a vehicle. Cross-school students are NOT exposed
+ * (the SQL filters by school_id AND vehicle_id together).
+ */
+router.get('/pickup-students', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const vehicleId = req.query.vehicle_id;
+    if (!vehicleId) return sendError(res, 'vehicle_id required', [], 400);
+
+    const students = await ppSvc.getStudentsForSchoolAndVehicle(schoolId, vehicleId);
+    return sendSuccess(res, students);
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/school/pickup-points
+ * Phase 6.1: school creates a pickup point for a vehicle that serves
+ * its roster, optionally assigning students in one atomic transaction.
+ *
+ * Scope enforcement:
+ *  - vehicle_id must serve at least one student in this school
+ *    (validateVehicleServesSchool)
+ *  - every student_id must belong to this school AND this vehicle
+ *    (validateStudentsBelongToSchoolAndVehicle)
+ */
+router.post('/pickup-points', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    // Input validation
+    const errors = [];
+    if (!req.body.vehicle_id) errors.push({ field: 'vehicle_id', message: 'vehicle_id required' });
+    if (!req.body.label || String(req.body.label).trim().length === 0) {
+      errors.push({ field: 'label', message: 'label required' });
+    } else if (String(req.body.label).length > 100) {
+      errors.push({ field: 'label', message: 'label must be ≤ 100 chars' });
+    }
+    const lat = parseFloat(req.body.latitude);
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+      errors.push({ field: 'latitude', message: 'latitude must be a number in [-90, 90]' });
+    }
+    const lng = parseFloat(req.body.longitude);
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
+      errors.push({ field: 'longitude', message: 'longitude must be a number in [-180, 180]' });
+    }
+    if (req.body.session && !['morning', 'evening', 'both'].includes(req.body.session)) {
+      errors.push({ field: 'session', message: "session must be 'morning', 'evening', or 'both'" });
+    }
+    if (errors.length > 0) return sendError(res, 'ข้อมูลไม่ถูกต้อง', errors, 400);
+
+    // Scope: vehicle must serve this school
+    const ok = await ppSvc.validateVehicleServesSchool(req.body.vehicle_id, schoolId);
+    if (!ok) return sendError(res, 'รถคันนี้ไม่ได้ให้บริการโรงเรียนนี้', [], 400);
+
+    const studentIds = Array.isArray(req.body.student_ids)
+      ? req.body.student_ids.map(Number).filter(Number.isInteger)
+      : [];
+
+    if (studentIds.length > 0) {
+      const studentsOk = await ppSvc.validateStudentsBelongToSchoolAndVehicle(
+        studentIds, schoolId, req.body.vehicle_id
+      );
+      if (!studentsOk) return sendError(res, 'นักเรียนบางรายไม่ใช่ของโรงเรียนหรือรถคันนี้', [], 400);
+    }
+
+    const id = await ppSvc.createPickupPointWithStudents(req.body, studentIds, {
+      actorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, { id }, 'สร้างจุดรับส่งสำเร็จ', null, 201);
+  } catch (err) { next(err); }
+});
+
+/**
  * GET /api/school/emergencies
  * Emergency logs for vehicles serving this school.
  * Query params: page, per_page

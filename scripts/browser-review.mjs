@@ -378,6 +378,98 @@ const MOCK = {
       },
     ],
   },
+  // Phase 6 — Pickup Points & Student Transport Map.
+  // Coords cluster around Lampang city centre (18.288, 99.490) to keep
+  // OSM tiles aligned with the project's geography in QA captures.
+  '/api/driver/pickup-points': {
+    data: {
+      vehicle: { id: 'V-DRV-MOCK', plate_no: 'นข 1010 ลำปาง' },
+      session: 'all',
+      points: [
+        {
+          id: 1, sequence: 1, label: 'หน้าโรงเรียน',
+          latitude: 18.2884, longitude: 99.4906, session: 'both', notes: null,
+          students: [
+            { id: 11, first_name: 'สมชาย', last_name: 'ใจดี',   grade: 'ป.4', classroom: '4/1' },
+            { id: 12, first_name: 'มานี',  last_name: 'รักเด็ก', grade: 'ป.4', classroom: '4/2' },
+          ],
+        },
+        {
+          id: 2, sequence: 2, label: 'ปาก ซ.5',
+          latitude: 18.2920, longitude: 99.4990, session: 'morning', notes: 'ฝั่งซ้าย',
+          students: [
+            { id: 13, first_name: 'อรอุมา', last_name: 'พัฒนา',  grade: 'ป.5', classroom: '5/1' },
+          ],
+        },
+        {
+          id: 3, sequence: 3, label: 'ตลาดเทศบาล',
+          latitude: 18.2800, longitude: 99.4830, session: 'evening', notes: null,
+          students: [
+            { id: 14, first_name: 'ดนัย',   last_name: 'แก้วใส', grade: 'ม.1', classroom: '1/1' },
+            { id: 15, first_name: 'ปรียา', last_name: 'มาดี',   grade: 'ม.1', classroom: '1/2' },
+            { id: 16, first_name: 'ภูมิ',   last_name: 'พูนสุข', grade: 'ม.2', classroom: '2/1' },
+          ],
+        },
+      ],
+    },
+  },
+  '/api/school/pickup-points': {
+    data: [
+      {
+        id: 1, sequence: 1, label: 'หน้าโรงเรียน',
+        latitude: 18.2884, longitude: 99.4906, session: 'both', notes: null,
+        vehicle_id: 'V-S01', plate_no: 'นข 1010 ลำปาง',
+        students: [
+          { id: 11, first_name: 'สมชาย', last_name: 'ใจดี',  grade: 'ป.4', classroom: '4/1' },
+          { id: 12, first_name: 'มานี',  last_name: 'รักเด็ก', grade: 'ป.4', classroom: '4/2' },
+        ],
+      },
+      {
+        id: 2, sequence: 2, label: 'ปาก ซ.5',
+        latitude: 18.2920, longitude: 99.4990, session: 'morning', notes: null,
+        vehicle_id: 'V-S01', plate_no: 'นข 1010 ลำปาง',
+        students: [
+          { id: 13, first_name: 'อรอุมา', last_name: 'พัฒนา', grade: 'ป.5', classroom: '5/1' },
+        ],
+      },
+      {
+        id: 3, sequence: 1, label: 'ตลาดเทศบาล',
+        latitude: 18.2800, longitude: 99.4830, session: 'both', notes: null,
+        vehicle_id: 'V-S02', plate_no: 'นข 2020 ลำปาง',
+        students: [
+          { id: 14, first_name: 'ดนัย', last_name: 'แก้วใส', grade: 'ม.1', classroom: '1/1' },
+          { id: 15, first_name: 'ปรียา', last_name: 'มาดี',  grade: 'ม.1', classroom: '1/2' },
+        ],
+      },
+      {
+        id: 4, sequence: 2, label: 'ห้าแยกหอนาฬิกา',
+        latitude: 18.2700, longitude: 99.4900, session: 'evening', notes: null,
+        vehicle_id: 'V-S02', plate_no: 'นข 2020 ลำปาง',
+        students: [
+          { id: 16, first_name: 'ภูมิ', last_name: 'พูนสุข', grade: 'ม.2', classroom: '2/1' },
+        ],
+      },
+    ],
+  },
+  '/api/admin/pickup-points': {
+    data: [
+      { id: 1, vehicle_id: 'V-A01', plate_no: 'นข 1010 ลำปาง', sequence: 1, label: 'หน้าโรงเรียน',     latitude: 18.2884, longitude: 99.4906, session: 'both',    notes: null,         student_count: 2, created_at: '2026-05-08T03:00:00Z', updated_at: '2026-05-09T03:00:00Z' },
+      { id: 2, vehicle_id: 'V-A01', plate_no: 'นข 1010 ลำปาง', sequence: 2, label: 'ปาก ซ.5',          latitude: 18.2920, longitude: 99.4990, session: 'morning', notes: 'ฝั่งซ้าย',     student_count: 1, created_at: '2026-05-08T03:00:00Z', updated_at: '2026-05-08T03:00:00Z' },
+      { id: 3, vehicle_id: 'V-A02', plate_no: 'นข 2020 ลำปาง', sequence: 1, label: 'ตลาดเทศบาล',       latitude: 18.2800, longitude: 99.4830, session: 'both',    notes: null,         student_count: 3, created_at: '2026-05-07T03:00:00Z', updated_at: '2026-05-09T03:00:00Z' },
+      { id: 4, vehicle_id: 'V-A02', plate_no: 'นข 2020 ลำปาง', sequence: 2, label: 'ห้าแยกหอนาฬิกา',    latitude: 18.2700, longitude: 99.4900, session: 'evening', notes: null,         student_count: 1, created_at: '2026-05-07T03:00:00Z', updated_at: '2026-05-07T03:00:00Z' },
+      { id: 5, vehicle_id: 'V-A03', plate_no: 'นข 3030 ลำปาง', sequence: 1, label: 'สถานีรถไฟ',          latitude: 18.2780, longitude: 99.5050, session: 'both',    notes: 'ใกล้ ATM',    student_count: 4, created_at: '2026-05-06T03:00:00Z', updated_at: '2026-05-06T03:00:00Z' },
+      { id: 6, vehicle_id: 'V-A03', plate_no: 'นข 3030 ลำปาง', sequence: 2, label: 'หน้า รพ.ลำปาง',       latitude: 18.2960, longitude: 99.4880, session: 'morning', notes: null,         student_count: 2, created_at: '2026-05-06T03:00:00Z', updated_at: '2026-05-09T03:00:00Z' },
+    ],
+    meta: { page: 1, per_page: 20, total: 6 },
+  },
+  // Vehicle dropdown source for the admin page filter.
+  '/api/province/vehicles': {
+    data: [
+      { id: 'V-A01', plate_no: 'นข 1010 ลำปาง' },
+      { id: 'V-A02', plate_no: 'นข 2020 ลำปาง' },
+      { id: 'V-A03', plate_no: 'นข 3030 ลำปาง' },
+    ],
+  },
 };
 
 function mockFor(url) {
@@ -574,6 +666,40 @@ async function pageWithUser(browser, user, viewport) {
     const { ctx, page } = await pageWithUser(browser, USERS.affiliation, vp);
     await page.goto(`${BASE}/affiliation`, { waitUntil: 'networkidle', timeout: 20000 });
     await shoot(page, `11-affiliation-${vname}`);
+    await ctx.close();
+  }
+
+  // Phase 6 — Pickup-point map pages.
+  // Leaflet tiles need a longer settle time than typical pages because
+  // the tile network requests don't always finish before 'networkidle'
+  // fires on chromium-headless. We give an extra 1.5s after navigation
+  // to let visible tiles paint before screenshotting.
+  const TILE_SETTLE = 1500;
+
+  // Driver pickup map — desktop + mobile
+  for (const [vname, vp] of Object.entries({ desktop: VIEWPORTS.desktop, mobile: VIEWPORTS.mobile })) {
+    const { ctx, page } = await pageWithUser(browser, USERS.driver, vp);
+    await page.goto(`${BASE}/driver/pickup-map`, { waitUntil: 'networkidle', timeout: 25000 });
+    await page.waitForTimeout(TILE_SETTLE);
+    await shoot(page, `12-driver-pickup-map-${vname}`);
+    await ctx.close();
+  }
+
+  // School pickup map — desktop + mobile
+  for (const [vname, vp] of Object.entries({ desktop: VIEWPORTS.desktop, mobile: VIEWPORTS.mobile })) {
+    const { ctx, page } = await pageWithUser(browser, USERS.school, vp);
+    await page.goto(`${BASE}/school/pickup-map`, { waitUntil: 'networkidle', timeout: 25000 });
+    await page.waitForTimeout(TILE_SETTLE);
+    await shoot(page, `13-school-pickup-map-${vname}`);
+    await ctx.close();
+  }
+
+  // Admin pickup-point management — desktop only (table view, dense info)
+  {
+    const { ctx, page } = await pageWithUser(browser, USERS.admin, VIEWPORTS.desktop);
+    await page.goto(`${BASE}/admin/pickup-points`, { waitUntil: 'networkidle', timeout: 25000 });
+    await page.waitForTimeout(500); // no map on the table view; minimal settle
+    await shoot(page, `14-admin-pickup-points-desktop`);
     await ctx.close();
   }
 

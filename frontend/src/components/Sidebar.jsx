@@ -29,7 +29,7 @@ const SCHOOL_NAV = [
   { to: '/school/students',      icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
   { to: '/school/pickup-map',    icon: Map,           label: 'แผนที่จุดรับส่ง' },
-  { to: '/school/live-vehicles', icon: Activity,      label: 'ตำแหน่งรถสด' },
+  { to: '/school/live-vehicles', icon: Activity,      label: 'ตำแหน่งปัจจุบัน' },
   { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },
   { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
   { section: 'ติดตามและบันทึก' },

@@ -7,6 +7,7 @@ import {
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import { AppCard, AlertBanner, StatusBadge } from '../../components/ui';
+import LiveLocationToggle from '../../components/LiveLocationToggle';
 import {
   resolveSession,
   SESSION_LABEL,
@@ -209,6 +210,9 @@ export default function DriverDashboard() {
           </AlertBanner>
         </div>
       )}
+
+      {/* ── Phase 7.3 — Driver location sender (explicit toggle) ── */}
+      <LiveLocationToggle />
 
       {/* ── Top info bar (neutral surface; icon carries session differentiation) ── */}
       <AppCard padding="md" className="mb-4">

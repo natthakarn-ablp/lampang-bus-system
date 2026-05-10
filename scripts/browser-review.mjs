@@ -130,6 +130,47 @@ const MOCK = {
     ],
     meta: { page: 1, per_page: 30, total: 3 },
   },
+  // Phase 3.5 — incident feed widget on Province dashboard.
+  // reported_at uses Date.now() relative offsets so the rendered
+  // "X minutes ago" timestamps match the moment the QA run executed.
+  '/api/province/emergencies': {
+    data: [
+      {
+        id: 1,
+        vehicle_id: 'V-001',
+        plate_no: 'กข 1234 ลำปาง',
+        detail: 'รถแจ้งเหตุฉุกเฉินระหว่างรับนักเรียน — ยางหลังขวาแตก',
+        note: 'ประสานโรงเรียนแล้ว รอช่างเปลี่ยนยาง',
+        result: null,
+        reported_at: new Date(Date.now() - 8 * 60 * 1000).toISOString(),
+        reported_by_name: 'สมชาย ใจดี',
+        channel: 'web',
+      },
+      {
+        id: 2,
+        vehicle_id: 'V-002',
+        plate_no: 'นข 5678 ลำปาง',
+        detail: 'ผู้ปกครองแจ้งผ่าน LINE ว่านักเรียนยังไม่ถึงจุดรับ',
+        note: '',
+        result: null,
+        reported_at: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+        reported_by_name: 'LINE OA',
+        channel: 'line',
+      },
+      {
+        id: 3,
+        vehicle_id: 'V-003',
+        plate_no: 'นข 9999 ลำปาง',
+        detail: 'รถเสียระหว่างทาง — น้ำมันเครื่องรั่ว',
+        note: 'ส่งรถสำรองไปรับนักเรียน',
+        result: 'แก้ไขแล้ว',
+        reported_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+        reported_by_name: 'ทดสอบ คนขับ',
+        channel: 'web',
+      },
+    ],
+    meta: { page: 1, per_page: 5, total: 3 },
+  },
 };
 
 function mockFor(url) {

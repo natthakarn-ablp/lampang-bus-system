@@ -8,7 +8,7 @@ comparison in future phases.
 
 | | |
 |---|---|
-| Captured at HEAD | `c7e3738` |
+| Captured at HEAD | `78ab6dd` |
 | Capture method | `scripts/browser-review.mjs` (Playwright + chromium-headless-shell) |
 | Auth | mock JWT injected via `localStorage` (see script header) |
 | API | stubbed via `page.route('**/api/**', …)` returning `{ success: true, data: {} }` |

@@ -284,6 +284,82 @@ router.post('/pickup-points', async (req, res, next) => {
 });
 
 /**
+ * GET /api/school/pickup-points/:id/assignable-students
+ * Phase 6.1 hotfix-7: edit-students modal feed. Returns the school's
+ * roster on this point's vehicle, filtered to students that can be
+ * checked into THIS point. Students currently on this point are
+ * included with currently_assigned=true so the modal pre-checks them;
+ * students locked to OTHER conflicting points are excluded.
+ */
+router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const pointId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const point = await ppSvc.getPickupPointById(pointId);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+
+    const vehicleOk = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
+    if (!vehicleOk) return sendError(res, 'จุดรับส่งนี้ไม่ใช่ของโรงเรียนคุณ', [], 403);
+
+    const students = await ppSvc.getAssignableStudentsForPickupPoint(point, { schoolId });
+    return sendSuccess(res, { point, students });
+  } catch (err) { next(err); }
+});
+
+/**
+ * PUT /api/school/pickup-points/:id/students
+ * Phase 6.1 hotfix-7: replace the student list of a pickup point.
+ * Validations:
+ *   - point must belong to a vehicle serving this school
+ *   - every student_id must belong to this school AND that vehicle
+ *   - no conflicts with OTHER pickup points (excludes self-point)
+ */
+router.put('/pickup-points/:id/students', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const pointId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    if (!Array.isArray(req.body.student_ids)) {
+      return sendError(res, 'student_ids must be an array', [], 400);
+    }
+    const studentIds = req.body.student_ids.map(Number).filter(Number.isInteger);
+
+    const point = await ppSvc.getPickupPointById(pointId);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+
+    const vehicleOk = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
+    if (!vehicleOk) return sendError(res, 'จุดรับส่งนี้ไม่ใช่ของโรงเรียนคุณ', [], 403);
+
+    if (studentIds.length > 0) {
+      const studentsOk = await ppSvc.validateStudentsBelongToSchoolAndVehicle(
+        studentIds, schoolId, point.vehicle_id
+      );
+      if (!studentsOk) return sendError(res, 'นักเรียนบางรายไม่ใช่ของโรงเรียนหรือรถคันนี้', [], 400);
+
+      const noDup = await ppSvc.validateNoDuplicateAssignmentsForVehicle(
+        studentIds, point.vehicle_id, point.session, { excludePointId: pointId }
+      );
+      if (!noDup) return sendError(res, 'นักเรียนบางรายมีจุดรับส่งในรอบนี้แล้ว', [], 400);
+    }
+
+    const result = await ppSvc.replacePickupPointStudents(pointId, studentIds, {
+      actorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, result, 'อัปเดตรายชื่อนักเรียนสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+/**
  * GET /api/school/emergencies
  * Emergency logs for vehicles serving this school.
  * Query params: page, per_page

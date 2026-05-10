@@ -297,15 +297,22 @@ async function unassignStudentFromPoint(pointId, studentId) {
  * SQL expresses it as: existing.session = 'both' OR target = 'both'
  *                       OR existing.session = target.
  */
-async function getStudentIdsConflictingForVehicle(vehicleId, session) {
+async function getStudentIdsConflictingForVehicle(vehicleId, session, { excludePointId = null } = {}) {
   if (!session || !['morning', 'evening', 'both'].includes(session)) return [];
+  const params = [vehicleId, session, session];
+  let exclude = '';
+  if (excludePointId) {
+    exclude = ' AND pp.id != ?';
+    params.push(excludePointId);
+  }
   const [rows] = await pool.query(`
     SELECT DISTINCT spp.student_id
     FROM student_pickup_points spp
     JOIN pickup_points pp ON pp.id = spp.pickup_point_id AND pp.is_deleted = FALSE
     WHERE pp.vehicle_id = ?
       AND (pp.session = 'both' OR ? = 'both' OR pp.session = ?)
-  `, [vehicleId, session, session]);
+      ${exclude}
+  `, params);
   return rows.map(r => r.student_id);
 }
 
@@ -365,12 +372,21 @@ async function getStudentsForSchoolAndVehicle(schoolId, vehicleId, { session = n
  * Server-side ground truth — even if the frontend filter is bypassed,
  * the POST handler must catch duplicates here.
  */
-async function validateNoDuplicateAssignmentsForVehicle(studentIds, vehicleId, session) {
+async function validateNoDuplicateAssignmentsForVehicle(studentIds, vehicleId, session, { excludePointId = null } = {}) {
   if (!Array.isArray(studentIds) || studentIds.length === 0) return true;
   if (!['morning', 'evening', 'both'].includes(session)) {
     // Defensive default: if session unknown, treat like 'both' (most strict)
     // so we never accidentally accept a duplicate.
     session = 'both';
+  }
+  const params = [vehicleId, studentIds, session, session];
+  let exclude = '';
+  if (excludePointId) {
+    // Phase 6.1 hotfix-7: when EDITING an existing pickup point, students
+    // already on THIS point must not be flagged as duplicates against
+    // themselves. Caller passes excludePointId = the point being edited.
+    exclude = ' AND pp.id != ?';
+    params.push(excludePointId);
   }
   const [[{ conflicts }]] = await pool.query(`
     SELECT COUNT(*) AS conflicts FROM student_pickup_points spp
@@ -378,8 +394,121 @@ async function validateNoDuplicateAssignmentsForVehicle(studentIds, vehicleId, s
     WHERE pp.vehicle_id = ?
       AND spp.student_id IN (?)
       AND (pp.session = 'both' OR ? = 'both' OR pp.session = ?)
-  `, [vehicleId, studentIds, session, session]);
+      ${exclude}
+  `, params);
   return conflicts === 0;
+}
+
+/**
+ * getAssignableStudentsForPickupPoint — for the edit-students modal.
+ * Returns the candidate student list for a pickup point's vehicle:
+ *   - Includes students currently assigned to THIS point (so they
+ *     stay checkable in the modal even though they're "in use")
+ *   - Includes students with no conflicting assignment on this vehicle
+ *   - Excludes students assigned to OTHER points with conflicting session
+ *
+ * Each row carries a `currently_assigned` flag (1 if on this point,
+ * 0 otherwise) so the frontend can pre-check the right students.
+ *
+ * `schoolId` — optional scope filter. When set (school role), restricts
+ * the result to that school's roster. Driver role passes null.
+ */
+async function getAssignableStudentsForPickupPoint(point, { schoolId = null } = {}) {
+  if (!point || !point.id || !point.vehicle_id || !point.session) return [];
+  const conflictIds = await getStudentIdsConflictingForVehicle(
+    point.vehicle_id, point.session, { excludePointId: point.id }
+  );
+
+  let where = 's.vehicle_id = ? AND s.is_deleted = FALSE';
+  const params = [point.id, point.vehicle_id];   // first ? = the LEFT JOIN's pickup_point_id
+  if (schoolId) {
+    where += ' AND s.school_id = ?';
+    params.push(schoolId);
+  }
+  if (conflictIds.length > 0) {
+    where += ' AND s.id NOT IN (?)';
+    params.push(conflictIds);
+  }
+
+  const [rows] = await pool.query(`
+    SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+           s.morning_enabled, s.evening_enabled,
+           CASE WHEN spp.pickup_point_id IS NOT NULL THEN 1 ELSE 0 END AS currently_assigned
+    FROM students s
+    LEFT JOIN student_pickup_points spp
+      ON spp.student_id = s.id AND spp.pickup_point_id = ?
+    WHERE ${where}
+    ORDER BY s.classroom ASC, s.first_name ASC
+  `, params);
+
+  // Coerce the MySQL CASE-WHEN INT to a boolean for cleaner JSON.
+  return rows.map(r => ({ ...r, currently_assigned: r.currently_assigned === 1 }));
+}
+
+/**
+ * replacePickupPointStudents — atomic delete-then-insert for the edit
+ * flow. Caller MUST have already validated:
+ *   - point belongs to actor's scope
+ *   - studentIds belong to scope
+ *   - no duplicate-assignment conflicts (excluding this point)
+ *
+ * Captures old/new student_ids in the audit log so the change is
+ * traceable. Wrapped in a single transaction so a partial failure
+ * rolls back cleanly.
+ */
+async function replacePickupPointStudents(pointId, studentIds, ctx = {}) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Read current assignments for the audit oldValue
+    const [oldRows] = await conn.query(
+      `SELECT student_id FROM student_pickup_points WHERE pickup_point_id = ?`,
+      [pointId]
+    );
+    const oldIds = oldRows.map(r => r.student_id);
+
+    // Delete-then-insert pattern. Simpler than diffing, and the table
+    // is tiny per-point (typically < 30 students per pickup), so the
+    // write cost is negligible. INSERT IGNORE on the way back in
+    // protects against accidental duplicates in the input array.
+    await conn.query(
+      `DELETE FROM student_pickup_points WHERE pickup_point_id = ?`,
+      [pointId]
+    );
+
+    if (Array.isArray(studentIds) && studentIds.length > 0) {
+      const values = studentIds.map(sid => [sid, pointId]);
+      await conn.query(
+        `INSERT IGNORE INTO student_pickup_points (student_id, pickup_point_id) VALUES ?`,
+        [values]
+      );
+    }
+
+    await logAudit({
+      userId: ctx.actorId || null,
+      action: 'UPDATE',
+      entityType: 'pickup_point',
+      entityId: pointId,
+      oldValue: { student_ids: oldIds },
+      newValue: { student_ids: studentIds || [] },
+      ipAddress: ctx.ipAddress || null,
+      userAgent: ctx.userAgent || null,
+      conn,
+    });
+
+    await conn.commit();
+    return {
+      added:   (studentIds || []).filter(id => !oldIds.includes(id)),
+      removed: oldIds.filter(id => !(studentIds || []).includes(id)),
+      total:   (studentIds || []).length,
+    };
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* swallow */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 async function validateStudentsBelongToVehicle(studentIds, vehicleId) {
@@ -498,4 +627,7 @@ module.exports = {
   createPickupPointWithStudents,
   // Phase 6.1 hotfix-4 — duplicate-assignment guard
   validateNoDuplicateAssignmentsForVehicle,
+  // Phase 6.1 hotfix-7 — edit-students workflow
+  getAssignableStudentsForPickupPoint,
+  replacePickupPointStudents,
 };

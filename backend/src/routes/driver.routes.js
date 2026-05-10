@@ -186,6 +186,74 @@ router.post('/pickup-points', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+// ─── GET /api/driver/pickup-points/:id/assignable-students ──────────────────
+// Phase 6.1 hotfix-7: feeds the edit-students modal. Returns the
+// driver-vehicle's roster filtered to students that can be ON this
+// point — i.e. either currently assigned (so they pre-check) OR not
+// in conflict with another point's session.
+router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
+  try {
+    const pointId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    const point = await ppSvc.getPickupPointById(pointId);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    if (point.vehicle_id !== vehicle.vehicle_id) {
+      return sendError(res, 'จุดรับส่งนี้ไม่ใช่ของรถคุณ', [], 403);
+    }
+
+    const students = await ppSvc.getAssignableStudentsForPickupPoint(point);
+    return sendSuccess(res, { point, students });
+  } catch (err) { return next(err); }
+});
+
+// ─── PUT /api/driver/pickup-points/:id/students ─────────────────────────────
+// Phase 6.1 hotfix-7: replace the student list of an existing pickup
+// point. Driver can only edit points belonging to their own vehicle;
+// every student_id must belong to that vehicle; no conflicts with
+// OTHER points (this point is excluded from the conflict check).
+router.put('/pickup-points/:id/students', async (req, res, next) => {
+  try {
+    const pointId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    if (!Array.isArray(req.body.student_ids)) {
+      return sendError(res, 'student_ids must be an array', [], 400);
+    }
+    const studentIds = req.body.student_ids.map(Number).filter(Number.isInteger);
+
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    const point = await ppSvc.getPickupPointById(pointId);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    if (point.vehicle_id !== vehicle.vehicle_id) {
+      return sendError(res, 'จุดรับส่งนี้ไม่ใช่ของรถคุณ', [], 403);
+    }
+
+    if (studentIds.length > 0) {
+      const ok = await ppSvc.validateStudentsBelongToVehicle(studentIds, vehicle.vehicle_id);
+      if (!ok) return sendError(res, 'นักเรียนบางรายไม่ใช่ของรถคันนี้', [], 400);
+
+      const noDup = await ppSvc.validateNoDuplicateAssignmentsForVehicle(
+        studentIds, vehicle.vehicle_id, point.session, { excludePointId: pointId }
+      );
+      if (!noDup) return sendError(res, 'นักเรียนบางรายมีจุดรับส่งในรอบนี้แล้ว', [], 400);
+    }
+
+    const result = await ppSvc.replacePickupPointStudents(pointId, studentIds, {
+      actorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, result, 'อัปเดตรายชื่อนักเรียนสำเร็จ');
+  } catch (err) { return next(err); }
+});
+
 // ─── POST /checkin ────────────────────────────────────────────────────────────
 
 router.post('/checkin', async (req, res, next) => {

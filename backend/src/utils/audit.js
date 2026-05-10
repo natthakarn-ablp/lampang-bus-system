@@ -5,7 +5,7 @@ const { pool } = require('../config/database');
 /**
  * Valid audit actions as defined in the schema.
  */
-const AUDIT_ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'EXPORT', 'LOGIN', 'IMPORT', 'APPROVE'];
+const AUDIT_ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'EXPORT', 'LOGIN', 'IMPORT', 'APPROVE', 'VIEW'];
 
 /**
  * Write a record to audit_logs.

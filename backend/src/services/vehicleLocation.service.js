@@ -94,7 +94,12 @@ async function pauseLocation(vehicleId) {
  * LOW_ACCURACY is a separate overlay flag (returned as boolean).
  */
 function computeStatus(row, nowMs) {
-  if (!row) return { status: 'OFFLINE', low_accuracy: false, seconds_since_seen: null };
+  // No row, or LEFT JOIN gave a row with no live data → OFFLINE.
+  // (`null <= 60` is truthy in JS, so we MUST short-circuit before
+  // the age ladder; otherwise vehicles never broadcast appear ONLINE.)
+  if (!row || !row.received_at) {
+    return { status: 'OFFLINE', low_accuracy: false, seconds_since_seen: null };
+  }
   if (row.status === 'PAUSED') {
     return {
       status: 'PAUSED',

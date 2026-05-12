@@ -5,12 +5,16 @@ import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import AppCard from '../../components/ui/AppCard';
+import { useAuth } from '../../hooks/useAuth';
+import { isGradeTeacher } from '../../utils/authScope';
 
 const PREFIX_OPTIONS = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นางสาว', 'นาง'];
 
 export default function StudentSearch() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { user } = useAuth();
+  const isTeacher = isGradeTeacher(user); // read-only for grade teacher
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -173,16 +177,18 @@ export default function StudentSearch() {
       {/* Header + actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-xl font-semibold text-gray-800">ข้อมูลนักเรียน</h1>
-        <div className="flex gap-2">
-          <button onClick={handleDownloadTemplate}
-            className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">
-            ดาวน์โหลดตัวอย่าง
-          </button>
-          <button onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }}
-            className="text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-3 py-2 rounded-lg transition">
-            นำเข้าข้อมูล
-          </button>
-        </div>
+        {!isTeacher && (
+          <div className="flex gap-2">
+            <button onClick={handleDownloadTemplate}
+              className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">
+              ดาวน์โหลดตัวอย่าง
+            </button>
+            <button onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }}
+              className="text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-3 py-2 rounded-lg transition">
+              นำเข้าข้อมูล
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Search + filter */}
@@ -224,7 +230,7 @@ export default function StudentSearch() {
                   <th className="px-4 py-3">เช้า</th>
                   <th className="px-4 py-3">เย็น</th>
                   <th className="px-4 py-3">ผู้ปกครอง</th>
-                  <th className="px-4 py-3 text-center">จัดการ</th>
+                  {!isTeacher && <th className="px-4 py-3 text-center">จัดการ</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border">
@@ -246,14 +252,16 @@ export default function StudentSearch() {
                       {s.evening_enabled ? <span className="text-green-600 text-xs font-medium">ใช้</span> : <span className="text-gray-400 text-xs">-</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
-                      {s.parent_name ? <span>{s.parent_name} <span className="text-gray-400">{s.parent_phone}</span></span> : <span className="text-gray-400">-</span>}
+                      {s.parent_name ? <span>{s.parent_name}{s.parent_phone && <span className="text-gray-400"> {s.parent_phone}</span>}</span> : <span className="text-gray-400">-</span>}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <button onClick={() => openEdit(s)}
-                        className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1 rounded-lg transition">
-                        แก้ไข
-                      </button>
-                    </td>
+                    {!isTeacher && (
+                      <td className="px-4 py-3 text-center">
+                        <button onClick={() => openEdit(s)}
+                          className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1 rounded-lg transition">
+                          แก้ไข
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -276,10 +284,12 @@ export default function StudentSearch() {
                       <span className="text-gray-400">รหัส {s.id}</span>
                     </p>
                   </div>
-                  <button onClick={() => openEdit(s)}
-                    className="text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition shrink-0">
-                    แก้ไข
-                  </button>
+                  {!isTeacher && (
+                    <button onClick={() => openEdit(s)}
+                      className="text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition shrink-0">
+                      แก้ไข
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mt-2">

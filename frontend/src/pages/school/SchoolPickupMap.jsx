@@ -6,10 +6,14 @@ import PickupMap from '../../components/PickupMap';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
 import { classroomLabel } from '../../utils/student';
+import { useAuth } from '../../hooks/useAuth';
+import { isGradeTeacher } from '../../utils/authScope';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
 export default function SchoolPickupMap() {
+  const { user } = useAuth();
+  const isTeacher = isGradeTeacher(user); // read-only for grade teacher
   const [points, setPoints] = useState([]);
   const [sessionFilter, setSessionFilter] = useState('all');
   const [vehicleFilter, setVehicleFilter] = useState('all');
@@ -81,14 +85,16 @@ export default function SchoolPickupMap() {
             ))}
           </select>
         )}
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="ml-auto inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition"
-        >
-          <Plus className="w-4 h-4" strokeWidth={2.5} />
-          เพิ่มจุดรับส่ง
-        </button>
+        {!isTeacher && (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="ml-auto inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition"
+          >
+            <Plus className="w-4 h-4" strokeWidth={2.5} />
+            เพิ่มจุดรับส่ง
+          </button>
+        )}
       </div>
 
       {error ? (
@@ -97,7 +103,9 @@ export default function SchoolPickupMap() {
         <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
       ) : filteredPoints.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีจุดรับส่ง">
-          กดปุ่ม "+ เพิ่มจุดรับส่ง" ด้านบนเพื่อเริ่มสร้างจุดแรกของโรงเรียน
+          {isTeacher
+            ? 'ยังไม่มีจุดรับส่งของระดับชั้นนี้ — ให้บัญชีหลักของโรงเรียนเป็นผู้เพิ่มข้อมูล'
+            : 'กดปุ่ม "+ เพิ่มจุดรับส่ง" ด้านบนเพื่อเริ่มสร้างจุดแรกของโรงเรียน'}
         </AlertBanner>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
@@ -110,7 +118,7 @@ export default function SchoolPickupMap() {
                   point={p}
                   selected={selectedId === p.id}
                   onClick={() => setSelectedId(p.id)}
-                  onEdit={() => setEditing(p)}
+                  onEdit={isTeacher ? undefined : () => setEditing(p)}
                 />
               ))}
             </div>

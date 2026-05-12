@@ -2,12 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/axios';
 import ApprovalBadge from '../../components/ApprovalBadge';
 import { useToast } from '../../components/Toast';
+import { useAuth } from '../../hooks/useAuth';
+import { isGradeTeacher } from '../../utils/authScope';
 
 export default function SchoolApprovals() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
   const toast = useToast();
+  const { user } = useAuth();
+  const isTeacher = isGradeTeacher(user); // teacher views in read-only mode
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
@@ -68,7 +72,7 @@ export default function SchoolApprovals() {
                 <ApprovalBadge status={r.status} />
               </div>
 
-              {r.status === 'pending' && (
+              {r.status === 'pending' && !isTeacher && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
                   <button onClick={() => handleReview(r.id, 'approved')}
                     className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white font-medium px-5 py-2.5 rounded-lg transition">

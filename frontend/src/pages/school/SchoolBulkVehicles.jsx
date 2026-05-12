@@ -1,15 +1,46 @@
 import { useState } from 'react';
+import { ShieldAlert } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import { AppCard } from '../../components/ui';
+import { useAuth } from '../../hooks/useAuth';
+import { isGradeTeacher } from '../../utils/authScope';
 
 const EMPTY_ROW = { plate_no: '', vehicle_type: 'รถตู้', driver_name: '', driver_phone: '' };
 
+function TeacherDeniedCard() {
+  return (
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
+      <AppCard padding="lg">
+        <div className="flex items-start gap-3">
+          <ShieldAlert className="w-6 h-6 text-warn shrink-0" strokeWidth={2} />
+          <div>
+            <h1 className="text-lg font-semibold text-ink mb-1">
+              ไม่สามารถเข้าถึงหน้านี้ได้
+            </h1>
+            <p className="text-sm text-ink-muted">
+              บัญชีครูประจำสายชั้นเข้าถึงได้เฉพาะข้อมูลสำหรับตรวจสอบเท่านั้น
+              หากต้องการเพิ่มรถ กรุณาแจ้งบัญชีหลักของโรงเรียน
+            </p>
+          </div>
+        </div>
+      </AppCard>
+    </div>
+  );
+}
+
 export default function SchoolBulkVehicles() {
+  const { user } = useAuth();
   const [rows, setRows] = useState([{ ...EMPTY_ROW }]);
   const [saving, setSaving] = useState(false);
   const [existingVehicles, setExistingVehicles] = useState([]);
   const [searchPlate, setSearchPlate] = useState('');
   const toast = useToast();
+
+  // Phase 7.11.4 — render denied state for teacher AFTER all hooks
+  // are mounted (rules of hooks). The form below never gets a chance
+  // to POST because the early return short-circuits the render.
+  if (isGradeTeacher(user)) return <TeacherDeniedCard />;
 
   function addRow() {
     if (rows.length >= 10) { toast.error('สูงสุด 10 คันต่อครั้ง'); return; }

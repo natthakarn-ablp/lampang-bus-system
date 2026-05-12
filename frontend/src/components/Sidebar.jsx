@@ -7,6 +7,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { isGradeTeacher, getGradeScope } from '../utils/authScope';
 import { PAGE_TITLES } from '../constants/uiLabels';
 
 // section: string = section heading (not a link)
@@ -105,6 +106,23 @@ const ADMIN_NAV = [
 
 const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATION_NAV, province: PROVINCE_NAV, transport: TRANSPORT_NAV, admin: ADMIN_NAV };
 
+/**
+ * Phase 7.11.4 — for a homeroom-teacher sub-account
+ * (role='school' + grade_scope set), drop write-only / admin-only
+ * school routes from the sidebar so the teacher only sees pages
+ * that work for them. Backend still 403s these paths.
+ */
+const TEACHER_BLOCKED_PATHS = new Set([
+  '/school/audit-log',
+  '/school/bulk-vehicles',
+]);
+
+function navItemsForUser(user) {
+  const base = NAV_MAP[user?.role] || [];
+  if (!isGradeTeacher(user)) return base;
+  return base.filter(item => item.section || !TEACHER_BLOCKED_PATHS.has(item.to));
+}
+
 // Roles whose sidebar uses collapsible section groups.
 // Other roles get a flat list with static section headers.
 const COLLAPSIBLE_ROLES = new Set(['admin']);
@@ -149,7 +167,8 @@ export default function Sidebar({ onClose }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const groups = useMemo(() => buildGroups(NAV_MAP[user?.role] || []), [user?.role]);
+  const groups = useMemo(() => buildGroups(navItemsForUser(user)), [user?.role, user?.grade_scope, user?.gradeScope]);
+  const teacherGrade = getGradeScope(user);
   const useCollapsible = COLLAPSIBLE_ROLES.has(user?.role);
 
   const activeGroupKey = useMemo(() => {
@@ -207,6 +226,11 @@ export default function Sidebar({ onClose }) {
       <div className="px-5 py-3 border-b border-blue-700 shrink-0">
         <p className="text-xs text-blue-300">เข้าสู่ระบบในฐานะ</p>
         <p className="font-semibold text-sm truncate">{user?.display_name || user?.username}</p>
+        {teacherGrade && (
+          <p className="text-[11px] text-blue-200 mt-0.5">
+            ครูประจำสายชั้น · ขอบเขต {teacherGrade}
+          </p>
+        )}
       </div>
 
       {/* Navigation — collapsible only for COLLAPSIBLE_ROLES, flat otherwise */}

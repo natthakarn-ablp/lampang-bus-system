@@ -6,7 +6,13 @@ const { sendError } = require('../utils/response');
 
 /**
  * Verify the Bearer access token from the Authorization header.
- * On success, attaches req.user = { id, role, scopeType, scopeId, displayName }.
+ * On success, attaches req.user = { id, username, role, scopeType,
+ * scopeId, gradeScope, displayName }.
+ *
+ * `gradeScope` is Phase 7.11.2 plumbing — null for every existing
+ * account, populated only when the user is a homeroom-teacher
+ * sub-account (role='school' + grade_scope set). Endpoint-level
+ * filtering arrives in Phase 7.11.3.
  */
 async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -30,6 +36,7 @@ async function authenticate(req, res, next) {
       role: payload.role,
       scopeType: payload.scopeType || null,
       scopeId: payload.scopeId || null,
+      gradeScope: payload.gradeScope || null,
       displayName: payload.displayName || '',
     };
 

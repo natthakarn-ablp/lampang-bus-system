@@ -43,6 +43,9 @@ function generateAccessToken(user) {
       role: user.role,
       scopeType: user.scope_type || null,
       scopeId: user.scope_id || null,
+      // Phase 7.11.2 — null for every existing account; only set on
+      // teacher (homeroom) sub-accounts created in Phase 7.11.5.
+      gradeScope: user.grade_scope || null,
       displayName: user.display_name || '',
     },
     env.jwt.secret,
@@ -90,7 +93,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT id, username, password_hash, role, scope_type, scope_id,
-              display_name, is_active, is_deleted, must_change_password
+              grade_scope, display_name, is_active, is_deleted, must_change_password
        FROM users
        WHERE username = ? AND is_deleted = FALSE
        LIMIT 1`,
@@ -149,6 +152,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
           role: user.role,
           scope_type: user.scope_type,
           scope_id: user.scope_id,
+          grade_scope: user.grade_scope || null,
           display_name: user.display_name,
           must_change_password: !!user.must_change_password,
         },
@@ -167,7 +171,8 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 router.get('/me', authenticate, async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT id, username, role, scope_type, scope_id, display_name, last_login, created_at
+      `SELECT id, username, role, scope_type, scope_id, grade_scope,
+              display_name, last_login, created_at
        FROM users
        WHERE id = ? AND is_deleted = FALSE AND is_active = TRUE
        LIMIT 1`,

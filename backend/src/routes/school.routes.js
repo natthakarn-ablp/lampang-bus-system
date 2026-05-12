@@ -27,6 +27,42 @@ function resolveSchoolId(req) {
   return req.user.scopeId;
 }
 
+/**
+ * Phase 7.11.2 — canonical Thai grades accepted as `users.grade_scope`.
+ * Mirrors the CHECK constraint defined in migration 018; keeping the
+ * list duplicated here means the route layer can fast-reject before
+ * the DB ever sees a bad value (and gives admin's ?grade= override a
+ * whitelist to validate against).
+ */
+const VALID_GRADE_SCOPES = [
+  'อ.1','อ.2','อ.3',
+  'ป.1','ป.2','ป.3','ป.4','ป.5','ป.6',
+  'ม.1','ม.2','ม.3','ม.4','ม.5','ม.6',
+];
+
+/**
+ * Resolve grade scope for a school-scoped request.
+ *
+ * Behaviour:
+ *   • Teacher sub-account (role='school' + grade_scope set) → that
+ *     grade (Thai canonical, e.g. 'ป.4'). The JWT carries the value.
+ *   • School main account (role='school' + grade_scope null) → null
+ *     (no grade filter; see full school).
+ *   • Admin → ?grade= or ?grade_scope= query param if it matches the
+ *     canonical whitelist; otherwise null. Used for support / probes.
+ *   • Any other role → null.
+ *
+ * Phase 7.11.2 only exposes the helper. Endpoint-level filtering
+ * lands in Phase 7.11.3.
+ */
+function resolveGradeScope(req) {
+  if (req.user.role === 'admin') {
+    const q = req.query.grade || req.query.grade_scope || null;
+    return VALID_GRADE_SCOPES.includes(q) ? q : null;
+  }
+  return req.user.gradeScope || null;
+}
+
 // Multer for student import uploads
 const importUploadDir = path.join(__dirname, '../../uploads/imports');
 if (!fs.existsSync(importUploadDir)) fs.mkdirSync(importUploadDir, { recursive: true });

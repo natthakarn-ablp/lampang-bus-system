@@ -22,6 +22,7 @@ function calcDelta(baseline, latest, numField, denField) {
 const BCRYPT_COST = 12;
 const VALID_ROLES = ['driver', 'school', 'affiliation', 'province', 'transport', 'admin'];
 const SCOPED_ROLES = { school: 'SCHOOL', affiliation: 'AFFILIATION', province: 'PROVINCE' };
+const { VALID_GRADE_SCOPES, isValidGradeScope } = require('../utils/gradeScope');
 
 // All admin routes require admin role
 router.use(authenticate, requireRole('admin'));
@@ -41,7 +42,7 @@ router.get('/users', async (req, res, next) => {
     if (search) { where += ' AND (u.username LIKE ? OR u.display_name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
 
     const [rows] = await pool.query(
-      `SELECT u.id, u.username, u.role, u.scope_type, u.scope_id, u.display_name,
+      `SELECT u.id, u.username, u.role, u.scope_type, u.scope_id, u.grade_scope, u.display_name,
               u.is_active, u.must_change_password, u.last_login, u.created_at,
               CASE WHEN u.scope_type = 'SCHOOL' THEN (SELECT name FROM schools WHERE id = u.scope_id)
                    WHEN u.scope_type = 'AFFILIATION' THEN (SELECT name FROM affiliations WHERE id = u.scope_id)
@@ -63,7 +64,7 @@ router.get('/users', async (req, res, next) => {
 // ─── POST /api/admin/users ──────────────────────────────────────────────────
 router.post('/users', async (req, res, next) => {
   try {
-    const { username, password, role, scope_id, display_name } = req.body;
+    const { username, password, role, scope_id, display_name, grade_scope } = req.body;
 
     if (!username || !password || !role) {
       return sendError(res, 'username, password, และ role จำเป็น', [], 400);
@@ -89,24 +90,40 @@ router.post('/users', async (req, res, next) => {
       if (!aff) return sendError(res, 'ไม่พบสังกัดที่ระบุ', [], 400);
     }
 
+    // Phase 7.11.5 — optional grade_scope. Only valid on school role;
+    // value must be one of the 15 canonical Thai grades (mirrors the
+    // CHECK constraint defined in migration 018).
+    let gradeScopeValue = null;
+    if (grade_scope != null && String(grade_scope).trim() !== '') {
+      if (role !== 'school') {
+        return sendError(res, 'grade_scope ใช้ได้เฉพาะ role=school', [], 400);
+      }
+      if (!isValidGradeScope(grade_scope)) {
+        return sendError(res, `grade_scope ต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_GRADE_SCOPES.join(', ')}`, [], 400);
+      }
+      gradeScopeValue = String(grade_scope).trim();
+    }
+
     // Check duplicate username
     const [[existing]] = await pool.query('SELECT id FROM users WHERE username = ? AND is_deleted = FALSE', [username.trim()]);
     if (existing) return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST);
     const [result] = await pool.query(
-      `INSERT INTO users (username, password_hash, role, scope_type, scope_id, display_name, must_change_password)
-       VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
-      [username.trim(), hash, role, scopeType, scope_id || null, display_name || username.trim()]
+      `INSERT INTO users (username, password_hash, role, scope_type, scope_id, grade_scope, display_name, must_change_password)
+       VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)`,
+      [username.trim(), hash, role, scopeType, scope_id || null, gradeScopeValue, display_name || username.trim()]
     );
 
     await logAudit({
       userId: req.user.id, action: 'CREATE', entityType: 'user', entityId: result.insertId,
-      newValue: { username: username.trim(), role, scope_type: scopeType, scope_id },
+      newValue: { username: username.trim(), role, scope_type: scopeType, scope_id, grade_scope: gradeScopeValue },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
-    return sendSuccess(res, { id: result.insertId, username: username.trim(), role }, 'สร้างผู้ใช้สำเร็จ', null, 201);
+    return sendSuccess(res,
+      { id: result.insertId, username: username.trim(), role, grade_scope: gradeScopeValue },
+      'สร้างผู้ใช้สำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
 

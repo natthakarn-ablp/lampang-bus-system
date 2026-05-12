@@ -59,7 +59,7 @@ export default function UserManagement() {
 
   // ── Create user ──
   function openCreate() {
-    setForm({ username: '', password: '', role: 'school', scope_id: '', display_name: '' });
+    setForm({ username: '', password: '', role: 'school', scope_id: '', display_name: '', grade_scope: '' });
     setModal('create');
   }
 
@@ -68,7 +68,14 @@ export default function UserManagement() {
     if (SCOPED_ROLES.includes(form.role) && !form.scope_id) { toast.error('กรุณาเลือกหน่วยงาน'); return; }
     setSaving(true);
     try {
-      await api.post('/admin/users', form);
+      // Phase 7.11.5 — only send grade_scope when role=school AND a
+      // grade has been selected; otherwise omit so backend treats
+      // the row as a normal full school account.
+      const payload = { ...form };
+      if (payload.role !== 'school' || !payload.grade_scope) {
+        delete payload.grade_scope;
+      }
+      await api.post('/admin/users', payload);
       toast.success('สร้างผู้ใช้สำเร็จ');
       setModal(null);
       fetchUsers(meta.page);
@@ -171,6 +178,7 @@ export default function UserManagement() {
                   <th className="px-4 py-3">ชื่อแสดง</th>
                   <th className="px-4 py-3">บทบาท</th>
                   <th className="px-4 py-3">หน่วยงาน</th>
+                  <th className="px-4 py-3">ระดับชั้น</th>
                   <th className="px-4 py-3 text-center">สถานะ</th>
                   <th className="px-4 py-3 text-center">จัดการ</th>
                 </tr>
@@ -182,6 +190,7 @@ export default function UserManagement() {
                     <td className="px-4 py-3 text-gray-600">{u.display_name || '-'}</td>
                     <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{u.scope_name || u.scope_id || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700 text-xs">{u.grade_scope || '-'}</td>
                     <td className="px-4 py-3 text-center">
                       <StatusBadge active={u.is_active} mustChange={u.must_change_password} />
                     </td>
@@ -258,6 +267,26 @@ export default function UserManagement() {
                   <option value="">— เลือก —</option>
                   {scopeOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
+              </div>
+            )}
+            {/* Phase 7.11.5 — grade_scope dropdown enabled only when
+                role=school. Empty = full school account; selected = grade
+                teacher sub-account (read-only on backend per 7.11.3). */}
+            {form.role === 'school' && (
+              <div>
+                <label className="block text-sm text-gray-500 mb-1">ระดับชั้น (สำหรับครูประจำสายชั้น)</label>
+                <select value={form.grade_scope || ''}
+                  onChange={e => setForm({...form, grade_scope: e.target.value})}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base">
+                  <option value="">— ไม่ระบุ (บัญชีหลักของโรงเรียน) —</option>
+                  {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6']
+                    .map(g => <option key={g} value={g}>{g}</option>)}
+                </select>
+                {form.grade_scope && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    บัญชีครูประจำสายชั้น: ดูข้อมูลเฉพาะระดับชั้น {form.grade_scope} และเป็นสิทธิ์อ่านอย่างเดียว
+                  </p>
+                )}
               </div>
             )}
             <Field label="ชื่อแสดง" value={form.display_name} onChange={v => setForm({...form, display_name: v})} />

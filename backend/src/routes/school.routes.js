@@ -27,18 +27,9 @@ function resolveSchoolId(req) {
   return req.user.scopeId;
 }
 
-/**
- * Phase 7.11.2 — canonical Thai grades accepted as `users.grade_scope`.
- * Mirrors the CHECK constraint defined in migration 018; keeping the
- * list duplicated here means the route layer can fast-reject before
- * the DB ever sees a bad value (and gives admin's ?grade= override a
- * whitelist to validate against).
- */
-const VALID_GRADE_SCOPES = [
-  'อ.1','อ.2','อ.3',
-  'ป.1','ป.2','ป.3','ป.4','ป.5','ป.6',
-  'ม.1','ม.2','ม.3','ม.4','ม.5','ม.6',
-];
+// Phase 7.11.5 — extracted into shared util so admin.routes.js can
+// use the same whitelist.
+const { VALID_GRADE_SCOPES, isValidGradeScope } = require('../utils/gradeScope');
 
 /**
  * Resolve grade scope for a school-scoped request.
@@ -1248,6 +1239,170 @@ router.get('/live-vehicles', async (req, res, next) => {
     const gradeFilter = resolveGradeScope(req);
     const vehicles = await vllSvc.listForSchool(schoolId, gradeFilter);
     return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
+  } catch (err) { next(err); }
+});
+
+/* ── Phase 7.11.5 — Grade teacher account management ──────────────────────
+ *
+ * 4 endpoints under /api/school/teacher-accounts let a FULL school account
+ * create / list / reset / soft-delete grade-level teacher sub-accounts for
+ * its OWN school. Teacher accounts themselves cannot reach any of these —
+ * `requireFullSchoolScope` middleware (already defined for write routes)
+ * returns 403 when req.user.gradeScope is set.
+ *
+ * Server-trusted scope: school_id is resolved from req.user.scopeId (or
+ * admin's ?school_id=); a client-supplied school_id is IGNORED.
+ *
+ * Hard rules enforced here:
+ *   • role hard-coded to 'school', scope_type to 'SCHOOL'
+ *   • grade_scope mandatory + canonical-whitelist validated
+ *   • password_hash never returned in any response
+ *   • must_change_password = 1 on create + reset
+ *   • all four ops audit-logged (CREATE, UPDATE for reset, DELETE)
+ *   • soft-delete only — historical audit chain stays intact
+ *   • cannot target a non-teacher row (defensive WHERE on every UPDATE)
+ *   • cannot target another school's teacher (school_id check on every row)
+ */
+
+const bcrypt = require('bcrypt');
+const BCRYPT_COST_TEACHER = 12;
+
+router.get('/teacher-accounts', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const [rows] = await pool.query(
+      `SELECT id, username, display_name, grade_scope, is_active,
+              must_change_password, last_login, created_at, updated_at
+       FROM users
+       WHERE role = 'school'
+         AND scope_type = 'SCHOOL'
+         AND scope_id = ?
+         AND grade_scope IS NOT NULL
+         AND is_deleted = FALSE
+       ORDER BY grade_scope, username`,
+      [schoolId]
+    );
+    return sendSuccess(res, rows);
+  } catch (err) { next(err); }
+});
+
+router.post('/teacher-accounts', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const { username, password, display_name, grade_scope } = req.body || {};
+    const errors = [];
+    if (!username || !String(username).trim()) errors.push({ field: 'username', message: 'จำเป็นต้องระบุชื่อผู้ใช้' });
+    if (!password) errors.push({ field: 'password', message: 'จำเป็นต้องระบุรหัสผ่าน' });
+    else if (String(password).length < 6) errors.push({ field: 'password', message: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' });
+    if (!isValidGradeScope(grade_scope)) {
+      errors.push({ field: 'grade_scope', message: `ระดับชั้นต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_GRADE_SCOPES.join(', ')}` });
+    }
+    if (errors.length) return sendError(res, 'ข้อมูลไม่ถูกต้อง', errors, 400);
+
+    const uname = String(username).trim();
+
+    // Duplicate username check (active users only)
+    const [[existing]] = await pool.query('SELECT id FROM users WHERE username = ? AND is_deleted = FALSE', [uname]);
+    if (existing) return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+
+    const hash = await bcrypt.hash(String(password), BCRYPT_COST_TEACHER);
+    const [result] = await pool.query(
+      `INSERT INTO users (username, password_hash, role, scope_type, scope_id, grade_scope,
+                          display_name, must_change_password, is_active)
+       VALUES (?, ?, 'school', 'SCHOOL', ?, ?, ?, TRUE, TRUE)`,
+      [uname, hash, schoolId, String(grade_scope).trim(), display_name || uname]
+    );
+
+    await logAudit({
+      userId: req.user.id, action: 'CREATE', entityType: 'user', entityId: result.insertId,
+      newValue: { username: uname, role: 'school', scope_type: 'SCHOOL', scope_id: schoolId,
+                  grade_scope: String(grade_scope).trim(), display_name: display_name || uname,
+                  account_type: 'grade_teacher' },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res,
+      { id: result.insertId, username: uname, display_name: display_name || uname,
+        grade_scope: String(grade_scope).trim(), is_active: true, must_change_password: true },
+      'สร้างบัญชีครูประจำสายชั้นสำเร็จ', null, 201);
+  } catch (err) { next(err); }
+});
+
+router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const userId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const { password } = req.body || {};
+    if (!password || String(password).length < 6) {
+      return sendError(res, 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', [], 400);
+    }
+
+    // Verify the target is a teacher of THIS school
+    const [[target]] = await pool.query(
+      `SELECT id, username FROM users
+       WHERE id = ? AND role = 'school' AND scope_id = ?
+         AND grade_scope IS NOT NULL AND is_deleted = FALSE
+       LIMIT 1`,
+      [userId, schoolId]
+    );
+    if (!target) return sendError(res, 'ไม่พบบัญชีครูในโรงเรียนนี้', [], 404);
+
+    const hash = await bcrypt.hash(String(password), BCRYPT_COST_TEACHER);
+    await pool.query(
+      `UPDATE users SET password_hash = ?, must_change_password = TRUE
+       WHERE id = ?`,
+      [hash, userId]
+    );
+
+    await logAudit({
+      userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
+      newValue: { username: target.username, action_detail: 'reset_password', must_change_password: true,
+                  account_type: 'grade_teacher' },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, null, 'รีเซ็ตรหัสผ่านสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+router.delete('/teacher-accounts/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+
+    const userId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const [[target]] = await pool.query(
+      `SELECT id, username, grade_scope FROM users
+       WHERE id = ? AND role = 'school' AND scope_id = ?
+         AND grade_scope IS NOT NULL AND is_deleted = FALSE
+       LIMIT 1`,
+      [userId, schoolId]
+    );
+    if (!target) return sendError(res, 'ไม่พบบัญชีครูในโรงเรียนนี้', [], 404);
+
+    await pool.query(
+      `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), is_active = FALSE
+       WHERE id = ?`,
+      [userId]
+    );
+
+    await logAudit({
+      userId: req.user.id, action: 'DELETE', entityType: 'user', entityId: userId,
+      oldValue: { username: target.username, grade_scope: target.grade_scope, account_type: 'grade_teacher' },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, null, 'ลบบัญชีครูประจำสายชั้นสำเร็จ');
   } catch (err) { next(err); }
 });
 

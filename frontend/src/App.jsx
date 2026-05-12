@@ -38,6 +38,7 @@ const SchoolBulkVehicles   = lazy(() => import('./pages/school/SchoolBulkVehicle
 const SchoolAuditLog       = lazy(() => import('./pages/school/SchoolAuditLog'));
 const SchoolPickupMap      = lazy(() => import('./pages/school/SchoolPickupMap'));
 const SchoolLiveVehicles   = lazy(() => import('./pages/school/SchoolLiveVehicles'));
+const SchoolTeacherAccounts = lazy(() => import('./pages/school/SchoolTeacherAccounts'));
 
 // Affiliation
 const AffiliationLayout    = lazy(() => import('./pages/affiliation/AffiliationLayout'));
@@ -193,6 +194,7 @@ export default function App() {
             <Route path="audit-log"    element={<SchoolAuditLog />} />
             <Route path="pickup-map"   element={<SchoolPickupMap />} />
             <Route path="live-vehicles" element={<SchoolLiveVehicles />} />
+            <Route path="teacher-accounts" element={<SchoolTeacherAccounts />} />
           </Route>
 
           {/* Affiliation module */}

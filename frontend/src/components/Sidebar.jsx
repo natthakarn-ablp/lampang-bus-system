@@ -37,6 +37,7 @@ const SCHOOL_NAV = [
   { section: 'ติดตามและบันทึก' },
   { to: '/school/emergencies',   icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
+  { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
   { section: 'รายงาน' },
   { to: '/reports/daily',        icon: FileText,      label: 'รายงาน' },
 ];
@@ -115,6 +116,7 @@ const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATI
 const TEACHER_BLOCKED_PATHS = new Set([
   '/school/audit-log',
   '/school/bulk-vehicles',
+  '/school/teacher-accounts',
 ]);
 
 function navItemsForUser(user) {

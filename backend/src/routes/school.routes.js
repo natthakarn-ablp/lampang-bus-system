@@ -63,6 +63,29 @@ function resolveGradeScope(req) {
   return req.user.gradeScope || null;
 }
 
+/**
+ * Phase 7.11.3 — write-side safety net. Blocks any school-role
+ * teacher (grade_scope != null) from a route. Used on every write
+ * + on read endpoints that are inherently full-school (audit log,
+ * unscoped vehicle dropdown, bulk import).
+ *
+ * Cleanly 403s with a Thai-language reason so a teacher tapping a
+ * stale frontend button sees a meaningful toast — but no data leaks.
+ * Full school accounts (grade_scope=null) and admin pass through
+ * untouched; their existing behaviour is preserved.
+ */
+function requireFullSchoolScope(req, res, next) {
+  if (req.user?.role === 'school' && req.user?.gradeScope) {
+    return sendError(
+      res,
+      'บัญชีครูประจำสายชั้นเข้าถึงได้เฉพาะข้อมูลในการดูเท่านั้น',
+      [],
+      403
+    );
+  }
+  next();
+}
+
 // Multer for student import uploads
 const importUploadDir = path.join(__dirname, '../../uploads/imports');
 if (!fs.existsSync(importUploadDir)) fs.mkdirSync(importUploadDir, { recursive: true });
@@ -119,8 +142,8 @@ router.get('/dashboard', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียนที่ผูกกับบัญชีนี้', [], req.user.role === 'admin' ? 400 : 403);
-
-    const data = await schoolSvc.getDashboard(schoolId);
+    const gradeFilter = resolveGradeScope(req);
+    const data = await schoolSvc.getDashboard(schoolId, { gradeFilter });
     return sendSuccess(res, data);
   } catch (err) {
     next(err);
@@ -141,9 +164,10 @@ router.get('/students', async (req, res, next) => {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
 
+    const gradeFilter = resolveGradeScope(req);
     const result = await schoolSvc.getStudents(schoolId, {
       search, grade, vehicle_id, morning_enabled, evening_enabled,
-      page, per_page, sort, order,
+      page, per_page, sort, order, gradeFilter,
     });
 
     return sendSuccess(res, result.students, 'OK', result.meta);
@@ -160,8 +184,8 @@ router.get('/vehicles', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-
-    const vehicles = await schoolSvc.getVehicles(schoolId);
+    const gradeFilter = resolveGradeScope(req);
+    const vehicles = await schoolSvc.getVehicles(schoolId, { gradeFilter });
     return sendSuccess(res, vehicles);
   } catch (err) {
     next(err);
@@ -176,8 +200,8 @@ router.get('/status-today', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-
-    const data = await schoolSvc.getStatusToday(schoolId);
+    const gradeFilter = resolveGradeScope(req);
+    const data = await schoolSvc.getStatusToday(schoolId, { gradeFilter });
     return sendSuccess(res, data);
   } catch (err) {
     next(err);
@@ -203,7 +227,8 @@ router.get('/pickup-points', async (req, res, next) => {
       return sendError(res, "session must be 'morning' or 'evening'", [], 400);
     }
 
-    const points = await ppSvc.getPickupPointsForSchool(schoolId, { session });
+    const gradeFilter = resolveGradeScope(req);
+    const points = await ppSvc.getPickupPointsForSchool(schoolId, { session, gradeFilter });
     return sendSuccess(res, points);
   } catch (err) { next(err); }
 });
@@ -219,7 +244,8 @@ router.get('/pickup-vehicles', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const vehicles = await ppSvc.getVehiclesForSchool(schoolId);
+    const gradeFilter = resolveGradeScope(req);
+    const vehicles = await ppSvc.getVehiclesForSchool(schoolId, { gradeFilter });
     return sendSuccess(res, vehicles);
   } catch (err) { next(err); }
 });
@@ -246,7 +272,8 @@ router.get('/pickup-students', async (req, res, next) => {
       return sendError(res, "session must be 'morning', 'evening', or 'both'", [], 400);
     }
 
-    const students = await ppSvc.getStudentsForSchoolAndVehicle(schoolId, vehicleId, { session });
+    const gradeFilter = resolveGradeScope(req);
+    const students = await ppSvc.getStudentsForSchoolAndVehicle(schoolId, vehicleId, { session, gradeFilter });
     return sendSuccess(res, students);
   } catch (err) { next(err); }
 });
@@ -262,7 +289,7 @@ router.get('/pickup-students', async (req, res, next) => {
  *  - every student_id must belong to this school AND this vehicle
  *    (validateStudentsBelongToSchoolAndVehicle)
  */
-router.post('/pickup-points', async (req, res, next) => {
+router.post('/pickup-points', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -342,7 +369,8 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
     const vehicleOk = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
     if (!vehicleOk) return sendError(res, 'จุดรับส่งนี้ไม่ใช่ของโรงเรียนคุณ', [], 403);
 
-    const students = await ppSvc.getAssignableStudentsForPickupPoint(point, { schoolId });
+    const gradeFilter = resolveGradeScope(req);
+    const students = await ppSvc.getAssignableStudentsForPickupPoint(point, { schoolId, gradeFilter });
     return sendSuccess(res, { point, students });
   } catch (err) { next(err); }
 });
@@ -355,7 +383,7 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
  *   - every student_id must belong to this school AND that vehicle
  *   - no conflicts with OTHER pickup points (excludes self-point)
  */
-router.put('/pickup-points/:id/students', async (req, res, next) => {
+router.put('/pickup-points/:id/students', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -409,7 +437,8 @@ router.get('/emergencies', async (req, res, next) => {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
 
-    const result = await schoolSvc.getEmergencies(schoolId, { page, per_page });
+    const gradeFilter = resolveGradeScope(req);
+    const result = await schoolSvc.getEmergencies(schoolId, { page, per_page, gradeFilter });
     return sendSuccess(res, result.emergencies, 'OK', result.meta);
   } catch (err) {
     next(err);
@@ -424,6 +453,11 @@ router.get('/missing', async (req, res, next) => {
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     const session = req.query.session; // optional: morning | evening
+    const gradeFilter = resolveGradeScope(req);
+    const gradeAnd  = gradeFilter ? ' AND s.grade = ?' : '';
+    const baseParams = [today, today, session || 'morning', schoolId];
+    if (gradeFilter) baseParams.push(gradeFilter);
+    baseParams.push(session, session, session);
 
     const [rows] = await pool.query(
       `SELECT s.id, CONCAT(IFNULL(s.prefix,''), s.first_name, ' ', s.last_name) AS student_name,
@@ -435,7 +469,7 @@ router.get('/missing', async (req, res, next) => {
        LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
        LEFT JOIN student_leaves sl ON sl.student_id = s.id AND sl.leave_date = ? AND sl.cancelled = FALSE
          AND (sl.session = 'both' OR sl.session = ?)
-       WHERE s.school_id = ? AND s.is_deleted = FALSE AND sl.id IS NULL
+       WHERE s.school_id = ? AND s.is_deleted = FALSE AND sl.id IS NULL${gradeAnd}
          AND ((? = 'morning' AND s.morning_enabled = TRUE AND (ds.morning_done IS NULL OR ds.morning_done = FALSE))
            OR (? = 'evening' AND s.evening_enabled = TRUE AND (ds.evening_done IS NULL OR ds.evening_done = FALSE))
            OR (? IS NULL AND (
@@ -443,7 +477,7 @@ router.get('/missing', async (req, res, next) => {
              OR (s.evening_enabled = TRUE AND (ds.evening_done IS NULL OR ds.evening_done = FALSE))
            )))
        ORDER BY v.plate_no, s.first_name`,
-      [today, today, session || 'morning', schoolId, session, session, session]
+      baseParams
     );
     return sendSuccess(res, { date: today, session: session || 'all', students: rows });
   } catch (err) { next(err); }
@@ -456,14 +490,15 @@ router.get('/leaves', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const date = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
-    const leaves = await leaveSvc.getLeavesForSchool(schoolId, date);
+    const gradeFilter = resolveGradeScope(req);
+    const leaves = await leaveSvc.getLeavesForSchool(schoolId, date, { gradeFilter });
     return sendSuccess(res, leaves);
   } catch (err) { next(err); }
 });
 
 // ─── POST /leave ─────────────────────────────────────────────────────────────
 
-router.post('/leave', async (req, res, next) => {
+router.post('/leave', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -492,8 +527,9 @@ router.get('/roster-requests', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const gradeFilter = resolveGradeScope(req);
     const result = await rosterReqSvc.getRequestsForSchool(schoolId, {
-      status: req.query.status, page, per_page: 20,
+      status: req.query.status, page, per_page: 20, gradeFilter,
     });
     return sendSuccess(res, result.requests, 'OK', result.meta);
   } catch (err) { next(err); }
@@ -501,7 +537,7 @@ router.get('/roster-requests', async (req, res, next) => {
 
 // ─── PUT /roster-requests/:id ────────────────────────────────────────────────
 
-router.put('/roster-requests/:id', async (req, res, next) => {
+router.put('/roster-requests/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -518,7 +554,7 @@ router.put('/roster-requests/:id', async (req, res, next) => {
 
 // ─── PUT /students/:id (update student profile + parent) ────────────────────
 
-router.put('/students/:id', async (req, res, next) => {
+router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -653,7 +689,7 @@ router.put('/students/:id', async (req, res, next) => {
 
 // ─── POST /students/move ─────────────────────────────────────────────────────
 
-router.post('/students/move', async (req, res, next) => {
+router.post('/students/move', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -687,7 +723,7 @@ router.post('/students/move', async (req, res, next) => {
 
 // ─── DELETE /students/:id (soft delete — ลาออก) ─────────────────────────────
 
-router.delete('/students/:id', async (req, res, next) => {
+router.delete('/students/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -725,7 +761,7 @@ router.delete('/students/:id', async (req, res, next) => {
 
 // ─── GET /vehicles/all (for vehicle dropdown) ───────────────────────────────
 
-router.get('/vehicles/all', async (req, res, next) => {
+router.get('/vehicles/all', requireFullSchoolScope, async (req, res, next) => {
   try {
     const [rows] = await pool.query(
       `SELECT id, plate_no, vehicle_type FROM vehicles WHERE is_deleted = FALSE ORDER BY plate_no`
@@ -736,7 +772,7 @@ router.get('/vehicles/all', async (req, res, next) => {
 
 // ─── POST /vehicles ──────────────────────────────────────────────────────────
 
-router.post('/vehicles', async (req, res, next) => {
+router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -851,7 +887,7 @@ router.post('/vehicles', async (req, res, next) => {
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 // Audit trail for school actions
 
-router.get('/audit-logs', async (req, res, next) => {
+router.get('/audit-logs', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -990,7 +1026,7 @@ router.get('/students/template', async (req, res, next) => {
 // ─── POST /students/import ──────────────────────────────────────────────────
 // Import students from Excel file
 
-router.post('/students/import', importUpload.single('file'), async (req, res, next) => {
+router.post('/students/import', requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -1209,7 +1245,8 @@ router.get('/live-vehicles', async (req, res, next) => {
         req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน',
         [], req.user.role === 'admin' ? 400 : 403);
     }
-    const vehicles = await vllSvc.listForSchool(schoolId);
+    const gradeFilter = resolveGradeScope(req);
+    const vehicles = await vllSvc.listForSchool(schoolId, gradeFilter);
     return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
   } catch (err) { next(err); }
 });

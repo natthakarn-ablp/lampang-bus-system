@@ -170,8 +170,14 @@ const SELECT_VEHICLE_BASE = `
 /**
  * Vehicles serving a single school.
  * Reuses the existing scope chain (students.vehicle_id + s.school_id).
+ *
+ * Phase 7.11.3 — optional `gradeFilter` (Thai canonical) further
+ * narrows the inner subquery to students of one grade so a homeroom
+ * teacher sees only vehicles carrying her grade. null = full school.
  */
-async function listForSchool(schoolId) {
+async function listForSchool(schoolId, gradeFilter = null) {
+  const subqueryGrade = gradeFilter ? ' AND s.grade = ?' : '';
+  const params = gradeFilter ? [schoolId, gradeFilter] : [schoolId];
   const [rows] = await pool.query(
     `${SELECT_VEHICLE_BASE}
      FROM vehicles v
@@ -179,10 +185,10 @@ async function listForSchool(schoolId) {
      WHERE v.is_deleted = FALSE
        AND v.id IN (
          SELECT DISTINCT s.vehicle_id FROM students s
-         WHERE s.school_id = ? AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL
+         WHERE s.school_id = ? AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL${subqueryGrade}
        )
      ORDER BY v.plate_no`,
-    [schoolId]
+    params
   );
   const now = Date.now();
   return rows.map(r => toPublicVehicle(r, now));

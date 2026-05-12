@@ -58,13 +58,22 @@ async function getPickupPointsForVehicle(vehicleId, { session = null } = {}) {
  * school's students — cross-school students at the same physical point
  * are NOT exposed to the school.
  */
-async function getPickupPointsForSchool(schoolId, { session = null } = {}) {
-  const params = [schoolId, schoolId];   // bound twice (inner + EXISTS)
+async function getPickupPointsForSchool(schoolId, { session = null, gradeFilter = null } = {}) {
+  // Phase 7.11.3 — gradeFilter narrows BOTH the embedded student
+  // JSON list (so the teacher sees only her own grade in each point
+  // card) AND the EXISTS clause (so points whose only assigned
+  // students are out-of-grade are hidden entirely).
+  const innerGrade  = gradeFilter ? ' AND s.grade = ?'  : '';
+  const existsGrade = gradeFilter ? ' AND s2.grade = ?' : '';
+  const params = [schoolId];
+  if (gradeFilter) params.push(gradeFilter);
   let sessionFilter = '';
   if (session === 'morning' || session === 'evening') {
     sessionFilter = ` AND pp.session IN (?, 'both')`;
     params.push(session);
   }
+  params.push(schoolId);
+  if (gradeFilter) params.push(gradeFilter);
 
   const [rows] = await pool.query(`
     SELECT
@@ -84,7 +93,7 @@ async function getPickupPointsForSchool(schoolId, { session = null } = {}) {
          )
          FROM student_pickup_points spp
          JOIN students s ON s.id = spp.student_id AND s.is_deleted = FALSE
-                       AND s.school_id = ?
+                       AND s.school_id = ?${innerGrade}
          WHERE spp.pickup_point_id = pp.id),
         JSON_ARRAY()
       ) AS students
@@ -94,7 +103,7 @@ async function getPickupPointsForSchool(schoolId, { session = null } = {}) {
       AND EXISTS (
         SELECT 1 FROM student_pickup_points spp2
         JOIN students s2 ON s2.id = spp2.student_id AND s2.is_deleted = FALSE
-                       AND s2.school_id = ?
+                       AND s2.school_id = ?${existsGrade}
         WHERE spp2.pickup_point_id = pp.id
       )
     ORDER BY v.plate_no ASC, pp.sequence ASC, pp.id ASC
@@ -334,24 +343,36 @@ async function getStudentsForVehicle(vehicleId, { session = null } = {}) {
   return rows;
 }
 
-async function getVehiclesForSchool(schoolId) {
+async function getVehiclesForSchool(schoolId, { gradeFilter = null } = {}) {
+  // student_count counts only in-grade students when a teacher asks,
+  // so the modal-dropdown reading matches the perspective.
+  const countGrade = gradeFilter ? ' AND s2.grade = ?'  : '';
+  const joinGrade  = gradeFilter ? ' AND s.grade = ?'   : '';
+  const params = [schoolId];
+  if (gradeFilter) params.push(gradeFilter);
+  params.push(schoolId);
+  if (gradeFilter) params.push(gradeFilter);
   const [rows] = await pool.query(`
     SELECT DISTINCT v.id, v.plate_no,
            (SELECT COUNT(*) FROM students s2
               WHERE s2.vehicle_id = v.id AND s2.school_id = ?
-                AND s2.is_deleted = FALSE) AS student_count
+                AND s2.is_deleted = FALSE${countGrade}) AS student_count
     FROM vehicles v
-    JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE
+    JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE${joinGrade}
     WHERE v.is_deleted = FALSE AND s.school_id = ?
     ORDER BY v.plate_no ASC
-  `, [schoolId, schoolId]);
+  `, params);
   return rows;
 }
 
-async function getStudentsForSchoolAndVehicle(schoolId, vehicleId, { session = null } = {}) {
+async function getStudentsForSchoolAndVehicle(schoolId, vehicleId, { session = null, gradeFilter = null } = {}) {
   const conflictIds = await getStudentIdsConflictingForVehicle(vehicleId, session);
   let where = 'school_id = ? AND vehicle_id = ? AND is_deleted = FALSE';
   const params = [schoolId, vehicleId];
+  if (gradeFilter) {
+    where += ' AND grade = ?';
+    params.push(gradeFilter);
+  }
   if (conflictIds.length > 0) {
     where += ' AND id NOT IN (?)';
     params.push(conflictIds);
@@ -413,7 +434,7 @@ async function validateNoDuplicateAssignmentsForVehicle(studentIds, vehicleId, s
  * `schoolId` — optional scope filter. When set (school role), restricts
  * the result to that school's roster. Driver role passes null.
  */
-async function getAssignableStudentsForPickupPoint(point, { schoolId = null } = {}) {
+async function getAssignableStudentsForPickupPoint(point, { schoolId = null, gradeFilter = null } = {}) {
   if (!point || !point.id || !point.vehicle_id || !point.session) return [];
   const conflictIds = await getStudentIdsConflictingForVehicle(
     point.vehicle_id, point.session, { excludePointId: point.id }
@@ -424,6 +445,10 @@ async function getAssignableStudentsForPickupPoint(point, { schoolId = null } = 
   if (schoolId) {
     where += ' AND s.school_id = ?';
     params.push(schoolId);
+  }
+  if (gradeFilter) {
+    where += ' AND s.grade = ?';
+    params.push(gradeFilter);
   }
   if (conflictIds.length > 0) {
     where += ' AND s.id NOT IN (?)';

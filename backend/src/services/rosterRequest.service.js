@@ -156,10 +156,27 @@ async function getRequestsForDriver(vehicleId, { status, page = 1, per_page = 20
 /**
  * Get pending requests for a school.
  */
-async function getRequestsForSchool(schoolId, { status, page = 1, per_page = 20 }) {
+async function getRequestsForSchool(schoolId, { status, page = 1, per_page = 20, gradeFilter = null }) {
+  // Phase 7.11.3 — teacher accounts only see requests whose
+  // affected student matches their grade. We use a portable filter
+  // that handles BOTH the existing-student case (LEFT JOIN s on
+  // student_id) and the new-student case (grade is inside the
+  // new_student_data JSON). For requests with no student_id, the
+  // grade is read from new_student_data.grade.
   let where = 'rcr.school_id = ?';
   const params = [schoolId];
   if (status) { where += ' AND rcr.status = ?'; params.push(status); }
+  if (gradeFilter) {
+    where += ` AND (
+      (rcr.student_id IS NOT NULL AND EXISTS (
+        SELECT 1 FROM students sx
+        WHERE sx.id = rcr.student_id AND sx.grade = ?
+      ))
+      OR (rcr.student_id IS NULL AND
+          JSON_UNQUOTE(JSON_EXTRACT(rcr.new_student_data, '$.grade')) = ?)
+    )`;
+    params.push(gradeFilter, gradeFilter);
+  }
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM roster_change_requests rcr WHERE ${where}`, params

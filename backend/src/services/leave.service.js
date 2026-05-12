@@ -94,7 +94,9 @@ async function getLeavesForVehicle(vehicleId, date) {
 /**
  * Get leaves for a school on a date.
  */
-async function getLeavesForSchool(schoolId, date) {
+async function getLeavesForSchool(schoolId, date, { gradeFilter = null } = {}) {
+  const gradeAnd = gradeFilter ? ' AND s.grade = ?' : '';
+  const params   = gradeFilter ? [schoolId, gradeFilter, date] : [schoolId, date];
   const [rows] = await pool.query(
     `SELECT sl.id, sl.student_id, sl.vehicle_id, sl.leave_date, sl.session, sl.reason,
             sl.reported_role, sl.cancelled, sl.created_at,
@@ -103,9 +105,9 @@ async function getLeavesForSchool(schoolId, date) {
      FROM student_leaves sl
      JOIN students s ON s.id = sl.student_id
      JOIN vehicles v ON v.id = sl.vehicle_id
-     WHERE s.school_id = ? AND sl.leave_date = ? AND sl.cancelled = FALSE
+     WHERE s.school_id = ?${gradeAnd} AND sl.leave_date = ? AND sl.cancelled = FALSE
      ORDER BY v.plate_no, sl.created_at DESC`,
-    [schoolId, date]
+    params
   );
   return rows;
 }

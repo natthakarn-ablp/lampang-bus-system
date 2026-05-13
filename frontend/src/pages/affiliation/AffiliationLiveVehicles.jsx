@@ -5,6 +5,8 @@ import {
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import {
   getStatusMeta,
   getStatusHelpText,
@@ -133,15 +135,16 @@ export default function AffiliationLiveVehicles() {
         <AlertBanner variant="warn" title="โหลดรอบล่าสุดไม่สำเร็จ">{pollWarn}</AlertBanner>
       )}
       {firstLoadError && !hasDataRef.current && (
-        <AlertBanner variant="danger" title="โหลดข้อมูลตำแหน่งรถในสังกัดไม่สำเร็จ">
-          {firstLoadError}
-        </AlertBanner>
+        <ErrorState
+          title="โหลดข้อมูลตำแหน่งรถในสังกัดไม่สำเร็จ"
+          message={firstLoadError}
+        />
       )}
 
       {loading && !hasDataRef.current ? (
-        <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : vehicles.length === 0 ? (
-        <AlertBanner variant="info" title="ยังไม่มีรถรับส่งที่เชื่อมกับโรงเรียนในสังกัดนี้">
+        <AlertBanner variant="info" title="ยังไม่มีรถรับส่งในขอบเขตนี้">
           เมื่อมีนักเรียนของโรงเรียนในสังกัดถูกผูกกับรถรับส่ง รถคันนั้นจะปรากฏที่นี่
         </AlertBanner>
       ) : (

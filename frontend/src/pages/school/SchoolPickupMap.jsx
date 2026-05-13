@@ -5,6 +5,8 @@ import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../compo
 import PickupMap from '../../components/PickupMap';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import { classroomLabel } from '../../utils/student';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
@@ -98,11 +100,11 @@ export default function SchoolPickupMap() {
       </div>
 
       {error ? (
-        <AlertBanner variant="danger" title="โหลดข้อมูลไม่สำเร็จ">{error}</AlertBanner>
+        <ErrorState message={error} />
       ) : loading ? (
-        <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
+        <LoadingState message="กำลังโหลดแผนที่และข้อมูล…" />
       ) : filteredPoints.length === 0 ? (
-        <AlertBanner variant="info" title="ยังไม่มีจุดรับส่ง">
+        <AlertBanner variant="info" title="ยังไม่มีจุดรับส่งในขอบเขตนี้">
           {isTeacher
             ? 'ยังไม่มีจุดรับส่งของระดับชั้นนี้ — ให้บัญชีหลักของโรงเรียนเป็นผู้เพิ่มข้อมูล'
             : 'กดปุ่ม "+ เพิ่มจุดรับส่ง" ด้านบนเพื่อเริ่มสร้างจุดแรกของโรงเรียน'}

@@ -3,6 +3,7 @@ import L from 'leaflet';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { Map as MapIcon, Bus, Users, Clock } from 'lucide-react';
 import { AppCard, AlertBanner, DashboardSection } from './ui';
+import LoadingState from './LoadingState';
 import './PickupMap.css';
 
 // Vite + Leaflet default-icon workaround — same as PickupMap.jsx
@@ -68,11 +69,11 @@ export default function ReadOnlyPickupPointMap({
   }
 
   if (loading) {
-    return <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>;
+    return <LoadingState message="กำลังโหลดแผนที่และข้อมูล…" />;
   }
 
   if (!hasAnyPoints) {
-    return <AlertBanner variant="info" title="ยังไม่มีจุดรับส่ง">{emptyMessage}</AlertBanner>;
+    return <AlertBanner variant="info" title="ยังไม่มีจุดรับส่งในขอบเขตนี้">{emptyMessage}</AlertBanner>;
   }
 
   return (
@@ -109,7 +110,7 @@ export default function ReadOnlyPickupPointMap({
             />
           ) : (
             <div className="h-full w-full flex items-center justify-center bg-surface text-ink-muted text-sm p-4 text-center">
-              ยังไม่มีจุดรับส่งที่มีพิกัด
+              ยังไม่มีรายการที่มีพิกัดสำหรับแสดงบนแผนที่
             </div>
           )}
         </div>

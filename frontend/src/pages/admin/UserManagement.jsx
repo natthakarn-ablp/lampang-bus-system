@@ -3,6 +3,7 @@ import { Users } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
 import AppCard from '../../components/ui/AppCard';
 
 const ROLE_LABELS = {
@@ -159,12 +160,12 @@ export default function UserManagement() {
       </div>
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
+        <LoadingState />
       ) : users.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="ไม่พบผู้ใช้"
-          description="ลองเปลี่ยนคำค้นหรือตัวกรองบทบาท"
+          title={debouncedSearch || filterRole ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้'}
+          description={debouncedSearch || filterRole ? 'ลองเปลี่ยนคำค้นหรือตัวกรองบทบาท' : undefined}
         />
       ) : (
         <>

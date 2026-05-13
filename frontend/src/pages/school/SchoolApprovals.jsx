@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../api/axios';
 import ApprovalBadge from '../../components/ApprovalBadge';
+import LoadingState from '../../components/LoadingState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
@@ -50,9 +51,11 @@ export default function SchoolApprovals() {
       </div>
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : requests.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่มีคำขอ</p>
+        <p className="text-gray-400 py-10 text-center">
+          {filter === 'pending' ? 'ยังไม่มีคำขอที่รออนุมัติ' : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก'}
+        </p>
       ) : (
         <div className="space-y-3">
           {requests.map(r => (

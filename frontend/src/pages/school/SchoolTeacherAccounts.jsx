@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Plus, KeyRound, Trash2, ShieldAlert, Users } from 'lucide-react';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge } from '../../components/ui';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
@@ -37,10 +39,11 @@ function TeacherDeniedCard() {
           <ShieldAlert className="w-6 h-6 text-warn shrink-0" strokeWidth={2} />
           <div>
             <h1 className="text-lg font-semibold text-ink mb-1">
-              ไม่สามารถเข้าถึงหน้านี้ได้
+              ไม่มีสิทธิ์เข้าถึงข้อมูลนี้
             </h1>
             <p className="text-sm text-ink-muted">
-              เฉพาะบัญชีหลักของโรงเรียนเท่านั้นที่จัดการบัญชีครูประจำสายชั้นได้
+              บัญชีครูประจำสายชั้นเข้าถึงได้เฉพาะข้อมูลสำหรับตรวจสอบเท่านั้น
+              การจัดการบัญชีครูทำได้เฉพาะบัญชีหลักของโรงเรียน
             </p>
           </div>
         </div>
@@ -174,12 +177,10 @@ export default function SchoolTeacherAccounts() {
         </button>
       </header>
 
-      {error && (
-        <AlertBanner variant="danger" title="โหลดข้อมูลไม่สำเร็จ">{error}</AlertBanner>
-      )}
+      {error && <ErrorState message={error} />}
 
       {loading ? (
-        <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : accounts.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีบัญชีครูประจำสายชั้น">
           กดปุ่ม "+ เพิ่มบัญชีครู" ด้านบนเพื่อสร้างบัญชีแรก

@@ -77,7 +77,7 @@ export default function ProvincePickupMap() {
 
       {permError && (
         <AlertBanner variant="warn" title="ไม่มีสิทธิ์เข้าถึงข้อมูลนี้">
-          บัญชีของคุณไม่มีสิทธิ์ดูแผนที่จุดรับส่งในขอบเขตนี้
+          บัญชีของคุณไม่มีสิทธิ์เข้าถึงข้อมูลในหน้านี้
         </AlertBanner>
       )}
 

@@ -4,6 +4,8 @@ import { GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
@@ -207,14 +209,16 @@ export default function StudentSearch() {
         </select>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" />}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
+        <LoadingState />
       ) : students.length === 0 ? (
-        <EmptyState icon={GraduationCap} title="ไม่พบนักเรียน" description="ลองเปลี่ยนคำค้นหรือตัวกรอง" />
+        <EmptyState
+          icon={GraduationCap}
+          title={debouncedSearch || grade ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้'}
+          description={debouncedSearch || grade ? 'ลองเปลี่ยนคำค้นหรือตัวกรอง' : undefined}
+        />
       ) : (
         <>
           {/* ── Desktop table (hidden on mobile) ── */}

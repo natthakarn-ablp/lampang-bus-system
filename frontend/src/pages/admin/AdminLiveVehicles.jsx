@@ -4,7 +4,7 @@ import {
   Users, MapPin, Search, ShieldAlert,
 } from 'lucide-react';
 import api from '../../api/axios';
-import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
+import { AppCard, AlertBanner, StatusBadge, DashboardSection, LiveKpiCard } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
@@ -181,19 +181,19 @@ export default function AdminLiveVehicles() {
       </AlertBanner>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-        <KpiCard icon={Bus}            label="รถทั้งหมด"               value={vehicles.length} variant="neutral" />
-        <KpiCard icon={Users}          label="นักเรียนที่เกี่ยวข้อง"     value={counts.students} variant="brand"   />
-        <KpiCard icon={Activity}       label="ออนไลน์"                  value={counts.online}   variant="success" />
-        <KpiCard icon={AlertTriangle}  label="สัญญาณเก่า"               value={counts.stale}    variant="warn"    />
-        <KpiCard icon={Pause}          label="หยุดส่ง"                  value={counts.paused}   variant="neutral" />
-        <KpiCard icon={WifiOff}        label="ออฟไลน์ / ยังไม่มีข้อมูล"   value={counts.offline}  variant="neutral" />
+        <LiveKpiCard icon={Bus}            label="รถทั้งหมด"               value={vehicles.length} variant="neutral" />
+        <LiveKpiCard icon={Users}          label="นักเรียนที่เกี่ยวข้อง"     value={counts.students} variant="brand"   />
+        <LiveKpiCard icon={Activity}       label="ออนไลน์"                  value={counts.online}   variant="success" />
+        <LiveKpiCard icon={AlertTriangle}  label="สัญญาณเก่า"               value={counts.stale}    variant="warn"    />
+        <LiveKpiCard icon={Pause}          label="หยุดส่ง"                  value={counts.paused}   variant="neutral" />
+        <LiveKpiCard icon={WifiOff}        label="ออฟไลน์ / ยังไม่มีข้อมูล"   value={counts.offline}  variant="neutral" />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard icon={MapPin}        label="กำลังมีพิกัดจริง"        value={counts.withCoords}  variant="success" />
-        <KpiCard icon={WifiOff}       label="ยังไม่เคยส่งตำแหน่ง"     value={counts.neverSent}   variant="neutral" />
-        <KpiCard icon={AlertTriangle} label="ความแม่นยำต่ำ"           value={counts.lowAcc}      variant="warn"    />
-        <KpiCard icon={Pause}         label="ไม่อัปเดตเกิน 5 นาที"     value={counts.staleOver5}  variant="warn"    />
+        <LiveKpiCard icon={MapPin}        label="กำลังมีพิกัดจริง"        value={counts.withCoords}  variant="success" />
+        <LiveKpiCard icon={WifiOff}       label="ยังไม่เคยส่งตำแหน่ง"     value={counts.neverSent}   variant="neutral" />
+        <LiveKpiCard icon={AlertTriangle} label="ความแม่นยำต่ำ"           value={counts.lowAcc}      variant="warn"    />
+        <LiveKpiCard icon={Pause}         label="ไม่อัปเดตเกิน 5 นาที"     value={counts.staleOver5}  variant="warn"    />
       </div>
 
       {!browserOnline && (
@@ -302,26 +302,6 @@ export default function AdminLiveVehicles() {
 }
 
 /* ── Sub-components ─────────────────────────────────────────────────────── */
-
-function KpiCard({ icon: Icon, label, value, variant }) {
-  const tone = variant === 'success' ? 'text-success'
-             : variant === 'warn'    ? 'text-warn'
-             : variant === 'brand'   ? 'text-brand'
-             : 'text-ink-muted';
-  return (
-    <AppCard padding="sm">
-      <div className="flex items-center gap-3">
-        <div className={`shrink-0 ${tone}`}>
-          <Icon className="w-5 h-5" strokeWidth={2} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs text-ink-muted leading-tight truncate">{label}</p>
-          <p className="text-xl font-semibold text-ink tabular-nums">{value}</p>
-        </div>
-      </div>
-    </AppCard>
-  );
-}
 
 function VehicleRow({ vehicle, selected, onClick }) {
   const meta = getStatusMeta(vehicle.status);

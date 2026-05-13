@@ -3,6 +3,7 @@ export { default as StatusBadge }      from './StatusBadge';
 export { default as AlertBanner }      from './AlertBanner';
 export { default as KPIGrid }          from './KPIGrid';
 export { default as KPIStat }          from './KPIStat';
+export { default as LiveKpiCard }      from './LiveKpiCard';
 export { default as RiskCard }         from './RiskCard';
 export { default as SectionTitle }     from './SectionTitle';
 export { default as DashboardSection } from './DashboardSection';

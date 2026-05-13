@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, Bus, Activity, Pause, WifiOff, AlertTriangle } from 'lucide-react';
 import api from '../../api/axios';
-import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
+import { AppCard, AlertBanner, StatusBadge, DashboardSection, LiveKpiCard } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
@@ -116,10 +116,10 @@ export default function SchoolLiveVehicles() {
       </header>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <KpiCard icon={Activity}        label="ออนไลน์"        value={counts.online}  variant="success" />
-        <KpiCard icon={AlertTriangle}   label="สัญญาณเก่า"     value={counts.stale}   variant="warn"    />
-        <KpiCard icon={Pause}           label="หยุดส่ง"        value={counts.paused}  variant="neutral" />
-        <KpiCard icon={WifiOff}         label="ออฟไลน์ / ยังไม่มีข้อมูล" value={counts.offline} variant="neutral" />
+        <LiveKpiCard icon={Activity}        label="ออนไลน์"        value={counts.online}  variant="success" />
+        <LiveKpiCard icon={AlertTriangle}   label="สัญญาณเก่า"     value={counts.stale}   variant="warn"    />
+        <LiveKpiCard icon={Pause}           label="หยุดส่ง"        value={counts.paused}  variant="neutral" />
+        <LiveKpiCard icon={WifiOff}         label="ออฟไลน์ / ยังไม่มีข้อมูล" value={counts.offline} variant="neutral" />
       </div>
 
       {/* Browser offline — non-blocking */}
@@ -194,25 +194,6 @@ export default function SchoolLiveVehicles() {
 }
 
 /* ── Sub-components ─────────────────────────────────────────────────────── */
-
-function KpiCard({ icon: Icon, label, value, variant }) {
-  const tone = variant === 'success' ? 'text-success'
-             : variant === 'warn'    ? 'text-warn'
-             : 'text-ink-muted';
-  return (
-    <AppCard padding="sm">
-      <div className="flex items-center gap-3">
-        <div className={`shrink-0 ${tone}`}>
-          <Icon className="w-5 h-5" strokeWidth={2} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-xs text-ink-muted leading-tight truncate">{label}</p>
-          <p className="text-xl font-semibold text-ink tabular-nums">{value}</p>
-        </div>
-      </div>
-    </AppCard>
-  );
-}
 
 function VehicleRow({ vehicle, selected, onClick }) {
   const meta = getStatusMeta(vehicle.status);

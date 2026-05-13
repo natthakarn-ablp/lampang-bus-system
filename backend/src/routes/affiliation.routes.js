@@ -9,6 +9,7 @@ const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
 const affAdminSvc = require('../services/affiliationAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
+const ppSvc = require('../services/pickupPoint.service');
 const { logAudit } = require('../utils/audit');
 
 // Shared CSV helper for audit export
@@ -366,6 +367,54 @@ router.get('/live-vehicles', async (req, res, next) => {
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
     return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
+  } catch (err) { next(err); }
+});
+
+// ─── Phase 7.12.2 — GET /api/affiliation/pickup-map ─────────────────────────
+// Read-only multi-role pickup-point map. Returns aggregate-only rows
+// (no student names/phones/addresses). Affiliation scope is JWT-locked;
+// ?school_id outside this affiliation returns 403.
+router.get('/pickup-map', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) {
+      return sendError(res,
+        req.user.role === 'admin' ? 'กรุณาระบุ affiliation_id' : 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้',
+        [], req.user.role === 'admin' ? 400 : 403);
+    }
+
+    const { school_id, vehicle_id, session, grade, search } = req.query;
+
+    if (!ppSvc.isValidSession(session || null)) {
+      return sendError(res, 'session ต้องเป็น morning, evening หรือ both', [], 400);
+    }
+    if (!ppSvc.isValidGrade(grade || null)) {
+      return sendError(res, 'ชั้นเรียนไม่ถูกต้อง', [], 400);
+    }
+
+    // Cross-affiliation school_id → 403 (do not leak existence)
+    if (school_id && !(await ppSvc.schoolBelongsToAffiliation(school_id, affId))) {
+      return sendError(res, 'ไม่มีสิทธิ์เข้าถึงโรงเรียนนี้', [], 403);
+    }
+
+    const data = await ppSvc.getReadOnlyPickupMap({
+      scopeAffiliationId: affId,
+      filterSchoolId: school_id || null,
+      filterVehicleId: vehicle_id || null,
+      session: session || null,
+      grade: grade || null,
+      search: search || null,
+    });
+
+    ppSvc.maybeAuditPickupMapView({
+      userId: req.user.id,
+      entityType: 'affiliation_pickup_map',
+      entityId: affId,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
 

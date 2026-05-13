@@ -628,6 +628,204 @@ async function createPickupPointWithStudents(input, studentIds, ctx = {}) {
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+ * Phase 7.12.2 — Read-only multi-role pickup map (affiliation / province /
+ * transport)
+ *
+ * Returns aggregate-only rows: NO student names, NO phone, NO address.
+ * One row per (pickup_point × school) — a stop shared across schools
+ * shows up once per school so each row carries an unambiguous
+ * school_id/affiliation_id pair.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+const VALID_SESSIONS = ['morning', 'evening', 'both'];
+const VALID_GRADES = new Set([
+  'อ.1','อ.2','อ.3',
+  'ป.1','ป.2','ป.3','ป.4','ป.5','ป.6',
+  'ม.1','ม.2','ม.3','ม.4','ม.5','ม.6',
+]);
+
+function isValidSession(s) { return s == null || VALID_SESSIONS.includes(s); }
+function isValidGrade(g)   { return g == null || VALID_GRADES.has(g); }
+
+/**
+ * Aggregate read for affiliation / province / transport viewers.
+ *
+ * @param {object} opts
+ * @param {string|null} opts.scopeAffiliationId   Hard-locked from JWT (affiliation role). Server-trusted.
+ * @param {string|null} opts.filterAffiliationId  Optional filter (province/transport only).
+ * @param {string|null} opts.filterSchoolId
+ * @param {string|null} opts.filterVehicleId
+ * @param {string|null} opts.session              'morning' | 'evening' | 'both' | null
+ * @param {string|null} opts.grade                Thai canonical, e.g. 'ป.4'
+ * @param {string|null} opts.search               Matches pp.label / v.plate_no / sch.name
+ */
+async function getReadOnlyPickupMap({
+  scopeAffiliationId = null,
+  filterAffiliationId = null,
+  filterSchoolId = null,
+  filterVehicleId = null,
+  session = null,
+  grade = null,
+  search = null,
+} = {}) {
+  const where = ['pp.is_deleted = FALSE'];
+  const params = [];
+
+  if (scopeAffiliationId) {
+    where.push('sch.affiliation_id = ?');
+    params.push(scopeAffiliationId);
+  }
+  if (filterAffiliationId) {
+    where.push('sch.affiliation_id = ?');
+    params.push(filterAffiliationId);
+  }
+  if (filterSchoolId) {
+    where.push('sch.id = ?');
+    params.push(filterSchoolId);
+  }
+  if (filterVehicleId) {
+    where.push('pp.vehicle_id = ?');
+    params.push(filterVehicleId);
+  }
+  if (session === 'morning' || session === 'evening') {
+    where.push('pp.session IN (?, ?)');
+    params.push(session, 'both');
+  } else if (session === 'both') {
+    where.push("pp.session = 'both'");
+  }
+  if (grade) {
+    where.push('s.grade = ?');
+    params.push(grade);
+  }
+  if (search) {
+    const term = '%' + String(search).slice(0, 100).replace(/[\\%_]/g, m => '\\' + m) + '%';
+    where.push('(pp.label LIKE ? OR v.plate_no LIKE ? OR sch.name LIKE ?)');
+    params.push(term, term, term);
+  }
+
+  const [rows] = await pool.query(`
+    SELECT
+      pp.id            AS pickup_point_id,
+      pp.label,
+      pp.latitude, pp.longitude,
+      pp.sequence, pp.session, pp.notes, pp.updated_at,
+      pp.vehicle_id, v.plate_no, v.vehicle_type,
+      sch.id           AS school_id,
+      sch.name         AS school_name,
+      sch.affiliation_id,
+      aff.name         AS affiliation_name,
+      COUNT(DISTINCT s.id) AS student_count_in_scope,
+      GROUP_CONCAT(DISTINCT s.grade ORDER BY s.grade SEPARATOR ',') AS grade_summary_raw
+    FROM pickup_points pp
+    JOIN student_pickup_points spp ON spp.pickup_point_id = pp.id
+    JOIN students s    ON s.id  = spp.student_id  AND s.is_deleted   = FALSE
+    JOIN schools sch   ON sch.id = s.school_id    AND sch.is_deleted = FALSE
+    LEFT JOIN affiliations aff ON aff.id = sch.affiliation_id AND aff.is_deleted = FALSE
+    LEFT JOIN vehicles v       ON v.id  = pp.vehicle_id      AND v.is_deleted   = FALSE
+    WHERE ${where.join(' AND ')}
+    GROUP BY pp.id, pp.label, pp.latitude, pp.longitude, pp.sequence,
+             pp.session, pp.notes, pp.updated_at,
+             pp.vehicle_id, v.plate_no, v.vehicle_type,
+             sch.id, sch.name, sch.affiliation_id, aff.name
+    ORDER BY aff.name ASC, sch.name ASC, v.plate_no ASC, pp.sequence ASC, pp.id ASC
+  `, params);
+
+  const points = rows.map(r => ({
+    pickup_point_id: r.pickup_point_id,
+    label: r.label,
+    latitude:  r.latitude  == null ? null : parseFloat(r.latitude),
+    longitude: r.longitude == null ? null : parseFloat(r.longitude),
+    sequence: r.sequence,
+    session: r.session,
+    notes: r.notes,
+    vehicle_id: r.vehicle_id,
+    plate_no: r.plate_no,
+    vehicle_type: r.vehicle_type,
+    school_id: r.school_id,
+    school_name: r.school_name,
+    affiliation_id: r.affiliation_id,
+    affiliation_name: r.affiliation_name,
+    student_count_in_scope: Number(r.student_count_in_scope) || 0,
+    grade_summary: r.grade_summary_raw ? r.grade_summary_raw.split(',') : [],
+    updated_at: r.updated_at,
+  }));
+
+  const uniqPP = new Set();
+  const uniqSch = new Set();
+  const uniqVeh = new Set();
+  let totalStudents = 0;
+  for (const p of points) {
+    uniqPP.add(p.pickup_point_id);
+    uniqSch.add(p.school_id);
+    if (p.vehicle_id) uniqVeh.add(p.vehicle_id);
+    // Per (point × school) assignment count. The duplicate-assignment guard
+    // (Phase 6.1 hotfix-4) prevents a student from being on >1 pickup point
+    // for the same session, so this is a safe aggregate count.
+    totalStudents += p.student_count_in_scope;
+  }
+
+  return {
+    points,
+    summary: {
+      total_points:  uniqPP.size,
+      total_students_in_scope: totalStudents,
+      total_schools: uniqSch.size,
+      total_vehicles: uniqVeh.size,
+    },
+    generated_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Check whether a given school_id falls inside the supplied affiliation
+ * scope. Used by the affiliation route to enforce the cross-affiliation
+ * 403 when the user supplies ?school_id=<some other AFF's school>.
+ *
+ * Returns true if the school exists and belongs to the affiliation;
+ * false otherwise (school not found, deleted, or in a different AFF).
+ */
+async function schoolBelongsToAffiliation(schoolId, affiliationId) {
+  if (!schoolId || !affiliationId) return false;
+  const [rows] = await pool.query(
+    'SELECT 1 FROM schools WHERE id = ? AND affiliation_id = ? AND is_deleted = FALSE LIMIT 1',
+    [schoolId, affiliationId]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Audit a pickup-map page-load with a 5-minute dedup window. Same
+ * pattern as vehicleLocation.maybeAuditView but parameterized on
+ * entity_type so each role's page audit log stays distinct.
+ * Errors are swallowed — audit must never block a viewer GET.
+ */
+async function maybeAuditPickupMapView({ userId, entityType, entityId, ipAddress, userAgent }) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT 1 FROM audit_logs
+       WHERE  user_id     = ?
+         AND  action      = 'VIEW'
+         AND  entity_type = ?
+         AND  entity_id   = ?
+         AND  created_at  > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+       LIMIT  1`,
+      [userId, entityType, String(entityId)]
+    );
+    if (rows.length) return false;
+    await logAudit({
+      userId, action: 'VIEW',
+      entityType, entityId: String(entityId),
+      ipAddress, userAgent,
+    });
+    return true;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[pickupPoint] audit skipped:', err?.message);
+    return false;
+  }
+}
+
 module.exports = {
   // Read (driver + school)
   getPickupPointsForVehicle,
@@ -655,4 +853,10 @@ module.exports = {
   // Phase 6.1 hotfix-7 — edit-students workflow
   getAssignableStudentsForPickupPoint,
   replacePickupPointStudents,
+  // Phase 7.12.2 — multi-role read-only map
+  getReadOnlyPickupMap,
+  schoolBelongsToAffiliation,
+  maybeAuditPickupMapView,
+  isValidSession,
+  isValidGrade,
 };

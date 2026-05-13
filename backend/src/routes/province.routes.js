@@ -4,10 +4,11 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
-const { sendSuccess } = require('../utils/response');
+const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const provSvc = require('../services/province.service');
 const vllSvc = require('../services/vehicleLocation.service');
+const ppSvc = require('../services/pickupPoint.service');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
@@ -240,6 +241,41 @@ router.get('/live-vehicles', async (req, res, next) => {
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
     return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
+  } catch (err) { next(err); }
+});
+
+// ─── Phase 7.12.2 — GET /api/province/pickup-map ────────────────────────────
+// Read-only multi-role pickup-point map for province oversight. Aggregate-only
+// rows: no student names / phones / addresses.
+router.get('/pickup-map', async (req, res, next) => {
+  try {
+    const { affiliation_id, school_id, vehicle_id, session, grade, search } = req.query;
+
+    if (!ppSvc.isValidSession(session || null)) {
+      return sendError(res, 'session ต้องเป็น morning, evening หรือ both', [], 400);
+    }
+    if (!ppSvc.isValidGrade(grade || null)) {
+      return sendError(res, 'ชั้นเรียนไม่ถูกต้อง', [], 400);
+    }
+
+    const data = await ppSvc.getReadOnlyPickupMap({
+      filterAffiliationId: affiliation_id || null,
+      filterSchoolId: school_id || null,
+      filterVehicleId: vehicle_id || null,
+      session: session || null,
+      grade: grade || null,
+      search: search || null,
+    });
+
+    ppSvc.maybeAuditPickupMapView({
+      userId: req.user.id,
+      entityType: 'province_pickup_map',
+      entityId: 'province',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
 

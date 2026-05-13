@@ -8,6 +8,7 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit } = require('../utils/audit');
 const transportSvc = require('../services/transport.service');
+const ppSvc = require('../services/pickupPoint.service');
 
 // All routes require transport or admin role
 router.use(authenticate, requireRole('transport', 'admin'));
@@ -169,6 +170,41 @@ router.put('/inspections/:id', async (req, res, next) => {
     });
 
     sendSuccess(res, null, 'Inspection updated');
+  } catch (err) { next(err); }
+});
+
+// ─── Phase 7.12.2 — GET /api/transport/pickup-map ───────────────────────────
+// Read-only multi-role pickup-point map for transport oversight. Aggregate-only
+// rows: no student names / phones / addresses.
+router.get('/pickup-map', async (req, res, next) => {
+  try {
+    const { affiliation_id, school_id, vehicle_id, session, grade, search } = req.query;
+
+    if (!ppSvc.isValidSession(session || null)) {
+      return sendError(res, 'session ต้องเป็น morning, evening หรือ both', [], 400);
+    }
+    if (!ppSvc.isValidGrade(grade || null)) {
+      return sendError(res, 'ชั้นเรียนไม่ถูกต้อง', [], 400);
+    }
+
+    const data = await ppSvc.getReadOnlyPickupMap({
+      filterAffiliationId: affiliation_id || null,
+      filterSchoolId: school_id || null,
+      filterVehicleId: vehicle_id || null,
+      session: session || null,
+      grade: grade || null,
+      search: search || null,
+    });
+
+    ppSvc.maybeAuditPickupMapView({
+      userId: req.user.id,
+      entityType: 'transport_pickup_map',
+      entityId: 'transport',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    sendSuccess(res, data);
   } catch (err) { next(err); }
 });
 

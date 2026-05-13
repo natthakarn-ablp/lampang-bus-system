@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, RefreshCw, GraduationCap, Bus, Building2, Users } from 'lucide-react';
 import api from '../../api/axios';
 import { AlertBanner, KPIGrid, KPIStat } from '../../components/ui';
@@ -30,6 +30,11 @@ export default function AffiliationPickupMap() {
     school_id: '', vehicle_id: '', session: '', grade: '', search: '',
   });
 
+  // Phase 9.3 — capture dropdown options from the broadest (unfiltered) load
+  // so narrowing a filter doesn't erase the other choices.
+  const [optionSource, setOptionSource] = useState([]);
+  const hasCapturedOptionsRef = useRef(false);
+
   const fetchData = useCallback(async (params) => {
     setLoading(true); setError(null); setPermError(false);
     try {
@@ -38,8 +43,13 @@ export default function AffiliationPickupMap() {
         if (v && String(v).trim()) q[k] = String(v).trim();
       }
       const res = await api.get('/affiliation/pickup-map', { params: q });
-      setPoints(Array.isArray(res.data?.data?.points) ? res.data.data.points : []);
+      const pointsList = Array.isArray(res.data?.data?.points) ? res.data.data.points : [];
+      setPoints(pointsList);
       setSummary(res.data?.data?.summary || null);
+      if (!hasCapturedOptionsRef.current && pointsList.length > 0) {
+        setOptionSource(pointsList);
+        hasCapturedOptionsRef.current = true;
+      }
     } catch (err) {
       if (err?.response?.status === 403) {
         setPermError(true);
@@ -53,6 +63,17 @@ export default function AffiliationPickupMap() {
   }, []);
 
   useEffect(() => { fetchData(filters); }, [fetchData]); // initial load
+
+  // Phase 9.3 — name-first dropdowns derived from the broadest snapshot so
+  // narrowing one filter doesn't drop the other options out of view.
+  const schoolOptions = useMemo(
+    () => uniqOptions(optionSource, 'school_id', 'school_name'),
+    [optionSource]
+  );
+  const vehicleOptions = useMemo(
+    () => uniqOptions(optionSource, 'vehicle_id', 'plate_no'),
+    [optionSource]
+  );
 
   function handleApplyFilters(e) {
     e?.preventDefault?.();
@@ -95,6 +116,8 @@ export default function AffiliationPickupMap() {
         onApply={handleApplyFilters}
         onReset={handleReset}
         loading={loading}
+        schoolOptions={schoolOptions}
+        vehicleOptions={vehicleOptions}
       />
 
       {!permError && (
@@ -113,7 +136,7 @@ export default function AffiliationPickupMap() {
   );
 }
 
-function FilterBar({ filters, setFilters, onApply, onReset, loading }) {
+function FilterBar({ filters, setFilters, onApply, onReset, loading, schoolOptions, vehicleOptions }) {
   function update(k, v) { setFilters(prev => ({ ...prev, [k]: v })); }
   return (
     <form
@@ -135,13 +158,15 @@ function FilterBar({ filters, setFilters, onApply, onReset, loading }) {
         value={filters.grade} onChange={(v) => update('grade', v)}
         options={GRADE_OPTIONS.map(g => ({ value: g, label: g || 'ทั้งหมด' }))}
       />
-      <FieldInput
-        label="รหัสโรงเรียน" placeholder="เช่น SCH0001"
+      <FieldSelect
+        label="โรงเรียน"
         value={filters.school_id} onChange={(v) => update('school_id', v)}
+        options={[{ value: '', label: 'เลือกโรงเรียน' }, ...schoolOptions]}
       />
-      <FieldInput
-        label="รหัสรถ" placeholder="เช่น V-…"
+      <FieldSelect
+        label="รถรับส่ง"
         value={filters.vehicle_id} onChange={(v) => update('vehicle_id', v)}
+        options={[{ value: '', label: 'เลือกรถ' }, ...vehicleOptions]}
       />
       <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
         <button
@@ -187,4 +212,22 @@ function FieldSelect({ label, value, onChange, options }) {
       </select>
     </label>
   );
+}
+
+/**
+ * Phase 9.3 — collect unique {value,label} entries from a points snapshot,
+ * sorted by Thai-collated label, for name-first dropdowns. idKey is the
+ * stable backend identifier (e.g. school_id) and labelKey is the human-
+ * readable display field (e.g. school_name). Entries without an id are
+ * skipped; labels fall back to the id when display is missing.
+ */
+function uniqOptions(rows, idKey, labelKey) {
+  const seen = new Map();
+  for (const r of rows) {
+    const id = r?.[idKey];
+    if (id == null || id === '') continue;
+    if (!seen.has(id)) seen.set(id, r?.[labelKey] || String(id));
+  }
+  return Array.from(seen, ([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'th'));
 }

@@ -231,7 +231,7 @@ export default function AdminLiveVehicles() {
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="ค้นหา ทะเบียน / vehicle_id / ชื่อคนขับ…"
+                placeholder="ค้นหาทะเบียน หรือชื่อคนขับ…"
                 className="w-full text-sm border border-surface-border rounded-lg pl-9 pr-3 py-2 bg-surface text-ink"
               />
             </div>

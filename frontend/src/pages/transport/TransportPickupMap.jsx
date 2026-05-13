@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, RefreshCw, Bus, Building2, Users } from 'lucide-react';
 import api from '../../api/axios';
 import { AlertBanner, KPIGrid, KPIStat } from '../../components/ui';
@@ -29,6 +29,11 @@ export default function TransportPickupMap() {
     affiliation_id: '', school_id: '', vehicle_id: '', session: '', grade: '', search: '',
   });
 
+  // Phase 9.3 — capture dropdown options from the broadest (unfiltered) load
+  // so narrowing a filter doesn't erase the other choices.
+  const [optionSource, setOptionSource] = useState([]);
+  const hasCapturedOptionsRef = useRef(false);
+
   const fetchData = useCallback(async (params) => {
     setLoading(true); setError(null); setPermError(false);
     try {
@@ -37,8 +42,13 @@ export default function TransportPickupMap() {
         if (v && String(v).trim()) q[k] = String(v).trim();
       }
       const res = await api.get('/transport/pickup-map', { params: q });
-      setPoints(Array.isArray(res.data?.data?.points) ? res.data.data.points : []);
+      const pointsList = Array.isArray(res.data?.data?.points) ? res.data.data.points : [];
+      setPoints(pointsList);
       setSummary(res.data?.data?.summary || null);
+      if (!hasCapturedOptionsRef.current && pointsList.length > 0) {
+        setOptionSource(pointsList);
+        hasCapturedOptionsRef.current = true;
+      }
     } catch (err) {
       if (err?.response?.status === 403) {
         setPermError(true);
@@ -52,6 +62,20 @@ export default function TransportPickupMap() {
   }, []);
 
   useEffect(() => { fetchData(filters); }, [fetchData]);
+
+  // Phase 9.3 — name-first dropdowns derived from the broadest snapshot.
+  const affiliationOptions = useMemo(
+    () => uniqOptions(optionSource, 'affiliation_id', 'affiliation_name'),
+    [optionSource]
+  );
+  const schoolOptions = useMemo(
+    () => uniqOptions(optionSource, 'school_id', 'school_name'),
+    [optionSource]
+  );
+  const vehicleOptions = useMemo(
+    () => uniqOptions(optionSource, 'vehicle_id', 'plate_no'),
+    [optionSource]
+  );
 
   function handleApplyFilters(e) {
     e?.preventDefault?.();
@@ -102,14 +126,17 @@ export default function TransportPickupMap() {
           options={GRADE_OPTIONS.map(g => ({ value: g, label: g || 'ทั้งหมด' }))}
           onChange={(v) => setFilters(s => ({ ...s, grade: v }))}
         />
-        <Field label="รหัสสังกัด" placeholder="เช่น AFF001"
-          value={filters.affiliation_id} onChange={(v) => setFilters(s => ({ ...s, affiliation_id: v }))}
+        <Select label="สังกัด" value={filters.affiliation_id}
+          options={[{ value: '', label: 'เลือกสังกัด' }, ...affiliationOptions]}
+          onChange={(v) => setFilters(s => ({ ...s, affiliation_id: v }))}
         />
-        <Field label="รหัสโรงเรียน" placeholder="เช่น SCH0001"
-          value={filters.school_id} onChange={(v) => setFilters(s => ({ ...s, school_id: v }))}
+        <Select label="โรงเรียน" value={filters.school_id}
+          options={[{ value: '', label: 'เลือกโรงเรียน' }, ...schoolOptions]}
+          onChange={(v) => setFilters(s => ({ ...s, school_id: v }))}
         />
-        <Field label="รหัสรถ" placeholder="เช่น V-…"
-          value={filters.vehicle_id} onChange={(v) => setFilters(s => ({ ...s, vehicle_id: v }))}
+        <Select label="รถรับส่ง" value={filters.vehicle_id}
+          options={[{ value: '', label: 'เลือกรถ' }, ...vehicleOptions]}
+          onChange={(v) => setFilters(s => ({ ...s, vehicle_id: v }))}
         />
         <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
           <button type="submit" disabled={loading}
@@ -159,4 +186,19 @@ function Select({ label, value, onChange, options }) {
       </select>
     </label>
   );
+}
+
+/**
+ * Phase 9.3 — collect unique {value,label} entries from a points snapshot,
+ * sorted by Thai-collated label, for name-first dropdowns.
+ */
+function uniqOptions(rows, idKey, labelKey) {
+  const seen = new Map();
+  for (const r of rows) {
+    const id = r?.[idKey];
+    if (id == null || id === '') continue;
+    if (!seen.has(id)) seen.set(id, r?.[labelKey] || String(id));
+  }
+  return Array.from(seen, ([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'th'));
 }

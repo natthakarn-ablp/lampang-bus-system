@@ -51,6 +51,7 @@ const AffEmergencyList     = lazy(() => import('./pages/affiliation/AffEmergency
 const AffSchoolAccounts    = lazy(() => import('./pages/affiliation/AffSchoolAccounts'));
 const AffAuditLog          = lazy(() => import('./pages/affiliation/AffAuditLog'));
 const AffiliationLiveVehicles = lazy(() => import('./pages/affiliation/AffiliationLiveVehicles'));
+const AffiliationPickupMap   = lazy(() => import('./pages/affiliation/AffiliationPickupMap'));
 
 // Province
 const ProvinceLayout       = lazy(() => import('./pages/province/ProvinceLayout'));
@@ -63,6 +64,7 @@ const ProvDailyStatus      = lazy(() => import('./pages/province/ProvDailyStatus
 const ProvEmergencyList    = lazy(() => import('./pages/province/ProvEmergencyList'));
 const ProvAuditLog         = lazy(() => import('./pages/province/ProvAuditLog'));
 const ProvinceLiveVehicles = lazy(() => import('./pages/province/ProvinceLiveVehicles'));
+const ProvincePickupMap    = lazy(() => import('./pages/province/ProvincePickupMap'));
 
 // Reports (charts-heavy — own chunk per page)
 const ReportsLayout        = lazy(() => import('./pages/reports/ReportsLayout'));
@@ -75,6 +77,7 @@ const TransportLayout      = lazy(() => import('./pages/transport/TransportLayou
 const TransportDashboard   = lazy(() => import('./pages/transport/TransportDashboard'));
 const TransportVehicleList = lazy(() => import('./pages/transport/TransportVehicleList'));
 const InspectionForm       = lazy(() => import('./pages/transport/InspectionForm'));
+const TransportPickupMap   = lazy(() => import('./pages/transport/TransportPickupMap'));
 
 // Admin (heaviest cluster — research/measurement/executive)
 const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
@@ -215,6 +218,7 @@ export default function App() {
             <Route path="accounts"    element={<AffSchoolAccounts />} />
             <Route path="audit-log"   element={<AffAuditLog />} />
             <Route path="live-vehicles" element={<AffiliationLiveVehicles />} />
+            <Route path="pickup-map"  element={<AffiliationPickupMap />} />
           </Route>
 
           {/* Province module */}
@@ -235,6 +239,7 @@ export default function App() {
             <Route path="emergencies"  element={<ProvEmergencyList />} />
             <Route path="audit-log"    element={<ProvAuditLog />} />
             <Route path="live-vehicles" element={<ProvinceLiveVehicles />} />
+            <Route path="pickup-map"   element={<ProvincePickupMap />} />
           </Route>
 
           {/* Reports module */}
@@ -264,6 +269,7 @@ export default function App() {
             <Route index             element={<TransportDashboard />} />
             <Route path="vehicles"   element={<TransportVehicleList />} />
             <Route path="inspections" element={<InspectionForm />} />
+            <Route path="pickup-map"  element={<TransportPickupMap />} />
           </Route>
 
           {/* Admin pages */}

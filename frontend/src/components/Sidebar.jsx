@@ -49,6 +49,7 @@ const AFFILIATION_NAV = [
   { to: '/affiliation/students',    icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/affiliation/vehicles',    icon: Bus,           label: 'รถรับส่ง' },
   { to: '/affiliation/live-vehicles', icon: Activity,    label: 'ตำแหน่งปัจจุบัน' },
+  { to: '/affiliation/pickup-map',  icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { section: 'จัดการ' },
   { to: '/affiliation/accounts',    icon: Key,           label: 'จัดการบัญชีโรงเรียน' },
   { section: 'ติดตามและบันทึก' },
@@ -67,6 +68,7 @@ const PROVINCE_NAV = [
   { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/province/vehicles',     icon: Bus,           label: 'รถรับส่ง' },
   { to: '/province/live-vehicles', icon: Activity,     label: 'ตำแหน่งปัจจุบัน' },
+  { to: '/province/pickup-map',   icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { section: 'ติดตาม' },
   { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
@@ -77,6 +79,7 @@ const PROVINCE_NAV = [
 const TRANSPORT_NAV = [
   { section: 'ภาพรวม' },
   { to: '/transport',              icon: BarChart3,    label: 'ภาพรวมตรวจสภาพรถ' },
+  { to: '/transport/pickup-map',   icon: Map,          label: 'แผนที่จุดรับส่ง' },
   { section: 'บันทึก' },
   { to: '/transport/inspections',  icon: ClipboardList, label: 'บันทึกตรวจสภาพ' },
 ];

@@ -19,6 +19,7 @@ const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 const { pool }          = require('../config/database');
 const { authenticate }  = require('../middleware/auth');
 const { requireRole }   = require('../middleware/roleGuard');
@@ -40,7 +41,7 @@ const driverLocationLimiter = rateLimit({
   max: 6,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `drv-loc:${req.user?.id || req.ip}`,
+  keyGenerator: (req) => `drv-loc:${req.user?.id || ipKeyGenerator(req.ip)}`,
   skip: () => process.env.NODE_ENV === 'test',
   message: { success: false, message: 'ส่งตำแหน่งถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
 });

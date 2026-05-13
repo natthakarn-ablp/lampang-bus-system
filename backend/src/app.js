@@ -15,6 +15,14 @@ const reportRoutes      = require('./routes/report.routes');
 
 const app = express();
 
+// ─── Proxy trust ────────────────────────────────────────────────────────────
+// Production chain: client → Cloudflare → nginx (127.0.0.1) → backend.
+// nginx appends `$remote_addr` (= Cloudflare edge IP) via
+// proxy_add_x_forwarded_for, so XFF arrives as `<client>, <cf-edge>`.
+// trust proxy = 1 strips the rightmost trusted entry (cf-edge), exposing the
+// real client IP as req.ip for rate-limit keys + audit logs.
+app.set('trust proxy', 1);
+
 // ─── Security & parsing middleware ──────────────────────────────────────────
 app.use(helmet());
 app.use(cors());

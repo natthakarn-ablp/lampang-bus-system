@@ -41,6 +41,7 @@ export default function SearchableSelect({
 
   const wrapRef = useRef(null);
   const searchRef = useRef(null);
+  const listboxRef = useRef(null);
   const listboxId = useId();
 
   const selected = useMemo(
@@ -67,6 +68,13 @@ export default function SearchableSelect({
       return () => clearTimeout(t);
     }
   }, [open]);
+
+  // Phase 9.5 — keep the keyboard-highlighted option in view on long lists.
+  useEffect(() => {
+    if (!open || !listboxRef.current) return;
+    const el = listboxRef.current.children[highlight];
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, open]);
 
   // Close on outside click
   useEffect(() => {
@@ -156,7 +164,7 @@ export default function SearchableSelect({
       </button>
 
       {open && (
-        <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-surface-raised border border-surface-border rounded-lg shadow-elevate overflow-hidden">
+        <div className="absolute z-40 top-full left-0 right-0 mt-1 bg-surface-raised border border-surface-border rounded-lg shadow-elevate overflow-hidden">
           <div className="relative border-b border-surface-border">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted" strokeWidth={2} aria-hidden="true" />
             <input
@@ -174,7 +182,8 @@ export default function SearchableSelect({
           <ul
             id={listboxId}
             role="listbox"
-            className="max-h-60 overflow-y-auto py-1"
+            ref={listboxRef}
+            className="max-h-[40vh] sm:max-h-60 overflow-y-auto py-1"
           >
             {filtered.length === 0 ? (
               <li className="px-3 py-2 text-sm text-ink-muted text-center">ไม่พบรายการ</li>

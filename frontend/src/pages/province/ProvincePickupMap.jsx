@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, RefreshCw, Bus, Building2, Users } from 'lucide-react';
 import api from '../../api/axios';
-import { AlertBanner, KPIGrid, KPIStat } from '../../components/ui';
+import { AlertBanner, KPIGrid, KPIStat, SearchableSelect } from '../../components/ui';
 import ReadOnlyPickupPointMap from '../../components/ReadOnlyPickupPointMap';
 
 const GRADE_OPTIONS = [
@@ -126,16 +126,22 @@ export default function ProvincePickupMap() {
           options={GRADE_OPTIONS.map(g => ({ value: g, label: g || 'ทั้งหมด' }))}
           onChange={(v) => setFilters(s => ({ ...s, grade: v }))}
         />
-        <Select label="สังกัด" value={filters.affiliation_id}
-          options={[{ value: '', label: 'เลือกสังกัด' }, ...affiliationOptions]}
+        <SearchableSelect label="สังกัด" value={filters.affiliation_id}
+          options={affiliationOptions}
+          placeholder="เลือกสังกัด"
+          searchPlaceholder="ค้นหาชื่อสังกัด…"
           onChange={(v) => setFilters(s => ({ ...s, affiliation_id: v }))}
         />
-        <Select label="โรงเรียน" value={filters.school_id}
-          options={[{ value: '', label: 'เลือกโรงเรียน' }, ...schoolOptions]}
+        <SearchableSelect label="โรงเรียน" value={filters.school_id}
+          options={schoolOptions}
+          placeholder="เลือกโรงเรียน"
+          searchPlaceholder="ค้นหาชื่อโรงเรียน…"
           onChange={(v) => setFilters(s => ({ ...s, school_id: v }))}
         />
-        <Select label="รถรับส่ง" value={filters.vehicle_id}
-          options={[{ value: '', label: 'เลือกรถ' }, ...vehicleOptions]}
+        <SearchableSelect label="รถรับส่ง" value={filters.vehicle_id}
+          options={vehicleOptions}
+          placeholder="เลือกรถ"
+          searchPlaceholder="ค้นหาทะเบียน…"
           onChange={(v) => setFilters(s => ({ ...s, vehicle_id: v }))}
         />
         <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">

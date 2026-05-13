@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, RefreshCw, GraduationCap, Bus, Building2, Users } from 'lucide-react';
 import api from '../../api/axios';
-import { AlertBanner, KPIGrid, KPIStat } from '../../components/ui';
+import { AlertBanner, KPIGrid, KPIStat, SearchableSelect } from '../../components/ui';
 import ReadOnlyPickupPointMap from '../../components/ReadOnlyPickupPointMap';
 
 const GRADE_OPTIONS = [
@@ -158,15 +158,19 @@ function FilterBar({ filters, setFilters, onApply, onReset, loading, schoolOptio
         value={filters.grade} onChange={(v) => update('grade', v)}
         options={GRADE_OPTIONS.map(g => ({ value: g, label: g || 'ทั้งหมด' }))}
       />
-      <FieldSelect
+      <SearchableSelect
         label="โรงเรียน"
         value={filters.school_id} onChange={(v) => update('school_id', v)}
-        options={[{ value: '', label: 'เลือกโรงเรียน' }, ...schoolOptions]}
+        options={schoolOptions}
+        placeholder="เลือกโรงเรียน"
+        searchPlaceholder="ค้นหาชื่อโรงเรียน…"
       />
-      <FieldSelect
+      <SearchableSelect
         label="รถรับส่ง"
         value={filters.vehicle_id} onChange={(v) => update('vehicle_id', v)}
-        options={[{ value: '', label: 'เลือกรถ' }, ...vehicleOptions]}
+        options={vehicleOptions}
+        placeholder="เลือกรถ"
+        searchPlaceholder="ค้นหาทะเบียน…"
       />
       <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
         <button

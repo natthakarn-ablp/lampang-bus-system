@@ -4,6 +4,7 @@ export { default as AlertBanner }      from './AlertBanner';
 export { default as KPIGrid }          from './KPIGrid';
 export { default as KPIStat }          from './KPIStat';
 export { default as LiveKpiCard }      from './LiveKpiCard';
+export { default as SearchableSelect } from './SearchableSelect';
 export { default as RiskCard }         from './RiskCard';
 export { default as SectionTitle }     from './SectionTitle';
 export { default as DashboardSection } from './DashboardSection';

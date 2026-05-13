@@ -1,0 +1,206 @@
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ChevronDown, X, Search } from 'lucide-react';
+
+/**
+ * SearchableSelect — lightweight name-first combobox.
+ *
+ * Trigger button shows the current selection's label (or `placeholder` when
+ * cleared). Click/Enter opens a popover with a Thai-friendly search input
+ * and the filtered option list. Selecting an option emits the option's
+ * `value` via onChange — the calling page treats it the same way it
+ * treats a plain <select>.
+ *
+ * Props:
+ *   label       — field label
+ *   value       — currently selected option value (or '')
+ *   onChange    — (value) => void
+ *   options     — [{ value, label }]   (consumers can use uniqOptions)
+ *   placeholder — empty-state hint shown when value is '' (e.g. "เลือกโรงเรียน")
+ *   searchPlaceholder — hint inside the search input (default "ค้นหา…")
+ *
+ * Keyboard:
+ *   Enter / Space / ArrowDown on trigger → open
+ *   ArrowUp / ArrowDown                  → move highlight
+ *   Enter                                → select highlighted
+ *   Esc                                  → close (and clear search)
+ *
+ * Tailwind only; no external dependencies.
+ */
+export default function SearchableSelect({
+  label,
+  value,
+  onChange,
+  options = [],
+  placeholder = 'เลือกรายการ',
+  searchPlaceholder = 'ค้นหา…',
+  className = '',
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [highlight, setHighlight] = useState(0);
+
+  const wrapRef = useRef(null);
+  const searchRef = useRef(null);
+  const listboxId = useId();
+
+  const selected = useMemo(
+    () => options.find(o => String(o.value) === String(value)) || null,
+    [options, value]
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLocaleLowerCase('th');
+    if (!q) return options;
+    return options.filter(o => String(o.label).toLocaleLowerCase('th').includes(q));
+  }, [options, query]);
+
+  // Reset highlight when filtered list changes
+  useEffect(() => {
+    setHighlight(0);
+  }, [query, open]);
+
+  // Focus the search input when opening
+  useEffect(() => {
+    if (open && searchRef.current) {
+      // microtask so the input is mounted
+      const t = setTimeout(() => searchRef.current?.focus(), 0);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery('');
+      }
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [open]);
+
+  const closeAndReset = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+  }, []);
+
+  function pick(opt) {
+    onChange(opt.value);
+    closeAndReset();
+  }
+
+  function onTriggerKey(e) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpen(true);
+    }
+  }
+
+  function onSearchKey(e) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlight(h => Math.min(h + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight(h => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const opt = filtered[highlight];
+      if (opt) pick(opt);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeAndReset();
+    }
+  }
+
+  function clear(e) {
+    e.stopPropagation();
+    onChange('');
+    closeAndReset();
+  }
+
+  return (
+    <label className={`flex flex-col text-xs text-ink-muted w-full sm:w-auto sm:min-w-[160px] relative ${className}`} ref={wrapRef}>
+      <span className="mb-1">{label}</span>
+
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={onTriggerKey}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listboxId}
+        className="text-sm border border-surface-border rounded-lg pl-3 pr-9 py-2 bg-surface text-ink min-h-[40px] text-left flex items-center gap-2 hover:bg-surface-border/30 transition relative"
+      >
+        <span className={`flex-1 truncate ${selected ? 'text-ink' : 'text-ink-muted'}`}>
+          {selected ? selected.label : placeholder}
+        </span>
+        {selected && (
+          <span
+            role="button"
+            tabIndex={-1}
+            onClick={clear}
+            aria-label="ล้างการเลือก"
+            className="absolute right-7 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-surface-border text-ink-muted"
+          >
+            <X className="w-3.5 h-3.5" strokeWidth={2} />
+          </span>
+        )}
+        <ChevronDown
+          className={`absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted transition-transform ${open ? 'rotate-180' : ''}`}
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open && (
+        <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-surface-raised border border-surface-border rounded-lg shadow-elevate overflow-hidden">
+          <div className="relative border-b border-surface-border">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted" strokeWidth={2} aria-hidden="true" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={onSearchKey}
+              placeholder={searchPlaceholder}
+              className="w-full text-sm bg-transparent pl-8 pr-3 py-2 outline-none text-ink"
+              aria-controls={listboxId}
+              aria-autocomplete="list"
+            />
+          </div>
+          <ul
+            id={listboxId}
+            role="listbox"
+            className="max-h-60 overflow-y-auto py-1"
+          >
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-ink-muted text-center">ไม่พบรายการ</li>
+            ) : (
+              filtered.map((opt, i) => {
+                const isSelected = String(opt.value) === String(value);
+                const isHighlighted = i === highlight;
+                return (
+                  <li
+                    key={opt.value}
+                    role="option"
+                    aria-selected={isSelected}
+                    onMouseEnter={() => setHighlight(i)}
+                    onClick={() => pick(opt)}
+                    className={`px-3 py-2 text-sm cursor-pointer truncate ${
+                      isHighlighted ? 'bg-brand-50' : ''
+                    } ${isSelected ? 'font-semibold text-brand-700' : 'text-ink'}`}
+                  >
+                    {opt.label}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
+      )}
+    </label>
+  );
+}

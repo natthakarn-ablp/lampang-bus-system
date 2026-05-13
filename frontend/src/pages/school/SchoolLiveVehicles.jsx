@@ -101,7 +101,7 @@ export default function SchoolLiveVehicles() {
       <header>
         <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
           <MapIcon className="w-6 h-6 text-brand" strokeWidth={2} />
-          ตำแหน่งรถรับส่ง
+          ตำแหน่งปัจจุบัน
         </h1>
         <p className="text-sm text-ink-muted mt-1">
           แสดงตำแหน่งล่าสุดของรถที่ให้บริการโรงเรียนของคุณ · อัปเดตทุก 15 วินาที

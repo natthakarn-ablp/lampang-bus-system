@@ -105,7 +105,7 @@ export default function ProvinceLiveVehicles() {
           ตำแหน่งปัจจุบัน
         </h1>
         <p className="text-sm text-ink-muted mt-1">
-          แสดงตำแหน่งล่าสุดของรถรับส่งนักเรียนในภาพรวมระดับจังหวัด · อัปเดตทุก 15 วินาที
+          แสดงตำแหน่งล่าสุดของรถรับส่งในภาพรวมระดับจังหวัด · อัปเดตทุก 15 วินาที
           {generatedAt && (
             <span className="ml-1 text-ink-muted">
               · ข้อมูล {formatThaiTime(generatedAt)} น.

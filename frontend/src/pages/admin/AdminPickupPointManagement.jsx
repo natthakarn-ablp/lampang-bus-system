@@ -78,7 +78,7 @@ export default function AdminPickupPointManagement() {
           when those primary roles can't act (e.g., a school account
           temporarily disabled). */}
       <AlertBanner variant="info" title="หน้าตรวจสอบและกรณีพิเศษ">
-        การเพิ่มจุดรับส่งหลักทำผ่าน Driver หรือ School. หน้านี้สำหรับผู้ดูแลระบบใช้ตรวจสอบภาพรวม และเพิ่ม/แก้ไขในกรณีพิเศษเท่านั้น.
+        การเพิ่มจุดรับส่งหลักทำผ่านบัญชีคนขับหรือบัญชีโรงเรียน หน้านี้สำหรับผู้ดูแลระบบใช้ตรวจสอบภาพรวม และเพิ่ม/แก้ไขในกรณีพิเศษเท่านั้น
       </AlertBanner>
 
       {/* Filter */}
@@ -101,7 +101,7 @@ export default function AdminPickupPointManagement() {
         <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
       ) : rows.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีจุดรับส่งในระบบ">
-          Driver หรือ School สามารถเริ่มสร้างจุดรับส่งได้จากแผนที่ของตนเอง — หน้านี้จะแสดงเมื่อมีจุดให้ตรวจสอบ
+          บัญชีคนขับหรือบัญชีโรงเรียนสามารถเริ่มสร้างจุดรับส่งได้จากแผนที่ของตนเอง — หน้านี้จะแสดงเมื่อมีจุดให้ตรวจสอบ
         </AlertBanner>
       ) : (
         <>

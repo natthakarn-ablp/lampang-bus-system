@@ -159,12 +159,20 @@ describe('GET /api/reports/monthly', () => {
     const d = res.body.data;
     expect(d).toHaveProperty('month');
     expect(d).toHaveProperty('total_students');
-    expect(d).toHaveProperty('total_morning_checkins');
-    expect(d).toHaveProperty('total_evening_checkins');
+    // Phase 9.6 — API contract uses *_done + *_expected (instead of the
+    // old *_checkins shorthand). Each side is asserted independently so
+    // both halves of the KPI surface are covered.
+    expect(d).toHaveProperty('total_morning_done');
+    expect(d).toHaveProperty('total_morning_expected');
+    expect(d).toHaveProperty('total_evening_done');
+    expect(d).toHaveProperty('total_evening_expected');
     expect(d).toHaveProperty('emergency_count');
     expect(d).toHaveProperty('daily_trend');
     expect(d).toHaveProperty('schools');
+    expect(d).toHaveProperty('vehicles');
     expect(Array.isArray(d.daily_trend)).toBe(true);
+    expect(Array.isArray(d.schools)).toBe(true);
+    expect(Array.isArray(d.vehicles)).toBe(true);
   });
 
   test('month filter works', async () => {
@@ -222,14 +230,24 @@ describe('GET /api/reports/export/csv', () => {
 
 describe('GET /api/reports/export/excel', () => {
   test('returns Excel file', async () => {
+    // Phase 9.6 — supertest's default parsers don't recognize the Excel
+    // OpenXML mime, so without an explicit binary parser res.body would
+    // be undefined. Register the standard binary-collecting parser used
+    // by superagent so we can assert the response actually has bytes.
     const res = await request(app)
       .get('/api/reports/export/excel')
-      .set('Authorization', `Bearer ${provinceToken}`);
+      .set('Authorization', `Bearer ${provinceToken}`)
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/spreadsheetml|openxml/);
     expect(res.headers['content-disposition']).toMatch(/attachment.*\.xlsx/);
-    // Binary content should exist
+    expect(Buffer.isBuffer(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(0);
   });
 });

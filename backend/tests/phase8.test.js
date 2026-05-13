@@ -18,6 +18,29 @@ async function login(creds) {
   return res.body.data.access_token;
 }
 
+/**
+ * Phase 9.6 — the production cancel/reject flows are intentionally
+ * soft-delete (audit-trail preservation), but tests need a hard reset
+ * because the underlying unique indexes do NOT exclude cancelled rows:
+ *   • student_leaves uk_sl_date_student_session (date, student, session)
+ *   • roster_change_requests "no duplicate pending" check
+ * Without this helper, leftover rows from earlier `describe` blocks
+ * cause later POSTs to return 409.
+ */
+async function hardCleanTestStudentRows() {
+  const conn = await mysql.createConnection({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    database: process.env.DB_NAME || 'lampang_bus',
+    user: process.env.DB_USER || 'lampang',
+    password: process.env.DB_PASSWORD || '',
+    charset: 'utf8mb4',
+  });
+  await conn.query(`DELETE FROM student_leaves WHERE student_id = ?`, [TEST_STUDENT_ID]);
+  await conn.query(`DELETE FROM roster_change_requests WHERE student_id = ?`, [TEST_STUDENT_ID]);
+  await conn.end();
+}
+
 beforeAll(async () => {
   driverToken = await login(DRIVER);
   schoolToken = await login(SCHOOL);
@@ -148,6 +171,11 @@ describe('School Approval Workflow', () => {
   let requestId;
 
   beforeAll(async () => {
+    // Phase 9.6 — drop any leftover request from the prior "Driver Roster
+    // Requests" describe block (production duplicate-prevention returns
+    // 409 if a pending request already exists for this student+vehicle).
+    await hardCleanTestStudentRows();
+
     // Create a fresh request for approval test
     const res = await request(app)
       .post('/api/driver/roster-request')
@@ -192,6 +220,14 @@ describe('School Approval Workflow', () => {
 // ─── School Missing ──────────────────────────────────────────────────────────
 
 describe('School Missing Students', () => {
+  beforeAll(async () => {
+    // Phase 9.6 — earlier "Driver Leave" tests left cancelled leave rows
+    // for the same student; the unique index doesn't exclude cancelled
+    // rows, so the leave POST inside the test below would return 409
+    // without this hard reset.
+    await hardCleanTestStudentRows();
+  });
+
   test('GET /api/school/missing returns missing list', async () => {
     const res = await request(app)
       .get('/api/school/missing?session=morning')

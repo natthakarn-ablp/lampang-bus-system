@@ -16,9 +16,35 @@ async function login(creds) {
   return res.body.data.access_token;
 }
 
+/**
+ * Phase 9.6 — hard-delete the test student's leave rows. The driver
+ * cancel endpoint is soft-cancel (preserves audit history), but the
+ * unique index uk_sl_date_student_session does not exclude cancelled
+ * rows, so a soft-cancelled leave still occupies the unique slot and
+ * the next POST for the same (date, student, session) returns 409.
+ */
+async function hardCleanTestStudentLeaves() {
+  const conn = await mysql.createConnection({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    database: process.env.DB_NAME || 'lampang_bus',
+    user: process.env.DB_USER || 'lampang',
+    password: process.env.DB_PASSWORD || '',
+    charset: 'utf8mb4',
+  });
+  await conn.query(`DELETE FROM student_leaves WHERE student_id = ?`, [TEST_STUDENT_ID]);
+  await conn.end();
+}
+
 beforeAll(async () => {
   driverToken = await login(DRIVER);
   schoolToken = await login(SCHOOL);
+});
+
+beforeEach(async () => {
+  // Each leave test in this suite expects a clean slate for the test
+  // student (otherwise the prior test's soft-cancelled row triggers 409).
+  await hardCleanTestStudentLeaves();
 });
 
 afterAll(async () => {

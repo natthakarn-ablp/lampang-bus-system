@@ -55,7 +55,9 @@ describe('POST /api/auth/login', () => {
       .send({ username: TEST_USER.username, password: WRONG_PASSWORD });
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
-    expect(res.body.message).toMatch(/invalid/i);
+    // Phase 9.6 — production API returns Thai (Phase 8.4 label work);
+    // assert a stable Thai substring instead of the old /invalid/i regex.
+    expect(res.body.message).toMatch(/ชื่อผู้ใช้หรือรหัสผ่าน/);
   });
 
   it('should return 200 with tokens for valid credentials', async () => {

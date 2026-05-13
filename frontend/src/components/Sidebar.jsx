@@ -24,33 +24,43 @@ const DRIVER_NAV = [
   { to: '/driver/profile',     icon: User,           label: 'ข้อมูลคนขับ' },
 ];
 
+// Phase 8.2 — school main crossed 10 items after Phase 7.11/7.12; split
+// into smaller cluster-groups and turn on collapsible so daily-use
+// sections (ภาพรวม / นักเรียนและรถ / แผนที่และตำแหน่ง) stay above the fold.
 const SCHOOL_NAV = [
   { section: 'ภาพรวม' },
   { to: '/school',               icon: BarChart3,     label: PAGE_TITLES.SCHOOL_DASHBOARD },
-  { section: 'ข้อมูลหลัก' },
+  { section: 'นักเรียนและรถรับส่ง' },
   { to: '/school/students',      icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
+  { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
+  { section: 'แผนที่และตำแหน่ง' },
   { to: '/school/pickup-map',    icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { to: '/school/live-vehicles', icon: Activity,      label: 'ตำแหน่งปัจจุบัน' },
+  { section: 'คำขอและบัญชี' },
   { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },
-  { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
+  { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
   { section: 'ติดตามและบันทึก' },
   { to: '/school/emergencies',   icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
-  { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
   { section: 'รายงาน' },
   { to: '/reports/daily',        icon: FileText,      label: 'รายงาน' },
 ];
 
+// Phase 8.2 — light grouping, no collapse (9 items). Surface the existing
+// /affiliation/schools route ("โรงเรียนในสังกัด") which was reachable but
+// not linked from the sidebar.
 const AFFILIATION_NAV = [
   { section: 'ภาพรวม' },
   { to: '/affiliation',             icon: BarChart3,     label: PAGE_TITLES.AFFILIATION_DASHBOARD },
-  { section: 'ข้อมูล' },
+  { section: 'ข้อมูลในสังกัด' },
+  { to: '/affiliation/schools',     icon: Building2,     label: 'โรงเรียนในสังกัด' },
   { to: '/affiliation/students',    icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/affiliation/vehicles',    icon: Bus,           label: 'รถรับส่ง' },
+  { section: 'แผนที่และตำแหน่ง' },
   { to: '/affiliation/live-vehicles', icon: Activity,    label: 'ตำแหน่งปัจจุบัน' },
   { to: '/affiliation/pickup-map',  icon: Map,           label: 'แผนที่จุดรับส่ง' },
-  { section: 'จัดการ' },
+  { section: 'คำขอและบัญชี' },
   { to: '/affiliation/accounts',    icon: Key,           label: 'จัดการบัญชีโรงเรียน' },
   { section: 'ติดตามและบันทึก' },
   { to: '/affiliation/emergencies', icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
@@ -59,17 +69,21 @@ const AFFILIATION_NAV = [
   { to: '/reports/daily',           icon: FileText,      label: 'รายงาน' },
 ];
 
+// Phase 8.2 — split the previous broad "ข้อมูล" group (6 items) into
+// "ข้อมูลพื้นฐาน" (read-only catalog) + "แผนที่และการกำกับติดตาม"
+// (live + pickup map). Same items, clearer mental model.
 const PROVINCE_NAV = [
   { section: 'ภาพรวม' },
   { to: '/province',              icon: BarChart3,     label: PAGE_TITLES.PROVINCE_DASHBOARD },
-  { section: 'ข้อมูล' },
+  { section: 'ข้อมูลพื้นฐาน' },
   { to: '/province/affiliations', icon: Landmark,      label: 'สังกัด' },
   { to: '/province/schools',      icon: Building2,     label: 'โรงเรียน' },
   { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/province/vehicles',     icon: Bus,           label: 'รถรับส่ง' },
+  { section: 'แผนที่และการกำกับติดตาม' },
   { to: '/province/live-vehicles', icon: Activity,     label: 'ตำแหน่งปัจจุบัน' },
   { to: '/province/pickup-map',   icon: Map,           label: 'แผนที่จุดรับส่ง' },
-  { section: 'ติดตาม' },
+  { section: 'ติดตามและบันทึก' },
   { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
   { section: 'รายงาน' },
@@ -84,28 +98,35 @@ const TRANSPORT_NAV = [
   { to: '/transport/inspections',  icon: ClipboardList, label: 'บันทึกตรวจสภาพ' },
 ];
 
+// Phase 8.2 — the old "ข้อมูลจังหวัด" mixed read-only province views with
+// management tools for school/affiliation/transport (per Phase 8.1
+// finding #2). Split into a pure province "มุมมองจังหวัด" group and a
+// dedicated "จัดการระบบ" group for cross-role admin tools, and merge
+// the analytics/reports cluster into "รายงานและวิเคราะห์".
 const ADMIN_NAV = [
-  { section: 'ระบบ' },
+  { section: 'ภาพรวม' },
   { to: '/admin',                 icon: Home,        label: 'ศูนย์ควบคุมระบบ' },
+  { section: 'จัดการระบบ' },
   { to: '/admin/users',           icon: Users,       label: 'จัดการผู้ใช้งาน' },
+  { to: '/school',                icon: Building2,   label: 'จัดการโรงเรียน' },
+  { to: '/affiliation/accounts',  icon: Key,         label: 'จัดการบัญชีโรงเรียน' },
+  { to: '/transport',             icon: Wrench,      label: 'ตรวจสภาพรถ' },
+  { section: 'ตรวจสอบและสนับสนุน' },
   { to: '/admin/pickup-points',   icon: Map,         label: 'ตรวจสอบจุดรับส่ง' },
   { to: '/admin/live-vehicles',   icon: ShieldAlert, label: 'ตรวจสอบตำแหน่งรถ' },
   { to: '/admin/audit-logs',      icon: FileText,    label: 'ประวัติการใช้งาน' },
   { to: '/admin/system-health',   icon: Activity,    label: 'สุขภาพระบบ' },
-  { section: 'การวิจัย' },
+  { section: 'มุมมองจังหวัด' },
+  { to: '/province',              icon: Map,         label: 'ภาพรวมจังหวัด' },
+  { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
+  { to: '/province/vehicles',     icon: Bus,         label: 'รถรับส่ง' },
+  { section: 'รายงานและวิเคราะห์' },
   { to: '/admin/measurement',     icon: Ruler,       label: 'กรอบวัดผลระบบ' },
   { to: '/admin/research',        icon: TrendingUp,  label: 'เปรียบ Baseline' },
   { to: '/admin/research-export', icon: Package,     label: 'ส่งออกข้อมูลวิจัย' },
   { to: '/admin/evaluation',      icon: Target,      label: 'ประเมินผลแยก Role' },
   { to: '/admin/executive',       icon: BarChart3,   label: 'สรุปผู้บริหาร' },
-  { section: 'ข้อมูลจังหวัด' },
-  { to: '/province',              icon: Map,         label: 'ภาพรวมจังหวัด' },
-  { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
-  { to: '/province/vehicles',     icon: Bus,         label: 'รถรับส่ง' },
   { to: '/reports/daily',         icon: FileText,    label: 'รายงาน' },
-  { to: '/school',                icon: Building2,   label: 'จัดการโรงเรียน' },
-  { to: '/affiliation/accounts',  icon: Key,         label: 'จัดการบัญชีโรงเรียน' },
-  { to: '/transport',             icon: Wrench,      label: 'ตรวจสภาพรถ' },
 ];
 
 const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATION_NAV, province: PROVINCE_NAV, transport: TRANSPORT_NAV, admin: ADMIN_NAV };
@@ -128,9 +149,16 @@ function navItemsForUser(user) {
   return base.filter(item => item.section || !TEACHER_BLOCKED_PATHS.has(item.to));
 }
 
-// Roles whose sidebar uses collapsible section groups.
-// Other roles get a flat list with static section headers.
-const COLLAPSIBLE_ROLES = new Set(['admin']);
+// Phase 8.2 — collapsible groups for roles that crossed the 10-item
+// threshold (admin always; school main after 7.11/7.12 brought it to 11
+// items). School grade teachers see only ~8 filtered items, so they keep
+// static headers so the active section is always visible.
+function isCollapsibleForUser(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.role === 'school' && !isGradeTeacher(user)) return true;
+  return false;
+}
 
 function buildGroups(items) {
   const groups = [];
@@ -147,7 +175,9 @@ function buildGroups(items) {
       current.items.push(item);
     }
   }
-  return groups;
+  // Phase 8.2 — drop section headers whose items were all filtered out
+  // (e.g. teacher-blocked routes). Keeps the grade-teacher sidebar tight.
+  return groups.filter(g => g.items.length > 0);
 }
 
 function isItemActive(toPath, pathname) {
@@ -174,7 +204,7 @@ export default function Sidebar({ onClose }) {
 
   const groups = useMemo(() => buildGroups(navItemsForUser(user)), [user?.role, user?.grade_scope, user?.gradeScope]);
   const teacherGrade = getGradeScope(user);
-  const useCollapsible = COLLAPSIBLE_ROLES.has(user?.role);
+  const useCollapsible = isCollapsibleForUser(user);
 
   const activeGroupKey = useMemo(() => {
     if (!useCollapsible) return null;
@@ -238,7 +268,7 @@ export default function Sidebar({ onClose }) {
         )}
       </div>
 
-      {/* Navigation — collapsible only for COLLAPSIBLE_ROLES, flat otherwise */}
+      {/* Navigation — collapsible only when isCollapsibleForUser, flat otherwise */}
       <nav className="flex-1 overflow-y-auto px-3 py-3">
         {groups.map((group, gi) => {
           const key = group.section || `__g${gi}`;

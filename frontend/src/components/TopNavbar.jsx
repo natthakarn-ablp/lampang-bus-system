@@ -40,21 +40,21 @@ export default function TopNavbar({ onOpenDrawer }) {
 
   return (
     <header className="sticky top-0 z-30 h-14 shrink-0 bg-surface-raised/85 backdrop-blur border-b border-surface-border">
-      <div className="h-full px-4 flex items-center gap-3">
+      <div className="h-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3">
         <button
           onClick={onOpenDrawer}
-          className="md:hidden p-2 -ml-2 rounded-lg text-ink-muted hover:bg-surface hover:text-ink transition"
+          className="md:hidden inline-flex items-center justify-center w-10 h-10 -ml-1 rounded-lg text-ink-muted hover:bg-surface hover:text-ink active:bg-surface-border transition"
           aria-label="เปิดเมนู"
         >
           <Menu className="w-5 h-5" strokeWidth={2} />
         </button>
 
-        <div className="md:hidden flex flex-col leading-tight">
-          <span className="text-sm font-bold text-ink">ระบบรถรับส่งนักเรียน</span>
-          <span className="text-[11px] text-ink-muted">จังหวัดลำปาง</span>
+        <div className="md:hidden flex flex-col leading-tight min-w-0 flex-1">
+          <span className="text-sm font-bold text-ink truncate">ระบบรถรับส่งนักเรียน</span>
+          <span className="text-[11px] text-ink-muted truncate">จังหวัดลำปาง</span>
         </div>
 
-        <div className="flex-1" />
+        <div className="hidden md:block flex-1" />
 
         <button
           type="button"
@@ -64,11 +64,11 @@ export default function TopNavbar({ onOpenDrawer }) {
           <Bell className="w-5 h-5" strokeWidth={2} />
         </button>
 
-        <div className="relative" ref={menuRef}>
+        <div className="relative shrink-0" ref={menuRef}>
           <button
             type="button"
             onClick={() => setMenuOpen(o => !o)}
-            className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-surface transition"
+            className="flex items-center gap-1.5 sm:gap-2 pl-1 pr-1.5 sm:pr-2 py-1 rounded-lg hover:bg-surface active:bg-surface-border transition min-h-[40px]"
             aria-haspopup="menu"
             aria-expanded={menuOpen}
           >

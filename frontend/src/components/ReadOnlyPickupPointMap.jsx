@@ -79,7 +79,7 @@ export default function ReadOnlyPickupPointMap({
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
       {/* Left: list of points */}
       <DashboardSection title="รายการจุดรับส่ง" description={`${points.length} จุด`}>
-        <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-[50vh] lg:max-h-[60vh] overflow-y-auto pr-1">
           {points.map(p => {
             const key = rowKey(p);
             return (
@@ -98,7 +98,7 @@ export default function ReadOnlyPickupPointMap({
 
       {/* Right: the map */}
       <DashboardSection title="แผนที่">
-        <div className="h-[60vh] min-h-[400px] rounded-xl overflow-hidden border border-surface-border">
+        <div className="h-[50vh] min-h-[320px] lg:h-[60vh] lg:min-h-[400px] rounded-xl overflow-hidden border border-surface-border">
           {hasAnyCoords ? (
             <InnerMap
               points={validPoints}

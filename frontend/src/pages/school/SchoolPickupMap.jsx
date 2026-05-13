@@ -71,13 +71,13 @@ export default function SchoolPickupMap() {
       </header>
 
       {/* Filter strip — session pills, vehicle dropdown, add button */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <SessionFilter value={sessionFilter} onChange={setSessionFilter} />
         {vehicleOptions.length > 0 && (
           <select
             value={vehicleFilter}
             onChange={e => setVehicleFilter(e.target.value)}
-            className="text-sm border border-surface-border rounded-lg px-3 py-1.5 bg-surface text-ink"
+            className="text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink min-h-[40px] flex-1 sm:flex-none min-w-0"
           >
             <option value="all">รถทุกคัน</option>
             {vehicleOptions.map(v => (
@@ -89,7 +89,7 @@ export default function SchoolPickupMap() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="ml-auto inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg transition"
+            className="w-full sm:w-auto sm:ml-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-2.5 rounded-lg transition min-h-[40px]"
           >
             <Plus className="w-4 h-4" strokeWidth={2.5} />
             เพิ่มจุดรับส่ง
@@ -111,7 +111,7 @@ export default function SchoolPickupMap() {
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
           {/* Left/top: list of points (click → highlight on map) */}
           <DashboardSection title="รายการจุดรับส่ง" description={`${filteredPoints.length} จุด`}>
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[50vh] lg:max-h-[60vh] overflow-y-auto pr-1">
               {filteredPoints.map(p => (
                 <PickupPointRow
                   key={p.id}
@@ -126,7 +126,7 @@ export default function SchoolPickupMap() {
 
           {/* Right/bottom: the map */}
           <DashboardSection title="แผนที่">
-            <div className="h-[60vh] min-h-[400px] rounded-xl overflow-hidden border border-surface-border">
+            <div className="h-[50vh] min-h-[320px] lg:h-[60vh] lg:min-h-[400px] rounded-xl overflow-hidden border border-surface-border">
               <PickupMap
                 points={filteredPoints}
                 selectedPointId={selectedId}
@@ -478,11 +478,11 @@ function CreatePickupModal({ onClose, onCreated }) {
             </AlertBanner>
           )}
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border min-h-[40px]">
               ยกเลิก
             </button>
-            <button type="submit" disabled={saving || !form.vehicle_id} className="px-4 py-2 text-sm rounded-lg bg-brand hover:bg-brand-700 text-white disabled:opacity-60">
+            <button type="submit" disabled={saving || !form.vehicle_id} className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-brand hover:bg-brand-700 text-white disabled:opacity-60 min-h-[40px]">
               {saving ? 'กำลังบันทึก…' : 'บันทึก'}
             </button>
           </div>

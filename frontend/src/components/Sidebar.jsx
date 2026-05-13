@@ -243,7 +243,7 @@ export default function Sidebar({ onClose }) {
   }
 
   return (
-    <aside className="w-64 md:w-56 shrink-0 h-full bg-blue-800 text-white flex flex-col">
+    <aside className="w-full md:w-56 shrink-0 h-full bg-blue-800 text-white flex flex-col">
       {/* Brand */}
       <div className="px-5 py-5 border-b border-blue-700 shrink-0 flex items-start justify-between">
         <div>
@@ -251,7 +251,11 @@ export default function Sidebar({ onClose }) {
           <p className="text-blue-300 text-xs mt-0.5">จังหวัดลำปาง</p>
         </div>
         {onClose && (
-          <button onClick={onClose} className="md:hidden p-1 -mr-1 -mt-1 rounded-md hover:bg-blue-700 transition" aria-label="ปิดเมนู">
+          <button
+            onClick={onClose}
+            className="md:hidden -mr-2 -mt-1 inline-flex items-center justify-center w-10 h-10 rounded-md hover:bg-blue-700 active:bg-blue-600 transition"
+            aria-label="ปิดเมนู"
+          >
             <X className="w-5 h-5" strokeWidth={2} />
           </button>
         )}
@@ -284,11 +288,11 @@ export default function Sidebar({ onClose }) {
                   onClick={() => toggleSection(key)}
                   aria-expanded={isOpen}
                   aria-controls={panelId}
-                  className={`w-full flex items-center justify-between px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-blue-400 hover:text-blue-200 transition ${gi === 0 ? 'pt-1' : 'pt-4'}`}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-[10px] font-semibold uppercase tracking-wider text-blue-400 hover:text-blue-200 hover:bg-blue-700/40 active:bg-blue-700/60 transition ${gi === 0 ? 'mt-0' : 'mt-2'}`}
                 >
                   <span>{group.section}</span>
                   <ChevronDown
-                    className={`w-3 h-3 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
                     strokeWidth={2.5}
                     aria-hidden="true"
                   />
@@ -316,13 +320,13 @@ export default function Sidebar({ onClose }) {
                       end={item.to.split('/').length === 2}
                       tabIndex={isOpen ? 0 : -1}
                       className={({ isActive }) =>
-                        `flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition mb-0.5 ${
-                          isActive ? 'bg-white text-blue-800 font-semibold' : 'text-blue-100 hover:bg-blue-700'
+                        `flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm transition mb-0.5 min-h-[40px] ${
+                          isActive ? 'bg-white text-blue-800 font-semibold' : 'text-blue-100 hover:bg-blue-700 active:bg-blue-600'
                         }`
                       }
                     >
                       {item.icon && <item.icon className="w-4 h-4 shrink-0" strokeWidth={2} />}
-                      <span>{item.label}</span>
+                      <span className="truncate">{item.label}</span>
                     </NavLink>
                   ))}
                 </div>
@@ -333,9 +337,9 @@ export default function Sidebar({ onClose }) {
       </nav>
 
       {/* Logout */}
-      <div className="px-5 py-4 border-t border-blue-700 shrink-0">
+      <div className="px-5 py-3 border-t border-blue-700 shrink-0">
         <button onClick={handleLogout}
-          className="w-full text-sm text-blue-200 hover:text-white hover:bg-blue-700 rounded-lg px-4 py-2 transition">
+          className="w-full text-sm text-blue-200 hover:text-white hover:bg-blue-700 active:bg-blue-600 rounded-lg px-4 py-2.5 min-h-[40px] transition">
           ออกจากระบบ
         </button>
       </div>

@@ -157,7 +157,7 @@ export default function SchoolLiveVehicles() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
           <DashboardSection title="รายการรถ" description={`${vehicles.length} คัน`}>
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[50vh] lg:max-h-[60vh] overflow-y-auto pr-1">
               {vehicles.map(v => (
                 <VehicleRow
                   key={v.vehicle_id}
@@ -175,7 +175,7 @@ export default function SchoolLiveVehicles() {
                 เมื่อคนขับเปิด "เริ่มส่งตำแหน่ง" จากหน้า Dashboard ของตน รถจะปรากฏบนแผนที่ทันที
               </AlertBanner>
             ) : (
-              <div className="h-[60vh] min-h-[400px] rounded-xl overflow-hidden border border-surface-border">
+              <div className="h-[55vh] min-h-[340px] lg:h-[60vh] lg:min-h-[400px] rounded-xl overflow-hidden border border-surface-border">
                 <LiveVehicleMap
                   vehicles={vehicles}
                   selectedVehicleId={selectedId}

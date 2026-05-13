@@ -213,34 +213,36 @@ export default function UserManagement() {
             {users.map(u => (
               <div key={u.id} className="bg-white rounded-xl border border-gray-200 p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <div>
-                    <p className="text-base font-bold text-gray-900">{u.username}</p>
-                    <p className="text-sm text-gray-500">{u.display_name || '-'}</p>
+                  <div className="min-w-0">
+                    <p className="text-base font-bold text-gray-900 truncate">{u.username}</p>
+                    <p className="text-sm text-gray-500 truncate">{u.display_name || '-'}</p>
                   </div>
-                  <StatusBadge active={u.is_active} mustChange={u.must_change_password} />
+                  <div className="shrink-0">
+                    <StatusBadge active={u.is_active} mustChange={u.must_change_password} />
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2 text-sm mb-3">
                   <RoleBadge role={u.role} />
-                  {u.scope_name && <span className="text-gray-400">{u.scope_name}</span>}
+                  {u.scope_name && <span className="text-gray-400 truncate">{u.scope_name}</span>}
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => openEdit(u)} className="flex-1 text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 py-2 rounded-lg font-medium">แก้ไข</button>
-                  <button onClick={() => openReset(u)} className="flex-1 text-sm text-amber-700 bg-amber-50 hover:bg-amber-100 py-2 rounded-lg font-medium">รีเซ็ตรหัส</button>
-                  <button onClick={() => handleDelete(u)} className="text-sm text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg">ลบ</button>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => openEdit(u)} className="flex-1 min-w-[80px] text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 py-2.5 rounded-lg font-medium min-h-[40px]">แก้ไข</button>
+                  <button onClick={() => openReset(u)} className="flex-1 min-w-[100px] text-sm text-amber-700 bg-amber-50 hover:bg-amber-100 py-2.5 rounded-lg font-medium min-h-[40px]">รีเซ็ตรหัส</button>
+                  <button onClick={() => handleDelete(u)} className="text-sm text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2.5 rounded-lg min-h-[40px]">ลบ</button>
                 </div>
               </div>
             ))}
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-4 text-sm text-gray-500">
             <span>แสดง {users.length} จาก {meta.total}</span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button onClick={() => fetchUsers(meta.page - 1)} disabled={meta.page <= 1}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-              <span className="px-3 py-2">{meta.page}/{totalPages}</span>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 min-h-[40px]">ก่อนหน้า</button>
+              <span className="px-3 py-2 tabular-nums">{meta.page}/{totalPages}</span>
               <button onClick={() => fetchUsers(meta.page + 1)} disabled={meta.page >= totalPages}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 min-h-[40px]">ถัดไป</button>
             </div>
           </div>
         </>

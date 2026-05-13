@@ -154,10 +154,10 @@ export default function SchoolTeacherAccounts() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+      <header className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-            <Users className="w-6 h-6 text-brand" strokeWidth={2} />
+            <Users className="w-6 h-6 text-brand shrink-0" strokeWidth={2} />
             บัญชีครูประจำสายชั้น
           </h1>
           <p className="text-sm text-ink-muted mt-1">
@@ -167,7 +167,7 @@ export default function SchoolTeacherAccounts() {
         <button
           type="button"
           onClick={openCreate}
-          className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-2.5 sm:py-2 rounded-lg transition min-h-[40px]"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} />
           เพิ่มบัญชีครู
@@ -218,14 +218,14 @@ export default function SchoolTeacherAccounts() {
                     <td className="px-4 py-3 text-xs text-ink-muted tabular-nums">{formatDateTime(a.last_login)}</td>
                     <td className="px-4 py-3 text-xs text-ink-muted tabular-nums">{formatDateTime(a.created_at)}</td>
                     <td className="px-4 py-3">
-                      <div className="flex justify-center gap-1">
+                      <div className="flex justify-center gap-1 flex-wrap">
                         <button onClick={() => openReset(a)}
-                          className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded">
+                          className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1.5 rounded whitespace-nowrap">
                           <KeyRound className="w-3.5 h-3.5" strokeWidth={2} />
                           รีเซ็ตรหัส
                         </button>
                         <button onClick={() => openDelete(a)}
-                          className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1 rounded">
+                          className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-nowrap">
                           <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
                           ลบ
                         </button>
@@ -262,13 +262,13 @@ export default function SchoolTeacherAccounts() {
             <p className="text-[11px] text-ink-muted">
               บัญชีครูประจำสายชั้นเป็นสิทธิ์อ่านอย่างเดียว เห็นข้อมูลเฉพาะระดับชั้นที่เลือก
             </p>
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
               <button type="button" onClick={() => { setModal(null); setForm({}); }}
-                className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border">
+                className="px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border min-h-[40px]">
                 ยกเลิก
               </button>
               <button type="button" onClick={handleCreate} disabled={saving}
-                className="px-4 py-2 text-sm rounded-lg bg-brand hover:bg-brand-700 text-white disabled:opacity-60">
+                className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-brand hover:bg-brand-700 text-white disabled:opacity-60 min-h-[40px]">
                 {saving ? 'กำลังสร้าง…' : 'สร้างบัญชี'}
               </button>
             </div>
@@ -296,7 +296,7 @@ export default function SchoolTeacherAccounts() {
                 ยกเลิก
               </button>
               <button type="button" onClick={handleReset} disabled={saving}
-                className="px-4 py-2 text-sm rounded-lg bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-60">
+                className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-60 min-h-[40px]">
                 {saving ? 'กำลังบันทึก…' : 'รีเซ็ตรหัสผ่าน'}
               </button>
             </div>
@@ -313,13 +313,13 @@ export default function SchoolTeacherAccounts() {
           <p className="text-xs text-ink-muted mb-3">
             การลบเป็นแบบ soft-delete — บัญชีจะใช้งานไม่ได้ทันที แต่ประวัติการดำเนินการยังถูกเก็บไว้
           </p>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
             <button type="button" onClick={() => { setModal(null); setSelected(null); }}
-              className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border">
+              className="px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border min-h-[40px]">
               ยกเลิก
             </button>
             <button type="button" onClick={handleDelete} disabled={saving}
-              className="px-4 py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60">
+              className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60 min-h-[40px]">
               {saving ? 'กำลังลบ…' : 'ลบบัญชี'}
             </button>
           </div>

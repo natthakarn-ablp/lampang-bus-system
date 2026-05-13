@@ -43,7 +43,7 @@ export default function SchoolApprovals() {
       <div className="flex gap-2 mb-4">
         {['pending', 'approved', 'rejected'].map(s => (
           <button key={s} onClick={() => setFilter(s)}
-            className={`flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium rounded-lg transition ${filter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            className={`flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium rounded-lg transition min-h-[40px] ${filter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
             {s === 'pending' ? 'รออนุมัติ' : s === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว'}
           </button>
         ))}
@@ -56,20 +56,22 @@ export default function SchoolApprovals() {
       ) : (
         <div className="space-y-3">
           {requests.map(r => (
-            <div key={r.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{TYPE_LABEL[r.request_type]} — {r.student_name}</p>
-                  <p className="text-xs text-gray-500">
+            <div key={r.id} className="bg-white rounded-xl border border-gray-200 px-4 sm:px-5 py-4">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800 break-words">{TYPE_LABEL[r.request_type]} — {r.student_name}</p>
+                  <p className="text-xs text-gray-500 break-words">
                     รถ: {r.plate_no} · {r.grade && r.classroom ? `${r.grade}/${r.classroom}` : ''} · ขอโดย: {r.requested_by_name || '-'}
                   </p>
-                  {r.reason && <p className="text-xs text-gray-400 mt-0.5">เหตุผล: {r.reason}</p>}
+                  {r.reason && <p className="text-xs text-gray-400 mt-0.5 break-words">เหตุผล: {r.reason}</p>}
                   <p className="text-xs text-gray-400 mt-0.5">
                     {new Date(r.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     {r.review_note && <> · หมายเหตุ: {r.review_note}</>}
                   </p>
                 </div>
-                <ApprovalBadge status={r.status} />
+                <div className="shrink-0">
+                  <ApprovalBadge status={r.status} />
+                </div>
               </div>
 
               {r.status === 'pending' && !isTeacher && (

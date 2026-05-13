@@ -71,23 +71,23 @@ export default function ProvStudentSearch() {
           placeholder="ค้นหาชื่อ นามสกุล หรือรหัส…"
           className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
         />
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <select value={grade} onChange={(e) => setGrade(e.target.value)}
-            className="flex-1 min-w-[100px] border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            className="w-full min-w-0 border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
             <option value="">ทุกชั้น</option>
             {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map((g) => (
               <option key={g} value={g}>{g}</option>
             ))}
           </select>
           <select value={affFilter} onChange={(e) => { setAffFilter(e.target.value); setSchoolFilter(''); }}
-            className="flex-1 min-w-[120px] border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            className="w-full min-w-0 border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
             <option value="">ทุกสังกัด</option>
             {affiliations.map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
           </select>
           <select value={schoolFilter} onChange={(e) => setSchoolFilter(e.target.value)}
-            className="flex-1 min-w-[120px] border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            className="w-full min-w-0 border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
             <option value="">ทุกโรงเรียน</option>
             {schools.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
@@ -175,14 +175,14 @@ export default function ProvStudentSearch() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-4 text-sm text-gray-500">
             <span>แสดง {students.length} จาก {meta.total}</span>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button onClick={() => fetchStudents(meta.page - 1)} disabled={meta.page <= 1}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-              <span className="px-3 py-2">{meta.page}/{totalPages}</span>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 min-h-[40px]">ก่อนหน้า</button>
+              <span className="px-3 py-2 tabular-nums">{meta.page}/{totalPages}</span>
               <button onClick={() => fetchStudents(meta.page + 1)} disabled={meta.page >= totalPages}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 min-h-[40px]">ถัดไป</button>
             </div>
           </div>
         </>

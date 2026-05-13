@@ -143,18 +143,18 @@ function FilterBar({ filters, setFilters, onApply, onReset, loading }) {
         label="รหัสรถ" placeholder="เช่น V-…"
         value={filters.vehicle_id} onChange={(v) => update('vehicle_id', v)}
       />
-      <div className="flex gap-2 ml-auto">
+      <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 disabled:bg-brand/60 text-white text-sm font-medium px-3 py-2 rounded-lg transition"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-700 disabled:bg-brand/60 text-white text-sm font-medium px-3 py-2.5 sm:py-2 rounded-lg transition min-h-[40px]"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} strokeWidth={2} />
           {loading ? 'กำลังโหลด…' : 'ใช้ตัวกรอง'}
         </button>
         <button
           type="button" onClick={onReset} disabled={loading}
-          className="text-sm text-ink-muted hover:text-ink px-3 py-2 rounded-lg transition disabled:opacity-50"
+          className="text-sm text-ink-muted hover:text-ink px-3 py-2.5 sm:py-2 rounded-lg transition disabled:opacity-50 min-h-[40px]"
         >
           ล้างตัวกรอง
         </button>
@@ -165,11 +165,11 @@ function FilterBar({ filters, setFilters, onApply, onReset, loading }) {
 
 function FieldInput({ label, value, onChange, placeholder }) {
   return (
-    <label className="flex flex-col text-xs text-ink-muted min-w-[160px]">
+    <label className="flex flex-col text-xs text-ink-muted w-full sm:w-auto sm:min-w-[160px]">
       <span className="mb-1">{label}</span>
       <input
         type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="text-sm border border-surface-border rounded-lg px-3 py-1.5 bg-surface text-ink"
+        className="text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink min-h-[40px]"
       />
     </label>
   );
@@ -177,11 +177,11 @@ function FieldInput({ label, value, onChange, placeholder }) {
 
 function FieldSelect({ label, value, onChange, options }) {
   return (
-    <label className="flex flex-col text-xs text-ink-muted min-w-[140px]">
+    <label className="flex flex-col text-xs text-ink-muted w-full sm:w-auto sm:min-w-[140px]">
       <span className="mb-1">{label}</span>
       <select
         value={value} onChange={(e) => onChange(e.target.value)}
-        className="text-sm border border-surface-border rounded-lg px-3 py-1.5 bg-surface text-ink"
+        className="text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink min-h-[40px]"
       >
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>

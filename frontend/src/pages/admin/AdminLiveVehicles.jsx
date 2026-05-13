@@ -178,7 +178,7 @@ export default function AdminLiveVehicles() {
         และทุกการเปิดดูจะถูกบันทึกใน audit log อัตโนมัติ
       </AlertBanner>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         <KpiCard icon={Bus}            label="รถทั้งหมด"               value={vehicles.length} variant="neutral" />
         <KpiCard icon={Users}          label="นักเรียนที่เกี่ยวข้อง"     value={counts.students} variant="brand"   />
         <KpiCard icon={Activity}       label="ออนไลน์"                  value={counts.online}   variant="success" />
@@ -263,7 +263,7 @@ export default function AdminLiveVehicles() {
                 title="รายการรถ"
                 description={`${visible.length} / ${vehicles.length} คัน`}
               >
-                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[50vh] lg:max-h-[60vh] overflow-y-auto pr-1">
                   {visible.map(v => (
                     <VehicleRow
                       key={v.vehicle_id}
@@ -281,7 +281,7 @@ export default function AdminLiveVehicles() {
                     รถที่ผ่านตัวกรองไม่มีพิกัดจริงแสดงบนแผนที่
                   </AlertBanner>
                 ) : (
-                  <div className="h-[60vh] min-h-[400px] rounded-xl overflow-hidden border border-surface-border">
+                  <div className="h-[55vh] min-h-[340px] lg:h-[60vh] lg:min-h-[400px] rounded-xl overflow-hidden border border-surface-border">
                     <LiveVehicleMap
                       vehicles={visible}
                       selectedVehicleId={selectedId}
@@ -347,7 +347,7 @@ function VehicleRow({ vehicle, selected, onClick }) {
               {vehicle.vehicle_id}
             </p>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end max-w-[55%]">
             <StatusBadge variant={meta.variant} size="sm">{meta.label}</StatusBadge>
             {vehicle.low_accuracy && (
               <StatusBadge variant="info" size="sm">ความแม่นยำต่ำ</StatusBadge>

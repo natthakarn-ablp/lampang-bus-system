@@ -15,7 +15,13 @@ export default function Layout({ children, bottomNav = null }) {
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+    <div
+      className="flex h-screen overflow-hidden bg-surface"
+      style={{
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+    >
       {/* Desktop sidebar (≥md) */}
       <div className="hidden md:flex">
         <Sidebar />
@@ -25,7 +31,10 @@ export default function Layout({ children, bottomNav = null }) {
       {drawerOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={closeDrawer} />
-          <div className="relative z-50 w-64 h-full animate-slide-in-left">
+          <div
+            className="relative z-50 w-[82vw] max-w-[300px] min-w-[260px] h-full animate-slide-in-left"
+            style={{ paddingTop: 'env(safe-area-inset-top)' }}
+          >
             <Sidebar onClose={closeDrawer} />
           </div>
         </div>

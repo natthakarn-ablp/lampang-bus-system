@@ -185,7 +185,7 @@ export default function SchoolDashboard() {
           <DashboardSection
             title={SECTION_TITLES.VEHICLE_STATUS}
             description={`${filtered.length} คัน${plateSearch ? ' (กรอง)' : ''}`}
-            action={<PlateSearchInput value={plateSearch} onChange={setPlateSearch} />}
+            action={<PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />}
           >
             {filtered.length === 0 ? (
               <AppCard padding="lg" className="py-12 text-center">

@@ -231,7 +231,7 @@ export default function AdminLiveVehicles() {
               onChange={setSearch}
               suggestions={vehicles}
               placeholder="ค้นหาทะเบียน หรือชื่อคนขับ…"
-              className="flex-1 min-w-0"
+              className="w-full sm:flex-1 min-w-0"
               inputClassName="w-full text-sm border border-surface-border rounded-lg pl-9 pr-3 py-2 bg-surface text-ink"
               leadingIcon={<Search className="w-4 h-4" strokeWidth={2} />}
             />

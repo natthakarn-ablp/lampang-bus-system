@@ -43,6 +43,13 @@ export default function PlateSearchInput({
   placeholder,
   suggestions,
   maxSuggestions = 8,
+  // Phase 9.12 — optional styling overrides so callers can fit the input
+  // into wider layouts (admin support page, dashboard headers, etc.) and
+  // attach a leading icon. All three default to the original Phase 9.9
+  // styling so the six existing consumers keep working without changes.
+  className,
+  inputClassName,
+  leadingIcon,
 }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -132,12 +139,25 @@ export default function PlateSearchInput({
     if (v.driver_name) return v.driver_name;
     if (v.school_name) return v.school_name;
     if (v.school_names) return v.school_names;
+    if (v.affiliation_name) return v.affiliation_name;
     if (v.vehicle_type) return v.vehicle_type;
     return '';
   }
 
+  const wrapperCls = className || 'w-full sm:w-64';
+  const inputCls = inputClassName ||
+    'w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
+
   return (
-    <div ref={wrapRef} className="relative w-full sm:w-64">
+    <div ref={wrapRef} className={`relative ${wrapperCls}`}>
+      {leadingIcon && (
+        <span
+          aria-hidden="true"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted pointer-events-none flex items-center"
+        >
+          {leadingIcon}
+        </span>
+      )}
       <input
         type="text"
         value={value}
@@ -145,7 +165,7 @@ export default function PlateSearchInput({
         onFocus={() => setOpen(true)}
         onKeyDown={onKeyDown}
         placeholder={placeholder || 'ค้นหาทะเบียนรถ…'}
-        className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        className={inputCls}
         role={hasSuggestions ? 'combobox' : undefined}
         aria-expanded={hasSuggestions ? showPopover : undefined}
         aria-controls={hasSuggestions ? listboxId : undefined}

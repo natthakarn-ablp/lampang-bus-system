@@ -8,6 +8,7 @@ import { AppCard, AlertBanner, StatusBadge, DashboardSection, LiveKpiCard } from
 import LiveVehicleMap from '../../components/LiveVehicleMap';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
+import PlateSearchInput from '../../components/PlateSearchInput';
 import {
   getStatusMeta,
   getStatusHelpText,
@@ -225,16 +226,15 @@ export default function AdminLiveVehicles() {
       ) : (
         <>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="relative flex-1 min-w-0">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" strokeWidth={2} />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="ค้นหาทะเบียน หรือชื่อคนขับ…"
-                className="w-full text-sm border border-surface-border rounded-lg pl-9 pr-3 py-2 bg-surface text-ink"
-              />
-            </div>
+            <PlateSearchInput
+              value={search}
+              onChange={setSearch}
+              suggestions={vehicles}
+              placeholder="ค้นหาทะเบียน หรือชื่อคนขับ…"
+              className="flex-1 min-w-0"
+              inputClassName="w-full text-sm border border-surface-border rounded-lg pl-9 pr-3 py-2 bg-surface text-ink"
+              leadingIcon={<Search className="w-4 h-4" strokeWidth={2} />}
+            />
             <div className="flex gap-1.5 flex-wrap">
               {FILTERS.map(opt => {
                 const active = filter === opt.key;

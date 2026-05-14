@@ -508,4 +508,74 @@ printed. `.claude/settings.json` untracked is downgraded to WARN, not FAIL.
 
 ---
 
-*Document updated: 2026-05-14 (Phase 9.15 — health smoke script)*
+## 13. Phase 9.16 Smoke Baseline Constants
+
+The Phase 9.15 smoke script (`scripts/health-smoke.sh`) treats three known
+historical signals as `[BASELINE]` rather than `[WARN]`, so a normal run
+reports `HEALTH SMOKE PASSED WITH BASELINED OBSERVATIONS` instead of
+recurring warnings every time. New incidents that push a metric past its
+baseline still surface as `[WARN]` or `[FAIL]`.
+
+### 13.1 Constants
+
+The constants are declared near the top of `scripts/health-smoke.sh`:
+
+| Constant | Default | Meaning |
+|---|---|---|
+| `BASELINE_INNODB_ROW_LOCK_WAITS` | `16` | Lifetime `Innodb_row_lock_waits` captured at end of the 2026-05-13 disk-pressure incident. Values ≤ this with current waits = 0 are baseline. |
+| `BASELINE_PM2_CRITICAL_MATCHES` | `7` | Number of historical critical-pattern matches in `~/.pm2/logs/schoolbus-backend-error.log` (lines 712–718) from the same incident. A count exactly equal to this is baseline. |
+| `BASELINE_MYSQL_UPTIME_GUARD_SECONDS` | `86400` (24 h) | If MySQL `Uptime` is below this, the InnoDB baseline is disabled — the counter is fresh and any nonzero value is genuinely new. |
+
+### 13.2 Decision tree — InnoDB row-lock waits
+
+| Condition | Result |
+|---|---|
+| `current_waits > 0` | `[FAIL]` — active contention |
+| `current_waits = 0` AND `lifetime = 0` | `[PASS]` |
+| `current_waits = 0` AND MySQL `Uptime < 24h` | `[WARN]` — baseline disabled, counter is fresh |
+| `current_waits = 0` AND `lifetime ≤ 16` AND `Uptime ≥ 24h` | `[BASELINE]` |
+| `current_waits = 0` AND `lifetime > 16` AND `Uptime ≥ 24h` | `[WARN]` — new contention beyond baseline |
+
+### 13.3 Decision tree — PM2 critical log matches
+
+| Condition | Result |
+|---|---|
+| 0 matches | `[PASS]` |
+| `count == 7` | `[BASELINE]` (historical entries; first 3 shown for traceability) |
+| `count < 7` | `[BASELINE]` — logs likely rotated; operator should reset baseline |
+| `count > 7` | `[WARN]` — `(count − 7)` new critical entries; last 20 shown |
+
+### 13.4 NOT baselined (still WARN)
+
+- `/health.commit ≠ git HEAD` — service may need restart to pick up new code
+- Tracked working-tree modifications — still `[FAIL]`
+- Untracked files **other than** `.claude/settings.json` — still `[WARN]`
+
+### 13.5 Reset procedure after operational events
+
+After the following events, the operator should review and adjust the
+baseline constants in `scripts/health-smoke.sh`:
+
+- **MySQL restart** — `Innodb_row_lock_waits` resets to 0. The script's
+  uptime guard automatically disables the baseline for 24 h. After 24 h, set
+  `BASELINE_INNODB_ROW_LOCK_WAITS=0` (or the new clean lifetime value).
+- **PM2 log rotation** (e.g., after the housekeeping timer runs) — the
+  historical lines 712–718 will be archived. Run the script once; if it
+  reports `count < 7`, set `BASELINE_PM2_CRITICAL_MATCHES=0` (or the new
+  count if some entries survive in the rotated tail).
+- **New incident** — after diagnosing and resolving a real WARN/FAIL, if the
+  metric stabilizes at a new higher value, update the baseline upward only
+  with explicit reasoning in the commit message.
+
+### 13.6 Known limitation
+
+The script does not fingerprint individual log lines. If exactly 7
+historical lines rotate out **and** exactly 7 new critical lines appear
+between two runs, the count remains 7 and the script will continue to
+report `[BASELINE]`. Mitigation: run the script frequently enough that
+single-event deltas are visible (rotation events are weekly; a daily smoke
+run will catch the rotation transition the next morning).
+
+---
+
+*Document updated: 2026-05-14 (Phase 9.16 — smoke baseline constants)*

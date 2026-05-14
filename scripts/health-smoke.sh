@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════
-# Lampang Bus System — Production Health Smoke Script (Phase 9.15)
+# Lampang Bus System — Production Health Smoke Script (Phase 9.16)
 #
 # Purpose:  Read-only post-deploy / post-incident smoke check.
 #           Verifies frontend, backend /health, PM2, disk, MySQL lock state,
@@ -9,8 +9,15 @@
 # Usage:    bash scripts/health-smoke.sh
 #           (runnable from any cwd — it auto-locates the repo root)
 #
-# Exit:     0   all PASS, or PASS + WARN only
+# Exit:     0   all PASS / BASELINE / WARN
 #           1   one or more FAIL
+#
+# Result labels:
+#   [PASS]      check succeeded
+#   [BASELINE]  known historical signal acknowledged (does NOT exit 1)
+#   [WARN]      unexpected but non-blocking — investigate
+#   [FAIL]      blocking — exit 1
+#   [SKIP]      check could not be performed (missing tool/file)
 #
 # Safety:   no sudo, no restarts, no writes, no DB mutations, no secrets in
 #           output, no file deletions. Safe to run during traffic.
@@ -27,6 +34,26 @@ HOUSEKEEPING_TIMER="schoolbus-housekeeping.timer"
 DISK_WARN_PCT=80
 DISK_FAIL_PCT=90
 PM2_LOG_DIR="$HOME/.pm2/logs"
+
+# ─── Phase 9.16 baselines ──────────────────────────────────────────────────
+# Known historical signals from the 2026-05-13 pre-Phase-9.2 disk-pressure
+# incident. Each baseline is paired with a rule that promotes the signal back
+# to WARN/FAIL when a *new* event would push the metric past the baseline.
+# See docs/phase-9-ops-notes.md Section 13 for reset procedures.
+
+# InnoDB lifetime row-lock waits captured at end-of-incident. Current waits
+# must still be 0; lifetime must be ≤ this number to count as baseline.
+BASELINE_INNODB_ROW_LOCK_WAITS=16
+
+# Number of critical-pattern matches in PM2 error log captured at end-of-
+# incident (lines 712–718 of schoolbus-backend-error.log on 2026-05-13).
+BASELINE_PM2_CRITICAL_MATCHES=7
+
+# Safeguard: if MySQL Uptime is below this many seconds, ignore the lifetime
+# baseline. A fresh server hasn't accumulated the historical residue, so any
+# nonzero counter is genuinely new. 86400 s = 24 h.
+BASELINE_MYSQL_UPTIME_GUARD_SECONDS=86400
+
 TMP_HEALTH="$(mktemp -t health-smoke.XXXXXX.json)"
 trap 'rm -f "$TMP_HEALTH"' EXIT
 
@@ -36,16 +63,18 @@ PASS_COUNT=0
 WARN_COUNT=0
 FAIL_COUNT=0
 SKIP_COUNT=0
+BASELINE_COUNT=0
 
-color()  { local c="$1"; shift; printf '\033[%sm%s\033[0m' "$c" "$*"; }
-pass()   { PASS_COUNT=$((PASS_COUNT + 1)); printf "  %s %s\n" "$(color '1;32' '[PASS]')" "$*"; }
-warn()   { WARN_COUNT=$((WARN_COUNT + 1)); printf "  %s %s\n" "$(color '1;33' '[WARN]')" "$*"; }
-fail()   { FAIL_COUNT=$((FAIL_COUNT + 1)); printf "  %s %s\n" "$(color '1;31' '[FAIL]')" "$*"; }
-skip()   { SKIP_COUNT=$((SKIP_COUNT + 1)); printf "  %s %s\n" "$(color '1;34' '[SKIP]')" "$*"; }
-section() { printf "\n%s\n" "$(color '1;36' "── $* ──")"; }
+color()    { local c="$1"; shift; printf '\033[%sm%s\033[0m' "$c" "$*"; }
+pass()     { PASS_COUNT=$((PASS_COUNT + 1));         printf "  %s %s\n" "$(color '1;32' '[PASS]')"     "$*"; }
+warn()     { WARN_COUNT=$((WARN_COUNT + 1));         printf "  %s %s\n" "$(color '1;33' '[WARN]')"     "$*"; }
+fail()     { FAIL_COUNT=$((FAIL_COUNT + 1));         printf "  %s %s\n" "$(color '1;31' '[FAIL]')"     "$*"; }
+skip()     { SKIP_COUNT=$((SKIP_COUNT + 1));         printf "  %s %s\n" "$(color '1;34' '[SKIP]')"     "$*"; }
+baseline() { BASELINE_COUNT=$((BASELINE_COUNT + 1)); printf "  %s %s\n" "$(color '1;35' '[BASELINE]')" "$*"; }
+section()  { printf "\n%s\n" "$(color '1;36' "── $* ──")"; }
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║  Lampang Bus System — Health Smoke (Phase 9.15)      ║"
+echo "║  Lampang Bus System — Health Smoke (Phase 9.16)      ║"
 echo "╚══════════════════════════════════════════════════════╝"
 printf "Time:     %s\n" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 printf "Repo:     %s\n" "$APP_DIR"
@@ -61,17 +90,26 @@ else
   pass "git HEAD = $GIT_HEAD"
 fi
 
-# Tracked changes are FAIL; .claude/settings.json untracked is WARN.
-TRACKED_MODS="$(git status --porcelain 2>/dev/null | grep -vE '^\?\? \.claude/settings\.json$' | grep -v '^$' || true)"
-UNTRACKED_CLAUDE="$(git status --porcelain 2>/dev/null | grep -E '^\?\? \.claude/settings\.json$' || true)"
+# Tracked changes are FAIL.
+# Untracked .claude/settings.json is BASELINE (repo policy keeps it local).
+# Any OTHER untracked file is WARN (unexpected — investigate or .gitignore).
+PORCELAIN="$(git status --porcelain 2>/dev/null || true)"
+TRACKED_MODS="$(printf '%s\n' "$PORCELAIN" | grep -vE '^\?\? ' | grep -v '^$' || true)"
+UNTRACKED_BASELINE="$(printf '%s\n' "$PORCELAIN" | grep -E '^\?\? \.claude/settings\.json$' || true)"
+OTHER_UNTRACKED="$(printf '%s\n' "$PORCELAIN" | grep -E '^\?\? ' | grep -vE '^\?\? \.claude/settings\.json$' || true)"
+
 if [ -n "$TRACKED_MODS" ]; then
   fail "unexpected tracked changes in working tree:"
-  echo "$TRACKED_MODS" | sed 's/^/         /'
+  printf '%s\n' "$TRACKED_MODS" | sed 's/^/         /'
 else
   pass "no tracked working-tree changes"
 fi
-if [ -n "$UNTRACKED_CLAUDE" ]; then
-  warn ".claude/settings.json present (untracked — expected, ignored by policy)"
+if [ -n "$UNTRACKED_BASELINE" ]; then
+  baseline ".claude/settings.json untracked (allowlisted by repo policy)"
+fi
+if [ -n "$OTHER_UNTRACKED" ]; then
+  warn "unexpected untracked files (outside baseline allowlist):"
+  printf '%s\n' "$OTHER_UNTRACKED" | sed 's/^/         /'
 fi
 
 # ─── B. Frontend reachability ────────────────────────────────────────────
@@ -224,7 +262,9 @@ SELECT 'Innodb_row_lock_current_waits',VARIABLE_VALUE FROM performance_schema.gl
 UNION ALL
 SELECT 'Innodb_row_lock_waits',VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Innodb_row_lock_waits'
 UNION ALL
-SELECT 'Created_tmp_disk_tables',VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Created_tmp_disk_tables';
+SELECT 'Created_tmp_disk_tables',VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Created_tmp_disk_tables'
+UNION ALL
+SELECT 'Uptime',VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Uptime';
 SQL_EOF
 )
     MYSQL_OUT="$(MYSQL_PWD="$DB_PASS_VAL" mysql -N -h "${DB_HOST_VAL:-localhost}" -P "${DB_PORT_VAL:-3306}" -u "$DB_USER_VAL" "$DB_NAME_VAL" -e "$SQL" 2>/dev/null || true)"
@@ -236,15 +276,28 @@ SQL_EOF
       LIFE_WAITS="$(printf '%s\n' "$MYSQL_OUT" | awk -F'\t' '$1=="Innodb_row_lock_waits"{print $2}')"
       TMPDIR_VAL="$(printf '%s\n' "$MYSQL_OUT" | awk -F'\t' '$1=="tmpdir"{print $2}')"
       TMP_DISK_TABLES="$(printf '%s\n' "$MYSQL_OUT" | awk -F'\t' '$1=="Created_tmp_disk_tables"{print $2}')"
-      pass "mysql connectivity OK (tmpdir=$TMPDIR_VAL, Created_tmp_disk_tables=$TMP_DISK_TABLES)"
-      if [ "${CUR_WAITS:-0}" = "0" ]; then
-        if [ "${LIFE_WAITS:-0}" = "0" ]; then
-          pass "Innodb_row_lock_current_waits=0, lifetime Innodb_row_lock_waits=0"
-        else
-          warn "Innodb_row_lock_current_waits=0 (good) but lifetime Innodb_row_lock_waits=$LIFE_WAITS (historical)"
-        fi
-      else
+      MYSQL_UPTIME="$(printf '%s\n' "$MYSQL_OUT" | awk -F'\t' '$1=="Uptime"{print $2}')"
+      MYSQL_UPTIME="${MYSQL_UPTIME:-0}"
+      pass "mysql connectivity OK (tmpdir=$TMPDIR_VAL, Created_tmp_disk_tables=$TMP_DISK_TABLES, Uptime=${MYSQL_UPTIME}s)"
+
+      # Decision tree for InnoDB lock counters:
+      #   current > 0                          → FAIL (active contention)
+      #   current = 0 AND lifetime = 0         → PASS (clean)
+      #   current = 0 AND uptime < 24h         → WARN if lifetime > 0
+      #                                          (counter is fresh; baseline doesn't apply)
+      #   current = 0 AND lifetime ≤ baseline  → BASELINE (known historical residue)
+      #   current = 0 AND lifetime > baseline  → WARN (new contention since baseline)
+      if [ "${CUR_WAITS:-0}" != "0" ]; then
         fail "Innodb_row_lock_current_waits=$CUR_WAITS — active lock contention"
+      elif [ "${LIFE_WAITS:-0}" = "0" ]; then
+        pass "Innodb_row_lock_current_waits=0, lifetime Innodb_row_lock_waits=0"
+      elif [ "${MYSQL_UPTIME:-0}" -lt "$BASELINE_MYSQL_UPTIME_GUARD_SECONDS" ] 2>/dev/null; then
+        warn "Innodb_row_lock_waits=$LIFE_WAITS lifetime, current=0 — MySQL Uptime ${MYSQL_UPTIME}s < ${BASELINE_MYSQL_UPTIME_GUARD_SECONDS}s, baseline disabled (counter is fresh)"
+      elif [ "${LIFE_WAITS:-0}" -le "$BASELINE_INNODB_ROW_LOCK_WAITS" ] 2>/dev/null; then
+        baseline "Innodb_row_lock_waits=$LIFE_WAITS lifetime, current=0 (≤ baseline $BASELINE_INNODB_ROW_LOCK_WAITS — historical residue from 2026-05-13 incident)"
+      else
+        NEW_WAITS=$((LIFE_WAITS - BASELINE_INNODB_ROW_LOCK_WAITS))
+        warn "Innodb_row_lock_waits=$LIFE_WAITS lifetime, current=0 — exceeds baseline $BASELINE_INNODB_ROW_LOCK_WAITS by $NEW_WAITS (new contention since baseline)"
       fi
     fi
   fi
@@ -281,21 +334,40 @@ else
   if [ -z "$MATCHES" ]; then
     pass "no critical patterns found in PM2 logs"
   else
-    COUNT="$(printf '%s\n' "$MATCHES" | wc -l)"
-    warn "$COUNT critical-pattern matches in PM2 logs (showing last 20 — historical entries are expected)"
-    printf '%s\n' "$MATCHES" | tail -20 | sed 's/^/         /'
+    COUNT="$(printf '%s\n' "$MATCHES" | wc -l | awk '{print $1}')"
+
+    # Decision tree for PM2 critical-pattern matches:
+    #   count = baseline  → BASELINE (known historical entries)
+    #   count > baseline  → WARN     (new entries — show last 20)
+    #   count < baseline  → BASELINE (logs likely rotated — note for operator)
+    #   count = 0         → PASS (handled in outer branch)
+    if [ "$COUNT" = "$BASELINE_PM2_CRITICAL_MATCHES" ]; then
+      baseline "PM2 critical matches=$COUNT (== baseline — historical entries from 2026-05-13 incident; first 3 shown for traceability)"
+      printf '%s\n' "$MATCHES" | head -3 | sed 's/^/         /'
+    elif [ "$COUNT" -lt "$BASELINE_PM2_CRITICAL_MATCHES" ] 2>/dev/null; then
+      baseline "PM2 critical matches=$COUNT (< baseline $BASELINE_PM2_CRITICAL_MATCHES — logs likely rotated; consider resetting baseline)"
+      printf '%s\n' "$MATCHES" | sed 's/^/         /'
+    else
+      NEW_COUNT=$((COUNT - BASELINE_PM2_CRITICAL_MATCHES))
+      warn "PM2 critical matches=$COUNT (baseline $BASELINE_PM2_CRITICAL_MATCHES + $NEW_COUNT new) — showing last 20:"
+      printf '%s\n' "$MATCHES" | tail -20 | sed 's/^/         /'
+    fi
   fi
 fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────
 section "Summary"
-printf "  PASS: %d   WARN: %d   FAIL: %d   SKIP: %d\n" "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT" "$SKIP_COUNT"
+printf "  PASS: %d   BASELINE: %d   WARN: %d   FAIL: %d   SKIP: %d\n" \
+  "$PASS_COUNT" "$BASELINE_COUNT" "$WARN_COUNT" "$FAIL_COUNT" "$SKIP_COUNT"
 echo
 if [ "$FAIL_COUNT" -gt 0 ]; then
   printf "  %s\n" "$(color '1;31' 'HEALTH SMOKE FAILED')"
   exit 1
 elif [ "$WARN_COUNT" -gt 0 ]; then
   printf "  %s\n" "$(color '1;33' 'HEALTH SMOKE PASSED WITH WARNINGS')"
+  exit 0
+elif [ "$BASELINE_COUNT" -gt 0 ]; then
+  printf "  %s\n" "$(color '1;35' 'HEALTH SMOKE PASSED WITH BASELINED OBSERVATIONS')"
   exit 0
 else
   printf "  %s\n" "$(color '1;32' 'HEALTH SMOKE PASSED')"

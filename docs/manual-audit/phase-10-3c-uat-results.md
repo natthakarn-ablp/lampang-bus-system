@@ -169,3 +169,11 @@ This file is considered **complete** when:
 - A footer with the executor's name and date is appended
 
 After completion, this file becomes the source of truth for chapters 7.5.4 / 8.9 / 11.2 / 13.2 of the user manual.
+
+## Execution attempt log
+
+| Date | Executor | UATs executed | Result | Note |
+|---|---|---|---|---|
+| 2026-05-14 | AI agent (Phase 10.3D session) | **0 / 5** | **NONE** | The 5 UAT items require a real browser session (UAT-1/2/4), a real LINE OA + mobile app (UAT-3), or an authenticated 100-row import run (UAT-5). The AI agent in this CLI session has no browser/LINE driver and no privileged role credentials; per strict rules `"Do not fabricate results"`, every *Actual result* field remains `NEEDS_OPERATOR_UAT`. A human operator with a login session is required. |
+
+**Next concrete action:** a human operator with admin / affiliation / school / driver / grade-teacher / parent-LINE credentials runs the 5 items per the *Browser steps* sections above (~30 min total), then edits this file to replace each `NEEDS_OPERATOR_UAT` with the observed result.

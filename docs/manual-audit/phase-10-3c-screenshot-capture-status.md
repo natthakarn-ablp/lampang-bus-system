@@ -111,7 +111,7 @@ Following this order saves ~30 min of re-setup.
 
 | Date | Executor | Batches affected | Captured added | Status changes | Notes |
 |---|---|---|---|---|---|
-| _(empty — to be appended after each capture session)_ | | | | | |
+| 2026-05-14 | AI agent (Phase 10.3D session) | none | **0** | none | The 10 batches all require a real browser session (Batches 1-5, 8, 10), a real mobile-viewport browser (Batch 7), or a real LINE OA + mobile app (Batch 9). The AI agent in this CLI session cannot drive a browser, capture screen output, install Playwright/Puppeteer (not approved by this phase's strict rules + the long-standing "no npm dependencies" rule), or use LINE OA. Per the prompt's `"Do not mark COMPLETE unless screenshots exist and are redacted"` rule, every batch remains `NOT_STARTED` with Captured = 0. `docs/manual/screenshots/` was **not** created — no images exist to put there. A human operator following [phase-10-3b-screenshot-capture-plan.md](phase-10-3b-screenshot-capture-plan.md) is required. |
 
 ## Snapshot summary
 

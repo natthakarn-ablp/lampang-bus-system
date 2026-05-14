@@ -578,4 +578,113 @@ run will catch the rotation transition the next morning).
 
 ---
 
-*Document updated: 2026-05-14 (Phase 9.16 — smoke baseline constants)*
+## 14. Phase 9.17 Health Smoke Watchdog Timer
+
+A systemd timer + oneshot service that runs `scripts/health-smoke.sh`
+automatically every 30 minutes, recording each run to the journal. This
+is **passive monitoring** — no LINE, email, or webhook alerting is wired
+up yet. That gate is deferred to Phase 9.18 so operators can observe
+real-world noise levels for a few days first.
+
+### 14.1 Tracked source
+
+| Path | Purpose |
+|---|---|
+| `ops/systemd/schoolbus-health-smoke.service` | Oneshot service that runs the smoke script as `schoolbus:schoolbus` |
+| `ops/systemd/schoolbus-health-smoke.timer`   | Drives the cadence (30 min) |
+
+Installed copies live in `/etc/systemd/system/` and are owned by `root:root`
+— never edit them in place. Update the tracked source, re-`sudo install`,
+then `sudo systemctl daemon-reload`.
+
+### 14.2 What it does
+
+- `Type=oneshot`, runs once per fire, exits when the script exits.
+- Records full smoke output to the systemd journal under the service unit.
+- Considered **healthy** when the script exits `0`. The script exits `0`
+  on `PASS`, `BASELINE`, and `WARN`. Only `FAIL` (exit `1`) makes the
+  service unit "failed".
+- This means `[WARN]` observations (e.g., the commit-drift WARN after a
+  script/docs-only commit) leave the service `active (exited)` and do
+  not produce any alert today.
+
+### 14.3 Schedule
+
+| Trigger | Setting |
+|---|---|
+| First run after boot | `OnBootSec=5min` (lets nginx/MySQL/PM2 settle) |
+| Subsequent runs | `OnUnitActiveSec=30min` |
+| Missed-while-off recovery | `Persistent=true` — runs once after boot if a fire-time was missed |
+
+### 14.4 Installation (one-time, requires sudo)
+
+```bash
+cd /home/schoolbus/apps/lampang-bus-system
+sudo install -m 0644 ops/systemd/schoolbus-health-smoke.service /etc/systemd/system/schoolbus-health-smoke.service
+sudo install -m 0644 ops/systemd/schoolbus-health-smoke.timer   /etc/systemd/system/schoolbus-health-smoke.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now schoolbus-health-smoke.timer
+sudo systemctl start schoolbus-health-smoke.service   # one-shot trial
+```
+
+### 14.5 Check status
+
+```bash
+systemctl is-active schoolbus-health-smoke.timer
+systemctl list-timers --all | grep schoolbus-health-smoke
+systemctl status schoolbus-health-smoke.timer --no-pager
+systemctl status schoolbus-health-smoke.service --no-pager
+```
+
+### 14.6 View logs
+
+```bash
+# Last 200 lines of the service's most recent runs:
+journalctl -u schoolbus-health-smoke.service --no-pager -n 200
+
+# Follow new runs as they happen:
+journalctl -u schoolbus-health-smoke.service -f
+
+# Just the failures, last 7 days:
+journalctl -u schoolbus-health-smoke.service --since '7 days ago' -p err
+```
+
+### 14.7 Run manually (no sudo required for the script itself)
+
+```bash
+bash /home/schoolbus/apps/lampang-bus-system/scripts/health-smoke.sh
+
+# Or via systemctl (uses the unit's User/Env, requires sudo):
+sudo systemctl start schoolbus-health-smoke.service
+```
+
+### 14.8 Disable / rollback
+
+```bash
+sudo systemctl disable --now schoolbus-health-smoke.timer
+sudo rm /etc/systemd/system/schoolbus-health-smoke.service
+sudo rm /etc/systemd/system/schoolbus-health-smoke.timer
+sudo systemctl daemon-reload
+```
+
+The repo templates under `ops/systemd/` remain in version control so the
+operator can re-install at any time with the Section 14.4 block.
+
+### 14.9 Important behavioral notes
+
+- **No alerts today.** This phase is observation only. Phase 9.18 will
+  add alert routing (LINE first, likely conditional on `FAIL`-only) once
+  we know the steady-state noise profile.
+- **`[WARN]` and `[BASELINE]` are not silent.** They are recorded in the
+  journal at info level. Operators should periodically review the journal
+  (e.g., weekly) for new WARN patterns even though there is no automated
+  page.
+- **Commit drift is expected and tolerated.** Until backend is restarted
+  after the Phase 9.17 commit lands, every timer fire will record a
+  commit-drift `[WARN]`. Service stays healthy because exit code is 0.
+- **PM2 logs are read as `schoolbus` user.** That's why the service runs
+  as `User=schoolbus, Group=schoolbus` and sets `PM2_HOME=/home/schoolbus/.pm2`.
+
+---
+
+*Document updated: 2026-05-14 (Phase 9.17 — health smoke watchdog timer)*

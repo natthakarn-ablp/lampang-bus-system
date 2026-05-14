@@ -1,0 +1,34 @@
+# Lampang Bus System — Health Smoke Watchdog (Phase 9.17)
+#
+# Runs scripts/health-smoke.sh once per fire, as the schoolbus user, recording
+# all output to the systemd journal. Read-only, passive monitoring; no alert
+# integrations yet (deferred to Phase 9.18). The smoke script exits 0 unless
+# a [FAIL] check trips, so transient [WARN]/[BASELINE] observations leave the
+# service "active (exited)" and do not page anyone.
+#
+# Paired with: schoolbus-health-smoke.timer (drives the 30-minute cadence)
+# Repo source: ops/systemd/schoolbus-health-smoke.service
+# Install:     sudo install -m 0644 ops/systemd/schoolbus-health-smoke.service \
+#                /etc/systemd/system/schoolbus-health-smoke.service
+
+[Unit]
+Description=Lampang Bus System health smoke watchdog
+Documentation=file:/home/schoolbus/apps/lampang-bus-system/docs/phase-9-ops-notes.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=schoolbus
+Group=schoolbus
+WorkingDirectory=/home/schoolbus/apps/lampang-bus-system
+Environment=PM2_HOME=/home/schoolbus/.pm2
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/bash /home/schoolbus/apps/lampang-bus-system/scripts/health-smoke.sh
+
+# Light hardening — defensive only, no functional impact for a read-only
+# script. Keep this list short to avoid breaking the smoke script's grep
+# over ~/.pm2/logs.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false

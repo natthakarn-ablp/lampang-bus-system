@@ -1,0 +1,23 @@
+# Lampang Bus System — Health Smoke Watchdog Timer (Phase 9.17)
+#
+# Drives schoolbus-health-smoke.service every 30 minutes. First fire 5 min
+# after boot to let nginx, MySQL, and PM2 settle. Persistent so a fire-time
+# missed while the host was off triggers once after boot.
+#
+# Repo source: ops/systemd/schoolbus-health-smoke.timer
+# Install:     sudo install -m 0644 ops/systemd/schoolbus-health-smoke.timer \
+#                /etc/systemd/system/schoolbus-health-smoke.timer
+# Enable:      sudo systemctl daemon-reload \
+#           && sudo systemctl enable --now schoolbus-health-smoke.timer
+
+[Unit]
+Description=Run Lampang Bus System health smoke watchdog every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=30min
+Persistent=true
+Unit=schoolbus-health-smoke.service
+
+[Install]
+WantedBy=timers.target

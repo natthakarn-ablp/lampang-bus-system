@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
 
@@ -26,12 +26,25 @@ export default function AffDailyStatus() {
     setExpandedVehicle((prev) => (prev === key ? null : key));
   }
 
+  // Phase 9.11 — flatten the school→vehicles tree for plate autocomplete.
+  // Each suggestion carries plate_no (primary) + school_name (secondary)
+  // so PlateSearchInput's existing metaText() picks the right label.
+  const vehicleSuggestions = useMemo(() => {
+    if (!data?.schools) return [];
+    return data.schools.flatMap(s =>
+      (s.vehicles || []).map(v => ({
+        plate_no: v.plate_no,
+        school_name: s.school_name,
+      }))
+    );
+  }, [data]);
+
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <h1 className="text-xl font-bold text-gray-800">สถานะวันนี้</h1>
         <div className="flex items-center gap-3">
-          <PlateSearchInput value={plateSearch} onChange={setPlateSearch} />
+          <PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicleSuggestions} />
           {data?.date && (
             <span className="text-sm text-gray-500 whitespace-nowrap">
               {new Date(data.date).toLocaleDateString('th-TH', { month: 'short', day: 'numeric' })}

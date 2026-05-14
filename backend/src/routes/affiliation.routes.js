@@ -2,6 +2,10 @@
 
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const ExcelJS = require('exceljs');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
@@ -11,6 +15,104 @@ const affAdminSvc = require('../services/affiliationAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { logAudit } = require('../utils/audit');
+
+// ─── Bulk-import upload (Phase 10.2A) ────────────────────────────────────────
+// Disk-backed multer config mirroring backend/src/routes/school.routes.js.
+// Files are written to uploads/imports/, then read once by the handler and
+// deleted in `finally`. 5 MB cap is generous for a ~100-row Excel.
+const importUploadDir = path.join(__dirname, '../../uploads/imports');
+if (!fs.existsSync(importUploadDir)) fs.mkdirSync(importUploadDir, { recursive: true });
+const importUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, importUploadDir),
+    filename: (_req, file, cb) => cb(null, `aff-import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname).toLowerCase()}`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.xlsx' || ext === '.csv') cb(null, true);
+    else cb(new Error('รองรับเฉพาะไฟล์ .xlsx หรือ .csv'), false);
+  },
+});
+
+/**
+ * Parse the uploaded import file into raw rows for the service layer.
+ * Returns Array<{ rowNum, school_code, school_name, username, initial_password }>.
+ * Tolerant of column ordering when the header row uses Thai-or-English keys.
+ */
+async function parseSchoolImportFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  const rows = [];
+
+  // Match a column header (case- and accent-tolerant) to one of our 4 keys.
+  function matchHeader(h) {
+    const s = String(h || '').trim().toLowerCase().replace(/\s+/g, '');
+    if (!s) return null;
+    if (s.includes('school_code') || s.includes('รหัสโรงเรียน') || s.includes('schoolcode')) return 'school_code';
+    if (s.includes('school_name') || s.includes('ชื่อโรงเรียน') || s.includes('schoolname')) return 'school_name';
+    if (s.includes('username')    || s.includes('ชื่อผู้ใช้'))                                 return 'username';
+    if (s.includes('initial_password') || s.includes('รหัสผ่าน') || s.includes('password'))   return 'initial_password';
+    return null;
+  }
+
+  if (ext === '.csv') {
+    const raw = fs.readFileSync(filePath, 'utf-8').replace(/^﻿/, '');
+    const lines = raw.split(/\r?\n/).filter(l => l.trim().length);
+    if (lines.length < 2) return [];
+    const header = lines[0].split(',').map(c => c.trim());
+    const colMap = {};
+    header.forEach((h, i) => { const k = matchHeader(h); if (k) colMap[k] = i; });
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',');
+      rows.push({
+        rowNum: i + 1,
+        school_code:      (cols[colMap.school_code]      ?? '').trim().replace(/^"|"$/g, ''),
+        school_name:      (cols[colMap.school_name]      ?? '').trim().replace(/^"|"$/g, ''),
+        username:         (cols[colMap.username]         ?? '').trim().replace(/^"|"$/g, ''),
+        initial_password: (cols[colMap.initial_password] ?? '').trim().replace(/^"|"$/g, ''),
+      });
+    }
+    return rows;
+  }
+
+  // .xlsx via ExcelJS
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(filePath);
+  const ws = wb.getWorksheet(1) || wb.worksheets[0];
+  if (!ws) return [];
+
+  const colMap = {};
+  const headerRow = ws.getRow(1);
+  headerRow.eachCell((cell, col) => {
+    const k = matchHeader(cell.value);
+    if (k) colMap[k] = col;
+  });
+
+  ws.eachRow((row, rowNum) => {
+    if (rowNum === 1) return;
+    const get = (key) => {
+      const idx = colMap[key];
+      if (!idx) return '';
+      const cell = row.getCell(idx);
+      const v = cell.value;
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'object' && v.text)   return String(v.text).trim();
+      if (typeof v === 'object' && v.result) return String(v.result).trim();
+      return String(v).trim();
+    };
+    const r = {
+      rowNum,
+      school_code:      get('school_code'),
+      school_name:      get('school_name'),
+      username:         get('username'),
+      initial_password: get('initial_password'),
+    };
+    // Skip fully-empty rows so trailing blank rows in Excel aren't reported.
+    if (r.school_code || r.school_name || r.username || r.initial_password) rows.push(r);
+  });
+
+  return rows;
+}
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
@@ -265,6 +367,139 @@ router.put('/school-accounts/:id', async (req, res, next) => {
     });
     return sendSuccess(res, result, 'อัปเดตสำเร็จ');
   } catch (err) { next(err); }
+});
+
+// ─── School-Account Bulk Import (Phase 10.2A) ───────────────────────────────
+// Two-phase flow: preview (read-only validation) → commit (transactional
+// insert). Both endpoints accept the same .xlsx/.csv upload; the frontend
+// re-uploads on commit so we re-validate against current DB state and never
+// trust a stale client-side preview.
+//
+// Security:
+//   - Affiliation scope comes from JWT via resolveAffiliationId(req); the
+//     caller cannot override it from the body or query.
+//   - The plaintext initial_password (operator-supplied or defaulted) is
+//     consumed inline by bcrypt.hash() in the service layer and is NEVER
+//     returned in any API response.
+//   - Multer disk-storage files are deleted in `finally`.
+
+/**
+ * GET /api/affiliation/school-accounts/import-template
+ *
+ * Streams a freshly-generated .xlsx with the 4 import columns plus a small
+ * sample row and an "instructions" sheet. No DB read; safe to call any
+ * time.
+ */
+router.get('/school-accounts/import-template', async (_req, res, next) => {
+  try {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Lampang Bus System';
+    wb.created = new Date();
+
+    // Sheet 1: data — the columns the parser keys off.
+    const ws = wb.addWorksheet('schools');
+    ws.columns = [
+      { header: 'school_code',      key: 'school_code',      width: 14 },
+      { header: 'school_name',      key: 'school_name',      width: 40 },
+      { header: 'username',         key: 'username',         width: 14 },
+      { header: 'initial_password', key: 'initial_password', width: 18 },
+    ];
+    // Bold + colored header.
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FE' } };
+    // One sample row so operators can see the format. Delete before upload.
+    ws.addRow({
+      school_code: '101010',
+      school_name: 'โรงเรียนตัวอย่าง',
+      username: '101010',
+      initial_password: '',  // blank → defaults to school_code at commit time
+    });
+
+    // Sheet 2: instructions
+    const guide = wb.addWorksheet('คำอธิบาย');
+    guide.getColumn(1).width = 90;
+    const lines = [
+      ['คำอธิบายการนำเข้าโรงเรียนแบบหลายรายการ', true],
+      ['', false],
+      ['คอลัมน์ที่ใช้ในชีท "schools":', false],
+      ['• school_code (จำเป็น) — รหัสโรงเรียน 6-10 หลัก', false],
+      ['• school_name (จำเป็น) — ชื่อโรงเรียน', false],
+      ['• username (ไม่บังคับ) — รหัส OBEC 6 หลัก ถ้าไม่ระบุ ระบบจะใช้ school_code (กรณี 6 หลัก) เป็นค่าเริ่มต้น', false],
+      ['• initial_password (ไม่บังคับ) — รหัสผ่านเริ่มต้น ถ้าไม่ระบุ ระบบจะใช้ school_code เป็นค่าเริ่มต้น', false],
+      ['', false],
+      ['ข้อปฏิบัติ:', false],
+      ['• ลบแถวตัวอย่างก่อนกรอกข้อมูลจริง', false],
+      ['• ระบบจะเพิ่มเฉพาะโรงเรียนในสังกัดของท่านเท่านั้น (กำหนดจากบัญชีผู้ใช้ที่ล็อกอิน)', false],
+      ['• รหัสโรงเรียนหรือชื่อผู้ใช้ที่ซ้ำกับในระบบ จะถูกข้ามและรายงานผลให้ทราบ', false],
+      ['• รหัสผ่านเริ่มต้นจะถูกเข้ารหัสด้วย bcrypt และผู้ใช้ต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก', false],
+      ['• ระบบจะไม่บันทึกหรือส่งคืนรหัสผ่านในรูปแบบ plaintext หลังนำเข้า', false],
+    ];
+    lines.forEach(([text, bold], i) => {
+      const r = guide.getRow(i + 1);
+      r.getCell(1).value = text;
+      if (bold) r.getCell(1).font = { bold: true, size: 14 };
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=school_account_import_template.xlsx');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/affiliation/school-accounts/import/preview
+ *
+ * Multipart upload, field name "file". Returns validation results without
+ * touching the DB. Frontend uses this to populate the preview table.
+ */
+router.post('/school-accounts/import/preview', importUpload.single('file'), async (req, res, next) => {
+  let filePath = null;
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    if (!req.file) return sendError(res, 'กรุณาเลือกไฟล์ (.xlsx หรือ .csv)', [], 400);
+    filePath = req.file.path;
+
+    const rawRows = await parseSchoolImportFile(filePath);
+    if (!rawRows.length) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
+
+    const result = await affAdminSvc.previewSchoolImport(rawRows, affId);
+    return sendSuccess(res, result);
+  } catch (err) {
+    next(err);
+  } finally {
+    if (filePath) { try { fs.unlinkSync(filePath); } catch { /* ignore */ } }
+  }
+});
+
+/**
+ * POST /api/affiliation/school-accounts/import/commit
+ *
+ * Multipart upload, field name "file". Same parse logic as preview, then
+ * one transactional commit that inserts only the valid rows. Invalid rows
+ * are reported and skipped, not rolled-back. Returns row-by-row status.
+ * NEVER returns plaintext passwords.
+ */
+router.post('/school-accounts/import/commit', importUpload.single('file'), async (req, res, next) => {
+  let filePath = null;
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    if (!req.file) return sendError(res, 'กรุณาเลือกไฟล์ (.xlsx หรือ .csv)', [], 400);
+    filePath = req.file.path;
+
+    const rawRows = await parseSchoolImportFile(filePath);
+    if (!rawRows.length) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
+
+    const result = await affAdminSvc.commitSchoolImport(rawRows, affId, req.user.id);
+    const msg = `นำเข้าสำเร็จ ${result.summary.created} โรงเรียน, ข้าม ${result.summary.skipped} แถว`;
+    return sendSuccess(res, result, msg);
+  } catch (err) {
+    next(err);
+  } finally {
+    if (filePath) { try { fs.unlinkSync(filePath); } catch { /* ignore */ } }
+  }
 });
 
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────

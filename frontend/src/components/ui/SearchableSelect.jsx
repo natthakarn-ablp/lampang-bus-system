@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, X, Search } from 'lucide-react';
+
+// Phase 9.8B — popover height upper-bound estimate used for placement
+// decisions: ~40 px search row + worst-case list height (240 px desktop
+// max-h-60, 40vh mobile). 280 covers the desktop case and is close enough
+// to the mobile case that the heuristic still produces stable results.
+const POPOVER_ESTIMATE = 280;
 
 /**
  * SearchableSelect — lightweight name-first combobox.
@@ -38,8 +44,11 @@ export default function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
+  // Phase 9.8B — 'bottom' (default) or 'top' when there's no room below.
+  const [placement, setPlacement] = useState('bottom');
 
   const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
   const searchRef = useRef(null);
   const listboxRef = useRef(null);
   const listboxId = useId();
@@ -75,6 +84,26 @@ export default function SearchableSelect({
     const el = listboxRef.current.children[highlight];
     el?.scrollIntoView({ block: 'nearest' });
   }, [highlight, open]);
+
+  // Phase 9.8B — pick 'top' placement only when there isn't enough room
+  // below AND there's actually more room above. Defaults to 'bottom'
+  // (matches user expectation in most cases). Measured synchronously
+  // before paint so the popover never flashes in the wrong position.
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    function measure() {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const viewportH = window.innerHeight || document.documentElement.clientHeight;
+      const spaceBelow = viewportH - rect.bottom;
+      const spaceAbove = rect.top;
+      const shouldFlip = spaceBelow < POPOVER_ESTIMATE && spaceAbove > spaceBelow;
+      setPlacement(shouldFlip ? 'top' : 'bottom');
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
 
   // Close on outside click
   useEffect(() => {
@@ -134,6 +163,7 @@ export default function SearchableSelect({
       <span className="mb-1">{label}</span>
 
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen(o => !o)}
         onKeyDown={onTriggerKey}
@@ -164,7 +194,9 @@ export default function SearchableSelect({
       </button>
 
       {open && (
-        <div className="absolute z-40 top-full left-0 right-0 mt-1 bg-surface-raised border border-surface-border rounded-lg shadow-elevate overflow-hidden">
+        <div className={`absolute z-40 left-0 right-0 bg-surface-raised border border-surface-border rounded-lg shadow-elevate overflow-hidden ${
+          placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'
+        }`}>
           <div className="relative border-b border-surface-border">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted" strokeWidth={2} aria-hidden="true" />
             <input

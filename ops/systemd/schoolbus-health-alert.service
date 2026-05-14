@@ -1,0 +1,40 @@
+# Lampang Bus System — FAIL-only Health Smoke Alerter (Phase 9.18)
+#
+# Companion to schoolbus-health-smoke.service (Phase 9.17). Runs the alert
+# wrapper, which itself runs the smoke script and only forwards to LINE
+# when the smoke exits non-zero. [PASS] / [BASELINE] / [WARN] never produce
+# an alert.
+#
+# EnvironmentFile uses a leading dash so the unit starts even when the
+# protected env file is absent. In that case, an actual FAIL event prints
+# a "ALERT NOT DELIVERED: missing creds" message to the journal and exits
+# non-zero — operators still see the FAIL recorded by the watchdog, the
+# alert just isn't pushed until credentials are configured.
+#
+# Repo source: ops/systemd/schoolbus-health-alert.service
+# Install:     sudo install -m 0644 ops/systemd/schoolbus-health-alert.service \
+#                /etc/systemd/system/schoolbus-health-alert.service
+# Env file:    /etc/schoolbus/health-alert.env   root:schoolbus 0640
+#              (LINE_CHANNEL_ACCESS_TOKEN, LINE_TARGET_ID)
+
+[Unit]
+Description=Lampang Bus System FAIL-only health smoke alert
+Documentation=file:/home/schoolbus/apps/lampang-bus-system/docs/phase-9-ops-notes.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=schoolbus
+Group=schoolbus
+WorkingDirectory=/home/schoolbus/apps/lampang-bus-system
+Environment=PM2_HOME=/home/schoolbus/.pm2
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/etc/schoolbus/health-alert.env
+ExecStart=/usr/bin/bash /home/schoolbus/apps/lampang-bus-system/scripts/health-smoke-alert.sh
+
+# Light hardening — keep narrow because the script needs network egress
+# (LINE push) and read access to ~/.pm2/logs.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false

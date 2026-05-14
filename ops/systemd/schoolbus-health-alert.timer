@@ -1,0 +1,25 @@
+# Lampang Bus System — FAIL-only Health Alert Timer (Phase 9.18)
+#
+# Drives schoolbus-health-alert.service every 30 minutes. First fire 10 min
+# after boot (5 min after the Phase 9.17 watchdog at OnBootSec=5min), so
+# the journal records watchdog-then-alert in chronological order. Both run
+# independently — disabling this timer cuts alerts without affecting the
+# watchdog. Persistent=true so a missed fire-time triggers once after boot.
+#
+# Repo source: ops/systemd/schoolbus-health-alert.timer
+# Install:     sudo install -m 0644 ops/systemd/schoolbus-health-alert.timer \
+#                /etc/systemd/system/schoolbus-health-alert.timer
+# Enable:      sudo systemctl daemon-reload \
+#           && sudo systemctl enable --now schoolbus-health-alert.timer
+
+[Unit]
+Description=Run Lampang Bus System FAIL-only health smoke alert every 30 minutes
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+Persistent=true
+Unit=schoolbus-health-alert.service
+
+[Install]
+WantedBy=timers.target

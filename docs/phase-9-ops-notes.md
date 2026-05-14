@@ -687,4 +687,177 @@ operator can re-install at any time with the Section 14.4 block.
 
 ---
 
-*Document updated: 2026-05-14 (Phase 9.17 — health smoke watchdog timer)*
+## 15. Phase 9.18 FAIL-only Health Alerting
+
+The Phase 9.17 watchdog records every smoke run to the journal but does
+not page anyone. Phase 9.18 adds a separate, opt-in alerter that pushes
+a LINE message **only when the smoke exits non-zero**. `[PASS]`,
+`[BASELINE]`, and `[WARN]` never trigger an alert; only `[FAIL]` (which
+is what makes the smoke script exit `1`) does.
+
+### 15.1 Tracked source
+
+| Path | Purpose |
+|---|---|
+| `scripts/health-smoke-alert.sh` | Wrapper: runs smoke, sends LINE push on non-zero exit, exits matching the smoke result |
+| `ops/systemd/schoolbus-health-alert.service` | Oneshot service that runs the wrapper as `schoolbus:schoolbus`, sources `/etc/schoolbus/health-alert.env` (optional) |
+| `ops/systemd/schoolbus-health-alert.timer` | Drives the cadence every 30 min, offset 5 min from the watchdog |
+
+The Phase 9.17 watchdog (`schoolbus-health-smoke.timer/service`) is **not
+modified** by this phase. The alerter is a separate unit pair so it can
+be disabled without affecting passive monitoring (Option A from the
+design choice).
+
+### 15.2 Alert rules
+
+| Smoke exit | Wrapper action | Wrapper exit |
+|---|---|---|
+| `0` (PASS / BASELINE / WARN) | Print `"No alert sent"` to journal | `0` |
+| `1` (FAIL) and creds present | POST to `/v2/bot/message/push`, log delivery result | `1` (delivered) or `2` (HTTP error) |
+| `1` (FAIL) and creds missing | Log `"ALERT NOT DELIVERED: missing creds"` | `2` |
+| script unrunnable | Log `"FATAL: smoke script not executable"` | `3` |
+
+### 15.3 Protected env file — MUST be created manually in SSH
+
+**Never paste real LINE secrets into chat.** Create the env file directly
+on the server:
+
+```bash
+sudo mkdir -p /etc/schoolbus
+sudo chmod 0755 /etc/schoolbus
+sudo chown root:root /etc/schoolbus
+
+# Create the env file — paste real values inline in your editor:
+sudo install -m 0640 -o root -g schoolbus /dev/null /etc/schoolbus/health-alert.env
+sudo nano /etc/schoolbus/health-alert.env   # or vi / vim
+```
+
+Contents (paste the real LINE channel access token and target ID in
+place of the angle-bracketed placeholders):
+
+```
+# Health-alert push credentials for Lampang Bus System.
+# Permissions: root:schoolbus 0640.  NEVER commit to git.
+# NEVER paste real values into chat or PR descriptions.
+
+LINE_CHANNEL_ACCESS_TOKEN=<paste your LINE channel access token here>
+LINE_TARGET_ID=<paste the user/group/room ID to push to>
+```
+
+| Path | Owner | Group | Mode | Why |
+|---|---|---|---|---|
+| `/etc/schoolbus/` | root | root | 0755 | Standard system-config dir |
+| `/etc/schoolbus/health-alert.env` | root | schoolbus | 0640 | Readable by the `schoolbus` user (and root) only |
+
+**LINE_TARGET_ID** must be a user ID (`Uxxxx…`), group ID (`Cxxxx…`), or
+room ID (`Rxxxx…`) that the bot has been invited to and is allowed to
+push to. It is NOT a display name. The simplest is to create a dedicated
+LINE group for ops alerts, invite the bot, and grab the group ID via the
+LINE Developers Console or a webhook trace.
+
+### 15.4 Installation (one-time, requires sudo)
+
+After creating the env file (or even before — the unit's
+`EnvironmentFile=-` is optional and the wrapper handles missing creds
+gracefully):
+
+```bash
+cd /home/schoolbus/apps/lampang-bus-system
+
+sudo install -m 0644 ops/systemd/schoolbus-health-alert.service /etc/systemd/system/schoolbus-health-alert.service
+sudo install -m 0644 ops/systemd/schoolbus-health-alert.timer   /etc/systemd/system/schoolbus-health-alert.timer
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now schoolbus-health-alert.timer
+
+# Optional: one-shot trial run (should say "No alert sent" while smoke is healthy):
+sudo systemctl start schoolbus-health-alert.service
+journalctl -u schoolbus-health-alert.service --no-pager -n 200
+```
+
+### 15.5 Test without sending a real alert
+
+```bash
+# Dry run as the schoolbus user. Smoke is currently healthy so this
+# should print "No alert sent" and exit 0. Safe to run any time.
+bash /home/schoolbus/apps/lampang-bus-system/scripts/health-smoke-alert.sh
+echo "exit code: $?"
+```
+
+### 15.6 Force a wiring test WITHOUT touching production
+
+```bash
+# FORCE_FAIL=1 skips the real smoke and pretends it returned exit 1 with
+# a synthetic body. Combined with NO env file (or unset creds), the
+# wrapper will print "ALERT NOT DELIVERED: missing creds" and exit 2 —
+# proving the FAIL branch is wired without sending any LINE message.
+FORCE_FAIL=1 LINE_CHANNEL_ACCESS_TOKEN= LINE_TARGET_ID= \
+  bash /home/schoolbus/apps/lampang-bus-system/scripts/health-smoke-alert.sh
+echo "exit code: $?"
+```
+
+To send a real test alert (only do this when on call, with notification
+group on standby — it will produce a LINE notification to whoever is in
+the target group/user):
+
+```bash
+FORCE_FAIL=1 bash /home/schoolbus/apps/lampang-bus-system/scripts/health-smoke-alert.sh
+```
+
+(the env vars will be picked up from `/etc/schoolbus/health-alert.env`
+when invoked via `sudo systemctl start schoolbus-health-alert.service`,
+not via direct shell run — for a direct shell test with real creds,
+`source` the env file beforehand:
+`set -a; source /etc/schoolbus/health-alert.env; set +a`)
+
+### 15.7 Status, logs, disable
+
+```bash
+# Status / next-fire time:
+systemctl is-active schoolbus-health-alert.timer
+systemctl list-timers --all | grep schoolbus-health-alert
+systemctl status schoolbus-health-alert.timer --no-pager
+systemctl status schoolbus-health-alert.service --no-pager
+
+# Last 200 lines from the alerter's runs:
+journalctl -u schoolbus-health-alert.service --no-pager -n 200
+
+# Follow:
+journalctl -u schoolbus-health-alert.service -f
+
+# Disable alerts (watchdog keeps running):
+sudo systemctl disable --now schoolbus-health-alert.timer
+
+# Full rollback (remove unit files too):
+sudo systemctl disable --now schoolbus-health-alert.timer
+sudo rm /etc/systemd/system/schoolbus-health-alert.service
+sudo rm /etc/systemd/system/schoolbus-health-alert.timer
+sudo systemctl daemon-reload
+# (optional, removes secrets too:)
+sudo rm /etc/schoolbus/health-alert.env
+```
+
+### 15.8 Important behavioral notes
+
+- **No alerts on WARN/BASELINE.** Operators must still review the
+  watchdog journal weekly for new WARN patterns. The Phase 9.17
+  watchdog still records every run regardless.
+- **Duplicate smoke runs.** Watchdog and alerter both invoke the smoke
+  script every 30 min (offset 5 min). This is intentional (Option A) so
+  alerting is isolated and easy to disable. The smoke is read-only and
+  costs ~3 s of CPU; doubling that is negligible.
+- **Token is never echoed, even on errors.** Curl carries it in
+  `Authorization: Bearer …` only. If the LINE API echoes any string
+  back that happens to contain the token (it won't, but defensive),
+  the wrapper redacts it before printing.
+- **Missing creds is not a crash.** The unit uses
+  `EnvironmentFile=-` so it starts without the file; the wrapper checks
+  for empty vars and exits with a "missing creds" message. Until the
+  env file is populated, FAIL events log the message but don't push.
+- **Do not commit the env file.** `/etc/schoolbus/` is outside the
+  repo by design. If you ever copy it accidentally, scrub from history
+  immediately and rotate the LINE channel access token.
+
+---
+
+*Document updated: 2026-05-14 (Phase 9.18 — FAIL-only health alerting)*

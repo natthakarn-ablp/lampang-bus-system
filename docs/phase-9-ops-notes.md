@@ -455,4 +455,57 @@ Out of Phase 9.7 scope.
 
 ---
 
-*Document updated: 2026-05-13 (Phase 9.7 — operator runbook)*
+## 12. Phase 9.15 Health Smoke Script
+
+`scripts/health-smoke.sh` is a read-only, sudo-free post-deploy and
+post-incident smoke check. It runs in under a couple of seconds and verifies
+the full operator surface: frontend reachability, backend `/health` envelope
+(including the Phase 9.14 enrichment), PM2 process state, disk + inode
+headroom, MySQL InnoDB lock state via the app DB user, the
+`schoolbus-housekeeping.timer` activity, recent critical PM2 log patterns,
+and git working-tree cleanliness.
+
+**Usage:**
+
+```bash
+cd /home/schoolbus/apps/lampang-bus-system
+bash scripts/health-smoke.sh
+```
+
+**Exit codes:**
+
+| Exit | Meaning |
+|------|---------|
+| `0`  | All PASS, or PASS + WARN only |
+| `1`  | One or more FAIL |
+
+**Result labels** printed per check: `[PASS]`, `[WARN]`, `[FAIL]`, `[SKIP]`.
+A trailing `Summary:` block totals each label and prints one of:
+
+- `HEALTH SMOKE PASSED`
+- `HEALTH SMOKE PASSED WITH WARNINGS`
+- `HEALTH SMOKE FAILED`
+
+**Thresholds:**
+
+- Disk `/` usage: WARN ≥ 80 %, FAIL ≥ 90 % (same for inodes)
+- `Innodb_row_lock_current_waits > 0` → FAIL
+- `Innodb_row_lock_waits` lifetime > 0 (no current) → WARN (historical, normal)
+- PM2 `online` with uptime < 30 s → WARN (possible flap)
+- `/health` `data.commit ≠ git HEAD` → WARN (service needs restart to refresh)
+
+**Safety contract:** no sudo, no service restarts, no DB writes, no file
+mutations, no `pm2 flush`, no log truncation. The script only reads. The DB
+password is sourced inline via `MYSQL_PWD=` in a subshell and is never
+printed. `.claude/settings.json` untracked is downgraded to WARN, not FAIL.
+
+**When to run:**
+
+- After every `pm2 reload` or front-end deploy
+- After any disk-pressure remediation (LVM resize, log rotation)
+- After any DB schema change
+- Periodically (manual or cron) as a coarse production heartbeat
+
+---
+
+*Document updated: 2026-05-14 (Phase 9.15 — health smoke script)*

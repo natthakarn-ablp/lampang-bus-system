@@ -1,0 +1,37 @@
+# Lampang Bus System — Weekly Health Heartbeat (Phase 9.19)
+#
+# Runs scripts/health-smoke-heartbeat.sh — sends ONE LINE push per week
+# confirming the alert pipeline is alive. Stateless; does not touch
+# /var/lib/schoolbus/health-alert. If smoke is currently failing, the
+# heartbeat is skipped so the operator isn't told "everything is fine"
+# while an incident is in progress.
+#
+# EnvironmentFile uses a leading dash so the unit starts even when the
+# protected env file is absent (the script then prints a safe "missing
+# creds" message and exits 2).
+#
+# Repo source: ops/systemd/schoolbus-health-heartbeat.service
+# Install:     sudo install -m 0644 ops/systemd/schoolbus-health-heartbeat.service \
+#                /etc/systemd/system/schoolbus-health-heartbeat.service
+# Env file:    /etc/schoolbus/health-alert.env   root:schoolbus 0640
+#              (LINE_CHANNEL_ACCESS_TOKEN, LINE_TARGET_ID)
+
+[Unit]
+Description=Lampang Bus System weekly health alert heartbeat
+Documentation=file:/home/schoolbus/apps/lampang-bus-system/docs/phase-9-ops-notes.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=schoolbus
+Group=schoolbus
+WorkingDirectory=/home/schoolbus/apps/lampang-bus-system
+Environment=PM2_HOME=/home/schoolbus/.pm2
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/etc/schoolbus/health-alert.env
+ExecStart=/usr/bin/bash /home/schoolbus/apps/lampang-bus-system/scripts/health-smoke-heartbeat.sh
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false

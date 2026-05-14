@@ -1,0 +1,22 @@
+# Lampang Bus System — Weekly Health Heartbeat Timer (Phase 9.19)
+#
+# Fires once a week (Monday 08:00 UTC = Monday 15:00 Asia/Bangkok) to send
+# a single "alive" LINE message. Persistent=true so a missed fire-time
+# (e.g. host was off Monday morning) triggers once after boot.
+#
+# Repo source: ops/systemd/schoolbus-health-heartbeat.timer
+# Install:     sudo install -m 0644 ops/systemd/schoolbus-health-heartbeat.timer \
+#                /etc/systemd/system/schoolbus-health-heartbeat.timer
+# Enable:      sudo systemctl daemon-reload \
+#           && sudo systemctl enable --now schoolbus-health-heartbeat.timer
+
+[Unit]
+Description=Run Lampang Bus System weekly health alert heartbeat
+
+[Timer]
+OnCalendar=Mon 08:00
+Persistent=true
+Unit=schoolbus-health-heartbeat.service
+
+[Install]
+WantedBy=timers.target

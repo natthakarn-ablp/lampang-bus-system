@@ -860,4 +860,212 @@ sudo rm /etc/schoolbus/health-alert.env
 
 ---
 
-*Document updated: 2026-05-14 (Phase 9.18 — FAIL-only health alerting)*
+## 16. Phase 9.19 Alert Debounce + Weekly Heartbeat
+
+The Phase 9.18 FAIL-only alerter would push the same LINE message every
+30 minutes for an ongoing incident — noisy and easy to ignore. Phase 9.19
+adds three things, on top of Phase 9.18, without changing the existing
+timers:
+
+- **Debounce.** Identical FAIL signatures within a 6-hour window send only
+  one alert. A new signature (different failing checks) breaks the debounce
+  and alerts immediately. A persistent failure ≥ 6 h pushes one reminder.
+- **Recovery notification.** The first PASS after a previous FAIL sends one
+  optional "✅ recovered" message, then the system goes silent again.
+- **Weekly heartbeat.** A separate timer pushes one proof-of-life message
+  every Monday confirming the alert pipeline still works.
+
+### 16.1 Tracked source
+
+| Path | Purpose |
+|---|---|
+| `scripts/health-smoke-alert.sh` | Phase 9.18 wrapper, now with debounce + recovery |
+| `scripts/health-smoke-heartbeat.sh` | NEW — weekly LINE proof-of-life |
+| `ops/systemd/schoolbus-health-heartbeat.service` | Oneshot, runs the heartbeat |
+| `ops/systemd/schoolbus-health-heartbeat.timer` | `OnCalendar=Mon 08:00`, Persistent |
+
+Phase 9.17 watchdog (`schoolbus-health-smoke.timer`) and Phase 9.18 alerter
+(`schoolbus-health-alert.timer`) remain **unchanged**.
+
+### 16.2 Debounce policy
+
+Constants at the top of `scripts/health-smoke-alert.sh`:
+
+```bash
+ALERT_STATE_DIR=/var/lib/schoolbus/health-alert
+ALERT_DEBOUNCE_SECONDS=21600       # 6 hours
+ALERT_RECOVERY_ENABLED=1
+```
+
+Failure signature = SHA-256 of `[FAIL]` lines + summary line from smoke
+output (ANSI-stripped, trailing whitespace trimmed). Stable across runs of
+the same underlying incident; changes immediately when a different check
+fails or counts change.
+
+Decision tree on smoke FAIL:
+
+| Condition | Action | Wrapper exit |
+|---|---|---|
+| First FAIL after PASS (or no prior state) | Send alert, record state | `1` (sent) / `2` (delivery fail) |
+| Same signature, < 6 h since last alert | **Suppress** — log "Duplicate FAIL suppressed by debounce" | `2` |
+| Same signature, ≥ 6 h since last alert | Send **reminder** ("still FAILING") | `1` / `2` |
+| Different signature | Treat as new incident → send alert immediately | `1` / `2` |
+| Delivery failure on a send-decision | Do NOT update `last_alert_time` → next run retries instead of being silenced | `2` |
+
+Decision tree on smoke PASS:
+
+| Prior state | `ALERT_RECOVERY_ENABLED` | Action |
+|---|---|---|
+| `PASS` or unknown | any | Quiet exit 0 (existing 9.18 behavior) |
+| `FAIL` | `1` | Send one ✅ recovery msg, set state to PASS, exit 0 |
+| `FAIL` | `0` | No message, set state to PASS, exit 0 |
+
+### 16.3 State directory
+
+```
+/var/lib/schoolbus/health-alert/   owner schoolbus:schoolbus, mode 0750
+├── last_fail_hash    SHA-256 hex of canonical failing body
+├── last_fail_time    epoch seconds (UTC)
+├── last_alert_time   epoch seconds of the most recent successful push
+└── last_status       "PASS" or "FAIL"
+```
+
+State files contain **no secrets** — only hashes, integers, and the literal
+strings `PASS`/`FAIL`. They are safe to inspect, copy, or back up. If the
+directory is missing or not writable, the wrapper falls back to Phase 9.18
+behavior (alert on every FAIL) and prints one `WARN: state dir … not
+writable — debounce inactive` line per run.
+
+### 16.4 View / inspect / reset state
+
+```bash
+# Inspect (token-free, safe to share):
+ls -la /var/lib/schoolbus/health-alert/
+for f in /var/lib/schoolbus/health-alert/*; do
+  echo "=== $f ==="; cat "$f"; echo
+done
+
+# Reset to "no prior incident" (e.g. after handling an outage):
+sudo rm -f /var/lib/schoolbus/health-alert/last_fail_hash \
+           /var/lib/schoolbus/health-alert/last_fail_time \
+           /var/lib/schoolbus/health-alert/last_alert_time \
+           /var/lib/schoolbus/health-alert/last_status
+
+# Or just blank "last_status" so the next FAIL alerts immediately:
+sudo -u schoolbus tee /var/lib/schoolbus/health-alert/last_status >/dev/null <<< "PASS"
+```
+
+### 16.5 Weekly heartbeat
+
+`scripts/health-smoke-heartbeat.sh` sends ONE LINE message per Monday
+08:00 UTC (= Monday 15:00 Asia/Bangkok) with:
+
+```
+💚 Lampang Bus health heartbeat (weekly)
+service: lampang-bus-system
+host: schbus
+time: <ISO UTC>
+git HEAD: <short SHA>
+/health.commit: <short SHA from /health>
+smoke summary: PASS: N BASELINE: N WARN: N FAIL: N
+smoke verdict: HEALTH SMOKE PASSED (WITH …)
+disk /: 45% used, 12G avail
+```
+
+Behavior:
+
+- Runs `health-smoke.sh` once. If `FAIL`, **heartbeat is skipped** (exit 1)
+  so the operator isn't told "everything is fine" mid-incident — the
+  alert wrapper handles that case on its own 30-min cycle.
+- Missing creds → safe message + exit 2.
+- LINE push uses the same `Authorization: Bearer …` pattern as the alerter.
+  Token never echoed.
+
+### 16.6 Run heartbeat manually
+
+```bash
+# Real push (if env file is readable in your shell):
+set -a; sudo cat /etc/schoolbus/health-alert.env > /tmp/he.env && source /tmp/he.env && shred -u /tmp/he.env; set +a
+bash /home/schoolbus/apps/lampang-bus-system/scripts/health-smoke-heartbeat.sh
+
+# Or via systemd one-shot (uses the unit's EnvironmentFile cleanly):
+sudo systemctl start schoolbus-health-heartbeat.service
+journalctl -u schoolbus-health-heartbeat.service --no-pager -n 200
+```
+
+### 16.7 Status, logs, disable
+
+```bash
+# Status / next-fire:
+systemctl is-active schoolbus-health-heartbeat.timer
+systemctl list-timers --all | grep schoolbus-health-heartbeat
+systemctl status schoolbus-health-heartbeat.timer --no-pager
+systemctl status schoolbus-health-heartbeat.service --no-pager
+
+# Logs:
+journalctl -u schoolbus-health-heartbeat.service --no-pager -n 200
+journalctl -u schoolbus-health-alert.service --no-pager -n 200
+journalctl -u schoolbus-health-smoke.service --no-pager -n 200
+
+# Disable heartbeat (alerter + watchdog unaffected):
+sudo systemctl disable --now schoolbus-health-heartbeat.timer
+
+# Disable alerter (watchdog + heartbeat unaffected):
+sudo systemctl disable --now schoolbus-health-alert.timer
+
+# Disable everything Phase 9.18+9.19 (passive watchdog still runs):
+sudo systemctl disable --now schoolbus-health-alert.timer schoolbus-health-heartbeat.timer
+```
+
+### 16.8 Full installation (one-time, requires sudo)
+
+```bash
+cd /home/schoolbus/apps/lampang-bus-system
+
+# State directory for debounce
+sudo mkdir -p /var/lib/schoolbus/health-alert
+sudo chown schoolbus:schoolbus /var/lib/schoolbus/health-alert
+sudo chmod 750 /var/lib/schoolbus/health-alert
+
+# Heartbeat unit pair
+sudo install -m 0644 ops/systemd/schoolbus-health-heartbeat.service /etc/systemd/system/schoolbus-health-heartbeat.service
+sudo install -m 0644 ops/systemd/schoolbus-health-heartbeat.timer   /etc/systemd/system/schoolbus-health-heartbeat.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now schoolbus-health-heartbeat.timer
+
+# Optional one-shot trial runs
+sudo systemctl start schoolbus-health-alert.service       # exercises the debounce path
+sudo systemctl start schoolbus-health-heartbeat.service   # sends one real heartbeat
+journalctl -u schoolbus-health-alert.service --no-pager -n 200
+journalctl -u schoolbus-health-heartbeat.service --no-pager -n 200
+```
+
+The alerter script is updated in place via the Phase 9.19 commit; no
+re-install is needed for that file because it lives under `scripts/`
+and is owned by `schoolbus`.
+
+### 16.9 Important behavioral notes
+
+- **WARN/BASELINE still produce no alert.** Debounce and recovery operate
+  only on the smoke FAIL/PASS transition. The Phase 9.16 baselines remain
+  the gate that keeps the steady state silent.
+- **State dir missing ≠ outage.** If `/var/lib/schoolbus/health-alert/` is
+  removed or unwritable, the alerter falls back to Phase 9.18 behavior
+  (alert on every FAIL). One `WARN` line is logged per run so operators
+  can tell debounce is inactive.
+- **Delivery failures don't burn the debounce window.** A 401/timeout
+  doesn't update `last_alert_time`, so the next run retries instead of
+  being silenced for 6 hours.
+- **Reminder cadence.** A long-running incident pushes once when first
+  detected, then again every ~6 hours. Tune via `ALERT_DEBOUNCE_SECONDS`
+  if 6 h is wrong for your on-call rotation.
+- **Heartbeat is silent during incidents.** A Monday 08:00 fire that lands
+  on a FAIL state exits non-zero and pushes no message. Combined with the
+  alerter's reminder cadence, the operator sees the incident, not a
+  conflicting "all good" message.
+- **No new secrets.** Heartbeat and alerter share the same
+  `/etc/schoolbus/health-alert.env` from Phase 9.18. Nothing new to rotate.
+
+---
+
+*Document updated: 2026-05-14 (Phase 9.19 — alert debounce + weekly heartbeat)*

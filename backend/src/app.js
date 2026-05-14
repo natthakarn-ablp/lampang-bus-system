@@ -6,6 +6,7 @@ const cors = require('cors');
 const path = require('path');
 
 const errorHandler = require('./middleware/errorHandler');
+const { getBuildInfo, pingDatabaseWithTimeout, getEnvironment } = require('./utils/health');
 const authRoutes   = require('./routes/auth.routes');
 const driverRoutes = require('./routes/driver.routes');
 const schoolRoutes      = require('./routes/school.routes');
@@ -37,8 +38,29 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ─── Health check ────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => {
-  res.json({ success: true, message: 'OK', data: { uptime: process.uptime() } });
+// Phase 9.14 — enriched response: keeps existing { success, message, data:
+// { uptime } } contract for old monitors, adds safe operational metadata
+// (service, version, environment, node_version, commit, timestamp, and
+// a bounded database-ping flag). Never exposes secrets, file paths, env
+// values, or DB error details. HTTP 200 + success:true even when DB is
+// down — caller probes data.database.connected for the DB signal.
+app.get('/health', async (_req, res) => {
+  const dbConnected = await pingDatabaseWithTimeout(1500);
+  const build = getBuildInfo();
+  res.json({
+    success: true,
+    message: 'OK',
+    data: {
+      service: build.service,
+      version: build.version,
+      environment: getEnvironment(),
+      node_version: process.version,
+      commit: build.commit,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      database: { connected: dbConnected },
+    },
+  });
 });
 
 // ─── API Routes ──────────────────────────────────────────────────────────────

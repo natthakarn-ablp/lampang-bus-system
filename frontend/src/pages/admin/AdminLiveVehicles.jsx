@@ -30,14 +30,16 @@ const SORT_PRIORITY = {
   ONLINE:  3,
 };
 
+// Phase 9.12 hotfix 2 — chip set trimmed: the KPI grid directly above
+// already exposes ONLINE/STALE/PAUSED/OFFLINE counts, so duplicating them
+// as chips was visual noise. Keep only the five chips that uniquely
+// filter the LIST (cards show counts; chips narrow what's rendered).
 const FILTERS = [
-  { key: 'all',           label: 'ทั้งหมด' },
-  { key: 'ONLINE',        label: 'ออนไลน์' },
-  { key: 'STALE',         label: 'สัญญาณเก่า' },
-  { key: 'PAUSED',        label: 'หยุดส่ง' },
-  { key: 'OFFLINE',       label: 'ออฟไลน์' },
-  { key: 'low_accuracy',  label: 'ความแม่นยำต่ำ' },
-  { key: 'never_sent',    label: 'ยังไม่เคยส่งตำแหน่ง' },
+  { key: 'all',              label: 'ทั้งหมด' },
+  { key: 'with_coords',      label: 'กำลังมีพิกัดจริง' },
+  { key: 'never_sent',       label: 'ยังไม่เคยส่งตำแหน่ง' },
+  { key: 'stale_over_5min',  label: 'ไม่อัปเดตเกิน 5 นาที' },
+  { key: 'low_accuracy',     label: 'ความแม่นยำต่ำ' },
 ];
 
 export default function AdminLiveVehicles() {
@@ -132,14 +134,12 @@ export default function AdminLiveVehicles() {
         if (!hay.includes(q)) return false;
       }
       switch (filter) {
-        case 'all':           return true;
-        case 'ONLINE':
-        case 'STALE':
-        case 'OFFLINE':
-        case 'PAUSED':        return v.status === filter;
-        case 'low_accuracy':  return !!v.low_accuracy;
-        case 'never_sent':    return !v.received_at;
-        default:              return true;
+        case 'all':             return true;
+        case 'with_coords':     return hasVehicleCoords(v);
+        case 'never_sent':      return !v.received_at;
+        case 'stale_over_5min': return v.seconds_since_seen != null && v.seconds_since_seen > 300;
+        case 'low_accuracy':    return !!v.low_accuracy;
+        default:                return true;
       }
     });
     out = [...out].sort((a, b) => {
@@ -225,17 +225,24 @@ export default function AdminLiveVehicles() {
         </AlertBanner>
       ) : (
         <>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <PlateSearchInput
-              value={search}
-              onChange={setSearch}
-              suggestions={vehicles}
-              placeholder="ค้นหาทะเบียน หรือชื่อคนขับ…"
-              className="w-full sm:flex-1 min-w-0"
-              inputClassName="w-full text-sm border border-surface-border rounded-lg pl-9 pr-3 py-2 bg-surface text-ink"
-              leadingIcon={<Search className="w-4 h-4" strokeWidth={2} />}
-            />
-            <div className="flex gap-1.5 flex-wrap">
+          {/* Phase 9.12 hotfix 2 — stack search row above chip row at all
+              breakpoints. Earlier `flex-row` layout forced the search to
+              compete with 7 chips for horizontal space at ≥ sm, collapsing
+              it to icon-only on tablets. Stacking gives the search its
+              full width unconditionally; chips wrap naturally below. */}
+          <div className="flex flex-col gap-3">
+            <div className="w-full lg:max-w-xl">
+              <PlateSearchInput
+                value={search}
+                onChange={setSearch}
+                suggestions={vehicles}
+                placeholder="ค้นหาทะเบียน หรือชื่อคนขับ…"
+                className="w-full min-w-0"
+                inputClassName="w-full text-sm border border-surface-border rounded-lg pl-9 pr-3 py-2 bg-surface text-ink"
+                leadingIcon={<Search className="w-4 h-4" strokeWidth={2} />}
+              />
+            </div>
+            <div className="flex flex-wrap gap-1.5">
               {FILTERS.map(opt => {
                 const active = filter === opt.key;
                 return (

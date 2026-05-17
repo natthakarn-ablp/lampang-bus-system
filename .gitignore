@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .vscode/
+.claude/
 .DS_Store
 coverage/
 backend/node_modules/

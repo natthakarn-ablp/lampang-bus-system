@@ -346,7 +346,7 @@ export default function Sidebar({ onClose }) {
 
       <div className="px-5 pb-3 shrink-0">
         <div className="border-t border-blue-700/40 pt-2">
-          <p className="text-[11px] text-blue-300/80">Copyright © 2026 Natthakarn S. | v1.0</p>
+          <p className="text-[11px] text-blue-300/80">Copyright © 2026 Natthakarn S. | v2.0</p>
         </div>
       </div>
     </aside>

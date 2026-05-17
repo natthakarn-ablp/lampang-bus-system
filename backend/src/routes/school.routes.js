@@ -597,45 +597,68 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
         await conn.query(`UPDATE students SET ${updates.join(', ')} WHERE id = ?`, params);
       }
 
-      // 2. Update parent info (upsert first approved parent)
+      // 2. Parent reassignment (Phase 10.3E final rule).
+      //
+      // Business rule: a student-parent link is defined by
+      //   (student_id, parent_phone)  — and indirectly parent_name.
+      // ANY change to the submitted name or phone is treated as a per-student
+      // parent reassignment: detach this student only, create a NEW parent
+      // row, and link. The shared parent master is NEVER UPDATEd from the
+      // student-edit flow — that prevented the household-cascade bug where
+      // editing one student silently changed every sibling that shared the
+      // same parent record.
+      //
+      // QA invariants (Phase 10.3E hardening):
+      //   • Old parent row is preserved (other students keep their link)
+      //   • line_user_id is NOT carried to the new parent row
+      //   • New parent row is created fresh — no phone-based reuse that
+      //     would merge this student into an unrelated household
+      let parentReassigned = false;
       if (parent_name !== undefined || normalizedParentPhone !== undefined) {
-        const [[existingLink]] = await conn.query(
-          `SELECT ps.parent_id FROM parent_student ps WHERE ps.student_id = ? LIMIT 1`,
+        const [[currentLink]] = await conn.query(
+          `SELECT ps.parent_id, p.name AS current_name, p.phone AS current_phone
+           FROM   parent_student ps
+           JOIN   parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
+           WHERE  ps.student_id = ?
+           LIMIT  1`,
           [studentId]
         );
 
-        if (existingLink) {
-          const pUpdates = [];
-          const pParams = [];
-          if (parent_name !== undefined) { pUpdates.push('name = ?'); pParams.push(parent_name || null); }
-          if (normalizedParentPhone !== undefined) { pUpdates.push('phone = ?'); pParams.push(normalizedParentPhone || null); }
-          if (pUpdates.length > 0) {
-            pParams.push(existingLink.parent_id);
-            await conn.query(`UPDATE parents SET ${pUpdates.join(', ')} WHERE id = ?`, pParams);
-          }
-        } else if (parent_name || normalizedParentPhone) {
-          // Check for existing parent by phone to avoid duplicates
-          let parentId;
-          if (normalizedParentPhone) {
-            const [[ep]] = await conn.query(
-              `SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1`,
-              [normalizedParentPhone]
+        // Resolve effective new identity (submitted fields override current
+        // for what's actually sent; missing fields fall through unchanged).
+        const newName  = parent_name !== undefined
+          ? (parent_name ? String(parent_name).trim() : null)
+          : (currentLink?.current_name || null);
+        const newPhone = normalizedParentPhone !== undefined
+          ? (normalizedParentPhone || null)
+          : (currentLink?.current_phone || null);
+
+        const noChange = currentLink
+          && (newName  || '') === (currentLink.current_name  || '')
+          && (newPhone || '') === (currentLink.current_phone || '');
+
+        if (!noChange && (newName || newPhone)) {
+          // Detach this student from current parent (preserve old parent row
+          // and any sibling links that point to it).
+          if (currentLink) {
+            await conn.query(
+              `DELETE FROM parent_student WHERE student_id = ?`,
+              [studentId]
             );
-            parentId = ep?.id;
           }
-          if (!parentId) {
-            const [parentResult] = await conn.query(
-              `INSERT INTO parents (name, phone) VALUES (?, ?)`,
-              [parent_name || null, normalizedParentPhone || null]
-            );
-            parentId = parentResult.insertId;
-          }
+          // ALWAYS INSERT a fresh parent row — never look up by phone.
+          const [r] = await conn.query(
+            `INSERT INTO parents (name, phone) VALUES (?, ?)`,
+            [newName, newPhone]
+          );
+          const newParentId = r.insertId;
           await conn.query(
             `INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at)
              VALUES (?, ?, TRUE, ?, NOW())
              ON DUPLICATE KEY UPDATE approved = TRUE`,
-            [parentId, studentId, req.user.id]
+            [newParentId, studentId, req.user.id]
           );
+          parentReassigned = true;
         }
       }
 
@@ -668,7 +691,13 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
       }
 
       await conn.commit();
-      return sendSuccess(res, { student_id: studentId }, 'บันทึกข้อมูลนักเรียนเรียบร้อยแล้ว');
+      // parent_reassigned tells the UI to surface a "ผู้ปกครองใหม่ยังไม่ได้
+      // ผูกบัญชี LINE" notice — a freshly-created parent row never carries
+      // a line_user_id, so the message is unconditional when this flag is true.
+      return sendSuccess(res, {
+        student_id: studentId,
+        parent_reassigned: parentReassigned,
+      }, 'บันทึกข้อมูลนักเรียนเรียบร้อยแล้ว');
     } catch (err) {
       await conn.rollback();
       throw err;

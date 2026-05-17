@@ -94,6 +94,11 @@ export default function StudentSearch() {
   }
 
   async function handleSaveProfile() {
+    // Phase 10.3E final rule — single save action.
+    // The backend treats any parent_name/parent_phone change as a per-student
+    // parent reassignment (detach + create new parent + link this student
+    // only). No more shared-parent UPDATE from the student-edit screen, so
+    // there are no longer separate "edit shared" vs "reassign" buttons.
     if (!editStudent) return;
     if (!form.first_name.trim()) { toast.error('กรุณากรอกชื่อนักเรียน'); return; }
     if (!form.last_name.trim()) { toast.error('กรุณากรอกนามสกุลนักเรียน'); return; }
@@ -103,8 +108,18 @@ export default function StudentSearch() {
     }
     setSaving(true);
     try {
-      await api.put(`/school/students/${editStudent.id}`, form);
+      const res = await api.put(`/school/students/${editStudent.id}`, form);
       toast.success('บันทึกข้อมูลนักเรียนเรียบร้อยแล้ว');
+      // If the backend reassigned the parent (any change to name/phone),
+      // surface a notice — the freshly-created parent row has no LINE
+      // binding until the parent re-links via LINE OA.
+      if (res.data?.data?.parent_reassigned) {
+        if (typeof toast.info === 'function') {
+          toast.info('ผู้ปกครองใหม่ยังไม่ได้ผูกบัญชี LINE');
+        } else {
+          console.info('[student-edit] parent reassigned — new parent has no LINE binding');
+        }
+      }
       closeEdit();
       fetchStudents(meta.page);
     } catch (err) {
@@ -455,9 +470,18 @@ export default function StudentSearch() {
               </div>
             </fieldset>
 
-            {/* Section 2: ผู้ปกครอง */}
+            {/* Section 2: ผู้ปกครอง — Phase 10.3E final rule.
+                Any change to name or phone here is treated as a per-student
+                parent reassignment by the backend. No buttons / no shared-edit
+                workflow — the standard "บันทึกข้อมูลนักเรียน" button below
+                handles save + reassign atomically. */}
             <fieldset className="space-y-3 mb-6">
               <legend className="text-sm font-semibold text-gray-600 mb-2">ผู้ปกครอง</legend>
+              <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-lg px-3 py-2 text-xs leading-snug">
+                ℹ️ หากเปลี่ยนเบอร์โทรหรือชื่อผู้ปกครอง ระบบจะถือว่าเป็นการ
+                <span className="font-semibold"> เปลี่ยนผู้ปกครองของนักเรียนคนนี้เท่านั้น </span>
+                — จะไม่กระทบนักเรียนคนอื่นที่เคยใช้ข้อมูลผู้ปกครองเดิมร่วมกัน
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-500 mb-1">ชื่อผู้ปกครอง</label>

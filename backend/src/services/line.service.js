@@ -60,19 +60,34 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-// Phase 10.3E-UX1 — preview-then-commit linking, used by the LIFF bind page.
-// `findLinkableParent` is read-only: no DB mutation. The browser shows the
-// student summary to the user, and only after the user taps Confirm does
-// the LIFF page call `commitLineLink`. The legacy chat handler keeps using
-// `tryLinkByPhoneAndStudentId` so backward compatibility is preserved.
+// ─── Phone-based binding (Round 1) ─────────────────────────────────────────
+// Source of truth for parent ⇄ LINE binding is now `line_bindings.phone`.
+// `parents.line_user_id` is legacy (read-only, will be dropped in Round 2).
+// `line_users` is still dual-written so the existing notification resolver
+// in checkin.service.js keeps working until Round 2 migrates it.
 
-async function findLinkableParent(phone, studentId) {
-  // Same join as tryLinkByPhoneAndStudentId, plus a student summary for the
-  // confirmation screen. Returns { found: false, message } on miss, or
-  // { found: true, parentId, student } on hit.
+async function getBoundPhoneByLineUserId(lineUserId) {
+  const [[row]] = await pool.query(
+    `SELECT phone FROM line_bindings WHERE line_user_id = ? LIMIT 1`,
+    [lineUserId]
+  );
+  return row ? row.phone : null;
+}
+
+async function getLineUserIdByPhone(phone) {
+  const [[row]] = await pool.query(
+    `SELECT line_user_id FROM line_bindings WHERE phone = ? LIMIT 1`,
+    [phone]
+  );
+  return row ? row.line_user_id : null;
+}
+
+// Verify phone + studentId form a legitimate (approved) parent_student link.
+// Returns { found, parentId, student } — used by both the LIFF preview and
+// the chat bind flow so both paths share one source of truth for matching.
+async function findLinkablePhoneByStudentAndPhone(phone, studentId) {
   const [[row]] = await pool.query(
     `SELECT p.id          AS parent_id,
-            s.id          AS student_id,
             s.prefix, s.first_name, s.last_name,
             s.grade, s.classroom,
             sc.name       AS school_name
@@ -84,19 +99,11 @@ async function findLinkableParent(phone, studentId) {
      LIMIT  1`,
     [studentId, phone]
   );
-  if (!row) {
-    return {
-      found: false,
-      message: 'ไม่พบข้อมูลผู้ปกครองที่ตรงกัน กรุณาตรวจสอบเบอร์โทรและรหัสนักเรียนอีกครั้ง',
-    };
-  }
+  if (!row) return { found: false };
   return {
     found: true,
     parentId: row.parent_id,
     student: {
-      // Only public-facing fields. We intentionally omit student.id from
-      // the response — the LIFF page only needs to display, and the actual
-      // binding key is parent.phone + student.id (held in form state).
       prefix:      row.prefix,
       first_name:  row.first_name,
       last_name:   row.last_name,
@@ -107,27 +114,185 @@ async function findLinkableParent(phone, studentId) {
   };
 }
 
-async function commitLineLink(lineUserId, parentId) {
+// Bind a LINE user to a phone atomically. Caller MUST have already verified
+// (phone, studentId) via findLinkablePhoneByStudentAndPhone.
+// `parentId` is the verified parent row, used for the legacy line_users
+// dual-write (Round 2 will drop this argument).
+// Returns { success: true } on bind, or { success: false, code, message } on
+// conflict. Throws only on unexpected DB error (handled by Express error mw).
+async function bindLineUserToPhone(lineUserId, phone, parentId) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+
+    const [[existingByPhone]] = await conn.query(
+      `SELECT line_user_id FROM line_bindings WHERE phone = ? LIMIT 1`,
+      [phone]
+    );
+    if (existingByPhone && existingByPhone.line_user_id !== lineUserId) {
+      await conn.rollback();
+      return {
+        success: false,
+        code: 'PHONE_BOUND_TO_OTHER',
+        message: 'เบอร์นี้ผูก LINE อื่นไว้แล้ว',
+      };
+    }
+
+    const [[existingByUser]] = await conn.query(
+      `SELECT phone FROM line_bindings WHERE line_user_id = ? LIMIT 1`,
+      [lineUserId]
+    );
+    if (existingByUser && existingByUser.phone !== phone) {
+      await conn.rollback();
+      return {
+        success: false,
+        code: 'USER_BOUND_TO_OTHER_PHONE',
+        message: 'บัญชี LINE นี้ผูกเบอร์อื่นอยู่ กรุณายกเลิกการผูกก่อน',
+      };
+    }
+
+    // Idempotent upsert (same pair → no-op refresh of timestamps).
+    await conn.query(
+      `INSERT INTO line_bindings (phone, line_user_id, is_active, bound_at)
+       VALUES (?, ?, TRUE, NOW())
+       ON DUPLICATE KEY UPDATE
+         is_active  = TRUE,
+         bound_at   = COALESCE(bound_at, NOW()),
+         unbound_at = NULL`,
+      [phone, lineUserId]
+    );
+
+    // Legacy dual-write: notification resolver in checkin.service.js still
+    // reads line_users.parent_id. Round 2 will remove this and migrate the
+    // resolver to phone-based lookup.
     await conn.query(
       `INSERT INTO line_users (line_user_id, user_type, parent_id, verified, linked_at, created_at)
        VALUES (?, 'parent', ?, TRUE, NOW(), NOW())
-       ON DUPLICATE KEY UPDATE parent_id = VALUES(parent_id), verified = TRUE, linked_at = NOW(), user_type = 'parent'`,
+       ON DUPLICATE KEY UPDATE
+         parent_id = VALUES(parent_id),
+         verified  = TRUE,
+         linked_at = NOW(),
+         user_type = 'parent'`,
       [lineUserId, parentId]
     );
-    await conn.query(
-      `UPDATE parents SET line_user_id = ? WHERE id = ?`,
-      [lineUserId, parentId]
-    );
+
     await conn.commit();
+    return { success: true };
   } catch (err) {
     await conn.rollback();
     throw err;
   } finally {
     conn.release();
   }
+}
+
+// Hard delete the binding (Round 1 strategy — see migration 022 header).
+// Also clears legacy line_users + parents.line_user_id so nothing dangling
+// points at this LINE user.
+async function unbindLineUser(lineUserId) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [delRes] = await conn.query(
+      `DELETE FROM line_bindings WHERE line_user_id = ?`,
+      [lineUserId]
+    );
+    await conn.query(
+      `UPDATE line_users SET parent_id = NULL, verified = FALSE, linked_at = NULL WHERE line_user_id = ?`,
+      [lineUserId]
+    );
+    await conn.query(
+      `UPDATE parents SET line_user_id = NULL WHERE line_user_id = ?`,
+      [lineUserId]
+    );
+    await conn.commit();
+    return { success: delRes.affectedRows > 0 };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+// Resolve LINE user → all approved children via phone-based binding.
+// One binding can map to multiple parent rows (siblings sharing a phone),
+// so this is the canonical way to list a parent's children after Round 1.
+async function getChildrenByBoundPhone(lineUserId) {
+  // Two parent rows can point at the same student (e.g. mother+father with
+  // the same phone), which would otherwise duplicate that student in the
+  // result. DISTINCT — not GROUP BY s.id — keeps the query safe under
+  // strict ONLY_FULL_GROUP_BY without relying on functional-dependency
+  // detection.
+  const [rows] = await pool.query(
+    `SELECT DISTINCT
+            s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+            sc.name AS school_name, v.plate_no,
+            (SELECT d.name
+               FROM drivers d
+               JOIN driver_vehicle_assignments dva ON dva.driver_id = d.id
+              WHERE dva.vehicle_id = v.id
+                AND dva.is_active = TRUE
+                AND d.is_deleted = FALSE
+              LIMIT 1) AS driver_name
+     FROM   line_bindings lb
+     JOIN   parents p ON p.phone = lb.phone AND p.is_deleted = FALSE
+     JOIN   parent_student ps ON ps.parent_id = p.id AND ps.approved = TRUE
+     JOIN   students s ON s.id = ps.student_id AND s.is_deleted = FALSE
+     LEFT JOIN schools sc ON sc.id = s.school_id
+     LEFT JOIN vehicles v ON v.id = s.vehicle_id
+     WHERE  lb.line_user_id = ?`,
+    [lineUserId]
+  );
+  return rows;
+}
+
+// Phase 10.3E-UX1 — preview-then-commit linking, used by the LIFF bind page.
+// `findLinkableParent` is read-only: no DB mutation. The browser shows the
+// student summary to the user, and only after the user taps Confirm does
+// the LIFF page call `commitLineLink`. The legacy chat handler keeps using
+// `tryLinkByPhoneAndStudentId` so backward compatibility is preserved.
+
+async function findLinkableParent(phone, studentId) {
+  // Thin wrapper over findLinkablePhoneByStudentAndPhone — preserves the
+  // { found: false, message } shape that callers (parent.routes.js) rely on.
+  const r = await findLinkablePhoneByStudentAndPhone(phone, studentId);
+  if (!r.found) {
+    return {
+      found: false,
+      message: 'ไม่พบข้อมูลผู้ปกครองที่ตรงกัน กรุณาตรวจสอบเบอร์โทรและรหัสนักเรียนอีกครั้ง',
+    };
+  }
+  return r;
+}
+
+// Thrown when commitLineLink hits a phone/user binding conflict so the
+// LIFF route can map it to a 409. Carries a code for granular UI handling.
+class LineBindConflictError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'LineBindConflictError';
+    this.code = code;
+  }
+}
+
+async function commitLineLink(lineUserId, parentId) {
+  // Resolve the binding key (phone) from the verified parent row. We never
+  // accept phone from the caller here — the LIFF route has already verified
+  // (phone, studentId) and looked up parentId, so this is the trust boundary.
+  const [[parentRow]] = await pool.query(
+    `SELECT phone FROM parents WHERE id = ? AND is_deleted = FALSE LIMIT 1`,
+    [parentId]
+  );
+  if (!parentRow || !parentRow.phone) {
+    throw new Error(`commitLineLink: parent ${parentId} has no phone — cannot bind`);
+  }
+
+  const r = await bindLineUserToPhone(lineUserId, parentRow.phone, parentId);
+  if (!r.success) {
+    throw new LineBindConflictError(r.code, r.message);
+  }
+
   // Drop any pending chat state (await_phone / await_student_id / confirm_*)
   // left over from a chat-driven flow the user abandoned before completing
   // the LIFF bind. Without this, the next chat message gets interpreted as
@@ -138,48 +303,38 @@ async function commitLineLink(lineUserId, parentId) {
 }
 
 async function tryLinkByPhoneAndStudentId(lineUserId, phone, studentId) {
-  // Find parent by phone
-  const [[parent]] = await pool.query(
-    `SELECT p.id FROM parents p
-     JOIN parent_student ps ON ps.parent_id = p.id AND ps.student_id = ? AND ps.approved = TRUE
-     WHERE p.phone = ? AND p.is_deleted = FALSE
-     LIMIT 1`,
-    [studentId, phone]
-  );
-  if (!parent) return { success: false, message: 'ไม่พบข้อมูลผู้ปกครองที่ตรงกัน กรุณาตรวจสอบเบอร์โทรและรหัสนักเรียนอีกครั้ง' };
-
-  // Link — ensure line_users record exists first (follow event may have been missed)
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    await conn.query(
-      `INSERT INTO line_users (line_user_id, user_type, parent_id, verified, linked_at, created_at)
-       VALUES (?, 'parent', ?, TRUE, NOW(), NOW())
-       ON DUPLICATE KEY UPDATE parent_id = VALUES(parent_id), verified = TRUE, linked_at = NOW(), user_type = 'parent'`,
-      [lineUserId, parent.id]
-    );
-    await conn.query(
-      `UPDATE parents SET line_user_id = ? WHERE id = ?`,
-      [lineUserId, parent.id]
-    );
-    await conn.commit();
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
+  const match = await findLinkablePhoneByStudentAndPhone(phone, studentId);
+  if (!match.found) {
+    return {
+      success: false,
+      message: 'ไม่พบข้อมูลผู้ปกครองที่ตรงกัน กรุณาตรวจสอบเบอร์โทรและรหัสนักเรียนอีกครั้ง',
+    };
   }
 
-  return { success: true, parentId: parent.id };
+  const r = await bindLineUserToPhone(lineUserId, phone, match.parentId);
+  if (!r.success) {
+    return { success: false, code: r.code, message: r.message };
+  }
+  return { success: true, parentId: match.parentId };
 }
 
 // ─── Link Status Checks ────────────────────────────────────────────────────
 
-/**
- * Check if a LINE user is currently linked to a parent.
- * Returns the parent_id if linked, null otherwise.
- */
+// Returns one matching parent_id for the bound phone, or null. If multiple
+// parents rows share the bound phone (the common sibling case), any of them
+// is fine — callers only use this to detect "is this LINE user bound at all"
+// and to drive the "already linked" UI message.
+// Falls back to legacy line_users for rows not yet visible in line_bindings
+// (e.g. mid-migration on a hot read).
 async function getLinkedParentId(lineUserId) {
+  const phone = await getBoundPhoneByLineUserId(lineUserId);
+  if (phone) {
+    const [[row]] = await pool.query(
+      `SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1`,
+      [phone]
+    );
+    if (row) return row.id;
+  }
   const [[row]] = await pool.query(
     `SELECT parent_id FROM line_users WHERE line_user_id = ? AND verified = TRUE AND parent_id IS NOT NULL`,
     [lineUserId]
@@ -187,83 +342,67 @@ async function getLinkedParentId(lineUserId) {
   return row?.parent_id || null;
 }
 
-/**
- * Get a summary of the linked parent + children (for "already linked" messages).
- */
+// Summary used by the "already linked" Flex card. Pulls all parent rows
+// (siblings) that share the bound phone, so the card reflects the full
+// household — not just the parent row that happened to be in line_users.
 async function getLinkedParentSummary(lineUserId) {
-  const [[parent]] = await pool.query(
-    `SELECT p.id, p.name, p.phone
-     FROM line_users lu JOIN parents p ON p.id = lu.parent_id
-     WHERE lu.line_user_id = ? AND lu.verified = TRUE`,
-    [lineUserId]
-  );
+  const phone = await getBoundPhoneByLineUserId(lineUserId);
+  let parent = null;
+  if (phone) {
+    const [[row]] = await pool.query(
+      `SELECT id, name, phone FROM parents
+       WHERE phone = ? AND is_deleted = FALSE
+       ORDER BY id ASC LIMIT 1`,
+      [phone]
+    );
+    parent = row || null;
+  }
+  if (!parent) {
+    // Legacy fallback (pre-Round 1 bindings not yet backfilled)
+    const [[row]] = await pool.query(
+      `SELECT p.id, p.name, p.phone
+       FROM line_users lu JOIN parents p ON p.id = lu.parent_id
+       WHERE lu.line_user_id = ? AND lu.verified = TRUE`,
+      [lineUserId]
+    );
+    parent = row || null;
+  }
   if (!parent) return null;
+
+  // Pull children from ALL parent rows that share this phone — that's the
+  // whole point of the phone-based refactor.
   const [children] = await pool.query(
     `SELECT s.first_name, s.last_name, s.grade, sc.name AS school_name
-     FROM parent_student ps
-     JOIN students s ON s.id = ps.student_id AND s.is_deleted = FALSE
+     FROM   parents p
+     JOIN   parent_student ps ON ps.parent_id = p.id AND ps.approved = TRUE
+     JOIN   students s ON s.id = ps.student_id AND s.is_deleted = FALSE
      LEFT JOIN schools sc ON sc.id = s.school_id
-     WHERE ps.parent_id = ? AND ps.approved = TRUE`,
-    [parent.id]
+     WHERE  p.phone = ? AND p.is_deleted = FALSE`,
+    [parent.phone]
   );
   return { parent, children };
 }
 
-/**
- * Safe unlink: soft-remove LINE↔parent link.
- * Clears line_users.parent_id/verified and parents.line_user_id.
- */
+// Round 1 unlink — hard delete the line_bindings row, clear legacy mirrors.
+// Public name kept stable so webhook handlers (line.routes.js) don't break.
 async function unlinkAccount(lineUserId) {
-  const parentId = await getLinkedParentId(lineUserId);
-  if (!parentId) return { success: false, message: 'ไม่พบการผูกบัญชี' };
-
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
-    await conn.query(
-      `UPDATE line_users SET parent_id = NULL, verified = FALSE, linked_at = NULL WHERE line_user_id = ?`,
-      [lineUserId]
-    );
-    await conn.query(
-      `UPDATE parents SET line_user_id = NULL WHERE id = ? AND line_user_id = ?`,
-      [parentId, lineUserId]
-    );
-    await conn.commit();
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
+  const phone = await getBoundPhoneByLineUserId(lineUserId);
+  const legacyParentId = phone ? null : await getLinkedParentId(lineUserId);
+  if (!phone && !legacyParentId) {
+    return { success: false, message: 'ไม่พบการผูกบัญชี' };
   }
-  return { success: true, unlinkedParentId: parentId };
+  await unbindLineUser(lineUserId);
+  return { success: true, unlinkedPhone: phone, unlinkedParentId: legacyParentId };
 }
 
 // ─── Parent Data Queries ────────────────────────────────────────────────────
 
 async function getLinkedChildren(lineUserId) {
-  // Phase 10.3E-HF4: include the active driver's name for the parent status
-  // Flex card. Scalar subquery prevents row duplication when a vehicle has
-  // multiple active assignment rows (rare but possible).
-  const [rows] = await pool.query(
-    `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
-            sc.name AS school_name, v.plate_no,
-            (SELECT d.name
-               FROM drivers d
-               JOIN driver_vehicle_assignments dva ON dva.driver_id = d.id
-              WHERE dva.vehicle_id = v.id
-                AND dva.is_active = TRUE
-                AND d.is_deleted = FALSE
-              LIMIT 1) AS driver_name
-     FROM line_users lu
-     JOIN parents p ON p.id = lu.parent_id
-     JOIN parent_student ps ON ps.parent_id = p.id AND ps.approved = TRUE
-     JOIN students s ON s.id = ps.student_id AND s.is_deleted = FALSE
-     LEFT JOIN schools sc ON sc.id = s.school_id
-     LEFT JOIN vehicles v ON v.id = s.vehicle_id
-     WHERE lu.line_user_id = ? AND lu.verified = TRUE`,
-    [lineUserId]
-  );
-  return rows;
+  // Phase 10.3E-HF4 included the driver name via a scalar subquery; that
+  // logic now lives in getChildrenByBoundPhone, which joins through the new
+  // line_bindings table instead of line_users. Public signature unchanged
+  // so callers (parent.routes.js, line.routes.js status handler) keep working.
+  return getChildrenByBoundPhone(lineUserId);
 }
 
 async function getChildStatusToday(studentId) {
@@ -1092,6 +1231,15 @@ async function processUnsentNotifications(limit = 50) {
 module.exports = {
   upsertLineUser, removeLineUser,
   getLinkState, setLinkState, clearLinkState,
+  // Round 1 — phone-based binding (canonical)
+  getBoundPhoneByLineUserId,
+  getLineUserIdByPhone,
+  findLinkablePhoneByStudentAndPhone,
+  bindLineUserToPhone,
+  unbindLineUser,
+  getChildrenByBoundPhone,
+  LineBindConflictError,
+  // Public surface (signatures unchanged — internals refactored to phone-based)
   tryLinkByPhoneAndStudentId,
   findLinkableParent, commitLineLink,
   getLinkedParentId, getLinkedParentSummary, unlinkAccount,

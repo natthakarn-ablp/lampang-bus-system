@@ -172,7 +172,16 @@ router.post('/line/bind-confirm', async (req, res, next) => {
     const match = await lineSvc.findLinkableParent(cleanPhone, cleanStudent);
     if (!match.found) return sendError(res, match.message || 'ไม่พบข้อมูลที่ตรงกัน', [], 404);
 
-    await lineSvc.commitLineLink(lineUserId, match.parentId);
+    try {
+      await lineSvc.commitLineLink(lineUserId, match.parentId);
+    } catch (bindErr) {
+      // Phone-binding conflict (Round 1) — surface as 409 with a localized msg.
+      if (bindErr instanceof lineSvc.LineBindConflictError) {
+        console.warn('[LINE_BIND_CONFIRM] conflict', { code: bindErr.code });
+        return sendError(res, bindErr.message, [{ field: 'phone', code: bindErr.code }], 409);
+      }
+      throw bindErr;
+    }
     await lineSvc.logMessage(lineUserId, 'system', 'bind_success_liff', 'ok', `parent_id=${match.parentId}`);
     console.log('[LINE_BIND_CONFIRM] linked', { parentId: match.parentId });
 

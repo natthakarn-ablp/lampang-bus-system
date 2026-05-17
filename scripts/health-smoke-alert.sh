@@ -26,7 +26,10 @@
 # Env vars (sourced from /etc/schoolbus/health-alert.env via systemd
 # EnvironmentFile=- — i.e. file is optional, no failure if absent):
 #   LINE_CHANNEL_ACCESS_TOKEN   — LINE Messaging API channel access token
-#   LINE_TARGET_ID              — user / group / room ID to push to
+#   TECH_LINE_TARGET_ID         — Technical channel ID for health alerts.
+#                                 Phase 10.3E-HF3: MUST NOT be the school
+#                                 emergency group (backend env LINE_GROUP_ID) —
+#                                 those two audiences are explicitly separated.
 #
 # Optional dev flag:
 #   FORCE_FAIL=1   skip the real smoke run and pretend it returned exit 1
@@ -136,13 +139,19 @@ build_message() {
 # Token is read from env, used only in the Authorization header.
 send_line_push() {
   local message="$1"
-  if [ -z "${LINE_CHANNEL_ACCESS_TOKEN:-}" ] || [ -z "${LINE_TARGET_ID:-}" ]; then
-    echo "ALERT NOT DELIVERED: missing LINE_CHANNEL_ACCESS_TOKEN or LINE_TARGET_ID"
+  if [ -z "${LINE_CHANNEL_ACCESS_TOKEN:-}" ] || [ -z "${TECH_LINE_TARGET_ID:-}" ]; then
+    echo "ALERT NOT DELIVERED: missing LINE_CHANNEL_ACCESS_TOKEN or TECH_LINE_TARGET_ID"
+    if [ -n "${LINE_TARGET_ID:-}" ]; then
+      echo "  ! MIGRATION REQUIRED: legacy LINE_TARGET_ID is set but TECH_LINE_TARGET_ID is not."
+      echo "    Phase 10.3E-HF3 separated tech alerts from the emergency group."
+      echo "    Rename the var in /etc/schoolbus/health-alert.env and point it at a"
+      echo "    DIFFERENT channel from the school emergency LINE_GROUP_ID."
+    fi
     echo "  → configure /etc/schoolbus/health-alert.env (root:schoolbus, 0640)"
     echo "  → see docs/phase-9-ops-notes.md Section 15"
     return 1
   fi
-  TARGET_ID="$LINE_TARGET_ID" MSG="$message" python3 - <<'PY' > "$PUSH_BODY"
+  TARGET_ID="$TECH_LINE_TARGET_ID" MSG="$message" python3 - <<'PY' > "$PUSH_BODY"
 import json, os
 print(json.dumps({
     "to": os.environ["TARGET_ID"],
@@ -166,7 +175,7 @@ PY
       ;;
     401|403)
       echo "ALERT DELIVERY FAILED: LINE authentication rejected (HTTP $code)."
-      echo "  → check that LINE_CHANNEL_ACCESS_TOKEN is current and the bot can push to LINE_TARGET_ID"
+      echo "  → check that LINE_CHANNEL_ACCESS_TOKEN is current and the bot can push to TECH_LINE_TARGET_ID"
       return 1
       ;;
     000)

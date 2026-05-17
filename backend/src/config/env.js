@@ -41,6 +41,7 @@ const env = {
     channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN || '',
     channelSecret: process.env.LINE_CHANNEL_SECRET || '',
     liffId: process.env.LINE_LIFF_ID || '',
+    groupId: process.env.LINE_GROUP_ID || '',
   },
   app: {
     port: parseInt(process.env.PORT || '3000', 10),

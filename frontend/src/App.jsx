@@ -16,6 +16,7 @@ import Login from './pages/Login';
 // downloads what their role uses.
 const ChangePassword       = lazy(() => import('./pages/ChangePassword'));
 const ParentStatus         = lazy(() => import('./pages/parent/ParentStatus'));
+const ParentLink           = lazy(() => import('./pages/parent/ParentLink'));
 
 // Driver
 const DriverLayout         = lazy(() => import('./pages/driver/DriverLayout'));
@@ -336,6 +337,7 @@ export default function App() {
 
           {/* Parent status — standalone (LIFF / LINE webview) */}
           <Route path="/parent" element={<ParentStatus />} />
+          <Route path="/parent/link" element={<ParentLink />} />
 
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />

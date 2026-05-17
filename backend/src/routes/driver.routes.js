@@ -30,6 +30,7 @@ const ppSvc             = require('../services/pickupPoint.service');
 const leaveSvc          = require('../services/leave.service');
 const rosterReqSvc      = require('../services/rosterRequest.service');
 const vllSvc            = require('../services/vehicleLocation.service');
+const lineSvc           = require('../services/line.service');
 
 // Phase 7.2 — per-driver rate limit on the location-write endpoint.
 // Keyed on req.user.id (NOT IP) so multiple drivers behind one NAT
@@ -374,19 +375,50 @@ router.post('/checkin-all', async (req, res, next) => {
 
 router.post('/emergency', async (req, res, next) => {
   try {
-    const { detail, note } = req.body;
+    const { detail, note, latitude, longitude, accuracy, gps_status } = req.body;
 
     if (!detail) {
       return sendError(res, 'detail is required', [], 400);
     }
 
+    // GPS is OPTIONAL — if provided, validate ranges. Bad values are dropped
+    // (warning logged) rather than failing the whole emergency report.
+    let lat = null, lng = null, acc = null;
+    if (latitude != null && longitude != null) {
+      const la = Number(latitude);
+      const lo = Number(longitude);
+      if (Number.isFinite(la) && la >= -90 && la <= 90 &&
+          Number.isFinite(lo) && lo >= -180 && lo <= 180) {
+        lat = la;
+        lng = lo;
+        const a = Number(accuracy);
+        acc = Number.isFinite(a) && a >= 0 ? Math.min(Math.round(a), 2147483647) : null;
+      } else {
+        console.warn('[emergency] invalid GPS payload dropped:', { latitude, longitude });
+      }
+    }
+
+    // HF2-debug: surface the driver-side GPS state machine outcome so we can
+    // tell from server logs whether the iPhone hit denied / timeout / etc.
+    // No coordinates logged here — only the status label.
+    const validGpsStatuses = new Set(['requesting','granted','denied','timeout','unsupported']);
+    const gpsStatus = validGpsStatuses.has(gps_status) ? gps_status : 'unknown';
+    console.log('[EMERGENCY_GPS_STATUS]', {
+      userId:   req.user.id,
+      hasCoord: lat != null,
+      status:   gpsStatus,
+      accuracy: acc,
+    });
+
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
 
     const [result] = await pool.query(
       `INSERT INTO emergency_logs
-         (reported_by, channel, vehicle_id, plate_no, detail, note)
-       VALUES (?, 'web', ?, ?, ?, ?)`,
-      [req.user.id, vehicle.vehicle_id, vehicle.plate_no, detail, note || null]
+         (reported_by, channel, vehicle_id, plate_no, detail, note,
+          latitude, longitude, location_accuracy_m)
+       VALUES (?, 'web', ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.id, vehicle.vehicle_id, vehicle.plate_no, detail, note || null,
+       lat, lng, acc]
     );
 
     await logAudit({
@@ -394,14 +426,54 @@ router.post('/emergency', async (req, res, next) => {
       action:     'CREATE',
       entityType: 'emergency',
       entityId:   result.insertId,
-      newValue:   { vehicleId: vehicle.vehicle_id, plateNo: vehicle.plate_no, detail },
+      newValue:   {
+        vehicleId: vehicle.vehicle_id,
+        plateNo:   vehicle.plate_no,
+        detail,
+        hasGps:    lat != null,
+        gpsStatus,
+      },
       ipAddress:  req.ip,
       userAgent:  req.headers['user-agent'],
     });
 
+    // Phase 10.3E-HF2 — push Flex card to school LINE group.
+    // Wrapped so a LINE failure NEVER blocks the emergency report.
+    try {
+      const [[meta]] = await pool.query(
+        `SELECT v.vehicle_type,
+                (SELECT GROUP_CONCAT(DISTINCT sc.name SEPARATOR ', ')
+                   FROM students s
+                   JOIN schools sc ON sc.id = s.school_id
+                  WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE) AS schools
+           FROM vehicles v
+          WHERE v.id = ?`,
+        [vehicle.vehicle_id]
+      );
+      await lineSvc.pushEmergencyFlexMessage({
+        plateNo:     vehicle.plate_no,
+        vehicleType: meta?.vehicle_type,
+        driverName:  req.user.display_name || req.user.username || '-',
+        schools:     meta?.schools,
+        detail,
+        note:        note || null,
+        timestamp:   new Date(),
+        latitude:    lat,
+        longitude:   lng,
+        accuracy:    acc,
+      });
+    } catch (pushErr) {
+      console.error('[LINE_EMERGENCY_FLEX_PUSH] unexpected error (suppressed):', pushErr.message);
+    }
+
     return sendSuccess(
       res,
-      { id: result.insertId, vehicle_id: vehicle.vehicle_id, plate_no: vehicle.plate_no },
+      {
+        id: result.insertId,
+        vehicle_id: vehicle.vehicle_id,
+        plate_no: vehicle.plate_no,
+        has_gps: lat != null,
+      },
       'Emergency reported',
       null,
       201

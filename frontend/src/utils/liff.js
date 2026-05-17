@@ -17,6 +17,18 @@ const LIFF_ID = import.meta.env.VITE_LIFF_ID || '';
 
 let _liffReady = false;
 let _cachedUserId = null;
+let _liffModule = null;
+
+async function getLiffModule() {
+  if (_liffModule) return _liffModule;
+  if (!LIFF_ID) return null;
+  _liffModule = (await import('@line/liff')).default;
+  if (!_liffReady) {
+    await _liffModule.init({ liffId: LIFF_ID });
+    _liffReady = true;
+  }
+  return _liffModule;
+}
 
 export async function resolveLineUserId() {
   // Return cached result if already resolved
@@ -25,9 +37,7 @@ export async function resolveLineUserId() {
   // Try LIFF SDK if configured
   if (LIFF_ID) {
     try {
-      const liff = (await import('@line/liff')).default;
-      await liff.init({ liffId: LIFF_ID });
-      _liffReady = true;
+      const liff = await getLiffModule();
 
       if (liff.isLoggedIn()) {
         const profile = await liff.getProfile();
@@ -49,6 +59,35 @@ export async function resolveLineUserId() {
   return _cachedUserId;
 }
 
+/**
+ * Phase 10.3E-UX1 — return the LIFF ID token. Backend uses this token via
+ * LINE Verify API to confirm the LINE userId is genuine. Sensitive ops
+ * (bind / unlink) require it; passive ops (status view) may skip it.
+ *
+ * Returns '' when:
+ *   • LIFF SDK not configured (no VITE_LIFF_ID)
+ *   • Not running inside LINE / LIFF browser
+ *   • User not logged in (caller should resolveLineUserId() first to trigger login)
+ */
+export async function getLiffIdToken() {
+  if (!LIFF_ID) return '';
+  try {
+    const liff = await getLiffModule();
+    if (!liff.isLoggedIn()) return '';
+    return liff.getIDToken() || '';
+  } catch (err) {
+    console.warn('[liff] getIDToken failed:', err.message);
+    return '';
+  }
+}
+
 export function isLiffReady() {
   return _liffReady;
+}
+
+export function isInLiffClient() {
+  // Hint for UI: true if we're running inside the LINE client (LIFF browser)
+  // and can rely on idToken; false if we're in a regular desktop browser.
+  if (!_liffReady || !_liffModule) return false;
+  try { return _liffModule.isInClient(); } catch { return false; }
 }

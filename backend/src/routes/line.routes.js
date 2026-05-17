@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const env = require('../config/env');
 const lineSvc = require('../services/line.service');
+const tpl = require('../services/lineFlexTemplates.service');
 
 /**
  * Verify LINE webhook signature.
@@ -53,6 +54,41 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   }
 });
 
+// ─── Keyword matcher (Phase 10.3E-HF4.2) ─────────────────────────────────────
+// Map case-insensitive, whitespace-trimmed user input to a canonical intent.
+// Rich-menu labels and natural variants both resolve to the same intent.
+const COMMAND_ALIASES = {
+  cancel:    ['ยกเลิก', 'cancel'],
+  bind:      ['ผูกบัญชี', 'ลงทะเบียน', 'link', 'ผูก'],
+  unbind:    ['ยกเลิกผูกบัญชี', 'unlink', 'ยกเลิกบัญชี', 'ยกเลิกผูก'],
+  rebind:    ['เปลี่ยนบัญชี', 'rebind', 'เปลี่ยนผู้ใช้', 'เปลี่ยนผู้ปกครอง'],
+  status:    ['สถานะ', 'status'],
+  children:  ['ข้อมูลบุตร', 'children', 'ลูก', 'ข้อมูลลูก'],
+  help:      ['ช่วยเหลือ', 'help', 'เมนู', 'menu'],
+  confirmUnlink: ['ยืนยันยกเลิก'],
+  confirmRebind: ['ยืนยันเปลี่ยนบัญชี'],
+};
+function matchCommand(input) {
+  const lower = input.trim().toLowerCase();
+  for (const [intent, aliases] of Object.entries(COMMAND_ALIASES)) {
+    if (aliases.some((a) => a.toLowerCase() === lower)) return intent;
+  }
+  return null;
+}
+
+// Phase 10.3E-UX2.1 — Top-level commands that MUST override any pending chat
+// state. Without this, typing "ผูกบัญชี" while stuck in await_phone made the
+// state machine try to parse "ผูกบัญชี" as a phone number and reply
+// "เบอร์โทรไม่ถูกต้อง".
+//
+// `cancel` is intentionally absent — its handler reads state BEFORE clearing
+// to render different copy ("had-pending" vs "idle"), so it manages its own
+// clear. Confirmation intents (confirmUnlink / confirmRebind) are also absent
+// — they only make sense mid-flow and must NOT bypass the state machine.
+const TOP_LEVEL_INTENTS = new Set([
+  'bind', 'unbind', 'rebind', 'status', 'children', 'help',
+]);
+
 /**
  * Handle a single LINE event.
  */
@@ -61,15 +97,15 @@ async function handleEvent(event) {
   if (!lineUserId) return;
 
   if (event.type === 'follow') {
-    const profile = event.source; // displayName comes from profile API if needed
     await lineSvc.upsertLineUser(lineUserId, null);
     await lineSvc.logMessage(lineUserId, 'system', 'follow', 'ok', null);
-    await lineSvc.sendTextMessage(lineUserId,
-      'ยินดีต้อนรับสู่ระบบรถรับส่งนักเรียนจังหวัดลำปาง 🚌\n\n' +
-      'พิมพ์ "ผูกบัญชี" เพื่อเชื่อมข้อมูลบุตรหลาน\n' +
-      'พิมพ์ "สถานะ" เพื่อดูสถานะรับ-ส่งวันนี้\n' +
-      'พิมพ์ "ข้อมูลบุตร" เพื่อดูข้อมูลนักเรียนที่ผูกไว้'
-    );
+    // Welcome with help card — same content as /help, since this is the
+    // very first impression we get.
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentHelpCard(false),
+      fallbackText: tpl.fallbackHelp(false),
+      logPrefix:    '[LINE_PARENT_WELCOME_FLEX]',
+    });
     return;
   }
 
@@ -85,6 +121,69 @@ async function handleEvent(event) {
     await handleTextMessage(lineUserId, text);
     return;
   }
+
+  // Phase 10.3E-UX2 — tap-driven actions (Flex postback buttons)
+  if (event.type === 'postback') {
+    const data = event.postback?.data || '';
+    // Log a truncated view of the data (never user-controlled secrets — these
+    // are server-issued query strings) for audit.
+    await lineSvc.logMessage(lineUserId, 'user', `postback:${data.slice(0, 60)}`, 'received', null);
+    await handlePostback(lineUserId, data);
+    return;
+  }
+}
+
+/**
+ * Postback dispatcher. Parses data as a URL-encoded query string and routes
+ * by `action` key. Keep this small — any heavy logic should live in helpers
+ * so it can be unit-tested independently. Never throws (handleEvent already
+ * catches at the outer scope, but defensive try/catch within each branch).
+ */
+async function handlePostback(lineUserId, data) {
+  const params = new URLSearchParams(data || '');
+  const action = params.get('action');
+
+  if (action === 'unlink_confirm') {
+    // Same effect as the legacy chat "ยืนยันยกเลิก" branch — clear pending
+    // chat state, run the unlink, push the appropriate success/error Flex.
+    lineSvc.clearLinkState(lineUserId);
+    const result = await lineSvc.unlinkAccount(lineUserId);
+    if (result.success) {
+      await lineSvc.logMessage(lineUserId, 'system', 'unlink_success_postback', 'ok', `parent_id=${result.unlinkedParentId}`);
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentUnbindSuccessCard(),
+        fallbackText: tpl.fallbackUnbindSuccess(),
+        logPrefix:    '[LINE_PARENT_UNBIND_FLEX]',
+      });
+    } else {
+      // Idempotent: if the user double-taps Confirm or the account was
+      // already unlinked elsewhere, show the friendly "not bound" card
+      // rather than a hard error.
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentNotBoundCard(),
+        fallbackText: tpl.fallbackNotBound(),
+        logPrefix:    '[LINE_PARENT_UNBIND_FLEX]',
+      });
+    }
+    return;
+  }
+
+  if (action === 'unlink_cancel') {
+    const state = lineSvc.getLinkState(lineUserId);
+    if (state) lineSvc.clearLinkState(lineUserId);
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentCancelCard(Boolean(state)),
+      fallbackText: tpl.fallbackCancel(Boolean(state)),
+      logPrefix:    '[LINE_PARENT_UNBIND_FLEX]',
+    });
+    return;
+  }
+
+  // Unknown postback — likely a stale button from an old Flex carousel or
+  // a forged payload. Don't push anything to the user (no chat spam); just
+  // log for audit. Postback data is server-issued, so unknown actions are
+  // safe to silently ignore.
+  console.warn('[LINE_POSTBACK] unknown action', { action: action || '(none)' });
 }
 
 /**
@@ -99,17 +198,25 @@ async function handleEvent(event) {
  */
 async function handleTextMessage(lineUserId, text) {
   const cmd = text.trim();
-  const cmdLower = cmd.toLowerCase();
+  const intent = matchCommand(cmd);
+
+  // Top-level command guard: any of these intents wins over a stale chat
+  // state, so the user can always exit a half-finished flow by typing the
+  // canonical keyword (or tapping the rich-menu equivalent). `cancel` is
+  // handled separately (see TOP_LEVEL_INTENTS comment).
+  if (intent && TOP_LEVEL_INTENTS.has(intent)) {
+    lineSvc.clearLinkState(lineUserId);
+  }
 
   // ── "ยกเลิก" resets any pending state ──
-  if (cmdLower === 'ยกเลิก' || cmdLower === 'cancel') {
+  if (intent === 'cancel') {
     const state = lineSvc.getLinkState(lineUserId);
-    if (state) {
-      lineSvc.clearLinkState(lineUserId);
-      await lineSvc.sendTextMessage(lineUserId, 'ยกเลิกคำสั่งแล้ว');
-    } else {
-      await lineSvc.sendTextMessage(lineUserId, 'ไม่มีคำสั่งค้างอยู่');
-    }
+    if (state) lineSvc.clearLinkState(lineUserId);
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentCancelCard(Boolean(state)),
+      fallbackText: tpl.fallbackCancel(Boolean(state)),
+      logPrefix:    '[LINE_PARENT_CANCEL_FLEX]',
+    });
     return;
   }
 
@@ -119,197 +226,229 @@ async function handleTextMessage(lineUserId, text) {
   if (state?.step === 'await_phone') {
     const phone = cmd.replace(/-/g, '').trim();
     if (!/^\d{9,10}$/.test(phone)) {
-      await lineSvc.sendTextMessage(lineUserId, 'เบอร์โทรไม่ถูกต้อง กรุณาพิมพ์เบอร์โทร 10 หลัก เช่น 0812345678\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก');
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentInvalidPhoneCard(),
+        fallbackText: tpl.fallbackInvalidPhone(),
+        logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+      });
       return;
     }
     const normalized = phone.length === 9 && (phone[0] === '8' || phone[0] === '9') ? '0' + phone : phone;
     lineSvc.setLinkState(lineUserId, { step: 'await_student_id', phone: normalized });
-    await lineSvc.sendTextMessage(lineUserId, 'กรุณาพิมพ์รหัสนักเรียนของบุตรหลาน (ตัวเลข)\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก');
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentRequestStudentCard(),
+      fallbackText: tpl.fallbackRequestStudent(),
+      logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+    });
     return;
   }
 
   if (state?.step === 'await_student_id') {
     const studentId = parseInt(cmd, 10);
     if (!studentId || isNaN(studentId)) {
-      await lineSvc.sendTextMessage(lineUserId, 'รหัสนักเรียนไม่ถูกต้อง กรุณาพิมพ์เป็นตัวเลข\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก');
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentInvalidStudentCard(),
+        fallbackText: tpl.fallbackInvalidStudent(),
+        logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+      });
       return;
     }
     const result = await lineSvc.tryLinkByPhoneAndStudentId(lineUserId, state.phone, studentId);
     lineSvc.clearLinkState(lineUserId);
     if (result.success) {
       await lineSvc.logMessage(lineUserId, 'system', 'bind_success', 'ok', `parent_id=${result.parentId}`);
-      await lineSvc.sendTextMessage(lineUserId,
-        '✅ ผูกบัญชีสำเร็จ!\n\nคุณจะได้รับแจ้งเตือนเมื่อบุตรหลานขึ้น-ลงรถ\n\nพิมพ์ "สถานะ" เพื่อดูสถานะวันนี้'
-      );
+      const children = await lineSvc.getLinkedChildren(lineUserId);
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentBindSuccessCard(children),
+        fallbackText: tpl.fallbackBindSuccess(children),
+        logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+      });
     } else {
-      await lineSvc.sendTextMessage(lineUserId, '❌ ' + result.message);
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentBindErrorCard(result.message),
+        fallbackText: tpl.fallbackBindError(result.message),
+        logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+      });
     }
     return;
   }
 
   if (state?.step === 'confirm_unlink') {
-    if (cmdLower === 'ยืนยันยกเลิก') {
+    if (intent === 'confirmUnlink') {
       lineSvc.clearLinkState(lineUserId);
       const result = await lineSvc.unlinkAccount(lineUserId);
       if (result.success) {
         await lineSvc.logMessage(lineUserId, 'system', 'unlink_success', 'ok', `parent_id=${result.unlinkedParentId}`);
-        await lineSvc.sendTextMessage(lineUserId,
-          '✅ ยกเลิกการผูกบัญชีเรียบร้อยแล้ว\n\nคุณจะไม่ได้รับแจ้งเตือนอีกจนกว่าจะผูกบัญชีใหม่\n\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้นใหม่'
-        );
+        await lineSvc.pushParentFlex(lineUserId, {
+          flex:         tpl.buildParentUnbindSuccessCard(),
+          fallbackText: tpl.fallbackUnbindSuccess(),
+          logPrefix:    '[LINE_PARENT_UNBIND_FLEX]',
+        });
       } else {
-        await lineSvc.sendTextMessage(lineUserId, '❌ ' + result.message);
+        await lineSvc.pushParentFlex(lineUserId, {
+          flex:         tpl.buildParentBindErrorCard(result.message || 'ระบบไม่สามารถยกเลิกได้'),
+          fallbackText: tpl.fallbackBindError(result.message || 'ระบบไม่สามารถยกเลิกได้'),
+          logPrefix:    '[LINE_PARENT_UNBIND_FLEX]',
+        });
       }
     } else {
       lineSvc.clearLinkState(lineUserId);
-      await lineSvc.sendTextMessage(lineUserId, 'ยกเลิกคำสั่ง — ไม่มีการเปลี่ยนแปลง');
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentCancelCard(true),
+        fallbackText: tpl.fallbackCancel(true),
+        logPrefix:    '[LINE_PARENT_UNBIND_FLEX]',
+      });
     }
     return;
   }
 
   if (state?.step === 'confirm_rebind') {
-    if (cmdLower === 'ยืนยันเปลี่ยนบัญชี') {
+    if (intent === 'confirmRebind') {
       const unlinkResult = await lineSvc.unlinkAccount(lineUserId);
       if (unlinkResult.success) {
         await lineSvc.logMessage(lineUserId, 'system', 'rebind_unlink', 'ok', `old_parent_id=${unlinkResult.unlinkedParentId}`);
         lineSvc.setLinkState(lineUserId, { step: 'await_phone' });
-        await lineSvc.sendTextMessage(lineUserId,
-          '✅ ยกเลิกการผูกบัญชีเดิมแล้ว\n\nเริ่มผูกบัญชีใหม่…\nกรุณาพิมพ์เบอร์โทรที่ลงทะเบียนไว้กับโรงเรียน (10 หลัก)\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก'
-        );
+        await lineSvc.pushParentFlex(lineUserId, {
+          flex:         tpl.buildParentRebindContinueCard(),
+          fallbackText: tpl.fallbackRebindContinue(),
+          logPrefix:    '[LINE_PARENT_REBIND_FLEX]',
+        });
       } else {
         lineSvc.clearLinkState(lineUserId);
-        await lineSvc.sendTextMessage(lineUserId, '❌ ไม่สามารถยกเลิกการผูกบัญชีเดิมได้ กรุณาลองใหม่');
+        await lineSvc.pushParentFlex(lineUserId, {
+          flex:         tpl.buildParentBindErrorCard('ไม่สามารถยกเลิกการผูกบัญชีเดิมได้ กรุณาลองใหม่'),
+          fallbackText: tpl.fallbackBindError('ไม่สามารถยกเลิกการผูกบัญชีเดิมได้ กรุณาลองใหม่'),
+          logPrefix:    '[LINE_PARENT_REBIND_FLEX]',
+        });
       }
     } else {
       lineSvc.clearLinkState(lineUserId);
-      await lineSvc.sendTextMessage(lineUserId, 'ยกเลิกคำสั่ง — ไม่มีการเปลี่ยนแปลง');
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentCancelCard(true),
+        fallbackText: tpl.fallbackCancel(true),
+        logPrefix:    '[LINE_PARENT_REBIND_FLEX]',
+      });
     }
     return;
   }
 
   // ── Commands (no pending state) ──
 
-  if (cmdLower === 'ผูกบัญชี' || cmdLower === 'ลงทะเบียน' || cmdLower === 'link') {
-    // Check if already linked
+  if (intent === 'bind') {
     const linked = await lineSvc.getLinkedParentId(lineUserId);
     if (linked) {
       const summary = await lineSvc.getLinkedParentSummary(lineUserId);
-      let msg = '⚠️ บัญชี LINE นี้ผูกอยู่แล้ว\n';
-      if (summary?.children?.length > 0) {
-        msg += '\nบุตรหลานที่ผูกอยู่:';
-        for (const c of summary.children) {
-          msg += `\n• ${c.first_name} ${c.last_name} (${c.grade || '-'}) — ${c.school_name || '-'}`;
-        }
-      }
-      msg += '\n\n📌 คำสั่งที่ใช้ได้:';
-      msg += '\n• "สถานะ" — ดูสถานะรับ-ส่งวันนี้';
-      msg += '\n• "ยกเลิกผูกบัญชี" — ยกเลิกการเชื่อม';
-      msg += '\n• "เปลี่ยนบัญชี" — เปลี่ยนเป็นผู้ปกครองอื่น';
-      await lineSvc.sendTextMessage(lineUserId, msg);
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentBindAlreadyCard(summary),
+        fallbackText: tpl.fallbackBindAlready(summary),
+        logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+      });
       return;
     }
     lineSvc.setLinkState(lineUserId, { step: 'await_phone' });
-    await lineSvc.sendTextMessage(lineUserId, 'กรุณาพิมพ์เบอร์โทรที่ลงทะเบียนไว้กับโรงเรียน (10 หลัก)\n\nพิมพ์ "ยกเลิก" เพื่อยกเลิก');
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentRequestPhoneCard({ liffId: env.line.liffId }),
+      fallbackText: tpl.fallbackRequestPhone(),
+      logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+    });
     return;
   }
 
-  if (cmdLower === 'ยกเลิกผูกบัญชี' || cmdLower === 'unlink') {
+  if (intent === 'unbind') {
     const linked = await lineSvc.getLinkedParentId(lineUserId);
     if (!linked) {
-      await lineSvc.sendTextMessage(lineUserId, 'บัญชี LINE นี้ยังไม่ได้ผูกกับข้อมูลใด\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้น');
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentNotBoundCard(),
+        fallbackText: tpl.fallbackNotBound(),
+        logPrefix:    '[LINE_PARENT_UNBIND_FLEX]',
+      });
       return;
     }
     const summary = await lineSvc.getLinkedParentSummary(lineUserId);
-    let msg = '⚠️ คุณกำลังจะยกเลิกการผูกบัญชี\n';
-    if (summary?.children?.length > 0) {
-      msg += '\nบุตรหลานที่ผูกอยู่:';
-      for (const c of summary.children) {
-        msg += `\n• ${c.first_name} ${c.last_name}`;
-      }
-    }
-    msg += '\n\n❗ หลังยกเลิก คุณจะไม่ได้รับแจ้งเตือนรับ-ส่งอีก';
-    msg += '\n\nพิมพ์ "ยืนยันยกเลิก" เพื่อดำเนินการ';
-    msg += '\nพิมพ์ "ยกเลิก" เพื่อยกเลิกคำสั่ง';
     lineSvc.setLinkState(lineUserId, { step: 'confirm_unlink' });
-    await lineSvc.sendTextMessage(lineUserId, msg);
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentConfirmUnbindCard(summary),
+      fallbackText: tpl.fallbackConfirmUnbind(summary),
+      logPrefix:    '[LINE_PARENT_UNBIND_FLEX]',
+    });
     return;
   }
 
-  if (cmdLower === 'เปลี่ยนบัญชี' || cmdLower === 'rebind') {
+  if (intent === 'rebind') {
     const linked = await lineSvc.getLinkedParentId(lineUserId);
     if (!linked) {
-      await lineSvc.sendTextMessage(lineUserId, 'บัญชี LINE นี้ยังไม่ได้ผูกกับข้อมูลใด\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้น');
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentNotBoundCard(),
+        fallbackText: tpl.fallbackNotBound(),
+        logPrefix:    '[LINE_PARENT_REBIND_FLEX]',
+      });
       return;
     }
     const summary = await lineSvc.getLinkedParentSummary(lineUserId);
-    let msg = '⚠️ คุณกำลังจะเปลี่ยนบัญชีผู้ปกครอง\n';
-    if (summary?.parent) msg += `\nบัญชีปัจจุบัน: ${summary.parent.name || '-'} (${summary.parent.phone || '-'})`;
-    msg += '\n\nระบบจะยกเลิกการผูกบัญชีเดิม แล้วเริ่มผูกใหม่';
-    msg += '\n\nพิมพ์ "ยืนยันเปลี่ยนบัญชี" เพื่อดำเนินการ';
-    msg += '\nพิมพ์ "ยกเลิก" เพื่อยกเลิกคำสั่ง';
     lineSvc.setLinkState(lineUserId, { step: 'confirm_rebind' });
-    await lineSvc.sendTextMessage(lineUserId, msg);
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentConfirmRebindCard(summary),
+      fallbackText: tpl.fallbackConfirmRebind(summary),
+      logPrefix:    '[LINE_PARENT_REBIND_FLEX]',
+    });
     return;
   }
 
-  if (cmdLower === 'สถานะ' || cmdLower === 'status') {
+  if (intent === 'status') {
     const children = await lineSvc.getLinkedChildren(lineUserId);
     if (children.length === 0) {
-      await lineSvc.sendTextMessage(lineUserId, 'ยังไม่ได้ผูกบัญชี\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้น');
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentNotBoundCard(),
+        fallbackText: tpl.fallbackNotBound(),
+        logPrefix:    '[LINE_PARENT_STATUS_FLEX]',
+      });
       return;
     }
-    let msg = '📋 สถานะรับ-ส่งวันนี้\n';
+    // Phase 10.3E-HF4 — Flex card with text fallback baked into the helper.
+    const childrenWithStatus = [];
     for (const child of children) {
-      const st = await lineSvc.getChildStatusToday(child.id);
-      const mLabel = st.morning_done ? `✅ ส่งแล้ว ${st.morning_ts ? new Date(st.morning_ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) : ''}` : '⏳ ยังไม่ส่ง';
-      const eLabel = st.evening_done ? `✅ รับแล้ว ${st.evening_ts ? new Date(st.evening_ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) : ''}` : '⏳ ยังไม่รับ';
-      msg += `\n👦 ${child.prefix || ''}${child.first_name} ${child.last_name}`;
-      msg += `\n   ${child.grade || ''}${child.classroom ? '/' + child.classroom : ''} - ${child.school_name || ''}`;
-      msg += `\n   เช้า: ${mLabel}`;
-      msg += `\n   เย็น: ${eLabel}`;
-      if (child.plate_no) msg += `\n   🚐 ${child.plate_no}`;
-      msg += '\n';
+      const status = await lineSvc.getChildStatusToday(child.id);
+      childrenWithStatus.push({ child, status });
     }
-    await lineSvc.sendTextMessage(lineUserId, msg.trim());
+    await lineSvc.pushParentStatusFlex(lineUserId, childrenWithStatus);
     return;
   }
 
-  if (cmdLower === 'ข้อมูลบุตร' || cmdLower === 'children' || cmdLower === 'ลูก') {
+  if (intent === 'children') {
     const children = await lineSvc.getLinkedChildren(lineUserId);
     if (children.length === 0) {
-      await lineSvc.sendTextMessage(lineUserId, 'ยังไม่ได้ผูกบัญชี\nพิมพ์ "ผูกบัญชี" เพื่อเริ่มต้น');
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentNotBoundCard(),
+        fallbackText: tpl.fallbackNotBound(),
+        logPrefix:    '[LINE_PARENT_CHILDREN_FLEX]',
+      });
       return;
     }
-    let msg = '👨‍👩‍👧‍👦 ข้อมูลบุตรหลาน\n';
-    for (const child of children) {
-      msg += `\n• ${child.prefix || ''}${child.first_name} ${child.last_name}`;
-      msg += `\n  รหัส: ${child.id}`;
-      msg += `\n  ชั้น: ${child.grade || '-'}${child.classroom ? '/' + child.classroom : ''}`;
-      msg += `\n  โรงเรียน: ${child.school_name || '-'}`;
-      msg += `\n  ทะเบียนรถ: ${child.plate_no || 'ยังไม่ระบุ'}`;
-    }
-    await lineSvc.sendTextMessage(lineUserId, msg.trim());
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentChildrenInfoCard(children),
+      fallbackText: tpl.fallbackChildrenInfo(children),
+      logPrefix:    '[LINE_PARENT_CHILDREN_FLEX]',
+    });
     return;
   }
 
-  if (cmdLower === 'ช่วยเหลือ' || cmdLower === 'help' || cmdLower === 'เมนู' || cmdLower === 'menu') {
+  if (intent === 'help') {
     const linked = await lineSvc.getLinkedParentId(lineUserId);
-    let msg = '📌 คำสั่งที่ใช้ได้:\n\n';
-    msg += '• "ผูกบัญชี" — เชื่อมข้อมูลบุตรหลาน\n';
-    msg += '• "สถานะ" — ดูสถานะรับ-ส่งวันนี้\n';
-    msg += '• "ข้อมูลบุตร" — ดูข้อมูลนักเรียน\n';
-    if (linked) {
-      msg += '• "ยกเลิกผูกบัญชี" — ยกเลิกการเชื่อม\n';
-      msg += '• "เปลี่ยนบัญชี" — เปลี่ยนผู้ปกครอง\n';
-    }
-    msg += '• "ช่วยเหลือ" — แสดงเมนูนี้';
-    await lineSvc.sendTextMessage(lineUserId, msg);
+    await lineSvc.pushParentFlex(lineUserId, {
+      flex:         tpl.buildParentHelpCard(Boolean(linked)),
+      fallbackText: tpl.fallbackHelp(Boolean(linked)),
+      logPrefix:    '[LINE_PARENT_HELP_FLEX]',
+    });
     return;
   }
 
-  // Default response
-  await lineSvc.sendTextMessage(lineUserId,
-    'ไม่เข้าใจคำสั่ง\nพิมพ์ "ช่วยเหลือ" เพื่อดูคำสั่งที่ใช้ได้'
-  );
+  // Default response — unknown command
+  const linked = await lineSvc.getLinkedParentId(lineUserId);
+  await lineSvc.pushParentFlex(lineUserId, {
+    flex:         tpl.buildParentUnknownCommandCard(Boolean(linked)),
+    fallbackText: tpl.fallbackUnknownCommand(Boolean(linked)),
+    logPrefix:    '[LINE_PARENT_HELP_FLEX]',
+  });
 }
 
 // ─── Notification processing endpoint (called by cron or manually) ──────────

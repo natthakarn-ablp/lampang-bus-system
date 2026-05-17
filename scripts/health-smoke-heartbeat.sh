@@ -24,7 +24,8 @@
 # Env vars (from /etc/schoolbus/health-alert.env via systemd
 # EnvironmentFile=- — same file as the alerter):
 #   LINE_CHANNEL_ACCESS_TOKEN
-#   LINE_TARGET_ID
+#   TECH_LINE_TARGET_ID         — Technical channel (Phase 10.3E-HF3 rename).
+#                                 MUST NOT equal the school emergency group.
 #
 # Safety:   no sudo, no DB writes, no service restarts, no state writes,
 #           token never echoed.
@@ -99,16 +100,20 @@ if [ "${#MSG}" -gt "$MAX_MSG_CHARS" ]; then
 fi
 
 # Check creds (token never echoed).
-if [ -z "${LINE_CHANNEL_ACCESS_TOKEN:-}" ] || [ -z "${LINE_TARGET_ID:-}" ]; then
+if [ -z "${LINE_CHANNEL_ACCESS_TOKEN:-}" ] || [ -z "${TECH_LINE_TARGET_ID:-}" ]; then
   echo
-  echo "HEARTBEAT NOT DELIVERED: missing LINE_CHANNEL_ACCESS_TOKEN or LINE_TARGET_ID"
+  echo "HEARTBEAT NOT DELIVERED: missing LINE_CHANNEL_ACCESS_TOKEN or TECH_LINE_TARGET_ID"
+  if [ -n "${LINE_TARGET_ID:-}" ]; then
+    echo "  ! MIGRATION REQUIRED: legacy LINE_TARGET_ID is set but TECH_LINE_TARGET_ID is not."
+    echo "    Phase 10.3E-HF3 separated tech alerts from the emergency group."
+  fi
   echo "  → /etc/schoolbus/health-alert.env (root:schoolbus, 0640)"
   echo "  → docs/phase-9-ops-notes.md Section 16"
   exit 2
 fi
 
 # Build push body via python3 (safe JSON escaping); token stays in -H only.
-TARGET_ID="$LINE_TARGET_ID" MSG="$MSG" python3 - <<'PY' > "$PUSH_BODY"
+TARGET_ID="$TECH_LINE_TARGET_ID" MSG="$MSG" python3 - <<'PY' > "$PUSH_BODY"
 import json, os
 print(json.dumps({
     "to": os.environ["TARGET_ID"],

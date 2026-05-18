@@ -176,7 +176,7 @@ export default function TransportDashboard() {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
       <header>
         <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">ภาพรวมตรวจสภาพรถ</h1>
-        <p className="text-sm text-ink-muted mt-1">สรุปสถานะรถรับส่งนักเรียนทั้งจังหวัด</p>
+        <p className="text-sm text-ink-muted mt-1">สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด</p>
       </header>
 
       {/* Save success banner */}

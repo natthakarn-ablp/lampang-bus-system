@@ -45,6 +45,12 @@ function rowKey(p) {
  * school_name, affiliation_name, student_count_in_scope, grade_summary.
  *
  * Never renders student names, phone numbers, addresses, or cid.
+ *
+ * Phase 10.6C.1 — `showStudentStats` (default true) gates the
+ * roster-size aggregate (student_count_in_scope) AND the per-point grade
+ * distribution (grade_summary). Transport callers MUST pass false so the
+ * map page stays PDPA-clean. School / province / affiliation / admin keep
+ * the default and continue to see these fields.
  */
 export default function ReadOnlyPickupPointMap({
   points = [],
@@ -54,6 +60,7 @@ export default function ReadOnlyPickupPointMap({
   onSelect,
   showSchool = true,
   showAffiliation = false,
+  showStudentStats = true,
   emptyMessage = 'ยังไม่มีจุดรับส่งในขอบเขตนี้',
 }) {
   const validPoints = useMemo(() => points.filter(hasCoords), [points]);
@@ -91,6 +98,7 @@ export default function ReadOnlyPickupPointMap({
                 onClick={() => onSelect && onSelect(key, p)}
                 showSchool={showSchool}
                 showAffiliation={showAffiliation}
+                showStudentStats={showStudentStats}
               />
             );
           })}
@@ -107,6 +115,7 @@ export default function ReadOnlyPickupPointMap({
               onMarkerClick={(p) => onSelect && onSelect(rowKey(p), p)}
               showSchool={showSchool}
               showAffiliation={showAffiliation}
+              showStudentStats={showStudentStats}
             />
           ) : (
             <div className="h-full w-full flex items-center justify-center bg-surface text-ink-muted text-sm p-4 text-center">
@@ -120,7 +129,7 @@ export default function ReadOnlyPickupPointMap({
 }
 
 /* ── List row — pure read-only; no edit/delete controls ─────────────────── */
-function PointRow({ point, selected, onClick, showSchool, showAffiliation }) {
+function PointRow({ point, selected, onClick, showSchool, showAffiliation, showStudentStats = true }) {
   return (
     <AppCard
       as="button"
@@ -150,10 +159,12 @@ function PointRow({ point, selected, onClick, showSchool, showAffiliation }) {
                 {point.vehicle_type && <span className="text-ink-muted">({point.vehicle_type})</span>}
               </span>
             )}
-            <span className="inline-flex items-center gap-1">
-              <Users className="w-3 h-3" strokeWidth={2} />
-              {Number(point.student_count_in_scope || 0)} คน
-            </span>
+            {showStudentStats && (
+              <span className="inline-flex items-center gap-1">
+                <Users className="w-3 h-3" strokeWidth={2} />
+                {Number(point.student_count_in_scope || 0)} คน
+              </span>
+            )}
           </p>
         </div>
         {!hasCoords(point) && (
@@ -169,14 +180,16 @@ function PointRow({ point, selected, onClick, showSchool, showAffiliation }) {
         {showAffiliation && point.affiliation_name && (
           <p className="truncate">สังกัด: <span className="text-ink">{point.affiliation_name}</span></p>
         )}
-        <p className="truncate">ระดับชั้น: <span className="text-ink">{formatGradeSummary(point.grade_summary)}</span></p>
+        {showStudentStats && (
+          <p className="truncate">ระดับชั้น: <span className="text-ink">{formatGradeSummary(point.grade_summary)}</span></p>
+        )}
       </div>
     </AppCard>
   );
 }
 
 /* ── Map ────────────────────────────────────────────────────────────────── */
-function InnerMap({ points, selectedKey, onMarkerClick, showSchool, showAffiliation }) {
+function InnerMap({ points, selectedKey, onMarkerClick, showSchool, showAffiliation, showStudentStats = true }) {
   return (
     <div className="pickup-page-map relative z-0 isolate h-full w-full" style={{ minHeight: 320 }}>
       <MapContainer
@@ -210,12 +223,16 @@ function InnerMap({ points, selectedKey, onMarkerClick, showSchool, showAffiliat
                 {showAffiliation && p.affiliation_name && (
                   <p className="text-xs mb-0.5"><span className="text-ink-muted">สังกัด:</span> {p.affiliation_name}</p>
                 )}
-                <p className="text-xs mb-0.5">
-                  <span className="text-ink-muted">จำนวนนักเรียน:</span> {Number(p.student_count_in_scope || 0)} คน
-                </p>
-                <p className="text-xs mb-2">
-                  <span className="text-ink-muted">ระดับชั้น:</span> {formatGradeSummary(p.grade_summary)}
-                </p>
+                {showStudentStats && (
+                  <p className="text-xs mb-0.5">
+                    <span className="text-ink-muted">จำนวนนักเรียน:</span> {Number(p.student_count_in_scope || 0)} คน
+                  </p>
+                )}
+                {showStudentStats && (
+                  <p className="text-xs mb-2">
+                    <span className="text-ink-muted">ระดับชั้น:</span> {formatGradeSummary(p.grade_summary)}
+                  </p>
+                )}
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${p.latitude},${p.longitude}`}
                   target="_blank"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Map as MapIcon, RefreshCw, Bus, Building2, Users } from 'lucide-react';
+import { Map as MapIcon, RefreshCw, Bus, Building2 } from 'lucide-react';
 import api from '../../api/axios';
 import { AlertBanner, KPIGrid, KPIStat, SearchableSelect } from '../../components/ui';
 import ReadOnlyPickupPointMap from '../../components/ReadOnlyPickupPointMap';
@@ -105,11 +105,13 @@ export default function TransportPickupMap() {
         </AlertBanner>
       )}
 
-      <KPIGrid cols={4}>
-        <KPIStat label="จุดรับส่งทั้งหมด"   value={summary?.total_points ?? '–'}            icon={MapIcon}   variant="brand" />
-        <KPIStat label="นักเรียนในขอบเขต"   value={summary?.total_students_in_scope ?? '–'} icon={Users}     variant="info" />
-        <KPIStat label="โรงเรียนที่เกี่ยวข้อง" value={summary?.total_schools ?? '–'}         icon={Building2} variant="neutral" />
-        <KPIStat label="รถที่เกี่ยวข้อง"     value={summary?.total_vehicles ?? '–'}          icon={Bus}       variant="success" />
+      {/* Phase 10.6C.1 — transport role does not see roster-size aggregates.
+          The 4th KPI card was intentionally dropped; the remaining 3 cover
+          scope relevant to vehicle safety (points / schools / vehicles). */}
+      <KPIGrid cols={3}>
+        <KPIStat label="จุดรับส่งทั้งหมด"   value={summary?.total_points ?? '–'}    icon={MapIcon}   variant="brand" />
+        <KPIStat label="โรงเรียนที่เกี่ยวข้อง" value={summary?.total_schools ?? '–'} icon={Building2} variant="neutral" />
+        <KPIStat label="รถที่เกี่ยวข้อง"     value={summary?.total_vehicles ?? '–'}  icon={Bus}       variant="success" />
       </KPIGrid>
 
       <form
@@ -166,6 +168,7 @@ export default function TransportPickupMap() {
           onSelect={(k) => setSelectedKey(k)}
           showSchool
           showAffiliation
+          showStudentStats={false}
           emptyMessage="ยังไม่มีจุดรับส่งให้ตรวจสอบในขอบเขตนี้"
         />
       )}

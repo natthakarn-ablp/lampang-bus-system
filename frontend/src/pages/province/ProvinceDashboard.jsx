@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Bus, GraduationCap, Building2, Clock, AlertTriangle,
+  Bus, Building2, Clock, AlertTriangle,
   Sunrise, Sunset, FileText, RotateCw, Truck,
+  // Phase 10.7B-2 — Wifi for the "สถานะสัญญาณรถ" hero card
+  Wifi,
 } from 'lucide-react';
 
 const POLL_INTERVAL = 30_000; // 30s background refresh
@@ -11,7 +13,7 @@ import { safePct, kpiColor } from '../../utils/kpi';
 import { relativeTime } from '../../utils/datetime';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
 import {
-  AppCard, AlertBanner, KPIGrid, KPIStat,
+  AppCard, AlertBanner,
   RiskCard, DashboardSection, StatusBadge, AttentionCard,
 } from '../../components/ui';
 
@@ -123,53 +125,182 @@ export default function ProvinceDashboard() {
         />
       )}
 
-      {/* KPI Grid */}
-      <KPIGrid cols={4}>
-        <KPIStat
-          label="รถรับส่ง"
-          value={data.total_vehicles ?? 0}
-          icon={Bus}
-          variant="brand"
-          hint={(data.total_students ?? 0) > 0 && (data.total_vehicles ?? 0) > 0
-            ? `เฉลี่ย ${Math.round(data.total_students / data.total_vehicles)} คน/คัน`
-            : null}
-        />
-        <KPIStat
-          label="นักเรียน"
-          value={data.total_students ?? 0}
-          icon={GraduationCap}
-          variant="brand"
-          hint={`${data.total_schools ?? 0} ร.ร. · ${data.total_vehicles ?? 0} คัน`}
-        />
-        <KPIStat
-          label="โรงเรียน"
-          value={data.total_schools ?? 0}
-          icon={Building2}
-          variant={problemSchools.length > 0 ? 'warn' : 'brand'}
-          hint={`${data.total_affiliations ?? 0} สังกัด · ค้าง ${problemSchools.length}`}
-        />
-        {(() => {
-          const base = (data.morning_total ?? 0) + (data.evening_total ?? 0);
-          const notStarted = base === 0;
-          const variant = notStarted ? 'neutral'
-                        : totalPending > 50 ? 'danger'
-                        : totalPending > 0  ? 'warn'
-                        : 'success';
-          return (
-            <KPIStat
-              label={notStarted ? 'ยังไม่เริ่ม' : totalPending > 0 ? 'รอดำเนินการ' : 'ครบแล้ว'}
-              value={notStarted ? '–' : totalPending > 0 ? totalPending : '✓'}
-              icon={!notStarted && totalPending > 0 ? Clock : null}
-              variant={variant}
-              hint={notStarted
-                ? 'รอเริ่มรอบเช้า'
-                : totalPending > 0
-                  ? `เช้า ${data.morning_pending} · เย็น ${data.evening_pending}`
-                  : 'ทุกรายการ'}
+      {/* Phase 10.7B-2 — Executive 5-card hero. Backed by additive fields
+          from Phase 10.7B-1; legacy totals (students/schools/affiliations)
+          moved below the fold to "ภาพรวมระบบ" so the at-a-glance row stays
+          action-driving. The 5 cards intentionally include zero student PII
+          and no transport-leaked counts. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+        {/* Card 1 — Fleet vs trackable. The 48-of-51 non-broadcast bucket
+            is the headline adoption signal post-10.7B-1; surface it loudly. */}
+        <AppCard padding="md">
+          <div className="flex items-start gap-2 mb-2">
+            <Bus className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
+            <p className="text-sm font-semibold text-ink leading-tight">รถทั้งหมด / รถที่ติดตามได้</p>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">รถทั้งหมด</span>
+              <span className="text-2xl font-bold text-ink tabular-nums">{data.vehicle_total ?? 0}</span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">ติดตามได้</span>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_trackable ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
+                {data.vehicle_trackable ?? 0}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">ยังไม่มีข้อมูล</span>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_no_location ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
+                {data.vehicle_no_location ?? 0}
+              </span>
+            </div>
+          </div>
+        </AppCard>
+
+        {/* Card 2 — Live signal status. Does NOT include vehicle_no_location;
+            those vehicles never broadcast and are handled by Card 1. */}
+        <AppCard padding="md">
+          <div className="flex items-start gap-2 mb-2">
+            <Wifi className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
+            <p className="text-sm font-semibold text-ink leading-tight">สถานะสัญญาณรถ</p>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">ออนไลน์</span>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_online ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
+                {data.vehicle_online ?? 0}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">สัญญาณเก่า</span>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_stale ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
+                {data.vehicle_stale ?? 0}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">ออฟไลน์</span>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_offline_smart ?? 0) > 0 ? 'text-danger' : 'text-ink-muted'}`}>
+                {data.vehicle_offline_smart ?? 0}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">หยุดส่ง</span>
+              <span className="text-base font-semibold text-ink-muted tabular-nums">{data.vehicle_paused ?? 0}</span>
+            </div>
+          </div>
+        </AppCard>
+
+        {/* Card 3 — Today's pickup/dropoff progress. Compact summary; the
+            existing SessionProgress section below keeps the rich breakdown. */}
+        <AppCard padding="md">
+          <div className="flex items-start gap-2 mb-2">
+            <Clock className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
+            <p className="text-sm font-semibold text-ink leading-tight">การรับ-ส่งวันนี้</p>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted inline-flex items-center gap-1">
+                <Sunrise className="w-3.5 h-3.5 text-warn" strokeWidth={2} /> ส่งเช้า
+              </span>
+              <span className="text-base font-semibold text-ink tabular-nums">
+                {data.morning_done ?? 0}
+                <span className="text-ink-muted text-sm"> / {data.morning_total ?? 0}</span>
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted inline-flex items-center gap-1">
+                <Sunset className="w-3.5 h-3.5 text-info" strokeWidth={2} /> รับเย็น
+              </span>
+              <span className="text-base font-semibold text-ink tabular-nums">
+                {data.evening_done ?? 0}
+                <span className="text-ink-muted text-sm"> / {data.evening_total ?? 0}</span>
+              </span>
+            </div>
+          </div>
+        </AppCard>
+
+        {/* Card 4 — School adoption. "ใช้งานล่าสุด" uses the 14-day window
+            from province.service.js SCHOOL_USAGE_WINDOW_DAYS. */}
+        <AppCard padding="md">
+          <div className="flex items-start gap-2 mb-2">
+            <Building2 className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
+            <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนยังไม่เริ่มใช้ระบบ</p>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">ใช้งานล่าสุด 14 วัน</span>
+              <span className="text-base font-semibold text-ink tabular-nums">
+                {data.school_used_recently ?? 0}
+                <span className="text-ink-muted text-sm"> / {data.school_total ?? data.total_schools ?? 0}</span>
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs text-ink-muted">ยังไม่เริ่ม</span>
+              <span className={`text-2xl font-bold tabular-nums ${(data.school_not_using_recently ?? 0) > 0 ? 'text-warn' : 'text-success'}`}>
+                {data.school_not_using_recently ?? 0}
+              </span>
+            </div>
+          </div>
+        </AppCard>
+
+        {/* Card 5 — At-risk schools today. Tap-through to existing
+            "โรงเรียนเสี่ยง" RiskCard section below. */}
+        <AppCard
+          as="button"
+          padding="md"
+          onClick={() => scrollTo(schoolsRef)}
+          className="text-left transition hover:shadow-elevate focus:outline-none focus:ring-2 focus:ring-warn/40"
+          aria-label="ดูรายชื่อโรงเรียนเสี่ยง"
+        >
+          <div className="flex items-start gap-2 mb-2">
+            <AlertTriangle
+              className={`w-5 h-5 shrink-0 ${problemSchools.length > 0 ? 'text-warn' : 'text-success'}`}
+              strokeWidth={2}
             />
-          );
-        })()}
-      </KPIGrid>
+            <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนเสี่ยงวันนี้</p>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-ink-muted">รายการค้าง</span>
+            <span className={`text-2xl font-bold tabular-nums ${problemSchools.length > 0 ? 'text-warn' : 'text-success'}`}>
+              {problemSchools.length}
+            </span>
+          </div>
+          {problemSchools.length > 0 && (
+            <p className="text-xs text-ink-muted mt-1 truncate">
+              เช่น {problemSchools.slice(0, 2).map(s => s.school_name).join(' · ')}
+            </p>
+          )}
+        </AppCard>
+
+      </div>
+
+      {/* Auxiliary system size — was hero cards 2/3 in the pre-10.7B-2 layout.
+          Demoted below the action-driving hero because these numbers change
+          weekly/monthly and don't drive a same-day decision. */}
+      <DashboardSection title="ภาพรวมระบบ" description="ขนาดระบบในจังหวัด">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <AppCard padding="sm" className="text-center">
+            <p className="text-xs text-ink-muted">นักเรียน</p>
+            <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_students ?? 0}</p>
+          </AppCard>
+          <AppCard padding="sm" className="text-center">
+            <p className="text-xs text-ink-muted">โรงเรียน</p>
+            <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_schools ?? 0}</p>
+          </AppCard>
+          <AppCard padding="sm" className="text-center">
+            <p className="text-xs text-ink-muted">สังกัด</p>
+            <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_affiliations ?? 0}</p>
+          </AppCard>
+          <AppCard padding="sm" className="text-center">
+            <p className="text-xs text-ink-muted">รถบริการนักเรียน</p>
+            <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">
+              {data.vehicle_serving_students ?? data.total_vehicles ?? 0}
+            </p>
+          </AppCard>
+        </div>
+      </DashboardSection>
 
       {/* Session progress */}
       <DashboardSection title="ผลการดำเนินการวันนี้">

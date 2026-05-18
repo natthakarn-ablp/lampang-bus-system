@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
-import { AppCard, AlertBanner, StatusBadge } from '../../components/ui';
+import { AppCard, StatusBadge } from '../../components/ui';
 import LiveLocationToggle from '../../components/LiveLocationToggle';
 import {
   resolveSession,
@@ -198,23 +198,14 @@ export default function DriverDashboard() {
         />
       )}
 
-      {/* ── Pre-trip status badge ── */}
-      {pretripDone?.done && (
-        <div className="mb-4">
-          <AlertBanner
-            variant={pretripDone.all_pass === false ? 'warn' : 'success'}
-            title="ตรวจรถแล้ววันนี้"
-          >
-            เวลา {pretripDone.checked_at ? new Date(pretripDone.checked_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' }) : '-'} น.
-            {pretripDone.all_pass === false && ' · มีรายการผิดปกติ'}
-          </AlertBanner>
-        </div>
-      )}
-
       {/* ── Phase 7.3 — Driver location sender (explicit toggle) ── */}
       <LiveLocationToggle />
 
-      {/* ── Top info bar (neutral surface; icon carries session differentiation) ── */}
+      {/* ── Top info bar (neutral surface; icon carries session differentiation).
+            Phase 10.7D — pretrip status + remaining-checkin pills consolidated
+            here for at-a-glance scanning. The wider AlertBanner that previously
+            showed "ตรวจรถแล้ววันนี้ เวลา HH:MM" is replaced by a compact pill;
+            the underlying pretrip gate (PretripModal) is UNCHANGED. ── */}
       <AppCard padding="md" className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <span className="inline-flex items-center gap-2 text-lg font-semibold text-ink">
@@ -238,6 +229,40 @@ export default function DriverDashboard() {
             <span className="font-semibold">{roster.vehicle.plate_no}</span>
           </p>
         )}
+
+        {/* Phase 10.7D — status pills row. Driver sees, at a glance:
+            (a) ตรวจสภาพรถ pass/fail/pending, (b) จำนวนนักเรียนที่เหลือ. */}
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          {/* Pretrip status pill — mirrors the gate state without bypassing it */}
+          {pretripLoading ? (
+            <StatusBadge variant="neutral" size="sm">กำลังตรวจสถานะรถ…</StatusBadge>
+          ) : !pretripDone?.done ? (
+            <StatusBadge variant="danger" size="sm" icon={AlertTriangle}>
+              ยังไม่ได้ตรวจสภาพรถ
+            </StatusBadge>
+          ) : pretripDone.all_pass === false ? (
+            <StatusBadge variant="warn" size="sm" icon={AlertTriangle}>
+              ตรวจสภาพรถแล้ว · มีรายการผิดปกติ
+            </StatusBadge>
+          ) : (
+            <StatusBadge variant="success" size="sm" icon={Check}>
+              ตรวจสภาพรถแล้ว
+            </StatusBadge>
+          )}
+
+          {/* Remaining-checkin pill — only meaningful once roster has loaded */}
+          {!loading && notOnLeave.length > 0 && (
+            allDone ? (
+              <StatusBadge variant="success" size="sm" icon={CheckCircle2}>
+                เสร็จครบทุกคน
+              </StatusBadge>
+            ) : (
+              <StatusBadge variant="warn" size="sm" icon={Clock}>
+                เหลือเช็กอิน {pending.length} คน
+              </StatusBadge>
+            )
+          )}
+        </div>
       </AppCard>
 
       {error && (

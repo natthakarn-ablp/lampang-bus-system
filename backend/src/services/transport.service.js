@@ -3,8 +3,12 @@
 const { pool } = require('../config/database');
 
 /**
- * Transport role sees ALL vehicles + inspection data.
- * No school/affiliation scope — transport is cross-cutting.
+ * Transport role sees ALL vehicles + inspection data, never student PII.
+ * No school/affiliation scope — transport is cross-cutting safety, not a
+ * roster view. Per Phase 10.6C PDPA cleanup: no roster-size aggregate, no
+ * student names/IDs, no parent info — only vehicle, driver, inspection, insurance
+ * fields. The dashboard KPIs filter `vehicles.is_deleted = FALSE` so soft-
+ * deleted rows never inflate the inspection-coverage counts.
  */
 
 async function getDashboard() {
@@ -14,8 +18,14 @@ async function getDashboard() {
     'SELECT COUNT(*) AS total_vehicles FROM vehicles WHERE is_deleted = FALSE'
   );
 
+  // Phase 10.6C — join vehicles and filter is_deleted so the inspection
+  // coverage count doesn't include soft-deleted rows. Without this, a
+  // retired bus that was last inspected last year would still bump
+  // `inspected_count` above `total_vehicles`, breaking the dashboard math.
   const [[{ inspected_count }]] = await pool.query(
-    'SELECT COUNT(DISTINCT vehicle_id) AS inspected_count FROM vehicle_inspections'
+    `SELECT COUNT(DISTINCT vi.vehicle_id) AS inspected_count
+     FROM   vehicle_inspections vi
+     JOIN   vehicles v ON v.id = vi.vehicle_id AND v.is_deleted = FALSE`
   );
 
   const [[{ passed, failed, needs_fix, pending }]] = await pool.query(
@@ -28,6 +38,7 @@ async function getDashboard() {
        SELECT vi.vehicle_id,
               vi.result AS latest_result
        FROM vehicle_inspections vi
+       JOIN vehicles v ON v.id = vi.vehicle_id AND v.is_deleted = FALSE
        INNER JOIN (
          SELECT vehicle_id, MAX(inspection_date) AS max_date
          FROM vehicle_inspections
@@ -88,8 +99,11 @@ async function getVehicles({ status, page = 1, per_page = 50 } = {}) {
             (SELECT d.phone FROM driver_vehicle_assignments dva
              JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
              WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE LIMIT 1) AS driver_phone,
-            (SELECT COUNT(*) FROM students s
-             WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE) AS student_count,
+            -- Phase 10.6C — roster-size aggregate intentionally NOT selected
+            -- here. Transport is a cross-cutting vehicle-safety role and
+            -- MUST NOT see student roster size. If a future safety need
+            -- requires an aggregate (e.g. "max bus capacity vs assigned"),
+            -- expose it from school/affiliation services, not transport.
             (SELECT vi2.result FROM vehicle_inspections vi2
              WHERE vi2.vehicle_id = v.id
              ORDER BY vi2.inspection_date DESC LIMIT 1) AS latest_inspection_result,

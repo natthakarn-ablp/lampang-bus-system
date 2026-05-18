@@ -363,7 +363,7 @@ function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
             <StatusBadge variant={prio.variant} size="sm">{prio.text}</StatusBadge>
           </div>
           <p className="text-sm text-ink-muted">
-            {v.driver_name || 'ไม่ระบุคนขับ'} · {v.student_count || 0} คน
+            {v.driver_name || 'ไม่ระบุคนขับ'}
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5">

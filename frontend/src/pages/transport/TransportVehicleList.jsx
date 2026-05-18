@@ -66,7 +66,6 @@ export default function TransportVehicleList() {
                   <th className="px-4 py-3">ทะเบียนรถ</th>
                   <th className="px-4 py-3">ประเภท</th>
                   <th className="px-4 py-3">คนขับ</th>
-                  <th className="px-4 py-3 text-center">นักเรียน</th>
                   <th className="px-4 py-3 text-center">ผลตรวจล่าสุด</th>
                   <th className="px-4 py-3">วันตรวจ</th>
                   <th className="px-4 py-3">ประกันหมดอายุ</th>
@@ -81,7 +80,6 @@ export default function TransportVehicleList() {
                       <td className="px-4 py-3 font-medium text-gray-800">{v.plate_no}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{v.vehicle_type || '-'}</td>
                       <td className="px-4 py-3 text-gray-600 text-xs">{v.driver_name || '-'}</td>
-                      <td className="px-4 py-3 text-center text-gray-600">{v.student_count}</td>
                       <td className="px-4 py-3 text-center">
                         <StatusBadge variant={badge.variant} size="sm">{badge.label}</StatusBadge>
                       </td>

@@ -1,6 +1,15 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const {
+  ONLINE_SECONDS_MAX,
+  STALE_SECONDS_MAX,
+} = require('./vehicleLocation.service');
+
+// Phase 10.7B-1 — schools count as "using the system" if they have any
+// daily_status row in the last N days. Two weeks ≈ school-week × 2, which
+// is the smallest window that survives a normal school holiday.
+const SCHOOL_USAGE_WINDOW_DAYS = 14;
 
 /**
  * Province-level dashboard — full system overview.
@@ -99,6 +108,104 @@ async function getDashboard() {
     }))
     .sort((a, b) => (b.morning_pending + b.evening_pending) - (a.morning_pending + a.evening_pending));
 
+  // ─── Phase 10.7B-1 — additive KPI fields ─────────────────────────────────
+  //
+  // New buckets that the upcoming province dashboard layout (10.7B-2) will
+  // consume. EXISTING fields above are untouched so the current frontend
+  // keeps rendering unchanged until cutover.
+  //
+  // Vehicle buckets are mutually exclusive by the SQL filters below:
+  //   - online / stale / offline_smart split active rows by age
+  //   - paused is its own row.status filter
+  //   - no_location is the fleet minus any vehicle with a location row
+  // Their sum should equal vehicle_total; an invariant warning logs (does
+  // NOT throw) if it ever drifts.
+
+  // 1. Fleet count — every active vehicle (was missing as a top-level KPI;
+  //    legacy `total_vehicles` is roster-scoped and reports a different number).
+  const [[{ vehicle_total }]] = await pool.query(
+    `SELECT COUNT(*) AS vehicle_total FROM vehicles WHERE is_deleted = FALSE`
+  );
+
+  // 2. Alias of the existing roster-scoped total_vehicles semantic — kept
+  //    under a clearer name so 10.7B-2 doesn't have to overload meaning.
+  const vehicle_serving_students = total_vehicles;
+
+  // 3. Vehicles that have ever sent a location (still in active fleet).
+  const [[{ vehicle_trackable }]] = await pool.query(
+    `SELECT COUNT(DISTINCT vll.vehicle_id) AS vehicle_trackable
+     FROM   vehicle_latest_locations vll
+     JOIN   vehicles v ON v.id = vll.vehicle_id AND v.is_deleted = FALSE`
+  );
+
+  // 4–7. Live status breakdown — joined to vehicles so soft-deleted vehicles
+  //      cannot leak into the buckets. ONLINE_SECONDS_MAX and STALE_SECONDS_MAX
+  //      are imported from vehicleLocation.service.js (single source of truth).
+  const [[liveStats]] = await pool.query(
+    `SELECT
+       SUM(CASE WHEN vll.status = 'ACTIVE'
+                 AND TIMESTAMPDIFF(SECOND, vll.received_at, NOW()) <= ?
+                THEN 1 ELSE 0 END) AS vehicle_online,
+       SUM(CASE WHEN vll.status = 'ACTIVE'
+                 AND TIMESTAMPDIFF(SECOND, vll.received_at, NOW()) >  ?
+                 AND TIMESTAMPDIFF(SECOND, vll.received_at, NOW()) <= ?
+                THEN 1 ELSE 0 END) AS vehicle_stale,
+       SUM(CASE WHEN vll.status = 'ACTIVE'
+                 AND TIMESTAMPDIFF(SECOND, vll.received_at, NOW()) >  ?
+                THEN 1 ELSE 0 END) AS vehicle_offline_smart,
+       SUM(CASE WHEN vll.status = 'PAUSED' THEN 1 ELSE 0 END) AS vehicle_paused
+     FROM   vehicle_latest_locations vll
+     JOIN   vehicles v ON v.id = vll.vehicle_id AND v.is_deleted = FALSE`,
+    [
+      ONLINE_SECONDS_MAX,
+      ONLINE_SECONDS_MAX,
+      STALE_SECONDS_MAX,
+      STALE_SECONDS_MAX,
+    ]
+  );
+  const vehicle_online         = Number(liveStats.vehicle_online)         || 0;
+  const vehicle_stale          = Number(liveStats.vehicle_stale)          || 0;
+  const vehicle_offline_smart  = Number(liveStats.vehicle_offline_smart)  || 0;
+  const vehicle_paused         = Number(liveStats.vehicle_paused)         || 0;
+
+  // 8. Non-broadcast vehicles — computed in JS to avoid duplicating the
+  //    fleet-count query. Always non-negative when the invariant holds.
+  const vehicle_no_location = vehicle_total - vehicle_trackable;
+
+  // Invariant — log a warning (never throw) if the buckets don't add up to
+  // the fleet count. By design the SQL filters are mutually exclusive, but
+  // a future MySQL upgrade or row-format quirk could break that quietly.
+  const bucket_sum =
+    vehicle_online + vehicle_stale + vehicle_offline_smart +
+    vehicle_paused + vehicle_no_location;
+  if (bucket_sum !== vehicle_total) {
+    // eslint-disable-next-line no-console
+    console.warn('[province.getDashboard] vehicle bucket invariant drift', {
+      vehicle_total, vehicle_online, vehicle_stale, vehicle_offline_smart,
+      vehicle_paused, vehicle_no_location, bucket_sum,
+    });
+  }
+
+  // 9. school_total — alias of total_schools (existing). Both names returned
+  //    so 10.7B-2 can cut over without touching callers in the same phase.
+  const school_total = total_schools;
+
+  // 10. Schools that have any daily_status row in the last 14 days.
+  //     daily_status has no school_id column — join through students.
+  const [[{ school_used_recently }]] = await pool.query(
+    `SELECT COUNT(DISTINCT s.school_id) AS school_used_recently
+     FROM   daily_status ds
+     JOIN   students s ON s.id = ds.student_id AND s.is_deleted = FALSE
+     JOIN   schools  sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+     WHERE  ds.check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)`,
+    [SCHOOL_USAGE_WINDOW_DAYS]
+  );
+  const school_not_using_recently = school_total - school_used_recently;
+
+  // 12–13. Aliases for clearer downstream naming. Old names kept above.
+  const emergency_7d = recent_emergencies;
+  const leave_today  = leave_count;
+
   return {
     date: today,
     total_affiliations,
@@ -120,6 +227,21 @@ async function getDashboard() {
     affiliations,
     schools: allSchools,
     schools_not_complete,
+
+    // Phase 10.7B-1 — new additive fields (frontend cuts over in 10.7B-2)
+    vehicle_total,
+    vehicle_serving_students,
+    vehicle_trackable,
+    vehicle_online,
+    vehicle_stale,
+    vehicle_offline_smart,
+    vehicle_paused,
+    vehicle_no_location,
+    school_total,
+    school_used_recently,
+    school_not_using_recently,
+    emergency_7d,
+    leave_today,
   };
 }
 

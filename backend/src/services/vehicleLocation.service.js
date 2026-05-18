@@ -290,4 +290,9 @@ module.exports = {
   // exposed for tests / debugging
   computeStatus,
   toPublicVehicle,
+  // Phase 10.7B-1 — threshold constants exported so other services
+  // (e.g. province.service.js dashboard buckets) share the single source
+  // of truth and don't drift from computeStatus() semantics.
+  ONLINE_SECONDS_MAX,
+  STALE_SECONDS_MAX,
 };

@@ -36,11 +36,16 @@ module.exports = async function globalSetup() {
   `);
 
   // ── Test vehicle ─────────────────────────────────────────────────────────
-  // plate_no MUST match the __test_driver username — resolution is plate_no = username
+  // plate_no MUST match the __test_driver username — resolution is plate_no = username.
+  // Phase 10.6B — normalized_plate becomes NOT NULL UNIQUE in migration 024, so
+  // raw fixture INSERTs must supply it explicitly (computed via the same rule
+  // as utils/vehiclePlate.normalizePlate: lowercase + strip whitespace + dashes).
   await conn.query(`
-    INSERT INTO vehicles (id, plate_no, vehicle_type)
-    VALUES ('V-test000000ab', '__TEST PLATE 9999', 'รถตู้')
-    ON DUPLICATE KEY UPDATE plate_no = VALUES(plate_no)
+    INSERT INTO vehicles (id, plate_no, normalized_plate, vehicle_type)
+    VALUES ('V-test000000ab', '__TEST PLATE 9999', '__testplate9999', 'รถตู้')
+    ON DUPLICATE KEY UPDATE
+      plate_no         = VALUES(plate_no),
+      normalized_plate = VALUES(normalized_plate)
   `);
 
   // ── Test driver record ───────────────────────────────────────────────────

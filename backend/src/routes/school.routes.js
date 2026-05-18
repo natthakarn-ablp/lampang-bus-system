@@ -797,11 +797,17 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const { plate_no, vehicle_type, driver_name, driver_phone } = req.body;
-    if (!plate_no) return sendError(res, 'กรุณากรอกทะเบียนรถ', [], 400);
+
+    // Phase 10.6B — whitespace/dash-agnostic plate validation. The duplicate
+    // check below uses normalized_plate, so users entering "นข 2210 ลำปาง" /
+    // "นข2210ลำปาง" / "นข-2210-ลำปาง" all reuse the same vehicle row.
+    const { validatePlateNo } = require('../utils/vehiclePlate');
+    const validation = validatePlateNo(plate_no);
+    if (!validation.valid) return sendError(res, validation.error, [], 400);
+    const { trimmed: trimmedPlate, normalized: normalizedPlate } = validation;
 
     const crypto = require('crypto');
     const bcrypt = require('bcrypt');
-    const trimmedPlate = plate_no.trim();
     const vehicleId = 'V-' + crypto.createHash('sha256').update(trimmedPlate).digest('hex').substring(0, 12);
 
     const conn = await pool.getConnection();
@@ -810,13 +816,16 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
     try {
       await conn.beginTransaction();
 
-      // 1. Create or reuse vehicle
-      const [[existingVehicle]] = await conn.query(`SELECT id FROM vehicles WHERE plate_no = ?`, [trimmedPlate]);
+      // 1. Create or reuse vehicle (dedup by normalized_plate, not raw plate)
+      const [[existingVehicle]] = await conn.query(
+        `SELECT id FROM vehicles WHERE normalized_plate = ?`,
+        [normalizedPlate]
+      );
       const vId = existingVehicle ? existingVehicle.id : vehicleId;
       if (!existingVehicle) {
         await conn.query(
-          `INSERT INTO vehicles (id, plate_no, vehicle_type) VALUES (?, ?, ?)`,
-          [vehicleId, trimmedPlate, vehicle_type || 'รถตู้']
+          `INSERT INTO vehicles (id, plate_no, normalized_plate, vehicle_type) VALUES (?, ?, ?, ?)`,
+          [vehicleId, trimmedPlate, normalizedPlate, vehicle_type || 'รถตู้']
         );
       }
 
@@ -877,7 +886,7 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
 
       await logAudit({
         userId: req.user.id, action: 'CREATE', entityType: 'vehicle', entityId: vId,
-        newValue: { plate_no: trimmedPlate, vehicle_type, driver_name, driverAccountCreated },
+        newValue: { plate_no: trimmedPlate, normalized_plate: normalizedPlate, vehicle_type, driver_name, driverAccountCreated },
         ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
       });
 

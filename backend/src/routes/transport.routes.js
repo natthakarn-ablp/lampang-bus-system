@@ -14,29 +14,44 @@ const ppSvc = require('../services/pickupPoint.service');
 router.use(authenticate, requireRole('transport', 'admin'));
 
 // ─── POST /api/transport/vehicles (create new vehicle for inspection) ───────
+// Phase 10.6B — duplicate check uses normalized_plate (whitespace + dash
+// agnostic) so "นข 2210 ลำปาง" / "นข2210ลำปาง" / "นข-2210-ลำปาง" collide.
+// Returns existing row on collision instead of erroring — transport flow is
+// "use what's already there for inspection" rather than "must be unique here".
 router.post('/vehicles', async (req, res, next) => {
   try {
     const { plate_no, vehicle_type } = req.body;
-    if (!plate_no || !plate_no.trim()) return sendError(res, 'กรุณาระบุทะเบียนรถ', [], 400);
+    const { validatePlateNo } = require('../utils/vehiclePlate');
+    const validation = validatePlateNo(plate_no);
+    if (!validation.valid) return sendError(res, validation.error, [], 400);
+    const { trimmed, normalized } = validation;
 
     const { pool } = require('../config/database');
     const { generateVehicleId } = require('../utils/hash');
     const { logAudit } = require('../utils/audit');
 
-    const trimmed = plate_no.trim();
-    // Check duplicate
-    const [[existing]] = await pool.query('SELECT id FROM vehicles WHERE plate_no = ? AND is_deleted = FALSE', [trimmed]);
-    if (existing) return sendSuccess(res, { id: existing.id, plate_no: trimmed, existed: true }, 'รถคันนี้มีในระบบแล้ว');
+    // Check duplicate by normalized_plate — catches spacing/dash variants
+    const [[existing]] = await pool.query(
+      'SELECT id, plate_no FROM vehicles WHERE normalized_plate = ? AND is_deleted = FALSE',
+      [normalized]
+    );
+    if (existing) {
+      return sendSuccess(
+        res,
+        { id: existing.id, plate_no: existing.plate_no, existed: true },
+        'รถคันนี้มีในระบบแล้ว'
+      );
+    }
 
     const id = generateVehicleId(trimmed);
     await pool.query(
-      'INSERT INTO vehicles (id, plate_no, vehicle_type) VALUES (?, ?, ?)',
-      [id, trimmed, vehicle_type || null]
+      'INSERT INTO vehicles (id, plate_no, normalized_plate, vehicle_type) VALUES (?, ?, ?, ?)',
+      [id, trimmed, normalized, vehicle_type || null]
     );
 
     await logAudit({
       userId: req.user.id, action: 'CREATE', entityType: 'vehicle', entityId: id,
-      newValue: { plate_no: trimmed, source: 'transport_inspection' },
+      newValue: { plate_no: trimmed, normalized_plate: normalized, source: 'transport_inspection' },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 

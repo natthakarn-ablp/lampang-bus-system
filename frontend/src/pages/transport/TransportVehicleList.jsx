@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Bus } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
@@ -12,11 +13,46 @@ const RESULT_BADGE = {
   PENDING:  { label: 'รอตรวจ',    variant: 'neutral' },
 };
 
+// Phase 10.7A — combined document expiry: pick the nearest of the 4 dates
+// per vehicle, return { earliest, status }. status is:
+//   'expired'  — at least one doc is past CURDATE()
+//   'expiring' — none expired but at least one is within 30 days
+//   'ok'       — none expired or expiring (or all NULL — treat as no signal)
+const DOC_EXPIRY_FIELDS = [
+  'insurance_expiry',
+  'registration_expiry',
+  'compulsory_insurance_expiry',
+  'tax_expiry',
+];
+
+function docExpiryStatus(v) {
+  const now = Date.now();
+  const limit = now + 30 * 86400000;
+  let earliest = null;
+  let anyExpired = false;
+  let anyExpiring = false;
+  for (const f of DOC_EXPIRY_FIELDS) {
+    if (!v[f]) continue;
+    const t = new Date(v[f]).getTime();
+    if (earliest == null || t < earliest) earliest = t;
+    if (t < now) anyExpired = true;
+    else if (t <= limit) anyExpiring = true;
+  }
+  return {
+    earliest: earliest != null ? new Date(earliest).toISOString().slice(0, 10) : null,
+    status: anyExpired ? 'expired' : anyExpiring ? 'expiring' : 'ok',
+  };
+}
+
 export default function TransportVehicleList() {
+  const location = useLocation();
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState({ page: 1, per_page: 50, total: 0 });
-  const [statusFilter, setStatusFilter] = useState('');
+  // Phase 10.7A — accept ?status=docs_expiring / docs_expired from the
+  // dashboard tap-through so the page lands pre-filtered.
+  const initialStatus = new URLSearchParams(location.search).get('status') || '';
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
 
   const fetchVehicles = useCallback(async (page = 1) => {
     setLoading(true);
@@ -45,6 +81,9 @@ export default function TransportVehicleList() {
           <option value="">ทุกสถานะ</option>
           <option value="expiring">ประกันใกล้หมด (30 วัน)</option>
           <option value="expired">ประกันหมดแล้ว</option>
+          {/* Phase 10.7A — combined-document filters across 4 expiry fields */}
+          <option value="docs_expiring">เอกสารใกล้หมด (30 วัน)</option>
+          <option value="docs_expired">เอกสารหมดอายุ</option>
         </select>
       </div>
 
@@ -69,12 +108,23 @@ export default function TransportVehicleList() {
                   <th className="px-4 py-3 text-center">ผลตรวจล่าสุด</th>
                   <th className="px-4 py-3">วันตรวจ</th>
                   <th className="px-4 py-3">ประกันหมดอายุ</th>
+                  <th className="px-4 py-3">เอกสาร</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border">
                 {vehicles.map(v => {
                   const badge = RESULT_BADGE[v.latest_inspection_result] || { label: 'ยังไม่ตรวจ', variant: 'neutral' };
                   const insExpired = v.insurance_expiry && new Date(v.insurance_expiry) < new Date();
+                  const docs = docExpiryStatus(v);
+                  const docCellClass =
+                    docs.status === 'expired'  ? 'text-red-600 font-medium'  :
+                    docs.status === 'expiring' ? 'text-amber-600 font-medium' :
+                                                 'text-gray-500';
+                  const docLabel = docs.earliest
+                    ? (docs.status === 'expired'  ? `หมดอายุ · ${docs.earliest}` :
+                       docs.status === 'expiring' ? `ใกล้หมด · ${docs.earliest}` :
+                                                    docs.earliest)
+                    : '-';
                   return (
                     <tr key={v.id} className="hover:bg-surface transition">
                       <td className="px-4 py-3 font-medium text-gray-800">{v.plate_no}</td>
@@ -86,6 +136,9 @@ export default function TransportVehicleList() {
                       <td className="px-4 py-3 text-gray-500 text-xs">{v.latest_inspection_date || '-'}</td>
                       <td className={`px-4 py-3 text-xs ${insExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
                         {v.insurance_expiry || '-'}
+                      </td>
+                      <td className={`px-4 py-3 text-xs ${docCellClass}`}>
+                        {docLabel}
                       </td>
                     </tr>
                   );

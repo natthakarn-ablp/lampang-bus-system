@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertTriangle, ClipboardList, CheckCircle2, Lightbulb,
   FileText, Phone, X, Search,
+  // Phase 10.7A — icons for the combined-document expiry cards
+  Clock, XCircle,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
@@ -104,16 +106,45 @@ function priorityLevel(score) {
   return              { text: 'พร้อมใช้งาน',     variant: 'success' };
 }
 
+// Phase 10.7A — combined-document expiry helpers. A vehicle is "docs_expiring"
+// if ANY of the 4 dated fields lands in the next 30 days, "docs_expired" if
+// ANY is past due. NULL fields are ignored (counted as "not yet recorded",
+// not as "expired") so vehicles with unfilled paperwork don't pollute counts.
+const DOC_EXPIRY_FIELDS = [
+  'insurance_expiry',
+  'registration_expiry',
+  'compulsory_insurance_expiry',
+  'tax_expiry',
+];
+
+function hasAnyExpiringDoc(v) {
+  const now = Date.now();
+  const limit = now + 30 * 86400000;
+  return DOC_EXPIRY_FIELDS.some(f => {
+    if (!v[f]) return false;
+    const t = new Date(v[f]).getTime();
+    return t >= now && t <= limit;
+  });
+}
+
+function hasAnyExpiredDoc(v) {
+  const now = Date.now();
+  return DOC_EXPIRY_FIELDS.some(f => v[f] && new Date(v[f]).getTime() < now);
+}
+
 const FILTERS = [
-  { key: 'all',           label: 'ทั้งหมด',           fn: () => true },
-  { key: 'urgent',        label: 'เร่งด่วน',          fn: v => riskScore(v) >= 100 },
-  { key: 'not_inspected', label: 'ยังไม่ตรวจ',         fn: v => !v.latest_inspection_result },
-  { key: 'failed',        label: 'ไม่ผ่าน',           fn: v => v.latest_inspection_result === 'FAILED' },
-  { key: 'needs_fix',     label: 'ต้องแก้ไข',         fn: v => v.latest_inspection_result === 'NEEDS_FIX' },
-  { key: 'ins_expired',   label: 'ประกันหมด',         fn: v => v.insurance_expiry && new Date(v.insurance_expiry) < new Date() },
-  { key: 'no_ins',        label: 'ไม่มีข้อมูลประกัน',   fn: v => !v.insurance_expiry },
-  { key: 'ins_expiring',  label: 'ใกล้หมดอายุ',        fn: v => v.insurance_expiry && new Date(v.insurance_expiry) >= new Date() && new Date(v.insurance_expiry) < new Date(Date.now() + 30*86400000) },
-  { key: 'ready',         label: 'พร้อมใช้งาน',       fn: v => riskScore(v) === 0 },
+  { key: 'all',            label: 'ทั้งหมด',           fn: () => true },
+  { key: 'urgent',         label: 'เร่งด่วน',          fn: v => riskScore(v) >= 100 },
+  { key: 'not_inspected',  label: 'ยังไม่ตรวจ',         fn: v => !v.latest_inspection_result },
+  { key: 'failed',         label: 'ไม่ผ่าน',           fn: v => v.latest_inspection_result === 'FAILED' },
+  { key: 'needs_fix',      label: 'ต้องแก้ไข',         fn: v => v.latest_inspection_result === 'NEEDS_FIX' },
+  { key: 'ins_expired',    label: 'ประกันหมด',         fn: v => v.insurance_expiry && new Date(v.insurance_expiry) < new Date() },
+  { key: 'no_ins',         label: 'ไม่มีข้อมูลประกัน',   fn: v => !v.insurance_expiry },
+  { key: 'ins_expiring',   label: 'ใกล้หมดอายุ',        fn: v => v.insurance_expiry && new Date(v.insurance_expiry) >= new Date() && new Date(v.insurance_expiry) < new Date(Date.now() + 30*86400000) },
+  // Phase 10.7A — combined-document filters across the 4 expiry fields
+  { key: 'docs_expiring',  label: 'เอกสารใกล้หมด',     fn: hasAnyExpiringDoc },
+  { key: 'docs_expired',   label: 'เอกสารหมดอายุ',     fn: hasAnyExpiredDoc },
+  { key: 'ready',          label: 'พร้อมใช้งาน',       fn: v => riskScore(v) === 0 },
 ];
 
 export default function TransportDashboard() {
@@ -206,11 +237,17 @@ export default function TransportDashboard() {
         return <AlertBanner variant="success" title="รถทุกคันพร้อมใช้งาน" />;
       })()}
 
-      {/* KPI grid — neutral when no vehicles in scope yet */}
+      {/* KPI grid — neutral when no vehicles in scope yet.
+          Phase 10.7A — 4-card grid grew to 6 (added เอกสารใกล้หมด /
+          เอกสารหมดอายุ). cols={3} keeps 2 clean rows on desktop and stacks
+          naturally on mobile. The 2 new cards are clickable to drop the
+          dashboard's local filter on the rendered vehicle list below. */}
       {(() => {
         const noFleet = (data.total_vehicles ?? 0) === 0;
+        const expiringDocs = data.expiring_docs_count || 0;
+        const expiredDocs  = data.expired_docs_count  || 0;
         return (
-          <KPIGrid cols={4} gap="sm">
+          <KPIGrid cols={3} gap="sm">
             <KPIStat
               label="เร่งด่วน"
               value={noFleet ? '–' : urgentCount}
@@ -241,6 +278,34 @@ export default function TransportDashboard() {
               variant={noFleet ? 'neutral' : 'success'}
               hint={noFleet ? null : `${readyPct}% ของทั้งหมด`}
             />
+            <button
+              type="button"
+              onClick={() => setActiveFilter('docs_expiring')}
+              className="text-left rounded-2xl focus:outline-none focus:ring-2 focus:ring-warn/50"
+              aria-label="ดูรถที่เอกสารใกล้หมด"
+            >
+              <KPIStat
+                label="เอกสารใกล้หมด"
+                value={noFleet ? '–' : expiringDocs}
+                icon={Clock}
+                variant={noFleet ? 'neutral' : expiringDocs > 0 ? 'warn' : 'success'}
+                hint={noFleet ? null : 'ประกัน · ทะเบียน · พ.ร.บ. · ภาษี · ใน 30 วัน'}
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveFilter('docs_expired')}
+              className="text-left rounded-2xl focus:outline-none focus:ring-2 focus:ring-danger/50"
+              aria-label="ดูรถที่เอกสารหมดอายุ"
+            >
+              <KPIStat
+                label="เอกสารหมดอายุ"
+                value={noFleet ? '–' : expiredDocs}
+                icon={XCircle}
+                variant={noFleet ? 'neutral' : expiredDocs > 0 ? 'danger' : 'success'}
+                hint={noFleet ? null : 'รวมทุกประเภทเอกสารที่เลยกำหนด'}
+              />
+            </button>
           </KPIGrid>
         );
       })()}

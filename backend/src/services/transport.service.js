@@ -57,6 +57,26 @@ async function getDashboard() {
      FROM vehicles WHERE is_deleted = FALSE`
   );
 
+  // Phase 10.7A — combined document expiry aggregate across the 4 dated
+  // fields added in migration 023 (insurance / registration / พ.ร.บ. / tax).
+  // A vehicle counts ONCE even if multiple documents are due in the window.
+  const [[docs]] = await pool.query(
+    `SELECT
+       SUM(CASE WHEN
+            (insurance_expiry            BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+         OR (registration_expiry         BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+         OR (compulsory_insurance_expiry BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+         OR (tax_expiry                  BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+       THEN 1 ELSE 0 END) AS expiring_docs_count,
+       SUM(CASE WHEN
+            (insurance_expiry            < CURDATE())
+         OR (registration_expiry         < CURDATE())
+         OR (compulsory_insurance_expiry < CURDATE())
+         OR (tax_expiry                  < CURDATE())
+       THEN 1 ELSE 0 END) AS expired_docs_count
+     FROM vehicles WHERE is_deleted = FALSE`
+  );
+
   return {
     date: today,
     total_vehicles: total_vehicles || 0,
@@ -70,6 +90,9 @@ async function getDashboard() {
     expiring_insurance: Number(ins.expiring_insurance) || 0,
     expired_insurance: Number(ins.expired_insurance) || 0,
     no_insurance_data: Number(ins.no_insurance_data) || 0,
+    // Phase 10.7A — combined-document expiry aggregates (4-field union)
+    expiring_docs_count: Number(docs.expiring_docs_count) || 0,
+    expired_docs_count:  Number(docs.expired_docs_count)  || 0,
   };
 }
 
@@ -78,9 +101,26 @@ async function getVehicles({ status, page = 1, per_page = 50 } = {}) {
   const params = [];
 
   if (status === 'expiring') {
+    // Legacy: insurance-only "expiring" — kept for backward compat with
+    // existing TransportVehicleList "ประกันใกล้หมด" dropdown option.
     where += ' AND v.insurance_expiry BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)';
   } else if (status === 'expired') {
     where += ' AND v.insurance_expiry IS NOT NULL AND v.insurance_expiry < CURDATE()';
+  } else if (status === 'docs_expiring') {
+    // Phase 10.7A — combined 4-field document expiry filter
+    where += ` AND (
+      (v.insurance_expiry            BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+      OR (v.registration_expiry         BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+      OR (v.compulsory_insurance_expiry BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+      OR (v.tax_expiry                  BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+    )`;
+  } else if (status === 'docs_expired') {
+    where += ` AND (
+      v.insurance_expiry            < CURDATE()
+      OR v.registration_expiry         < CURDATE()
+      OR v.compulsory_insurance_expiry < CURDATE()
+      OR v.tax_expiry                  < CURDATE()
+    )`;
   }
 
   const [[{ total }]] = await pool.query(
@@ -91,7 +131,11 @@ async function getVehicles({ status, page = 1, per_page = 50 } = {}) {
   const [vehicles] = await pool.query(
     `SELECT v.id, v.plate_no, v.vehicle_type,
             v.owner_name, v.owner_phone,
-            v.insurance_status, v.insurance_type, v.insurance_expiry,
+            v.insurance_status, v.insurance_type,
+            v.insurance_expiry,
+            v.registration_expiry,
+            v.compulsory_insurance_expiry,
+            v.tax_expiry,
             v.created_at,
             (SELECT d.name FROM driver_vehicle_assignments dva
              JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE

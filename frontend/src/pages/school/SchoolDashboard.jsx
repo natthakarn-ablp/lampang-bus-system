@@ -165,7 +165,42 @@ export default function SchoolDashboard() {
             />
           </KPIGrid>
 
-          {/* Session progress */}
+          {/* Phase 10.7E-2 — alert strip. 4 at-a-glance operational chips
+              derived from existing dashboard fields. Sits right above the
+              session-card hero so admins see the actionable totals before
+              they scan the per-session detail. Mobile: flex-wrap. */}
+          {(() => {
+            const totalDone     = (data?.morning_done    ?? 0) + (data?.evening_done    ?? 0);
+            const totalPending  = (data?.morning_pending ?? 0) + (data?.evening_pending ?? 0);
+            const totalLeaveNow = (data?.morning_leave   ?? 0) + (data?.evening_leave   ?? 0);
+            const emerg7d       = data?.recent_emergencies ?? 0;
+            const Chip = ({ tone, label, value }) => {
+              const cls = {
+                neutral: 'bg-surface-raised text-ink-muted border-surface-border',
+                info:    'bg-info-soft   text-info   border-info/30',
+                warn:    'bg-warn-soft   text-warn   border-warn/30',
+                danger:  'bg-danger-soft text-danger border-danger/30',
+                success: 'bg-success-soft text-success border-success/30',
+              }[tone] || 'bg-surface-raised text-ink-muted border-surface-border';
+              return (
+                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border tabular-nums ${cls}`}>
+                  <span>{label}</span>
+                  <span className="font-semibold">{value}</span>
+                </span>
+              );
+            };
+            return (
+              <div className="flex flex-wrap items-center gap-2">
+                <Chip tone={totalLeaveNow > 0 ? 'warn'    : 'neutral'} label="ลาวันนี้"        value={totalLeaveNow} />
+                <Chip tone={totalPending  > 0 ? 'danger'  : 'success'} label="ยังไม่ยืนยัน"     value={totalPending} />
+                <Chip tone={totalDone     > 0 ? 'success' : 'neutral'} label="ดำเนินการแล้ว" value={totalDone} />
+                <Chip tone={emerg7d       > 0 ? 'danger'  : 'neutral'} label="เหตุฉุกเฉิน 7 วัน" value={emerg7d} />
+              </div>
+            );
+          })()}
+
+          {/* Session progress (hero — Phase 10.7E-2 makes SessionCard more
+              prominent without changing data semantics; see component below). */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SessionCard
               icon={Sunrise}
@@ -317,30 +352,65 @@ function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
                 : pct >= 80  ? 'text-warn'
                 : 'text-danger';
 
+  // Phase 10.7E-2 — promote to hero layout: a single large done/total
+  // headline + percentage on its own row, then a wider progress bar and
+  // explicit pending/leave chips below. Data semantics unchanged: same
+  // props, same caller (already passing morning_/evening_ fields).
   return (
-    <AppCard padding="md" className={allDone ? 'border-success/40' : ''}>
-      <div className="flex items-center justify-between mb-2">
+    <AppCard padding="lg" className={allDone ? 'border-success/40' : ''}>
+      {/* Header row: icon + label · pct (top-right) */}
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          {Icon && <Icon className="w-4 h-4 text-ink-muted" strokeWidth={2} />}
-          <span className="text-sm font-semibold text-ink">{label}</span>
+          {Icon && <Icon className="w-5 h-5 text-ink-muted" strokeWidth={2} />}
+          <span className="text-base font-semibold text-ink">{label}</span>
         </div>
-        <span className={`text-xs font-semibold tabular-nums ${pctTone}`}>
+        <span className={`text-base font-semibold tabular-nums ${pctTone}`}>
           {notStarted ? 'ยังไม่เริ่ม' : `${pct}%`}
         </span>
       </div>
-      <div className="w-full bg-surface rounded-full h-2 mb-2">
-        {!notStarted && (
-          <div className={`h-2 rounded-full transition-all ${barCls}`} style={{ width: `${pct}%` }} />
+
+      {/* Hero number — bigger done/total readout */}
+      <div className="mb-3">
+        {notStarted ? (
+          <p className="text-2xl font-bold text-ink-muted tabular-nums">–</p>
+        ) : allDone ? (
+          <p className="text-2xl font-bold text-success">{label}ครบแล้ว ✓</p>
+        ) : (
+          <p className="text-3xl font-bold text-ink tabular-nums leading-none">
+            {done}
+            <span className="text-base font-semibold text-ink-muted"> / {total - leave} คน</span>
+          </p>
         )}
       </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className={notStarted ? 'text-ink-muted' : allDone ? 'text-success font-medium' : 'text-ink-muted'}>
-          {notStarted ? 'รอเริ่มรอบ' : allDone ? `${label}ครบแล้ว ✓` : `${done}/${total - leave} คน`}
-        </span>
-        <div className="flex gap-2">
-          {pending > 0 && <span className="text-danger font-medium">{STATUS.PENDING} {pending}</span>}
-          {leave > 0   && <span className="text-warn">{STATUS.LEAVE} {leave}</span>}
-        </div>
+
+      {/* Progress bar — slightly taller for hero feel */}
+      <div className="w-full bg-surface rounded-full h-2.5 mb-2.5">
+        {!notStarted && (
+          <div className={`h-2.5 rounded-full transition-all ${barCls}`} style={{ width: `${pct}%` }} />
+        )}
+      </div>
+
+      {/* Detail chips: pending + leave, only when relevant */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {notStarted ? (
+          <span className="text-ink-muted">รอเริ่มรอบ</span>
+        ) : (
+          <>
+            {pending > 0 && (
+              <span className="inline-flex items-center gap-1 bg-danger-soft text-danger px-2 py-0.5 rounded-full border border-danger/30 font-medium tabular-nums">
+                {STATUS.PENDING} {pending}
+              </span>
+            )}
+            {leave > 0 && (
+              <span className="inline-flex items-center gap-1 bg-warn-soft text-warn px-2 py-0.5 rounded-full border border-warn/30 font-medium tabular-nums">
+                {STATUS.LEAVE} {leave}
+              </span>
+            )}
+            {pending === 0 && leave === 0 && (
+              <span className="text-success font-medium">ทุกรายการ ✓</span>
+            )}
+          </>
+        )}
       </div>
     </AppCard>
   );

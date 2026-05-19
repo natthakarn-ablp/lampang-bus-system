@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import {
   Building2, GraduationCap, Bus, ClipboardList, AlertTriangle,
   Sunrise, Sunset, ChevronDown,
+  // Phase 10.7E-1 — icons for the action row
+  Search, FileText,
 } from 'lucide-react';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
@@ -17,8 +19,21 @@ import {
   PAGE_TITLES, CARD_LABELS, CHART_TITLES, SECTION_TITLES,
   STATUS, UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS,
 } from '../../constants/uiLabels';
+// Phase 10.7E-1 — teacher (grade-scoped) accounts are read-only; the
+// SchoolLayout already renders a scope chip ("ขอบเขตข้อมูล: ป.X · บัญชี
+// ครูประจำสายชั้น — ดูข้อมูลได้อย่างเดียว") above every school page, so
+// no chip is added here. We only use isGradeTeacher() to hide the
+// write-only action button ("จัดการรถ") from teacher accounts.
+import { useAuth } from '../../hooks/useAuth';
+import { isGradeTeacher } from '../../utils/authScope';
 
 export default function SchoolDashboard() {
+  // Phase 10.7E-1 — read user from auth context to decide whether to
+  // show the write-only "จัดการรถ" action button. Teacher accounts are
+  // read-only and would 403 if they reached the vehicle management page.
+  const { user } = useAuth();
+  const isTeacher = isGradeTeacher(user);
+
   const [data, setData] = useState(null);
   const [statusData, setStatusData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -66,6 +81,36 @@ export default function SchoolDashboard() {
         icon={Building2}
         iconColor="green"
       />
+
+      {/* Phase 10.7E-1 — action row. Renders even while the data loads
+          (the buttons are static). "จัดการรถ" is hidden for grade-teacher
+          accounts because those accounts are read-only per the system
+          intent — backend would 403 anyway. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Link
+          to="/school/students"
+          className="inline-flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition min-h-[40px]"
+        >
+          <Search className="w-4 h-4" strokeWidth={2} />
+          ค้นหานักเรียน
+        </Link>
+        {!isTeacher && (
+          <Link
+            to="/school/vehicles"
+            className="inline-flex items-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+          >
+            <Bus className="w-4 h-4" strokeWidth={2} />
+            จัดการรถ
+          </Link>
+        )}
+        <Link
+          to="/reports/daily"
+          className="inline-flex items-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+        >
+          <FileText className="w-4 h-4" strokeWidth={2} />
+          รายงานวันนี้
+        </Link>
+      </div>
 
       {loading ? (
         <div className="space-y-4">

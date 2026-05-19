@@ -17,6 +17,7 @@
  */
 
 const env = require('../config/env');
+const { logAudit } = require('../utils/audit');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -440,6 +441,168 @@ async function getStatusToday(pool, vehicleId) {
   return { summary, recent, current_session, switch_hour: switchHour };
 }
 
+// ─── processSchoolOverride ────────────────────────────────────────────────────
+
+/**
+ * Phase 10.8B — school confirms attendance on behalf of the driver.
+ *
+ * Reuses `_buildCheckinTransaction` to write checkin_logs + daily_status +
+ * notifications + audit-CREATE-checkin exactly like the driver path, then
+ * appends one extra audit row (entity_type='checkin_override') carrying the
+ * actor / reason / prior daily_status snapshot. checkin_logs.source stays
+ * 'web' — override semantics live in the audit row.
+ *
+ * Caller (route handler) maps thrown errors to HTTP status via err.statusCode.
+ */
+async function processSchoolOverride(pool, {
+  userId,
+  userRole,
+  userDisplayName,
+  ipAddress,
+  userAgent,
+  schoolId,
+  studentId,
+  session,
+  status = 'CHECKED_IN',
+  reason,
+}) {
+  assertSession(session);
+  if (!['CHECKED_IN', 'CHECKED_OUT'].includes(status)) {
+    throw makeError("status must be 'CHECKED_IN' or 'CHECKED_OUT'", 400);
+  }
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+  if (!trimmedReason) {
+    throw makeError('กรุณาระบุเหตุผลการยืนยันแทน', 400);
+  }
+  if (trimmedReason.length > 500) {
+    throw makeError('เหตุผลต้องไม่เกิน 500 ตัวอักษร', 400);
+  }
+  if (!schoolId) {
+    throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
+  }
+
+  // 1. Load student + vehicle plate (joined)
+  const [[student]] = await pool.query(
+    `SELECT s.id, s.school_id, s.vehicle_id, s.prefix, s.first_name, s.last_name,
+            s.cid_hash, s.morning_enabled, s.evening_enabled, s.is_deleted,
+            v.plate_no
+     FROM   students s
+     LEFT JOIN vehicles v ON v.id = s.vehicle_id
+     WHERE  s.id = ?
+     LIMIT  1`,
+    [studentId]
+  );
+  if (!student || student.is_deleted || String(student.school_id) !== String(schoolId)) {
+    throw makeError('ไม่พบนักเรียนในโรงเรียนนี้', 404);
+  }
+  if (session === 'morning' && !student.morning_enabled) {
+    throw makeError('นักเรียนไม่ได้ใช้บริการรอบนี้', 400);
+  }
+  if (session === 'evening' && !student.evening_enabled) {
+    throw makeError('นักเรียนไม่ได้ใช้บริการรอบนี้', 400);
+  }
+  if (!student.vehicle_id) {
+    throw makeError('นักเรียนยังไม่ได้กำหนดรถรับ-ส่ง', 400);
+  }
+
+  // 2. Active non-cancelled leave for today + session
+  const [[leaveHit]] = await pool.query(
+    `SELECT id FROM student_leaves
+     WHERE  student_id = ?
+       AND  leave_date = CURDATE()
+       AND  cancelled  = FALSE
+       AND  (session = ? OR session = 'both')
+     LIMIT 1`,
+    [studentId, session]
+  );
+  if (leaveHit) {
+    throw makeError('นักเรียนลาในรอบนี้ ไม่สามารถยืนยันแทนได้', 409);
+  }
+
+  // 3. Snapshot daily_status; reject if already done
+  const [[prior]] = await pool.query(
+    `SELECT morning_done, morning_ts, evening_done, evening_ts
+     FROM   daily_status
+     WHERE  check_date = CURDATE() AND student_id = ?
+     LIMIT 1`,
+    [studentId]
+  );
+  const priorDailyStatus = prior
+    ? {
+        morning_done: !!prior.morning_done,
+        morning_ts:   prior.morning_ts ? new Date(prior.morning_ts).toISOString() : null,
+        evening_done: !!prior.evening_done,
+        evening_ts:   prior.evening_ts ? new Date(prior.evening_ts).toISOString() : null,
+      }
+    : { morning_done: false, morning_ts: null, evening_done: false, evening_ts: null };
+
+  const sessionDoneKey = session === 'morning' ? 'morning_done' : 'evening_done';
+  if (priorDailyStatus[sessionDoneKey]) {
+    throw makeError('รอบนี้ได้รับการยืนยันแล้ว', 409);
+  }
+
+  // 4. Reuse driver transaction worker
+  const conn = await pool.getConnection();
+  await conn.beginTransaction();
+  try {
+    const result = await _buildCheckinTransaction(conn, {
+      userId,
+      vehicleId: student.vehicle_id,
+      plateNo:   student.plate_no || null,
+      studentId: student.id,
+      session,
+      status,
+      termId:    env.app.currentTerm,
+      source:    'web',
+    });
+
+    const studentName = `${student.first_name} ${student.last_name}`;
+    const confirmedAt = new Date().toISOString();
+
+    await logAudit({
+      conn,
+      userId,
+      action:     'UPDATE',
+      entityType: 'checkin_override',
+      entityId:   String(student.id),
+      oldValue:   priorDailyStatus,
+      newValue: {
+        school_id:                   schoolId,
+        student_id:                  student.id,
+        student_name:                studentName,
+        vehicle_id:                  student.vehicle_id,
+        plate_no:                    student.plate_no || null,
+        session,
+        status,
+        reason:                      trimmedReason,
+        confirmed_by_user_id:        userId,
+        confirmed_by_role:           userRole || null,
+        confirmed_by_display_name:   userDisplayName || null,
+        override_checkin_log_id:     result.log_id,
+        timestamp_utc:               confirmedAt,
+      },
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null,
+    });
+
+    await conn.commit();
+    return {
+      checkin_log_id: result.log_id,
+      student_id:     student.id,
+      session,
+      status,
+      confirmed_at:   confirmedAt,
+      confirmed_by:   userDisplayName || null,
+      override:       true,
+    };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 module.exports = {
   getDriverVehicle,
   getRoster,
@@ -447,4 +610,5 @@ module.exports = {
   processCheckout,
   processCheckinAll,
   getStatusToday,
+  processSchoolOverride,
 };

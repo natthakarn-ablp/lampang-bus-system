@@ -17,6 +17,7 @@ const leaveSvc = require('../services/leave.service');
 const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
+const checkinSvc = require('../services/checkin.service');
 
 /**
  * Resolve school scope: admin uses ?school_id query param, school role uses scopeId.
@@ -106,7 +107,7 @@ function normalizePhone(raw) {
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
   const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
-  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน' };
+  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ' };
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
   const lines = rows.map(r => [
@@ -508,6 +509,63 @@ router.post('/leave', requireFullSchoolScope, async (req, res, next) => {
       leaveDate: date, session, reason, userId: req.user.id, userRole: 'school',
     });
     return sendSuccess(res, result, 'บันทึกการลาสำเร็จ', null, 201);
+  } catch (err) { next(err); }
+});
+
+// ─── POST /checkin-override ──────────────────────────────────────────────────
+// Phase 10.8B — school confirms attendance on behalf of the driver.
+// Reuses driver checkin transaction + appends an extra audit row
+// (entity_type='checkin_override'). Grade-scoped teachers are blocked.
+
+router.post('/checkin-override', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) {
+      return sendError(
+        res,
+        req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียนที่ผูกกับบัญชีนี้',
+        [],
+        req.user.role === 'admin' ? 400 : 403
+      );
+    }
+
+    const { student_id, session, status, reason } = req.body || {};
+    const errors = [];
+    const sid = Number.parseInt(student_id, 10);
+    if (!Number.isInteger(sid) || sid <= 0) {
+      errors.push({ field: 'student_id', message: 'student_id จำเป็นต้องระบุ' });
+    }
+    if (!['morning', 'evening'].includes(session)) {
+      errors.push({ field: 'session', message: "session ต้องเป็น 'morning' หรือ 'evening'" });
+    }
+    const finalStatus = status || 'CHECKED_IN';
+    if (!['CHECKED_IN', 'CHECKED_OUT'].includes(finalStatus)) {
+      errors.push({ field: 'status', message: "status ต้องเป็น 'CHECKED_IN' หรือ 'CHECKED_OUT'" });
+    }
+    const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+    if (!trimmedReason) {
+      errors.push({ field: 'reason', message: 'กรุณาระบุเหตุผลการยืนยันแทน' });
+    } else if (trimmedReason.length > 500) {
+      errors.push({ field: 'reason', message: 'เหตุผลต้องไม่เกิน 500 ตัวอักษร' });
+    }
+    if (errors.length) {
+      return sendError(res, 'ข้อมูลไม่ครบถ้วน', errors, 400);
+    }
+
+    const result = await checkinSvc.processSchoolOverride(pool, {
+      userId:          req.user.id,
+      userRole:        req.user.role,
+      userDisplayName: req.user.displayName || req.user.username || null,
+      ipAddress:       req.ip,
+      userAgent:       req.headers['user-agent'],
+      schoolId,
+      studentId:       sid,
+      session,
+      status:          finalStatus,
+      reason:          trimmedReason,
+    });
+
+    return sendSuccess(res, result, 'ยืนยันการรับ-ส่งสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
 

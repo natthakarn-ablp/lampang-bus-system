@@ -5,12 +5,15 @@ import {
   Sunrise, Sunset, ChevronDown,
   // Phase 10.7E-1 — icons for the action row
   Search, FileText,
+  // Phase 10.8C — override button icon
+  CheckCircle2,
 } from 'lucide-react';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import { DonutChart, HBarChart } from '../../components/MiniCharts';
 import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
+import SchoolOverrideModal from '../../components/SchoolOverrideModal';
 import {
   AppCard, AlertBanner, KPIGrid, KPIStat,
   StatusBadge, DashboardSection, SectionTitle,
@@ -39,15 +42,22 @@ export default function SchoolDashboard() {
   const [loading, setLoading] = useState(true);
   const [expandedVehicle, setExpandedVehicle] = useState(null);
   const [plateSearch, setPlateSearch] = useState('');
+  // Phase 10.8C — override modal open state. Refetches both feeds on save
+  // so the session hero + alert chips + per-vehicle table all reflect the
+  // new daily_status row immediately.
+  const [overrideOpen, setOverrideOpen] = useState(false);
 
-  useEffect(() => {
-    Promise.all([
+  function refetchDashboard() {
+    return Promise.all([
       api.get('/school/dashboard').then(r => r.data.data),
       api.get('/school/status-today').then(r => r.data.data),
     ])
       .then(([dash, status]) => { setData(dash); setStatusData(status); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    refetchDashboard().finally(() => setLoading(false));
   }, []);
 
   function toggleVehicle(vehicleId) {
@@ -114,7 +124,29 @@ export default function SchoolDashboard() {
           <FileText className="w-4 h-4" strokeWidth={2} />
           รายงานวันนี้
         </Link>
+        {/* Phase 10.8C — "ยืนยันแทนคนขับ" override action. Hidden for
+            grade-teacher accounts (read-only) — backend enforces 403
+            via requireFullSchoolScope anyway, but hiding the button
+            avoids a dead-end UX. */}
+        {!isTeacher && (
+          <button
+            type="button"
+            onClick={() => setOverrideOpen(true)}
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+          >
+            <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
+            ยืนยันแทนคนขับ
+          </button>
+        )}
       </div>
+
+      {overrideOpen && (
+        <SchoolOverrideModal
+          vehicles={statusData?.vehicles || []}
+          onClose={() => setOverrideOpen(false)}
+          onSaved={() => refetchDashboard()}
+        />
+      )}
 
       {loading ? (
         <div className="space-y-4">

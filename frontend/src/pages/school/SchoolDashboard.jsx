@@ -132,8 +132,31 @@ export default function SchoolDashboard() {
             <AlertBanner variant="success" title="ดำเนินการครบแล้ว ไม่มีรายการค้าง" />
           )}
 
-          {/* Data completeness */}
-          {data?.completeness && <CompletenessCard c={data.completeness} />}
+          {/* Phase 10.7E-3 — data completeness moved below the fold.
+              Overall % shown in the collapsible subtitle so the at-a-glance
+              read survives even when closed. The full bar breakdown opens
+              on click. CompletenessCard component is reused as-is. */}
+          {data?.completeness && (() => {
+            const c = data.completeness;
+            const items = [
+              { done: c.students_with_vehicle, total: c.students_total },
+              { done: c.students_with_parent,  total: c.students_total },
+              { done: c.vehicles_inspected,    total: c.vehicles_total },
+              { done: c.vehicles_insured,      total: c.vehicles_total },
+            ];
+            const pct = Math.round(
+              items.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / items.length * 100
+            );
+            return (
+              <CollapsibleSection
+                title="ความครบถ้วนข้อมูล"
+                subtitle={`${pct}% ครบถ้วน`}
+                defaultOpen={false}
+              >
+                <CompletenessCard c={c} />
+              </CollapsibleSection>
+            );
+          })()}
 
           {/* Headline KPIs */}
           <KPIGrid cols={4} gap="sm">
@@ -220,8 +243,18 @@ export default function SchoolDashboard() {
             />
           </div>
 
-          {/* Charts row */}
+          {/* Phase 10.7E-3 — analytics charts moved below the fold.
+              Three charts (morning donut, evening donut, pending bar chart)
+              kept intact; only collapsed by default. The hero session cards
+              above already show the same morning/evening pct numbers, so
+              hiding the donuts by default removes redundancy without
+              losing the data — open the section to compare layouts. */}
           {vehicles.length > 0 && (
+            <CollapsibleSection
+              title="วิเคราะห์ภาพรวม"
+              subtitle="กราฟส่งเช้า / รับเย็น / รถที่มีรายการค้าง"
+              defaultOpen={false}
+            >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <AppCard padding="lg">
                 <p className="text-xs font-semibold text-ink-muted mb-3 text-center">{CHART_TITLES.MORNING_STATUS}</p>
@@ -259,6 +292,7 @@ export default function SchoolDashboard() {
                 />
               </AppCard>
             </div>
+            </CollapsibleSection>
           )}
 
           {/* Vehicle status section */}
@@ -512,5 +546,42 @@ function StudentStatus({ enabled, done, ts, leave }) {
       <span className="w-1.5 h-1.5 bg-warn rounded-full animate-pulse" />
       {STATUS.PENDING}
     </span>
+  );
+}
+
+/* ── Phase 10.7E-3 ── Collapsible section ────────────────────────────────
+   Local helper used to move secondary analytics below the fold without
+   removing them. Pure React state, no library. The header is a full-width
+   button (min-h ≥ 44px for mobile tap), shows a subtitle so closed state
+   still carries one piece of glanceable info, and uses the existing
+   AppCard styling so it matches the rest of the dashboard. */
+function CollapsibleSection({ title, subtitle, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <AppCard padding="none">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface transition min-h-[44px] focus:outline-none focus:ring-2 focus:ring-brand-400 rounded-2xl"
+        aria-expanded={open}
+      >
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink truncate">{title}</p>
+          {subtitle && <p className="text-xs text-ink-muted mt-0.5 truncate">{subtitle}</p>}
+        </div>
+        <span className="text-xs text-ink-muted shrink-0 inline-flex items-center gap-1 ml-2">
+          {open ? 'ซ่อนรายละเอียด' : 'แสดงรายละเอียด'}
+          <ChevronDown
+            className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`}
+            strokeWidth={2}
+          />
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-surface-border p-3 sm:p-4">
+          {children}
+        </div>
+      )}
+    </AppCard>
   );
 }

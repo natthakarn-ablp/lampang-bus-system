@@ -689,7 +689,8 @@ router.post('/snapshots/run', async (req, res, next) => {
     );
 
     const [[emergencyStats]] = await pool.query(
-      `SELECT COUNT(*) AS cnt FROM emergency_logs WHERE DATE(reported_at) = ?`, [snapshotDate]
+      `SELECT COUNT(*) AS cnt FROM emergency_logs
+       WHERE DATE(reported_at) = ? AND is_deleted = FALSE`, [snapshotDate]
     );
 
     // Upsert snapshot

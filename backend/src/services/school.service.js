@@ -96,7 +96,8 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
     `SELECT COUNT(DISTINCT el.id) AS recent_emergencies FROM emergency_logs el
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}
-     WHERE el.reported_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
+     WHERE el.reported_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       AND el.is_deleted = FALSE`,
     ga(schoolId)
   );
 
@@ -369,7 +370,8 @@ async function getEmergencies(schoolId, { page = 1, per_page = 20, gradeFilter =
     `SELECT COUNT(DISTINCT el.id) AS total
      FROM emergency_logs el
      JOIN vehicles v ON v.id = el.vehicle_id
-     JOIN students s ON s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}`,
+     JOIN students s ON s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}
+     WHERE el.is_deleted = FALSE`,
     gradeFilter ? [schoolId, gradeFilter] : [schoolId]
   );
 
@@ -383,6 +385,7 @@ async function getEmergencies(schoolId, { page = 1, per_page = 20, gradeFilter =
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}
      LEFT JOIN users u ON u.id = el.reported_by
+     WHERE el.is_deleted = FALSE
      ORDER BY el.reported_at DESC
      LIMIT ? OFFSET ?`,
     gradeFilter ? [schoolId, gradeFilter, per_page, offset] : [schoolId, per_page, offset]

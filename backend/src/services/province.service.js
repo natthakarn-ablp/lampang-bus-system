@@ -52,7 +52,8 @@ async function getDashboard() {
 
   const [[{ recent_emergencies }]] = await pool.query(
     `SELECT COUNT(*) AS recent_emergencies FROM emergency_logs
-     WHERE reported_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`
+     WHERE reported_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       AND is_deleted = FALSE`
   );
 
   const mDone = todayStats?.morning_done ?? 0;
@@ -282,7 +283,7 @@ async function getAffiliations() {
              JOIN vehicles v ON v.id = el.vehicle_id
              JOIN students s6 ON s6.vehicle_id = v.id AND s6.is_deleted = FALSE
              JOIN schools sc6 ON sc6.id = s6.school_id AND sc6.affiliation_id = a.id
-             WHERE DATE(el.reported_at) = ?) AS emergency_count
+             WHERE DATE(el.reported_at) = ? AND el.is_deleted = FALSE) AS emergency_count
      FROM affiliations a
      WHERE a.is_deleted = FALSE
      ORDER BY a.name`,
@@ -564,7 +565,7 @@ async function getStatusToday() {
  */
 async function getEmergencies({ page = 1, per_page = 20 }) {
   const [[{ total }]] = await pool.query(
-    `SELECT COUNT(*) AS total FROM emergency_logs`
+    `SELECT COUNT(*) AS total FROM emergency_logs WHERE is_deleted = FALSE`
   );
 
   const offset = (page - 1) * per_page;
@@ -574,6 +575,7 @@ async function getEmergencies({ page = 1, per_page = 20 }) {
             u.display_name AS reported_by_name
      FROM emergency_logs el
      LEFT JOIN users u ON u.id = el.reported_by
+     WHERE el.is_deleted = FALSE
      ORDER BY el.reported_at DESC
      LIMIT ? OFFSET ?`,
     [per_page, offset]

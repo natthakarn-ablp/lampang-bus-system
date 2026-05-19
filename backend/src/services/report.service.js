@@ -88,7 +88,7 @@ async function getDailyReport(user, filters) {
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id
      JOIN schools sc ON sc.id = s.school_id
-     WHERE DATE(el.reported_at) = ? AND ${where}`,
+     WHERE DATE(el.reported_at) = ? AND el.is_deleted = FALSE AND ${where}`,
     [date, ...params]
   );
 
@@ -210,7 +210,8 @@ async function getMonthlyReport(user, filters) {
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id
      JOIN schools sc ON sc.id = s.school_id
-     WHERE el.reported_at >= ? AND el.reported_at < DATE_ADD(?, INTERVAL 1 MONTH) AND ${where}`,
+     WHERE el.reported_at >= ? AND el.reported_at < DATE_ADD(?, INTERVAL 1 MONTH)
+       AND el.is_deleted = FALSE AND ${where}`,
     [startDate, startDate, ...params]
   );
 

@@ -75,7 +75,8 @@ async function getDashboard(affiliationId) {
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE
      JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
-     WHERE el.reported_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
+     WHERE el.reported_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+       AND el.is_deleted = FALSE`,
     [affiliationId]
   );
 
@@ -403,7 +404,8 @@ async function getEmergencies(affiliationId, { page = 1, per_page = 20 }) {
      FROM emergency_logs el
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE
-     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?`,
+     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
+     WHERE el.is_deleted = FALSE`,
     [affiliationId]
   );
 
@@ -417,6 +419,7 @@ async function getEmergencies(affiliationId, { page = 1, per_page = 20 }) {
      JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE
      JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
      LEFT JOIN users u ON u.id = el.reported_by
+     WHERE el.is_deleted = FALSE
      ORDER BY el.reported_at DESC
      LIMIT ? OFFSET ?`,
     [affiliationId, per_page, offset]

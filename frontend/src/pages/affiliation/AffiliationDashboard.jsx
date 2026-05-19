@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Map, Building2, GraduationCap, Bus, ClipboardList, AlertTriangle,
   Sunrise, Sunset, BellRing, Truck,
+  // Phase 10.7C-2 — icons for the 5-card school-checklist hero
+  Clock,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
@@ -10,11 +12,11 @@ import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
 import { relativeTime } from '../../utils/datetime';
 import {
-  AppCard, AlertBanner, KPIGrid, KPIStat,
-  RiskCard, DashboardSection, AttentionCard,
+  AppCard, AlertBanner,
+  DashboardSection, AttentionCard,
 } from '../../components/ui';
 import {
-  PAGE_TITLES, CARD_LABELS, CHART_TITLES,
+  PAGE_TITLES, CHART_TITLES,
   UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS,
 } from '../../constants/uiLabels';
 
@@ -90,39 +92,174 @@ export default function AffiliationDashboard() {
             />
           )}
 
-          {/* Headline KPIs */}
-          <KPIGrid cols={5} gap="sm">
-            <KPIStat
-              label={CARD_LABELS.SCHOOLS}
-              value={data.total_schools ?? 0}
-              icon={Building2}
-              variant="brand"
-            />
-            <KPIStat
-              label={CARD_LABELS.TOTAL_STUDENTS}
-              value={data.total_students ?? 0}
-              icon={GraduationCap}
-              variant="brand"
-            />
-            <KPIStat
-              label={CARD_LABELS.VEHICLES}
-              value={data.total_vehicles ?? 0}
-              icon={Bus}
-              variant="brand"
-            />
-            <KPIStat
-              label={CARD_LABELS.STUDENT_LEAVE}
-              value={data.leave_count ?? 0}
-              icon={ClipboardList}
-              variant={(data.leave_count ?? 0) > 0 ? 'warn' : 'neutral'}
-            />
-            <KPIStat
-              label={CARD_LABELS.EMERGENCY_7D}
-              value={data.recent_emergencies ?? 0}
-              icon={AlertTriangle}
-              variant={(data.recent_emergencies ?? 0) > 0 ? 'danger' : 'neutral'}
-            />
-          </KPIGrid>
+          {/* Phase 10.7C-2 — 5-card school-checklist hero. Drops the legacy
+              total-students / total-schools / total-vehicles tiles in favour
+              of action-driving adoption + data-quality + at-risk + alerts.
+              Auxiliary totals moved to "ภาพรวมเพิ่มเติม" below. Cards 4 + 5
+              are tap-through to the existing drill-down sections. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+            {/* Card 1 — School adoption. 14-day window matches province. */}
+            <AppCard padding="md">
+              <div className="flex items-start gap-2 mb-2">
+                <Building2 className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
+                <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนทั้งหมด / เข้าใช้งานแล้ว</p>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted">โรงเรียนทั้งหมด</span>
+                  <span className="text-2xl font-bold text-ink tabular-nums">{data.school_total ?? data.total_schools ?? 0}</span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted">เข้าใช้งานล่าสุด 14 วัน</span>
+                  <span className={`text-base font-semibold tabular-nums ${(data.school_used_recently ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
+                    {data.school_used_recently ?? 0}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted">ยังไม่เข้าใช้งาน</span>
+                  <span className={`text-base font-semibold tabular-nums ${(data.school_not_using_recently ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
+                    {data.school_not_using_recently ?? 0}
+                  </span>
+                </div>
+              </div>
+            </AppCard>
+
+            {/* Card 2 — Vehicle data completeness across schools. */}
+            <AppCard padding="md">
+              <div className="flex items-start gap-2 mb-2">
+                <Bus className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
+                <p className="text-sm font-semibold text-ink leading-tight">ความครบถ้วนข้อมูลรถ</p>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted">มีข้อมูลรถแล้ว</span>
+                  <span className={`text-base font-semibold tabular-nums ${(data.schools_with_vehicle_data ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
+                    {data.schools_with_vehicle_data ?? 0}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted">ข้อมูลไม่ครบ</span>
+                  <span className={`text-2xl font-bold tabular-nums ${(data.schools_missing_vehicle_data ?? 0) > 0 ? 'text-warn' : 'text-success'}`}>
+                    {data.schools_missing_vehicle_data ?? 0}
+                  </span>
+                </div>
+              </div>
+            </AppCard>
+
+            {/* Card 3 — Today's pickup/dropoff progress. Compact summary;
+                the existing SessionDonut section below keeps the rich detail. */}
+            <AppCard padding="md">
+              <div className="flex items-start gap-2 mb-2">
+                <Clock className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
+                <p className="text-sm font-semibold text-ink leading-tight">การรับ-ส่งวันนี้</p>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted inline-flex items-center gap-1">
+                    <Sunrise className="w-3.5 h-3.5 text-warn" strokeWidth={2} /> ส่งเช้า
+                  </span>
+                  <span className="text-base font-semibold text-ink tabular-nums">
+                    {data.morning_done ?? 0}
+                    <span className="text-ink-muted text-sm"> / {data.morning_total ?? 0}</span>
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted inline-flex items-center gap-1">
+                    <Sunset className="w-3.5 h-3.5 text-info" strokeWidth={2} /> รับเย็น
+                  </span>
+                  <span className="text-base font-semibold text-ink tabular-nums">
+                    {data.evening_done ?? 0}
+                    <span className="text-ink-muted text-sm"> / {data.evening_total ?? 0}</span>
+                  </span>
+                </div>
+              </div>
+            </AppCard>
+
+            {/* Card 4 — At-risk schools today. Tap-through to the existing
+                "โรงเรียนเสี่ยง" SchoolRiskRow section below (schoolsRef). */}
+            <AppCard
+              as="button"
+              padding="md"
+              onClick={() => scrollTo(schoolsRef)}
+              className="text-left transition hover:shadow-elevate focus:outline-none focus:ring-2 focus:ring-warn/40"
+              aria-label="ดูรายชื่อโรงเรียนเสี่ยง"
+            >
+              <div className="flex items-start gap-2 mb-2">
+                <AlertTriangle
+                  className={`w-5 h-5 shrink-0 ${(data.at_risk_schools ?? 0) > 0 ? 'text-warn' : 'text-success'}`}
+                  strokeWidth={2}
+                />
+                <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนเสี่ยงวันนี้</p>
+              </div>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs text-ink-muted">โรงเรียนที่ต้องติดตาม</span>
+                <span className={`text-2xl font-bold tabular-nums ${(data.at_risk_schools ?? 0) > 0 ? 'text-warn' : 'text-success'}`}>
+                  {data.at_risk_schools ?? problemSchools.length}
+                </span>
+              </div>
+              {problemSchools.length > 0 && (
+                <p className="text-xs text-ink-muted mt-1 truncate">
+                  เช่น {problemSchools.slice(0, 2).map(s => s.school_name).join(' · ')}
+                </p>
+              )}
+            </AppCard>
+
+            {/* Card 5 — Alert digest. Aliases emergency_7d / leave_today
+                from 10.7C-1; fall back to legacy names if needed. */}
+            <AppCard padding="md">
+              <div className="flex items-start gap-2 mb-2">
+                <BellRing
+                  className={`w-5 h-5 shrink-0 ${((data.emergency_7d ?? data.recent_emergencies ?? 0) > 0) ? 'text-danger' : 'text-brand'}`}
+                  strokeWidth={2}
+                />
+                <p className="text-sm font-semibold text-ink leading-tight">เหตุแจ้งเตือน</p>
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted">เหตุฉุกเฉิน 7 วัน</span>
+                  <span className={`text-2xl font-bold tabular-nums ${(data.emergency_7d ?? data.recent_emergencies ?? 0) > 0 ? 'text-danger' : 'text-ink-muted'}`}>
+                    {data.emergency_7d ?? data.recent_emergencies ?? 0}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-ink-muted">การลาวันนี้</span>
+                  <span className={`text-base font-semibold tabular-nums ${(data.leave_today ?? data.leave_count ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
+                    {data.leave_today ?? data.leave_count ?? 0}
+                  </span>
+                </div>
+              </div>
+            </AppCard>
+
+          </div>
+
+          {/* Auxiliary system size — was hero cards 2/3/4 in the pre-10.7C-2
+              layout. Demoted because students/schools/vehicles totals don't
+              drive a same-day decision; the 5-card hero owns that signal. */}
+          <DashboardSection title="ภาพรวมเพิ่มเติม" description="ขนาดสังกัด">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <AppCard padding="sm" className="text-center">
+                <p className="text-xs text-ink-muted">นักเรียน</p>
+                <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_students ?? 0}</p>
+              </AppCard>
+              <AppCard padding="sm" className="text-center">
+                <p className="text-xs text-ink-muted">โรงเรียน</p>
+                <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_schools ?? 0}</p>
+              </AppCard>
+              <AppCard padding="sm" className="text-center">
+                <p className="text-xs text-ink-muted">รถรับส่ง</p>
+                <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_vehicles ?? 0}</p>
+              </AppCard>
+              <AppCard padding="sm" className="text-center">
+                <p className="text-xs text-ink-muted inline-flex items-center gap-1 justify-center w-full">
+                  <ClipboardList className="w-3.5 h-3.5" strokeWidth={2} /> รายละเอียดลา
+                </p>
+                <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">
+                  {data.morning_leave ?? 0}<span className="text-ink-muted text-sm"> / {data.evening_leave ?? 0}</span>
+                </p>
+              </AppCard>
+            </div>
+          </DashboardSection>
 
           {/* Session donuts */}
           <DashboardSection title="ผลการดำเนินการวันนี้">

@@ -2,6 +2,11 @@
 
 const { pool } = require('../config/database');
 
+// Phase 10.7C-1 — match province.service.js window so "ยังไม่เริ่มใช้ระบบ"
+// means the same thing at both scopes. School is "used recently" if it has
+// any daily_status row in the last N days.
+const SCHOOL_USAGE_WINDOW_DAYS = 14;
+
 /**
  * Get dashboard summary for a specific affiliation (เขตพื้นที่).
  */
@@ -108,6 +113,62 @@ async function getDashboard(affiliationId) {
     s => (s.m_expected > 0 && s.m_done < s.m_expected) || (s.e_expected > 0 && s.e_done < s.e_expected)
   );
 
+  // ─── Phase 10.7C-1 — additive school-checklist KPI fields ───────────────
+  //
+  // Mirrors the 10.7B-1 pattern at the affiliation scope. ALL new queries
+  // filter by sc.affiliation_id so the affiliation account never sees
+  // counts that include other affiliations. Two invariants must hold:
+  //   school_total === school_used_recently + school_not_using_recently
+  //   school_total === schools_with_vehicle_data + schools_missing_vehicle_data
+  // The bottom of getDashboard() asserts both via non-fatal console.warn.
+
+  // 1. Schools with any daily_status in the last N days. daily_status has
+  //    no school_id column, so join through students -> schools.
+  const [[{ school_used_recently }]] = await pool.query(
+    `SELECT COUNT(DISTINCT s.school_id) AS school_used_recently
+     FROM   daily_status ds
+     JOIN   students s ON s.id = ds.student_id AND s.is_deleted = FALSE
+     JOIN   schools  sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+                       AND sc.affiliation_id = ?
+     WHERE  ds.check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)`,
+    [affiliationId, SCHOOL_USAGE_WINDOW_DAYS]
+  );
+
+  // 2. Schools that have at least one student with vehicle_id set.
+  const [[{ schools_with_vehicle_data }]] = await pool.query(
+    `SELECT COUNT(DISTINCT sc.id) AS schools_with_vehicle_data
+     FROM   schools sc
+     JOIN   students s ON s.school_id = sc.id AND s.is_deleted = FALSE
+     WHERE  sc.affiliation_id = ? AND sc.is_deleted = FALSE
+       AND  s.vehicle_id IS NOT NULL`,
+    [affiliationId]
+  );
+
+  // Derived (JS) — non-negative by SQL filter design.
+  const school_total                 = total_schools;
+  const school_not_using_recently    = school_total - school_used_recently;
+  const schools_missing_vehicle_data = school_total - schools_with_vehicle_data;
+
+  // Aliases for clearer downstream naming. Old names ALSO returned below
+  // so 10.7C-2 frontend cutover doesn't have to happen in the same phase.
+  const emergency_7d   = recent_emergencies;
+  const leave_today    = leave_count;
+  const at_risk_schools = schools_not_complete.length;
+
+  // Invariant guards — log warnings (never throw) if the buckets drift.
+  if (school_used_recently + school_not_using_recently !== school_total) {
+    // eslint-disable-next-line no-console
+    console.warn('[affiliation.getDashboard] school adoption invariant drift', {
+      affiliationId, school_total, school_used_recently, school_not_using_recently,
+    });
+  }
+  if (schools_with_vehicle_data + schools_missing_vehicle_data !== school_total) {
+    // eslint-disable-next-line no-console
+    console.warn('[affiliation.getDashboard] school vehicle-data invariant drift', {
+      affiliationId, school_total, schools_with_vehicle_data, schools_missing_vehicle_data,
+    });
+  }
+
   return {
     affiliation: affiliation || null,
     date: today,
@@ -135,6 +196,16 @@ async function getDashboard(affiliationId) {
       evening_expected: s.e_expected,
       evening_pending: s.e_expected - s.e_done,
     })),
+
+    // Phase 10.7C-1 — new additive fields (frontend cuts over in 10.7C-2)
+    school_total,
+    school_used_recently,
+    school_not_using_recently,
+    schools_with_vehicle_data,
+    schools_missing_vehicle_data,
+    emergency_7d,
+    leave_today,
+    at_risk_schools,
   };
 }
 

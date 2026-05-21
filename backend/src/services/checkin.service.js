@@ -131,12 +131,31 @@ async function getRoster(pool, vehicleId, session) {
             (SELECT sl3.id FROM student_leaves sl3
              WHERE sl3.student_id = s.id AND sl3.leave_date = CURDATE() AND sl3.cancelled = FALSE
              ORDER BY sl3.id DESC LIMIT 1
-            ) AS leave_id
+            ) AS leave_id,
+            COALESCE(ov.morning_override_by_school, 0) AS morning_override_by_school,
+            COALESCE(ov.evening_override_by_school, 0) AS evening_override_by_school,
+            ov.morning_override_at,
+            ov.evening_override_at
      FROM   students s
      LEFT JOIN schools sc ON sc.id = s.school_id
      LEFT JOIN daily_status ds
                ON ds.student_id = s.id
                AND ds.check_date = CURDATE()
+     LEFT JOIN (
+       SELECT CAST(entity_id AS UNSIGNED) AS student_id,
+              MAX(CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.session')) = 'morning'
+                       THEN 1 ELSE 0 END) AS morning_override_by_school,
+              MAX(CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.session')) = 'evening'
+                       THEN 1 ELSE 0 END) AS evening_override_by_school,
+              MAX(CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.session')) = 'morning'
+                       THEN created_at END) AS morning_override_at,
+              MAX(CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(new_value, '$.session')) = 'evening'
+                       THEN created_at END) AS evening_override_at
+       FROM   audit_logs
+       WHERE  entity_type = 'checkin_override'
+         AND  DATE(created_at) = CURDATE()
+       GROUP BY entity_id
+     ) ov ON ov.student_id = s.id
      WHERE  s.vehicle_id = ?
        AND  s.is_deleted = FALSE
        ${sessionFilter}
@@ -144,7 +163,14 @@ async function getRoster(pool, vehicleId, session) {
     [vehicleId]
   );
 
-  return rows;
+  // Phase 10.8F-B — cast TINYINT to boolean for the driver-side passive badge.
+  // Reason/actor metadata stays in audit_logs and is intentionally NOT exposed
+  // to the driver response (PDPA).
+  return rows.map(r => ({
+    ...r,
+    morning_override_by_school: !!r.morning_override_by_school,
+    evening_override_by_school: !!r.evening_override_by_school,
+  }));
 }
 
 // ─── _buildCheckinTransaction ─────────────────────────────────────────────────

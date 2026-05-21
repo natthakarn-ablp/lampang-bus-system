@@ -32,8 +32,9 @@
  *   DELETE FROM audit_logs   WHERE (entity_type='checkin_override' AND entity_id='987654');
  *   DELETE FROM students     WHERE id = 987654;
  *   DELETE FROM driver_vehicle_assignments WHERE vehicle_id = 'V-uat0000001';
+ *   DELETE FROM drivers      WHERE name = 'คนขับทดสอบ ยืนยันแทน';
  *   DELETE FROM vehicles     WHERE id = 'V-uat0000001';
- *   DELETE FROM users        WHERE username IN ('__UAT_SCHOOL_OVERRIDE','__UAT_TEACHER_OVERRIDE');
+ *   DELETE FROM users        WHERE username IN ('__UAT_SCHOOL_OVERRIDE','__UAT_TEACHER_OVERRIDE','UAT-OVERRIDE-001');
  *   DELETE FROM schools      WHERE id = '__UATSCH';
  */
 
@@ -63,6 +64,12 @@ const FX = {
   userFull:      '__UAT_SCHOOL_OVERRIDE',
   userTeacher:   '__UAT_TEACHER_OVERRIDE',
   teacherGrade:  'ป.1',
+  // Phase 10.8F-E — UAT driver tied to the same fixture vehicle.
+  // Driver login uses vehicles.plate_no as username (see checkin.service.js
+  // getDriverVehicle), so the user's username MUST be the plate string.
+  driverUserName: 'UAT-OVERRIDE-001',
+  driverName:     'คนขับทดสอบ ยืนยันแทน',
+  driverPhone:    '0000000099',
 };
 
 function randomPassword(len = 16) {
@@ -217,6 +224,112 @@ async function upsertUatUser(conn, { username, gradeScope, displayName, force })
   return { id: u.id, username, status: 'existed', password: null };
 }
 
+// ─── Phase 10.8F-E — UAT driver fixture ──────────────────────────────────────
+// Three rows are involved:
+//   1. drivers row (matched by exact UAT name; otherwise inserted)
+//   2. users row (matched by username = vehicles.plate_no per the project's
+//      driver-login convention — see backend/src/services/checkin.service.js
+//      getDriverVehicle())
+//   3. driver_vehicle_assignments linking #1 → V-uat0000001 for the current term
+
+async function upsertUatDriver(conn) {
+  const [exists] = await conn.query(
+    'SELECT id, name, phone, is_deleted FROM drivers WHERE name = ? LIMIT 1',
+    [FX.driverName]
+  );
+  if (exists.length === 0) {
+    const [ins] = await conn.query(
+      `INSERT INTO drivers (name, phone, is_deleted) VALUES (?, ?, FALSE)`,
+      [FX.driverName, FX.driverPhone]
+    );
+    return { id: ins.insertId, created: true };
+  }
+  const d = exists[0];
+  if (d.is_deleted) {
+    await conn.query(
+      `UPDATE drivers SET is_deleted = FALSE, deleted_at = NULL, phone = ? WHERE id = ?`,
+      [FX.driverPhone, d.id]
+    );
+    return { id: d.id, reactivated: true };
+  }
+  return { id: d.id, existed: true };
+}
+
+async function upsertUatDriverUser(conn, { force }) {
+  const [exists] = await conn.query(
+    'SELECT id, role, is_deleted FROM users WHERE username = ?',
+    [FX.driverUserName]
+  );
+
+  if (exists.length === 0) {
+    const password = randomPassword();
+    const hash = await bcrypt.hash(password, BCRYPT_COST);
+    const [ins] = await conn.query(
+      `INSERT INTO users
+         (username, password_hash, role, scope_type, scope_id, display_name,
+          is_active, must_change_password)
+       VALUES (?, ?, 'driver', NULL, NULL, ?, TRUE, FALSE)`,
+      [FX.driverUserName, hash, 'UAT Driver (Override Badge)']
+    );
+    return { id: ins.insertId, username: FX.driverUserName, status: 'created', password };
+  }
+
+  const u = exists[0];
+  if (u.role !== 'driver') {
+    throw new Error(
+      `User "${FX.driverUserName}" exists with role="${u.role}" — abort to avoid clobbering non-driver account`
+    );
+  }
+
+  if (force) {
+    const password = randomPassword();
+    const hash = await bcrypt.hash(password, BCRYPT_COST);
+    await conn.query(
+      `UPDATE users SET password_hash = ?, is_active = TRUE, is_deleted = FALSE,
+        deleted_at = NULL, must_change_password = FALSE WHERE id = ?`,
+      [hash, u.id]
+    );
+    return { id: u.id, username: FX.driverUserName, status: 'rotated', password };
+  }
+
+  if (u.is_deleted) {
+    await conn.query(
+      `UPDATE users SET is_deleted = FALSE, deleted_at = NULL, is_active = TRUE WHERE id = ?`,
+      [u.id]
+    );
+    return { id: u.id, username: FX.driverUserName, status: 'reactivated', password: null };
+  }
+
+  return { id: u.id, username: FX.driverUserName, status: 'existed', password: null };
+}
+
+async function upsertUatDriverAssignment(conn, driverId) {
+  const [exists] = await conn.query(
+    `SELECT id, is_active FROM driver_vehicle_assignments
+     WHERE driver_id = ? AND vehicle_id = ? AND term_id = ?
+     LIMIT 1`,
+    [driverId, FX.vehicleId, FX.termId]
+  );
+  if (exists.length === 0) {
+    const [ins] = await conn.query(
+      `INSERT INTO driver_vehicle_assignments
+         (driver_id, vehicle_id, term_id, start_date, end_date, is_active)
+       VALUES (?, ?, ?, CURDATE(), NULL, TRUE)`,
+      [driverId, FX.vehicleId, FX.termId]
+    );
+    return { id: ins.insertId, created: true };
+  }
+  const a = exists[0];
+  if (!a.is_active) {
+    await conn.query(
+      `UPDATE driver_vehicle_assignments SET is_active = TRUE, end_date = NULL WHERE id = ?`,
+      [a.id]
+    );
+    return { id: a.id, reactivated: true };
+  }
+  return { id: a.id, existed: true };
+}
+
 async function reportTodayBlockers(conn, studentId) {
   const [ds] = await conn.query(
     'SELECT morning_done, morning_ts, evening_done, evening_ts FROM daily_status WHERE student_id = ? AND check_date = CURDATE() LIMIT 1',
@@ -269,6 +382,11 @@ async function main() {
       force,
     });
 
+    // Phase 10.8F-E — UAT driver + login + assignment to V-uat0000001
+    const driver     = await upsertUatDriver(conn);
+    const driverUser = await upsertUatDriverUser(conn, { force });
+    const assignment = await upsertUatDriverAssignment(conn, driver.id);
+
     const blockers = await reportTodayBlockers(conn, FX.studentId);
     const safeSessions = [];
     if (!blockers.morning) safeSessions.push('morning');
@@ -283,9 +401,13 @@ async function main() {
     console.log(`Vehicle:  id=${vehicle.id}  plate=${FX.vehiclePlate}  [${describe(vehicle)}]`);
     console.log(`Student:  id=${student.id}  name="${FX.studentPrefix}${FX.studentFirst} ${FX.studentLast}"  [${describe(student)}]`);
     console.log('');
+    console.log(`Driver:   id=${driver.id}  name="${FX.driverName}"  [${describe(driver)}]`);
+    console.log(`Assignment: id=${assignment.id}  vehicle=${FX.vehicleId} → driver=${driver.id}  [${describe(assignment)}]`);
+    console.log('');
     console.log('Users (passwords are printed ONLY when created or rotated):');
     printUser(fullUser);
     printUser(teacherUser);
+    printUser(driverUser);
     console.log('');
     console.log(`Today's blockers for student ${FX.studentId}:`);
     console.log(`  morning blocked: ${blockers.morning}`);

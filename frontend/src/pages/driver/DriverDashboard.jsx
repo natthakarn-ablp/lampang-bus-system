@@ -472,22 +472,34 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
             </p>
           </div>
 
-          {/* Status badge */}
-          {state === 'done' && (
-            <StatusBadge variant="success" size="md" icon={Check} className="shrink-0">
-              {doneText}
-            </StatusBadge>
-          )}
-          {state === 'leave' && (
-            <StatusBadge variant="warn" size="md" className="shrink-0">
-              {leaveText}
-            </StatusBadge>
-          )}
-          {partialLeaveLabel && state !== 'leave' && (
-            <span className="text-sm text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full shrink-0">
-              {partialLeaveLabel}
-            </span>
-          )}
+          {/* Status badge column — Phase 10.8F-C stacks the override info
+              chip below the done/leave status pill in the right column.
+              The chip is informational only (no click, no metadata exposed)
+              and only appears when the school confirmed this student for
+              the CURRENT session via /api/school/checkin-override. */}
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {state === 'done' && (
+              <StatusBadge variant="success" size="md" icon={Check} className="shrink-0">
+                {doneText}
+              </StatusBadge>
+            )}
+            {state === 'leave' && (
+              <StatusBadge variant="warn" size="md" className="shrink-0">
+                {leaveText}
+              </StatusBadge>
+            )}
+            {partialLeaveLabel && state !== 'leave' && (
+              <span className="text-sm text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full shrink-0">
+                {partialLeaveLabel}
+              </span>
+            )}
+            {((session === 'morning' && student.morning_override_by_school) ||
+              (session === 'evening' && student.evening_override_by_school)) && (
+              <StatusBadge variant="info" size="sm" className="shrink-0">
+                ครูยืนยันแทนแล้ว
+              </StatusBadge>
+            )}
+          </div>
         </div>
       </div>
 

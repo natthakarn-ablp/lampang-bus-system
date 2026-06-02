@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Map, Building2, GraduationCap, Bus, ClipboardList, AlertTriangle,
   Sunrise, Sunset, BellRing, Truck,
   // Phase 10.7C-2 — icons for the 5-card school-checklist hero
   Clock,
+  // Phase 10.8UX-B-1 — action row icons
+  Activity, FileText,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
@@ -63,6 +66,33 @@ export default function AffiliationDashboard() {
         icon={Map}
         iconColor="sky"
       />
+
+      {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern
+          (flex-1 sm:flex-none + min-h 40px) so mobile users in สังกัด can
+          tap-through to common workflows without the hamburger drawer. */}
+      <div className="flex flex-wrap items-stretch gap-2">
+        <Link
+          to="/affiliation/schools"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+        >
+          <Building2 className="w-4 h-4" strokeWidth={2} />
+          โรงเรียนในสังกัด
+        </Link>
+        <Link
+          to="/affiliation/live-vehicles"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+        >
+          <Activity className="w-4 h-4" strokeWidth={2} />
+          ตำแหน่งปัจจุบัน
+        </Link>
+        <Link
+          to="/reports/daily"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+        >
+          <FileText className="w-4 h-4" strokeWidth={2} />
+          รายงาน
+        </Link>
+      </div>
 
       {loading ? (
         <SkeletonKpiGrid count={5} />

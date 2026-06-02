@@ -57,11 +57,13 @@ const AFFILIATION_NAV = [
   { to: '/affiliation/schools',     icon: Building2,     label: 'โรงเรียนในสังกัด' },
   { to: '/affiliation/students',    icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/affiliation/vehicles',    icon: Bus,           label: 'รถรับส่ง' },
+  // Phase 10.8UX-B-1 — folded the orphan "คำขอและบัญชี" section (single
+  // item) into "ข้อมูลในสังกัด" so the sidebar doesn't carry a one-item
+  // section header. Route + permission unchanged.
+  { to: '/affiliation/accounts',    icon: Key,           label: 'เพิ่มโรงเรียนใหม่' },
   { section: 'แผนที่และตำแหน่ง' },
   { to: '/affiliation/live-vehicles', icon: Activity,    label: 'ตำแหน่งปัจจุบัน' },
   { to: '/affiliation/pickup-map',  icon: Map,           label: 'แผนที่จุดรับส่ง' },
-  { section: 'คำขอและบัญชี' },
-  { to: '/affiliation/accounts',    icon: Key,           label: 'เพิ่มโรงเรียนใหม่' },
   { section: 'ติดตามและบันทึก' },
   { to: '/affiliation/emergencies', icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/affiliation/audit-log',   icon: FileText,      label: 'ประวัติการแก้ไข' },
@@ -122,7 +124,7 @@ const ADMIN_NAV = [
   { to: '/province/vehicles',     icon: Bus,         label: 'รถรับส่ง' },
   { section: 'รายงานและวิเคราะห์' },
   { to: '/admin/measurement',     icon: Ruler,       label: 'กรอบวัดผลระบบ' },
-  { to: '/admin/research',        icon: TrendingUp,  label: 'เปรียบ Baseline' },
+  { to: '/admin/research',        icon: TrendingUp,  label: 'เปรียบเทียบ Baseline' },
   { to: '/admin/research-export', icon: Package,     label: 'ส่งออกข้อมูลวิจัย' },
   { to: '/admin/evaluation',      icon: Target,      label: 'ประเมินผลแยก Role' },
   { to: '/admin/executive',       icon: BarChart3,   label: 'สรุปผู้บริหาร' },

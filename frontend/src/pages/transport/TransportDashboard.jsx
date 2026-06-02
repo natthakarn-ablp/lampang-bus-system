@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   AlertTriangle, ClipboardList, CheckCircle2, Lightbulb,
   FileText, Phone, X, Search,
   // Phase 10.7A — icons for the combined-document expiry cards
   Clock, XCircle,
+  // Phase 10.8UX-B-1 — action row icon for pickup map
+  Map as MapIcon,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
@@ -211,6 +213,26 @@ export default function TransportDashboard() {
         <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">ภาพรวมตรวจสภาพรถ</h1>
         <p className="text-sm text-ink-muted mt-1">สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด</p>
       </header>
+
+      {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern
+          (flex-1 sm:flex-none + min-h 40px) so transport operators can tap
+          straight to inspection record / pickup map without scrolling. */}
+      <div className="flex flex-wrap items-stretch gap-2">
+        <Link
+          to="/transport/inspections"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+        >
+          <ClipboardList className="w-4 h-4" strokeWidth={2} />
+          บันทึกตรวจสภาพ
+        </Link>
+        <Link
+          to="/transport/pickup-map"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+        >
+          <MapIcon className="w-4 h-4" strokeWidth={2} />
+          แผนที่จุดรับส่ง
+        </Link>
+      </div>
 
       {/* Save success banner */}
       {highlightId && (() => {

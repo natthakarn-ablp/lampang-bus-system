@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, KeyRound, Trash2, ShieldAlert, Users } from 'lucide-react';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge } from '../../components/ui';
@@ -58,10 +58,77 @@ export default function SchoolTeacherAccounts() {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
-  const [modal, setModal]       = useState(null); // null | 'create' | 'reset' | 'delete'
+  const [modal, setModal]       = useState(null); // null | 'create' | 'reset' | 'delete' | 'bulkDelete'
   const [selected, setSelected] = useState(null);
   const [form, setForm]         = useState({});
   const [saving, setSaving]     = useState(false);
+
+  // Phase 10.10G-C — bulk selection state. Self-account (`user.id`) is excluded
+  // from the deletable set so the operator cannot accidentally lock themselves
+  // out of the school by bulk-deleting their own row.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const currentUserId = user?.id;
+  const isDeletable = useCallback(
+    (acc) => !!acc && acc.id !== currentUserId,
+    [currentUserId]
+  );
+  const deletableVisibleIds = useMemo(
+    () => accounts.filter(isDeletable).map(a => a.id),
+    [accounts, isDeletable]
+  );
+  const isAllVisibleSelected = deletableVisibleIds.length > 0
+    && deletableVisibleIds.every(id => selectedIds.has(id));
+  const isAnySelected = selectedIds.size > 0;
+  const isIndeterminate = isAnySelected && !isAllVisibleSelected;
+
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelectedIds(prev => {
+      if (deletableVisibleIds.length > 0 && deletableVisibleIds.every(id => prev.has(id))) {
+        const next = new Set(prev);
+        deletableVisibleIds.forEach(id => next.delete(id));
+        return next;
+      }
+      const next = new Set(prev);
+      deletableVisibleIds.forEach(id => next.add(id));
+      return next;
+    });
+  }, [deletableVisibleIds]);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const selectedRows = useMemo(
+    () => accounts.filter(a => selectedIds.has(a.id)),
+    [accounts, selectedIds]
+  );
+
+  // Prune ids that disappeared from the list (after a successful delete /
+  // pagination / scope change). Matches "Clear selection after data reload".
+  useEffect(() => {
+    if (loading) return;
+    setSelectedIds(prev => {
+      const visible = new Set(accounts.map(a => a.id));
+      let changed = false;
+      const next = new Set();
+      prev.forEach(id => {
+        if (visible.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [loading, accounts]);
+
+  const headerCheckboxRef = useRef(null);
+  useEffect(() => {
+    if (headerCheckboxRef.current) headerCheckboxRef.current.indeterminate = isIndeterminate;
+  }, [isIndeterminate]);
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -179,6 +246,32 @@ export default function SchoolTeacherAccounts() {
 
       {error && <ErrorState message={error} />}
 
+      {/* Phase 10.10G-C — sticky selected-action bar (only when ≥1 row selected) */}
+      {isAnySelected && (
+        <div className="sticky top-2 z-10 -mx-1 sm:mx-0 rounded-xl border border-brand/40 bg-brand/5 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+          <div className="text-sm text-ink">
+            เลือกแล้ว <span className="font-semibold tabular-nums">{selectedIds.size}</span> รายการ
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="px-3 py-1.5 text-xs rounded-lg border border-surface-border bg-surface hover:bg-surface-border text-ink"
+            >
+              ยกเลิกการเลือก
+            </button>
+            <button
+              type="button"
+              onClick={() => setModal('bulkDelete')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-danger hover:bg-danger/90 text-white"
+            >
+              <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} />
+              ลบบัญชีที่เลือก
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <LoadingState />
       ) : accounts.length === 0 ? (
@@ -191,6 +284,17 @@ export default function SchoolTeacherAccounts() {
             <table className="w-full text-sm">
               <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
                 <tr className="text-left">
+                  <th className="px-3 py-3 w-10">
+                    <input
+                      ref={headerCheckboxRef}
+                      type="checkbox"
+                      aria-label={isAllVisibleSelected ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมดในหน้านี้'}
+                      checked={isAllVisibleSelected}
+                      disabled={deletableVisibleIds.length === 0}
+                      onChange={toggleSelectAllVisible}
+                      className="w-4 h-4 rounded border-surface-border text-brand focus:ring-brand cursor-pointer disabled:cursor-not-allowed"
+                    />
+                  </th>
                   <th className="px-4 py-3">ชื่อผู้ใช้</th>
                   <th className="px-4 py-3">ชื่อแสดง</th>
                   <th className="px-4 py-3">ระดับชั้น</th>
@@ -201,39 +305,58 @@ export default function SchoolTeacherAccounts() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border">
-                {accounts.map(a => (
-                  <tr key={a.id} className="hover:bg-surface transition">
-                    <td className="px-4 py-3 font-medium text-ink">{a.username}</td>
-                    <td className="px-4 py-3 text-ink-muted">{a.display_name || '-'}</td>
-                    <td className="px-4 py-3 text-ink">{a.grade_scope}</td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex flex-col items-center gap-0.5">
-                        <StatusBadge variant={a.is_active ? 'success' : 'neutral'} size="sm">
-                          {a.is_active ? 'ใช้งาน' : 'ปิด'}
-                        </StatusBadge>
-                        {a.must_change_password ? (
-                          <StatusBadge variant="warn" size="sm">ต้องเปลี่ยนรหัส</StatusBadge>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-ink-muted tabular-nums">{formatDateTime(a.last_login)}</td>
-                    <td className="px-4 py-3 text-xs text-ink-muted tabular-nums">{formatDateTime(a.created_at)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-center gap-1 flex-wrap">
-                        <button onClick={() => openReset(a)}
-                          className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1.5 rounded whitespace-nowrap">
-                          <KeyRound className="w-3.5 h-3.5" strokeWidth={2} />
-                          รีเซ็ตรหัส
-                        </button>
-                        <button onClick={() => openDelete(a)}
-                          className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-nowrap">
-                          <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
-                          ลบ
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {accounts.map(a => {
+                  const deletable = isDeletable(a);
+                  const checked = selectedIds.has(a.id);
+                  return (
+                    <tr
+                      key={a.id}
+                      className={`transition ${checked ? 'bg-brand/5' : 'hover:bg-surface'}`}
+                    >
+                      <td className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          aria-label={`เลือกบัญชี ${a.username}`}
+                          checked={checked}
+                          disabled={!deletable}
+                          title={deletable ? undefined : 'ไม่สามารถลบบัญชีตัวเองได้'}
+                          onChange={() => toggleSelect(a.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-4 h-4 rounded border-surface-border text-brand focus:ring-brand cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                        />
+                      </td>
+                      <td className="px-4 py-3 font-medium text-ink">{a.username}</td>
+                      <td className="px-4 py-3 text-ink-muted">{a.display_name || '-'}</td>
+                      <td className="px-4 py-3 text-ink">{a.grade_scope}</td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <StatusBadge variant={a.is_active ? 'success' : 'neutral'} size="sm">
+                            {a.is_active ? 'ใช้งาน' : 'ปิด'}
+                          </StatusBadge>
+                          {a.must_change_password ? (
+                            <StatusBadge variant="warn" size="sm">ต้องเปลี่ยนรหัส</StatusBadge>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-ink-muted tabular-nums">{formatDateTime(a.last_login)}</td>
+                      <td className="px-4 py-3 text-xs text-ink-muted tabular-nums">{formatDateTime(a.created_at)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-center gap-1 flex-wrap">
+                          <button onClick={() => openReset(a)}
+                            className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1.5 rounded whitespace-nowrap">
+                            <KeyRound className="w-3.5 h-3.5" strokeWidth={2} />
+                            รีเซ็ตรหัส
+                          </button>
+                          <button onClick={() => openDelete(a)}
+                            className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-nowrap">
+                            <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
+                            ลบ
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -326,7 +449,120 @@ export default function SchoolTeacherAccounts() {
           </div>
         </Modal>
       )}
+
+      {modal === 'bulkDelete' && (
+        <BulkDeleteConfirmModal
+          items={selectedRows}
+          totalSelected={selectedIds.size}
+          onClose={() => setModal(null)}
+          onDone={({ successIds }) => {
+            setModal(null);
+            if (successIds.length > 0) {
+              setSelectedIds(prev => {
+                const next = new Set(prev);
+                successIds.forEach(id => next.delete(id));
+                return next;
+              });
+              fetchAccounts();
+            }
+          }}
+          toast={toast}
+        />
+      )}
     </div>
+  );
+}
+
+/* ── Bulk delete confirm modal (Phase 10.10G-C) ─────────────────────────────
+ * Sequentially deletes selected teacher accounts via the existing per-id
+ * endpoint (DELETE /api/school/teacher-accounts/:id). Per-item failure does
+ * not abort the batch — caller gets back successfully-deleted ids so it can
+ * prune the selection set and refresh. Permission and soft-delete semantics
+ * stay entirely in the backend (requireFullSchoolScope + school-scope guard).
+ */
+function BulkDeleteConfirmModal({ items, totalSelected, onClose, onDone, toast }) {
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: totalSelected });
+  const previewItems = items.slice(0, 5);
+  const overflowCount = Math.max(0, totalSelected - previewItems.length);
+
+  const handleConfirm = async () => {
+    setBusy(true);
+    setProgress({ done: 0, total: totalSelected });
+    const successIds = [];
+    const failures = [];
+    for (let i = 0; i < items.length; i++) {
+      const row = items[i];
+      try {
+        await api.delete(`/school/teacher-accounts/${row.id}`);
+        successIds.push(row.id);
+      } catch (err) {
+        failures.push({
+          id: row.id,
+          username: row.username,
+          message: err?.response?.data?.message || 'ลบไม่สำเร็จ',
+        });
+      }
+      setProgress({ done: i + 1, total: items.length });
+    }
+    if (failures.length === 0) {
+      toast.success(`ลบสำเร็จ ${successIds.length} รายการ`);
+    } else if (successIds.length === 0) {
+      toast.error('ไม่สามารถลบบัญชีที่เลือกได้');
+    } else {
+      toast.error(`ลบสำเร็จ ${successIds.length} รายการ ไม่สำเร็จ ${failures.length} รายการ`);
+    }
+    onDone({ successIds, failures });
+  };
+
+  return (
+    <Modal
+      title="ยืนยันการลบบัญชีหลายรายการ"
+      onClose={busy ? () => {} : onClose}
+    >
+      <p className="text-sm mb-2">
+        คุณกำลังจะลบบัญชีครู <strong className="tabular-nums">{totalSelected}</strong> รายการ
+      </p>
+      {previewItems.length > 0 && (
+        <ul className="text-xs text-ink-muted list-disc pl-5 mb-3 space-y-0.5 max-h-32 overflow-y-auto">
+          {previewItems.map(r => (
+            <li key={r.id} className="truncate">
+              <span className="font-medium text-ink">{r.username}</span>
+              {r.grade_scope ? ` · ${r.grade_scope}` : ''}
+            </li>
+          ))}
+          {overflowCount > 0 && (
+            <li className="list-none italic">และอีก {overflowCount} รายการ</li>
+          )}
+        </ul>
+      )}
+      <p className="text-xs text-ink-muted mb-3">
+        การดำเนินการนี้จะใช้สิทธิ์และเงื่อนไขเดียวกับการลบทีละรายการ
+      </p>
+      {busy && (
+        <p className="text-xs text-ink-muted mb-2 tabular-nums">
+          กำลังลบ… {progress.done} / {progress.total}
+        </p>
+      )}
+      <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={busy}
+          className="px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border disabled:opacity-60 min-h-[40px]"
+        >
+          ยกเลิก
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={busy || totalSelected === 0}
+          className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60 min-h-[40px]"
+        >
+          {busy ? 'กำลังลบ…' : `ยืนยันลบ ${totalSelected} รายการ`}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

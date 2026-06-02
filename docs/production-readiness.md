@@ -218,3 +218,33 @@ first sprint after go-live.
 
 **Status snapshot generated**: 2026-06-02
 **HEAD at signing**: `2a802b2`
+
+---
+
+## 11. Phase 10.11D — Go-live Handoff Status
+
+> เพิ่มในรอบ Phase 10.11D (2026-06-02) — closeout เอกสารการส่งมอบ
+
+### 11.1 Handoff artifacts delivered
+| Doc | Path | Purpose |
+|---|---|---|
+| Go-live handoff (full) | [`docs/go-live-handoff.md`](go-live-handoff.md) | 11-section executive document with completed-work summary, role access, training plan, role-based training checklist, go-live checklist (before/day-of/after), known caveats, support/escalation matrix, rollback notes, sign-off block |
+| Operator quick checklist | [`docs/operator-go-live-checklist.md`](operator-go-live-checklist.md) | A4-printable day-of checklist: pre-go-live → role smoke → first-day monitoring → post-go-live ops + emergency contact matrix |
+| Training agenda (Thai) | [`docs/training-agenda.md`](training-agenda.md) | 60–90 min workshop plan with role-by-role practice tasks, common Q&A, post-training feedback form spec |
+
+### 11.2 Final readiness verdict
+🟢 **READY FOR CONTROLLED GO-LIVE WITH OFF-HOST BACKUP PENDING.**
+
+Same posture as §9 — no change to the underlying risk picture. Off-host backup
+destination remains the single 🟡 to clear within the first week of operations.
+Once configured, the system flips to **FULL GREEN**.
+
+### 11.3 Operator action queue (post-handoff)
+1. ▢ Distribute role-specific user guides to the appropriate staff
+2. ▢ Schedule training workshop(s) per `docs/training-agenda.md`
+3. ▢ Run `docs/operator-go-live-checklist.md` pre-go-live block on launch morning
+4. ▢ Configure off-host backup destination per [`docs/ops-backup-restore.md §7.3`](ops-backup-restore.md) within 7 days
+5. ▢ Schedule controlled reboot drill within 30 days
+6. ▢ Collect first-week user feedback → fold into next sprint backlog
+
+**Handoff status**: ✅ **complete; signed-off block in `docs/go-live-handoff.md §11`**

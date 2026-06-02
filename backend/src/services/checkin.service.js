@@ -235,15 +235,32 @@ async function _buildCheckinTransaction(conn, {
   }
 
   // 4. Insert notification records for linked + approved parents
+  //
+  // Phase 10.9B — phone-based LINE recipient resolver (Round 2).
+  // Old resolver (Round 0) joined line_users.parent_id which only matched
+  // ONE parents row per LINE user — broken for multi-child families because
+  // each child has its own parents row sharing the same phone (per-student
+  // parents rows since refactor baf2cea). The new resolver follows the
+  // phone path established by Round 1: parents.phone → line_bindings.phone
+  // → line_users.line_user_id. line_users is still in the JOIN so we (a)
+  // satisfy the notifications.target_line_user_id FK (FK→line_users), and
+  // (b) filter to verified accounts only.
   const notifType = status === 'CHECKED_IN' ? 'checkin' : 'checkout';
   const [linkedParents] = await conn.query(
-    `SELECT lu.line_user_id
+    `SELECT DISTINCT lu.line_user_id
      FROM   parent_student ps
-     JOIN   parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
+     JOIN   parents p
+            ON p.id = ps.parent_id
+            AND p.is_deleted = FALSE
+            AND p.phone IS NOT NULL
+            AND TRIM(p.phone) <> ''
+     JOIN   line_bindings lb
+            ON lb.phone = p.phone
+            AND lb.is_active = TRUE
      JOIN   line_users lu
-              ON lu.parent_id  = p.id
-              AND lu.user_type = 'parent'
-              AND lu.verified  = TRUE
+            ON lu.line_user_id = lb.line_user_id
+            AND lu.user_type = 'parent'
+            AND lu.verified = TRUE
      WHERE  ps.student_id = ?
        AND  ps.approved   = TRUE`,
     [student.id]

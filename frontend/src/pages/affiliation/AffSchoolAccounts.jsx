@@ -281,8 +281,8 @@ export default function AffSchoolAccounts() {
               </div>
 
               {/* Preview table */}
-              <div className="mt-3 max-h-96 overflow-y-auto rounded-lg border border-gray-200">
-                <table className="w-full text-sm">
+              <div className="mt-3 max-h-96 overflow-auto rounded-lg border border-gray-200">
+                <table className="w-full text-sm min-w-[560px]">
                   <thead className="sticky top-0 bg-gray-50 text-gray-500 text-xs">
                     <tr>
                       <th className="px-3 py-2 font-medium text-left">แถว</th>

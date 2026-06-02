@@ -184,7 +184,7 @@ export default function DriverRosterRequests() {
               </div>
 
               {/* Prefix + Name row */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">คำนำหน้า</label>
                   <select value={newStudent.prefix} onChange={(e) => setNewStudent({ ...newStudent, prefix: e.target.value })}

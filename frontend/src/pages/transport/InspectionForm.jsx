@@ -196,7 +196,7 @@ export default function InspectionForm() {
               {isOtherVehicle && (
                 <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
                   <p className="text-sm font-semibold text-amber-800">กรอกทะเบียนรถใหม่</p>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">เลขนำหน้า</label>
                       <input type="text" value={newPlate.prefix} maxLength={1}

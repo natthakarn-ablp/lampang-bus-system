@@ -2,7 +2,13 @@
 
 **เว็บไซต์:** https://schoolbuslampang.com  
 **เวอร์ชัน:** 1.0  
-**ปรับปรุงล่าสุด:** เมษายน 2569
+**ปรับปรุงล่าสุด:** เมษายน 2569 (สถานะ Phase 10.11 — 2026-06-02)
+
+> **เอกสารที่เกี่ยวข้อง (Phase 10.11):**
+> - คู่มือเฉพาะบทบาท: [โรงเรียน](user-guide-school.md), [คนขับ](user-guide-driver.md), [ขนส่ง/จังหวัด/สังกัด](user-guide-transport-province-affiliation.md)
+> - [Final UAT Checklist](final-uat-checklist.md) — สำหรับการทดสอบรอบสุดท้ายก่อน go-live
+> - [Production Readiness](production-readiness.md) — สถานะความพร้อมและความเสี่ยงคงเหลือ
+> - [Backup & Restore Operations](ops-backup-restore.md) — ขั้นตอน backup, restore drill, off-host sync
 
 ---
 

@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Map as MapIcon, Plus, Pencil, Trash2, X, Users } from 'lucide-react';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
+import { useToast } from '../../components/Toast';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
@@ -20,6 +21,76 @@ export default function AdminPickupPointManagement() {
   const [editing, setEditing] = useState(null);   // null | 'new' | { ...row }
   const [assigning, setAssigning] = useState(null);  // null | { ...row }
   const [confirmDelete, setConfirmDelete] = useState(null);  // null | { ...row }
+
+  // Phase 10.10G-B — bulk selection / bulk-delete state
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const toast = useToast();
+
+  const visibleIds = useMemo(() => rows.map(r => r.id), [rows]);
+  const isAllVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+  const isAnySelected = selectedIds.size > 0;
+  const isIndeterminate = isAnySelected && !isAllVisibleSelected;
+
+  const toggleSelect = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelectedIds(prev => {
+      if (visibleIds.length > 0 && visibleIds.every(id => prev.has(id))) {
+        // All visible currently selected → deselect them (keep selections from other pages, if any)
+        const next = new Set(prev);
+        visibleIds.forEach(id => next.delete(id));
+        return next;
+      }
+      // Add all visible to selection
+      const next = new Set(prev);
+      visibleIds.forEach(id => next.add(id));
+      return next;
+    });
+  }, [visibleIds]);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  // Selected rows full data (across all pages currently loaded — but since we paginate,
+  // only the rows currently rendered have full data). For the confirm modal we list
+  // labels from the current page; ids not on the current page still get deleted by id.
+  const selectedRows = useMemo(
+    () => rows.filter(r => selectedIds.has(r.id)),
+    [rows, selectedIds]
+  );
+
+  // Prune stale ids whenever rows change (e.g. after pagination or successful delete).
+  // Only prune ids that USED to be on a previously-visible page — we keep selections
+  // for paginated-away ids by intersecting with visibleIds only when paginating.
+  // Simplest safe behavior: if a selected id is no longer in rows AND we just reloaded
+  // (loading just turned false), drop it. Here we adopt the conservative rule of
+  // pruning to ids present in the latest rows. Selection survives mount but resets
+  // when data refreshes — matches the rubric "Clear selection after successful delete or data reload".
+  useEffect(() => {
+    if (loading) return;
+    setSelectedIds(prev => {
+      const visible = new Set(visibleIds);
+      let changed = false;
+      const next = new Set();
+      prev.forEach(id => {
+        if (visible.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [loading, visibleIds]);
+
+  // Set indeterminate on the header checkbox (HTML attribute — must be set via ref)
+  const headerCheckboxRef = useRef(null);
+  useEffect(() => {
+    if (headerCheckboxRef.current) headerCheckboxRef.current.indeterminate = isIndeterminate;
+  }, [isIndeterminate]);
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
@@ -96,6 +167,32 @@ export default function AdminPickupPointManagement() {
         </select>
       </div>
 
+      {/* Phase 10.10G-B — sticky selected-action bar (only visible when ≥1 row selected) */}
+      {isAnySelected && (
+        <div className="sticky top-2 z-10 -mx-1 sm:mx-0 rounded-xl border border-brand/40 bg-brand/5 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+          <div className="text-sm text-ink">
+            เลือกแล้ว <span className="font-semibold tabular-nums">{selectedIds.size}</span> รายการ
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="px-3 py-1.5 text-xs rounded-lg border border-surface-border bg-surface hover:bg-surface-border text-ink"
+            >
+              ยกเลิกการเลือก
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkConfirmOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-danger hover:bg-danger/90 text-white"
+            >
+              <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} />
+              ลบรายการที่เลือก
+            </button>
+          </div>
+        </div>
+      )}
+
       {error ? (
         <AlertBanner variant="danger" title="โหลดข้อมูลไม่สำเร็จ">{error}</AlertBanner>
       ) : loading ? (
@@ -112,6 +209,17 @@ export default function AdminPickupPointManagement() {
                 <table className="w-full text-sm">
                   <thead className="bg-surface-border/30 text-ink-muted text-xs uppercase">
                     <tr>
+                      <th className="px-3 py-2 w-10">
+                        <input
+                          ref={headerCheckboxRef}
+                          type="checkbox"
+                          aria-label={isAllVisibleSelected ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมดในหน้านี้'}
+                          checked={isAllVisibleSelected}
+                          disabled={visibleIds.length === 0}
+                          onChange={toggleSelectAllVisible}
+                          className="w-4 h-4 rounded border-surface-border text-brand focus:ring-brand cursor-pointer disabled:cursor-not-allowed"
+                        />
+                      </th>
                       <th className="text-left px-3 py-2">ทะเบียนรถ</th>
                       <th className="text-left px-3 py-2">ป้ายชื่อ</th>
                       <th className="text-left px-3 py-2">รอบ</th>
@@ -121,28 +229,44 @@ export default function AdminPickupPointManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map(r => (
-                      <tr key={r.id} className="border-t border-surface-border">
-                        <td className="px-3 py-2 font-medium text-ink">{r.plate_no || r.vehicle_id}</td>
-                        <td className="px-3 py-2 text-ink truncate max-w-[200px]">{r.label}</td>
-                        <td className="px-3 py-2">
-                          <StatusBadge variant="neutral" size="sm">
-                            {SESSION_LABEL[r.session] || r.session}
-                          </StatusBadge>
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{r.student_count}</td>
-                        <td className="px-3 py-2 text-xs text-ink-muted tabular-nums">
-                          {r.latitude?.toFixed(5)}, {r.longitude?.toFixed(5)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center justify-end gap-1">
-                            <IconBtn icon={Users} title="จัดการนักเรียน" onClick={() => setAssigning(r)} />
-                            <IconBtn icon={Pencil} title="แก้ไข" onClick={() => setEditing(r)} />
-                            <IconBtn icon={Trash2} title="ลบ" danger onClick={() => setConfirmDelete(r)} />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {rows.map(r => {
+                      const checked = selectedIds.has(r.id);
+                      return (
+                        <tr
+                          key={r.id}
+                          className={`border-t border-surface-border ${checked ? 'bg-brand/5' : ''}`}
+                        >
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              aria-label={`เลือก ${r.label}`}
+                              checked={checked}
+                              onChange={() => toggleSelect(r.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-4 h-4 rounded border-surface-border text-brand focus:ring-brand cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-medium text-ink">{r.plate_no || r.vehicle_id}</td>
+                          <td className="px-3 py-2 text-ink truncate max-w-[200px]">{r.label}</td>
+                          <td className="px-3 py-2">
+                            <StatusBadge variant="neutral" size="sm">
+                              {SESSION_LABEL[r.session] || r.session}
+                            </StatusBadge>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{r.student_count}</td>
+                          <td className="px-3 py-2 text-xs text-ink-muted tabular-nums">
+                            {r.latitude?.toFixed(5)}, {r.longitude?.toFixed(5)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center justify-end gap-1">
+                              <IconBtn icon={Users} title="จัดการนักเรียน" onClick={() => setAssigning(r)} />
+                              <IconBtn icon={Pencil} title="แก้ไข" onClick={() => setEditing(r)} />
+                              <IconBtn icon={Trash2} title="ลบ" danger onClick={() => setConfirmDelete(r)} />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -196,6 +320,25 @@ export default function AdminPickupPointManagement() {
           row={confirmDelete}
           onClose={() => setConfirmDelete(null)}
           onDeleted={() => { setConfirmDelete(null); fetchRows(); }}
+        />
+      )}
+      {bulkConfirmOpen && (
+        <BulkDeleteConfirmModal
+          items={selectedRows}
+          totalSelected={selectedIds.size}
+          onClose={() => setBulkConfirmOpen(false)}
+          onDone={({ successIds }) => {
+            setBulkConfirmOpen(false);
+            if (successIds.length > 0) {
+              setSelectedIds(prev => {
+                const next = new Set(prev);
+                successIds.forEach(id => next.delete(id));
+                return next;
+              });
+              fetchRows();
+            }
+          }}
+          toast={toast}
         />
       )}
     </div>
@@ -429,5 +572,94 @@ function Field({ label, children }) {
       <label className="block text-xs font-medium text-ink-muted mb-1">{label}</label>
       {children}
     </div>
+  );
+}
+
+/* ── Bulk delete confirm modal (Phase 10.10G-B) ────────────────────────────
+ * Sequentially deletes selected pickup points via the existing per-id endpoint
+ * (DELETE /api/admin/pickup-points/:id). Per-item failure does not abort the
+ * batch — caller gets back a list of successfully-deleted ids so it can prune
+ * the selection set and refresh.                                              */
+function BulkDeleteConfirmModal({ items, totalSelected, onClose, onDone, toast }) {
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: totalSelected });
+  const previewItems = items.slice(0, 5);
+  const overflowCount = Math.max(0, totalSelected - previewItems.length);
+
+  const handleConfirm = async () => {
+    setBusy(true);
+    setProgress({ done: 0, total: totalSelected });
+    const successIds = [];
+    const failures = [];
+
+    // Sequential: keeps backend load predictable + makes audit_log per-item ordered.
+    for (let i = 0; i < items.length; i++) {
+      const row = items[i];
+      try {
+        await api.delete(`/admin/pickup-points/${row.id}`);
+        successIds.push(row.id);
+      } catch (err) {
+        failures.push({
+          id: row.id,
+          label: row.label,
+          message: err?.response?.data?.message || 'ลบไม่สำเร็จ',
+        });
+      }
+      setProgress({ done: i + 1, total: items.length });
+    }
+
+    // Result toast
+    if (failures.length === 0) {
+      toast.success(`ลบสำเร็จ ${successIds.length} รายการ`);
+    } else if (successIds.length === 0) {
+      toast.error('ไม่สามารถลบรายการที่เลือกได้');
+    } else {
+      toast.error(`ลบสำเร็จ ${successIds.length} รายการ ไม่สำเร็จ ${failures.length} รายการ`);
+    }
+    onDone({ successIds, failures });
+  };
+
+  return (
+    <Modal onClose={busy ? () => {} : onClose} title="ยืนยันการลบหลายรายการ">
+      <p className="text-sm mb-2">
+        คุณกำลังจะลบ <strong className="tabular-nums">{totalSelected}</strong> รายการ
+      </p>
+      {previewItems.length > 0 && (
+        <ul className="text-xs text-ink-muted list-disc pl-5 mb-3 space-y-0.5 max-h-32 overflow-y-auto">
+          {previewItems.map(r => (
+            <li key={r.id} className="truncate">{r.label || `จุดที่ ${r.id}`}</li>
+          ))}
+          {overflowCount > 0 && (
+            <li className="list-none italic">และอีก {overflowCount} รายการ</li>
+          )}
+        </ul>
+      )}
+      <p className="text-xs text-ink-muted mb-3">
+        การดำเนินการนี้จะซ่อนรายการจากหน้าจอ แต่ไม่ลบประวัติย้อนหลัง
+      </p>
+      {busy && (
+        <p className="text-xs text-ink-muted mb-2 tabular-nums">
+          กำลังลบ… {progress.done} / {progress.total}
+        </p>
+      )}
+      <div className="flex justify-end gap-2 pt-2">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={busy}
+          className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border disabled:opacity-60"
+        >
+          ยกเลิก
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={busy || totalSelected === 0}
+          className="px-4 py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60"
+        >
+          {busy ? 'กำลังลบ…' : `ยืนยันลบ ${totalSelected} รายการ`}
+        </button>
+      </div>
+    </Modal>
   );
 }

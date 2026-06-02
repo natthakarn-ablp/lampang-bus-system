@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import DashboardCard from '../../components/DashboardCard';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
 
 export default function SchoolList() {
   const [schools, setSchools] = useState([]);
@@ -18,16 +21,12 @@ export default function SchoolList() {
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
       <h1 className="text-xl font-bold text-gray-800 mb-4">โรงเรียนในสังกัด</h1>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" />}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : schools.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่มีโรงเรียนในสังกัด</p>
+        <EmptyState title="ยังไม่มีโรงเรียนในสังกัด" />
       ) : (
         <div className="grid gap-4">
           {schools.map((s) => (

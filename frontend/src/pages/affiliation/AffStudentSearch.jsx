@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 
 export default function AffStudentSearch() {
   const navigate = useNavigate();
@@ -84,12 +86,10 @@ export default function AffStudentSearch() {
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" />}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
+        <LoadingState />
       ) : students.length === 0 ? (
         <EmptyState
           icon={GraduationCap}

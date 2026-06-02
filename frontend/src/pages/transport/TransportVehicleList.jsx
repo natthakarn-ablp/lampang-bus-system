@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Bus } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 
@@ -88,7 +89,7 @@ export default function TransportVehicleList() {
       </div>
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : vehicles.length === 0 ? (
         <EmptyState
           icon={Bus}

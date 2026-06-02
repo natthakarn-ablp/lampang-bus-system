@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Map as MapIcon, Plus, Pencil, Trash2, X, Users } from 'lucide-react';
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
+import LoadingState from '../../components/LoadingState';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
 
@@ -98,7 +99,7 @@ export default function AdminPickupPointManagement() {
       {error ? (
         <AlertBanner variant="danger" title="โหลดข้อมูลไม่สำเร็จ">{error}</AlertBanner>
       ) : loading ? (
-        <p className="text-ink-muted py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : rows.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีจุดรับส่งในระบบ">
           บัญชีคนขับหรือบัญชีโรงเรียนสามารถเริ่มสร้างจุดรับส่งได้จากแผนที่ของตนเอง — หน้านี้จะแสดงเมื่อมีจุดให้ตรวจสอบ

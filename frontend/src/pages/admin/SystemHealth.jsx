@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
 
 export default function SystemHealth() {
   const [data, setData] = useState(null);
@@ -15,8 +17,8 @@ export default function SystemHealth() {
 
   useEffect(() => { refresh(); }, []);
 
-  if (loading) return <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด...</p>;
-  if (!data) return <p className="text-gray-400 py-10 text-center text-lg">ไม่มีข้อมูล</p>;
+  if (loading) return <LoadingState />;
+  if (!data) return <EmptyState title="ยังไม่มีข้อมูล" />;
 
   const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
   const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถ', checkin: 'เช็กอิน', user: 'ผู้ใช้', leave: 'ลา', roster_request: 'คำขอรายชื่อ', pretrip_checklist: 'ตรวจรถก่อนออก', daily_snapshot: 'Snapshot', password: 'รหัสผ่าน', auth_failure: 'ล็อกอินล้มเหลว', school_notification: 'แจ้งเตือนโรงเรียน', decision_log: 'บันทึกการตัดสินใจ', audit_csv: 'ส่งออก CSV' };

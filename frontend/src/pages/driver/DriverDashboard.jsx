@@ -7,6 +7,9 @@ import {
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import { AppCard, StatusBadge } from '../../components/ui';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
 import LiveLocationToggle from '../../components/LiveLocationToggle';
 import {
   resolveSession,
@@ -265,12 +268,16 @@ export default function DriverDashboard() {
         </div>
       </AppCard>
 
-      {error && (
-        <div className="bg-red-50 border-2 border-red-200 text-red-700 rounded-xl px-4 py-3 mb-4 text-base font-medium">{error}</div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" />}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
+        <LoadingState />
+      ) : students.length === 0 ? (
+        <EmptyState
+          icon={Bus}
+          title="ยังไม่มีนักเรียนในรถคันนี้"
+          description="หากต้องการเพิ่มนักเรียน กรุณาติดต่อโรงเรียน"
+        />
       ) : (
         <>
           {/* ── Big progress indicator ── */}

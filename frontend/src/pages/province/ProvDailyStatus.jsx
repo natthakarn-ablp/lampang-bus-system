@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
 
 export default function ProvDailyStatus() {
   const [data, setData] = useState(null);
@@ -73,14 +76,12 @@ export default function ProvDailyStatus() {
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" />}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : !data?.affiliations?.length ? (
-        <p className="text-gray-400 py-10 text-center">ไม่มีข้อมูล</p>
+        <EmptyState title="ยังไม่มีข้อมูล" description="ยังไม่มีสังกัดที่มีข้อมูลสถานะวันนี้" />
       ) : (
         <div className="space-y-3">
           {data.affiliations.map((aff) => {

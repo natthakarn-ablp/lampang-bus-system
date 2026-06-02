@@ -12,6 +12,8 @@ import {
   AppCard, AlertBanner, KPIGrid, KPIStat,
   StatusBadge, DashboardSection,
 } from '../../components/ui';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
 
 // SLA configuration — days allowed to resolve a risk item
 const SLA_DAYS = 7;
@@ -196,8 +198,8 @@ export default function TransportDashboard() {
     return list.map(v => ({ ...v, _score: riskScore(v) })).sort((a, b) => b._score - a._score);
   }, [vehicles, activeFilter, vSearch, currentFilter]);
 
-  if (loading) return <p className="text-ink-muted py-10 text-center text-lg">กำลังโหลด…</p>;
-  if (!data)   return <p className="text-ink-muted py-10 text-center text-lg">ไม่มีข้อมูล</p>;
+  if (loading) return <LoadingState />;
+  if (!data)   return <EmptyState title="ยังไม่มีข้อมูล" />;
 
   const urgentCount = vehicles.filter(v => riskScore(v) >= 100).length;
   const readyCount = data.passed || 0;

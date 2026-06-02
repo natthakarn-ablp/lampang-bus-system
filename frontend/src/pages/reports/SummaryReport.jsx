@@ -8,6 +8,8 @@ import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
 import SummaryPrintView from '../../components/SummaryPrintView';
 import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
@@ -99,8 +101,8 @@ export default function SummaryReport() {
         </div>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>}
-      {loading ? <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+      {error && <ErrorState message={error} className="mb-4" />}
+      {loading ? <LoadingState />
       : !data ? <EmptyState icon={FileBarChart} title="ไม่มีข้อมูล" />
       : (
         <>

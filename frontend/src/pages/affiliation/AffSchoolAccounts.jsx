@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
 
 /**
  * เพิ่มโรงเรียนใหม่ — Phase 10.2A
@@ -324,9 +326,9 @@ export default function AffSchoolAccounts() {
       <section className="bg-white rounded-xl border border-gray-200 p-5">
         <h2 className="text-base font-semibold text-gray-700 mb-3">บัญชีที่สร้างล่าสุด</h2>
         {loading ? (
-          <p className="text-gray-400 py-6 text-center text-sm">กำลังโหลด…</p>
+          <LoadingState compact />
         ) : recentAccounts.length === 0 ? (
-          <p className="text-gray-400 py-6 text-center text-sm">ยังไม่มีบัญชีโรงเรียน</p>
+          <EmptyState title="ยังไม่มีบัญชีโรงเรียน" compact />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-200">
             <table className="w-full text-sm">

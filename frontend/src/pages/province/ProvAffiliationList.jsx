@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import KpiCard from '../../components/KpiCard';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
 import { kpiColor, safePct, levelBadge, sortByKpi } from '../../utils/kpi';
 
 export default function ProvAffiliationList() {
@@ -22,12 +25,12 @@ export default function ProvAffiliationList() {
         <p className="text-sm text-gray-500 mt-0.5">สรุป KPI รายสังกัด</p>
       </div>
 
-      {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>}
+      {error && <ErrorState message={error} className="mb-4" />}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : affiliations.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่มีสังกัด</p>
+        <EmptyState title="ยังไม่มีสังกัด" />
       ) : (
         <>
           {/* Full KPI table */}

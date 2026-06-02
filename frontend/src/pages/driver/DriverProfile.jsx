@@ -3,6 +3,7 @@ import { User } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
 
 const VEHICLE_TYPE_OPTIONS = [
   'รถตู้',
@@ -151,7 +152,7 @@ export default function DriverProfile() {
     } finally { setPwdSaving(false); }
   }
 
-  if (loading) return <p className="p-6 text-center text-gray-400">กำลังโหลด…</p>;
+  if (loading) return <LoadingState />;
   if (!profile) return (
     <EmptyState
       icon={User}

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ClipboardList } from 'lucide-react';
 import api from '../../api/axios';
 import ApprovalBadge from '../../components/ApprovalBadge';
 import { useToast } from '../../components/Toast';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
 
 const PREFIX_OPTIONS = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นางสาว', 'นาง'];
 
@@ -274,12 +277,13 @@ export default function DriverRosterRequests() {
 
       {/* Request lists */}
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : requests.length === 0 ? (
-        <div className="text-center py-16">
-          <p className="text-gray-400 text-base">ยังไม่มีคำขอ</p>
-          <p className="text-xs text-gray-300 mt-1">กดปุ่ม "สร้างคำขอ" เพื่อเริ่มต้น</p>
-        </div>
+        <EmptyState
+          icon={ClipboardList}
+          title="ยังไม่มีคำขอ"
+          description='กดปุ่ม "สร้างคำขอ" เพื่อเริ่มต้น'
+        />
       ) : (
         <div className="space-y-5">
           {pending.length > 0 && (

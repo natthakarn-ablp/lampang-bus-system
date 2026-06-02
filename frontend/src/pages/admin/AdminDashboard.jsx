@@ -9,6 +9,7 @@ import { relativeTime } from '../../utils/datetime';
 import {
   AppCard, AlertBanner, KPIGrid, KPIStat, DashboardSection, AttentionCard,
 } from '../../components/ui';
+import LoadingState from '../../components/LoadingState';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   }, [yesterday]);
 
-  if (loading) return <p className="text-ink-muted py-10 text-center text-lg">กำลังโหลด…</p>;
+  if (loading) return <LoadingState />;
 
   const totalUsers = users?.meta?.total ?? 0;
 

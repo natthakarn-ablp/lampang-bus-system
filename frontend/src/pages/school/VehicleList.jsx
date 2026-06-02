@@ -5,6 +5,8 @@ import api from '../../api/axios';
 import { VehicleSafetySection } from '../../components/VehicleSafety';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import EmptyState from '../../components/EmptyState';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 
 export default function VehicleList() {
   const [searchParams] = useSearchParams();
@@ -29,14 +31,10 @@ export default function VehicleList() {
         <PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" />}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center">กำลังโหลด…</p>
+        <LoadingState />
       ) : vehicles.length === 0 ? (
         <EmptyState icon={Bus} title="ไม่มีรถรับส่ง" description={plateSearch ? 'ลองค้นด้วยทะเบียนอื่น' : 'ยังไม่มีรถในระบบ'} />
       ) : (

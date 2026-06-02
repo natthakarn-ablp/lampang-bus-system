@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
 import CheckinPanel from './CheckinPanel';
+import LoadingState from '../../components/LoadingState';
 import {
   resolveSession,
   SESSION_LABEL,
@@ -141,9 +142,7 @@ export default function StudentList() {
         </div>
       )}
 
-      {loading && (
-        <div className="text-center text-gray-400 py-10 text-lg">กำลังโหลด…</div>
-      )}
+      {loading && <LoadingState />}
 
       {/* Pending students — grouped by school */}
       {!loading && pending.length > 0 && (

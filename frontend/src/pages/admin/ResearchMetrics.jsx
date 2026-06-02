@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import LoadingState from '../../components/LoadingState';
 
 // Metric definitions — edit here to add/change metrics
 const METRICS = [
@@ -81,7 +82,7 @@ export default function ResearchMetrics() {
   const baseline = baselines.find(s => s.id === selectedBaselineId) || baselines[0] || null;
   const latest = snapshots.find(s => !s.is_baseline) || snapshots[0] || null;
 
-  if (loading) return <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>;
+  if (loading) return <LoadingState />;
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto pb-10">

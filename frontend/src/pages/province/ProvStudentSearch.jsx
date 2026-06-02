@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
 
 export default function ProvStudentSearch() {
   const navigate = useNavigate();
@@ -96,14 +100,16 @@ export default function ProvStudentSearch() {
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">{error}</div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" />}
 
       {loading ? (
-        <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>
+        <LoadingState />
       ) : students.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center text-lg">ไม่พบนักเรียน</p>
+        <EmptyState
+          icon={GraduationCap}
+          title="ไม่พบนักเรียน"
+          description="ลองเปลี่ยนคำค้นหรือตัวกรอง"
+        />
       ) : (
         <>
           {/* Desktop table */}

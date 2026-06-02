@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
 
 function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function delta(c, b) { return Math.round((c - b) * 100) / 100; }
@@ -67,8 +69,8 @@ export default function EvaluationDashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p className="text-gray-400 py-10 text-center text-lg">กำลังโหลด…</p>;
-  if (!data) return <p className="text-gray-400 py-10 text-center text-lg">ไม่มีข้อมูล</p>;
+  if (loading) return <LoadingState />;
+  if (!data) return <EmptyState title="ยังไม่มีข้อมูล" />;
 
   const { baseline, latest, role_actions, role_exports } = data;
   const bData = baseline?.data || {};

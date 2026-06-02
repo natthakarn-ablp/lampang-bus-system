@@ -15,6 +15,22 @@ BACKUP_DIR="$BACKUP_BASE/backup-$TAG"
 DB_USER=$(grep -oP '^DB_USER=\K.*' "$APP_DIR/backend/.env")
 DB_PASS=$(grep -oP '^DB_PASSWORD=\K.*' "$APP_DIR/backend/.env")
 DB_NAME=$(grep -oP '^DB_NAME=\K.*' "$APP_DIR/backend/.env")
+DB_HOST=$(grep -oP '^DB_HOST=\K.*' "$APP_DIR/backend/.env" || echo localhost)
+DB_PORT=$(grep -oP '^DB_PORT=\K.*' "$APP_DIR/backend/.env" || echo 3306)
+
+# Stage the MySQL password in a private defaults-extra-file so it
+# never appears on the mysqldump command line or in /proc/<pid>/environ.
+MYSQL_DEFAULTS_FILE="$(mktemp -t lampang_bus_backup.XXXXXX)"
+chmod 600 "$MYSQL_DEFAULTS_FILE"
+trap 'rm -f "$MYSQL_DEFAULTS_FILE" 2>/dev/null || true' EXIT INT TERM
+cat > "$MYSQL_DEFAULTS_FILE" <<EOF
+[client]
+host=${DB_HOST}
+port=${DB_PORT}
+user=${DB_USER}
+password=${DB_PASS}
+EOF
+unset DB_PASS
 
 echo "╔══════════════════════════════════════╗"
 echo "║  Lampang Bus System — Backup         ║"
@@ -27,7 +43,7 @@ mkdir -p "$BACKUP_DIR"
 
 # 1. Database
 echo "[1/5] Backing up MySQL database..."
-mysqldump -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" > "$BACKUP_DIR/database.sql" 2>/dev/null
+mysqldump --defaults-extra-file="$MYSQL_DEFAULTS_FILE" "$DB_NAME" > "$BACKUP_DIR/database.sql" 2>/dev/null
 DB_SIZE=$(wc -c < "$BACKUP_DIR/database.sql")
 echo "  → database.sql ($DB_SIZE bytes)"
 

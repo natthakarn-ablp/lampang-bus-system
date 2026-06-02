@@ -25,6 +25,22 @@ ENV_FILE="$APP_DIR/backend/.env"
 DB_USER=$(grep -oP '^DB_USER=\K.*' "$ENV_FILE")
 DB_PASS=$(grep -oP '^DB_PASSWORD=\K.*' "$ENV_FILE")
 DB_NAME=$(grep -oP '^DB_NAME=\K.*' "$ENV_FILE")
+DB_HOST=$(grep -oP '^DB_HOST=\K.*' "$ENV_FILE" || echo localhost)
+DB_PORT=$(grep -oP '^DB_PORT=\K.*' "$ENV_FILE" || echo 3306)
+
+# Stage credentials in a private defaults-extra-file so the password
+# never appears on the mysql command line or in /proc/<pid>/environ.
+MYSQL_DEFAULTS_FILE="$(mktemp -t lampang_bus_restore.XXXXXX)"
+chmod 600 "$MYSQL_DEFAULTS_FILE"
+trap 'rm -f "$MYSQL_DEFAULTS_FILE" 2>/dev/null || true' EXIT INT TERM
+cat > "$MYSQL_DEFAULTS_FILE" <<EOF
+[client]
+host=${DB_HOST}
+port=${DB_PORT}
+user=${DB_USER}
+password=${DB_PASS}
+EOF
+unset DB_PASS
 
 echo "╔══════════════════════════════════════╗"
 echo "║  Lampang Bus System — Restore        ║"
@@ -47,7 +63,7 @@ sleep 1
 
 # 2. Restore database
 echo "[2/5] Restoring database..."
-mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" < "$BACKUP_DIR/database.sql" 2>/dev/null
+mysql --defaults-extra-file="$MYSQL_DEFAULTS_FILE" "$DB_NAME" < "$BACKUP_DIR/database.sql" 2>/dev/null
 echo "  → database restored"
 
 # 3. Restore .env if needed

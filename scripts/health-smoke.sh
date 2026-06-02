@@ -27,7 +27,7 @@
 set -uo pipefail
 
 APP_DIR="/home/schoolbus/apps/lampang-bus-system"
-FRONTEND_URL="https://schoolbus.503200.xyz/"
+FRONTEND_URL="https://schoolbuslampang.com/"
 BACKEND_URL="http://127.0.0.1:3000/health"
 PM2_APP_NAME="schoolbus-backend"
 HOUSEKEEPING_TIMER="schoolbus-housekeeping.timer"

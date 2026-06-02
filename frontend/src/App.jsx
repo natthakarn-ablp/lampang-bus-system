@@ -338,6 +338,13 @@ export default function App() {
           {/* Parent status — standalone (LIFF / LINE webview) */}
           <Route path="/parent" element={<ParentStatus />} />
           <Route path="/parent/link" element={<ParentLink />} />
+          {/* LIFF launcher defense — the bot composes `liff.line.me/<ID>/link`
+              which LINE rewrites by appending `/link` to whatever LIFF
+              Endpoint URL the operator set in Developers Console. The two
+              redirects below let the bind page load correctly regardless of
+              whether Endpoint = `/parent` (intended), `/parent/link`, or `/`. */}
+          <Route path="/parent/link/link" element={<Navigate to="/parent/link" replace />} />
+          <Route path="/link" element={<Navigate to="/parent/link" replace />} />
 
           <Route path="/" element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/" replace />} />

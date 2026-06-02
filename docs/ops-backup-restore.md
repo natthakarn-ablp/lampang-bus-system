@@ -170,16 +170,137 @@ Expected entries:
 
 ---
 
-## 7. Off-host backup (not yet implemented)
+## 7. Off-host backup
 
-Current backups live on the same VPS as the production database. A
-disk-loss event would lose them. Suggested follow-ups:
+### 7.1 Why
 
-- `rclone copy` to S3-compatible / Google Drive after each daily run
-- Or `scp` to a second host with key-based auth and 7-day retention there
+Daily backups currently live on the same VPS as the production
+database. A disk-loss / VM-loss event would destroy both at once.
+Off-host sync mitigates that single point of failure by replicating
+the latest dump + checksum to an independent location.
 
-This work is tracked as a follow-up to Phase 10.10 — not blocking
-production readiness as long as the local backup chain remains healthy.
+### 7.2 Script
+
+[`scripts/offhost-backup-sync.sh`](../scripts/offhost-backup-sync.sh)
+
+The script:
+1. Verifies the local sha256 and gzip of the latest backup **before**
+   it tries to upload anything.
+2. Uploads **only** `lampang_bus_*.sql.gz` + `lampang_bus_*.sql.gz.sha256`.
+   Logs, `.env`, partial dumps, and the sync marker file are
+   explicitly excluded by include/exclude filters.
+3. Supports two transport methods (pick one):
+   - **rclone** — for cloud object storage (S3, B2, GDrive, …)
+   - **rsync over SSH** — for a second host you own
+4. Supports `DRY_RUN=1` to preview without writing.
+5. On a real (non-dry-run) success, writes a timestamp marker at
+   `/home/schoolbus/backups/lampang-bus/.last_offhost_sync`
+   for future health-check integration.
+
+### 7.3 Configure
+
+Copy the template and edit (the real file is **gitignored by
+convention**: do not commit):
+```bash
+cp scripts/offhost-backup-sync.env.example scripts/offhost-backup-sync.env
+chmod 600 scripts/offhost-backup-sync.env
+$EDITOR scripts/offhost-backup-sync.env
+```
+
+Pick **one** method:
+
+**Method A — rclone (recommended for cloud):**
+```bash
+sudo apt-get install -y rclone
+rclone config   # interactively configure a remote, e.g. "lampang-s3"
+```
+Then in `scripts/offhost-backup-sync.env`:
+```
+OFFHOST_BACKUP_METHOD=rclone
+OFFHOST_RCLONE_REMOTE=lampang-s3:lampang-bus-backups/database
+```
+
+**Method B — rsync over SSH (recommended for a second VPS):**
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+ssh-keygen -t ed25519 -f ~/.ssh/offhost_id_ed25519 -C "lampang-bus-backup"
+# Then add ~/.ssh/offhost_id_ed25519.pub to the remote host's
+# ~backup-user/.ssh/authorized_keys (e.g. via ssh-copy-id).
+```
+Then in `scripts/offhost-backup-sync.env`:
+```
+OFFHOST_BACKUP_METHOD=rsync
+OFFHOST_RSYNC_TARGET=backup-user@backup.example.com:/srv/lampang-bus-backups
+OFFHOST_SSH_KEY=/home/schoolbus/.ssh/offhost_id_ed25519
+```
+
+### 7.4 Dry-run
+
+```bash
+DRY_RUN=1 ./scripts/offhost-backup-sync.sh
+```
+
+Expected output ends with `done` and (for rsync) lists the files
+that *would* be transferred. No marker file is written on dry-run.
+
+### 7.5 Real sync
+
+```bash
+./scripts/offhost-backup-sync.sh
+```
+
+### 7.6 Verify remote
+
+For rclone:
+```bash
+rclone ls "$OFFHOST_RCLONE_REMOTE" --include "lampang_bus_*.sql.gz"
+```
+For rsync:
+```bash
+ssh -i "$OFFHOST_SSH_KEY" "$OFFHOST_RSYNC_TARGET%%:*" \
+    "ls -lh ${OFFHOST_RSYNC_TARGET#*:}"
+```
+
+Always verify the remote checksum sidecar matches the local one;
+if it doesn't, do **not** delete the local copy.
+
+### 7.7 Recommended cron schedule
+
+Add to `crontab -e` **only after a real sync has succeeded**:
+```
+# Lampang Bus off-host backup sync (Phase 10.10F) — runs 15 min after local backup
+45 2 * * * /home/schoolbus/apps/lampang-bus-system/scripts/offhost-backup-sync.sh \
+  >> /home/schoolbus/backups/lampang-bus/offhost-sync.log 2>&1
+```
+
+### 7.8 What must NOT be uploaded
+
+The include/exclude filters in the script enforce this, but as a
+checklist:
+- `backend/.env` or any other `.env*` file
+- `backup.log`, `health-check.log`, `offhost-sync.log`
+- Any screenshot or UAT artifact
+- SSH private keys
+- The PM2 dump.pm2 file
+- `node_modules/`, `.git/`
+
+Only `lampang_bus_*.sql.gz` and the matching `.sha256` sidecar
+should cross the network.
+
+### 7.9 Restore flow from an off-host copy
+
+```bash
+# 1. Pull the artifacts back to a fresh host
+rclone copy "$OFFHOST_RCLONE_REMOTE/lampang_bus_YYYYmmdd_HHMMSS.sql.gz"        ./
+rclone copy "$OFFHOST_RCLONE_REMOTE/lampang_bus_YYYYmmdd_HHMMSS.sql.gz.sha256" ./
+
+# 2. Verify
+sha256sum -c lampang_bus_YYYYmmdd_HHMMSS.sql.gz.sha256
+gzip -t      lampang_bus_YYYYmmdd_HHMMSS.sql.gz
+
+# 3. Drill into the test DB (NEVER over lampang_bus)
+./scripts/restore-drill-db.sh /path/to/lampang_bus_YYYYmmdd_HHMMSS.sql.gz
+```
 
 ---
 

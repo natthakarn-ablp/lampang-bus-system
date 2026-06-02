@@ -12,3 +12,4 @@ frontend/dist/
 backend/uploads/
 backend/fonts/
 test-screenshots/
+scripts/offhost-backup-sync.env

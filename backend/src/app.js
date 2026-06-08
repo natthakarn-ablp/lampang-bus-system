@@ -34,8 +34,17 @@ app.use((req, res, next) => {
 });
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Static uploads ─────────────────────────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// ─── Uploaded files are NOT served publicly (Phase 10.12F — closes H7) ───────
+// Imported CSV/XLSX (student/parent PII) and driver photos live under
+// ../uploads and must never be reachable without authorization. Block all
+// direct /uploads access at the app layer and return a path-free 404.
+// Defense-in-depth: in production nginx serves the SPA for this path and never
+// proxies it to the backend; this also closes the exposure on a direct backend
+// hit (e.g. 127.0.0.1:3000). A scoped, authenticated file-serving route can be
+// added later if a feature needs it (e.g. driver photos).
+app.use('/uploads', (_req, res) => {
+  res.status(404).json({ success: false, message: 'Not found', errors: [], data: null });
+});
 
 // ─── Health check ────────────────────────────────────────────────────────────
 // Phase 9.14 — enriched response: keeps existing { success, message, data:

@@ -24,6 +24,30 @@ if (process.env.JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
+// ── Production-only required secrets ─────────────────────────────────────────
+// These integrations are allowed to be blank in local dev / dry-run, but in
+// production their security controls must NOT be able to silently fail open:
+//   - LINE_CHANNEL_SECRET → webhook signature verification (C1)
+//   - CRON_API_KEY        → /api/line/process-notifications auth guard (H11)
+// Enforced only when NODE_ENV === 'production'. Pure + side-effect free so it
+// can be unit-tested without touching process state.
+const PRODUCTION_REQUIRED = ['LINE_CHANNEL_SECRET', 'CRON_API_KEY'];
+
+function getMissingProductionSecrets(source = process.env, nodeEnv = source && source.NODE_ENV) {
+  if (nodeEnv !== 'production') return [];
+  return PRODUCTION_REQUIRED.filter(
+    (key) => !source[key] || String(source[key]).trim().length === 0
+  );
+}
+
+const missingProd = getMissingProductionSecrets(process.env, process.env.NODE_ENV);
+if (missingProd.length > 0) {
+  console.error(
+    `[env] Missing required production secrets (must be non-empty when NODE_ENV=production): ${missingProd.join(', ')}`
+  );
+  process.exit(1);
+}
+
 const env = {
   db: {
     host: process.env.DB_HOST,
@@ -46,6 +70,7 @@ const env = {
   app: {
     port: parseInt(process.env.PORT || '3000', 10),
     nodeEnv: process.env.NODE_ENV || 'development',
+    cronApiKey: process.env.CRON_API_KEY || '',
     timezone: process.env.TZ || 'Asia/Bangkok',
     currentTerm: process.env.CURRENT_TERM || '2568-2',
     // Hour (0-23, Bangkok time) at which the session switches morning → evening.
@@ -58,3 +83,5 @@ const env = {
 };
 
 module.exports = env;
+// Exposed for unit testing (pure, no side effects).
+module.exports.getMissingProductionSecrets = getMissingProductionSecrets;

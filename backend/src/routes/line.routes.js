@@ -8,15 +8,28 @@ const lineSvc = require('../services/line.service');
 const tpl = require('../services/lineFlexTemplates.service');
 
 /**
- * Verify LINE webhook signature.
- * Returns true if valid or if no secret configured (dev mode).
+ * Verify LINE webhook signature (HMAC-SHA256, base64).
+ *
+ * Fail-CLOSED in production: if no channel secret is configured the request is
+ * rejected. (In production this branch is unreachable because env.js refuses to
+ * boot without LINE_CHANNEL_SECRET — kept here as defense-in-depth.) Outside
+ * production we accept when no secret is set, to keep local dev / dry-run
+ * frictionless. Comparison is constant-time to avoid signature timing leaks.
  */
 function verifySignature(body, signature) {
-  if (!env.line.channelSecret) return true; // dev mode — no verification
-  const hash = crypto.createHmac('SHA256', env.line.channelSecret)
-    .update(body)
-    .digest('base64');
-  return hash === signature;
+  const secret = env.line.channelSecret;
+  if (!secret) {
+    return env.app.nodeEnv !== 'production';
+  }
+  const expected = crypto.createHmac('sha256', secret).update(body).digest();
+  let provided;
+  try {
+    provided = Buffer.from(String(signature || ''), 'base64');
+  } catch {
+    return false;
+  }
+  if (provided.length !== expected.length) return false;
+  return crypto.timingSafeEqual(expected, provided);
 }
 
 // LINE webhook — uses express.raw to get Buffer for signature verification
@@ -456,11 +469,20 @@ async function handleTextMessage(lineUserId, text) {
 // Set CRON_API_KEY env var and pass it as x-api-key header.
 
 router.post('/process-notifications', (req, res, next) => {
-  const cronKey = process.env.CRON_API_KEY;
-  if (cronKey && req.headers['x-api-key'] !== cronKey) {
-    return res.status(401).json({ success: false, message: 'Invalid API key' });
+  const cronKey = env.app.cronApiKey;
+  if (!cronKey) {
+    // Fail CLOSED in production: refuse to run this unauthenticated trigger.
+    // (Unreachable in production — env.js requires CRON_API_KEY to boot — kept
+    // as defense-in-depth.) In dev/test allow through for convenience.
+    if (env.app.nodeEnv === 'production') {
+      return res.status(503).json({ success: false, message: 'Notification processing is not configured', errors: [], data: null });
+    }
+    return next();
   }
-  next();
+  if (req.headers['x-api-key'] !== cronKey) {
+    return res.status(401).json({ success: false, message: 'Invalid API key', errors: [], data: null });
+  }
+  return next();
 }, async (req, res) => {
   try {
     const result = await lineSvc.processUnsentNotifications();
@@ -472,3 +494,5 @@ router.post('/process-notifications', (req, res, next) => {
 });
 
 module.exports = router;
+// Exposed for unit testing.
+module.exports.verifySignature = verifySignature;

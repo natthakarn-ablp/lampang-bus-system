@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const path = require('path');
 
+const env = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
 const { getBuildInfo, pingDatabaseWithTimeout, getEnvironment } = require('./utils/health');
 const authRoutes   = require('./routes/auth.routes');
@@ -26,7 +27,22 @@ app.set('trust proxy', 1);
 
 // ─── Security & parsing middleware ──────────────────────────────────────────
 app.use(helmet());
-app.use(cors());
+
+// ─── CORS (Phase 10.12H) ─────────────────────────────────────────────────────
+// Production: allow only the configured site origins (env CORS_ORIGINS).
+// Non-production: reflect any origin for local dev. Requests without an Origin
+// header (server-to-server: LINE webhook, health checks, monitors) always pass
+// — CORS only governs what a browser may read cross-origin. Credentials are off
+// (auth is a Bearer token in the Authorization header, never a cookie).
+function isOriginAllowed(origin) {
+  if (env.app.nodeEnv !== 'production') return true; // dev convenience
+  if (!origin) return true;                          // non-browser / same-origin
+  return env.app.corsOrigins.includes(origin);
+}
+app.use(cors({
+  origin: (origin, cb) => cb(null, isOriginAllowed(origin)),
+  credentials: false,
+}));
 app.use((req, res, next) => {
   // Skip JSON parsing for LINE webhook (needs raw body for signature verification)
   if (req.path === '/api/line/webhook') return next();
@@ -105,3 +121,5 @@ if (process.env.NODE_ENV === 'production') {
 app.use(errorHandler);
 
 module.exports = app;
+// Exposed for unit testing the CORS allow-list.
+module.exports.isOriginAllowed = isOriginAllowed;

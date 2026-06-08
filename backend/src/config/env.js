@@ -71,6 +71,12 @@ const env = {
     port: parseInt(process.env.PORT || '3000', 10),
     nodeEnv: process.env.NODE_ENV || 'development',
     cronApiKey: process.env.CRON_API_KEY || '',
+    // Phase 10.12H — browser origins allowed to read the API cross-origin in
+    // production. Override with CORS_ORIGINS (comma-separated). The SPA is
+    // same-origin with the API, so these only matter for cross-origin callers.
+    corsOrigins: (process.env.CORS_ORIGINS ||
+      'https://schoolbuslampang.com,https://www.schoolbuslampang.com,https://schoolbus.lp-pao.go.th')
+      .split(',').map((s) => s.trim()).filter(Boolean),
     timezone: process.env.TZ || 'Asia/Bangkok',
     currentTerm: process.env.CURRENT_TERM || '2568-2',
     // Hour (0-23, Bangkok time) at which the session switches morning → evening.

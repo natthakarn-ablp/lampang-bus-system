@@ -56,13 +56,22 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
 }
 
 /**
- * Cancel a leave.
+ * Cancel a leave — scoped to the canceller's vehicle (Phase 10.12E — closes H4).
+ *
+ * The UPDATE is constrained by `vehicle_id` so a driver can only cancel a leave
+ * that belongs to their own active vehicle. A leave that does not exist OR
+ * belongs to another vehicle both resolve to affectedRows === 0 → 404, which is
+ * privacy-preserving (it never reveals that an out-of-scope leave exists).
+ *
+ * @param {number} leaveId
+ * @param {number} userId     - users.id of the canceller (audit + cancelled_by)
+ * @param {string} vehicleId  - the canceller's active vehicle scope
  */
-async function cancelLeave(leaveId, userId) {
+async function cancelLeave(leaveId, userId, vehicleId) {
   const [result] = await pool.query(
     `UPDATE student_leaves SET cancelled = TRUE, cancelled_by = ?, cancelled_at = NOW()
-     WHERE id = ? AND cancelled = FALSE`,
-    [userId, leaveId]
+     WHERE id = ? AND vehicle_id = ? AND cancelled = FALSE`,
+    [userId, leaveId, vehicleId]
   );
   if (result.affectedRows === 0) {
     const err = new Error('ไม่พบรายการลาหรือยกเลิกไปแล้ว');

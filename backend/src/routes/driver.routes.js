@@ -690,7 +690,10 @@ router.post('/leave', async (req, res, next) => {
 
 router.delete('/leave/:id', async (req, res, next) => {
   try {
-    const result = await leaveSvc.cancelLeave(parseInt(req.params.id, 10), req.user.id);
+    // Phase 10.12E — scope cancellation to the driver's active vehicle (H4):
+    // a driver may only cancel a leave belonging to their own vehicle.
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const result = await leaveSvc.cancelLeave(parseInt(req.params.id, 10), req.user.id, vehicle.vehicle_id);
     return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
   } catch (err) { return next(err); }
 });

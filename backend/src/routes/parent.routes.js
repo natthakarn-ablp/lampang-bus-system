@@ -22,37 +22,63 @@ const parentLimiter = rateLimit({
 router.use(parentLimiter);
 
 /**
- * Parent REST API — for LIFF or web-based parent access.
- * Authentication can be via:
- *   1. JWT token (if parent has a web account) — future
- *   2. LINE LIFF access token verification — future
- *   3. Query by line_user_id passed from LIFF context — MVP approach
+ * Parent REST API — for LIFF parent access (status / history view).
  *
- * MVP: These endpoints accept ?line_user_id= as identification.
- * In production, this should be replaced with proper LIFF token verification.
+ * Identity is established ONLY by a server-verified LINE LIFF id_token. The
+ * canonical lineUserId is the `sub` returned by LINE's verify endpoint; a
+ * client-supplied `line_user_id` is never trusted as identity (Phase 10.12C —
+ * closes H1). Child-level endpoints additionally verify the requested student
+ * is linked to the verified LINE user before returning any data.
  */
 
-// ─── GET /api/parent/children ───────────────────────────────────────────────
-// Returns linked children for a verified LINE parent user
-router.get('/children', async (req, res, next) => {
+/**
+ * requireParentLineAuth — verify a LIFF id_token and set req.lineUserId to the
+ * LINE-verified `sub`. Token is read from `Authorization: Bearer <idToken>`
+ * (preferred) or an `id_token` query/body param (GET-friendly fallback).
+ * Never trusts `line_user_id`. Logs are id-redacted (error code only).
+ */
+async function requireParentLineAuth(req, res, next) {
   try {
-    const lineUserId = req.query.line_user_id;
-    if (!lineUserId) return sendError(res, 'line_user_id is required', [], 400);
+    const header = req.headers.authorization || '';
+    const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    const token =
+      bearer ||
+      (typeof req.query.id_token === 'string' ? req.query.id_token : '') ||
+      (req.body && typeof req.body.id_token === 'string' ? req.body.id_token : '') ||
+      '';
 
-    const children = await lineSvc.getLinkedChildren(lineUserId);
+    if (!token) {
+      return sendError(res, 'กรุณาเปิดผ่าน LINE และผูกบัญชีก่อนใช้งาน', [], 401);
+    }
+
+    const verify = await idTokenSvc.verifyIdToken(token);
+    if (!verify.valid) {
+      console.warn('[PARENT_API] id_token_invalid', { error: verify.error });
+      return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ได้ กรุณาเปิดผ่านลิงก์ใน LINE OA อีกครั้ง', [], 401);
+    }
+
+    req.lineUserId = verify.userId;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// ─── GET /api/parent/children ───────────────────────────────────────────────
+// Returns linked children for the verified LINE parent user.
+router.get('/children', requireParentLineAuth, async (req, res, next) => {
+  try {
+    const children = await lineSvc.getLinkedChildren(req.lineUserId);
     sendSuccess(res, children);
   } catch (err) { next(err); }
 });
 
 // ─── GET /api/parent/children/:id/status ────────────────────────────────────
-// Returns today's checkin/checkout status for a specific child
-router.get('/children/:id/status', async (req, res, next) => {
+// Returns today's checkin/checkout status for a specific child.
+router.get('/children/:id/status', requireParentLineAuth, async (req, res, next) => {
   try {
-    const lineUserId = req.query.line_user_id;
-    if (!lineUserId) return sendError(res, 'line_user_id is required', [], 400);
-
-    // Verify the parent is linked to this student
-    const children = await lineSvc.getLinkedChildren(lineUserId);
+    // Verify the verified LINE user is linked to this student.
+    const children = await lineSvc.getLinkedChildren(req.lineUserId);
     const child = children.find(c => c.id === parseInt(req.params.id));
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
 
@@ -62,14 +88,11 @@ router.get('/children/:id/status', async (req, res, next) => {
 });
 
 // ─── GET /api/parent/children/:id/history ───────────────────────────────────
-// Returns recent checkin/checkout history for a child (last 7 days)
-router.get('/children/:id/history', async (req, res, next) => {
+// Returns recent checkin/checkout history for a child (last 7 days).
+router.get('/children/:id/history', requireParentLineAuth, async (req, res, next) => {
   try {
-    const lineUserId = req.query.line_user_id;
-    if (!lineUserId) return sendError(res, 'line_user_id is required', [], 400);
-
-    // Verify linkage
-    const children = await lineSvc.getLinkedChildren(lineUserId);
+    // Verify linkage to the verified LINE user.
+    const children = await lineSvc.getLinkedChildren(req.lineUserId);
     const child = children.find(c => c.id === parseInt(req.params.id));
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
 

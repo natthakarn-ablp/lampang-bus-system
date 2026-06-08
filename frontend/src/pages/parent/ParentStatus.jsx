@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
-import { resolveLineUserId } from '../../utils/liff';
+import { getLiffIdToken } from '../../utils/liff';
 import AppCard from '../../components/ui/AppCard';
 
 const STATUS_MAP = {
@@ -11,7 +11,7 @@ const STATUS_MAP = {
 };
 
 export default function ParentStatus() {
-  const [lineUserId, setLineUserId] = useState('');
+  const [idToken, setIdToken] = useState('');
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [status, setStatus] = useState(null);
@@ -23,17 +23,27 @@ export default function ParentStatus() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const id = await resolveLineUserId();
+      // Identity comes from the verified LIFF id_token — never a query param.
+      const token = await getLiffIdToken();
       if (cancelled) return;
-      setLineUserId(id);
-      if (!id) { setLoading(false); return; }
+      setIdToken(token);
+      if (!token) { setLoading(false); return; }
       setLoading(true);
       setError('');
       try {
-        const res = await axios.get(`/api/parent/children?line_user_id=${encodeURIComponent(id)}`);
+        const res = await axios.get('/api/parent/children', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!cancelled) setChildren(res.data.data || []);
       } catch (err) {
-        if (!cancelled) setError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลได้');
+        if (!cancelled) {
+          const code = err.response?.status;
+          setError(
+            code === 401 || code === 403
+              ? 'กรุณาเปิดผ่าน LINE และผูกบัญชีก่อนใช้งาน'
+              : err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลได้'
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -45,7 +55,9 @@ export default function ParentStatus() {
     setSelectedChild(child);
     setView('status');
     try {
-      const res = await axios.get(`/api/parent/children/${child.id}/status?line_user_id=${encodeURIComponent(lineUserId)}`);
+      const res = await axios.get(`/api/parent/children/${child.id}/status`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
       setStatus(res.data.data);
     } catch {
       setStatus(null);
@@ -56,7 +68,9 @@ export default function ParentStatus() {
     setSelectedChild(child);
     setView('history');
     try {
-      const res = await axios.get(`/api/parent/children/${child.id}/history?line_user_id=${encodeURIComponent(lineUserId)}&days=7`);
+      const res = await axios.get(`/api/parent/children/${child.id}/history?days=7`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
       setHistory(res.data.data?.history || []);
     } catch {
       setHistory([]);
@@ -70,8 +84,8 @@ export default function ParentStatus() {
     setHistory([]);
   }
 
-  // ── Unlinked state ──
-  if (!loading && !lineUserId) {
+  // ── Unlinked state (no LIFF id_token — opened outside LINE or not linked) ──
+  if (!loading && !idToken) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
         <AppCard padding="lg" className="max-w-sm w-full text-center">

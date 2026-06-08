@@ -47,6 +47,9 @@ function generateAccessToken(user) {
       // teacher (homeroom) sub-accounts created in Phase 7.11.5.
       gradeScope: user.grade_scope || null,
       displayName: user.display_name || '',
+      // Phase 10.12D — carried so the auth middleware can enforce the forced
+      // password change at the backend (H2).
+      mustChangePassword: !!user.must_change_password,
     },
     env.jwt.secret,
     { expiresIn: env.jwt.expiresIn }
@@ -279,7 +282,8 @@ router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
 
     // Check user still active
     const [rows] = await pool.query(
-      `SELECT id, username, role, scope_type, scope_id, display_name, password_changed_at
+      `SELECT id, username, role, scope_type, scope_id, grade_scope, display_name,
+              password_changed_at, must_change_password
        FROM users
        WHERE id = ? AND is_deleted = FALSE AND is_active = TRUE
        LIMIT 1`,

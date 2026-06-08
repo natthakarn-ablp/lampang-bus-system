@@ -177,7 +177,9 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST);
     await pool.query(
-      'UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NULL WHERE id = ?',
+      // Phase 10.12D — set password_changed_at = NOW() so any refresh token
+      // issued before the reset is rejected (H3 — invalidate old sessions).
+      'UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?',
       [hash, userId]
     );
 

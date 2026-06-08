@@ -12,6 +12,7 @@ const adminSvc = require('../services/admin.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ExcelJS = require('exceljs');
+const { csvCell, neutralizeSpreadsheetCell, redactAuditValue } = require('../utils/exportSecurity');
 
 function calcDelta(baseline, latest, numField, denField) {
   const bPct = baseline[denField] > 0 ? (baseline[numField] / baseline[denField]) * 100 : 0;
@@ -475,14 +476,15 @@ router.get('/audit-logs', async (req, res, next) => {
          FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id
          WHERE ${where} ORDER BY al.created_at DESC LIMIT 5000`, params
       );
-      const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      // Phase 10.12G — neutralise every cell + redact PII from audit values.
+      const esc = csvCell;
       const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
       const lines = rows.map(r => [
         esc(new Date(r.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })),
         esc(r.actor_name), esc(r.actor_role), esc(r.action),
         esc(r.entity_type), esc(r.entity_id),
-        esc(r.old_value ? JSON.stringify(r.old_value) : ''),
-        esc(r.new_value ? JSON.stringify(r.new_value) : ''),
+        esc(r.old_value ? redactAuditValue(r.old_value) : ''),
+        esc(r.new_value ? redactAuditValue(r.new_value) : ''),
       ].join(','));
       const csv = [header, ...lines].join('\n');
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -945,8 +947,9 @@ router.get('/research-export', async (req, res, next) => {
       const BOM = '\uFEFF';
       const esc = (v) => {
         if (v == null) return '';
-        const s = String(v);
-        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+        // Phase 10.12G — neutralise against CSV formula injection.
+        const s = neutralizeSpreadsheetCell(v);
+        return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r') ? `"${s.replace(/"/g, '""')}"` : s;
       };
       let csv = BOM;
 

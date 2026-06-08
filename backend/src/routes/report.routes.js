@@ -8,6 +8,7 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const reportSvc = require('../services/report.service');
 const { logAudit } = require('../utils/audit');
+const { csvCell, neutralizeSpreadsheetCell } = require('../utils/exportSecurity');
 
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
@@ -96,20 +97,21 @@ router.get('/export/csv', async (req, res, next) => {
     const BOM = '\uFEFF';
     let csv = BOM + CSV_HEADERS.join(',') + '\n';
     for (const r of rows) {
+      // Phase 10.12G — every cell neutralised against CSV formula injection.
       const line = [
-        r.student_id,
-        `"${r.student_name}"`,
-        r.grade || '',
-        r.classroom || '',
-        `"${r.school_name}"`,
-        `"${r.affiliation_name}"`,
-        `"${r.plate_no}"`,
-        r.morning_service,
-        r.evening_service,
-        r.morning_status,
-        r.morning_time ? `"${r.morning_time}"` : '',
-        r.evening_status,
-        r.evening_time ? `"${r.evening_time}"` : '',
+        csvCell(r.student_id),
+        csvCell(r.student_name),
+        csvCell(r.grade || ''),
+        csvCell(r.classroom || ''),
+        csvCell(r.school_name),
+        csvCell(r.affiliation_name),
+        csvCell(r.plate_no),
+        csvCell(r.morning_service),
+        csvCell(r.evening_service),
+        csvCell(r.morning_status),
+        csvCell(r.morning_time || ''),
+        csvCell(r.evening_status),
+        csvCell(r.evening_time || ''),
       ].join(',');
       csv += line + '\n';
     }
@@ -150,20 +152,21 @@ router.get('/export/excel', async (req, res, next) => {
 
     // Data rows
     for (const r of rows) {
+      // Phase 10.12G — neutralise user-sourced text cells (defense-in-depth).
       sheet.addRow({
         col0: r.student_id,
-        col1: r.student_name,
-        col2: r.grade || '',
-        col3: r.classroom || '',
-        col4: r.school_name,
-        col5: r.affiliation_name,
-        col6: r.plate_no,
+        col1: neutralizeSpreadsheetCell(r.student_name),
+        col2: neutralizeSpreadsheetCell(r.grade || ''),
+        col3: neutralizeSpreadsheetCell(r.classroom || ''),
+        col4: neutralizeSpreadsheetCell(r.school_name),
+        col5: neutralizeSpreadsheetCell(r.affiliation_name),
+        col6: neutralizeSpreadsheetCell(r.plate_no),
         col7: r.morning_service,
         col8: r.evening_service,
         col9: r.morning_status,
-        col10: r.morning_time || '',
+        col10: neutralizeSpreadsheetCell(r.morning_time || ''),
         col11: r.evening_status,
-        col12: r.evening_time || '',
+        col12: neutralizeSpreadsheetCell(r.evening_time || ''),
       });
     }
 

@@ -104,11 +104,14 @@ function normalizePhone(raw) {
   return stripped;
 }
 
+const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
+
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
   const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
   const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ' };
-  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  // Phase 10.12G — neutralise every cell + redact PII from audit values.
+  const esc = csvCell;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
   const lines = rows.map(r => [
     esc(new Date(r.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })),
@@ -117,8 +120,8 @@ function auditRowsToCsv(rows) {
     esc(ACTION_TH[r.action] || r.action),
     esc(ENTITY_TH[r.entity_type] || r.entity_type || '-'),
     esc(r.entity_id || '-'),
-    esc(r.old_value ? JSON.stringify(r.old_value) : '-'),
-    esc(r.new_value ? JSON.stringify(r.new_value) : '-'),
+    esc(r.old_value ? redactAuditValue(r.old_value) : '-'),
+    esc(r.new_value ? redactAuditValue(r.new_value) : '-'),
   ].join(','));
   return [header, ...lines].join('\n');
 }

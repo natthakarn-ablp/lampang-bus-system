@@ -13,7 +13,7 @@
  */
 
 const { pool } = require('../config/database');
-const { validatePlateNo, isProvinceVariant } = require('../utils/vehiclePlate');
+const { validatePlateNo, isProvinceVariant, normalizePlate, formatPlateDisplay } = require('../utils/vehiclePlate');
 
 const TYPE_ORDER = { EXACT: 0, NORMALIZED: 1, PROVINCE_VARIANT: 2 };
 
@@ -67,4 +67,43 @@ async function findPlateMatches(plateNo) {
   return { status: candidates.length ? 'DUPLICATE_OR_SIMILAR' : 'CLEAR', candidates };
 }
 
-module.exports = { findPlateMatches };
+/**
+ * Phase 10.13A-22A — annotate a vehicle dropdown list for consistent display
+ * and to mark province-variant duplicate rows so the UI can hide them.
+ *
+ * Each row gets: display_plate (canonical spaced), compact_plate (normalized),
+ * duplicate_candidate (bool), canonical_vehicle_id (the row to keep instead).
+ *
+ * A row is a duplicate_candidate ONLY when it is safe to hide:
+ *   - it has 0 active students, AND
+ *   - another active row is a province-variant that is clearly more canonical
+ *     (has students, OR carries the province this row omits).
+ * Rows with students are never marked; ambiguous cases (no clear canonical) are
+ * left visible.
+ *
+ * @param {Array<{id,plate_no,vehicle_type,active_students?}>} rows
+ * @returns {Array} enriched rows (never mutates input)
+ */
+function annotateVehicleList(rows) {
+  const enriched = (rows || []).map((v) => ({
+    ...v,
+    display_plate: formatPlateDisplay(v.plate_no),
+    compact_plate: normalizePlate(v.plate_no),
+    duplicate_candidate: false,
+    canonical_vehicle_id: null,
+  }));
+  for (const v of enriched) {
+    if ((v.active_students || 0) > 0) continue; // never hide a vehicle with students
+    const canonical = enriched.find((w) =>
+      w.id !== v.id
+      && isProvinceVariant(v.compact_plate, w.compact_plate)
+      && ((w.active_students || 0) > 0 || w.compact_plate.length > v.compact_plate.length));
+    if (canonical) {
+      v.duplicate_candidate = true;
+      v.canonical_vehicle_id = canonical.id;
+    }
+  }
+  return enriched;
+}
+
+module.exports = { findPlateMatches, annotateVehicleList };

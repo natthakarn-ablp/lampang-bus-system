@@ -844,10 +844,16 @@ router.delete('/students/:id', requireFullSchoolScope, async (req, res, next) =>
 
 router.get('/vehicles/all', requireFullSchoolScope, async (req, res, next) => {
   try {
+    // Phase 10.13A-22A — include active_students so province-variant duplicates
+    // (0 students, with a canonical sibling) can be marked for the UI to hide.
     const [rows] = await pool.query(
-      `SELECT id, plate_no, vehicle_type FROM vehicles WHERE is_deleted = FALSE ORDER BY plate_no`
+      `SELECT v.id, v.plate_no, v.vehicle_type,
+              (SELECT COUNT(*) FROM students s
+                WHERE s.vehicle_id = v.id AND COALESCE(s.is_deleted, FALSE) = FALSE) AS active_students
+       FROM vehicles v WHERE v.is_deleted = FALSE ORDER BY v.plate_no`
     );
-    return sendSuccess(res, rows);
+    const { annotateVehicleList } = require('../services/vehicleDedup.service');
+    return sendSuccess(res, annotateVehicleList(rows));
   } catch (err) { next(err); }
 });
 
@@ -868,13 +874,24 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const { plate_no, vehicle_type, driver_name, driver_phone } = req.body;
+    const { plate_no, plate_prefix, plate_number, plate_province, vehicle_type, driver_name, driver_phone } = req.body;
+
+    // Phase 10.13A-22 — prefer structured plate fields (หมวดอักษร / เลขทะเบียน /
+    // จังหวัด); the backend builds the canonical display plate_no so operators
+    // cannot free-type spacing/province variants. Legacy free-text plate_no is
+    // still accepted for compatibility.
+    const { validatePlateNo, isProvinceVariant, buildStructuredPlate } = require('../utils/vehiclePlate');
+    let effectivePlateNo = plate_no;
+    if (plate_prefix != null || plate_number != null || plate_province != null) {
+      const built = buildStructuredPlate({ prefix: plate_prefix, number: plate_number, province: plate_province });
+      if (!built.valid) return sendError(res, built.error, [{ code: built.code }], 400);
+      effectivePlateNo = built.plateNo;
+    }
 
     // Phase 10.6B — whitespace/dash-agnostic plate validation. The duplicate
     // check below uses normalized_plate, so users entering "นข 2210 ลำปาง" /
     // "นข2210ลำปาง" / "นข-2210-ลำปาง" all reuse the same vehicle row.
-    const { validatePlateNo, isProvinceVariant } = require('../utils/vehiclePlate');
-    const validation = validatePlateNo(plate_no);
+    const validation = validatePlateNo(effectivePlateNo);
     if (!validation.valid) return sendError(res, validation.error, [], 400);
     const { trimmed: trimmedPlate, normalized: normalizedPlate } = validation;
 

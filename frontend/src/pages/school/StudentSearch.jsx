@@ -508,10 +508,17 @@ export default function StudentSearch() {
                 <select value={selectedVehicle} onChange={(e) => setSelectedVehicle(e.target.value)}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
                   <option value="">— ไม่มีรถ —</option>
-                  {vehicles.map(v => (
-                    <option key={v.id} value={v.id}>{v.plate_no}{v.vehicle_type ? ` (${v.vehicle_type})` : ''}</option>
-                  ))}
+                  {/* Phase 10.13A-22A — canonical display_plate; hide province-variant
+                      duplicates, but keep the currently-assigned vehicle visible. */}
+                  {vehicles
+                    .filter(v => !v.duplicate_candidate || v.id === selectedVehicle)
+                    .map(v => (
+                      <option key={v.id} value={v.id}>{(v.display_plate || v.plate_no)}{v.vehicle_type ? ` (${v.vehicle_type})` : ''}</option>
+                    ))}
                 </select>
+                {vehicles.some(v => v.duplicate_candidate && v.id !== selectedVehicle) && (
+                  <p className="mt-1 text-xs text-gray-400">แสดงเฉพาะรถที่ใช้งานจริง ไม่รวมรายการซ้ำที่รอจัดเก็บ</p>
+                )}
               </div>
             </fieldset>
 

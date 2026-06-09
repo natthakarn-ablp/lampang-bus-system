@@ -61,4 +61,42 @@ function isProvinceVariant(normA, normB) {
   return THAI_LETTERS_RE.test(longP.slice(shortP.length));
 }
 
-module.exports = { normalizePlate, validatePlateNo, isProvinceVariant };
+// Phase 10.13A-22 — build a canonical display plate from structured parts so
+// operators can't free-type spacing/province variants. prefix = 1–3 Thai
+// letters (optional leading digit, e.g. "1นค"); number = 1–4 digits; province
+// = non-empty (chosen from a dropdown). Returns the human display plate
+// (`นข 4337 ลำปาง`) plus its normalized key; the route still re-normalizes and
+// runs the duplicate guard — backend stays the source of truth.
+const PLATE_PREFIX_RE = /^[0-9]?[฀-๿]{1,3}$/;
+const PLATE_NUMBER_RE = /^[0-9]{1,4}$/;
+
+function buildStructuredPlate({ prefix, number, province } = {}) {
+  const p = String(prefix == null ? '' : prefix).trim();
+  const n = String(number == null ? '' : number).trim();
+  const prov = String(province == null ? '' : province).trim();
+  if (!p || !n || !prov) {
+    return { valid: false, code: 'PLATE_FIELDS_REQUIRED', error: 'กรุณากรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน' };
+  }
+  if (!PLATE_PREFIX_RE.test(p) || !PLATE_NUMBER_RE.test(n)) {
+    return { valid: false, code: 'PLATE_FORMAT_INVALID', error: 'รูปแบบทะเบียนรถไม่ถูกต้อง กรุณาตรวจสอบหมวดอักษรและเลขทะเบียน' };
+  }
+  const plateNo = `${p} ${n} ${prov}`;
+  return { valid: true, plateNo, normalized: normalizePlate(plateNo) };
+}
+
+// Phase 10.13A-22A — canonical human display for a stored plate_no. Splits
+// prefix / number / province and rejoins with single spaces ('นข4337ลำปาง' →
+// 'นข 4337 ลำปาง'). Never invents a missing province; returns the original
+// string unchanged if it can't be parsed.
+function formatPlateDisplay(plateNo) {
+  const s = String(plateNo == null ? '' : plateNo).trim();
+  if (!s) return s;
+  const m = s.match(/^([0-9]?[฀-๿]{1,3})\s*([0-9]{1,4})\s*([฀-๿].*)?$/);
+  if (!m) return s;
+  const prefix = m[1];
+  const number = m[2];
+  const province = (m[3] || '').trim();
+  return province ? `${prefix} ${number} ${province}` : `${prefix} ${number}`;
+}
+
+module.exports = { normalizePlate, validatePlateNo, isProvinceVariant, buildStructuredPlate, formatPlateDisplay };

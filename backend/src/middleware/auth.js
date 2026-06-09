@@ -58,21 +58,38 @@ async function authenticate(req, res, next) {
       mustChangePassword: !!payload.mustChangePassword,
     };
 
-    // Forced password-change enforcement. Only forced-change tokens pay any
-    // cost; normal traffic (the overwhelming majority) skips the DB entirely.
-    if (payload.mustChangePassword && !MUST_CHANGE_ALLOWLIST.has(normalizePath(req))) {
-      const [rows] = await pool.query(
-        'SELECT must_change_password FROM users WHERE id = ? AND is_deleted = FALSE AND is_active = TRUE LIMIT 1',
-        [payload.sub]
+    const path = normalizePath(req);
+
+    // Phase 10.13A-11 — re-validate account status against the DB on EVERY
+    // authenticated request, so a disabled/deleted account is rejected
+    // immediately rather than remaining valid until its access token expires.
+    // One indexed primary-key lookup that also yields the current
+    // must_change_password flag (no second query needed).
+    const [rows] = await pool.query(
+      'SELECT is_active, must_change_password FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
+      [payload.sub]
+    );
+    const dbUser = rows[0];
+
+    if (!dbUser || !dbUser.is_active) {
+      // Allow logout so a disabled user can cleanly end its session; reject
+      // everything else (including /me) with a generic, leak-free message.
+      if (path === '/api/auth/logout') return next();
+      return sendError(res, 'บัญชีนี้ถูกปิดการใช้งาน', [{ code: 'ACCOUNT_DISABLED' }], 401);
+    }
+
+    req.user.mustChangePassword = !!dbUser.must_change_password;
+
+    // Forced password-change enforcement (H2) — use the fresh DB value so a
+    // just-changed user is not locked out, and an admin reset takes effect even
+    // on a token that pre-dates it.
+    if (dbUser.must_change_password && !MUST_CHANGE_ALLOWLIST.has(path)) {
+      return sendError(
+        res,
+        'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งานระบบ',
+        [{ code: 'MUST_CHANGE_PASSWORD' }],
+        403
       );
-      if (rows.length && rows[0].must_change_password) {
-        return sendError(
-          res,
-          'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งานระบบ',
-          [{ code: 'MUST_CHANGE_PASSWORD' }],
-          403
-        );
-      }
     }
 
     return next();

@@ -851,6 +851,17 @@ router.get('/vehicles/all', requireFullSchoolScope, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── GET /vehicles/check-plate (Phase 10.13A-15) ────────────────────────────
+// Read-only duplicate preflight: warns the UI about existing exact/normalized/
+// province-variant vehicles BEFORE the operator saves. Never writes.
+router.get('/vehicles/check-plate', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const { findPlateMatches } = require('../services/vehicleDedup.service');
+    const result = await findPlateMatches(req.query.plate_no);
+    return sendSuccess(res, result);
+  } catch (err) { return next(err); }
+});
+
 // ─── POST /vehicles ──────────────────────────────────────────────────────────
 
 router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
@@ -894,10 +905,16 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
              AND (normalized_plate LIKE CONCAT(?, '%') OR ? LIKE CONCAT(normalized_plate, '%'))`,
           [normalizedPlate, normalizedPlate]
         );
-        if (candidates.some((c) => isProvinceVariant(c.normalized_plate, normalizedPlate))) {
+        const variantList = candidates.filter((c) => isProvinceVariant(c.normalized_plate, normalizedPlate));
+        if (variantList.length) {
+          // Phase 10.13A-15 — include the conflicting plate(s) so the UI can show
+          // the operator what already exists.
           const e = new Error('พบทะเบียนรถนี้ในระบบแล้ว กรุณาตรวจสอบทะเบียนและจังหวัด');
           e.statusCode = 409;
-          e.errors = [{ code: 'DUPLICATE_OR_INCOMPLETE_PLATE' }];
+          e.errors = [{
+            code: 'DUPLICATE_OR_INCOMPLETE_PLATE',
+            candidates: variantList.map((c) => ({ plate_no: c.plate_no, duplicate_type: 'PROVINCE_VARIANT' })),
+          }];
           throw e;
         }
         await conn.query(

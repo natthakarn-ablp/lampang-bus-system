@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
@@ -35,7 +35,22 @@ export default function SchoolBulkVehicles() {
   const [saving, setSaving] = useState(false);
   const [existingVehicles, setExistingVehicles] = useState([]);
   const [searchPlate, setSearchPlate] = useState('');
+  // Phase 10.13A-15 — per-row plate duplicate preflight: { [rowIndex]: { status, candidates } }
+  const [warnings, setWarnings] = useState({});
+  const checkTimers = useRef({});
   const toast = useToast();
+
+  // Debounced/blur duplicate preflight against the backend (source of truth).
+  async function checkPlate(i, plate) {
+    const p = (plate || '').trim();
+    if (!p) { setWarnings((w) => { const n = { ...w }; delete n[i]; return n; }); return; }
+    try {
+      const res = await api.get('/school/vehicles/check-plate', { params: { plate_no: p } });
+      setWarnings((w) => ({ ...w, [i]: res.data.data }));
+    } catch {
+      setWarnings((w) => { const n = { ...w }; delete n[i]; return n; }); // invalid plate → handled on save
+    }
+  }
 
   // Phase 7.11.4 — render denied state for teacher AFTER all hooks
   // are mounted (rules of hooks). The form below never gets a chance
@@ -53,6 +68,10 @@ export default function SchoolBulkVehicles() {
 
   function updateRow(i, field, value) {
     setRows(rows.map((r, idx) => idx === i ? { ...r, [field]: value } : r));
+    if (field === 'plate_no') {
+      clearTimeout(checkTimers.current[i]);
+      checkTimers.current[i] = setTimeout(() => checkPlate(i, value), 400);
+    }
   }
 
   async function searchExisting() {
@@ -76,6 +95,10 @@ export default function SchoolBulkVehicles() {
     const valid = rows.filter(r => r.plate_no.trim());
     if (valid.length === 0) { toast.error('กรุณากรอกทะเบียนรถอย่างน้อย 1 คัน'); return; }
 
+    // Phase 10.13A-15 — block save while a known duplicate/similar plate is flagged.
+    const flagged = rows.some((r, i) => r.plate_no.trim() && warnings[i]?.status === 'DUPLICATE_OR_SIMILAR');
+    if (flagged) { toast.error('พบรถทะเบียนใกล้เคียงในระบบ กรุณาตรวจสอบก่อนบันทึก'); return; }
+
     setSaving(true);
     let ok = 0, fail = 0;
     for (const row of valid) {
@@ -87,13 +110,19 @@ export default function SchoolBulkVehicles() {
           driver_phone: row.driver_phone.trim(),
         });
         ok++;
-      } catch {
+      } catch (err) {
         fail++;
+        // Surface the backend duplicate candidates on the matching row (keep the form).
+        const e0 = err.response?.data?.errors?.[0];
+        if (e0?.code === 'DUPLICATE_OR_INCOMPLETE_PLATE') {
+          const idx = rows.findIndex((r) => r.plate_no.trim() === row.plate_no.trim());
+          if (idx >= 0) setWarnings((w) => ({ ...w, [idx]: { status: 'DUPLICATE_OR_SIMILAR', candidates: e0.candidates || [] } }));
+        }
       }
     }
     toast.success(`บันทึกสำเร็จ ${ok} คัน${fail > 0 ? ` · ล้มเหลว ${fail} คัน` : ''}`);
     setSaving(false);
-    if (ok > 0) setRows([{ ...EMPTY_ROW }]);
+    if (ok > 0 && fail === 0) { setRows([{ ...EMPTY_ROW }]); setWarnings({}); }
   }
 
   return (
@@ -137,6 +166,7 @@ export default function SchoolBulkVehicles() {
               <div>
                 <label className="block text-xs text-gray-500 mb-0.5">ทะเบียนรถ *</label>
                 <input type="text" value={r.plate_no} onChange={(e) => updateRow(i, 'plate_no', e.target.value)}
+                  onBlur={() => checkPlate(i, r.plate_no)}
                   placeholder="เช่น นข 2210 ลำปาง"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
@@ -161,6 +191,15 @@ export default function SchoolBulkVehicles() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
             </div>
+            {warnings[i]?.status === 'DUPLICATE_OR_SIMILAR' && (
+              <div className="mt-2 text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-3 py-2">
+                ⚠️ พบรถทะเบียนใกล้เคียงในระบบแล้ว กรุณาตรวจสอบก่อนบันทึก
+                <div className="mt-0.5 font-medium">มีอยู่แล้ว: {warnings[i].candidates.map((c) => c.plate_no).join(', ')}</div>
+              </div>
+            )}
+            {warnings[i]?.status === 'CLEAR' && r.plate_no.trim() && (
+              <div className="mt-2 text-xs text-green-600">ยังไม่พบทะเบียนนี้ในระบบ</div>
+            )}
           </div>
         ))}
       </div>

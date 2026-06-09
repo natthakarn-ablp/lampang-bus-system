@@ -13,6 +13,16 @@ const ppSvc = require('../services/pickupPoint.service');
 // All routes require transport or admin role
 router.use(authenticate, requireRole('transport', 'admin'));
 
+// ─── GET /api/transport/vehicles/check-plate (Phase 10.13A-15) ──────────────
+// Read-only duplicate preflight (warns before creating a duplicate). No writes.
+router.get('/vehicles/check-plate', async (req, res, next) => {
+  try {
+    const { findPlateMatches } = require('../services/vehicleDedup.service');
+    const result = await findPlateMatches(req.query.plate_no);
+    return sendSuccess(res, result);
+  } catch (err) { return next(err); }
+});
+
 // ─── POST /api/transport/vehicles (create new vehicle for inspection) ───────
 // Phase 10.6B — duplicate check uses normalized_plate (whitespace + dash
 // agnostic) so "นข 2210 ลำปาง" / "นข2210ลำปาง" / "นข-2210-ลำปาง" collide.
@@ -21,7 +31,7 @@ router.use(authenticate, requireRole('transport', 'admin'));
 router.post('/vehicles', async (req, res, next) => {
   try {
     const { plate_no, vehicle_type } = req.body;
-    const { validatePlateNo } = require('../utils/vehiclePlate');
+    const { validatePlateNo, isProvinceVariant } = require('../utils/vehiclePlate');
     const validation = validatePlateNo(plate_no);
     if (!validation.valid) return sendError(res, validation.error, [], 400);
     const { trimmed, normalized } = validation;
@@ -40,6 +50,30 @@ router.post('/vehicles', async (req, res, next) => {
         res,
         { id: existing.id, plate_no: existing.plate_no, existed: true },
         'รถคันนี้มีในระบบแล้ว'
+      );
+    }
+
+    // Phase 10.13A-14 — reject province-omitted/variant duplicates (mirrors the
+    // school onboarding guard). Only an active vehicle whose normalized plate
+    // differs from this one by a trailing Thai province is flagged; different
+    // plate numbers are never rejected. No INSERT/audit happens after this.
+    const [variantCandidates] = await pool.query(
+      `SELECT plate_no, normalized_plate FROM vehicles
+       WHERE is_deleted = FALSE
+         AND (normalized_plate LIKE CONCAT(?, '%') OR ? LIKE CONCAT(normalized_plate, '%'))`,
+      [normalized, normalized]
+    );
+    const variantList = variantCandidates.filter((c) => isProvinceVariant(c.normalized_plate, normalized));
+    if (variantList.length) {
+      // Phase 10.13A-15 — include the conflicting plate(s) for the UI warning.
+      return sendError(
+        res,
+        'พบทะเบียนรถนี้ในระบบแล้ว กรุณาตรวจสอบทะเบียนและจังหวัด',
+        [{
+          code: 'DUPLICATE_OR_INCOMPLETE_PLATE',
+          candidates: variantList.map((c) => ({ plate_no: c.plate_no, duplicate_type: 'PROVINCE_VARIANT' })),
+        }],
+        409
       );
     }
 

@@ -862,7 +862,7 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
     // Phase 10.6B — whitespace/dash-agnostic plate validation. The duplicate
     // check below uses normalized_plate, so users entering "นข 2210 ลำปาง" /
     // "นข2210ลำปาง" / "นข-2210-ลำปาง" all reuse the same vehicle row.
-    const { validatePlateNo } = require('../utils/vehiclePlate');
+    const { validatePlateNo, isProvinceVariant } = require('../utils/vehiclePlate');
     const validation = validatePlateNo(plate_no);
     if (!validation.valid) return sendError(res, validation.error, [], 400);
     const { trimmed: trimmedPlate, normalized: normalizedPlate } = validation;
@@ -884,6 +884,22 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
       );
       const vId = existingVehicle ? existingVehicle.id : vehicleId;
       if (!existingVehicle) {
+        // Phase 10.13A-13 — reject province-omitted/variant duplicates so we do
+        // not create a second vehicle for the same bus (e.g. 'นข4337' when
+        // 'นข4337 ลำปาง' already exists). Only active vehicles whose normalized
+        // plate differs from this one by a trailing Thai province are flagged.
+        const [candidates] = await conn.query(
+          `SELECT plate_no, normalized_plate FROM vehicles
+           WHERE is_deleted = FALSE
+             AND (normalized_plate LIKE CONCAT(?, '%') OR ? LIKE CONCAT(normalized_plate, '%'))`,
+          [normalizedPlate, normalizedPlate]
+        );
+        if (candidates.some((c) => isProvinceVariant(c.normalized_plate, normalizedPlate))) {
+          const e = new Error('พบทะเบียนรถนี้ในระบบแล้ว กรุณาตรวจสอบทะเบียนและจังหวัด');
+          e.statusCode = 409;
+          e.errors = [{ code: 'DUPLICATE_OR_INCOMPLETE_PLATE' }];
+          throw e;
+        }
         await conn.query(
           `INSERT INTO vehicles (id, plate_no, normalized_plate, vehicle_type) VALUES (?, ?, ?, ?)`,
           [vehicleId, trimmedPlate, normalizedPlate, vehicle_type || 'รถตู้']
@@ -892,9 +908,14 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
 
       // 2. Create driver + assignment + user account if driver info provided
       if (driver_name) {
-        // Check if a driver user account already exists for this plate
+        // Phase 10.13A-13 — dedup driver account by NORMALIZED username so
+        // spacing/dash variants ('นข 4337 ลำปาง' vs 'นข4337 ลำปาง') reuse the
+        // same account instead of creating a duplicate.
         const [[existingUser]] = await conn.query(
-          `SELECT id FROM users WHERE username = ? AND role = 'driver' AND is_deleted = FALSE`, [trimmedPlate]
+          `SELECT id FROM users
+           WHERE role = 'driver' AND is_deleted = FALSE
+             AND REPLACE(REPLACE(LOWER(username), ' ', ''), '-', '') = ?
+           LIMIT 1`, [normalizedPlate]
         );
 
         if (!existingUser) {

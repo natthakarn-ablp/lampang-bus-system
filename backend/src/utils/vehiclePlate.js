@@ -47,4 +47,18 @@ function validatePlateNo(plateNo) {
   return { valid: true, trimmed, normalized };
 }
 
-module.exports = { normalizePlate, validatePlateNo };
+// Phase 10.13A-13 — detect province-omitted duplicates at onboarding.
+// True when two NORMALIZED plates differ only by a trailing province token,
+// e.g. 'นข4337' vs 'นข4337ลำปาง'. One must be a strict prefix of the other and
+// the differing suffix must be all Thai letters (a province) — so genuinely
+// different plate numbers ('นข433' vs 'นข4337', suffix '7') are NOT flagged.
+const THAI_LETTERS_RE = /^[฀-๿]+$/; // Thai Unicode block (letters/vowels)
+
+function isProvinceVariant(normA, normB) {
+  if (!normA || !normB || normA === normB) return false;
+  const [shortP, longP] = normA.length < normB.length ? [normA, normB] : [normB, normA];
+  if (!longP.startsWith(shortP)) return false;
+  return THAI_LETTERS_RE.test(longP.slice(shortP.length));
+}
+
+module.exports = { normalizePlate, validatePlateNo, isProvinceVariant };

@@ -22,9 +22,10 @@ const { normalizePlate } = require('../utils/vehiclePlate');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function makeError(message, statusCode = 400) {
+function makeError(message, statusCode = 400, code = null) {
   const err = new Error(message);
   err.statusCode = statusCode;
+  if (code) err.errors = [{ code }];
   return err;
 }
 
@@ -42,25 +43,54 @@ function assertSession(session) {
 /**
  * Resolve the active vehicle for a driver user.
  *
- * Resolution strategy (does NOT require users.driver_id):
- *   1. Look up vehicles.plate_no = username  (drivers login with their plate number)
- *   2. Confirm at least one active driver_vehicle_assignments row exists for
- *      this vehicle in the current term
- *   3. Return a single vehicle row — DISTINCT guards against multiple
- *      active assignment rows for the same vehicle
+ * Resolution order (Phase 10.13A-20):
+ *   1. If the user is LINKED (users.driver_id set), resolve via the relational
+ *      model: driver_vehicle_assignments.driver_id → vehicles (active). Exactly
+ *      one active vehicle → return it; multiple → fail closed; zero → fall back.
+ *   2. LEGACY fallback (also for unlinked YELLOW users with driver_id NULL):
+ *      match the login username to vehicles.plate_no / normalized_plate
+ *      (Phase 10.13A-8). normalized_plate is UNIQUE among active vehicles, so at
+ *      most one matches — we never guess.
+ *
+ * Accepts either a user object { username, driver_id } or a bare username string
+ * (legacy callers / tests → driver_id treated as NULL → legacy path).
  *
  * @param {import('mysql2/promise').Pool} pool
- * @param {string} username  - req.user.username (equals vehicles.plate_no for drivers)
+ * @param {{username:string, driver_id?:number}|string} userOrUsername
  * @returns {{ vehicle_id, plate_no }}
- * @throws 400 if vehicle not found or no active assignment exists
+ * @throws 400 if no vehicle / no active assignment / ambiguous match
  */
-async function getDriverVehicle(pool, username) {
-  // Step 1: resolve the active vehicle. Drivers log in with their plate number,
-  // but the username may differ from vehicles.plate_no by whitespace/dashes
-  // (plates are entered through different UIs). Match on the exact plate OR the
-  // normalized plate. `normalized_plate` is UNIQUE among vehicles (migration
-  // 024), so at most one ACTIVE vehicle can match — we never guess.
-  // Phase 10.13A-8.
+async function getDriverVehicle(pool, userOrUsername) {
+  const isObj = userOrUsername != null && typeof userOrUsername === 'object';
+  const username = isObj ? (userOrUsername.username || '') : String(userOrUsername || '');
+  const driverId = isObj ? (userOrUsername.driver_id ?? userOrUsername.driverId ?? null) : null;
+
+  // 1) Linked drivers resolve via the relational model (authoritative — works
+  //    even if the login username no longer matches the plate text).
+  if (driverId != null) {
+    const [linked] = await pool.query(
+      `SELECT v.id AS vehicle_id, v.plate_no
+       FROM   driver_vehicle_assignments dva
+       JOIN   vehicles v ON v.id = dva.vehicle_id AND v.is_deleted = FALSE
+       WHERE  dva.driver_id = ? AND dva.is_active = TRUE
+       GROUP  BY v.id, v.plate_no
+       LIMIT  2`,
+      [driverId]
+    );
+    if (linked.length === 1) {
+      return { vehicle_id: linked[0].vehicle_id, plate_no: linked[0].plate_no };
+    }
+    if (linked.length > 1) {
+      // Never guess which vehicle — surface the misconfiguration.
+      throw makeError(
+        'Multiple active vehicles assigned to this driver — please contact admin',
+        400, 'MULTIPLE_ACTIVE_DRIVER_ASSIGNMENTS'
+      );
+    }
+    // zero active assigned vehicles → fall through to legacy plate resolution
+  }
+
+  // 2) Legacy plate / normalized-plate resolution.
   const normalized = normalizePlate(username);
   const [vehicles] = await pool.query(
     `SELECT id AS vehicle_id, plate_no
@@ -82,8 +112,8 @@ async function getDriverVehicle(pool, username) {
 
   const { vehicle_id, plate_no } = vehicles[0];
 
-  // Step 2: confirm at least one active assignment exists for this vehicle
-  //         (validates the vehicle is still in-service this term)
+  // Confirm at least one active assignment exists for this vehicle (validates
+  // the vehicle is still in-service this term).
   const [assignments] = await pool.query(
     `SELECT 1
      FROM   driver_vehicle_assignments

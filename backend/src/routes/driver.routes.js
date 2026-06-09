@@ -77,7 +77,7 @@ router.get('/roster', async (req, res, next) => {
       return sendError(res, "session must be 'morning' or 'evening'", [], 400);
     }
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const students = await checkinSvc.getRoster(pool, vehicle.vehicle_id, session);
 
     return sendSuccess(res, {
@@ -105,7 +105,7 @@ router.get('/pickup-points', async (req, res, next) => {
       return sendError(res, "session must be 'morning' or 'evening'", [], 400);
     }
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
 
     const points = await ppSvc.getPickupPointsForVehicle(vehicle.vehicle_id, { session });
@@ -128,7 +128,7 @@ router.get('/pickup-points', async (req, res, next) => {
 // (backward compatible).
 router.get('/pickup-students', async (req, res, next) => {
   try {
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
 
     const session = req.query.session;
@@ -170,7 +170,7 @@ router.post('/pickup-points', async (req, res, next) => {
     }
     if (errors.length > 0) return sendError(res, 'ข้อมูลไม่ถูกต้อง', errors, 400);
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
 
     // Driver can only create points for OWN vehicle — overwrite vehicle_id
@@ -215,7 +215,7 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
     const pointId = parseInt(req.params.id, 10);
     if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
 
     const point = await ppSvc.getPickupPointById(pointId);
@@ -244,7 +244,7 @@ router.put('/pickup-points/:id/students', async (req, res, next) => {
     }
     const studentIds = req.body.student_ids.map(Number).filter(Number.isInteger);
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
 
     const point = await ppSvc.getPickupPointById(pointId);
@@ -289,7 +289,7 @@ router.post('/checkin', async (req, res, next) => {
       return sendError(res, "session must be 'morning' or 'evening'", [{ field: 'session', message: "ต้องเป็น 'morning' หรือ 'evening'" }], 400);
     }
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
 
     const result = await checkinSvc.processCheckin(pool, {
       userId:    req.user.id,
@@ -322,7 +322,7 @@ router.post('/checkout', async (req, res, next) => {
       return sendError(res, "session must be 'morning' or 'evening'", [{ field: 'session', message: "ต้องเป็น 'morning' หรือ 'evening'" }], 400);
     }
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
 
     const result = await checkinSvc.processCheckout(pool, {
       userId:    req.user.id,
@@ -352,7 +352,7 @@ router.post('/checkin-all', async (req, res, next) => {
       return sendError(res, "session must be 'morning' or 'evening'", [{ field: 'session', message: "ต้องเป็น 'morning' หรือ 'evening'" }], 400);
     }
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
 
     const result = await checkinSvc.processCheckinAll(pool, {
       userId:    req.user.id,
@@ -410,7 +410,7 @@ router.post('/emergency', async (req, res, next) => {
       accuracy: acc,
     });
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
 
     const [result] = await pool.query(
       `INSERT INTO emergency_logs
@@ -487,7 +487,7 @@ router.post('/emergency', async (req, res, next) => {
 
 router.get('/status-today', async (req, res, next) => {
   try {
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const status  = await checkinSvc.getStatusToday(pool, vehicle.vehicle_id);
 
     return sendSuccess(res, {
@@ -507,7 +507,7 @@ router.get('/status-today', async (req, res, next) => {
 
 router.get('/profile', async (req, res, next) => {
   try {
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const [[driver]] = await pool.query(
       `SELECT d.id, d.name, d.phone, d.photo_url,
               v.plate_no, v.vehicle_type, v.owner_name, v.owner_phone,
@@ -536,7 +536,7 @@ router.put('/profile', async (req, res, next) => {
       attendant_name, attendant_phone,
     } = req.body;
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
 
     // Find driver id
     const [[dva]] = await pool.query(
@@ -621,7 +621,7 @@ router.post('/profile/photo', upload.single('photo'), async (req, res, next) => 
   try {
     if (!req.file) return sendError(res, 'กรุณาเลือกไฟล์รูปภาพ (.jpg, .png, .webp ขนาดไม่เกิน 2MB)', [], 400);
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const [[dva]] = await pool.query(
       `SELECT driver_id FROM driver_vehicle_assignments WHERE vehicle_id = ? AND is_active = TRUE LIMIT 1`,
       [vehicle.vehicle_id]
@@ -675,7 +675,7 @@ router.post('/leave', async (req, res, next) => {
     if (!student_id || !session) return sendError(res, 'student_id and session are required', [], 400);
     if (!['morning', 'evening', 'both'].includes(session)) return sendError(res, "session ต้องเป็น 'morning', 'evening' หรือ 'both'", [], 400);
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const date = leave_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 
     const result = await leaveSvc.createLeave({
@@ -692,7 +692,7 @@ router.delete('/leave/:id', async (req, res, next) => {
   try {
     // Phase 10.12E — scope cancellation to the driver's active vehicle (H4):
     // a driver may only cancel a leave belonging to their own vehicle.
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const result = await leaveSvc.cancelLeave(parseInt(req.params.id, 10), req.user.id, vehicle.vehicle_id);
     return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
   } catch (err) { return next(err); }
@@ -702,7 +702,7 @@ router.delete('/leave/:id', async (req, res, next) => {
 
 router.get('/leaves', async (req, res, next) => {
   try {
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const date = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     const leaves = await leaveSvc.getLeavesForVehicle(vehicle.vehicle_id, date);
     return sendSuccess(res, leaves);
@@ -717,7 +717,7 @@ router.get('/search-students', async (req, res, next) => {
     const q = (req.query.q || '').trim();
     if (!q || q.length < 2) return sendSuccess(res, []);
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const like = `%${q}%`;
 
     const [rows] = await pool.query(
@@ -769,7 +769,7 @@ router.post('/roster-request', async (req, res, next) => {
     // For add: either student_id (existing) or new_student_data (new) is required
     if (request_type === 'add' && !student_id && !new_student_data) return sendError(res, 'กรุณากรอกข้อมูลนักเรียน', [], 400);
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
 
     const result = await rosterReqSvc.createRequest({
       vehicleId: vehicle.vehicle_id, studentId: student_id || null,
@@ -784,7 +784,7 @@ router.post('/roster-request', async (req, res, next) => {
 
 router.get('/roster-requests', async (req, res, next) => {
   try {
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const result = await rosterReqSvc.getRequestsForDriver(vehicle.vehicle_id, {
       status: req.query.status, page, per_page: 20,
@@ -796,7 +796,7 @@ router.get('/roster-requests', async (req, res, next) => {
 // ─── GET /pretrip-status — Check if today's pretrip is done ─────────────────
 router.get('/pretrip-status', async (req, res, next) => {
   try {
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     const entityId = `${vehicle.vehicle_id}_${today}`;
 
@@ -834,7 +834,7 @@ const PRETRIP_ITEMS = [
 
 router.post('/pretrip', async (req, res, next) => {
   try {
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const { items, all_pass, note } = req.body;
 
     if (typeof all_pass !== 'boolean') {
@@ -903,7 +903,7 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
     if (errors.length) return sendError(res, 'ข้อมูลตำแหน่งไม่ถูกต้อง', errors, 400);
 
     // Resolve vehicle from JWT scope — server-trusted
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
 
     const driverId = await vllSvc.getActiveDriverIdForVehicle(vehicle.vehicle_id);
@@ -931,7 +931,7 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
 
 router.delete('/vehicle-location', async (req, res, next) => {
   try {
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user.username);
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
 
     await vllSvc.pauseLocation(vehicle.vehicle_id);

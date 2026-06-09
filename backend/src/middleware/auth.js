@@ -66,7 +66,7 @@ async function authenticate(req, res, next) {
     // One indexed primary-key lookup that also yields the current
     // must_change_password flag (no second query needed).
     const [rows] = await pool.query(
-      'SELECT is_active, must_change_password FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
+      'SELECT is_active, must_change_password, driver_id FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
       [payload.sub]
     );
     const dbUser = rows[0];
@@ -79,6 +79,9 @@ async function authenticate(req, res, next) {
     }
 
     req.user.mustChangePassword = !!dbUser.must_change_password;
+    // Phase 10.13A-20 — expose the relational driver link (NULL for legacy/
+    // YELLOW users) so driver vehicle resolution can prefer driver_id.
+    req.user.driver_id = dbUser.driver_id ?? null;
 
     // Forced password-change enforcement (H2) — use the fresh DB value so a
     // just-changed user is not locked out, and an admin reset takes effect even

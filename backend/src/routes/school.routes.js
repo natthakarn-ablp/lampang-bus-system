@@ -879,7 +879,6 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
     const { trimmed: trimmedPlate, normalized: normalizedPlate } = validation;
 
     const crypto = require('crypto');
-    const bcrypt = require('bcrypt');
     const vehicleId = 'V-' + crypto.createHash('sha256').update(trimmedPlate).digest('hex').substring(0, 12);
 
     const conn = await pool.getConnection();
@@ -923,64 +922,21 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
         );
       }
 
-      // 2. Create driver + assignment + user account if driver info provided
+      // 2. Create/reuse driver profile + login user + assignment, with the user
+      //    linked to the profile via users.driver_id (Phase 10.13A-18). Dedups
+      //    the drivers profile (by phone/name) and the user (by normalized
+      //    username); throws 409 DRIVER_USER_PROFILE_CONFLICT if the user is
+      //    already linked to a different driver profile.
       if (driver_name) {
-        // Phase 10.13A-13 — dedup driver account by NORMALIZED username so
-        // spacing/dash variants ('นข 4337 ลำปาง' vs 'นข4337 ลำปาง') reuse the
-        // same account instead of creating a duplicate.
-        const [[existingUser]] = await conn.query(
-          `SELECT id FROM users
-           WHERE role = 'driver' AND is_deleted = FALSE
-             AND REPLACE(REPLACE(LOWER(username), ' ', ''), '-', '') = ?
-           LIMIT 1`, [normalizedPlate]
-        );
-
-        if (!existingUser) {
-          // Create driver record
-          const [dResult] = await conn.query(
-            `INSERT INTO drivers (name, phone) VALUES (?, ?)`,
-            [driver_name.trim(), driver_phone?.trim() || null]
-          );
-
-          // Create assignment
-          await conn.query(
-            `INSERT INTO driver_vehicle_assignments (driver_id, vehicle_id, start_date, is_active) VALUES (?, ?, CURDATE(), TRUE)`,
-            [dResult.insertId, vId]
-          );
-
-          // Create user account: username = plate_no, password = plate_no, must change on first login
-          const hash = await bcrypt.hash(trimmedPlate, 12);
-          await conn.query(
-            `INSERT INTO users (username, password_hash, role, display_name, must_change_password)
-             VALUES (?, ?, 'driver', ?, TRUE)`,
-            [trimmedPlate, hash, driver_name.trim()]
-          );
-          driverAccountCreated = true;
-        } else {
-          // User exists — just ensure assignment exists for this vehicle
-          const [[existingAssignment]] = await conn.query(
-            `SELECT dva.id FROM driver_vehicle_assignments dva
-             JOIN users u ON u.role = 'driver' AND u.username = ?
-             JOIN drivers d ON d.id = dva.driver_id
-             WHERE dva.vehicle_id = ? AND dva.is_active = TRUE LIMIT 1`,
-            [trimmedPlate, vId]
-          );
-          if (!existingAssignment) {
-            // Find driver_id from existing assignments for this plate
-            const [[driverRow]] = await conn.query(
-              `SELECT dva.driver_id FROM driver_vehicle_assignments dva
-               JOIN vehicles v ON v.id = dva.vehicle_id AND v.plate_no = ?
-               WHERE dva.is_active = TRUE LIMIT 1`,
-              [trimmedPlate]
-            );
-            if (driverRow) {
-              await conn.query(
-                `INSERT INTO driver_vehicle_assignments (driver_id, vehicle_id, start_date, is_active) VALUES (?, ?, CURDATE(), TRUE)`,
-                [driverRow.driver_id, vId]
-              );
-            }
-          }
-        }
+        const { linkOrCreateDriverForVehicle } = require('../services/driverProfile.service');
+        const { userCreated } = await linkOrCreateDriverForVehicle(conn, {
+          driverName: driver_name,
+          driverPhone: driver_phone,
+          normalizedPlate,
+          plateNo: trimmedPlate,
+          vehicleId: vId,
+        });
+        driverAccountCreated = userCreated;
       }
 
       await logAudit({

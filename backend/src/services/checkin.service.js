@@ -18,6 +18,7 @@
 
 const env = require('../config/env');
 const { logAudit } = require('../utils/audit');
+const { normalizePlate } = require('../utils/vehiclePlate');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -54,18 +55,29 @@ function assertSession(session) {
  * @throws 400 if vehicle not found or no active assignment exists
  */
 async function getDriverVehicle(pool, username) {
-  // Step 1: find the vehicle whose plate_no matches the driver's login username
+  // Step 1: resolve the active vehicle. Drivers log in with their plate number,
+  // but the username may differ from vehicles.plate_no by whitespace/dashes
+  // (plates are entered through different UIs). Match on the exact plate OR the
+  // normalized plate. `normalized_plate` is UNIQUE among vehicles (migration
+  // 024), so at most one ACTIVE vehicle can match — we never guess.
+  // Phase 10.13A-8.
+  const normalized = normalizePlate(username);
   const [vehicles] = await pool.query(
     `SELECT id AS vehicle_id, plate_no
      FROM   vehicles
-     WHERE  plate_no  = ?
-       AND  is_deleted = FALSE
-     LIMIT  1`,
-    [username]
+     WHERE  is_deleted = FALSE
+       AND  (plate_no = ? OR normalized_plate = ?)
+     LIMIT  2`,
+    [username, normalized]
   );
 
   if (!vehicles.length) {
     throw makeError('Vehicle not found for this driver account', 400);
+  }
+  if (vehicles.length > 1) {
+    // Defensive: unreachable while normalized_plate is unique among active
+    // vehicles. Never pick one arbitrarily — surface the misconfiguration.
+    throw makeError('Multiple vehicles match this driver account — please contact admin', 400);
   }
 
   const { vehicle_id, plate_no } = vehicles[0];

@@ -116,7 +116,10 @@ router.post('/login', loginLimiter, async (req, res, next) => {
       await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
         newValue: { username: user.username, result: 'failed', reason: 'account_disabled' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
-      return sendError(res, 'บัญชีนี้ถูกปิดการใช้งาน (Account disabled)', [], 401);
+      // Phase 10.13B-1 — return the SAME generic message as wrong-password /
+      // user-not-found so a disabled account is not externally distinguishable
+      // (prevents username enumeration). The real reason is audited above.
+      return sendError(res, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', [], 401);
     }
 
     const passwordMatch = await bcrypt.compare(String(password), user.password_hash);

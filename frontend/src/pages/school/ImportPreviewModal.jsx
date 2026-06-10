@@ -130,7 +130,10 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
 
   function downloadReport() {
     const cols = ['row_number', 'student_code', 'student_name', 'classification', 'status', 'message_th', 'input_vehicle_plate', 'matched_display_plate', 'guardian_mismatch', 'action_required'];
-    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    // Phase 10.13B-1 — neutralize CSV formula injection: a cell starting with
+    // = + - @ (or tab/CR) is prefixed with ' so spreadsheet apps treat it as text.
+    const neutralize = (v) => { const s = String(v ?? ''); return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s; };
+    const esc = (v) => `"${neutralize(v).replace(/"/g, '""')}"`;
     const lines = [cols.join(',')];
     for (const r of rows) {
       lines.push(cols.map((c) => esc(c === 'guardian_mismatch' ? (r.guardian_mismatch ? 'yes' : 'no') : r[c])).join(','));

@@ -533,7 +533,17 @@ router.get('/audit-logs', async (req, res, next) => {
       [...params, per_page, offset]
     );
 
-    return sendSuccess(res, rows, 'OK', { page, per_page, total });
+    // Phase 10.13B-1 — redact/mask PII (phones, LINE ids, secrets) in the
+    // old/new audit values before returning JSON, matching the CSV export.
+    const { redactAuditValue } = require('../utils/exportSecurity');
+    const redactVal = (v) => {
+      if (v === null || v === undefined) return v;
+      const s = redactAuditValue(v);
+      try { return JSON.parse(s); } catch { return s; }
+    };
+    const safeRows = rows.map((r) => ({ ...r, old_value: redactVal(r.old_value), new_value: redactVal(r.new_value) }));
+
+    return sendSuccess(res, safeRows, 'OK', { page, per_page, total });
   } catch (err) { next(err); }
 });
 

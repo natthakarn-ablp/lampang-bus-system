@@ -1400,6 +1400,9 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
 router.post('/students/import/preview', requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return sendError(res, 'ไม่พบไฟล์ที่อัปโหลด', [], 400);
+    // Phase 10.13B-1 — retained preview files may contain guardian PII; keep them
+    // owner-only (600) so they are not world/group-readable on the host.
+    try { fs.chmodSync(req.file.path, 0o600); } catch { /* best-effort */ }
     const schoolId = resolveSchoolId(req);
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.runPreview(pool, {

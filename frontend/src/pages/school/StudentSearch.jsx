@@ -7,6 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
+import ImportPreviewModal from './ImportPreviewModal';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
 
@@ -35,6 +36,7 @@ export default function StudentSearch() {
 
   // Import state
   const [showImport, setShowImport] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -200,9 +202,13 @@ export default function StudentSearch() {
               className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">
               ดาวน์โหลดตัวอย่าง
             </button>
-            <button onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }}
+            <button onClick={() => setShowPreview(true)}
               className="text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-3 py-2 rounded-lg transition">
               นำเข้าข้อมูล
+            </button>
+            <button onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }}
+              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2 transition" title="นำเข้าแบบเดิม (สำรอง)">
+              แบบเดิม
             </button>
           </div>
         )}
@@ -350,7 +356,10 @@ export default function StudentSearch() {
         </>
       )}
 
-      {/* ── Import Modal ── */}
+      {/* ── Import Preview (primary, Phase 10.13A-26B) ── */}
+      <ImportPreviewModal open={showPreview} onClose={() => setShowPreview(false)} onApplied={() => fetchStudents(1)} />
+
+      {/* ── Import Modal (legacy fallback) ── */}
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowImport(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>

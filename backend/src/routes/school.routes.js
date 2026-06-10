@@ -1388,6 +1388,56 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
   } catch (err) { next(err); }
 });
 
+// ─── Phase 10.13A-26A — Import Preview / Apply / Report ─────────────────────
+// Transparent, re-checkable, auditable imports. The legacy POST /students/import
+// above is untouched. Preview RETAINS the uploaded file (no fs.unlink).
+
+// POST /students/import/preview — analyse rows row-by-row, persist batch + rows,
+// return summary + classifications. Writes NO student/vehicle/parent data.
+router.post('/students/import/preview', requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return sendError(res, 'ไม่พบไฟล์ที่อัปโหลด', [], 400);
+    const schoolId = resolveSchoolId(req);
+    const importPreview = require('../services/studentImportPreview.service');
+    const out = await importPreview.runPreview(pool, {
+      schoolId, importedBy: req.user.id, filePath: req.file.path, originalName: req.file.originalname,
+    });
+    await logAudit({
+      userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(out.batch_id),
+      newValue: { mode: 'preview', school_id: schoolId, ...out.summary },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, 'วิเคราะห์ไฟล์นำเข้าสำเร็จ (ยังไม่บันทึกข้อมูลนักเรียน)');
+  } catch (err) { next(err); }
+});
+
+// POST /students/import/:batchId/apply — apply can_apply (INSERT) rows, idempotent.
+router.post('/students/import/:batchId/apply', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    const batchId = parseInt(req.params.batchId, 10);
+    const importPreview = require('../services/studentImportPreview.service');
+    const out = await importPreview.applyBatch(pool, { batchId, schoolId, userId: req.user.id });
+    await logAudit({
+      userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(batchId),
+      newValue: { mode: 'apply', school_id: schoolId, ...out },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, `นำเข้าสำเร็จ ${out.applied} รายการ` + (out.already_applied ? ` · มีอยู่แล้ว ${out.already_applied}` : '') + (out.failed ? ` · ไม่สำเร็จ ${out.failed}` : ''));
+  } catch (err) { next(err); }
+});
+
+// GET /students/import/:batchId/report — row-level results (PII-safe).
+router.get('/students/import/:batchId/report', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    const batchId = parseInt(req.params.batchId, 10);
+    const importPreview = require('../services/studentImportPreview.service');
+    const out = await importPreview.getReport(pool, { batchId, schoolId });
+    return sendSuccess(res, out);
+  } catch (err) { next(err); }
+});
+
 // ─── Phase 7.2 — GET /api/school/live-vehicles ──────────────────────────────
 // Vehicles serving this school. No audit (single-scope, not aggregate).
 router.get('/live-vehicles', async (req, res, next) => {

@@ -53,6 +53,20 @@ router.post('/vehicles', async (req, res, next) => {
       );
     }
 
+    // Phase 10.13A-25B — canonical (province-alias-aware) reuse: an existing
+    // active vehicle with the same canonical identity (e.g. 'ออ 7332 กทม' for an
+    // input 'ออ 7332 กรุงเทพมหานคร') is the SAME bus → reuse it for inspection.
+    const { classifyVehiclePlateConflict } = require('../utils/plateIdentity');
+    const [activeForCanon] = await pool.query('SELECT id, plate_no, is_deleted FROM vehicles WHERE is_deleted = FALSE');
+    const canon = classifyVehiclePlateConflict(trimmed, activeForCanon);
+    if (canon.vehicle_id && ['SAME_ACTIVE_VEHICLE_SAME_SCHOOL', 'SAME_ACTIVE_VEHICLE_OTHER_SCHOOL', 'PROVINCE_ALIAS_DUPLICATE'].includes(canon.code)) {
+      return sendSuccess(
+        res,
+        { id: canon.vehicle_id, plate_no: canon.display_plate, existed: true },
+        'รถคันนี้มีในระบบแล้ว (จับคู่จากชื่อจังหวัดที่เขียนต่างกัน)'
+      );
+    }
+
     // Phase 10.13A-14 — reject province-omitted/variant duplicates (mirrors the
     // school onboarding guard). Only an active vehicle whose normalized plate
     // differs from this one by a trailing Thai province is flagged; different

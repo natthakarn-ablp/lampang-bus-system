@@ -15,6 +15,9 @@ async function main() {
   const [prefix, number, province, schoolId] = process.argv.slice(2);
   if (!prefix || !number) {
     console.log('usage: node scripts/diagnose-plate.js <prefix> <number> <province> [schoolId]');
+    console.log('examples:');
+    console.log('  node backend/scripts/diagnose-plate.js นข 800 ลำปาง 52020039');
+    console.log('  node backend/scripts/diagnose-plate.js ออ 7332 กรุงเทพมหานคร 52020082');
     process.exit(1);
   }
   const input = { plate_prefix: prefix, plate_number: number, province: province || '' };

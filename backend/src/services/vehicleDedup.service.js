@@ -106,4 +106,20 @@ function annotateVehicleList(rows) {
   return enriched;
 }
 
-module.exports = { findPlateMatches, annotateVehicleList };
+// Phase 10.13A-25B — classify an incoming plate against ALL vehicles (active +
+// soft-deleted) using the deterministic, province-alias-aware identity module.
+// `db` is a pool or a transaction connection. `plateInput` is a structured
+// { plate_prefix, plate_number, province } or a legacy plate_no string.
+async function classifyPlateAgainstDb(db, plateInput, opts = {}) {
+  const { classifyVehiclePlateConflict } = require('../utils/plateIdentity');
+  const [vehicles] = await db.query(
+    `SELECT v.id, v.plate_no, v.is_deleted,
+            (SELECT s.school_id FROM students s
+               WHERE s.vehicle_id = v.id AND COALESCE(s.is_deleted, FALSE) = FALSE
+               GROUP BY s.school_id ORDER BY COUNT(*) DESC LIMIT 1) AS school_id
+     FROM vehicles v`
+  );
+  return classifyVehiclePlateConflict(plateInput, vehicles, opts);
+}
+
+module.exports = { findPlateMatches, annotateVehicleList, classifyPlateAgainstDb };

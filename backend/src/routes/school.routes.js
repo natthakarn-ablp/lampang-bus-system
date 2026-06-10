@@ -863,9 +863,27 @@ router.get('/vehicles/all', requireFullSchoolScope, async (req, res, next) => {
 // province-variant vehicles BEFORE the operator saves. Never writes.
 router.get('/vehicles/check-plate', requireFullSchoolScope, async (req, res, next) => {
   try {
-    const { findPlateMatches } = require('../services/vehicleDedup.service');
-    const result = await findPlateMatches(req.query.plate_no);
-    return sendSuccess(res, result);
+    const { findPlateMatches, classifyPlateAgainstDb } = require('../services/vehicleDedup.service');
+    const { buildDisplayPlate } = require('../utils/plateIdentity');
+    const { plate_no, plate_prefix, plate_number, province } = req.query;
+    const schoolId = resolveSchoolId(req);
+    // Structured fields take precedence; fall back to legacy plate_no.
+    const structured = (plate_prefix != null || plate_number != null || province != null);
+    const plateInput = structured ? { plate_prefix, plate_number, province } : plate_no;
+    const plateStr = structured ? buildDisplayPlate(plateInput) : plate_no;
+
+    // Phase 10.13A-25B — status comes from the deterministic, province-alias-aware
+    // classification (so กทม↔กรุงเทพมหานคร dups are flagged); findPlateMatches only
+    // contributes its normalized/variant candidate list.
+    const classification = await classifyPlateAgainstDb(pool, plateInput, { schoolId });
+    let candidates = [];
+    try { candidates = (await findPlateMatches(plateStr)).candidates || []; } catch { /* invalid/ambiguous */ }
+    if (classification.vehicle_id && classification.display_plate
+        && !candidates.some((c) => c.plate_no === classification.display_plate)) {
+      candidates = [{ plate_no: classification.display_plate, duplicate_type: classification.code }, ...candidates];
+    }
+    const status = classification.code === 'VALID_NEW_VEHICLE' ? 'CLEAR' : 'DUPLICATE_OR_SIMILAR';
+    return sendSuccess(res, { status, candidates, classification });
   } catch (err) { return next(err); }
 });
 
@@ -912,25 +930,22 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
       );
       const vId = existingVehicle ? existingVehicle.id : vehicleId;
       if (!existingVehicle) {
-        // Phase 10.13A-13 — reject province-omitted/variant duplicates so we do
-        // not create a second vehicle for the same bus (e.g. 'นข4337' when
-        // 'นข4337 ลำปาง' already exists). Only active vehicles whose normalized
-        // plate differs from this one by a trailing Thai province are flagged.
-        const [candidates] = await conn.query(
-          `SELECT plate_no, normalized_plate FROM vehicles
-           WHERE is_deleted = FALSE
-             AND (normalized_plate LIKE CONCAT(?, '%') OR ? LIKE CONCAT(normalized_plate, '%'))`,
-          [normalizedPlate, normalizedPlate]
-        );
-        const variantList = candidates.filter((c) => isProvinceVariant(c.normalized_plate, normalizedPlate));
-        if (variantList.length) {
-          // Phase 10.13A-15 — include the conflicting plate(s) so the UI can show
-          // the operator what already exists.
-          const e = new Error('พบทะเบียนรถนี้ในระบบแล้ว กรุณาตรวจสอบทะเบียนและจังหวัด');
-          e.statusCode = 409;
+        // Phase 10.13A-25B — alias-aware conflict classification. Exact-normalized
+        // reuse is handled above; here any remaining conflict is blocked, including
+        // province aliases (กทม↔กรุงเทพมหานคร), soft-deleted vehicles, and
+        // province-omitted/ambiguous plates — superseding the 10.13A-13 guard.
+        const { classifyPlateAgainstDb } = require('../services/vehicleDedup.service');
+        const conflict = await classifyPlateAgainstDb(conn, trimmedPlate, { schoolId });
+        if (conflict.code !== 'VALID_NEW_VEHICLE') {
+          const softOrFormat = conflict.code === 'AMBIGUOUS_PLATE_NEEDS_PROVINCE' || conflict.code === 'PLATE_FORMAT_INVALID';
+          const e = new Error(conflict.message || 'พบทะเบียนรถนี้ในระบบแล้ว กรุณาตรวจสอบทะเบียนและจังหวัด');
+          e.statusCode = softOrFormat ? 400 : 409;
           e.errors = [{
-            code: 'DUPLICATE_OR_INCOMPLETE_PLATE',
-            candidates: variantList.map((c) => ({ plate_no: c.plate_no, duplicate_type: 'PROVINCE_VARIANT' })),
+            code: conflict.code,
+            vehicle_id: conflict.vehicle_id || null,
+            existing_plate: conflict.display_plate || null,
+            is_deleted: conflict.is_deleted || false,
+            school_id: conflict.school_id || null,
           }];
           throw e;
         }
@@ -1199,10 +1214,18 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
 
     if (rows.length === 0) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
 
-    // Pre-load vehicles for plate lookup
+    // Pre-load vehicles for plate lookup. Phase 10.13A-25B — match by CANONICAL
+    // plate identity (province-alias + spacing/dash insensitive) so a file plate
+    // like "ออ 7332 กรุงเทพมหานคร" resolves to an existing "ออ 7332 กทม".
+    const plateId = require('../utils/plateIdentity');
     const [allVehicles] = await pool.query(`SELECT id, plate_no FROM vehicles WHERE is_deleted = FALSE`);
-    const plateMap = {};
-    for (const v of allVehicles) plateMap[v.plate_no.toLowerCase()] = v.id;
+    const [allVehiclesInclDeleted] = await pool.query(`SELECT id, plate_no, is_deleted FROM vehicles`);
+    const canonOf = (plate) => {
+      const parts = plateId.parseLegacyPlateText(plate);
+      return parts ? plateId.buildCanonicalPlate(parts) : '';
+    };
+    const canonicalMap = {};         // canonical → vehicle id (active only)
+    for (const v of allVehicles) { const c = canonOf(v.plate_no); if (c) canonicalMap[c] = v.id; }
 
     const crypto = require('crypto');
     const results = { success: 0, vehicle_linked: 0, errors: [] };
@@ -1249,12 +1272,19 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
           continue;
         }
 
-        // Resolve vehicle
+        // Resolve vehicle by CANONICAL identity (10.13A-25B) — alias/spacing
+        // insensitive. On a miss, classify the likely reason for the operator
+        // (do NOT auto-create the vehicle).
         let vehicleId = null;
         if (r.plate_no) {
-          vehicleId = plateMap[r.plate_no.toLowerCase()] || null;
+          vehicleId = canonicalMap[canonOf(r.plate_no)] || null;
           if (!vehicleId) {
-            results.errors.push({ row: r.rowNum, message: `ไม่พบรถทะเบียน "${r.plate_no}"` });
+            const cls = plateId.classifyVehiclePlateConflict(r.plate_no, allVehiclesInclDeleted);
+            let why = 'ไม่พบรถทะเบียนนี้ในระบบ (ยังไม่ได้ลงทะเบียนรถ)';
+            if (cls.code === 'AMBIGUOUS_PLATE_NEEDS_PROVINCE') why = 'ทะเบียนรถในไฟล์ไม่มีจังหวัด ทำให้จับคู่ไม่ได้ กรุณาระบุจังหวัด';
+            else if (cls.code === 'SOFT_DELETED_VEHICLE_EXISTS') why = `ทะเบียนรถตรงกับรถที่ถูกปิดใช้งานแล้ว (${cls.display_plate || ''}) กรุณากู้คืนรถก่อน`;
+            else if (cls.code === 'PROVINCE_ALIAS_DUPLICATE') why = `ทะเบียนรถตรงกับรถที่มีอยู่ในระบบ (${cls.display_plate || ''}) แต่ชื่อจังหวัดเขียนต่างกัน`;
+            results.errors.push({ row: r.rowNum, message: `ไม่พบรถทะเบียน "${r.plate_no}" — ${why}` });
             continue;
           }
         }

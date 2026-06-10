@@ -134,8 +134,25 @@ router.put('/users/:id', async (req, res, next) => {
     const userId = parseInt(req.params.id, 10);
     const { display_name, is_active, role, scope_id } = req.body;
 
-    const [[user]] = await pool.query('SELECT id, role, scope_type, scope_id, display_name, is_active FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
+    const [[user]] = await pool.query('SELECT id, username, role, scope_type, scope_id, display_name, is_active, driver_id FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
+
+    // Phase 10.13A-23C — block re-activating a dedupe-disabled / broken driver
+    // account (FALSE → TRUE for role='driver'). Runs BEFORE any write so the
+    // user is never partially updated. Non-drivers and non-reactivations pass.
+    const reactivating = is_active !== undefined && (is_active ? 1 : 0) === 1 && !user.is_active;
+    if (reactivating && user.role === 'driver') {
+      const { detectDriverReactivationBlock } = require('../utils/driverReactivation');
+      const block = await detectDriverReactivationBlock(pool, user);
+      if (block.blocked) {
+        return sendError(
+          res,
+          'ไม่สามารถเปิดใช้งานบัญชีคนขับนี้ได้ เนื่องจากเป็นบัญชีซ้ำหรือเชื่อมโยงกับรถที่ถูกปิดใช้งานแล้ว กรุณาใช้บัญชีหลักที่ถูกต้อง',
+          [{ code: 'DRIVER_REACTIVATION_BLOCKED', reason: block.reason, canonical_user_id: block.canonicalUserId }],
+          409
+        );
+      }
+    }
 
     const updates = [];
     const params = [];

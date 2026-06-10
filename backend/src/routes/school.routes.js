@@ -883,6 +883,9 @@ router.get('/vehicles/check-plate', requireFullSchoolScope, async (req, res, nex
       candidates = [{ plate_no: classification.display_plate, duplicate_type: classification.code }, ...candidates];
     }
     const status = classification.code === 'VALID_NEW_VEHICLE' ? 'CLEAR' : 'DUPLICATE_OR_SIMILAR';
+    // Phase 10.13A-27 — don't reveal WHICH other school owns a conflicting plate
+    // to a school user (the message + display_plate are enough). Admins keep it.
+    if (req.user.role !== 'admin' && classification) { delete classification.school_id; delete classification.school_name; }
     return sendSuccess(res, { status, candidates, classification });
   } catch (err) { return next(err); }
 });
@@ -945,7 +948,7 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
             vehicle_id: conflict.vehicle_id || null,
             existing_plate: conflict.display_plate || null,
             is_deleted: conflict.is_deleted || false,
-            school_id: conflict.school_id || null,
+            school_id: req.user.role === 'admin' ? (conflict.school_id || null) : null,  // 10.13A-27: hide other-school id from school users
           }];
           throw e;
         }

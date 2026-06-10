@@ -145,6 +145,14 @@ router.put('/users/:id', async (req, res, next) => {
       const { detectDriverReactivationBlock } = require('../utils/driverReactivation');
       const block = await detectDriverReactivationBlock(pool, user);
       if (block.blocked) {
+        // Phase 10.13A-27 — audit the blocked attempt so repeated reactivation
+        // tries on a dedupe-disabled driver are traceable.
+        await logAudit({
+          userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: String(userId),
+          oldValue: { is_active: false },
+          newValue: { reactivation_blocked: true, reason: block.reason, canonical_user_id: block.canonicalUserId },
+          ipAddress: req.ip, userAgent: req.headers['user-agent'],
+        });
         return sendError(
           res,
           'ไม่สามารถเปิดใช้งานบัญชีคนขับนี้ได้ เนื่องจากเป็นบัญชีซ้ำหรือเชื่อมโยงกับรถที่ถูกปิดใช้งานแล้ว กรุณาใช้บัญชีหลักที่ถูกต้อง',

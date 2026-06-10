@@ -574,6 +574,17 @@ router.post('/notify-school', async (req, res, next) => {
     const { school_id, school_name, message, method } = req.body;
     if (!school_id) return sendError(res, 'กรุณาระบุ school_id', [], 400);
 
+    // Phase 10.13A-27 — only allow notifying a school within the caller's own
+    // affiliation (admins may notify any). Prevents out-of-scope notifications.
+    if (req.user.role !== 'admin') {
+      const affId = resolveAffiliationId(req);
+      const [[sch]] = await pool.query(
+        'SELECT id FROM schools WHERE id = ? AND affiliation_id = ? AND is_deleted = FALSE',
+        [school_id, affId]
+      );
+      if (!sch) return sendError(res, 'ไม่สามารถแจ้งเตือนโรงเรียนนอกเขตพื้นที่ของท่านได้', [], 403);
+    }
+
     await logAudit({
       userId: req.user.id,
       action: 'CREATE',

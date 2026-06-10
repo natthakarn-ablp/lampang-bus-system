@@ -14,6 +14,7 @@ const { logAudit } = require('../utils/audit');
 const env     = require('../config/env');
 const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
+const { classifyStudentImport } = require('../utils/studentImport');
 const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
@@ -1211,9 +1212,12 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
       await conn.beginTransaction();
 
       for (const r of rows) {
-        // Validate required fields
-        const studentId = parseInt(r.id, 10);
-        if (!studentId || isNaN(studentId)) {
+        // Validate required fields. Phase 10.13A-24B — student identity is now
+        // school-scoped: `student_code` is the VISIBLE code from the file;
+        // students.id is an internal surrogate (auto-increment). Two schools may
+        // legitimately use the same code.
+        const studentCode = String(r.id == null ? '' : r.id).trim();
+        if (!studentCode) {
           results.errors.push({ row: r.rowNum, message: 'รหัสนักเรียนไม่ถูกต้อง' });
           continue;
         }
@@ -1226,10 +1230,15 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
           continue;
         }
 
-        // Check duplicate (including soft-deleted — use INSERT ... ON DUPLICATE for reactivation)
-        const [[existing]] = await conn.query(`SELECT id, is_deleted FROM students WHERE id = ?`, [studentId]);
-        if (existing && !existing.is_deleted) {
-          results.errors.push({ row: r.rowNum, message: `รหัสนักเรียน ${studentId} มีอยู่ในระบบแล้ว` });
+        // Duplicate check scoped to THIS school (10.13A-24B). The same code at a
+        // different school is allowed; only a duplicate within the same school is
+        // blocked. Soft-deleted matches in this school are reactivated below.
+        const [[existing]] = await conn.query(
+          `SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1`,
+          [schoolId, studentCode]
+        );
+        if (classifyStudentImport(existing) === 'SKIP') {
+          results.errors.push({ row: r.rowNum, message: `รหัสนักเรียน ${studentCode} มีอยู่แล้วในโรงเรียนนี้` });
           continue;
         }
 
@@ -1256,31 +1265,44 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
         const morningEnabled = (r.morning || '').toUpperCase() === 'N' ? 0 : 1;
         const eveningEnabled = (r.evening || '').toUpperCase() === 'N' ? 0 : 1;
 
-        // Insert or reactivate student
+        // Insert or reactivate student. `effectiveStudentId` is the internal
+        // students.id used for the parent link below (existing id on reactivate,
+        // new surrogate id on insert).
+        let effectiveStudentId;
         try {
           if (existing && existing.is_deleted) {
-            // Reactivate soft-deleted student with new data
+            // Reactivate the soft-deleted student in THIS school with new data.
             await conn.query(
               `UPDATE students SET cid_hash = ?, prefix = ?, first_name = ?, last_name = ?,
-               grade = ?, classroom = ?, school_id = ?, vehicle_id = ?,
+               grade = ?, classroom = ?, vehicle_id = ?,
                morning_enabled = ?, evening_enabled = ?, term_id = ?,
                is_deleted = FALSE, deleted_at = NULL
                WHERE id = ?`,
               [cidHash, r.prefix || null, r.first_name, r.last_name,
-               r.grade || null, r.classroom || null, schoolId, vehicleId,
-               morningEnabled, eveningEnabled, env.app.currentTerm, studentId]
+               r.grade || null, r.classroom || null, vehicleId,
+               morningEnabled, eveningEnabled, env.app.currentTerm, existing.id]
             );
+            effectiveStudentId = existing.id;
           } else {
+            // New student: surrogate id = MAX(id)+1 (10.13A-24B fallback — id is
+            // an FK-referenced PK so it can't be AUTO_INCREMENT). Computed inside
+            // this transaction, so successive inserts in the same import advance
+            // correctly. student_code keeps the visible code so the same code can
+            // exist at another school. A rare concurrent-import PK clash is caught
+            // by the surrounding try/catch and reported as a row error.
+            const [[nextId]] = await conn.query(`SELECT COALESCE(MAX(id), 0) + 1 AS nid FROM students`);
+            const newStudentId = nextId.nid;
             await conn.query(
-              `INSERT INTO students (id, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-              [studentId, cidHash, r.prefix || null, r.first_name, r.last_name,
+              `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [newStudentId, studentCode, cidHash, r.prefix || null, r.first_name, r.last_name,
                r.grade || null, r.classroom || null, schoolId, vehicleId,
                morningEnabled, eveningEnabled, env.app.currentTerm]
             );
+            effectiveStudentId = newStudentId;
           }
         } catch (insertErr) {
-          results.errors.push({ row: r.rowNum, message: `บันทึกรหัส ${studentId} ไม่สำเร็จ: ${insertErr.code || insertErr.message}` });
+          results.errors.push({ row: r.rowNum, message: `บันทึกรหัส ${studentCode} ไม่สำเร็จ: ${insertErr.code || insertErr.message}` });
           continue;
         }
 
@@ -1303,7 +1325,7 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
           await conn.query(
             `INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW())
              ON DUPLICATE KEY UPDATE approved = TRUE`,
-            [parentId, studentId, req.user.id]
+            [parentId, effectiveStudentId, req.user.id]
           );
         }
 

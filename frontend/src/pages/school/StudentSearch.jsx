@@ -255,7 +255,7 @@ export default function StudentSearch() {
               <tbody className="divide-y divide-surface-border">
                 {students.map((s) => (
                   <tr key={s.id} className="hover:bg-surface transition">
-                    <td className="px-4 py-3 text-gray-600">{s.id}</td>
+                    <td className="px-4 py-3 text-gray-600">{s.student_code ?? s.id}</td>
                     <td className="px-4 py-3 text-gray-800">{s.prefix}{s.first_name} {s.last_name}</td>
                     <td className="px-4 py-3 text-gray-600">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-center">
@@ -300,7 +300,7 @@ export default function StudentSearch() {
                     <p className="text-sm text-gray-500">
                       {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
                       <span className="text-gray-300"> · </span>
-                      <span className="text-gray-400">รหัส {s.id}</span>
+                      <span className="text-gray-400">รหัส {s.student_code ?? s.id}</span>
                     </p>
                   </div>
                   {!isTeacher && (
@@ -409,7 +409,7 @@ export default function StudentSearch() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeEdit}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-800 mb-1">แก้ไขข้อมูลนักเรียน</h2>
-            <p className="text-sm text-gray-400 mb-5">รหัส: {editStudent.id}</p>
+            <p className="text-sm text-gray-400 mb-5">รหัส: {editStudent.student_code ?? editStudent.id}</p>
 
             {/* Section 1: ข้อมูลนักเรียน */}
             <fieldset className="space-y-3 mb-6">

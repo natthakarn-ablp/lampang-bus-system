@@ -180,9 +180,9 @@ async function getStudents(schoolId, { search, grade, vehicle_id, morning_enable
   const params = [schoolId];
 
   if (search) {
-    where += ' AND (s.first_name LIKE ? OR s.last_name LIKE ? OR CAST(s.id AS CHAR) LIKE ?)';
+    where += ' AND (s.first_name LIKE ? OR s.last_name LIKE ? OR s.student_code LIKE ? OR CAST(s.id AS CHAR) LIKE ?)';
     const like = `%${search}%`;
-    params.push(like, like, like);
+    params.push(like, like, like, like);
   }
   // Phase 7.11.3 — teacher accounts (gradeFilter set) hard-pin to
   // their own grade. The client `grade` query param is ignored when
@@ -214,7 +214,7 @@ async function getStudents(schoolId, { search, grade, vehicle_id, morning_enable
   // Data
   const offset = (page - 1) * per_page;
   const [students] = await pool.query(
-    `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+    `SELECT s.id, s.student_code, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled,
             s.dropoff_address,
             p.name AS parent_name, p.phone AS parent_phone

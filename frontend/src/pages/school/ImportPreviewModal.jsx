@@ -83,6 +83,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   // Phase 10.13B-4 — explicit per-row selection for the two confirmed modes.
   const [selGuardian, setSelGuardian] = useState(() => new Set());
   const [selReactivate, setSelReactivate] = useState(() => new Set());
+  const [requestedVehicle, setRequestedVehicle] = useState(() => new Set());   // 10.13B-7 restore-requested rows
 
   const TERMINAL = ['APPLIED', 'ALREADY_APPLIED', 'GUARDIAN_UPDATED', 'REACTIVATED'];
   const canApplyCount = useMemo(() => (rows || []).filter((r) => r.can_apply && !TERMINAL.includes(r.status)).length, [rows]);
@@ -101,7 +102,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   function reset() {
     setFile(null); setBusy(false); setError(''); setBatchId(null);
     setSummary(null); setRows(null); setFilter('all'); setConfirming(false); setApplyResult(null);
-    setSelGuardian(new Set()); setSelReactivate(new Set());
+    setSelGuardian(new Set()); setSelReactivate(new Set()); setRequestedVehicle(new Set());
   }
   function close() { reset(); onClose(); }
 
@@ -155,6 +156,21 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
       if (status === 403) setError('ไม่สามารถเข้าถึงชุดนำเข้านี้ได้');
       else setError(err.response?.data?.message || 'นำเข้าข้อมูลไม่สำเร็จ — รายการพรีวิวยังอยู่ กรุณาลองใหม่');
     } finally { setBusy(false); }
+  }
+
+  // Phase 10.13B-7 — from a VEHICLE_SOFT_DELETED row, request a vehicle restore
+  // (admin-approved). Never auto-restores.
+  async function requestVehicleRestore(r) {
+    try {
+      await api.post('/school/vehicles/requests', {
+        request_type: 'RESTORE_SOFT_DELETED_VEHICLE',
+        input_plate: r.input_vehicle_plate,
+        import_batch_id: batchId, import_row_id: r.row_number,
+        reason: `จากการนำเข้า ชุด #${batchId} แถว ${r.row_number}`,
+      });
+      setRequestedVehicle((p) => new Set(p).add(r.row_number));
+      toast.success('ส่งคำขอกู้คืนรถแล้ว · รอผู้ดูแลระบบตรวจสอบ');
+    } catch (err) { toast.error(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ'); }
   }
 
   function downloadReport() {
@@ -291,6 +307,13 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
                                 </div>
                               )}
                               {r.action_required && !TERMINAL.includes(r.status) && <div className="text-xs text-amber-600 mt-0.5">ต้องทำ: {r.action_required}</div>}
+                              {/* 10.13B-7 — next actions for vehicle blockers */}
+                              {r.classification === 'VEHICLE_SOFT_DELETED' && (
+                                requestedVehicle.has(r.row_number)
+                                  ? <div className="text-xs text-emerald-600 mt-1">ส่งคำขอกู้คืนรถแล้ว</div>
+                                  : <button onClick={() => requestVehicleRestore(r)} className="text-xs text-blue-600 hover:text-blue-800 underline mt-1">ขอกู้คืนรถ</button>
+                              )}
+                              {r.classification === 'VEHICLE_NOT_FOUND' && <div className="text-xs text-gray-400 mt-1">เพิ่มรถได้ที่เมนู “จัดการรถ” แล้วตรวจสอบไฟล์อีกครั้ง</div>}
                             </td>
                           </tr>
                         );

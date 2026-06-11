@@ -1552,6 +1552,39 @@ router.post('/students/:studentId/transfer-request', requireFullSchoolScope, asy
   } catch (err) { next(err); }
 });
 
+// ─── Phase 10.13B-7 — Vehicle restore / shared-fleet request ────────────────
+// A request changes NO vehicle data; restore happens only on admin approval.
+router.get('/vehicles/requests', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    return sendSuccess(res, await vr.listSchoolVehicleRequests(pool, { schoolId: resolveSchoolId(req) }));
+  } catch (err) { next(err); }
+});
+router.get('/vehicles/requests/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    return sendSuccess(res, await vr.getSchoolVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req) }));
+  } catch (err) { next(err); }
+});
+router.post('/vehicles/requests/:id/cancel', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    return sendSuccess(res, await vr.cancelVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req), userId: req.user.id }), 'ยกเลิกคำขอแล้ว');
+  } catch (err) { next(err); }
+});
+router.post('/vehicles/requests', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    const b = req.body || {};
+    const out = await vr.createVehicleRequest(pool, {
+      schoolId: resolveSchoolId(req), userId: req.user.id, requestType: b.request_type, vehicleId: b.vehicle_id,
+      platePrefix: b.plate_prefix, plateNumber: b.plate_number, province: b.province, inputPlate: b.input_plate,
+      reason: b.reason, importBatchId: b.import_batch_id, importRowId: b.import_row_id,
+    });
+    return sendSuccess(res, out, 'ส่งคำขอแล้ว · รอผู้ดูแลระบบตรวจสอบ', null, 201);
+  } catch (err) { next(err); }
+});
+
 // ─── Phase 7.2 — GET /api/school/live-vehicles ──────────────────────────────
 // Vehicles serving this school. No audit (single-scope, not aggregate).
 router.get('/live-vehicles', async (req, res, next) => {

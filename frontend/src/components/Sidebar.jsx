@@ -117,6 +117,7 @@ const ADMIN_NAV = [
   { to: '/admin/pickup-points',   icon: Map,         label: 'ตรวจสอบจุดรับส่ง' },
   { to: '/admin/live-vehicles',   icon: ShieldAlert, label: 'ตรวจสอบตำแหน่งรถ' },
   { to: '/admin/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },
+  { to: '/admin/vehicle-requests', icon: Wrench,     label: 'คำขอเกี่ยวกับรถ' },
   { to: '/admin/audit-logs',      icon: FileText,    label: 'ประวัติการใช้งาน' },
   { to: '/admin/system-health',   icon: Activity,    label: 'สุขภาพระบบ' },
   { section: 'มุมมองจังหวัด' },

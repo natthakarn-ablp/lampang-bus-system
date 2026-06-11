@@ -1222,4 +1222,39 @@ router.post('/student-transfer-requests/:id/reject', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Phase 10.13B-7 — Vehicle restore / shared-fleet approval queue ──────────
+router.get('/vehicle-requests', async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    return sendSuccess(res, await vr.listAdminVehicleRequests(pool, { status: req.query.status }));
+  } catch (err) { next(err); }
+});
+router.get('/vehicle-requests/:id', async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    return sendSuccess(res, await vr.getAdminVehicleRequest(pool, { requestId: parseInt(req.params.id, 10) }));
+  } catch (err) { next(err); }
+});
+router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    const out = await vr.approveVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(req.params.id),
+      newValue: { result: out.status, vehicle_id: out.vehicle_id || null }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    const msg = out.status === 'APPLIED' ? (out.informational ? 'อนุมัติคำขอแล้ว' : 'อนุมัติและกู้คืนรถสำเร็จ')
+      : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
+      : out.status === 'FAILED' && out.reason === 'ACTIVE_CANONICAL_CONFLICT' ? 'ไม่สามารถกู้คืนรถได้ เนื่องจากมีรถทะเบียนเดียวกันที่ใช้งานอยู่แล้ว'
+      : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้' : 'ดำเนินการแล้ว';
+    return sendSuccess(res, out, msg);
+  } catch (err) { next(err); }
+});
+router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    const out = await vr.rejectVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(req.params.id), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

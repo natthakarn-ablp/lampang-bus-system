@@ -1257,4 +1257,57 @@ router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Phase 10.13B-8 — Driver lifecycle & assignment wizard (admin-only) ──────
+router.get('/driver-integrity', async (req, res, next) => {
+  try {
+    const dl = require('../services/driverLifecycle.service');
+    return sendSuccess(res, await dl.getDriverIntegrity(pool));
+  } catch (err) { next(err); }
+});
+router.post('/drivers/preflight', async (req, res, next) => {
+  try {
+    const dl = require('../services/driverLifecycle.service');
+    const { action, payload } = req.body || {};
+    return sendSuccess(res, await dl.preflightDriverAction(pool, { action, payload: payload || {} }));
+  } catch (err) { next(err); }
+});
+router.post('/drivers/:userId/restore', async (req, res, next) => {
+  try {
+    const reason = (req.body || {}).reason;
+    if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
+    const dl = require('../services/driverLifecycle.service');
+    const out = await dl.restoreDriver(pool, { userId: parseInt(req.params.userId, 10), reason, actorId: req.user.id });
+    return sendSuccess(res, out, out.status === 'RESTORED' ? 'กู้คืนบัญชีคนขับสำเร็จ' : 'บัญชีนี้ใช้งานอยู่แล้ว');
+  } catch (err) { next(err); }
+});
+router.post('/drivers/:userId/deactivate', async (req, res, next) => {
+  try {
+    const reason = (req.body || {}).reason;
+    if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
+    const dl = require('../services/driverLifecycle.service');
+    const out = await dl.deactivateDriver(pool, { userId: parseInt(req.params.userId, 10), reason, actorId: req.user.id });
+    return sendSuccess(res, out, out.status === 'DEACTIVATED' ? 'ปิดใช้งานบัญชีคนขับแล้ว' : 'บัญชีนี้ถูกปิดใช้งานอยู่แล้ว');
+  } catch (err) { next(err); }
+});
+router.post('/drivers/:userId/reassign-vehicle', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.vehicle_id) return sendError(res, 'กรุณาระบุรถปลายทาง', [], 400);
+    if (!String(b.reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
+    const dl = require('../services/driverLifecycle.service');
+    const out = await dl.reassignDriverVehicle(pool, { userId: parseInt(req.params.userId, 10), vehicleId: b.vehicle_id, endTargetExisting: !!b.end_target_existing, reason: b.reason, actorId: req.user.id });
+    const msg = out.status === 'REASSIGNED' ? 'ย้ายคนขับไปยังรถใหม่สำเร็จ'
+      : out.status === 'TARGET_VEHICLE_HAS_ACTIVE_DRIVER' ? 'รถคันนี้มีคนขับที่ใช้งานอยู่แล้ว กรุณายืนยันการสิ้นสุดงานเดิม'
+      : out.status === 'DRIVER_ALREADY_ASSIGNED' ? 'คนขับนี้อยู่กับรถคันนี้อยู่แล้ว' : 'ดำเนินการแล้ว';
+    return sendSuccess(res, out, msg);
+  } catch (err) { next(err); }
+});
+router.post('/driver-assignments/:assignmentId/end', async (req, res, next) => {
+  try {
+    const dl = require('../services/driverLifecycle.service');
+    const out = await dl.endAssignment(pool, { assignmentId: parseInt(req.params.assignmentId, 10), reason: (req.body || {}).reason, actorId: req.user.id });
+    return sendSuccess(res, out, out.status === 'ENDED' ? 'สิ้นสุดงานมอบหมายแล้ว' : 'งานนี้สิ้นสุดไปแล้ว');
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

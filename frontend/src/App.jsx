@@ -84,6 +84,7 @@ const TransportPickupMap   = lazy(() => import('./pages/transport/TransportPicku
 const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
 const StudentTransferRequests = lazy(() => import('./pages/admin/StudentTransferRequests'));
 const VehicleRequests      = lazy(() => import('./pages/admin/VehicleRequests'));
+const DriverIntegrity      = lazy(() => import('./pages/admin/DriverIntegrity'));
 const AdminAuditLog        = lazy(() => import('./pages/admin/AdminAuditLog'));
 const AdminPickupPointManagement = lazy(() => import('./pages/admin/AdminPickupPointManagement'));
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -299,6 +300,11 @@ export default function App() {
           <Route path="/admin/vehicle-requests" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><VehicleRequests /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/driver-integrity" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><DriverIntegrity /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/pickup-points" element={

@@ -1402,6 +1402,28 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
   } catch (err) { next(err); }
 });
 
+// ─── Phase 10.13B-5 — Import History / Correction Center ────────────────────
+// GET /students/import/batches — school-scoped list of past imports. Registered
+// BEFORE the /:batchId routes so 'batches' is not captured as a batch id.
+router.get('/students/import/batches', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    const importPreview = require('../services/studentImportPreview.service');
+    const out = await importPreview.listBatches(pool, { schoolId, page: parseInt(req.query.page, 10) || 1, perPage: parseInt(req.query.per_page, 10) || 30 });
+    return sendSuccess(res, out.batches, 'OK', out.meta);
+  } catch (err) { next(err); }
+});
+
+// GET /students/import/:batchId — batch detail + row-level results (reopenable).
+router.get('/students/import/:batchId', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    const importPreview = require('../services/studentImportPreview.service');
+    const out = await importPreview.getBatchDetail(pool, { batchId: parseInt(req.params.batchId, 10), schoolId });
+    return sendSuccess(res, out);
+  } catch (err) { next(err); }
+});
+
 // ─── Phase 10.13A-26A — Import Preview / Apply / Report ─────────────────────
 // Transparent, re-checkable, auditable imports. The legacy POST /students/import
 // above is untouched. Preview RETAINS the uploaded file (no fs.unlink).
@@ -1469,6 +1491,32 @@ router.get('/students/import/:batchId/report', requireFullSchoolScope, async (re
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.getReport(pool, { batchId, schoolId });
     return sendSuccess(res, out);
+  } catch (err) { next(err); }
+});
+
+// POST /students/import/:batchId/rollback — soft-delete ONLY the students this
+// batch inserted (Phase 10.13B-5). Selected rows only; idempotent; audited.
+router.post('/students/import/:batchId/rollback', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    const batchId = parseInt(req.params.batchId, 10);
+    const { selected_row_ids, reason } = req.body || {};
+    const importPreview = require('../services/studentImportPreview.service');
+    const out = await importPreview.rollbackBatch(pool, {
+      batchId, schoolId, userId: req.user.id,
+      selectedRowIds: Array.isArray(selected_row_ids) ? selected_row_ids : [], reason,
+    });
+    await logAudit({
+      userId: req.user.id, action: 'DELETE', entityType: 'import_batch', entityId: String(batchId),
+      newValue: { phase: 'rollback', school_id: schoolId, reason: String(reason || '').slice(0, 200), ...out, details: undefined },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    const parts = [];
+    if (out.rolled_back) parts.push(`ย้อนกลับ ${out.rolled_back}`);
+    if (out.already_rolled_back) parts.push(`ย้อนกลับแล้ว ${out.already_rolled_back}`);
+    if (out.skipped) parts.push(`ข้าม ${out.skipped}`);
+    if (out.failed) parts.push(`ไม่สำเร็จ ${out.failed}`);
+    return sendSuccess(res, out, parts.length ? 'ย้อนกลับสำเร็จ · ' + parts.join(' · ') : 'ไม่มีรายการที่ย้อนกลับได้');
   } catch (err) { next(err); }
 });
 

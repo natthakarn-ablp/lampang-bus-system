@@ -96,6 +96,7 @@ async function analyzeRows(db, schoolId, rows) {
   };
 
   const results = [];
+  const seenInFile = new Map();   // 10.13B-5 Part F — first row_no per student_code in this file
   for (const row of rows) {
     const code = String(row.student_code || '').trim();
     let existing = null;
@@ -114,6 +115,19 @@ async function analyzeRows(db, schoolId, rows) {
     const vehicle = matchVehicle(row.plate_no);
     const r = classifyImportRow({ row, schoolId, existing, crossSchool, vehicle });
     r.existing_student_id = existing ? existing.id : null;
+    // Phase 10.13B-5 Part F — a student_code repeated within the same file: the
+    // 2nd+ occurrence is flagged so it cannot silently double-import.
+    if (code && seenInFile.has(code)) {
+      r.classification = 'DUPLICATE_ROW_IN_FILE';
+      r.status = 'ERROR';
+      r.can_apply = false;
+      r.can_confirm_guardian_update = false;
+      r.can_confirm_reactivate = false;
+      r.message_th = `พบรหัสนักเรียนซ้ำในไฟล์เดียวกัน (แถวแรกคือแถวที่ ${seenInFile.get(code)}) กรุณาตรวจสอบก่อนนำเข้า`;
+      r.action_required = 'แก้ไขรหัสซ้ำในไฟล์';
+    } else if (code) {
+      seenInFile.set(code, row.rowNum);
+    }
     r._normalized = row;   // full normalized row for apply (server-side only)
     results.push(r);
   }
@@ -355,4 +369,121 @@ async function getReport(pool, { batchId, schoolId }) {
   };
 }
 
-module.exports = { parseImportFile, analyzeRows, runPreview, applyBatch, getReport, classifyImportRow, maskPhone };
+// ── Import history (Phase 10.13B-5) ──────────────────────────────────────────
+async function listBatches(pool, { schoolId, page = 1, perPage = 30 }) {
+  const limit = Math.min(100, Math.max(1, perPage));
+  const offset = (Math.max(1, page) - 1) * limit;
+  const [[{ total }]] = await pool.query('SELECT COUNT(*) AS total FROM import_batches WHERE school_id = ?', [schoolId]);
+  const [rows] = await pool.query(
+    `SELECT b.id AS batch_id, b.filename, b.status, b.mode, b.total_rows, b.success_rows,
+            b.insert_count, b.update_count, b.skip_count, b.error_rows, b.rollback_status,
+            b.created_at, b.applied_at, b.expires_at,
+            (SELECT COUNT(*) FROM import_batch_rows r WHERE r.batch_id = b.id AND r.applied_at IS NULL AND r.can_apply = TRUE) AS pending_ready,
+            (SELECT COUNT(*) FROM import_batch_rows r WHERE r.batch_id = b.id AND r.status = 'APPLIED' AND r.rollback_status IS NULL) AS rollbackable
+     FROM import_batches b WHERE b.school_id = ? ORDER BY b.id DESC LIMIT ? OFFSET ?`,
+    [schoolId, limit, offset]
+  );
+  return {
+    batches: rows.map((b) => ({
+      batch_id: b.batch_id, filename: b.filename, status: b.status, mode: b.mode,
+      total_rows: b.total_rows, insert_count: b.insert_count, update_count: b.update_count,
+      skip_count: b.skip_count, error_count: b.error_rows, rollback_status: b.rollback_status,
+      created_at: b.created_at, applied_at: b.applied_at, expires_at: b.expires_at,
+      can_continue_apply: b.pending_ready > 0, can_download_report: true, can_rollback: b.rollbackable > 0,
+    })),
+    meta: { page: Math.max(1, page), per_page: limit, total },
+  };
+}
+
+// Batch detail = metadata + row-level results (no phone, no raw file path).
+async function getBatchDetail(pool, { batchId, schoolId }) {
+  const [[batch]] = await pool.query(
+    'SELECT id, school_id, filename, status, mode, total_rows, insert_count, update_count, skip_count, error_rows, rollback_status, created_at, applied_at, expires_at FROM import_batches WHERE id = ?',
+    [batchId]
+  );
+  if (!batch) { const e = new Error('ไม่พบชุดข้อมูลนำเข้า'); e.statusCode = 404; throw e; }
+  if (String(batch.school_id) !== String(schoolId)) { const e = new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลนี้'); e.statusCode = 403; throw e; }
+  const [rows] = await pool.query(
+    `SELECT row_no, student_code, classification, status, rollback_status, message_th, matched_display_plate, matched_vehicle_id,
+            (guardian_diff_json IS NOT NULL) AS guardian_mismatch, (new_student_id IS NOT NULL) AS has_new_student, can_apply, applied_at,
+            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.student_name')) AS student_name,
+            JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.plate')) AS input_vehicle_plate,
+            JSON_UNQUOTE(JSON_EXTRACT(guardian_diff_json, '$.current')) AS guardian_current,
+            JSON_UNQUOTE(JSON_EXTRACT(guardian_diff_json, '$.input')) AS guardian_input
+     FROM import_batch_rows WHERE batch_id = ? ORDER BY row_no`, [batchId]);
+  const summary = { total: rows.length, ready: 0, warning: 0, skip: 0, error: 0, applied: 0, rolled_back: 0 };
+  const out = rows.map((r) => {
+    if (['APPLIED', 'GUARDIAN_UPDATED', 'REACTIVATED', 'ALREADY_APPLIED'].includes(r.status)) summary.applied++;
+    if (r.rollback_status === 'ROLLED_BACK') summary.rolled_back++;
+    if (r.status === 'ERROR' || r.status === 'APPLY_FAILED') summary.error++;
+    else if (r.status === 'WARNING') summary.warning++;
+    else if (r.status === 'SKIP') summary.skip++;
+    else if (r.can_apply && !r.applied_at) summary.ready++;
+    return {
+      row_number: r.row_no, student_code: r.student_code, student_name: r.student_name,
+      classification: r.classification, status: r.status, rollback_status: r.rollback_status,
+      message_th: r.message_th, input_vehicle_plate: r.input_vehicle_plate, matched_display_plate: r.matched_display_plate,
+      guardian_mismatch: !!r.guardian_mismatch, guardian_current: r.guardian_current, guardian_input: r.guardian_input,
+      can_apply: !!r.can_apply && !r.applied_at,
+      can_confirm_guardian_update: r.classification === 'GUARDIAN_MISMATCH' && !r.applied_at,
+      can_confirm_reactivate: r.classification === 'SOFT_DELETED_SAME_SCHOOL_REACTIVATE' && !r.applied_at,
+      can_rollback: r.status === 'APPLIED' && !r.rollback_status && !!r.has_new_student,
+    };
+  });
+  return {
+    batch: { id: batch.id, filename: batch.filename, status: batch.status, mode: batch.mode, total_rows: batch.total_rows,
+      insert_count: batch.insert_count, update_count: batch.update_count, skip_count: batch.skip_count, error_count: batch.error_rows,
+      rollback_status: batch.rollback_status, created_at: batch.created_at, applied_at: batch.applied_at, expires_at: batch.expires_at },
+    summary, rows: out,
+  };
+}
+
+// ── Rollback: soft-delete ONLY students inserted by this batch. ──────────────
+async function rollbackRow(pool, { row, schoolId, userId, batchId, reason, r }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (row.rollback_status === 'ROLLED_BACK') { await conn.commit(); r.already_rolled_back++; r.details.push({ row: row.row_no, status: 'ALREADY_ROLLED_BACK' }); return; }
+    if (row.status !== 'APPLIED' || !row.new_student_id) {  // only batch-inserted rows; never guardian/reactivate
+      await conn.query("UPDATE import_batch_rows SET rollback_status='NOT_ELIGIBLE_FOR_ROLLBACK' WHERE id=?", [row.id]);
+      await conn.commit(); r.skipped++; r.details.push({ row: row.row_no, status: 'NOT_ELIGIBLE_FOR_ROLLBACK' }); return;
+    }
+    const [[st]] = await conn.query('SELECT id, school_id, student_code, is_deleted, cid_hash FROM students WHERE id = ? FOR UPDATE', [row.new_student_id]);
+    if (!st) { await conn.query("UPDATE import_batch_rows SET rollback_status='STALE_NEEDS_REVIEW' WHERE id=?", [row.id]); await conn.commit(); r.skipped++; r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REVIEW' }); return; }
+    if (st.is_deleted) { await conn.query("UPDATE import_batch_rows SET rollback_status='ROLLED_BACK', rolled_back_at=NOW() WHERE id=?", [row.id]); await conn.commit(); r.already_rolled_back++; r.details.push({ row: row.row_no, status: 'ALREADY_ROLLED_BACK' }); return; }
+    // Guards: same school + code, and identity created by THIS import (cid match).
+    const expectedCid = crypto.createHash('sha256').update(`import-${schoolId}-${row.student_code}`).digest('hex');
+    if (String(st.school_id) !== String(schoolId) || String(st.student_code) !== String(row.student_code)) {
+      await conn.query("UPDATE import_batch_rows SET rollback_status='NOT_ELIGIBLE_FOR_ROLLBACK' WHERE id=?", [row.id]); await conn.commit(); r.skipped++; r.details.push({ row: row.row_no, status: 'NOT_ELIGIBLE_FOR_ROLLBACK' }); return;
+    }
+    if (st.cid_hash !== expectedCid) {  // student was replaced/created by another means → unsafe
+      await conn.query("UPDATE import_batch_rows SET rollback_status='NOT_SAFE_TO_ROLLBACK' WHERE id=?", [row.id]); await conn.commit(); r.skipped++; r.details.push({ row: row.row_no, status: 'NOT_SAFE_TO_ROLLBACK' }); return;
+    }
+    await conn.query('UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL WHERE id = ? AND is_deleted = FALSE', [st.id]);
+    await logAudit({ userId, action: 'DELETE', entityType: 'student', entityId: String(st.id), conn,
+      oldValue: { is_deleted: false }, newValue: { is_deleted: true, rollback: true, batch_id: batchId, row_no: row.row_no, reason: String(reason || '').slice(0, 200) } });
+    await conn.query("UPDATE import_batch_rows SET rollback_status='ROLLED_BACK', rolled_back_at=NOW() WHERE id=?", [row.id]);
+    await conn.commit(); r.rolled_back++; r.details.push({ row: row.row_no, status: 'ROLLED_BACK', student_id: st.id });
+  } catch (e) {
+    await conn.rollback();
+    await pool.query("UPDATE import_batch_rows SET rollback_status='ROLLBACK_FAILED', rollback_error=? WHERE id=?", [String(e.code || e.message).slice(0, 500), row.id]);
+    r.failed++; r.details.push({ row: row.row_no, status: 'ROLLBACK_FAILED' });
+  } finally { conn.release(); }
+}
+
+async function rollbackBatch(pool, { batchId, schoolId, userId, selectedRowIds = [], reason = '' }) {
+  const [[batch]] = await pool.query('SELECT id, school_id FROM import_batches WHERE id = ?', [batchId]);
+  if (!batch) { const e = new Error('ไม่พบชุดข้อมูลนำเข้า'); e.statusCode = 404; throw e; }
+  if (String(batch.school_id) !== String(schoolId)) { const e = new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลนี้'); e.statusCode = 403; throw e; }
+  const sel = new Set((Array.isArray(selectedRowIds) ? selectedRowIds : []).map(Number));
+  if (sel.size === 0) { const e = new Error('กรุณาเลือกรายการที่ต้องการย้อนกลับ'); e.statusCode = 400; throw e; }
+  const [rows] = await pool.query(
+    "SELECT id, row_no, status, rollback_status, new_student_id, student_code FROM import_batch_rows WHERE batch_id = ? ORDER BY row_no", [batchId]);
+  const r = { rolled_back: 0, already_rolled_back: 0, skipped: 0, failed: 0, details: [] };
+  for (const row of rows) if (sel.has(Number(row.row_no))) await rollbackRow(pool, { row, schoolId, userId, batchId, reason, r });
+  const anyActive = (await pool.query("SELECT COUNT(*) n FROM import_batch_rows WHERE batch_id=? AND status='APPLIED' AND rollback_status IS NULL", [batchId]))[0][0].n;
+  await pool.query('UPDATE import_batches SET rollback_status = ?, rolled_back_at = NOW() WHERE id = ?', [anyActive > 0 ? 'ROLLED_BACK_PARTIAL' : 'ROLLED_BACK', batchId]);
+  return r;
+}
+
+module.exports = { parseImportFile, analyzeRows, runPreview, applyBatch, getReport, listBatches, getBatchDetail, rollbackBatch, classifyImportRow, maskPhone };

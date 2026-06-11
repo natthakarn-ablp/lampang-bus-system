@@ -8,6 +8,7 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import ImportPreviewModal from './ImportPreviewModal';
+import ImportHistoryModal from './ImportHistoryModal';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
 
@@ -37,6 +38,7 @@ export default function StudentSearch() {
   // Import state
   const [showImport, setShowImport] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -206,6 +208,10 @@ export default function StudentSearch() {
               className="text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-3 py-2 rounded-lg transition">
               นำเข้าข้อมูล
             </button>
+            <button onClick={() => setShowHistory(true)}
+              className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">
+              ประวัติการนำเข้า
+            </button>
             <button onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }}
               className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2 transition" title="นำเข้าแบบเดิม (สำรอง)">
               แบบเดิม
@@ -358,6 +364,9 @@ export default function StudentSearch() {
 
       {/* ── Import Preview (primary, Phase 10.13A-26B) ── */}
       <ImportPreviewModal open={showPreview} onClose={() => setShowPreview(false)} onApplied={() => fetchStudents(1)} />
+
+      {/* ── Import History & Correction Center (Phase 10.13B-5) ── */}
+      <ImportHistoryModal open={showHistory} onClose={() => setShowHistory(false)} onChanged={() => fetchStudents(1)} />
 
       {/* ── Import Modal (legacy fallback) ── */}
       {showImport && (

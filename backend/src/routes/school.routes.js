@@ -952,9 +952,12 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
           }];
           throw e;
         }
+        // Phase 10.13B-3 — store canonical_plate so the DB unique
+        // (uq_vehicles_active_canonical) enforces alias-aware identity.
+        const { canonicalPlateForStorage } = require('../utils/plateIdentity');
         await conn.query(
-          `INSERT INTO vehicles (id, plate_no, normalized_plate, vehicle_type) VALUES (?, ?, ?, ?)`,
-          [vehicleId, trimmedPlate, normalizedPlate, vehicle_type || 'รถตู้']
+          `INSERT INTO vehicles (id, plate_no, normalized_plate, canonical_plate, vehicle_type) VALUES (?, ?, ?, ?, ?)`,
+          [vehicleId, trimmedPlate, normalizedPlate, canonicalPlateForStorage(trimmedPlate), vehicle_type || 'รถตู้']
         );
       }
 
@@ -997,6 +1000,14 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
         null, 201);
     } catch (err) {
       await conn.rollback();
+      // Phase 10.13B-3 — a concurrent add that raced past the code-level guard
+      // hits the DB unique; map it to the same clear Thai duplicate message.
+      if (err && err.code === 'ER_DUP_ENTRY' && /uq_vehicles_active_canonical/.test(err.sqlMessage || err.message || '')) {
+        const e = new Error('ทะเบียนรถนี้มีอยู่ในระบบแล้ว กรุณาตรวจสอบรถเดิมก่อนเพิ่มใหม่');
+        e.statusCode = 409;
+        e.errors = [{ code: 'DUPLICATE_ACTIVE_VEHICLE' }];
+        throw e;
+      }
       throw err;
     } finally {
       conn.release();

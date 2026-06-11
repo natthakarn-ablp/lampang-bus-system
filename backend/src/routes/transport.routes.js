@@ -92,10 +92,19 @@ router.post('/vehicles', async (req, res, next) => {
     }
 
     const id = generateVehicleId(trimmed);
-    await pool.query(
-      'INSERT INTO vehicles (id, plate_no, normalized_plate, vehicle_type) VALUES (?, ?, ?, ?)',
-      [id, trimmed, normalized, vehicle_type || null]
-    );
+    const { canonicalPlateForStorage } = require('../utils/plateIdentity');
+    try {
+      await pool.query(
+        'INSERT INTO vehicles (id, plate_no, normalized_plate, canonical_plate, vehicle_type) VALUES (?, ?, ?, ?, ?)',
+        [id, trimmed, normalized, canonicalPlateForStorage(trimmed), vehicle_type || null]
+      );
+    } catch (err) {
+      // Phase 10.13B-3 — DB unique race backstop → clear Thai duplicate message.
+      if (err && err.code === 'ER_DUP_ENTRY' && /uq_vehicles_active_canonical/.test(err.sqlMessage || err.message || '')) {
+        return sendError(res, 'ทะเบียนรถนี้มีอยู่ในระบบแล้ว กรุณาตรวจสอบรถเดิมก่อนเพิ่มใหม่', [{ code: 'DUPLICATE_ACTIVE_VEHICLE' }], 409);
+      }
+      throw err;
+    }
 
     await logAudit({
       userId: req.user.id, action: 'CREATE', entityType: 'vehicle', entityId: id,

@@ -153,6 +153,18 @@ function classifyVehiclePlateConflict(input, existingVehicles = [], opts = {}) {
   return conflict('VALID_NEW_VEHICLE', null);
 }
 
+// Phase 10.13B-3 — the canonical value to STORE in vehicles.canonical_plate.
+// Returns the province-alias-resolved canonical for a parseable plate WITH a
+// province; NULL for unparseable or province-less plates so DB uniqueness is
+// never enforced on an ambiguous plate.
+function canonicalPlateForStorage(plateNo) {
+  // Normalize dash/underscore separators to spaces so dash-written plates parse
+  // the same as space-written ones (production plates are space-separated).
+  const cleaned = String(plateNo == null ? '' : plateNo).replace(/[-‐-―_]+/g, ' ');
+  const p = parseLegacyPlateText(cleaned);
+  return (p && normalizeProvince(p.province)) ? buildCanonicalPlate(p) : null;
+}
+
 module.exports = {
   PROVINCE_ALIASES,
   normalizeThaiText,
@@ -165,4 +177,5 @@ module.exports = {
   parseLegacyPlateText,
   comparePlateIdentity,
   classifyVehiclePlateConflict,
+  canonicalPlateForStorage,
 };

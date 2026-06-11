@@ -86,11 +86,24 @@ async function linkOrCreateDriverForVehicle(conn, { driverName, driverPhone, nor
     [driverId, vehicleId]
   );
   if (!assignment) {
-    await conn.query(
-      `INSERT INTO driver_vehicle_assignments (driver_id, vehicle_id, start_date, is_active)
-       VALUES (?, ?, CURDATE(), TRUE)`,
-      [driverId, vehicleId]
-    );
+    try {
+      await conn.query(
+        `INSERT INTO driver_vehicle_assignments (driver_id, vehicle_id, start_date, is_active)
+         VALUES (?, ?, CURDATE(), TRUE)`,
+        [driverId, vehicleId]
+      );
+    } catch (err) {
+      // Phase 10.13B-3 — DB enforces one active assignment per vehicle
+      // (uq_dva_active_vehicle). A race that tries to add a second active driver
+      // to the same vehicle surfaces as a clear conflict, not a raw SQL error.
+      if (err && err.code === 'ER_DUP_ENTRY' && /uq_dva_active_vehicle/.test(err.sqlMessage || err.message || '')) {
+        const e = new Error('รถคันนี้มีคนขับที่ใช้งานอยู่แล้ว');
+        e.statusCode = 409;
+        e.errors = [{ code: 'VEHICLE_ALREADY_HAS_ACTIVE_DRIVER' }];
+        throw e;
+      }
+      throw err;
+    }
   }
 
   return { driverId, userCreated };

@@ -11,6 +11,7 @@ const env = require('../config/env');
 const { classifyImportRow, maskPhone } = require('../utils/studentImportClassifier');
 const plateId = require('../utils/plateIdentity');
 const { classifyStudentImport } = require('../utils/studentImport');
+const { allocateStudentId } = require('./idAllocator.service');
 
 const TERM = env.app.currentTerm;
 const canonOf = (plate) => { const p = plateId.parseLegacyPlateText(plate); return p ? plateId.buildCanonicalPlate(p) : ''; };
@@ -195,8 +196,7 @@ async function applyBatch(pool, { batchId, schoolId, userId }) {
       }
       const n = typeof row.normalized_json === 'string' ? JSON.parse(row.normalized_json) : (row.normalized_json || {});
       const cid = crypto.createHash('sha256').update(`import-${schoolId}-${row.student_code}`).digest('hex');
-      const [[nx]] = await conn.query('SELECT COALESCE(MAX(id),0)+1 AS nid FROM students');
-      const newId = nx.nid;
+      const newId = await allocateStudentId(conn);   // 10.13B-2 atomic allocator (was MAX(id)+1)
       await conn.query(
         `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,

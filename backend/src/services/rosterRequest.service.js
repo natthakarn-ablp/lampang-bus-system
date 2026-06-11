@@ -257,11 +257,10 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
           }
         }
         if (!newStudentId) {
-          // Lock-safe auto-generate: SELECT ... FOR UPDATE prevents race condition
-          const [[{ maxId }]] = await conn.query(
-            `SELECT COALESCE(MAX(id), 0) + 1 AS maxId FROM students FOR UPDATE`
-          );
-          newStudentId = maxId;
+          // Phase 10.13B-2 — atomic allocator (was SELECT MAX(id)+1 FOR UPDATE,
+          // which does not actually serialize concurrent allocators).
+          const { allocateStudentId } = require('./idAllocator.service');
+          newStudentId = await allocateStudentId(conn);
         }
 
         // Generate placeholder cid_hash (PDPA: driver doesn't provide national ID)

@@ -1321,10 +1321,10 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
             // an FK-referenced PK so it can't be AUTO_INCREMENT). Computed inside
             // this transaction, so successive inserts in the same import advance
             // correctly. student_code keeps the visible code so the same code can
-            // exist at another school. A rare concurrent-import PK clash is caught
-            // by the surrounding try/catch and reported as a row error.
-            const [[nextId]] = await conn.query(`SELECT COALESCE(MAX(id), 0) + 1 AS nid FROM students`);
-            const newStudentId = nextId.nid;
+            // exist at another school. Phase 10.13B-2 — atomic allocator (was
+            // MAX(id)+1) so concurrent imports cannot race on the surrogate id.
+            const { allocateStudentId } = require('../services/idAllocator.service');
+            const newStudentId = await allocateStudentId(conn);
             await conn.query(
               `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

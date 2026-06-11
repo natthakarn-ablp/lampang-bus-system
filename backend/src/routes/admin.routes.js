@@ -1257,6 +1257,14 @@ router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Phase 10.13B-9 — Operations health (admin-only, read-only, no PII) ──────
+router.get('/operations/health', async (req, res, next) => {
+  try {
+    const { computeOperationsHealth } = require('../services/operationsHealth.service');
+    return sendSuccess(res, await computeOperationsHealth(pool));
+  } catch (err) { next(err); }
+});
+
 // ─── Phase 10.13B-8 — Driver lifecycle & assignment wizard (admin-only) ──────
 router.get('/driver-integrity', async (req, res, next) => {
   try {

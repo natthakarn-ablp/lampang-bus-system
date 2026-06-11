@@ -56,15 +56,29 @@ cd backend && node scripts/cleanup-expired-imports.js --apply     # delete expir
 ```
 Path-guarded; only removes expired import files inside the uploads dir.
 
-## Restore-test readiness (deferred)
+## Restore-test readiness (config staged — one privileged step remaining)
 
 ```
 scripts/restore-test-readiness.sh    # exit 0 ready / 1 not-ready / 2 unsafe
 ```
-Currently **NOT READY** (no test DB). To enable: create `scripts/restore-test.env`
-(chmod 600) with `RESTORE_TEST_DB` (never the production DB), a chmod-600
-`RESTORE_TEST_MYSQL_DEFAULTS_FILE`, and `RESTORE_TEST_ALLOW_CREATE_DATABASE`. The
-script never touches production.
+As of 10.13C-2 the config is **staged** (not committed — gitignored):
+- `scripts/restore-test.env` → `RESTORE_TEST_DB=lampang_bus_restore_drill` (a dedicated
+  drill DB, never production), `RESTORE_TEST_MYSQL_DEFAULTS_FILE=/home/schoolbus/.restore-test.cnf`
+  (chmod 600), `RESTORE_TEST_ALLOW_CREATE_DATABASE=false`.
+- The app DB user already holds `ALL PRIVILEGES ON lampang_bus_restore_drill.*` but
+  has **no global CREATE**, so it cannot create the DB itself. Backup dumps contain
+  **no `USE`/`CREATE DATABASE`** line, so a restore into the drill DB can never reach production.
+
+**One remaining step (privileged user, e.g. root):**
+```
+mysql -e "CREATE DATABASE lampang_bus_restore_drill CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+scripts/restore-test-readiness.sh                 # → READY (exit 0)
+# then the safe drill (test DB only; production untouched):
+zcat $(ls -t /home/schoolbus/backups/lampang-bus/*.sql.gz | head -1) \
+  | mysql --defaults-file=/home/schoolbus/.restore-test.cnf lampang_bus_restore_drill
+mysql --defaults-file=/home/schoolbus/.restore-test.cnf lampang_bus_restore_drill -e "SELECT COUNT(*) FROM students;"
+# cleanup: DROP the drill tables (or the DB) afterward; verify production counts unchanged.
+```
 
 ## Off-host backup enablement (deferred)
 
@@ -83,10 +97,18 @@ pm2 status                         # process state
 pm2 logs schoolbus-backend         # tail logs
 pm2 restart schoolbus-backend --update-env
 ```
-**Ecosystem adoption (deferred):** `ecosystem.config.js` adds crash-loop backoff
-(`max_restarts`, `restart_delay`, `exp_backoff_restart_delay`). Adopt in a planned
-window: `pm2 delete schoolbus-backend && pm2 start ecosystem.config.js && pm2 save`,
-then confirm `/health` GREEN. Env still comes from `backend/.env`.
+**Ecosystem: ADOPTED (10.13C-2).** The process now runs from `ecosystem.config.js`
+(`node src/index.js`, cwd `backend/`, fork mode) with crash-loop backoff
+(`max_restarts: 10`, `restart_delay: 5000`, `exp_backoff_restart_delay: 1000`,
+`max_memory_restart: 500M`). Env still comes from `backend/.env`. PM2 dump saved
+(`pm2 save`), so a reboot resurrects it.
+
+Re-adopt / restart cleanly:
+```
+pm2 restart schoolbus-backend --update-env        # normal restart
+pm2 delete schoolbus-backend && pm2 start ecosystem.config.js && pm2 save   # re-adopt
+```
+**Rollback to npm start** (if ever needed): `pm2 delete schoolbus-backend && cd backend && pm2 start npm --name schoolbus-backend -- start && pm2 save`.
 
 ## Health / deploy checks
 

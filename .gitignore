@@ -12,4 +12,6 @@ frontend/dist/
 backend/uploads/
 backend/fonts/
 test-screenshots/
+# Operator infra config (secrets / env-specific paths — never commit)
 scripts/offhost-backup-sync.env
+scripts/restore-test.env

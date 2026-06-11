@@ -79,11 +79,11 @@ The integrity monitor reports **WARN** at release, with **0 CRITICAL**. The WARN
 
 See [OPERATOR_RUNBOOK.md](OPERATOR_RUNBOOK.md) for how to act on WARN vs CRITICAL.
 
-## Deferred infrastructure (documented, safe)
+## Deferred infrastructure (status after 10.13C-2)
 
-1. **Off-host backup** — deferred until `scripts/offhost-backup-sync.env` is created; enablement path in the runbook.
-2. **Real restore test** — deferred until a dedicated test DB + defaults-file exist (`restore-test-readiness.sh` is safe and ready).
-3. **PM2 ecosystem adoption** — `ecosystem.config.js` added; adopt in a planned maintenance window.
+1. **Off-host backup** — still **deferred** (no `scripts/offhost-backup-sync.env`; needs a real rclone remote or rsync target + SSH key). Enablement path in the runbook.
+2. **Real restore test** — **config staged** (`scripts/restore-test.env` + chmod-600 defaults-file pointing at the dedicated `lampang_bus_restore_drill`). One privileged step remains: a `CREATE DATABASE lampang_bus_restore_drill` by root (the app user has scoped ALL PRIVILEGES on it but no global CREATE). Then readiness → READY and the safe drill runs (production never touched; dumps carry no `USE` line).
+3. **PM2 ecosystem adoption** — **DONE (10.13C-2)**: process runs from `ecosystem.config.js` with crash-loop backoff; `/health` GREEN; rollback documented.
 
 ## Pending operator data actions (not code)
 

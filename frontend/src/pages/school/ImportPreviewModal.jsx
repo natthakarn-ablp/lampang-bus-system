@@ -32,7 +32,19 @@ const TONE = {
   red: 'bg-red-50 text-red-700 border-red-200',
   blue: 'bg-blue-50 text-blue-700 border-blue-200',
 };
+// After apply, prefer the row STATUS for the badge (the classification stays the
+// original, e.g. GUARDIAN_MISMATCH, while status becomes GUARDIAN_UPDATED).
+const STATUS_META = {
+  APPLIED: { label: 'นำเข้าแล้ว', tone: 'emerald' },
+  GUARDIAN_UPDATED: { label: 'อัปเดตผู้ปกครองแล้ว', tone: 'emerald' },
+  REACTIVATED: { label: 'กู้คืนนักเรียนแล้ว', tone: 'emerald' },
+  ALREADY_APPLIED: { label: 'มีอยู่แล้ว', tone: 'blue' },
+  STALE_NEEDS_REPREVIEW: { label: 'ต้องพรีวิวใหม่', tone: 'amber' },
+  VEHICLE_BLOCKED: { label: 'ติดปัญหารถ', tone: 'red' },
+  APPLY_FAILED: { label: 'ไม่สำเร็จ', tone: 'red' },
+};
 const metaFor = (c) => CLASS_META[c] || { label: c, tone: 'slate' };
+const badgeFor = (r) => STATUS_META[r.status] || metaFor(r.classification);
 
 const FILTERS = [
   { key: 'all', label: 'ทั้งหมด' },
@@ -68,18 +80,28 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   const [filter, setFilter] = useState('all');
   const [confirming, setConfirming] = useState(false);
   const [applyResult, setApplyResult] = useState(null);
+  // Phase 10.13B-4 — explicit per-row selection for the two confirmed modes.
+  const [selGuardian, setSelGuardian] = useState(() => new Set());
+  const [selReactivate, setSelReactivate] = useState(() => new Set());
 
-  const canApplyCount = useMemo(() => (rows || []).filter((r) => r.can_apply && !['APPLIED', 'ALREADY_APPLIED'].includes(r.status)).length, [rows]);
+  const TERMINAL = ['APPLIED', 'ALREADY_APPLIED', 'GUARDIAN_UPDATED', 'REACTIVATED'];
+  const canApplyCount = useMemo(() => (rows || []).filter((r) => r.can_apply && !TERMINAL.includes(r.status)).length, [rows]);
   const errorCount = useMemo(() => (rows || []).filter((r) => r.status === 'ERROR' || r.classification === 'APPLY_FAILED').length, [rows]);
   const vehicleIssues = useMemo(() => (rows || []).filter((r) => String(r.classification).startsWith('VEHICLE_')).length, [rows]);
-  const guardianIssues = useMemo(() => (rows || []).filter((r) => r.classification === 'GUARDIAN_MISMATCH').length, [rows]);
+  const guardianRows = useMemo(() => (rows || []).filter((r) => r.can_confirm_guardian_update && !TERMINAL.includes(r.status)), [rows]);
+  const reactivateRows = useMemo(() => (rows || []).filter((r) => r.can_confirm_reactivate && !TERMINAL.includes(r.status)), [rows]);
   const filtered = useMemo(() => (rows || []).filter((r) => matchesFilter(r, filter)), [rows, filter]);
+
+  function toggleSel(setter, rowNo) {
+    setter((prev) => { const n = new Set(prev); n.has(rowNo) ? n.delete(rowNo) : n.add(rowNo); return n; });
+  }
 
   if (!open) return null;
 
   function reset() {
     setFile(null); setBusy(false); setError(''); setBatchId(null);
     setSummary(null); setRows(null); setFilter('all'); setConfirming(false); setApplyResult(null);
+    setSelGuardian(new Set()); setSelReactivate(new Set());
   }
   function close() { reset(); onClose(); }
 
@@ -110,7 +132,14 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   async function runApply() {
     setBusy(true); setError(''); setConfirming(false);
     try {
-      const res = await api.post(`/school/students/import/${batchId}/apply`);
+      const confirmG = selGuardian.size > 0, confirmR = selReactivate.size > 0;
+      const mode = (confirmG || confirmR) ? 'mixed_confirmed' : 'insert_ready';
+      const res = await api.post(`/school/students/import/${batchId}/apply`, {
+        mode,
+        selected_row_ids: [...selGuardian, ...selReactivate],
+        confirm_guardian_update: confirmG,
+        confirm_reactivate: confirmR,
+      });
       setApplyResult(res.data.data);
       // Refresh row statuses from the persisted report.
       const rep = await api.get(`/school/students/import/${batchId}/report`);
@@ -119,7 +148,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
         const u = byRow[r.row_number];
         return u ? { ...r, status: u.status, classification: u.classification, can_apply: false } : r;
       }));
-      toast.success('นำเข้าข้อมูลสำเร็จ กรุณาตรวจสอบจำนวนในหน้ารายชื่อนักเรียน');
+      toast.success(res.data.message || 'ดำเนินการนำเข้าสำเร็จ');
       onApplied?.();
     } catch (err) {
       const status = err.response?.status;
@@ -211,12 +240,21 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
                 ))}
               </div>
 
+              {/* Confirm-action guidance (10.13B-4) */}
+              {!applied && (guardianRows.length > 0 || reactivateRows.length > 0) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-800 space-y-1">
+                  {guardianRows.length > 0 && <div>• ติ๊กเลือก “ยืนยันอัปเดตผู้ปกครอง” — ระบบจะอัปเดตเฉพาะข้อมูลผู้ปกครองของรายการที่เลือกเท่านั้น ({selGuardian.size}/{guardianRows.length})</div>}
+                  {reactivateRows.length > 0 && <div>• ติ๊กเลือก “ยืนยันกู้คืนนักเรียน” — ระบบจะกู้คืนเฉพาะนักเรียนในโรงเรียนเดียวกันและรหัสนักเรียนเดียวกันเท่านั้น ({selReactivate.size}/{reactivateRows.length})</div>}
+                </div>
+              )}
+
               {/* Row table */}
               <div className="border border-gray-100 rounded-lg overflow-hidden">
                 <div className="overflow-x-auto max-h-[42vh]">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 text-gray-500 text-xs sticky top-0">
                       <tr>
+                        <th className="text-left font-medium px-3 py-2">เลือก</th>
                         <th className="text-left font-medium px-3 py-2">แถว</th>
                         <th className="text-left font-medium px-3 py-2">รหัส</th>
                         <th className="text-left font-medium px-3 py-2">ชื่อนักเรียน</th>
@@ -228,9 +266,15 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {filtered.map((r) => {
-                        const m = metaFor(r.classification);
+                        const m = badgeFor(r);
+                        const isG = r.can_confirm_guardian_update && !TERMINAL.includes(r.status);
+                        const isR = r.can_confirm_reactivate && !TERMINAL.includes(r.status);
                         return (
                           <tr key={r.row_number} className="hover:bg-gray-50/50">
+                            <td className="px-3 py-2">
+                              {isG && <input type="checkbox" checked={selGuardian.has(r.row_number)} onChange={() => toggleSel(setSelGuardian, r.row_number)} className="accent-amber-600" title="ยืนยันอัปเดตผู้ปกครอง" />}
+                              {isR && <input type="checkbox" checked={selReactivate.has(r.row_number)} onChange={() => toggleSel(setSelReactivate, r.row_number)} className="accent-amber-600" title="ยืนยันกู้คืนนักเรียน" />}
+                            </td>
                             <td className="px-3 py-2 text-gray-400 tabular-nums">{r.row_number}</td>
                             <td className="px-3 py-2 text-gray-700 tabular-nums">{r.student_code}</td>
                             <td className="px-3 py-2 text-gray-800">{r.student_name || '—'}</td>
@@ -241,13 +285,18 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
                             </td>
                             <td className="px-3 py-2 text-gray-600">
                               <div>{r.message_th}</div>
-                              {r.action_required && <div className="text-xs text-amber-600 mt-0.5">ต้องทำ: {r.action_required}</div>}
+                              {r.guardian_mismatch && (
+                                <div className="text-xs text-amber-700 mt-0.5">
+                                  ผู้ปกครอง: <span className="line-through text-gray-400">{r.guardian_current || '—'}</span> → <span className="font-medium">{r.guardian_input || '—'}</span>
+                                </div>
+                              )}
+                              {r.action_required && !TERMINAL.includes(r.status) && <div className="text-xs text-amber-600 mt-0.5">ต้องทำ: {r.action_required}</div>}
                             </td>
                           </tr>
                         );
                       })}
                       {filtered.length === 0 && (
-                        <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400 text-sm">ไม่มีรายการในตัวกรองนี้</td></tr>
+                        <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400 text-sm">ไม่มีรายการในตัวกรองนี้</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -263,14 +312,14 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
         {rows && (
           <div className="px-5 sm:px-6 py-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-gray-500">
-              {applied ? 'นำเข้าเสร็จสิ้น' : <>ระบบจะนำเข้าเฉพาะ <span className="font-semibold text-emerald-600">{canApplyCount}</span> รายการที่พร้อม · รายการที่มีปัญหาจะยังไม่ถูกบันทึก</>}
+              {applied ? 'นำเข้าเสร็จสิ้น' : <>เพิ่มใหม่ <span className="font-semibold text-emerald-600">{canApplyCount}</span>{selGuardian.size > 0 && <> · อัปเดตผู้ปกครอง <span className="font-semibold text-amber-600">{selGuardian.size}</span></>}{selReactivate.size > 0 && <> · กู้คืน <span className="font-semibold text-amber-600">{selReactivate.size}</span></>} · รายการที่มีปัญหาจะยังไม่ถูกบันทึก</>}
             </div>
             <div className="flex gap-2">
               <button onClick={downloadReport} className="text-sm text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition">ดาวน์โหลดรายงาน (CSV)</button>
               {!applied
-                ? <button onClick={() => setConfirming(true)} disabled={busy || canApplyCount === 0}
+                ? <button onClick={() => setConfirming(true)} disabled={busy || (canApplyCount === 0 && selGuardian.size === 0 && selReactivate.size === 0)}
                     className="text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-medium px-4 py-2 rounded-lg transition">
-                    ยืนยันนำเข้ารายการที่พร้อม
+                    ยืนยันนำเข้า
                   </button>
                 : <button onClick={close} className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition">เสร็จสิ้น</button>}
             </div>
@@ -284,11 +333,13 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
               <h3 className="text-base font-semibold text-gray-800 mb-2">ยืนยันการนำเข้า</h3>
               <div className="text-sm text-gray-600 space-y-1 mb-3">
                 <div className="flex justify-between"><span>ชุดนำเข้า</span><span className="text-gray-400">#{batchId}</span></div>
-                <div className="flex justify-between"><span>จะนำเข้า</span><span className="font-semibold text-emerald-600">{canApplyCount} รายการ</span></div>
+                <div className="flex justify-between"><span>พร้อมเพิ่มใหม่</span><span className="font-semibold text-emerald-600">{canApplyCount}</span></div>
+                {selGuardian.size > 0 && <div className="flex justify-between"><span>ยืนยันอัปเดตผู้ปกครอง</span><span className="font-semibold text-amber-600">{selGuardian.size}</span></div>}
+                {selReactivate.size > 0 && <div className="flex justify-between"><span>ยืนยันกู้คืนนักเรียน</span><span className="font-semibold text-amber-600">{selReactivate.size}</span></div>}
                 <div className="flex justify-between"><span>ข้ามรายการซ้ำ</span><span className="text-slate-500">{summary.skip}</span></div>
-                <div className="flex justify-between"><span>มีปัญหา (ไม่นำเข้า)</span><span className="text-red-500">{errorCount}</span></div>
+                <div className="flex justify-between"><span>มีปัญหา/ผิดพลาด (ไม่นำเข้า)</span><span className="text-red-500">{errorCount}</span></div>
               </div>
-              <p className="text-xs text-gray-400 mb-4">ระบบจะนำเข้าเฉพาะรายการที่พร้อมเท่านั้น</p>
+              <p className="text-xs text-gray-400 mb-4">ระบบจะดำเนินการเฉพาะรายการที่พร้อมและรายการที่ท่านเลือกยืนยันเท่านั้น</p>
               <div className="flex gap-2">
                 <button onClick={runApply} disabled={busy}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-sm font-medium py-2.5 rounded-lg transition">

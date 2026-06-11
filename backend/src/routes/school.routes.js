@@ -1433,14 +1433,31 @@ router.post('/students/import/:batchId/apply', requireFullSchoolScope, async (re
   try {
     const schoolId = resolveSchoolId(req);
     const batchId = parseInt(req.params.batchId, 10);
+    // Phase 10.13B-4 — explicit apply modes; risky modes act only on selected rows.
+    const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate } = req.body || {};
+    const VALID_MODES = ['insert_ready', 'update_guardian_confirmed', 'reactivate_student_confirmed', 'mixed_confirmed'];
+    if (!VALID_MODES.includes(mode)) return sendError(res, 'โหมดการนำเข้าไม่ถูกต้อง', [], 400);
     const importPreview = require('../services/studentImportPreview.service');
-    const out = await importPreview.applyBatch(pool, { batchId, schoolId, userId: req.user.id });
+    const out = await importPreview.applyBatch(pool, {
+      batchId, schoolId, userId: req.user.id, mode,
+      selectedRowIds: Array.isArray(selected_row_ids) ? selected_row_ids : [],
+      confirmGuardianUpdate: !!confirm_guardian_update,
+      confirmReactivate: !!confirm_reactivate,
+    });
     await logAudit({
       userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(batchId),
-      newValue: { mode: 'apply', school_id: schoolId, ...out },
+      newValue: { phase: 'apply', school_id: schoolId, ...out },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
-    return sendSuccess(res, out, `นำเข้าสำเร็จ ${out.applied} รายการ` + (out.already_applied ? ` · มีอยู่แล้ว ${out.already_applied}` : '') + (out.failed ? ` · ไม่สำเร็จ ${out.failed}` : ''));
+    const parts = [];
+    if (out.applied) parts.push(`เพิ่มใหม่ ${out.applied}`);
+    if (out.guardian_updated) parts.push(`อัปเดตผู้ปกครอง ${out.guardian_updated}`);
+    if (out.reactivated) parts.push(`กู้คืน ${out.reactivated}`);
+    if (out.already_applied) parts.push(`มีอยู่แล้ว ${out.already_applied}`);
+    if (out.vehicle_blocked) parts.push(`ติดปัญหารถ ${out.vehicle_blocked}`);
+    if (out.stale) parts.push(`ต้องพรีวิวใหม่ ${out.stale}`);
+    if (out.failed) parts.push(`ไม่สำเร็จ ${out.failed}`);
+    return sendSuccess(res, out, parts.length ? 'ดำเนินการสำเร็จ · ' + parts.join(' · ') : 'ไม่มีรายการที่ต้องดำเนินการ');
   } catch (err) { next(err); }
 });
 

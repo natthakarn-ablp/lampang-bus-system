@@ -12,6 +12,7 @@ const { classifyImportRow, maskPhone } = require('../utils/studentImportClassifi
 const plateId = require('../utils/plateIdentity');
 const { classifyStudentImport } = require('../utils/studentImport');
 const { allocateStudentId } = require('./idAllocator.service');
+const { logAudit } = require('../utils/audit');
 
 const TERM = env.app.currentTerm;
 const canonOf = (plate) => { const p = plateId.parseLegacyPlateText(plate); return p ? plateId.buildCanonicalPlate(p) : ''; };
@@ -133,6 +134,7 @@ function publicRow(r) {
     matched_display_plate: r.matched_display_plate,
     guardian_current: r.guardian_current, guardian_input: r.guardian_input, guardian_mismatch: r.guardian_mismatch,
     message_th: r.message_th, action_required: r.action_required, can_apply: r.can_apply,
+    can_confirm_guardian_update: !!r.can_confirm_guardian_update, can_confirm_reactivate: !!r.can_confirm_reactivate,
   };
 }
 
@@ -173,53 +175,162 @@ async function runPreview(pool, { schoolId, importedBy, filePath, originalName }
   } catch (e) { await conn.rollback(); throw e; } finally { conn.release(); }
 }
 
-// ── Apply: insert can_apply (INSERT_NEW / CROSS_SCHOOL) rows idempotently. ───
-async function applyBatch(pool, { batchId, schoolId, userId }) {
-  const [[batch]] = await pool.query('SELECT id, school_id, status FROM import_batches WHERE id = ?', [batchId]);
+const normOf = (row) => (typeof row.normalized_json === 'string' ? JSON.parse(row.normalized_json) : (row.normalized_json || {}));
+
+// Dedupe-or-create a parent by phone, then link to the student (idempotent).
+async function linkParent(conn, studentId, name, phone, userId) {
+  if (!name && !phone) return;
+  let parentId;
+  if (phone) { const [[ep]] = await conn.query('SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1', [phone]); parentId = ep && ep.id; }
+  if (!parentId) { const [pr] = await conn.query('INSERT INTO parents (name, phone) VALUES (?, ?)', [name || null, phone || null]); parentId = pr.insertId; }
+  await conn.query('INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW()) ON DUPLICATE KEY UPDATE approved = TRUE', [parentId, studentId, userId]);
+}
+
+// ── insert_ready row (INSERT_NEW / CROSS_SCHOOL) — atomic id, idempotent. ────
+async function applyInsertRow(pool, { row, schoolId, userId, r }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[exist]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1', [schoolId, row.student_code]);
+    if (classifyStudentImport(exist) !== 'INSERT') {
+      await conn.query("UPDATE import_batch_rows SET status='ALREADY_APPLIED', applied_at=NOW() WHERE id=?", [row.id]);
+      await conn.commit(); r.already_applied++; r.details.push({ row: row.row_no, status: 'ALREADY_APPLIED' }); return;
+    }
+    const n = normOf(row);
+    const cid = crypto.createHash('sha256').update(`import-${schoolId}-${row.student_code}`).digest('hex');
+    const newId = await allocateStudentId(conn);
+    await conn.query(
+      `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
+      [newId, row.student_code, cid, n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, schoolId, row.matched_vehicle_id || null, TERM]
+    );
+    await linkParent(conn, newId, n.parent_name, n.parent_phone, userId);
+    await conn.query("UPDATE import_batch_rows SET status='APPLIED', new_student_id=?, applied_at=NOW() WHERE id=?", [newId, row.id]);
+    await conn.commit(); r.applied++; r.details.push({ row: row.row_no, status: 'APPLIED', student_id: newId });
+  } catch (e) {
+    await conn.rollback();
+    await pool.query("UPDATE import_batch_rows SET status='APPLY_FAILED', error_detail=? WHERE id=?", [String(e.code || e.message).slice(0, 500), row.id]);
+    r.failed++; r.details.push({ row: row.row_no, status: 'APPLY_FAILED' });
+  } finally { conn.release(); }
+}
+
+// ── update_guardian_confirmed row — updates ONLY the selected student's guardian.
+async function applyGuardianRow(pool, { row, schoolId, userId, batchId, r }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[st]] = await conn.query('SELECT id FROM students WHERE school_id = ? AND student_code = ? AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1', [schoolId, row.student_code]);
+    if (!st) {  // student gone / deleted / code reassigned since preview
+      await conn.query("UPDATE import_batch_rows SET status='STALE_NEEDS_REPREVIEW' WHERE id=?", [row.id]);
+      await conn.commit(); r.stale++; r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REPREVIEW' }); return;
+    }
+    const n = normOf(row);
+    const newName = n.parent_name || null, newPhone = n.parent_phone || null;
+    const [[cur]] = await conn.query('SELECT p.id, p.name AS old_name, p.phone AS old_phone FROM parent_student ps JOIN parents p ON p.id = ps.parent_id WHERE ps.student_id = ? LIMIT 1', [st.id]);
+    let parentId;
+    if (newPhone) { const [[ep]] = await conn.query('SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1', [newPhone]); parentId = ep && ep.id; }
+    if (parentId) {                                   // reuse the parent that already owns this phone (no dup)
+      await conn.query('UPDATE parents SET name = ? WHERE id = ?', [newName, parentId]);
+      await conn.query('INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW()) ON DUPLICATE KEY UPDATE approved = TRUE', [parentId, st.id, userId]);
+      if (cur && String(cur.id) !== String(parentId)) await conn.query('DELETE FROM parent_student WHERE student_id = ? AND parent_id = ?', [st.id, cur.id]);
+    } else if (cur) {                                 // update the student's current parent in place
+      parentId = cur.id;
+      await conn.query('UPDATE parents SET name = ?, phone = ? WHERE id = ?', [newName, newPhone, cur.id]);
+    } else {                                          // no parent yet → create + link
+      await linkParent(conn, st.id, newName, newPhone, userId);
+    }
+    await logAudit({
+      userId, action: 'UPDATE', entityType: 'student', entityId: String(st.id), conn,
+      oldValue: { guardian_name: cur ? cur.old_name : null, guardian_phone: maskPhone(cur ? cur.old_phone : null) },
+      newValue: { guardian_name: newName, guardian_phone: maskPhone(newPhone), batch_id: batchId, row_no: row.row_no, mode: 'update_guardian_confirmed' },
+    });
+    await conn.query("UPDATE import_batch_rows SET status='GUARDIAN_UPDATED', new_student_id=?, applied_at=NOW() WHERE id=?", [st.id, row.id]);
+    await conn.commit(); r.guardian_updated++; r.details.push({ row: row.row_no, status: 'GUARDIAN_UPDATED', student_id: st.id });
+  } catch (e) {
+    await conn.rollback();
+    await pool.query("UPDATE import_batch_rows SET status='APPLY_FAILED', error_detail=? WHERE id=?", [String(e.code || e.message).slice(0, 500), row.id]);
+    r.failed++; r.details.push({ row: row.row_no, status: 'APPLY_FAILED' });
+  } finally { conn.release(); }
+}
+
+// ── reactivate_student_confirmed row — restores the SAME-school soft-deleted student.
+async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[st]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1', [schoolId, row.student_code]);
+    if (!st) {
+      await conn.query("UPDATE import_batch_rows SET status='STALE_NEEDS_REPREVIEW' WHERE id=?", [row.id]);
+      await conn.commit(); r.stale++; r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REPREVIEW' }); return;
+    }
+    if (!st.is_deleted) {  // already active (restored or re-inserted since preview)
+      await conn.query("UPDATE import_batch_rows SET status='ALREADY_APPLIED', applied_at=NOW() WHERE id=?", [row.id]);
+      await conn.commit(); r.already_applied++; r.details.push({ row: row.row_no, status: 'ALREADY_APPLIED' }); return;
+    }
+    // Vehicle re-check: never reactivate onto a missing/soft-deleted vehicle.
+    let vehicleId = row.matched_vehicle_id || null;
+    if (vehicleId) {
+      const [[v]] = await conn.query('SELECT id FROM vehicles WHERE id = ? AND is_deleted = FALSE LIMIT 1', [vehicleId]);
+      if (!v) {
+        await conn.query("UPDATE import_batch_rows SET status='VEHICLE_BLOCKED' WHERE id=?", [row.id]);
+        await conn.commit(); r.vehicle_blocked++; r.details.push({ row: row.row_no, status: 'VEHICLE_BLOCKED' }); return;
+      }
+    }
+    const n = normOf(row);
+    await conn.query(
+      `UPDATE students SET is_deleted = FALSE, deleted_at = NULL, prefix = ?, first_name = ?, last_name = ?, grade = ?, classroom = ?, vehicle_id = ?, term_id = ?
+       WHERE id = ?`,
+      [n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, vehicleId, TERM, st.id]
+    );
+    await linkParent(conn, st.id, n.parent_name, n.parent_phone, userId);
+    await logAudit({
+      userId, action: 'UPDATE', entityType: 'student', entityId: String(st.id), conn,
+      oldValue: { is_deleted: true },
+      newValue: { is_deleted: false, vehicle_id: vehicleId, batch_id: batchId, row_no: row.row_no, mode: 'reactivate_student_confirmed' },
+    });
+    await conn.query("UPDATE import_batch_rows SET status='REACTIVATED', new_student_id=?, applied_at=NOW() WHERE id=?", [st.id, row.id]);
+    await conn.commit(); r.reactivated++; r.details.push({ row: row.row_no, status: 'REACTIVATED', student_id: st.id });
+  } catch (e) {
+    await conn.rollback();
+    await pool.query("UPDATE import_batch_rows SET status='APPLY_FAILED', error_detail=? WHERE id=?", [String(e.code || e.message).slice(0, 500), row.id]);
+    r.failed++; r.details.push({ row: row.row_no, status: 'APPLY_FAILED' });
+  } finally { conn.release(); }
+}
+
+// ── Apply with explicit modes (Phase 10.13B-4). insert_ready is the default and
+//    preserves prior behavior; risky modes act ONLY on explicitly selected rows.
+const RISKY_GUARDIAN = new Set(['update_guardian_confirmed', 'mixed_confirmed']);
+const RISKY_REACTIVATE = new Set(['reactivate_student_confirmed', 'mixed_confirmed']);
+const DOES_INSERT = new Set(['insert_ready', 'mixed_confirmed']);
+
+async function applyBatch(pool, { batchId, schoolId, userId, mode = 'insert_ready', selectedRowIds = [], confirmGuardianUpdate = false, confirmReactivate = false }) {
+  const [[batch]] = await pool.query('SELECT id, school_id FROM import_batches WHERE id = ?', [batchId]);
   if (!batch) { const e = new Error('ไม่พบชุดข้อมูลนำเข้า'); e.statusCode = 404; throw e; }
   if (String(batch.school_id) !== String(schoolId)) { const e = new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลนี้'); e.statusCode = 403; throw e; }
 
-  const [rows] = await pool.query(
-    `SELECT * FROM import_batch_rows WHERE batch_id = ? AND can_apply = TRUE AND applied_at IS NULL
-       AND classification IN ('INSERT_NEW', 'CROSS_SCHOOL_SAME_CODE_ALLOWED') ORDER BY row_no`, [batchId]);
+  const sel = new Set((Array.isArray(selectedRowIds) ? selectedRowIds : []).map(Number));
+  const r = { mode, applied: 0, already_applied: 0, guardian_updated: 0, reactivated: 0, stale: 0, vehicle_blocked: 0, failed: 0, details: [] };
 
-  const result = { applied: 0, already_applied: 0, failed: 0, details: [] };
-  for (const row of rows) {
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-      // Idempotency: if the student now exists active in this school, skip.
-      const [[exist]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1', [schoolId, row.student_code]);
-      if (classifyStudentImport(exist) !== 'INSERT') {
-        await conn.query("UPDATE import_batch_rows SET status='ALREADY_APPLIED', applied_at=NOW() WHERE id=?", [row.id]);
-        await conn.commit(); result.already_applied++; result.details.push({ row: row.row_no, status: 'ALREADY_APPLIED' }); continue;
-      }
-      const n = typeof row.normalized_json === 'string' ? JSON.parse(row.normalized_json) : (row.normalized_json || {});
-      const cid = crypto.createHash('sha256').update(`import-${schoolId}-${row.student_code}`).digest('hex');
-      const newId = await allocateStudentId(conn);   // 10.13B-2 atomic allocator (was MAX(id)+1)
-      await conn.query(
-        `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
-        [newId, row.student_code, cid, n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, schoolId, row.matched_vehicle_id || null, TERM]
-      );
-      // Parent link (dedupe by phone) — mirrors the legacy importer.
-      if (n.parent_name || n.parent_phone) {
-        let parentId;
-        if (n.parent_phone) { const [[ep]] = await conn.query('SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1', [n.parent_phone]); parentId = ep && ep.id; }
-        if (!parentId) { const [pr] = await conn.query('INSERT INTO parents (name, phone) VALUES (?, ?)', [n.parent_name || null, n.parent_phone || null]); parentId = pr.insertId; }
-        await conn.query('INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW()) ON DUPLICATE KEY UPDATE approved = TRUE', [parentId, newId, userId]);
-      }
-      await conn.query("UPDATE import_batch_rows SET status='APPLIED', new_student_id=?, applied_at=NOW() WHERE id=?", [newId, row.id]);
-      await conn.commit(); result.applied++; result.details.push({ row: row.row_no, status: 'APPLIED', student_id: newId });
-    } catch (e) {
-      await conn.rollback();
-      await pool.query("UPDATE import_batch_rows SET status='APPLY_FAILED', error_detail=? WHERE id=?", [String(e.code || e.message).slice(0, 500), row.id]);
-      result.failed++; result.details.push({ row: row.row_no, status: 'APPLY_FAILED' });
-    } finally { conn.release(); }
+  if (DOES_INSERT.has(mode)) {
+    const [rows] = await pool.query(
+      `SELECT * FROM import_batch_rows WHERE batch_id = ? AND can_apply = TRUE AND applied_at IS NULL
+         AND classification IN ('INSERT_NEW', 'CROSS_SCHOOL_SAME_CODE_ALLOWED') ORDER BY row_no`, [batchId]);
+    for (const row of rows) await applyInsertRow(pool, { row, schoolId, userId, r });
   }
-  const status = result.failed > 0 ? 'APPLIED_PARTIAL' : 'APPLIED';
-  await pool.query('UPDATE import_batches SET status=?, applied_at=NOW() WHERE id=?', [status, batchId]);
-  return result;
+  if (RISKY_GUARDIAN.has(mode) && confirmGuardianUpdate) {
+    const [rows] = await pool.query(
+      "SELECT * FROM import_batch_rows WHERE batch_id = ? AND classification = 'GUARDIAN_MISMATCH' AND applied_at IS NULL ORDER BY row_no", [batchId]);
+    for (const row of rows) if (sel.has(Number(row.row_no))) await applyGuardianRow(pool, { row, schoolId, userId, batchId, r });
+  }
+  if (RISKY_REACTIVATE.has(mode) && confirmReactivate) {
+    const [rows] = await pool.query(
+      "SELECT * FROM import_batch_rows WHERE batch_id = ? AND classification = 'SOFT_DELETED_SAME_SCHOOL_REACTIVATE' AND applied_at IS NULL ORDER BY row_no", [batchId]);
+    for (const row of rows) if (sel.has(Number(row.row_no))) await applyReactivateRow(pool, { row, schoolId, userId, batchId, r });
+  }
+
+  const status = r.failed > 0 ? 'APPLIED_PARTIAL' : 'APPLIED';
+  await pool.query('UPDATE import_batches SET status = ?, applied_at = NOW() WHERE id = ?', [status, batchId]);
+  return r;
 }
 
 // ── Report: row-level results (phones never included; PII-safe). ─────────────

@@ -39,8 +39,13 @@ function classifyImportRow({ row, schoolId, existing = null, crossSchool = false
     guardian_mismatch: false,
     error_detail: null,
   };
-  const out = (classification, status, message_th, can_apply, action_required) =>
-    ({ ...base, classification, status, message_th, can_apply: !!can_apply, action_required: action_required || null });
+  const out = (classification, status, message_th, can_apply, action_required, confirm) =>
+    ({
+      ...base, classification, status, message_th, can_apply: !!can_apply, action_required: action_required || null,
+      // Phase 10.13B-4 — confirm-ability flags for the two self-service apply modes.
+      can_confirm_guardian_update: confirm === 'guardian',
+      can_confirm_reactivate: confirm === 'reactivate',
+    });
 
   // 1. Required-field validation.
   if (!code) return out('INVALID_STUDENT_CODE', 'ERROR', 'รหัสนักเรียนไม่ถูกต้อง', false, 'แก้ไขรหัสนักเรียนในไฟล์');
@@ -59,12 +64,12 @@ function classifyImportRow({ row, schoolId, existing = null, crossSchool = false
   // 3. Student identity (24B: school_id + student_code).
   if (existing && !existing.is_deleted) {
     if (guardianInput && existing.parent_name && guardianInput !== String(existing.parent_name).trim()) {
-      return { ...out('GUARDIAN_MISMATCH', 'WARNING', 'พบข้อมูลผู้ปกครองไม่ตรงกับข้อมูลเดิม กรุณายืนยันก่อนอัปเดต', false, 'ยืนยันการอัปเดตผู้ปกครอง'), guardian_mismatch: true };
+      return { ...out('GUARDIAN_MISMATCH', 'WARNING', 'พบข้อมูลผู้ปกครองไม่ตรงกับข้อมูลเดิม กรุณายืนยันก่อนอัปเดต', false, 'ยืนยันอัปเดตข้อมูลผู้ปกครอง', 'guardian'), guardian_mismatch: true };
     }
     return out('SKIP_DUPLICATE_SAME_SCHOOL', 'SKIP', 'รหัสนักเรียนนี้มีอยู่แล้วในโรงเรียนนี้', false, null);
   }
   if (existing && existing.is_deleted) {
-    return out('SOFT_DELETED_SAME_SCHOOL_REACTIVATE', 'WARNING', 'รหัสนักเรียนนี้เคยถูกลบในโรงเรียนนี้ กรุณายืนยันการกู้คืน', false, 'ยืนยันการกู้คืนนักเรียน');
+    return out('SOFT_DELETED_SAME_SCHOOL_REACTIVATE', 'WARNING', 'รหัสนักเรียนนี้เคยถูกลบในโรงเรียนนี้ กรุณายืนยันการกู้คืน', false, 'ยืนยันกู้คืนนักเรียนที่เคยถูกลบ', 'reactivate');
   }
   if (crossSchool) {
     return out('CROSS_SCHOOL_SAME_CODE_ALLOWED', 'READY', 'รหัสนักเรียนนี้ซ้ำกับต่างโรงเรียน แต่สามารถนำเข้าได้เนื่องจากเป็นคนละโรงเรียน', true, null);

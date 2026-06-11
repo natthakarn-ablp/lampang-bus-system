@@ -1520,6 +1520,38 @@ router.post('/students/import/:batchId/rollback', requireFullSchoolScope, async 
   } catch (err) { next(err); }
 });
 
+// ─── Phase 10.13B-6 — Student Transfer / Wrong-School Workflow ──────────────
+// A request changes NO student data; the move happens only on admin approval.
+// GET /students/transfer-requests registered before the :studentId POST so the
+// literal path is not captured as a student id.
+router.get('/students/transfer-requests', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const out = await transfer.listForSchool(pool, { schoolId: resolveSchoolId(req) });
+    return sendSuccess(res, out);
+  } catch (err) { next(err); }
+});
+
+router.post('/students/transfer-requests/:id/cancel', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const out = await transfer.cancelRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req), userId: req.user.id });
+    return sendSuccess(res, out, 'ยกเลิกคำขอแล้ว');
+  } catch (err) { next(err); }
+});
+
+router.post('/students/:studentId/transfer-request', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const { destination_school_id, reason, evidence_note, request_type } = req.body || {};
+    const out = await transfer.createRequest(pool, {
+      studentId: parseInt(req.params.studentId, 10), schoolId: resolveSchoolId(req), userId: req.user.id,
+      destinationSchoolId: destination_school_id, reason, evidenceNote: evidence_note, requestType: request_type || 'TRANSFER_TO_SCHOOL',
+    });
+    return sendSuccess(res, out, 'ส่งคำขอโอนย้ายแล้ว · รอผู้ดูแลระบบตรวจสอบ', null, 201);
+  } catch (err) { next(err); }
+});
+
 // ─── Phase 7.2 — GET /api/school/live-vehicles ──────────────────────────────
 // Vehicles serving this school. No audit (single-scope, not aggregate).
 router.get('/live-vehicles', async (req, res, next) => {

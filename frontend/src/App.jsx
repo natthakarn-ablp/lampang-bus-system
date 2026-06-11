@@ -82,6 +82,7 @@ const TransportPickupMap   = lazy(() => import('./pages/transport/TransportPicku
 
 // Admin (heaviest cluster — research/measurement/executive)
 const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
+const StudentTransferRequests = lazy(() => import('./pages/admin/StudentTransferRequests'));
 const AdminAuditLog        = lazy(() => import('./pages/admin/AdminAuditLog'));
 const AdminPickupPointManagement = lazy(() => import('./pages/admin/AdminPickupPointManagement'));
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -287,6 +288,11 @@ export default function App() {
           <Route path="/admin/audit-logs" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><AdminAuditLog /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/transfer-requests" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><StudentTransferRequests /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/pickup-points" element={

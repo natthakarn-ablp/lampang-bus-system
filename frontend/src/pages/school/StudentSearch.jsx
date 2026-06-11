@@ -9,6 +9,7 @@ import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
+import StudentTransferModal from './StudentTransferModal';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
 
@@ -39,6 +40,7 @@ export default function StudentSearch() {
   const [showImport, setShowImport] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [transferStudent, setTransferStudent] = useState(null);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -368,6 +370,9 @@ export default function StudentSearch() {
       {/* ── Import History & Correction Center (Phase 10.13B-5) ── */}
       <ImportHistoryModal open={showHistory} onClose={() => setShowHistory(false)} onChanged={() => fetchStudents(1)} />
 
+      {/* ── Student Transfer request (Phase 10.13B-6) ── */}
+      {transferStudent && <StudentTransferModal student={transferStudent} onClose={() => setTransferStudent(null)} onChanged={() => fetchStudents(meta.page)} />}
+
       {/* ── Import Modal (legacy fallback) ── */}
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowImport(false)}>
@@ -552,6 +557,10 @@ export default function StudentSearch() {
                   {saving ? 'กำลังบันทึก…' : selectedVehicle ? (editStudent.vehicle_id ? 'เปลี่ยนรถ' : 'เพิ่มเข้ารถ') : 'ลบออกจากรถ'}
                 </button>
               )}
+              <button onClick={() => setTransferStudent(editStudent)} disabled={saving}
+                className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 py-2.5 rounded-lg transition disabled:opacity-40">
+                ขอโอนย้ายนักเรียน
+              </button>
               <button onClick={handleWithdraw} disabled={saving}
                 className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2.5 rounded-lg transition disabled:opacity-40">
                 ลาออก / ลบออกจากระบบ

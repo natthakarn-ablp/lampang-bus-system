@@ -1181,4 +1181,45 @@ router.get('/live-vehicles', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Phase 10.13B-6 — Student Transfer / Wrong-School approval queue ─────────
+// All admin-only (router.use(requireRole('admin')) above).
+router.get('/student-transfer-requests', async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const out = await transfer.listForAdmin(pool, { status: req.query.status });
+    return sendSuccess(res, out);
+  } catch (err) { next(err); }
+});
+
+router.get('/student-transfer-requests/:id', async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const out = await transfer.getDetailForAdmin(pool, { requestId: parseInt(req.params.id, 10) });
+    return sendSuccess(res, out);
+  } catch (err) { next(err); }
+});
+
+router.post('/student-transfer-requests/:id/approve', async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const out = await transfer.approveAndApply(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+      newValue: { result: out.status, applied_student_id: out.applied_student_id || null }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    const msg = out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
+      : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
+      : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้ (พบรหัสนักเรียนซ้ำในโรงเรียนปลายทางหรือข้อมูลไม่ครบ)'
+      : out.status === 'STALE_NEEDS_REVIEW' ? 'ข้อมูลนักเรียนเปลี่ยนแปลงตั้งแต่ส่งคำขอ กรุณาตรวจสอบใหม่' : 'ดำเนินการแล้ว';
+    return sendSuccess(res, out, msg);
+  } catch (err) { next(err); }
+});
+
+router.post('/student-transfer-requests/:id/reject', async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const out = await transfer.reject(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(req.params.id), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

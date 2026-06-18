@@ -58,11 +58,16 @@ api.interceptors.response.use(
       !original._retry &&
       localStorage.getItem('refresh_token')
     ) {
+      // Audit 2026-06-18 (frontend-security): mark the queued request as retried
+      // and ensure headers exist before mutating, so a still-401 response after
+      // refresh can't loop and a request without a headers object can't throw.
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           pendingQueue.push({ resolve, reject });
         })
           .then((token) => {
+            original._retry = true;
+            original.headers = original.headers || {};
             original.headers.Authorization = `Bearer ${token}`;
             return api(original);
           })
@@ -79,6 +84,7 @@ api.interceptors.response.use(
         const newToken = res.data.data.access_token;
         localStorage.setItem('access_token', newToken);
         processQueue(null, newToken);
+        original.headers = original.headers || {};
         original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch (refreshErr) {

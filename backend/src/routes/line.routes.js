@@ -6,6 +6,7 @@ const router = express.Router();
 const env = require('../config/env');
 const lineSvc = require('../services/line.service');
 const tpl = require('../services/lineFlexTemplates.service');
+const bindGuard = require('../services/lineBindGuard');
 
 /**
  * Verify LINE webhook signature (HMAC-SHA256, base64).
@@ -30,6 +31,35 @@ function verifySignature(body, signature) {
   }
   if (provided.length !== expected.length) return false;
   return crypto.timingSafeEqual(expected, provided);
+}
+
+/**
+ * Constant-time string compare for API keys (audit 2026-06-18, line-integration).
+ * Avoids the timing side-channel of `!==`.
+ */
+function safeKeyEqual(a, b) {
+  const ba = Buffer.from(String(a == null ? '' : a));
+  const bb = Buffer.from(String(b == null ? '' : b));
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
+// In-memory dedup of recently seen LINE webhookEventIds (audit 2026-06-18,
+// line-integration): LINE retries deliveries, so without dedup a single event can
+// be processed multiple times. Bounded ring to cap memory; single-instance only.
+const SEEN_EVENTS = new Map(); // id -> timestamp
+const SEEN_EVENTS_MAX = 5000;
+function alreadyProcessed(eventId) {
+  if (!eventId) return false;
+  if (SEEN_EVENTS.has(eventId)) return true;
+  SEEN_EVENTS.set(eventId, Date.now());
+  if (SEEN_EVENTS.size > SEEN_EVENTS_MAX) {
+    // drop the oldest ~10%
+    const drop = Math.floor(SEEN_EVENTS_MAX * 0.1);
+    let i = 0;
+    for (const k of SEEN_EVENTS.keys()) { SEEN_EVENTS.delete(k); if (++i >= drop) break; }
+  }
+  return false;
 }
 
 // LINE webhook — uses express.raw to get Buffer for signature verification
@@ -58,6 +88,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const body = JSON.parse(rawBody.toString());
     const events = body.events || [];
     for (const event of events) {
+      // Skip a redelivered event we've already handled (replay/retry dedup).
+      if (alreadyProcessed(event.webhookEventId)) continue;
       await handleEvent(event).catch(err =>
         console.error('[LINE] Event error:', err.message)
       );
@@ -257,8 +289,10 @@ async function handleTextMessage(lineUserId, text) {
   }
 
   if (state?.step === 'await_student_id') {
-    const studentId = parseInt(cmd, 10);
-    if (!studentId || isNaN(studentId)) {
+    // Phase 10.13C-4A — accept the VISIBLE รหัสนักเรียน (student_code), which may be
+    // non-numeric, as the credential (was parseInt-only).
+    const credential = String(cmd || '').trim();
+    if (!credential || credential.length > 50) {
       await lineSvc.pushParentFlex(lineUserId, {
         flex:         tpl.buildParentInvalidStudentCard(),
         fallbackText: tpl.fallbackInvalidStudent(),
@@ -266,9 +300,26 @@ async function handleTextMessage(lineUserId, text) {
       });
       return;
     }
-    const result = await lineSvc.tryLinkByPhoneAndStudentId(lineUserId, state.phone, studentId);
+
+    // Same credential lockout as the LIFF bind endpoints (per phone / student /
+    // pair / sub). The chat path is another guessing surface for the same pair.
+    const guardKeys = bindGuard.keysFor({ phone: state.phone, studentKey: credential, sub: lineUserId });
+    const lock = bindGuard.checkLock(guardKeys);
+    if (lock.locked) {
+      await lineSvc.auditBind({ sub: lineUserId, phone: state.phone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason });
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentBindErrorCard('พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง'),
+        fallbackText: tpl.fallbackBindError('พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง'),
+        logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+      });
+      return;
+    }
+
+    const result = await lineSvc.tryLinkByPhoneAndStudentId(lineUserId, state.phone, credential);
     lineSvc.clearLinkState(lineUserId);
     if (result.success) {
+      bindGuard.noteSuccess(guardKeys);
+      await lineSvc.auditBind({ sub: lineUserId, phone: state.phone, studentCode: credential, action: 'LINE_BIND_SUCCESS', reason: 'SUCCESS' });
       await lineSvc.logMessage(lineUserId, 'system', 'bind_success', 'ok', `parent_id=${result.parentId}`);
       const children = await lineSvc.getLinkedChildren(lineUserId);
       await lineSvc.pushParentFlex(lineUserId, {
@@ -277,6 +328,13 @@ async function handleTextMessage(lineUserId, text) {
         logPrefix:    '[LINE_PARENT_BIND_FLEX]',
       });
     } else {
+      const isConflict = !!result.code; // PHONE_BOUND_TO_OTHER / USER_BOUND_TO_OTHER_PHONE
+      if (!isConflict) bindGuard.noteFailure(guardKeys);
+      await lineSvc.auditBind({
+        sub: lineUserId, phone: state.phone, studentCode: credential,
+        action: isConflict ? 'LINE_BIND_DUPLICATE_OR_ALREADY_BOUND' : 'LINE_BIND_CONFIRM_FAILED',
+        reason: isConflict ? 'ALREADY_BOUND' : 'CREDENTIAL_MISMATCH',
+      });
       await lineSvc.pushParentFlex(lineUserId, {
         flex:         tpl.buildParentBindErrorCard(result.message),
         fallbackText: tpl.fallbackBindError(result.message),
@@ -479,7 +537,7 @@ router.post('/process-notifications', (req, res, next) => {
     }
     return next();
   }
-  if (req.headers['x-api-key'] !== cronKey) {
+  if (!safeKeyEqual(req.headers['x-api-key'], cronKey)) {
     return res.status(401).json({ success: false, message: 'Invalid API key', errors: [], data: null });
   }
   return next();

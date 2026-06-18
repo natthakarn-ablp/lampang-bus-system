@@ -219,6 +219,17 @@ async function applyInsertRow(pool, { row, schoolId, userId, r }) {
       [newId, row.student_code, cid, n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, schoolId, row.matched_vehicle_id || null, TERM]
     );
     await linkParent(conn, newId, n.parent_name, n.parent_phone, userId);
+    // Audit 2026-06-18 (limitations): the import-apply INSERT path created a
+    // student without a per-row CREATE audit (other apply branches audit). Record
+    // it so every student creation is traceable per the audit-logging rule.
+    await logAudit({
+      userId, action: 'CREATE', entityType: 'student', entityId: String(newId), conn,
+      newValue: {
+        student_code: row.student_code, first_name: n.first_name, last_name: n.last_name,
+        school_id: schoolId, vehicle_id: row.matched_vehicle_id || null,
+        source: 'import_apply', row_no: row.row_no,
+      },
+    });
     await conn.query("UPDATE import_batch_rows SET status='APPLIED', new_student_id=?, applied_at=NOW() WHERE id=?", [newId, row.id]);
     await conn.commit(); r.applied++; r.details.push({ row: row.row_no, status: 'APPLIED', student_id: newId });
   } catch (e) {

@@ -499,21 +499,25 @@ router.get('/audit-logs', async (req, res, next) => {
                 al.old_value, al.new_value, al.created_at,
                 u.display_name AS actor_name, u.role AS actor_role
          FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id
-         WHERE ${where} ORDER BY al.created_at DESC LIMIT 5000`, params
+         WHERE ${where} ORDER BY al.created_at DESC LIMIT 5001`, params
       );
+      // Audit 2026-06-18 (limitations): detect truncation instead of silently capping.
+      const truncated = rows.length > 5000;
       // Phase 10.12G — neutralise every cell + redact PII from audit values.
       const esc = csvCell;
       const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
-      const lines = rows.map(r => [
+      const lines = rows.slice(0, 5000).map(r => [
         esc(new Date(r.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })),
         esc(r.actor_name), esc(r.actor_role), esc(r.action),
         esc(r.entity_type), esc(r.entity_id),
         esc(r.old_value ? redactAuditValue(r.old_value) : ''),
         esc(r.new_value ? redactAuditValue(r.new_value) : ''),
       ].join(','));
+      if (truncated) lines.push(esc('# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14'));
       const csv = [header, ...lines].join('\n');
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=audit_admin_${new Date().toISOString().split('T')[0]}.csv`);
+      if (truncated) res.setHeader('X-Truncated', 'true');
       return res.send('\uFEFF' + csv);
     }
 

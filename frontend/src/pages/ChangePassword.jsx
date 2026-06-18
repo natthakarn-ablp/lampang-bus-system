@@ -18,8 +18,8 @@ export default function ChangePassword() {
     e.preventDefault();
     setError('');
 
-    if (form.new_password.length < 6) {
-      setError('รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร');
+    if (form.new_password.length < 8) {
+      setError('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร');
       return;
     }
     if (form.new_password !== form.confirm) {
@@ -39,11 +39,14 @@ export default function ChangePassword() {
         refresh_token: localStorage.getItem('refresh_token'),
       });
 
-      // Clear must_change_password in both AuthContext and localStorage
-      updateUser({ must_change_password: false });
-
-      toast.success('เปลี่ยนรหัสผ่านสำเร็จ');
-      navigate(ROLE_HOME[user?.role] || '/', { replace: true });
+      // Audit 2026-06-18 (frontend-security): the backend now invalidates all
+      // tokens issued before the change (access + refresh), so the current session
+      // is dead. Clear local state and force a fresh login with the new password
+      // instead of navigating on with a stale token (which would 401).
+      localStorage.clear();
+      sessionStorage.clear();
+      toast.success('เปลี่ยนรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบใหม่');
+      navigate('/login', { replace: true });
     } catch (err) {
       setError(err.response?.data?.message || 'ไม่สามารถเปลี่ยนรหัสผ่านได้');
     } finally {
@@ -67,14 +70,14 @@ export default function ChangePassword() {
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</label>
-            <input type="password" value={form.new_password} required minLength={6}
+            <label className="block text-sm text-gray-600 mb-1">รหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)</label>
+            <input type="password" value={form.new_password} required minLength={8}
               onChange={(e) => setForm({ ...form, new_password: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
           </div>
           <div>
             <label className="block text-sm text-gray-600 mb-1">ยืนยันรหัสผ่านใหม่</label>
-            <input type="password" value={form.confirm} required minLength={6}
+            <input type="password" value={form.confirm} required minLength={8}
               onChange={(e) => setForm({ ...form, confirm: e.target.value })}
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             {form.confirm && form.new_password !== form.confirm && (

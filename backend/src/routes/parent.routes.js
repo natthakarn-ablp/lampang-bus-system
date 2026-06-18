@@ -10,6 +10,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const lineSvc = require('../services/line.service');
 const idTokenSvc = require('../services/lineIdToken.service');
 const tpl = require('../services/lineFlexTemplates.service');
+const bindGuard = require('../services/lineBindGuard');
 
 // Rate limit: 60 requests per minute per IP (parents querying status)
 const parentLimiter = rateLimit({
@@ -20,6 +21,21 @@ const parentLimiter = rateLimit({
   message: { success: false, message: 'Too many requests. Try again shortly.', errors: [], data: null },
 });
 router.use(parentLimiter);
+
+// Audit 2026-06-18 (line-integration / auth-crypto): account BINDING is far more
+// sensitive than read traffic — a (phone, studentId) pair authorizes linking to a
+// child. The generous 60/min limiter made guessing cheap, so bind endpoints get a
+// much tighter per-IP budget. NOTE (residual): the strongest fix is proof of phone
+// ownership (SMS OTP) or a school-issued one-time claim code; that needs an SMS
+// provider decision and is tracked separately.
+const bindLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { success: false, message: 'มีการพยายามผูกบัญชีหลายครั้งเกินไป กรุณาลองใหม่ภายหลัง', errors: [], data: null },
+});
 
 /**
  * Parent REST API — for LIFF parent access (status / history view).
@@ -96,12 +112,15 @@ router.get('/children/:id/history', requireParentLineAuth, async (req, res, next
     const child = children.find(c => c.id === parseInt(req.params.id));
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
 
-    const days = parseInt(req.query.days) || 7;
+    // Audit 2026-06-18 (limitations): clamp the window so a huge ?days can't scan
+    // unbounded history.
+    const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 90);
     const [rows] = await pool.query(
       `SELECT check_date, session, status, checked_at
        FROM checkin_logs
        WHERE student_id = ? AND check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-       ORDER BY check_date DESC, checked_at DESC`,
+       ORDER BY check_date DESC, checked_at DESC
+       LIMIT 500`,
       [parseInt(req.params.id), days]
     );
 
@@ -127,6 +146,17 @@ function validateStudentId(raw) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+// Phase 10.13C-4A — the credential is the VISIBLE รหัสนักเรียน (student_code), which
+// may be non-numeric for newly-imported students. Accept a trimmed 1–50 char code.
+// The frontend currently posts it in the `studentId` field; a `student_code` field
+// is preferred and takes precedence when present.
+function validateStudentCredential(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (s.length < 1 || s.length > 50) return null;
+  return s;
+}
+
 // POST /api/parent/line/bind-preview
 // body: { idToken, phone, studentId }
 // → 200 { student: { ... }, masked_phone: "090****567" }   parent may proceed
@@ -134,15 +164,25 @@ function validateStudentId(raw) {
 // → 401 idToken invalid
 // → 404 phone+studentId combo not found
 // → 409 already linked (different parent)
-router.post('/line/bind-preview', async (req, res, next) => {
+router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
+  const meta = { ip: req.ip, ua: req.headers['user-agent'] };
   try {
-    const { idToken, phone, studentId } = req.body || {};
+    const { idToken, phone, studentId, student_code } = req.body || {};
     const errors = [];
     const cleanPhone = validatePhone(phone);
-    const cleanStudent = validateStudentId(studentId);
-    if (!cleanPhone)   errors.push({ field: 'phone',     message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก' });
-    if (!cleanStudent) errors.push({ field: 'studentId', message: 'กรุณากรอกรหัสนักเรียน (ตัวเลข)' });
+    const credential = validateStudentCredential(student_code != null ? student_code : studentId);
+    if (!cleanPhone)  errors.push({ field: 'phone',     message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก' });
+    if (!credential)  errors.push({ field: 'studentId', message: 'กรุณากรอกรหัสนักเรียน' });
     if (errors.length) return sendError(res, 'ข้อมูลไม่ถูกต้อง', errors, 400);
+
+    // Phase 10.13C-4A — credential lockout (before the credential lookup), so a
+    // brute-force can't be bypassed by rotating IPs.
+    const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential });
+    const lock = bindGuard.checkLock(keys);
+    if (lock.locked) {
+      await lineSvc.auditBind({ phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason, ...meta });
+      return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
+    }
 
     const verify = await idTokenSvc.verifyIdToken(idToken);
     if (!verify.valid) {
@@ -150,17 +190,29 @@ router.post('/line/bind-preview', async (req, res, next) => {
       return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ของคุณได้ กรุณาเปิดผ่านลิงก์ใน LINE OA อีกครั้ง', [], 401);
     }
     const lineUserId = verify.userId;
+    const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, sub: lineUserId });
+    const subLock = bindGuard.checkLock({ sub: subKeys.sub });
+    if (subLock.locked) {
+      await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: subLock.reason, ...meta });
+      return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
+    }
 
     // If this LINE userId is already bound to someone, surface that early so
     // the form can guide them to "ยกเลิกผูกบัญชี" first.
     const existing = await lineSvc.getLinkedParentId(lineUserId);
     if (existing) {
+      await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_DUPLICATE_OR_ALREADY_BOUND', reason: 'ALREADY_BOUND', ...meta });
       return sendError(res, 'บัญชี LINE นี้ผูกอยู่กับผู้ปกครองท่านอื่นแล้ว กรุณาพิมพ์ "ยกเลิกผูกบัญชี" ก่อน', [], 409);
     }
 
-    const match = await lineSvc.findLinkableParent(cleanPhone, cleanStudent);
-    if (!match.found) return sendError(res, match.message || 'ไม่พบข้อมูลที่ตรงกัน', [], 404);
+    const match = await lineSvc.findLinkableParent(cleanPhone, credential);
+    if (!match.found) {
+      bindGuard.noteFailure(subKeys);
+      await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_PREVIEW_FAILED', reason: 'CREDENTIAL_MISMATCH', ...meta });
+      return sendError(res, 'ไม่พบข้อมูลที่ตรงกัน กรุณาตรวจสอบรหัสนักเรียนและเบอร์โทรศัพท์', [], 404);
+    }
 
+    bindGuard.noteSuccess(subKeys); // valid credential — clear the pair counter
     console.log('[LINE_BIND_PREVIEW] ok', { hasStudent: true });
     return sendSuccess(res, {
       student: match.student,
@@ -173,27 +225,48 @@ router.post('/line/bind-preview', async (req, res, next) => {
 // body: { idToken, phone, studentId }
 // → 201 success
 // → same error codes as preview
-router.post('/line/bind-confirm', async (req, res, next) => {
+router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
+  const meta = { ip: req.ip, ua: req.headers['user-agent'] };
   try {
-    const { idToken, phone, studentId } = req.body || {};
+    const { idToken, phone, studentId, student_code } = req.body || {};
     const cleanPhone = validatePhone(phone);
-    const cleanStudent = validateStudentId(studentId);
-    if (!cleanPhone || !cleanStudent) {
+    const credential = validateStudentCredential(student_code != null ? student_code : studentId);
+    if (!cleanPhone || !credential) {
       return sendError(res, 'ข้อมูลไม่ถูกต้อง', [], 400);
     }
+
+    // Credential lockout before lookup (see bind-preview).
+    const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential });
+    const lock = bindGuard.checkLock(keys);
+    if (lock.locked) {
+      await lineSvc.auditBind({ phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason, ...meta });
+      return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
+    }
+
     const verify = await idTokenSvc.verifyIdToken(idToken);
     if (!verify.valid) {
       console.warn('[LINE_BIND_CONFIRM] id_token_invalid', { error: verify.error });
       return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ของคุณได้ กรุณาเปิดผ่านลิงก์ใน LINE OA อีกครั้ง', [], 401);
     }
     const lineUserId = verify.userId;
+    const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, sub: lineUserId });
+    const subLock = bindGuard.checkLock({ sub: subKeys.sub });
+    if (subLock.locked) {
+      await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: subLock.reason, ...meta });
+      return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
+    }
 
     const existing = await lineSvc.getLinkedParentId(lineUserId);
     if (existing) {
+      await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_DUPLICATE_OR_ALREADY_BOUND', reason: 'ALREADY_BOUND', ...meta });
       return sendError(res, 'บัญชี LINE นี้ผูกอยู่แล้ว', [], 409);
     }
-    const match = await lineSvc.findLinkableParent(cleanPhone, cleanStudent);
-    if (!match.found) return sendError(res, match.message || 'ไม่พบข้อมูลที่ตรงกัน', [], 404);
+    const match = await lineSvc.findLinkableParent(cleanPhone, credential);
+    if (!match.found) {
+      bindGuard.noteFailure(subKeys);
+      await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_CONFIRM_FAILED', reason: 'CREDENTIAL_MISMATCH', ...meta });
+      return sendError(res, 'ไม่พบข้อมูลที่ตรงกัน กรุณาตรวจสอบรหัสนักเรียนและเบอร์โทรศัพท์', [], 404);
+    }
 
     try {
       await lineSvc.commitLineLink(lineUserId, match.parentId);
@@ -201,10 +274,13 @@ router.post('/line/bind-confirm', async (req, res, next) => {
       // Phone-binding conflict (Round 1) — surface as 409 with a localized msg.
       if (bindErr instanceof lineSvc.LineBindConflictError) {
         console.warn('[LINE_BIND_CONFIRM] conflict', { code: bindErr.code });
+        await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: match.studentCode || credential, action: 'LINE_BIND_DUPLICATE_OR_ALREADY_BOUND', reason: 'ALREADY_BOUND', ...meta });
         return sendError(res, bindErr.message, [{ field: 'phone', code: bindErr.code }], 409);
       }
       throw bindErr;
     }
+    bindGuard.noteSuccess(subKeys);
+    await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: match.studentCode || credential, action: 'LINE_BIND_SUCCESS', reason: 'SUCCESS', ...meta });
     await lineSvc.logMessage(lineUserId, 'system', 'bind_success_liff', 'ok', `parent_id=${match.parentId}`);
     console.log('[LINE_BIND_CONFIRM] linked', { parentId: match.parentId });
 

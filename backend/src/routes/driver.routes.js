@@ -25,6 +25,8 @@ const { authenticate }  = require('../middleware/auth');
 const { requireRole }   = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit }      = require('../utils/audit');
+const { validatePassword } = require('../utils/passwordPolicy');
+const { isAllowedImage } = require('../utils/fileType');
 const checkinSvc        = require('../services/checkin.service');
 const ppSvc             = require('../services/pickupPoint.service');
 const leaveSvc          = require('../services/leave.service');
@@ -621,6 +623,20 @@ router.post('/profile/photo', upload.single('photo'), async (req, res, next) => 
   try {
     if (!req.file) return sendError(res, 'กรุณาเลือกไฟล์รูปภาพ (.jpg, .png, .webp ขนาดไม่เกิน 2MB)', [], 400);
 
+    // Audit 2026-06-18 (fileupload-import): the extension filter is not enough —
+    // sniff the actual bytes and reject anything that isn't a real image, deleting
+    // the just-written file so a disguised payload can't linger on disk.
+    try {
+      const head = fs.readFileSync(req.file.path).subarray(0, 16);
+      if (!isAllowedImage(head)) {
+        fs.unlink(req.file.path, () => {});
+        return sendError(res, 'ไฟล์ที่อัปโหลดไม่ใช่รูปภาพที่รองรับ (.jpg, .png, .webp)', [], 400);
+      }
+    } catch {
+      fs.unlink(req.file.path, () => {});
+      return sendError(res, 'ไม่สามารถอ่านไฟล์รูปภาพได้', [], 400);
+    }
+
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const [[dva]] = await pool.query(
       `SELECT driver_id FROM driver_vehicle_assignments WHERE vehicle_id = ? AND is_active = TRUE LIMIT 1`,
@@ -646,17 +662,29 @@ router.post('/change-password', async (req, res, next) => {
   try {
     const { current_password, new_password } = req.body;
     if (!current_password || !new_password) return sendError(res, 'กรุณากรอกรหัสผ่านเดิมและรหัสผ่านใหม่', [], 400);
-    if (String(new_password).length < 4) return sendError(res, 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร', [], 400);
 
     const bcrypt = require('bcrypt');
-    const [[user]] = await pool.query(`SELECT password_hash FROM users WHERE id = ? AND is_deleted = FALSE`, [req.user.id]);
+    const [[user]] = await pool.query(`SELECT username, password_hash FROM users WHERE id = ? AND is_deleted = FALSE`, [req.user.id]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
 
+    // Verify the current password BEFORE the strength check so a wrong current
+    // password is reported as such (keeps the generic "incorrect" response).
     const match = await bcrypt.compare(String(current_password), user.password_hash);
     if (!match) return sendError(res, 'รหัสผ่านเดิมไม่ถูกต้อง', [], 400);
 
+    // Audit 2026-06-18 (auth-crypto): share the system-wide password policy.
+    const pwCheck = validatePassword(new_password, { username: user.username });
+    if (!pwCheck.ok) return sendError(res, pwCheck.message, [], 400);
+
     const newHash = await bcrypt.hash(String(new_password), 12);
-    await pool.query(`UPDATE users SET password_hash = ? WHERE id = ?`, [newHash, req.user.id]);
+    // Audit 2026-06-18 (HIGH, auth-crypto): set password_changed_at + clear the
+    // forced-change flag exactly like every other password path, so previously
+    // issued access/refresh tokens are invalidated. Previously this route updated
+    // only password_hash, leaving stolen sessions valid for up to 7 days.
+    await pool.query(
+      `UPDATE users SET password_hash = ?, must_change_password = FALSE, password_changed_at = NOW() WHERE id = ?`,
+      [newHash, req.user.id]
+    );
 
     await logAudit({
       userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: req.user.id,
@@ -721,6 +749,10 @@ router.get('/search-students', async (req, res, next) => {
     const like = `%${q}%`;
 
     const [rows] = await pool.query(
+      // Audit 2026-06-18 (authz-scope): constrain the search to schools this
+      // driver's vehicle actually serves, so a driver can't enumerate the
+      // province-wide student directory. A vehicle with no students yet returns
+      // nothing (there is no school context to add into).
       `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
               sc.name AS school_name, v.plate_no AS current_plate
        FROM students s
@@ -728,6 +760,10 @@ router.get('/search-students', async (req, res, next) => {
        LEFT JOIN vehicles v ON v.id = s.vehicle_id
        WHERE s.is_deleted = FALSE
          AND (s.vehicle_id IS NULL OR s.vehicle_id != ?)
+         AND s.school_id IN (
+           SELECT DISTINCT school_id FROM students
+           WHERE vehicle_id = ? AND is_deleted = FALSE AND school_id IS NOT NULL
+         )
          AND (
            CAST(s.id AS CHAR) LIKE ?
            OR s.first_name LIKE ?
@@ -737,7 +773,7 @@ router.get('/search-students', async (req, res, next) => {
          )
        ORDER BY s.first_name
        LIMIT 20`,
-      [vehicle.vehicle_id, like, like, like, like, like]
+      [vehicle.vehicle_id, vehicle.vehicle_id, like, like, like, like, like]
     );
 
     return sendSuccess(res, rows);

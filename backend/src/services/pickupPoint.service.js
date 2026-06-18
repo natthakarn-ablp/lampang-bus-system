@@ -482,25 +482,49 @@ async function getAssignableStudentsForPickupPoint(point, { schoolId = null, gra
  * rolls back cleanly.
  */
 async function replacePickupPointStudents(pointId, studentIds, ctx = {}) {
+  // Audit 2026-06-18 (authz-scope): when a caller may only manage its OWN
+  // students at a shared pickup point (the school edit flow), pass
+  // ctx.restrictToSchoolId so the delete-then-insert only touches that school's
+  // rows. Without it, a school sharing a bus could wipe another school's students
+  // off the same physical stop. The driver flow owns the whole vehicle and passes
+  // no restriction.
+  const restrictSchool = ctx.restrictToSchoolId || null;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // Read current assignments for the audit oldValue
-    const [oldRows] = await conn.query(
-      `SELECT student_id FROM student_pickup_points WHERE pickup_point_id = ?`,
-      [pointId]
-    );
+    // Read current assignments for the audit oldValue (scoped to the caller's
+    // school when restricted, so removed/added reflect only their own change).
+    const [oldRows] = restrictSchool
+      ? await conn.query(
+          `SELECT spp.student_id FROM student_pickup_points spp
+           JOIN students s ON s.id = spp.student_id
+           WHERE spp.pickup_point_id = ? AND s.school_id = ?`,
+          [pointId, restrictSchool]
+        )
+      : await conn.query(
+          `SELECT student_id FROM student_pickup_points WHERE pickup_point_id = ?`,
+          [pointId]
+        );
     const oldIds = oldRows.map(r => r.student_id);
 
     // Delete-then-insert pattern. Simpler than diffing, and the table
     // is tiny per-point (typically < 30 students per pickup), so the
     // write cost is negligible. INSERT IGNORE on the way back in
     // protects against accidental duplicates in the input array.
-    await conn.query(
-      `DELETE FROM student_pickup_points WHERE pickup_point_id = ?`,
-      [pointId]
-    );
+    if (restrictSchool) {
+      await conn.query(
+        `DELETE spp FROM student_pickup_points spp
+         JOIN students s ON s.id = spp.student_id
+         WHERE spp.pickup_point_id = ? AND s.school_id = ?`,
+        [pointId, restrictSchool]
+      );
+    } else {
+      await conn.query(
+        `DELETE FROM student_pickup_points WHERE pickup_point_id = ?`,
+        [pointId]
+      );
+    }
 
     if (Array.isArray(studentIds) && studentIds.length > 0) {
       const values = studentIds.map(sid => [sid, pointId]);

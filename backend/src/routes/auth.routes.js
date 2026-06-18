@@ -11,10 +11,45 @@ const env = require('../config/env');
 const { authenticate } = require('../middleware/auth');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit } = require('../utils/audit');
+const { validatePassword } = require('../utils/passwordPolicy');
 
 const router = express.Router();
 
 const BCRYPT_COST = 12;
+
+// JWT must only ever be verified/signed with the symmetric algorithm we use.
+// Pinning this closes the alg-confusion / "alg:none" class permanently
+// (audit 2026-06-18, auth-crypto).
+const JWT_ALG = 'HS256';
+
+// Fixed bcrypt hash used to equalise login timing on the user-not-found and
+// account-disabled branches, so response latency can't be used to enumerate
+// usernames (audit 2026-06-18, auth-crypto). Computed once at startup; the input
+// is a constant that no real password equals.
+const DUMMY_BCRYPT_HASH = bcrypt.hashSync('lampang-login-timing-equaliser', BCRYPT_COST);
+
+// In-process per-(username+IP) failed-login lockout, layered on top of the
+// per-IP rate limiter. Stops sustained guessing against a single account even
+// when the attacker stays under the IP limit. Single-instance (pm2 fork); for a
+// multi-instance deployment move this to a shared store (Redis / DB table).
+const LOGIN_FAILS = new Map();
+const LOGIN_LOCK = { THRESHOLD: 10, WINDOW_MS: 15 * 60 * 1000 };
+function loginKey(username, ip) {
+  return `${String(username || '').trim().toLowerCase()}|${ip || ''}`;
+}
+function isLoginLocked(key) {
+  const e = LOGIN_FAILS.get(key);
+  if (!e) return false;
+  if (Date.now() - e.first > LOGIN_LOCK.WINDOW_MS) { LOGIN_FAILS.delete(key); return false; }
+  return e.count >= LOGIN_LOCK.THRESHOLD;
+}
+function noteLoginFail(key) {
+  const now = Date.now();
+  const e = LOGIN_FAILS.get(key);
+  if (!e || now - e.first > LOGIN_LOCK.WINDOW_MS) LOGIN_FAILS.set(key, { count: 1, first: now });
+  else e.count += 1;
+}
+function clearLoginFails(key) { LOGIN_FAILS.delete(key); }
 
 // ─── Rate limiters ──────────────────────────────────────────────────────────
 const loginLimiter = rateLimit({
@@ -52,7 +87,7 @@ function generateAccessToken(user) {
       mustChangePassword: !!user.must_change_password,
     },
     env.jwt.secret,
-    { expiresIn: env.jwt.expiresIn }
+    { expiresIn: env.jwt.expiresIn, algorithm: JWT_ALG }
   );
 }
 
@@ -61,7 +96,7 @@ function generateRefreshToken(userId) {
   const token = jwt.sign(
     { sub: userId, jti, type: 'refresh' },
     env.jwt.secret,
-    { expiresIn: env.jwt.refreshExpiresIn }
+    { expiresIn: env.jwt.refreshExpiresIn, algorithm: JWT_ALG }
   );
   return { token, jti };
 }
@@ -71,7 +106,7 @@ function generateRefreshToken(userId) {
  */
 function decodeRefreshToken(token) {
   try {
-    return jwt.verify(token, env.jwt.secret);
+    return jwt.verify(token, env.jwt.secret, { algorithms: [JWT_ALG] });
   } catch {
     return null;
   }
@@ -94,6 +129,11 @@ router.post('/login', loginLimiter, async (req, res, next) => {
       return sendError(res, 'username and password are required', [], 400);
     }
 
+    const lockKey = loginKey(username, req.ip);
+    if (isLoginLocked(lockKey)) {
+      return sendError(res, 'มีการพยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 15 นาที', [], 429);
+    }
+
     const [rows] = await pool.query(
       `SELECT id, username, password_hash, role, scope_type, scope_id,
               grade_scope, display_name, is_active, is_deleted, must_change_password
@@ -104,6 +144,10 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     );
 
     if (rows.length === 0) {
+      // Run a dummy bcrypt compare so the not-found path costs the same as a real
+      // one — removes the timing oracle for username enumeration (auth-crypto).
+      await bcrypt.compare(String(password), DUMMY_BCRYPT_HASH);
+      noteLoginFail(lockKey);
       await logAudit({ userId: null, action: 'LOGIN', entityType: 'user', entityId: null,
         newValue: { username: String(username).trim(), result: 'failed', reason: 'user_not_found' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
@@ -113,6 +157,8 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     const user = rows[0];
 
     if (!user.is_active) {
+      await bcrypt.compare(String(password), DUMMY_BCRYPT_HASH); // equalise timing
+      noteLoginFail(lockKey);
       await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
         newValue: { username: user.username, result: 'failed', reason: 'account_disabled' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
@@ -124,11 +170,14 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     const passwordMatch = await bcrypt.compare(String(password), user.password_hash);
     if (!passwordMatch) {
+      noteLoginFail(lockKey);
       await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
         newValue: { username: user.username, result: 'failed', reason: 'wrong_password' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
       return sendError(res, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', [], 401);
     }
+
+    clearLoginFails(lockKey);
 
     // Update last_login
     await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
@@ -205,12 +254,8 @@ router.post('/change-password', authenticate, async (req, res, next) => {
       return sendError(res, 'current_password and new_password are required', [], 400);
     }
 
-    if (String(new_password).length < 6) {
-      return sendError(res, 'new_password must be at least 6 characters', [], 400);
-    }
-
     const [rows] = await pool.query(
-      'SELECT id, password_hash FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
+      'SELECT id, username, password_hash FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
       [req.user.id]
     );
 
@@ -221,6 +266,11 @@ router.post('/change-password', authenticate, async (req, res, next) => {
     const match = await bcrypt.compare(String(current_password), rows[0].password_hash);
     if (!match) {
       return sendError(res, 'Current password is incorrect', [], 400);
+    }
+
+    const pwCheck = validatePassword(new_password, { username: rows[0].username });
+    if (!pwCheck.ok) {
+      return sendError(res, pwCheck.message, [], 400);
     }
 
     const newHash = await bcrypt.hash(String(new_password), BCRYPT_COST);

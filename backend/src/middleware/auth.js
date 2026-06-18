@@ -40,7 +40,9 @@ async function authenticate(req, res, next) {
   const token = authHeader.slice(7); // strip "Bearer "
 
   try {
-    const payload = jwt.verify(token, env.jwt.secret);
+    // Pin the algorithm so a forged alg:none / alg-confusion token can never verify
+    // (audit 2026-06-18, auth-crypto).
+    const payload = jwt.verify(token, env.jwt.secret, { algorithms: ['HS256'] });
 
     // Reject refresh tokens presented as access tokens
     if (payload.type === 'refresh') {
@@ -66,7 +68,7 @@ async function authenticate(req, res, next) {
     // One indexed primary-key lookup that also yields the current
     // must_change_password flag (no second query needed).
     const [rows] = await pool.query(
-      'SELECT is_active, must_change_password, driver_id FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
+      'SELECT is_active, must_change_password, driver_id, password_changed_at FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
       [payload.sub]
     );
     const dbUser = rows[0];
@@ -76,6 +78,18 @@ async function authenticate(req, res, next) {
       // everything else (including /me) with a generic, leak-free message.
       if (path === '/api/auth/logout') return next();
       return sendError(res, 'บัญชีนี้ถูกปิดการใช้งาน', [{ code: 'ACCOUNT_DISABLED' }], 401);
+    }
+
+    // Phase 10.13C audit (auth-crypto H3 completion) — hard-invalidate any ACCESS
+    // token minted before the last password change/reset, mirroring the
+    // /refresh-token guard. Without this, a stolen access token stayed valid for
+    // its full 24h even after the victim changed their password. Logout is still
+    // allowed through so the client can clear its own state.
+    if (dbUser.password_changed_at && payload.iat && path !== '/api/auth/logout') {
+      const changedAtUnix = Math.floor(new Date(dbUser.password_changed_at).getTime() / 1000);
+      if (payload.iat < changedAtUnix) {
+        return sendError(res, 'เซสชันหมดอายุจากการเปลี่ยนรหัสผ่าน กรุณาเข้าสู่ระบบใหม่', [{ code: 'PASSWORD_CHANGED' }], 401);
+      }
     }
 
     req.user.mustChangePassword = !!dbUser.must_change_password;

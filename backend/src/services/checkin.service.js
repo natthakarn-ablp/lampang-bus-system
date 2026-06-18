@@ -245,6 +245,20 @@ async function _buildCheckinTransaction(conn, {
   const student = students[0];
   const studentName = `${student.first_name} ${student.last_name}`;
 
+  // 1b. Idempotency guard (audit 2026-06-18, business-logic-txn). Reject an exact
+  // duplicate of the same session+status for today so a double-tap or network
+  // retry can't create duplicate checkin_logs AND duplicate parent notifications.
+  // A different status (board CHECKED_IN → dropoff CHECKED_OUT) is still allowed.
+  const [dupLog] = await conn.query(
+    `SELECT id FROM checkin_logs
+     WHERE student_id = ? AND session = ? AND status = ? AND check_date = CURDATE()
+     LIMIT 1`,
+    [student.id, session, status]
+  );
+  if (dupLog.length) {
+    throw makeError('รายการนี้ถูกบันทึกไปแล้ว', 409);
+  }
+
   // 2. Insert checkin_log
   const [logResult] = await conn.query(
     `INSERT INTO checkin_logs
@@ -442,22 +456,36 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
   const succeeded = [];
   const failed    = [];
 
-  for (const { id: studentId } of students) {
-    const conn = await pool.getConnection();
+  // Audit 2026-06-18 (limitations-scalability): use ONE pooled connection for the
+  // whole batch instead of getConnection()/commit() per student, which thrashed
+  // the 10-slot pool when many buses ran "check-in all" at 07:00. Each student is
+  // isolated with a SAVEPOINT so one failure doesn't abort the rest (preserving
+  // the partial-success contract). studentId is an integer, safe to interpolate
+  // into the savepoint name.
+  const conn = await pool.getConnection();
+  try {
     await conn.beginTransaction();
-    try {
-      const result = await _buildCheckinTransaction(conn, {
-        userId, vehicleId, plateNo, studentId, session,
-        status: 'CHECKED_IN', termId, source,
-      });
-      await conn.commit();
-      succeeded.push(result);
-    } catch (err) {
-      await conn.rollback();
-      failed.push({ student_id: studentId, error: err.message });
-    } finally {
-      conn.release();
+    for (const { id: studentId } of students) {
+      const sp = `ca_${studentId}`;
+      try {
+        await conn.query(`SAVEPOINT ${sp}`);
+        const result = await _buildCheckinTransaction(conn, {
+          userId, vehicleId, plateNo, studentId, session,
+          status: 'CHECKED_IN', termId, source,
+        });
+        await conn.query(`RELEASE SAVEPOINT ${sp}`);
+        succeeded.push(result);
+      } catch (err) {
+        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        failed.push({ student_id: studentId, error: err.message });
+      }
     }
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* swallow */ }
+    throw err;
+  } finally {
+    conn.release();
   }
 
   return { succeeded, failed };

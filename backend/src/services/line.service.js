@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { pool } = require('../config/database');
 const env = require('../config/env');
 
@@ -82,27 +83,42 @@ async function getLineUserIdByPhone(phone) {
   return row ? row.line_user_id : null;
 }
 
-// Verify phone + studentId form a legitimate (approved) parent_student link.
-// Returns { found, parentId, student } — used by both the LIFF preview and
-// the chat bind flow so both paths share one source of truth for matching.
-async function findLinkablePhoneByStudentAndPhone(phone, studentId) {
+// Verify phone + the student credential the parent typed form a legitimate
+// (approved) parent_student link. Returns { found, parentId, studentCode, student }.
+// Used by both the LIFF preview/confirm and the chat bind flow so all paths share
+// one source of truth for matching.
+//
+// Phase 10.13C-4A — the credential is the VISIBLE รหัสนักเรียน (students.student_code),
+// not the internal surrogate id. We match `student_code` first and fall back to the
+// numeric id for backward compatibility: migration 026 set student_code =
+// CAST(id AS CHAR) for migrated rows (so both match identically there), while
+// newly-imported rows have a surrogate id ≠ student_code — matching by code is what
+// the parent actually reads off the school form, and also fixes a latent bug where
+// such students could never be bound. Matching stays anchored on the parent's own
+// phone + an APPROVED parent_student link, so the school-local (non-global)
+// uniqueness of student_code is never ambiguous (scoped to this parent's children).
+async function findLinkablePhoneByStudentAndPhone(phone, studentCredential) {
+  const cred = String(studentCredential == null ? '' : studentCredential).trim();
   const [[row]] = await pool.query(
     `SELECT p.id          AS parent_id,
+            s.student_code AS student_code,
             s.prefix, s.first_name, s.last_name,
             s.grade, s.classroom,
             sc.name       AS school_name
      FROM   parents p
-     JOIN   parent_student ps ON ps.parent_id = p.id AND ps.student_id = ? AND ps.approved = TRUE
+     JOIN   parent_student ps ON ps.parent_id = p.id AND ps.approved = TRUE
      JOIN   students  s ON s.id = ps.student_id AND s.is_deleted = FALSE
+            AND (s.student_code = ? OR CAST(s.id AS CHAR) = ?)
      LEFT JOIN schools sc ON sc.id = s.school_id
      WHERE  p.phone = ? AND p.is_deleted = FALSE
      LIMIT  1`,
-    [studentId, phone]
+    [cred, cred, phone]
   );
   if (!row) return { found: false };
   return {
     found: true,
     parentId: row.parent_id,
+    studentCode: row.student_code,
     student: {
       prefix:      row.prefix,
       first_name:  row.first_name,
@@ -1193,6 +1209,43 @@ async function logMessage(lineUserId, sourceType, messageText, result, detail) {
   );
 }
 
+// ─── LINE bind audit (Phase 10.13C-4A) ───────────────────────────────────────
+// Records every bind attempt/outcome to line_message_logs so repeated guessing is
+// visible to operators. NEVER logs the raw phone or the id_token — phone is masked
+// (081****678) and the LINE sub / ip / ua are short sha fingerprints only.
+function _maskPhone(phone) {
+  const d = String(phone || '').replace(/\D/g, '');
+  if (d.length < 7) return d ? '****' : '';
+  return `${d.slice(0, 3)}****${d.slice(-3)}`;
+}
+function _fp(value) {
+  if (!value) return null;
+  return crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 12);
+}
+
+// action: LINE_BIND_PREVIEW_FAILED | LINE_BIND_CONFIRM_FAILED | LINE_BIND_LOCKED |
+//         LINE_BIND_SUCCESS | LINE_BIND_DUPLICATE_OR_ALREADY_BOUND
+// reason: INVALID_INPUT | CREDENTIAL_MISMATCH | NOT_APPROVED | ALREADY_BOUND |
+//         LOCKED_PHONE | LOCKED_STUDENT | LOCKED_PAIR | LOCKED_SUB | SUCCESS
+async function auditBind({ sub, phone, studentCode, action, reason, ip, ua }) {
+  const detail = JSON.stringify({
+    masked_phone: _maskPhone(phone),
+    student_code: studentCode == null ? null : String(studentCode),
+    sub_fp: _fp(sub),
+    ip_fp: _fp(ip),
+    ua_fp: _fp(ua),
+  });
+  try {
+    await pool.query(
+      `INSERT INTO line_message_logs (line_user_id, source_type, message_text, result, detail, created_at)
+       VALUES (?, 'bind_audit', ?, ?, ?, NOW())`,
+      [sub || null, action, reason || null, detail]
+    );
+  } catch (e) {
+    console.error('[LINE_BIND_AUDIT] failed to write audit:', e.message);
+  }
+}
+
 // ─── Notification Processor ─────────────────────────────────────────────────
 
 async function processUnsentNotifications(limit = 50) {
@@ -1245,6 +1298,6 @@ module.exports = {
   getLinkedParentId, getLinkedParentSummary, unlinkAccount,
   getLinkedChildren, getChildStatusToday,
   sendTextMessage, pushToEmergencyGroup, pushEmergencyFlexMessage,
-  pushParentStatusFlex, pushParentFlex, logMessage,
+  pushParentStatusFlex, pushParentFlex, logMessage, auditBind,
   processUnsentNotifications,
 };

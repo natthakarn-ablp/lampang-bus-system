@@ -4,6 +4,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 
 const env = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
@@ -94,7 +95,18 @@ app.use('/api/driver', driverRoutes);
 app.use('/api/school',      schoolRoutes);
 app.use('/api/affiliation', affiliationRoutes);
 app.use('/api/province',    provinceRoutes);
-app.use('/api/reports',     reportRoutes);
+// Audit 2026-06-18 (config-infra-dos): the report/export endpoints build full
+// datasets in memory and were unthrottled. Cap them so a single authenticated
+// user can't hammer expensive exports. Skipped under test.
+const exportLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { success: false, message: 'ขอรายงานถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+});
+app.use('/api/reports',     exportLimiter, reportRoutes);
 
 // ─── Phase 7+ routes ────────────────────────────────────────────────────────
 app.use('/api/transport', require('./routes/transport.routes'));

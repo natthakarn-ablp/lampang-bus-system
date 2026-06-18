@@ -12,13 +12,16 @@ services:
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "${DB_PORT:-3306}:3306"
+      # Audit 2026-06-18 (config-infra-dos): bind to loopback only so the DB port
+      # is not published to every interface. Use an SSH tunnel for remote access.
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     command: >
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
       --event-scheduler=ON
+      --default-time-zone=+07:00
       --default-authentication-plugin=mysql_native_password
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
@@ -27,12 +30,17 @@ services:
       retries: 5
       start_period: 30s
 
+  # Adminer is a DB admin UI — do NOT expose it publicly. Audit 2026-06-18
+  # (config-infra-dos): bound to loopback and put behind the "debug" profile so a
+  # plain `docker compose up` does NOT start it. Run with `--profile debug` when
+  # you actually need it, and reach it via an SSH tunnel to 127.0.0.1:8080.
   adminer:
     image: adminer:latest
     container_name: lampang_adminer
     restart: unless-stopped
+    profiles: ["debug"]
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       mysql:
         condition: service_healthy

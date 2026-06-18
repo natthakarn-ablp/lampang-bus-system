@@ -198,19 +198,23 @@ router.get('/audit-logs', async (req, res, next) => {
 
     // CSV export mode
     if (req.query.format === 'csv') {
+      // Audit 2026-06-18 (limitations): +1 row to detect truncation.
       const [rows] = await pool.query(
         `SELECT al.id, al.action, al.entity_type, al.entity_id,
                 al.old_value, al.new_value, al.created_at,
                 u.display_name AS actor_name, u.role AS actor_role
          FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id
-         WHERE ${where} ORDER BY al.created_at DESC LIMIT 5000`, params
+         WHERE ${where} ORDER BY al.created_at DESC LIMIT 5001`, params
       );
-      const csv = auditRowsToCsv(rows);
+      const truncated = rows.length > 5000;
+      const csv = auditRowsToCsv(rows.slice(0, 5000));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=audit_province_${new Date().toISOString().split('T')[0]}.csv`);
+      if (truncated) res.setHeader('X-Truncated', 'true');
       logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'audit_csv', entityId: 'province',
-        newValue: { role: req.user.role }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
-      return res.send('\uFEFF' + csv);
+        newValue: { role: req.user.role, truncated }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
+      return res.send('\uFEFF' + csv +
+        (truncated ? '\n"# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14"' : ''));
     }
 
     const [[{ total }]] = await pool.query(

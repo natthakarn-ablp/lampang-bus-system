@@ -216,8 +216,11 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
   try {
     await conn.beginTransaction();
 
+    // Audit 2026-06-18 (business-logic-txn): lock the request row FOR UPDATE so two
+    // concurrent approvals can't both read it as 'pending' and both apply (which
+    // for a new-student request created two duplicate students).
     const [[req]] = await conn.query(
-      `SELECT * FROM roster_change_requests WHERE id = ? AND school_id = ? AND status = 'pending'`,
+      `SELECT * FROM roster_change_requests WHERE id = ? AND school_id = ? AND status = 'pending' FOR UPDATE`,
       [requestId, schoolId]
     );
     if (!req) {
@@ -226,16 +229,35 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
       throw err;
     }
 
-    await conn.query(
+    // Guard the transition on status='pending' and require exactly one row to
+    // change, so a racing second approval that slipped past the lock window aborts.
+    const [upd] = await conn.query(
       `UPDATE roster_change_requests SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_note = ?
-       WHERE id = ?`,
+       WHERE id = ? AND status = 'pending'`,
       [status, userId, reviewNote || null, requestId]
     );
+    if (!upd.affectedRows) {
+      const err = new Error('คำขอถูกดำเนินการไปแล้ว');
+      err.statusCode = 409;
+      throw err;
+    }
 
     // If approved, apply the roster change
     if (status === 'approved') {
       if (req.request_type === 'add' && req.student_id) {
-        // Existing student → assign to vehicle
+        // Existing student → assign to vehicle. Audit 2026-06-18
+        // (business-logic-txn): re-verify the student still exists, isn't
+        // soft-deleted, and still belongs to this school before mutating it (the
+        // request may pre-date a delete/transfer).
+        const [[stu]] = await conn.query(
+          `SELECT id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE FOR UPDATE`,
+          [req.student_id, req.school_id]
+        );
+        if (!stu) {
+          const err = new Error('นักเรียนถูกลบหรือย้ายโรงเรียนแล้ว ไม่สามารถอนุมัติคำขอนี้ได้');
+          err.statusCode = 409;
+          throw err;
+        }
         await conn.query(`UPDATE students SET vehicle_id = ? WHERE id = ?`, [req.vehicle_id, req.student_id]);
       } else if (req.request_type === 'add' && !req.student_id && req.new_student_data) {
         // New student → create student record + assign to vehicle
@@ -327,6 +349,16 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
           [newStudentId, requestId]
         );
       } else if (req.request_type === 'remove') {
+        // Re-verify ownership before clearing the assignment (see add path above).
+        const [[stu]] = await conn.query(
+          `SELECT id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE FOR UPDATE`,
+          [req.student_id, req.school_id]
+        );
+        if (!stu) {
+          const err = new Error('นักเรียนถูกลบหรือย้ายโรงเรียนแล้ว ไม่สามารถอนุมัติคำขอนี้ได้');
+          err.statusCode = 409;
+          throw err;
+        }
         await conn.query(`UPDATE students SET vehicle_id = NULL WHERE id = ?`, [req.student_id]);
       }
     }

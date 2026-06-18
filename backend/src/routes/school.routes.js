@@ -15,6 +15,7 @@ const env     = require('../config/env');
 const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
 const { classifyStudentImport } = require('../utils/studentImport');
+const { isOle2, isAllowedImport } = require('../utils/fileType');
 const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
@@ -414,6 +415,9 @@ router.put('/pickup-points/:id/students', requireFullSchoolScope, async (req, re
       actorId: req.user.id,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
+      // Audit 2026-06-18 (authz-scope): only this school's students may be
+      // removed from a shared point — other schools' rows are preserved.
+      restrictToSchoolId: schoolId,
     });
 
     return sendSuccess(res, result, 'อัปเดตรายชื่อนักเรียนสำเร็จ');
@@ -636,6 +640,15 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
     const normalizedParentPhone = parent_phone !== undefined ? normalizePhone(parent_phone) : undefined;
     if (normalizedParentPhone && !/^\d{9,10}$/.test(normalizedParentPhone)) {
       return sendError(res, 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก (รองรับรูปแบบ 0XX-XXXXXXX)', [], 400);
+    }
+    // Audit 2026-06-18 (limitations): reject over-length values with a clean 400
+    // instead of letting MySQL raise a 500 on column overflow.
+    const LEN_LIMITS = { prefix: 20, first_name: 100, last_name: 100, grade: 20, classroom: 20 };
+    for (const [field, max] of Object.entries(LEN_LIMITS)) {
+      const v = req.body[field];
+      if (v != null && String(v).length > max) {
+        return sendError(res, `ข้อมูล "${field}" ยาวเกินกำหนด (ไม่เกิน ${max} ตัวอักษร)`, [], 400);
+      }
     }
 
     const conn = await pool.getConnection();
@@ -1041,18 +1054,22 @@ router.get('/audit-logs', requireFullSchoolScope, async (req, res, next) => {
 
     // CSV export mode
     if (req.query.format === 'csv') {
+      // Audit 2026-06-18 (limitations): +1 row to detect truncation.
       const [rows] = await pool.query(
         `SELECT al.id, al.action, al.entity_type, al.entity_id,
                 al.old_value, al.new_value, al.created_at,
                 u.display_name AS actor_name, u.role AS actor_role
          FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id
-         WHERE ${scopeWhere} ORDER BY al.created_at DESC LIMIT 5000`,
+         WHERE ${scopeWhere} ORDER BY al.created_at DESC LIMIT 5001`,
         params
       );
-      const csv = auditRowsToCsv(rows);
+      const truncated = rows.length > 5000;
+      const csv = auditRowsToCsv(rows.slice(0, 5000));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=audit_school_${new Date().toISOString().split('T')[0]}.csv`);
-      return res.send('\uFEFF' + csv);
+      if (truncated) res.setHeader('X-Truncated', 'true');
+      return res.send('\uFEFF' + csv +
+        (truncated ? '\n"# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14"' : ''));
     }
 
     const [[{ total }]] = await pool.query(
@@ -1163,6 +1180,19 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     if (!req.file) return sendError(res, 'กรุณาเลือกไฟล์ (.xlsx หรือ .csv)', [], 400);
 
+    // Audit 2026-06-18 (fileupload-import): validate the real bytes, not just the
+    // extension. Reject legacy .xls (OLE2) up front with a clear message — ExcelJS
+    // cannot parse it and previously threw an unhandled 500. The orphaned upload
+    // is removed by the finally block at the end of the handler.
+    let head;
+    try { head = fs.readFileSync(req.file.path).subarray(0, 16); } catch { head = Buffer.alloc(0); }
+    if (isOle2(head)) {
+      return sendError(res, 'ไฟล์ .xls (รุ่นเก่า) ไม่รองรับ กรุณาบันทึกเป็น .xlsx หรือ .csv', [], 400);
+    }
+    if (!isAllowedImport(head)) {
+      return sendError(res, 'ไฟล์ไม่ถูกต้อง รองรับเฉพาะ .xlsx หรือ .csv', [], 400);
+    }
+
     const ext = path.extname(req.file.originalname).toLowerCase();
     const rows = [];
 
@@ -1227,6 +1257,9 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
     }
 
     if (rows.length === 0) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
+    // Audit 2026-06-18 (fileupload-import): bound the work a single upload can
+    // trigger so a (possibly decompression-bombed) file can't exhaust memory/CPU.
+    if (rows.length > 5000) return sendError(res, 'ไฟล์มีจำนวนแถวมากเกินไป (เกิน 5000 แถว) กรุณาแบ่งไฟล์', [], 400);
 
     // Pre-load vehicles for plate lookup. Phase 10.13A-25B — match by CANONICAL
     // plate identity (province-alias + spacing/dash insensitive) so a file plate
@@ -1303,8 +1336,12 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
           }
         }
 
-        // Generate cid_hash placeholder (unique per row)
-        const cidHash = crypto.createHash('sha256').update(`import-${studentId}-${Date.now()}-${r.rowNum}`).digest('hex');
+        // Generate cid_hash placeholder (unique per row).
+        // Audit 2026-06-18 (HIGH, fileupload-import): this used an undefined
+        // `studentId` (it lives only in the PUT/DELETE handlers), throwing a
+        // ReferenceError that rolled back the whole import → 500 every time. Use
+        // the in-scope school + student_code, which is unique per row here.
+        const cidHash = crypto.createHash('sha256').update(`import-${schoolId}-${studentCode}-${Date.now()}-${r.rowNum}`).digest('hex');
 
         const morningEnabled = (r.morning || '').toUpperCase() === 'N' ? 0 : 1;
         const eveningEnabled = (r.evening || '').toUpperCase() === 'N' ? 0 : 1;
@@ -1391,15 +1428,17 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
       conn.release();
     }
 
-    // Cleanup uploaded file
-    fs.unlink(req.file.path, () => {});
-
     const message = `นำเข้าสำเร็จ ${results.success} รายการ` +
       (results.vehicle_linked > 0 ? ` (ผูกรถ ${results.vehicle_linked} คน)` : '') +
       (results.errors.length > 0 ? ` · ไม่สำเร็จ ${results.errors.length} รายการ` : '');
 
     return sendSuccess(res, results, message, null, results.success > 0 ? 201 : 200);
   } catch (err) { next(err); }
+  finally {
+    // Audit 2026-06-18 (fileupload-import): always delete the uploaded PII file —
+    // previously early validation returns / errors left it orphaned under uploads/.
+    if (req.file && req.file.path) fs.unlink(req.file.path, () => {});
+  }
 });
 
 // ─── Phase 10.13B-5 — Import History / Correction Center ────────────────────

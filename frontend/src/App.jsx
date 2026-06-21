@@ -17,6 +17,9 @@ import Login from './pages/Login';
 const ChangePassword       = lazy(() => import('./pages/ChangePassword'));
 const ParentStatus         = lazy(() => import('./pages/parent/ParentStatus'));
 const ParentLink           = lazy(() => import('./pages/parent/ParentLink'));
+const VehicleQr            = lazy(() => import('./pages/qr/VehicleQr'));
+const AdminVehicleQr       = lazy(() => import('./pages/admin/AdminVehicleQr'));
+const DriverConsentForm    = lazy(() => import('./components/consent/DriverConsentForm'));
 
 // Driver
 const DriverLayout         = lazy(() => import('./pages/driver/DriverLayout'));
@@ -307,6 +310,16 @@ export default function App() {
               <Layout><DriverIntegrity /></Layout>
             </PrivateRoute>
           } />
+          <Route path="/admin/vehicle-qr" element={
+            <PrivateRoute allowedRoles={['admin', 'transport']}>
+              <Layout><AdminVehicleQr /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/driver/consent" element={
+            <PrivateRoute allowedRoles={['driver']}>
+              <div className="p-4 max-w-md mx-auto"><DriverConsentForm /></div>
+            </PrivateRoute>
+          } />
           <Route path="/admin/pickup-points" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><AdminPickupPointManagement /></Layout>
@@ -352,6 +365,9 @@ export default function App() {
               <ExecutivePrint />
             </PrivateRoute>
           } />
+
+          {/* Vehicle QR — public scan page (Level-1; escalates to Level-2 in LINE) */}
+          <Route path="/qr/:token" element={<VehicleQr />} />
 
           {/* Parent status — standalone (LIFF / LINE webview) */}
           <Route path="/parent" element={<ParentStatus />} />

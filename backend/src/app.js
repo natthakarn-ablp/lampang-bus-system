@@ -115,6 +115,14 @@ app.use('/api/line',      require('./routes/line.routes'));
 app.use('/api/admin',     require('./routes/admin.routes'));
 app.use('/api/visits',    require('./routes/visits.routes'));
 
+// ─── Vehicle QR + consent (feature-flagged; dark by default) ─────────────────
+// Mounted ONLY when FEATURE_VEHICLE_QR=true. When off, these paths 404 and the
+// existing system is byte-for-byte unchanged (true dark launch).
+if (env.features.vehicleQr) {
+  app.use('/api/qr',      require('./routes/qr.routes'));
+  app.use('/api/consent', require('./routes/consent.routes'));
+}
+
 // ─── Serve frontend build in production ──────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
   const frontendDist = path.join(__dirname, '../../frontend/dist');

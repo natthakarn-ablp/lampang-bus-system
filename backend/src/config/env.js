@@ -86,6 +86,14 @@ const env = {
   export: {
     pdfFontPath: process.env.PDF_FONT_PATH || './fonts/THSarabunNew.ttf',
   },
+  // Vehicle-QR feature (PDPA 3-level access). Dark by default — when
+  // featureVehicleQr is false the /api/qr + /api/consent routers are not mounted,
+  // so the existing system is byte-for-byte unchanged.
+  features: {
+    vehicleQr: process.env.FEATURE_VEHICLE_QR === 'true',
+    qrLevel3: process.env.FEATURE_QR_LEVEL3 === 'true',   // Level-3 sensitive viewer (default off, DPO-gated)
+    qrEmergencyContactSource: process.env.QR_EMERGENCY_CONTACT_SOURCE || 'driver', // driver | attendant | school
+  },
 };
 
 module.exports = env;

@@ -870,7 +870,7 @@ router.get('/vehicles/all', requireFullSchoolScope, async (req, res, next) => {
     // Phase 10.13A-22A — include active_students so province-variant duplicates
     // (0 students, with a canonical sibling) can be marked for the UI to hide.
     const [rows] = await pool.query(
-      `SELECT v.id, v.plate_no, v.vehicle_type,
+      `SELECT v.id, v.plate_no, v.vehicle_type, v.owner_name,
               (SELECT COUNT(*) FROM students s
                 WHERE s.vehicle_id = v.id AND COALESCE(s.is_deleted, FALSE) = FALSE) AS active_students
        FROM vehicles v WHERE v.is_deleted = FALSE ORDER BY v.plate_no`
@@ -918,7 +918,7 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const { plate_no, plate_prefix, plate_number, plate_province, vehicle_type, driver_name, driver_phone } = req.body;
+    const { plate_no, plate_prefix, plate_number, plate_province, vehicle_type, driver_name, driver_phone, owner_name } = req.body;
 
     // Phase 10.13A-22 — prefer structured plate fields (หมวดอักษร / เลขทะเบียน /
     // จังหวัด); the backend builds the canonical display plate_no so operators
@@ -978,8 +978,8 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
         // (uq_vehicles_active_canonical) enforces alias-aware identity.
         const { canonicalPlateForStorage } = require('../utils/plateIdentity');
         await conn.query(
-          `INSERT INTO vehicles (id, plate_no, normalized_plate, canonical_plate, vehicle_type) VALUES (?, ?, ?, ?, ?)`,
-          [vehicleId, trimmedPlate, normalizedPlate, canonicalPlateForStorage(trimmedPlate), vehicle_type || 'รถตู้']
+          `INSERT INTO vehicles (id, plate_no, normalized_plate, canonical_plate, vehicle_type, owner_name) VALUES (?, ?, ?, ?, ?, ?)`,
+          [vehicleId, trimmedPlate, normalizedPlate, canonicalPlateForStorage(trimmedPlate), vehicle_type || 'รถตู้', (owner_name && String(owner_name).trim()) || null]
         );
       }
 

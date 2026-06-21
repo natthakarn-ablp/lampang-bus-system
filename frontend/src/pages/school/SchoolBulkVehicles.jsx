@@ -9,7 +9,7 @@ import { THAI_PROVINCES, buildPlateNo, normalizedLoginPlate, parsePlateParts } f
 
 // Phase 10.13A-22 — structured plate parts (หมวดอักษร / เลขทะเบียน / จังหวัด).
 // plate_no is DERIVED, never free-typed. Province defaults to ลำปาง.
-const EMPTY_ROW = { plate_prefix: '', plate_number: '', plate_province: 'ลำปาง', vehicle_type: 'รถตู้', driver_name: '', driver_phone: '' };
+const EMPTY_ROW = { plate_prefix: '', plate_number: '', plate_province: 'ลำปาง', vehicle_type: 'รถตู้', driver_name: '', driver_phone: '', owner_name: '' };
 const rowPlate = (r) => buildPlateNo(r.plate_prefix, r.plate_number, r.plate_province);
 const PLATE_FIELDS = ['plate_prefix', 'plate_number', 'plate_province'];
 
@@ -92,7 +92,7 @@ export default function SchoolBulkVehicles() {
     const parts = parsePlateParts(v.plate_no) || { prefix: '', number: '', province: 'ลำปาง' };
     setRows([...rows, {
       plate_prefix: parts.prefix, plate_number: parts.number, plate_province: parts.province || 'ลำปาง',
-      vehicle_type: v.vehicle_type || 'รถตู้', driver_name: v.driver_name || '', driver_phone: v.driver_phone || '', existing_id: v.id,
+      vehicle_type: v.vehicle_type || 'รถตู้', driver_name: v.driver_name || '', driver_phone: v.driver_phone || '', owner_name: v.owner_name || '', existing_id: v.id,
     }]);
     setExistingVehicles([]); setSearchPlate('');
   }
@@ -118,6 +118,7 @@ export default function SchoolBulkVehicles() {
           vehicle_type: row.vehicle_type,
           driver_name: row.driver_name.trim(),
           driver_phone: row.driver_phone.trim(),
+          owner_name: (row.owner_name || '').trim(),
         });
         ok++;
       } catch (err) {
@@ -212,6 +213,11 @@ export default function SchoolBulkVehicles() {
                   <label className="block text-xs text-gray-500 mb-0.5">เบอร์โทรคนขับ</label>
                   <input type="text" value={r.driver_phone} onChange={(e) => updateRow(i, 'driver_phone', e.target.value)} className={inputCls} />
                 </div>
+              </div>
+
+              <div className="mt-3">
+                <label className="block text-xs text-gray-500 mb-0.5">ชื่อผู้ครอบครองรถ (เจ้าของรถ)</label>
+                <input type="text" value={r.owner_name} onChange={(e) => updateRow(i, 'owner_name', e.target.value)} className={inputCls} placeholder="เว้นว่างได้ หากเป็นคนเดียวกับคนขับ" />
               </div>
 
               {warnings[i]?.status === 'DUPLICATE_OR_SIMILAR' && (

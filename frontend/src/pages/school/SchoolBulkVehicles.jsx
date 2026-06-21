@@ -40,6 +40,13 @@ export default function SchoolBulkVehicles() {
   const [searchPlate, setSearchPlate] = useState('');
   // Per-row plate duplicate preflight: { [rowIndex]: { status, candidates } }
   const [warnings, setWarnings] = useState({});
+  // Phase 10.13C — turn the soft-deleted-plate 409 dead-end into the existing
+  // admin-approved restore-request flow (10.13B-7). restorePrompt[i] holds the
+  // conflicting vehicle; requestedRestore tracks rows already requested;
+  // rowErrors[i] surfaces the server reason for any other save failure.
+  const [restorePrompt, setRestorePrompt] = useState({});
+  const [requestedRestore, setRequestedRestore] = useState(new Set());
+  const [rowErrors, setRowErrors] = useState({});
   const checkTimers = useRef({});
   const toast = useToast();
 
@@ -101,14 +108,24 @@ export default function SchoolBulkVehicles() {
     const valid = rows.filter((r) => rowPlate(r));
     if (valid.length === 0) { toast.error('กรุณากรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน'); return; }
 
-    // Block save while any row is flagged as a duplicate/similar plate.
+    // Block save while any row is flagged as a duplicate/similar plate. A
+    // soft-deleted collision is also blocked, but the row shows a restore-request
+    // action instead of a plain dead-end (see softDeletedConflict / requestRestore).
     const flagged = rows.some((r, i) => rowPlate(r) && warnings[i]?.status === 'DUPLICATE_OR_SIMILAR');
-    if (flagged) { toast.error('พบรถทะเบียนใกล้เคียงในระบบ กรุณาตรวจสอบก่อนบันทึก'); return; }
+    if (flagged) {
+      const hasSoftDeleted = rows.some((r, i) => rowPlate(r) && warnings[i]?.classification?.code === 'SOFT_DELETED_VEHICLE_EXISTS');
+      toast.error(hasSoftDeleted
+        ? 'มีรถที่ถูกปิดใช้งาน — กรุณาส่งคำขอกู้คืน หรือแก้ไขทะเบียนก่อนบันทึก'
+        : 'พบรถทะเบียนใกล้เคียงในระบบ กรุณาตรวจสอบก่อนบันทึก');
+      return;
+    }
 
     setSaving(true);
+    setRestorePrompt({}); setRowErrors({});   // fresh attempt; keep requestedRestore
     let ok = 0, fail = 0;
     for (const row of valid) {
       const plate = rowPlate(row);
+      const idx = rows.findIndex((r) => rowPlate(r) === plate);
       try {
         await api.post('/school/vehicles', {
           plate_prefix: row.plate_prefix.trim(),
@@ -124,15 +141,50 @@ export default function SchoolBulkVehicles() {
       } catch (err) {
         fail++;
         const e0 = err.response?.data?.errors?.[0];
-        if (e0?.code === 'DUPLICATE_OR_INCOMPLETE_PLATE') {
-          const idx = rows.findIndex((r) => rowPlate(r) === plate);
-          if (idx >= 0) setWarnings((w) => ({ ...w, [idx]: { status: 'DUPLICATE_OR_SIMILAR', candidates: e0.candidates || [] } }));
+        if (e0?.code === 'SOFT_DELETED_VEHICLE_EXISTS' && e0.vehicle_id && idx >= 0) {
+          // Dead-end → offer the admin-approved restore request (10.13B-7), no auto-restore.
+          setRestorePrompt((p) => ({ ...p, [idx]: { vehicle_id: e0.vehicle_id, existing_plate: e0.existing_plate || plate, plate } }));
+        } else if (idx >= 0) {
+          setRowErrors((p) => ({ ...p, [idx]: err.response?.data?.message || 'บันทึกไม่สำเร็จ' }));
         }
       }
     }
-    toast.success(`บันทึกสำเร็จ ${ok} คัน${fail > 0 ? ` · ล้มเหลว ${fail} คัน` : ''}`);
+    if (ok > 0) toast.success(`บันทึกสำเร็จ ${ok} คัน${fail > 0 ? ` · มี ${fail} คันต้องตรวจสอบด้านล่าง` : ''}`);
+    else if (fail > 0) toast.error(`ยังบันทึกไม่ได้ ${fail} คัน — ดูรายละเอียดด้านล่าง`);
     setSaving(false);
-    if (ok > 0 && fail === 0) { setRows([{ ...EMPTY_ROW }]); setWarnings({}); }
+    if (ok > 0 && fail === 0) { setRows([{ ...EMPTY_ROW }]); setWarnings({}); setRestorePrompt({}); setRowErrors({}); }
+  }
+
+  // A soft-deleted-plate collision can surface two ways: the live check-plate
+  // preflight (primary — the operator sees it while typing) OR the POST /vehicles
+  // 409 catch (fallback — if they saved before the debounce). Derive the restore
+  // target from the preflight classification so the prompt shows in both paths.
+  function softDeletedConflict(i) {
+    const c = warnings[i]?.classification;
+    return c?.code === 'SOFT_DELETED_VEHICLE_EXISTS' && c.vehicle_id
+      ? { vehicle_id: c.vehicle_id, existing_plate: c.display_plate }
+      : null;
+  }
+
+  // Phase 10.13C — from a soft-deleted-plate collision, request a vehicle restore
+  // (admin-approved, 10.13B-7). Never auto-restores; mirrors ImportPreviewModal.
+  async function requestRestore(i, info) {
+    if (!info) return;
+    try {
+      await api.post('/school/vehicles/requests', {
+        request_type: 'RESTORE_SOFT_DELETED_VEHICLE',
+        vehicle_id: info.vehicle_id,
+        input_plate: info.existing_plate || info.plate,
+        reason: 'จากหน้าเพิ่มรถ — ทะเบียนตรงกับรถที่ถูกปิดใช้งานแล้ว',
+      });
+      setRequestedRestore((s) => new Set(s).add(i));
+      toast.success('ส่งคำขอกู้คืนรถแล้ว · รอผู้ดูแลระบบตรวจสอบ');
+    } catch (err) {
+      if (err.response?.data?.errors?.[0]?.code === 'PENDING_REQUEST_EXISTS') {
+        setRequestedRestore((s) => new Set(s).add(i));
+        toast.success('มีคำขอกู้คืนรถคันนี้รออนุมัติอยู่แล้ว');
+      } else { toast.error(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ'); }
+    }
   }
 
   const completeCount = rows.filter((r) => rowPlate(r)).length;
@@ -168,6 +220,7 @@ export default function SchoolBulkVehicles() {
       <div className="space-y-3 mb-4">
         {rows.map((r, i) => {
           const plate = rowPlate(r);
+          const restoreInfo = restorePrompt[i] || softDeletedConflict(i);
           return (
             <div key={i} className="bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex items-center justify-between mb-2">
@@ -220,14 +273,29 @@ export default function SchoolBulkVehicles() {
                 <input type="text" value={r.owner_name} onChange={(e) => updateRow(i, 'owner_name', e.target.value)} className={inputCls} placeholder="เว้นว่างได้ หากเป็นคนเดียวกับคนขับ" />
               </div>
 
-              {warnings[i]?.status === 'DUPLICATE_OR_SIMILAR' && (
+              {restoreInfo ? (
+                <div className="mt-2 text-xs bg-blue-50 border border-blue-300 text-blue-800 rounded-lg px-3 py-2">
+                  <div className="font-medium">รถทะเบียนนี้ถูกปิดใช้งานอยู่ ({restoreInfo.existing_plate})</div>
+                  <div className="mt-0.5">ต้องการใช้งานต่อ ส่งคำขอให้ผู้ดูแลระบบกู้คืนรถคันนี้ (ไม่กู้คืนทันที)</div>
+                  {requestedRestore.has(i) ? (
+                    <div className="mt-1.5 font-medium text-emerald-700">✓ ส่งคำขอแล้ว · รอผู้ดูแลระบบอนุมัติ</div>
+                  ) : (
+                    <button type="button" onClick={() => requestRestore(i, restoreInfo)}
+                      className="mt-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">
+                      ส่งคำขอกู้คืนรถนี้
+                    </button>
+                  )}
+                </div>
+              ) : warnings[i]?.status === 'DUPLICATE_OR_SIMILAR' ? (
                 <div className="mt-2 text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-3 py-2">
                   ⚠️ พบรถทะเบียนใกล้เคียงในระบบแล้ว กรุณาตรวจสอบก่อนบันทึก
                   <div className="mt-0.5 font-medium">มีอยู่แล้ว: {warnings[i].candidates.map((c) => c.plate_no).join(', ')}</div>
                 </div>
-              )}
-              {warnings[i]?.status === 'CLEAR' && plate && (
+              ) : warnings[i]?.status === 'CLEAR' && plate && !rowErrors[i] ? (
                 <div className="mt-2 text-xs text-green-600">ยังไม่พบทะเบียนนี้ในระบบ</div>
+              ) : null}
+              {rowErrors[i] && !restoreInfo && (
+                <div className="mt-2 text-xs bg-red-50 border border-red-300 text-red-700 rounded-lg px-3 py-2">{rowErrors[i]}</div>
               )}
             </div>
           );

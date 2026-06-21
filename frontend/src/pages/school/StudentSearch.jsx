@@ -10,6 +10,7 @@ import AppCard from '../../components/ui/AppCard';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 import StudentTransferModal from './StudentTransferModal';
+import VehicleSelect from '../../components/VehicleSelect';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
 
@@ -528,17 +529,10 @@ export default function StudentSearch() {
                 <label className="block text-sm text-gray-500 mb-1">
                   รถปัจจุบัน: <span className="text-gray-700 font-medium">{editStudent.plate_no || 'ยังไม่มีรถ'}</span>
                 </label>
-                <select value={selectedVehicle} onChange={(e) => setSelectedVehicle(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
-                  <option value="">— ไม่มีรถ —</option>
-                  {/* Phase 10.13A-22A — canonical display_plate; hide province-variant
-                      duplicates, but keep the currently-assigned vehicle visible. */}
-                  {vehicles
-                    .filter(v => !v.duplicate_candidate || v.id === selectedVehicle)
-                    .map(v => (
-                      <option key={v.id} value={v.id}>{(v.display_plate || v.plate_no)}{v.vehicle_type ? ` (${v.vehicle_type})` : ''}</option>
-                    ))}
-                </select>
+                {/* Phase 10.13C — searchable combobox (type to filter 100+ vehicles);
+                    canonical display_plate; hides province-variant duplicates but keeps
+                    the currently-assigned vehicle visible. value '' = ไม่มีรถ. */}
+                <VehicleSelect vehicles={vehicles} value={selectedVehicle} onChange={setSelectedVehicle} />
                 {vehicles.some(v => v.duplicate_candidate && v.id !== selectedVehicle) && (
                   <p className="mt-1 text-xs text-gray-400">แสดงเฉพาะรถที่ใช้งานจริง ไม่รวมรายการซ้ำที่รอจัดเก็บ</p>
                 )}

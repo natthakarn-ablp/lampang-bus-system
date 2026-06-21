@@ -870,7 +870,11 @@ router.get('/vehicles/all', requireFullSchoolScope, async (req, res, next) => {
     // Phase 10.13A-22A — include active_students so province-variant duplicates
     // (0 students, with a canonical sibling) can be marked for the UI to hide.
     const [rows] = await pool.query(
-      `SELECT v.id, v.plate_no, v.vehicle_type, v.owner_name,
+      // owner_name (a person's name) is intentionally NOT selected here: this is
+      // the cross-school assignment dropdown (province-shared fleet). Plate +
+      // type identify the vehicle; the owner name stays on the owning school's
+      // GET /school/vehicles only (PDPA data minimization).
+      `SELECT v.id, v.plate_no, v.vehicle_type,
               (SELECT COUNT(*) FROM students s
                 WHERE s.vehicle_id = v.id AND COALESCE(s.is_deleted, FALSE) = FALSE) AS active_students
        FROM vehicles v WHERE v.is_deleted = FALSE ORDER BY v.plate_no`

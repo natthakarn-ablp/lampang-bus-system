@@ -141,6 +141,7 @@ router.put('/users/:id', async (req, res, next) => {
     // account (FALSE → TRUE for role='driver'). Runs BEFORE any write so the
     // user is never partially updated. Non-drivers and non-reactivations pass.
     const reactivating = is_active !== undefined && (is_active ? 1 : 0) === 1 && !user.is_active;
+    let reactivationWarning = null;
     if (reactivating && user.role === 'driver') {
       const { detectDriverReactivationBlock } = require('../utils/driverReactivation');
       const block = await detectDriverReactivationBlock(pool, user);
@@ -160,6 +161,9 @@ router.put('/users/:id', async (req, res, next) => {
           409
         );
       }
+      // Phase 10.13C — NO_ACTIVE_VEHICLE no longer blocks reactivation; keep it on
+      // the audit trail so a restore-without-active-vehicle stays traceable.
+      if (block.warning) reactivationWarning = block.reason;
     }
 
     const updates = [];
@@ -180,11 +184,13 @@ router.put('/users/:id', async (req, res, next) => {
     await logAudit({
       userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
       oldValue: { display_name: user.display_name, is_active: user.is_active, role: user.role },
-      newValue: { display_name, is_active, role },
+      newValue: { display_name, is_active, role, ...(reactivationWarning ? { reactivation_warning: reactivationWarning } : {}) },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
-    return sendSuccess(res, null, 'อัปเดตผู้ใช้สำเร็จ');
+    return sendSuccess(res, null, reactivationWarning === 'NO_ACTIVE_VEHICLE'
+      ? 'เปิดใช้งานบัญชีคนขับแล้ว · คนขับนี้ยังไม่มีรถที่ใช้งาน ควรมอบหมายรถให้'
+      : 'อัปเดตผู้ใช้สำเร็จ');
   } catch (err) { next(err); }
 });
 

@@ -26,6 +26,9 @@ async function preflightDriverAction(pool, { action, payload = {} }) {
       if (u.is_active && !u.is_deleted) return out(false, 'WARNING', 'ALREADY_ACTIVE', 'บัญชีนี้ใช้งานอยู่แล้ว');
       const block = await detectDriverReactivationBlock(pool, u);
       if (block.blocked) return out(false, 'BLOCKED', block.reason, 'ไม่สามารถเปิดใช้งานบัญชีนี้ได้ เนื่องจากพบข้อมูลซ้ำกับคนขับที่ใช้งานอยู่', { canonical_user_id: block.canonicalUserId, recommended_action: 'BLOCK' });
+      // Phase 10.13C — NO_ACTIVE_VEHICLE is a non-blocking warning: restore is
+      // allowed, but prompt the operator to assign a vehicle afterwards.
+      if (block.warning) return out(true, 'WARNING', block.reason, 'กู้คืนได้ แต่คนขับนี้ยังไม่มีรถที่ใช้งาน — ควรมอบหมายรถให้หลังกู้คืน', { recommended_action: 'RESTORE' });
       return out(true, 'CLEAR', 'RESTORABLE', 'พร้อมกู้คืนบัญชีคนขับนี้', { recommended_action: 'RESTORE' });
     }
     case 'REASSIGN_DRIVER_VEHICLE': {
@@ -61,8 +64,10 @@ async function restoreDriver(pool, { userId, reason, actorId }) {
   const block = await detectDriverReactivationBlock(pool, u);
   if (block.blocked) { const e = err('ไม่สามารถเปิดใช้งานบัญชีนี้ได้ เนื่องจากพบข้อมูลซ้ำกับคนขับที่ใช้งานอยู่', 409); e.errors = [{ code: block.reason, canonical_user_id: block.canonicalUserId }]; throw e; }
   await pool.query('UPDATE users SET is_active = TRUE, is_deleted = FALSE, deleted_at = NULL WHERE id = ?', [u.id]);
-  await logAudit({ userId: actorId, action: 'UPDATE', entityType: 'user', entityId: String(u.id), oldValue: { is_active: false }, newValue: { is_active: true, restored: true, reason: String(reason || '').slice(0, 200) } });
-  return { status: 'RESTORED', user_id: u.id };
+  // Phase 10.13C — keep the NO_ACTIVE_VEHICLE warning in the audit trail so a
+  // restore-without-active-vehicle stays traceable even though it is allowed.
+  await logAudit({ userId: actorId, action: 'UPDATE', entityType: 'user', entityId: String(u.id), oldValue: { is_active: false }, newValue: { is_active: true, restored: true, reason: String(reason || '').slice(0, 200), ...(block.warning ? { reactivation_warning: block.reason } : {}) } });
+  return { status: 'RESTORED', user_id: u.id, ...(block.warning ? { warning: block.reason } : {}) };
 }
 
 // ── Deactivate: end active assignments + deactivate the user. ────────────────

@@ -12,16 +12,21 @@
 // operator to consciously use/restore the canonical instead of silently flipping
 // the duplicate back on.
 //
-// Returns { blocked, reason, canonicalUserId }:
+// Returns { blocked, reason, canonicalUserId, warning }:
 //   DUPLICATE_OF_LINKED_DRIVER        — another driver user with the SAME
 //                                       normalized plate is linked (e.g. 369→368,
-//                                       408→407).
+//                                       408→407). HARD BLOCK (dedupe resurrection).
 //   PROVINCE_VARIANT_OF_LINKED_DRIVER — a linked driver user is a province-variant
 //                                       of this plate (e.g. 358 'นข4031' → 363
-//                                       'นข 4031 ลำปาง').
+//                                       'นข 4031 ลำปาง'). HARD BLOCK.
 //   NO_ACTIVE_VEHICLE                 — this plate resolves to no active vehicle
 //                                       (its vehicle is soft-deleted / missing).
-// Not blocked → a legitimate, non-duplicate driver with an active vehicle.
+//                                       Phase 10.13C: NON-BLOCKING warning — the
+//                                       account is restorable (no dedupe risk); the
+//                                       operator should reassign a vehicle after.
+//                                       Only the two DUPLICATE reasons hard-block.
+// Not blocked → a legitimate, non-duplicate driver (with an active vehicle, or none
+// yet — NO_ACTIVE_VEHICLE comes back as a warning the caller surfaces + audits).
 
 const { normalizePlate, isProvinceVariant } = require('./vehiclePlate');
 
@@ -48,7 +53,12 @@ async function detectDriverReactivationBlock(pool, user) {
     `SELECT id FROM vehicles WHERE is_deleted = FALSE AND (plate_no = ? OR normalized_plate = ?) LIMIT 1`,
     [user.username, norm]
   );
-  if (active.length === 0) return { blocked: true, reason: 'NO_ACTIVE_VEHICLE', canonicalUserId: null };
+  // Phase 10.13C — relaxed: no active vehicle is a WARNING, not a hard block. A
+  // suspended driver whose vehicle was soft-deleted is a legitimate account that
+  // just needs a (re)assignment; blocking it stranded 46 accounts. Reactivation is
+  // allowed; the caller surfaces the warning and audits it. Genuine dedupe
+  // duplicates (the two reasons above) stay hard-blocked.
+  if (active.length === 0) return { blocked: false, reason: 'NO_ACTIVE_VEHICLE', warning: true, canonicalUserId: null };
 
   return { blocked: false, reason: null, canonicalUserId: null };
 }

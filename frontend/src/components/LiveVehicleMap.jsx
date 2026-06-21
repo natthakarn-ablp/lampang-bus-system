@@ -8,6 +8,7 @@ import {
   formatRelativeTime,
   LOW_ACCURACY_RING,
   LOW_ACCURACY_LABEL,
+  hasVehicleCoords,
 } from '../utils/liveVehicleStatus';
 
 // Lampang centroid — fallback when no live coordinates yet.
@@ -62,9 +63,10 @@ export default function LiveVehicleMap({
   className = 'h-full w-full',
 }) {
   const validVehicles = useMemo(
-    () => vehicles.filter(v =>
-      Number.isFinite(Number(v.latitude)) && Number.isFinite(Number(v.longitude))
-    ),
+    // Reuse the shared predicate (rejects null coords + (0,0) Null Island) so
+    // never-reported vehicles get no marker, and FitOnce/FlyToSelected below —
+    // which iterate validVehicles — no longer zoom the map to (0,0).
+    () => vehicles.filter(hasVehicleCoords),
     [vehicles]
   );
 

@@ -100,9 +100,16 @@ export function formatThaiTime(ts) {
 /* ── Predicates ────────────────────────────────────────────────────────── */
 
 export function hasVehicleCoords(v) {
-  return v
-    && Number.isFinite(Number(v.latitude))
-    && Number.isFinite(Number(v.longitude));
+  // A vehicle that never reported GPS has latitude/longitude = null. Number(null)
+  // is 0 and Number.isFinite(0) is true, so the old check wrongly accepted it and
+  // plotted a marker at (0,0) / Null Island. Reject null/undefined, then exclude
+  // the (0,0) sentinel — a Lampang school bus is never legitimately at lat0/lng0.
+  if (!v || v.latitude == null || v.longitude == null) return false;
+  const lat = Number(v.latitude);
+  const lng = Number(v.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  if (lat === 0 && lng === 0) return false;
+  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
 /**

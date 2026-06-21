@@ -82,6 +82,11 @@ async function listForAdmin(pool, { status }) {
   return rows.map(pubRow);
 }
 
+async function countPendingForAdmin(pool) {
+  const [[r]] = await pool.query("SELECT COUNT(*) n FROM student_transfer_requests WHERE status = 'PENDING'");
+  return r.n;
+}
+
 async function getDetailForAdmin(pool, { requestId }) {
   const [[req]] = await pool.query(`SELECT ${SELECT_COLS} FROM student_transfer_requests q ${JOIN_SCHOOLS} WHERE q.id = ?`, [requestId]);
   if (!req) throw notFound('ไม่พบคำขอ');
@@ -156,4 +161,4 @@ async function reject(pool, { requestId, adminUserId, adminNote }) {
   return { id: requestId, status: 'REJECTED' };
 }
 
-module.exports = { createRequest, listForSchool, cancelRequest, listForAdmin, getDetailForAdmin, approveAndApply, reject };
+module.exports = { createRequest, listForSchool, cancelRequest, listForAdmin, countPendingForAdmin, getDetailForAdmin, approveAndApply, reject };

@@ -1185,6 +1185,21 @@ router.get('/live-vehicles', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Pending-requests count (bell badge) — aggregates the 3 admin queues ─────
+router.get('/pending-requests-count', async (req, res, next) => {
+  try {
+    const tr = require('../services/studentTransfer.service');
+    const vr = require('../services/vehicleRequest.service');
+    const [student_transfer, vehicle, rosterRes] = await Promise.all([
+      tr.countPendingForAdmin(pool),
+      vr.countPendingForAdmin(pool),
+      pool.query("SELECT COUNT(*) n FROM roster_change_requests WHERE status = 'pending'"),
+    ]);
+    const roster = rosterRes[0][0].n;
+    return sendSuccess(res, { total: student_transfer + vehicle + roster, student_transfer, vehicle, roster });
+  } catch (err) { next(err); }
+});
+
 // ─── Phase 10.13B-6 — Student Transfer / Wrong-School approval queue ─────────
 // All admin-only (router.use(requireRole('admin')) above).
 router.get('/student-transfer-requests', async (req, res, next) => {

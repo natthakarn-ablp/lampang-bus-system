@@ -101,6 +101,11 @@ async function listAdminVehicleRequests(pool, { status }) {
   const [rows] = await pool.query(`SELECT ${SEL} FROM vehicle_requests q ${JOIN} ${where} ORDER BY q.status='PENDING' DESC, q.id DESC LIMIT 300`, params);
   return rows.map(pub);
 }
+
+async function countPendingForAdmin(pool) {
+  const [[r]] = await pool.query("SELECT COUNT(*) n FROM vehicle_requests WHERE status = 'PENDING'");
+  return r.n;
+}
 async function getAdminVehicleRequest(pool, { requestId }) {
   const [[q]] = await pool.query(`SELECT ${SEL} FROM vehicle_requests q ${JOIN} WHERE q.id = ?`, [requestId]);
   if (!q) throw err('ไม่พบคำขอ', 404);
@@ -171,5 +176,5 @@ async function rejectVehicleRequest(pool, { requestId, adminUserId, adminNote })
 
 module.exports = {
   createVehicleRequest, listSchoolVehicleRequests, getSchoolVehicleRequest, cancelVehicleRequest,
-  listAdminVehicleRequests, getAdminVehicleRequest, approveVehicleRequest, rejectVehicleRequest,
+  listAdminVehicleRequests, countPendingForAdmin, getAdminVehicleRequest, approveVehicleRequest, rejectVehicleRequest,
 };

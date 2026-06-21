@@ -19,6 +19,7 @@ function db(over = {}) {
   const cfg = {
     vehicle: [{ id: 'V-1', plate_no: 'นข 1 ลำปาง', vehicle_type: 'รถตู้', insurance_status: 'active', insurance_expiry: null, is_deleted: 0 }],
     parentLinked: [],
+    parentConsent: [{ consent_status: 'granted' }],   // latest qr_parent_optin status
     driver: [{ id: 7, name: 'สมชาย ใจดี', phone: '0812345678' }],
     displayStatus: [{ display_status: 'normal' }],
     inspection: [{ result: 'PASSED', expiry_date: null }],
@@ -29,6 +30,7 @@ function db(over = {}) {
   pool.query.mockImplementation(async (sql) => {
     if (/qr_token = \?/.test(sql)) return [cfg.vehicle];
     if (/FROM line_bindings lb/.test(sql)) return [cfg.parentLinked];
+    if (/FROM consent_records/.test(sql)) return [cfg.parentConsent];
     if (/FROM drivers d\s+JOIN driver_vehicle_assignments/.test(sql)) return [cfg.driver];
     if (/FROM driver_display_status/.test(sql)) return [cfg.displayStatus];
     if (/FROM vehicle_inspections/.test(sql)) return [cfg.inspection];
@@ -58,12 +60,18 @@ describe('resolveAccessLevel (credentials only)', () => {
     expect(await qr.resolveAccessLevel({ user: { id: 1, role: 'school' } }, 'V-1')).toBe(1);
     expect(await qr.resolveAccessLevel({ user: { id: 1, role: 'driver' } }, 'V-1')).toBe(1);
   });
-  test('verified parent linked to THIS vehicle → 2', async () => {
-    db({ parentLinked: [{ ok: 1 }] });
+  test('verified parent linked to THIS vehicle WITH granted opt-in → 2', async () => {
+    db({ parentLinked: [{ ok: 1 }], parentConsent: [{ consent_status: 'granted' }] });
     expect(await qr.resolveAccessLevel({ lineUserId: 'U1' }, 'V-1')).toBe(2);
   });
   test('verified parent NOT linked to this vehicle → 1 (isolation)', async () => {
     db({ parentLinked: [] });
+    expect(await qr.resolveAccessLevel({ lineUserId: 'U1' }, 'V-1')).toBe(1);
+  });
+  test('linked parent WITHOUT granted opt-in (none/withdrawn) → 1 (consent-gated L2, PDPA ม.19)', async () => {
+    db({ parentLinked: [{ ok: 1 }], parentConsent: [] });
+    expect(await qr.resolveAccessLevel({ lineUserId: 'U1' }, 'V-1')).toBe(1);
+    db({ parentLinked: [{ ok: 1 }], parentConsent: [{ consent_status: 'withdrawn' }] });
     expect(await qr.resolveAccessLevel({ lineUserId: 'U1' }, 'V-1')).toBe(1);
   });
   test('anonymous → 1', async () => {
@@ -96,12 +104,19 @@ describe('view builders — field isolation', () => {
     expect(v.driver_name).toBeNull();
     expect(v.emergency_contact).toBeNull();
   });
-  test('staff view adds risk history + writes the sensitive VIEW audit', async () => {
+  test('staff view (FEATURE_QR_LEVEL3 on) adds driver_phone + risk + sensitive VIEW audit', async () => {
     const v = await qr.buildStaffView({ id: 'V-1', plate_no: 'นข 1 ลำปาง', insurance_status: 'active', insurance_expiry: null }, { user: { id: 9 }, ip: '1.2.3.4', headers: {} });
     expect(v.level).toBe(3);
+    expect(v.driver_phone).toBe('0812345678'); // L3-sensitive, gated by flag (on here)
     expect(Array.isArray(v.risk_history)).toBe(true);
     expect(v.risk_history.length).toBe(1);
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'VIEW', entityType: 'driver_sensitive', entityId: '7' }));
+  });
+  test('suspended driver hides driver_phone at staff level too', async () => {
+    db({ displayStatus: [{ display_status: 'suspended' }] });
+    const v = await qr.buildStaffView({ id: 'V-1', plate_no: 'นข 1 ลำปาง', insurance_status: 'active', insurance_expiry: null }, { user: { id: 9 }, ip: '1.2.3.4', headers: {} });
+    expect(v.driver_phone).toBeNull();
+    expect(v.driver_name).toBeNull();
   });
 });
 

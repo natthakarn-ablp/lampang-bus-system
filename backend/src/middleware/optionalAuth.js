@@ -28,13 +28,16 @@ async function optionalAuth(req, _res, next) {
       const payload = jwt.verify(bearer, env.jwt.secret, { algorithms: ['HS256'] });
       if (payload && payload.type !== 'refresh' && payload.sub) {
         const [rows] = await pool.query(
-          'SELECT is_active, password_changed_at FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
+          'SELECT is_active, must_change_password, password_changed_at FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
           [payload.sub]
         );
         const dbUser = rows[0];
         const tokenPredatesPwChange = dbUser && dbUser.password_changed_at && payload.iat &&
           payload.iat < Math.floor(new Date(dbUser.password_changed_at).getTime() / 1000);
-        if (dbUser && dbUser.is_active && !tokenPredatesPwChange) {
+        // Mirror authenticate()'s quarantine: a must_change_password (freshly
+        // provisioned / admin-reset) account is not allowed to operate yet, so it
+        // must NOT gain a QR access level — stay anonymous (L1) until onboarded.
+        if (dbUser && dbUser.is_active && !dbUser.must_change_password && !tokenPredatesPwChange) {
           req.user = {
             id: payload.sub,
             username: payload.username || '',

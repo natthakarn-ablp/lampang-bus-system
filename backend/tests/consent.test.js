@@ -20,12 +20,36 @@ beforeEach(() => {
 });
 
 describe('grantConsent', () => {
-  test('inserts a granted ledger row', async () => {
-    const out = await svc.grantConsent({ userId: 5, userRole: 'driver', consentType: 'qr_driver_public', ipAddress: '1.1.1.1', userAgent: 'ua' });
+  test('non-required/parent consent → simple append (granted ledger row)', async () => {
+    const out = await svc.grantConsent({ userId: 5, userRole: 'driver', consentType: 'qr_driver_sensitive', ipAddress: '1.1.1.1', userAgent: 'ua' });
     expect(out.status).toBe('granted');
     const insert = pool.query.mock.calls.find((c) => /INSERT INTO consent_records/.test(c[0]));
     expect(insert).toBeTruthy();
-    expect(insert[1]).toEqual(expect.arrayContaining(['qr_driver_public', 'granted']));
+    expect(insert[1]).toEqual(expect.arrayContaining(['qr_driver_sensitive', 'granted']));
+  });
+  test('re-granting a REQUIRED driver consent (all now granted) restores display from suspension (fix D)', async () => {
+    conn.query.mockImplementation(async (sql) => {
+      if (/INSERT INTO consent_records/.test(sql)) return [{ insertId: 2 }];
+      if (/FROM users WHERE id/.test(sql)) return [[{ driver_id: 7 }]];                  // resolveDriverIdForUser
+      if (/SELECT consent_status FROM consent_records/.test(sql)) return [[{ consent_status: 'granted' }]]; // allRequiredConsentsGranted
+      if (/UPDATE driver_display_status/.test(sql)) return [{ affectedRows: 1 }];          // un-suspend
+      return [[]];
+    });
+    const out = await svc.grantConsent({ userId: 5, userRole: 'driver', consentType: 'qr_driver_public', ipAddress: '1.1.1.1', userAgent: 'ua' });
+    expect(out.status).toBe('granted');
+    expect(out.restored_driver_id).toBe(7);
+    expect(conn.query.mock.calls.some((c) => /UPDATE driver_display_status/.test(c[0]) && /'normal'/.test(c[0]))).toBe(true);
+    expect(conn.commit).toHaveBeenCalled();
+  });
+  test('re-grant does NOT restore when a required consent is still withdrawn', async () => {
+    conn.query.mockImplementation(async (sql) => {
+      if (/INSERT INTO consent_records/.test(sql)) return [{ insertId: 2 }];
+      if (/FROM users WHERE id/.test(sql)) return [[{ driver_id: 7 }]];
+      if (/SELECT consent_status FROM consent_records/.test(sql)) return [[{ consent_status: 'withdrawn' }]]; // not all granted
+      return [[]];
+    });
+    const out = await svc.grantConsent({ userId: 5, userRole: 'driver', consentType: 'qr_driver_public' });
+    expect(out.restored_driver_id).toBeNull();
   });
   test('invalid consent type → 400', async () => {
     await expect(svc.grantConsent({ userId: 5, consentType: 'bogus' })).rejects.toMatchObject({ statusCode: 400 });
@@ -45,6 +69,18 @@ describe('withdrawConsent — auto-suspend cascade', () => {
     expect(out.suspended_driver_id).toBe(7);
     expect(conn.query.mock.calls.some((c) => /driver_display_status/.test(c[0]) && /suspended/.test(c[0]))).toBe(true);
     expect(conn.commit).toHaveBeenCalled();
+  });
+  test('suspends a legacy/YELLOW driver (users.driver_id NULL) via plate→assignment (fix A)', async () => {
+    conn.query.mockImplementation(async (sql) => {
+      if (/INSERT INTO consent_records/.test(sql)) return [{ insertId: 9 }];
+      if (/FROM users WHERE id/.test(sql)) return [[{ driver_id: null, username: 'นข 1 ลำปาง', role: 'driver' }]];
+      if (/FROM vehicles v\s+JOIN driver_vehicle_assignments/.test(sql)) return [[{ driver_id: 42 }]];
+      if (/INSERT INTO driver_display_status/.test(sql)) return [{}];
+      return [[]];
+    });
+    const out = await svc.withdrawConsent({ userId: 5, userRole: 'driver', consentType: 'qr_driver_public' });
+    expect(out.suspended_driver_id).toBe(42);
+    expect(conn.query.mock.calls.some((c) => /driver_display_status/.test(c[0]) && /suspended/.test(c[0]))).toBe(true);
   });
   test('withdrawing a NON-required consent does not suspend', async () => {
     conn.query.mockImplementation(async (sql) => {

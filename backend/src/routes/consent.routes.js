@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 
 const { authenticate } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const idTokenSvc = require('../services/lineIdToken.service');
 const consentSvc = require('../services/consent.service');
@@ -58,7 +59,7 @@ router.get('/me', authenticate, async (req, res, next) => {
   try { return sendSuccess(res, await consentSvc.getMyConsents({ userId: req.user.id })); }
   catch (err) { next(err); }
 });
-router.post('/', authenticate, async (req, res, next) => {
+router.post('/', authenticate, requireRole('driver'), async (req, res, next) => {
   try {
     const type = String((req.body || {}).consent_type || '');
     if (!DRIVER_CONSENTS.has(type)) return sendError(res, 'ประเภทความยินยอมไม่ถูกต้อง', [], 400);
@@ -66,7 +67,7 @@ router.post('/', authenticate, async (req, res, next) => {
     return sendSuccess(res, out, 'บันทึกความยินยอมแล้ว', null, 201);
   } catch (err) { next(err); }
 });
-router.post('/withdraw', authenticate, async (req, res, next) => {
+router.post('/withdraw', authenticate, requireRole('driver'), async (req, res, next) => {
   try {
     const type = String((req.body || {}).consent_type || '');
     if (!DRIVER_CONSENTS.has(type)) return sendError(res, 'ประเภทความยินยอมไม่ถูกต้อง', [], 400);

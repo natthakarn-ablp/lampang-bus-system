@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { normalizePlate } = require('../utils/vehiclePlate');
 
 /**
  * Transport role sees ALL vehicles + inspection data, never student PII.
@@ -96,9 +97,18 @@ async function getDashboard() {
   };
 }
 
-async function getVehicles({ status, page = 1, per_page = 50 } = {}) {
+async function getVehicles({ status, search, page = 1, per_page = 50 } = {}) {
   let where = 'v.is_deleted = FALSE';
   const params = [];
+
+  // Plate search (partial match) — matches the raw plate and the stored
+  // normalized_plate (whitespace/dash-agnostic) so "นข4031" finds "นข 4031".
+  // Pushed before the COUNT + SELECT so pagination/total stay consistent.
+  if (search && String(search).trim()) {
+    const raw = String(search).trim();
+    where += ' AND (v.plate_no LIKE ? OR v.normalized_plate LIKE ?)';
+    params.push(`%${raw}%`, `%${normalizePlate(raw)}%`);
+  }
 
   if (status === 'expiring') {
     // Legacy: insurance-only "expiring" — kept for backward compat with

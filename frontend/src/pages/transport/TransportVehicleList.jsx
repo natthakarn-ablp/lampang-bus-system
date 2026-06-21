@@ -6,6 +6,7 @@ import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
+import PlateSearchInput from '../../components/PlateSearchInput';
 
 const RESULT_BADGE = {
   PASSED:   { label: 'ผ่าน',      variant: 'success' },
@@ -54,6 +55,15 @@ export default function TransportVehicleList() {
   // dashboard tap-through so the page lands pre-filtered.
   const initialStatus = new URLSearchParams(location.search).get('status') || '';
   const [statusFilter, setStatusFilter] = useState(initialStatus);
+  // Plate search — debounced + server-side (searches across all pages, not just
+  // the loaded 50). The transport list is paginated, so client-only filtering
+  // would miss matches on other pages.
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const fetchVehicles = useCallback(async (page = 1) => {
     setLoading(true);
@@ -62,11 +72,12 @@ export default function TransportVehicleList() {
       params.set('page', page);
       params.set('per_page', '50');
       if (statusFilter) params.set('status', statusFilter);
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       const res = await api.get(`/transport/vehicles?${params}`);
       setVehicles(res.data.data);
       setMeta(res.data.meta);
     } catch {} finally { setLoading(false); }
-  }, [statusFilter]);
+  }, [statusFilter, debouncedSearch]);
 
   useEffect(() => { fetchVehicles(1); }, [fetchVehicles]);
 
@@ -77,6 +88,7 @@ export default function TransportVehicleList() {
       <h1 className="text-xl font-bold text-gray-800 mb-4">รถรับส่งทั้งหมด</h1>
 
       <div className="flex flex-wrap gap-3 mb-5">
+        <PlateSearchInput value={search} onChange={setSearch} placeholder="ค้นหาทะเบียนรถ…" className="w-full sm:w-72" />
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
           <option value="">ทุกสถานะ</option>

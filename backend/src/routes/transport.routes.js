@@ -138,9 +138,10 @@ router.get('/dashboard', async (req, res, next) => {
 // ─── GET /api/transport/vehicles ────────────────────────────────────────────
 router.get('/vehicles', async (req, res, next) => {
   try {
-    const { status, page, per_page } = req.query;
+    const { status, search, page, per_page } = req.query;
     const data = await transportSvc.getVehicles({
       status,
+      search,
       page: parseInt(page) || 1,
       per_page: parseInt(per_page) || 50,
     });

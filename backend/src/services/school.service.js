@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 /**
  * Phase 7.11.3 — every school.service read accepts an optional
@@ -189,8 +190,13 @@ async function getStudents(schoolId, { search, grade, vehicle_id, morning_enable
   // a gradeFilter is present, so a teacher can't unlock other grades.
   const effectiveGrade = gradeFilter || grade || null;
   if (effectiveGrade) {
-    where += ' AND s.grade = ?';
-    params.push(effectiveGrade);
+    // Tolerant match: students.grade is stored inconsistently ('ป.5' vs
+    // 'ประถมศึกษาปีที่ 5' vs 'ป. 5' …). Match every variant of the requested
+    // canonical grade — same level+number only — so the dropdown filter AND
+    // grade-scoped teacher rosters find their students without a data migration.
+    const eq = gradeEquivalents(effectiveGrade);
+    where += ` AND s.grade IN (${eq.map(() => '?').join(',')})`;
+    params.push(...eq);
   }
   if (vehicle_id) {
     where += ' AND s.vehicle_id = ?';

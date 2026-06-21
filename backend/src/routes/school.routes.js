@@ -979,7 +979,15 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
         const { canonicalPlateForStorage } = require('../utils/plateIdentity');
         await conn.query(
           `INSERT INTO vehicles (id, plate_no, normalized_plate, canonical_plate, vehicle_type, owner_name) VALUES (?, ?, ?, ?, ?, ?)`,
-          [vehicleId, trimmedPlate, normalizedPlate, canonicalPlateForStorage(trimmedPlate), vehicle_type || 'รถตู้', (owner_name && String(owner_name).trim()) || null]
+          [vehicleId, trimmedPlate, normalizedPlate, canonicalPlateForStorage(trimmedPlate), vehicle_type || 'รถตู้', (owner_name && String(owner_name).trim().slice(0, 100)) || null]
+        );
+      } else if (owner_name && String(owner_name).trim()) {
+        // Reusing an existing active vehicle (e.g. selectExisting): fill a BLANK
+        // owner only — never clobber an owner another school may have set, since
+        // the fleet is shared province-wide. slice(0,100) matches VARCHAR(100).
+        await conn.query(
+          `UPDATE vehicles SET owner_name = ? WHERE id = ? AND (owner_name IS NULL OR owner_name = '')`,
+          [String(owner_name).trim().slice(0, 100), vId]
         );
       }
 

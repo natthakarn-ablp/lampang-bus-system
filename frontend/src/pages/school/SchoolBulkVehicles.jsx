@@ -69,7 +69,19 @@ export default function SchoolBulkVehicles() {
     if (rows.length >= 10) { toast.error('สูงสุด 10 คันต่อครั้ง'); return; }
     setRows([...rows, { ...EMPTY_ROW }]);
   }
-  function removeRow(i) { setRows(rows.filter((_, idx) => idx !== i)); }
+  function removeRow(i) {
+    setRows(rows.filter((_, idx) => idx !== i));
+    // Per-row state is keyed by array index, so removing a row must shift every
+    // entry after it down by one (and drop the removed row's), or the restore
+    // prompt / "ส่งคำขอแล้ว" confirmation / error would attach to the wrong row.
+    const shift = (m) => {
+      const out = {};
+      for (const k of Object.keys(m)) { const n = Number(k); if (n < i) out[n] = m[k]; else if (n > i) out[n - 1] = m[k]; }
+      return out;
+    };
+    setWarnings(shift); setRestorePrompt(shift); setRowErrors(shift);
+    setRequestedRestore((s) => { const out = new Set(); for (const n of s) { if (n < i) out.add(n); else if (n > i) out.add(n - 1); } return out; });
+  }
 
   function updateRow(i, field, value) {
     setRows((prev) => {
@@ -105,7 +117,9 @@ export default function SchoolBulkVehicles() {
   }
 
   async function handleSave() {
-    const valid = rows.filter((r) => rowPlate(r));
+    // Carry each row's REAL index so per-row state (restorePrompt/rowErrors) is
+    // keyed correctly even when two rows share the same built plate.
+    const valid = rows.map((r, i) => ({ r, i })).filter(({ r }) => rowPlate(r));
     if (valid.length === 0) { toast.error('กรุณากรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน'); return; }
 
     // Block save while any row is flagged as a duplicate/similar plate. A
@@ -123,9 +137,8 @@ export default function SchoolBulkVehicles() {
     setSaving(true);
     setRestorePrompt({}); setRowErrors({});   // fresh attempt; keep requestedRestore
     let ok = 0, fail = 0;
-    for (const row of valid) {
+    for (const { r: row, i: idx } of valid) {
       const plate = rowPlate(row);
-      const idx = rows.findIndex((r) => rowPlate(r) === plate);
       try {
         await api.post('/school/vehicles', {
           plate_prefix: row.plate_prefix.trim(),
@@ -270,7 +283,7 @@ export default function SchoolBulkVehicles() {
 
               <div className="mt-3">
                 <label className="block text-xs text-gray-500 mb-0.5">ชื่อผู้ครอบครองรถ (เจ้าของรถ)</label>
-                <input type="text" value={r.owner_name} onChange={(e) => updateRow(i, 'owner_name', e.target.value)} className={inputCls} placeholder="เว้นว่างได้ หากเป็นคนเดียวกับคนขับ" />
+                <input type="text" value={r.owner_name} maxLength={100} onChange={(e) => updateRow(i, 'owner_name', e.target.value)} className={inputCls} placeholder="เว้นว่างได้ หากเป็นคนเดียวกับคนขับ" />
               </div>
 
               {restoreInfo ? (

@@ -45,7 +45,6 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
   const [confirmRollback, setConfirmRollback] = useState(false);
 
   useEffect(() => { if (open) loadList(); /* eslint-disable-next-line */ }, [open]);
-  if (!open) return null;
 
   function close() { setView('list'); setDetail(null); setError(''); resetSel(); onClose(); }
   function resetSel() { setSelRollback(new Set()); setSelG(new Set()); setSelR(new Set()); setReason(''); setConfirmRollback(false); }
@@ -105,6 +104,12 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
   const guardianRows = useMemo(() => (detail?.rows || []).filter((r) => r.can_confirm_guardian_update), [detail]);
   const reactRows = useMemo(() => (detail?.rows || []).filter((r) => r.can_confirm_reactivate), [detail]);
   const pendingReady = useMemo(() => (detail?.rows || []).filter((r) => r.can_apply).length, [detail]);
+
+  // Rules of Hooks: every hook above must run on every render, so the closed-modal
+  // early return MUST come after them. Placing `if (!open) return null` before the
+  // useMemos changed the hook count when the modal opened → React #310 crash
+  // (pre-existing since 10.13B-5). Keep this return here, below all hooks.
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onClick={close}>

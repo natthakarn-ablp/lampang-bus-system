@@ -46,10 +46,11 @@ describe('detectDriverReactivationBlock (10.13A-23C)', () => {
     expect(r.canonicalUserId).toBe(363);
   });
 
-  test('broken account (no linked sibling, no active vehicle) → NO_ACTIVE_VEHICLE', async () => {
+  test('no linked sibling, no active vehicle → NO_ACTIVE_VEHICLE warning, NOT blocked (10.13C)', async () => {
     const pool = makePool({ siblings: [], activeVeh: [] });
     const r = await detectDriverReactivationBlock(pool, { id: 999, username: 'ขข 9 ลำปาง' });
-    expect(r.blocked).toBe(true);
+    expect(r.blocked).toBe(false);
+    expect(r.warning).toBe(true);
     expect(r.reason).toBe('NO_ACTIVE_VEHICLE');
   });
 

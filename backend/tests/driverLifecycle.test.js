@@ -40,6 +40,14 @@ describe('preflightDriverAction (10.13B-8)', () => {
     expect(r.allowed).toBe(true);
     expect(r.recommended_action).toBe('RESTORE');
   });
+  test('RESTORE allowed with WARNING when no active vehicle (10.13C)', async () => {
+    detectDriverReactivationBlock.mockResolvedValue({ blocked: false, warning: true, reason: 'NO_ACTIVE_VEHICLE' });
+    const r = await svc.preflightDriverAction(makePool({ user: driverUser({ is_active: 0 }) }), { action: 'RESTORE_DRIVER', payload: { user_id: 50 } });
+    expect(r.allowed).toBe(true);
+    expect(r.severity).toBe('WARNING');
+    expect(r.classification).toBe('NO_ACTIVE_VEHICLE');
+    expect(r.recommended_action).toBe('RESTORE');
+  });
   test('REASSIGN warns when target vehicle already has an active driver', async () => {
     const r = await svc.preflightDriverAction(makePool({ user: driverUser(), vehicle: { id: 'V-1', is_deleted: 0 }, targetDriver: true }), { action: 'REASSIGN_DRIVER_VEHICLE', payload: { user_id: 50, vehicle_id: 'V-1' } });
     expect(r.classification).toBe('TARGET_VEHICLE_HAS_ACTIVE_DRIVER');
@@ -61,6 +69,12 @@ describe('restoreDriver (10.13B-8)', () => {
     detectDriverReactivationBlock.mockResolvedValue({ blocked: false });
     const out = await svc.restoreDriver(makePool({ user: driverUser({ is_active: 0 }) }), { userId: 50, reason: 'wrongly deactivated', actorId: 1 });
     expect(out.status).toBe('RESTORED');
+  });
+  test('no active vehicle → RESTORED with warning surfaced (10.13C)', async () => {
+    detectDriverReactivationBlock.mockResolvedValue({ blocked: false, warning: true, reason: 'NO_ACTIVE_VEHICLE' });
+    const out = await svc.restoreDriver(makePool({ user: driverUser({ is_active: 0 }) }), { userId: 50, reason: 'vehicle was retired', actorId: 1 });
+    expect(out.status).toBe('RESTORED');
+    expect(out.warning).toBe('NO_ACTIVE_VEHICLE');
   });
 });
 

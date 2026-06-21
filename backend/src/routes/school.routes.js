@@ -95,6 +95,15 @@ const importUpload = multer({
   },
 });
 
+// multer/busboy decodes the multipart Content-Disposition filename as latin1, so
+// a Thai filename arrives as mojibake ("à¹à¸…"). Re-decode latin1→utf8 to recover
+// the real UTF-8 name before it is stored/shown. Safe for ASCII (identity). The
+// on-disk name uses path.extname (ASCII) only, so it is unaffected.
+function decodeUploadFilename(name) {
+  try { return Buffer.from(String(name || ''), 'latin1').toString('utf8'); }
+  catch { return String(name || ''); }
+}
+
 // Normalize phone: strip dashes, pad leading zero if Excel stripped it
 function normalizePhone(raw) {
   if (!raw) return raw;
@@ -1478,7 +1487,7 @@ router.post('/students/import/preview', requireFullSchoolScope, importUpload.sin
     const schoolId = resolveSchoolId(req);
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.runPreview(pool, {
-      schoolId, importedBy: req.user.id, filePath: req.file.path, originalName: req.file.originalname,
+      schoolId, importedBy: req.user.id, filePath: req.file.path, originalName: decodeUploadFilename(req.file.originalname),
     });
     await logAudit({
       userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(out.batch_id),

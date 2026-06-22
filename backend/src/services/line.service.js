@@ -1252,12 +1252,20 @@ async function auditBind({ sub, phone, studentCode, action, reason, ip, ua }) {
 // backlog of stale rows (left over from testing, or piled up during a dispatcher
 // outage) is NEVER blasted to parents — a hours/months-old "checked in" push is
 // confusing and useless. Pass null to disable the window (back-office/manual use).
-async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180) {
+// types: only dispatch these notification_type values (e.g. ['emergency'] to push
+// ONLY exceptions, leaving routine checkin/checkout for the free pull/LIFF view).
+// Reserves the scarce LINE free-tier quota (~500 msg/mo) for what matters.
+// Pass null to push every type (paid-plan / back-office use).
+async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180, types = null) {
   const where = ['sent = FALSE', 'retry_count < 3'];
   const params = [];
   if (maxAgeMinutes != null) {
     where.push('created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)');
     params.push(maxAgeMinutes);
+  }
+  if (Array.isArray(types) && types.length) {
+    where.push(`notification_type IN (${types.map(() => '?').join(',')})`);
+    params.push(...types);
   }
   params.push(limit);
   const [rows] = await pool.query(

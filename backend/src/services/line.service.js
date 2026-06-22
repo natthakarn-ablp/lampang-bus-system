@@ -1248,14 +1248,25 @@ async function auditBind({ sub, phone, studentCode, action, reason, ip, ua }) {
 
 // ─── Notification Processor ─────────────────────────────────────────────────
 
-async function processUnsentNotifications(limit = 50) {
+// maxAgeMinutes: only dispatch notifications created within this window, so a
+// backlog of stale rows (left over from testing, or piled up during a dispatcher
+// outage) is NEVER blasted to parents — a hours/months-old "checked in" push is
+// confusing and useless. Pass null to disable the window (back-office/manual use).
+async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180) {
+  const where = ['sent = FALSE', 'retry_count < 3'];
+  const params = [];
+  if (maxAgeMinutes != null) {
+    where.push('created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)');
+    params.push(maxAgeMinutes);
+  }
+  params.push(limit);
   const [rows] = await pool.query(
     `SELECT id, target_line_user_id, notification_type, student_id, message_json
      FROM notifications
-     WHERE sent = FALSE AND retry_count < 3
+     WHERE ${where.join(' AND ')}
      ORDER BY created_at ASC
      LIMIT ?`,
-    [limit]
+    params
   );
 
   let sent = 0, failed = 0;

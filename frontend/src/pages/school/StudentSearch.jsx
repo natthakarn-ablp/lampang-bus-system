@@ -11,6 +11,7 @@ import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 import StudentTransferModal from './StudentTransferModal';
 import VehicleSelect from '../../components/VehicleSelect';
+import Pagination from '../../components/Pagination';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
 
@@ -351,17 +352,14 @@ export default function StudentSearch() {
             ))}
           </div>
 
-          {/* Pagination */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-4 text-sm text-gray-500">
-            <span>แสดง {students.length} จาก {meta.total}</span>
-            <div className="flex gap-2 items-center">
-              <button onClick={() => fetchStudents(meta.page - 1)} disabled={meta.page <= 1}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 text-sm min-h-[40px]">ก่อนหน้า</button>
-              <span className="px-3 py-2 tabular-nums">{meta.page}/{totalPages}</span>
-              <button onClick={() => fetchStudents(meta.page + 1)} disabled={meta.page >= totalPages}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 text-sm min-h-[40px]">ถัดไป</button>
-            </div>
-          </div>
+          {/* Pagination — jump-to-page input so reaching p.15 of 28 is one step */}
+          <Pagination
+            page={meta.page}
+            totalPages={totalPages}
+            total={meta.total}
+            shown={students.length}
+            onPage={(p) => fetchStudents(p)}
+          />
         </>
       )}
 

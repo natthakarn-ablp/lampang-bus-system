@@ -491,6 +491,65 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
   return { succeeded, failed };
 }
 
+// ─── processCheckoutAll ───────────────────────────────────────────────────────
+
+/**
+ * Batch-checkout (drop-off) all students who BOARDED this session but have not
+ * yet been dropped. One-tap "ส่งครบทุกคน" at the end of a route so checkout is
+ * actually recorded (real data showed checkout was scanned only ~11% of the time,
+ * making a "left-behind" signal impossible). Eligibility is computed from
+ * checkin_logs directly (CHECKED_IN without a matching CHECKED_OUT) — NOT from
+ * daily_status.*_done, which is already TRUE after the morning board. A student
+ * who never boarded is never dropped, so this cannot fabricate a checkout.
+ * Returns { succeeded: [], failed: [] }.
+ */
+async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, source = 'web' }) {
+  assertSession(session);
+  const termId = env.app.currentTerm;
+
+  const [students] = await pool.query(
+    `SELECT DISTINCT ci.student_id AS id
+       FROM checkin_logs ci
+      WHERE ci.vehicle_id = ? AND ci.session = ? AND ci.check_date = CURDATE()
+        AND ci.status = 'CHECKED_IN'
+        AND NOT EXISTS (
+          SELECT 1 FROM checkin_logs co
+           WHERE co.student_id = ci.student_id AND co.session = ci.session
+             AND co.check_date = CURDATE() AND co.status = 'CHECKED_OUT')`,
+    [vehicleId, session]
+  );
+
+  const succeeded = [];
+  const failed = [];
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    for (const { id: studentId } of students) {
+      const sp = `co_${studentId}`;
+      try {
+        await conn.query(`SAVEPOINT ${sp}`);
+        const result = await _buildCheckinTransaction(conn, {
+          userId, vehicleId, plateNo, studentId, session,
+          status: 'CHECKED_OUT', termId, source,
+        });
+        await conn.query(`RELEASE SAVEPOINT ${sp}`);
+        succeeded.push(result);
+      } catch (err) {
+        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        failed.push({ student_id: studentId, error: err.message });
+      }
+    }
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* swallow */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+
+  return { succeeded, failed };
+}
+
 // ─── getStatusToday ───────────────────────────────────────────────────────────
 
 /**
@@ -716,12 +775,40 @@ async function processSchoolOverride(pool, {
   }
 }
 
+// ─── getNoShowStudents (roadmap A — no-show; checkout-independent) ─────────────
+// Students who SHOULD have boarded (assigned to a bus + session-enabled) but have
+// NO CHECKED_IN for the day/session, excluding those on leave. Built on CHECKED_IN
+// (reliably recorded ~90%+) so it is trustworthy even though checkout is not.
+async function getNoShowStudents(pool, { schoolId, session, date = null }) {
+  assertSession(session);
+  const enabledCol = session === 'morning' ? 's.morning_enabled' : 's.evening_enabled';
+  const [rows] = await pool.query(
+    `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom, s.vehicle_id, v.plate_no
+       FROM students s
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
+      WHERE s.school_id = ? AND s.is_deleted = FALSE
+        AND ${enabledCol} = TRUE
+        AND s.vehicle_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM checkin_logs ci
+                         WHERE ci.student_id = s.id AND ci.session = ?
+                           AND ci.check_date = COALESCE(?, CURDATE()) AND ci.status = 'CHECKED_IN')
+        AND NOT EXISTS (SELECT 1 FROM student_leaves sl
+                         WHERE sl.student_id = s.id AND sl.leave_date = COALESCE(?, CURDATE())
+                           AND sl.cancelled = FALSE AND (sl.session = ? OR sl.session = 'both'))
+      ORDER BY s.grade, s.classroom, s.first_name`,
+    [schoolId, session, date, date, session]
+  );
+  return rows;
+}
+
 module.exports = {
   getDriverVehicle,
   getRoster,
   processCheckin,
   processCheckout,
   processCheckinAll,
+  processCheckoutAll,
   getStatusToday,
+  getNoShowStudents,
   processSchoolOverride,
 };

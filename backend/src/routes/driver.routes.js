@@ -373,6 +373,40 @@ router.post('/checkin-all', async (req, res, next) => {
   }
 });
 
+// ─── POST /checkout-all ───────────────────────────────────────────────────────
+// One-tap "ส่งครบทุกคน" at the end of a route: drops off everyone who boarded this
+// session but has no checkout yet. Improves checkout-recording (was ~11%) so the
+// data can actually support a left-behind signal.
+
+router.post('/checkout-all', async (req, res, next) => {
+  try {
+    const { session } = req.body;
+    if (!session) {
+      return sendError(res, 'session is required', [{ field: 'session', message: 'จำเป็นต้องระบุรอบ (morning/evening)' }], 400);
+    }
+    if (!['morning', 'evening'].includes(session)) {
+      return sendError(res, "session must be 'morning' or 'evening'", [{ field: 'session', message: "ต้องเป็น 'morning' หรือ 'evening'" }], 400);
+    }
+
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+
+    const result = await checkinSvc.processCheckoutAll(pool, {
+      userId:    req.user.id,
+      vehicleId: vehicle.vehicle_id,
+      plateNo:   vehicle.plate_no,
+      session,
+      source:    'web',
+    });
+
+    const message = `Checked out ${result.succeeded.length} student(s)` +
+      (result.failed.length > 0 ? `, ${result.failed.length} failed` : '');
+
+    return sendSuccess(res, result, message, null, 201);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 // ─── POST /emergency ──────────────────────────────────────────────────────────
 
 router.post('/emergency', async (req, res, next) => {

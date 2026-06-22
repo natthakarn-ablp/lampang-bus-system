@@ -60,6 +60,10 @@ export default function DriverDashboard() {
   const [error, setError] = useState('');
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkMsg, setBulkMsg] = useState('');
+  // End-of-route drop-off confirmation (records CHECKED_OUT for everyone boarded —
+  // the step that was missing, leaving checkout recorded only ~11% of the time).
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkedOut, setCheckedOut] = useState(false);
   const [actionLoading, setActionLoading] = useState({});
   const [leaveLoading, setLeaveLoading] = useState({});
   const [showIndividual, setShowIndividual] = useState(false);
@@ -181,6 +185,21 @@ export default function DriverDashboard() {
       setBulkMsg(err.response?.data?.message || 'เกิดข้อผิดพลาด');
     } finally {
       setBulkLoading(false);
+    }
+  }
+
+  async function handleCheckoutAll() {
+    setCheckoutLoading(true);
+    try {
+      const res = await api.post('/driver/checkout-all', { session });
+      const { succeeded, failed } = res.data.data;
+      toast.success(`บันทึกส่งลงครบ ${succeeded.length} คน` + (failed.length > 0 ? ` · ล้มเหลว ${failed.length} คน` : ''));
+      setCheckedOut(true);
+      await fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+    } finally {
+      setCheckoutLoading(false);
     }
   }
 
@@ -306,10 +325,28 @@ export default function DriverDashboard() {
           {/* ── Primary action area ── */}
           <div className="mb-5">
             {allDone ? (
-              <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success rounded-xl px-4 py-3 text-center text-lg font-semibold">
-                <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />
-                {ALL_DONE_LABEL[session]}
-              </div>
+              checkedOut ? (
+                <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success rounded-xl px-4 py-3 text-center text-lg font-semibold">
+                  <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />
+                  จบรอบ — ส่งนักเรียนลงครบแล้ว
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success rounded-xl px-4 py-3 text-center text-lg font-semibold">
+                    <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />
+                    {ALL_DONE_LABEL[session]}
+                  </div>
+                  {/* End-of-route: one tap records that everyone got off, so checkout
+                      data exists (enables a real left-behind check + dwell analytics). */}
+                  <button
+                    onClick={handleCheckoutAll}
+                    disabled={checkoutLoading}
+                    className="inline-flex w-full items-center justify-center gap-2 bg-brand-700 hover:bg-brand-700/90 active:bg-brand-700/80 disabled:opacity-50 text-white text-lg font-semibold px-5 py-4 rounded-2xl shadow-soft transition"
+                  >
+                    {checkoutLoading ? 'กำลังบันทึก…' : 'ยืนยันส่งนักเรียนลงครบแล้ว (จบรอบ)'}
+                  </button>
+                </div>
+              )
             ) : !showIndividual ? (
               /* Default: bulk-first UX */
               <div className="space-y-3">

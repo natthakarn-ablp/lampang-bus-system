@@ -161,6 +161,19 @@ router.get('/dashboard', async (req, res, next) => {
  * Search/list students for the school with optional filters.
  * Query params: search, grade, vehicle_id, morning_enabled, evening_enabled, page, per_page, sort, order
  */
+// ─── GET /no-show ─── students who should have boarded but did not (no CHECKED_IN),
+// excluding those on leave. Reliable (CHECKED_IN ~90%+), unlike checkout. ?session=morning|evening&date=YYYY-MM-DD
+router.get('/no-show', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const session = req.query.session === 'evening' ? 'evening' : 'morning';
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
+    const students = await checkinSvc.getNoShowStudents(pool, { schoolId, session, date });
+    return sendSuccess(res, { session, date: date || 'today', count: students.length, students });
+  } catch (err) { next(err); }
+});
+
 router.get('/students', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);

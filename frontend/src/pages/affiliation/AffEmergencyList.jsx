@@ -4,6 +4,7 @@ import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
+import Pagination from '../../components/Pagination';
 
 export default function AffEmergencyList() {
   const [emergencies, setEmergencies] = useState([]);
@@ -93,26 +94,7 @@ export default function AffEmergencyList() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-              <span>แสดง {emergencies.length} จาก {meta.total} รายการ</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => fetchEmergencies(meta.page - 1)}
-                  disabled={meta.page <= 1}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30"
-                >
-                  ก่อนหน้า
-                </button>
-                <span className="px-3 py-1">หน้า {meta.page}/{totalPages}</span>
-                <button
-                  onClick={() => fetchEmergencies(meta.page + 1)}
-                  disabled={meta.page >= totalPages}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30"
-                >
-                  ถัดไป
-                </button>
-              </div>
-            </div>
+            <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={emergencies.length} unit="รายการ" onPage={(p) => fetchEmergencies(p)} />
           )}
         </>
       )}

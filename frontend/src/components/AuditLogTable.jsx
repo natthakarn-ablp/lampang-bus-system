@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
 import AuditEntry from './AuditEntry';
 import EmptyState from './EmptyState';
+import Pagination from './Pagination';
 import { ClipboardList } from 'lucide-react';
 
 const ACTION_OPTIONS = [
@@ -172,16 +173,7 @@ export default function AuditLogTable({ apiPath, title = 'ประวัติ�
             ))}
           </div>
 
-          <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-            <span>แสดง {logs.length} จาก {meta.total}</span>
-            <div className="flex gap-2">
-              <button onClick={() => fetchLogs(meta.page - 1)} disabled={meta.page <= 1}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-              <span className="px-3 py-2">{meta.page}/{totalPages}</span>
-              <button onClick={() => fetchLogs(meta.page + 1)} disabled={meta.page >= totalPages}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
-            </div>
-          </div>
+          <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={logs.length} onPage={(p) => fetchLogs(p)} />
         </>
       )}
     </div>

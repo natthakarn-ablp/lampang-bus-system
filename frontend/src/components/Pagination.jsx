@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 // Pagination with a jump-to-page input — type a page number + Enter (or blur) to
 // jump straight there instead of tapping ถัดไป one page at a time (painful at
 // 28 pages). Clamps to [1, totalPages]. onPage(n) loads that page.
-export default function Pagination({ page, totalPages, total = null, shown = null, onPage }) {
+export default function Pagination({ page, totalPages, total = null, shown = null, unit = '', onPage }) {
   const [input, setInput] = useState(String(page));
   useEffect(() => { setInput(String(page)); }, [page]);
 
@@ -15,7 +15,7 @@ export default function Pagination({ page, totalPages, total = null, shown = nul
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-4 text-sm text-gray-500">
-      {total != null && <span>แสดง {shown != null ? shown : ''} จาก {total}</span>}
+      {total != null && <span>แสดง {shown != null ? shown : ''} จาก {total}{unit ? ` ${unit}` : ''}</span>}
       <div className="flex gap-2 items-center">
         <button
           onClick={() => onPage(page - 1)}

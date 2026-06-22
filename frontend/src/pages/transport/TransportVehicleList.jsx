@@ -7,6 +7,7 @@ import LoadingState from '../../components/LoadingState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import PlateSearchInput from '../../components/PlateSearchInput';
+import Pagination from '../../components/Pagination';
 
 const RESULT_BADGE = {
   PASSED:   { label: 'ผ่าน',      variant: 'success' },
@@ -162,16 +163,7 @@ export default function TransportVehicleList() {
           </AppCard>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-              <span>แสดง {vehicles.length} จาก {meta.total} คัน</span>
-              <div className="flex gap-2">
-                <button onClick={() => fetchVehicles(meta.page - 1)} disabled={meta.page <= 1}
-                  className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-                <span className="px-3 py-1">หน้า {meta.page}/{totalPages}</span>
-                <button onClick={() => fetchVehicles(meta.page + 1)} disabled={meta.page >= totalPages}
-                  className="px-3 py-1 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
-              </div>
-            </div>
+            <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={vehicles.length} unit="คัน" onPage={(p) => fetchVehicles(p)} />
           )}
         </>
       )}

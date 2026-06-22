@@ -6,6 +6,7 @@ import LoadingState from '../../components/LoadingState';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
 import { useToast } from '../../components/Toast';
+import Pagination from '../../components/Pagination';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
@@ -274,27 +275,7 @@ export default function AdminPickupPointManagement() {
           </DashboardSection>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-3 py-1.5 text-sm rounded-lg border border-surface-border disabled:opacity-50 hover:bg-surface-border"
-              >
-                ก่อนหน้า
-              </button>
-              <span className="text-sm text-ink-muted tabular-nums">
-                {page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="px-3 py-1.5 text-sm rounded-lg border border-surface-border disabled:opacity-50 hover:bg-surface-border"
-              >
-                ถัดไป
-              </button>
-            </div>
+            <Pagination page={page} totalPages={totalPages} onPage={(p) => setPage(p)} />
           )}
         </>
       )}

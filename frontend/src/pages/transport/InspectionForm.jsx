@@ -7,6 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
+import Pagination from '../../components/Pagination';
 
 const RESULT_OPTIONS = [
   { value: 'PASSED',   label: 'ผ่าน' },
@@ -356,16 +357,7 @@ export default function InspectionForm() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
-              <span>แสดง {inspections.length} จาก {meta.total}</span>
-              <div className="flex gap-2">
-                <button onClick={() => fetchInspections(meta.page - 1)} disabled={meta.page <= 1}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ก่อนหน้า</button>
-                <span className="px-3 py-2">{meta.page}/{totalPages}</span>
-                <button onClick={() => fetchInspections(meta.page + 1)} disabled={meta.page >= totalPages}
-                  className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30">ถัดไป</button>
-              </div>
-            </div>
+            <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={inspections.length} onPage={(p) => fetchInspections(p)} />
           )}
         </>
       )}

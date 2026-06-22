@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import AppCard from '../../components/ui/AppCard';
+import Pagination from '../../components/Pagination';
 
 const ROLE_LABELS = {
   driver: 'คนขับ', school: 'โรงเรียน', affiliation: 'สังกัด',
@@ -236,16 +237,7 @@ export default function UserManagement() {
           </div>
 
           {/* Pagination */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-4 text-sm text-gray-500">
-            <span>แสดง {users.length} จาก {meta.total}</span>
-            <div className="flex gap-2 items-center">
-              <button onClick={() => fetchUsers(meta.page - 1)} disabled={meta.page <= 1}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 min-h-[40px]">ก่อนหน้า</button>
-              <span className="px-3 py-2 tabular-nums">{meta.page}/{totalPages}</span>
-              <button onClick={() => fetchUsers(meta.page + 1)} disabled={meta.page >= totalPages}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30 min-h-[40px]">ถัดไป</button>
-            </div>
-          </div>
+          <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={users.length} onPage={(p) => fetchUsers(p)} />
         </>
       )}
 

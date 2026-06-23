@@ -16,8 +16,9 @@
 
 require('dotenv').config();
 const request = require('supertest');
-const mysql   = require('mysql2/promise');
+const { getTestConnection } = require('./dbHelper');
 const app     = require('../src/app');
+const env     = require('../src/config/env');
 
 // username = plate_no — matches the new vehicle-based resolution strategy
 const DRIVER   = { username: '__TEST PLATE 9999', password: 'testpass123' };
@@ -35,14 +36,9 @@ async function login(creds) {
 }
 
 async function cleanupTodayLogs() {
-  const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    database: process.env.DB_NAME || 'lampang_bus',
-    user: process.env.DB_USER || 'lampang',
-    password: process.env.DB_PASSWORD || '',
-    charset: 'utf8mb4',
-  });
+  // Guarded: getTestConnection() asserts the disposable-test-DB guard before
+  // opening the socket (defense-in-depth, issue #8).
+  const conn = await getTestConnection();
   await conn.query(`DELETE FROM checkin_logs WHERE vehicle_id = 'V-test000000ab' AND check_date = CURDATE()`);
   await conn.query(`DELETE FROM daily_status  WHERE vehicle_id = 'V-test000000ab' AND check_date = CURDATE()`);
   await conn.end();
@@ -165,6 +161,24 @@ describe('POST /api/driver/checkin', () => {
     expect(res.body.data).toHaveProperty('log_id');
     expect(res.body.data.status).toBe('CHECKED_IN');
     expect(res.body.data.session).toBe('morning');
+    expect(res.body.data.safety_policy).toMatchObject({ decision: 'ALLOW_WITH_WARNING', policy_mode: 'OBSERVE' });
+  });
+
+  it('blocks unverified vehicle data when policy mode is ENFORCE', async () => {
+    const oldMode = env.safetyPolicy.mode;
+    env.safetyPolicy.mode = 'ENFORCE';
+    try {
+      const res = await request(app)
+        .post('/api/driver/checkin')
+        .set('Authorization', `Bearer ${driverToken}`)
+        .send({ student_id: TEST_STUDENT_ID, session: 'morning' });
+
+      expect(res.status).toBe(409);
+      expect(res.body.success).toBe(false);
+      expect(res.body.errors[0]).toMatchObject({ code: 'SAFETY_POLICY_BLOCKED' });
+    } finally {
+      env.safetyPolicy.mode = oldMode;
+    }
   });
 
   it('roster reflects CHECKED_IN status after checkin', async () => {

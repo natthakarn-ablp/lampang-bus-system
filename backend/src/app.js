@@ -110,10 +110,12 @@ app.use('/api/reports',     exportLimiter, reportRoutes);
 
 // ─── Phase 7+ routes ────────────────────────────────────────────────────────
 app.use('/api/transport', require('./routes/transport.routes'));
+app.use('/api/verification', require('./routes/verification.routes'));
 app.use('/api/parent',    require('./routes/parent.routes'));
 app.use('/api/line',      require('./routes/line.routes'));
 app.use('/api/admin',     require('./routes/admin.routes'));
 app.use('/api/visits',    require('./routes/visits.routes'));
+app.use('/api/readiness', require('./routes/readiness.routes'));
 
 // ─── Vehicle QR + consent (feature-flagged; dark by default) ─────────────────
 // Mounted ONLY when FEATURE_VEHICLE_QR=true. When off, these paths 404 and the

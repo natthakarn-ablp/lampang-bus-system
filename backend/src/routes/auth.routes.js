@@ -227,7 +227,7 @@ router.get('/me', authenticate, async (req, res, next) => {
   try {
     const [rows] = await pool.query(
       `SELECT id, username, role, scope_type, scope_id, grade_scope,
-              display_name, last_login, created_at
+              display_name, driver_id, last_login, created_at
        FROM users
        WHERE id = ? AND is_deleted = FALSE AND is_active = TRUE
        LIMIT 1`,

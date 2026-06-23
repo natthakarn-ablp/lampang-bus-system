@@ -146,6 +146,10 @@ async function getVehicles({ status, search, page = 1, per_page = 50 } = {}) {
             v.registration_expiry,
             v.compulsory_insurance_expiry,
             v.tax_expiry,
+            v.certified_capacity,
+            v.verification_status,
+            v.verification_reasons_json,
+            v.verification_updated_at,
             v.created_at,
             (SELECT d.name FROM driver_vehicle_assignments dva
              JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
@@ -172,6 +176,127 @@ async function getVehicles({ status, search, page = 1, per_page = 50 } = {}) {
      ORDER BY v.plate_no
      LIMIT ? OFFSET ?`,
     [...params, per_page, offset]
+  );
+
+  return { vehicles, meta: { page, per_page, total } };
+}
+
+// ─── Phase 10.x — per-vehicle LIST endpoints backing the dashboard counts ────
+// Both functions take an injectable `db` (defaults to the module pool) so they
+// can be unit-tested with a mock pool, matching the safetyPolicy.service style.
+// They are PII-free: they return the same vehicle/inspection/document columns
+// as getVehicles() and never touch the students table.
+//
+// The SELECT column list is shared with getVehicles() so the list rows match
+// the main "/vehicles" list shape (driver_name/phone, latest inspection, docs).
+const VEHICLE_LIST_COLUMNS = `v.id, v.plate_no, v.vehicle_type,
+            v.owner_name, v.owner_phone,
+            v.insurance_status, v.insurance_type,
+            v.insurance_expiry,
+            v.registration_expiry,
+            v.compulsory_insurance_expiry,
+            v.tax_expiry,
+            v.certified_capacity,
+            v.verification_status,
+            v.verification_reasons_json,
+            v.verification_updated_at,
+            v.created_at,
+            (SELECT d.name FROM driver_vehicle_assignments dva
+             JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
+             WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE LIMIT 1) AS driver_name,
+            (SELECT d.phone FROM driver_vehicle_assignments dva
+             JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
+             WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE LIMIT 1) AS driver_phone,
+            (SELECT vi2.result FROM vehicle_inspections vi2
+             WHERE vi2.vehicle_id = v.id
+             ORDER BY vi2.inspection_date DESC LIMIT 1) AS latest_inspection_result,
+            (SELECT vi2.inspection_date FROM vehicle_inspections vi2
+             WHERE vi2.vehicle_id = v.id
+             ORDER BY vi2.inspection_date DESC LIMIT 1) AS latest_inspection_date,
+            (SELECT vi2.expiry_date FROM vehicle_inspections vi2
+             WHERE vi2.vehicle_id = v.id
+             ORDER BY vi2.inspection_date DESC LIMIT 1) AS inspection_expiry`;
+
+/**
+ * Vehicles that the dashboard counts under `not_inspected`
+ * (= total_vehicles − inspected_count, where inspected_count is the number of
+ * non-deleted vehicles that have at least one row in vehicle_inspections).
+ *
+ * Default ("ยังไม่ตรวจ"): vehicles with NO inspection row at all — this exactly
+ * reproduces the dashboard's `not_inspected` set.
+ *
+ * With `includePending = true`: ALSO include vehicles whose LATEST inspection
+ * result is 'PENDING' (the dashboard's separate `pending` KPI — "รอตรวจ").
+ * Kept opt-in so the default list total stays equal to `not_inspected`.
+ */
+async function getPendingVehicles({ page = 1, per_page = 50, includePending = false } = {}, db = pool) {
+  // NOT EXISTS → "no inspection ever recorded" == the not_inspected definition.
+  let cond = `NOT EXISTS (SELECT 1 FROM vehicle_inspections vi WHERE vi.vehicle_id = v.id)`;
+  if (includePending) {
+    // OR latest inspection result is PENDING (matches dashboard `pending`).
+    cond = `(${cond} OR (
+      SELECT vi3.result FROM vehicle_inspections vi3
+      WHERE vi3.vehicle_id = v.id
+      ORDER BY vi3.inspection_date DESC LIMIT 1
+    ) = 'PENDING')`;
+  }
+  const where = `v.is_deleted = FALSE AND ${cond}`;
+
+  const [[{ total }]] = await db.query(
+    `SELECT COUNT(*) AS total FROM vehicles v WHERE ${where}`
+  );
+
+  const offset = (page - 1) * per_page;
+  const [vehicles] = await db.query(
+    `SELECT ${VEHICLE_LIST_COLUMNS}
+     FROM vehicles v
+     WHERE ${where}
+     ORDER BY v.plate_no
+     LIMIT ? OFFSET ?`,
+    [per_page, offset]
+  );
+
+  return { vehicles, meta: { page, per_page, total } };
+}
+
+/**
+ * Vehicles with a document expiring soon / already expired. The default
+ * (`expired = false`) reproduces the dashboard's `expiring_docs_count`
+ * definition EXACTLY: any of the 4 dated documents (insurance / registration /
+ * พ.ร.บ. / tax) falling in [today, today+30d]. A vehicle appears once even if
+ * several documents are due.
+ *
+ * With `expired = true`: reproduces `expired_docs_count` — any of the 4 dated
+ * documents already past CURDATE().
+ */
+async function getExpiringVehicles({ page = 1, per_page = 50, expired = false } = {}, db = pool) {
+  const docCond = expired
+    ? `(
+        v.insurance_expiry            < CURDATE()
+        OR v.registration_expiry         < CURDATE()
+        OR v.compulsory_insurance_expiry < CURDATE()
+        OR v.tax_expiry                  < CURDATE()
+      )`
+    : `(
+        (v.insurance_expiry            BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+        OR (v.registration_expiry         BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+        OR (v.compulsory_insurance_expiry BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+        OR (v.tax_expiry                  BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+      )`;
+  const where = `v.is_deleted = FALSE AND ${docCond}`;
+
+  const [[{ total }]] = await db.query(
+    `SELECT COUNT(*) AS total FROM vehicles v WHERE ${where}`
+  );
+
+  const offset = (page - 1) * per_page;
+  const [vehicles] = await db.query(
+    `SELECT ${VEHICLE_LIST_COLUMNS}
+     FROM vehicles v
+     WHERE ${where}
+     ORDER BY v.plate_no
+     LIMIT ? OFFSET ?`,
+    [per_page, offset]
   );
 
   return { vehicles, meta: { page, per_page, total } };
@@ -224,6 +349,8 @@ async function updateInspection({ inspectionId, expiryDate, result, notes, userI
 module.exports = {
   getDashboard,
   getVehicles,
+  getPendingVehicles,
+  getExpiringVehicles,
   getInspections,
   createInspection,
   updateInspection,

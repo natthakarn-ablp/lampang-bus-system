@@ -18,7 +18,12 @@ const env = require('../src/config/env');
 const lineRoutes = require('../src/routes/line.routes');
 
 const { verifySignature } = lineRoutes;
-const { getMissingProductionSecrets } = env;
+const {
+  getMissingProductionSecrets,
+  parseSafetyPolicyConfig,
+  validateFeatureDependencies,
+  validateEnvOrExit,
+} = env;
 
 // ─── 1. Webhook signature verification ───────────────────────────────────────
 describe('LINE webhook verifySignature', () => {
@@ -107,5 +112,91 @@ describe('getMissingProductionSecrets', () => {
   test('non-production never requires the secrets', () => {
     expect(getMissingProductionSecrets({ LINE_CHANNEL_SECRET: '', CRON_API_KEY: '' }, 'development')).toEqual([]);
     expect(getMissingProductionSecrets({ LINE_CHANNEL_SECRET: '', CRON_API_KEY: '' }, 'test')).toEqual([]);
+  });
+});
+
+// ─── 3. Progressive deployment policy config ────────────────────────────────
+describe('progressive deployment policy config', () => {
+  test('defaults to observe', () => {
+    expect(parseSafetyPolicyConfig({})).toEqual({ mode: 'OBSERVE', enforcementAt: null });
+  });
+
+  test('accepts enforce and a valid ISO date', () => {
+    expect(parseSafetyPolicyConfig({
+      SAFETY_POLICY_MODE: 'enforce',
+      SAFETY_ENFORCEMENT_AT: '2026-07-01T00:00:00+07:00',
+    })).toEqual({ mode: 'ENFORCE', enforcementAt: '2026-07-01T00:00:00+07:00' });
+  });
+
+  test.each(['open', 'true'])('rejects explicit invalid mode %p', (mode) => {
+    expect(() => parseSafetyPolicyConfig({ SAFETY_POLICY_MODE: mode })).toThrow(/SAFETY_POLICY_MODE/);
+  });
+
+  test('rejects invalid enforcement date', () => {
+    expect(() => parseSafetyPolicyConfig({
+      SAFETY_POLICY_MODE: 'enforce', SAFETY_ENFORCEMENT_AT: 'not-a-date',
+    })).toThrow(/SAFETY_ENFORCEMENT_AT/);
+  });
+
+  test('rejects QR level 3 when vehicle QR is disabled', () => {
+    expect(() => validateFeatureDependencies({ FEATURE_VEHICLE_QR: 'false', FEATURE_QR_LEVEL3: 'true' }))
+      .toThrow(/FEATURE_QR_LEVEL3/);
+  });
+});
+
+// ─── 4. validateEnvOrExit — fail-closed without killing the test worker ──────
+// env.js runs hard validation at module load and historically called
+// process.exit(1) on bad config with no NODE_ENV gate, which would kill the Jest
+// worker when `require('../src/config/env')` ran on a checkout without a .env.
+// Under NODE_ENV==='test' the same checks must THROW (catchable) instead of
+// exiting, so bad config is still rejected but the worker survives. These tests
+// assert that behaviour by passing nodeEnv='test' explicitly.
+describe('validateEnvOrExit (test mode throws instead of process.exit)', () => {
+  const goodBase = {
+    DB_HOST: 'localhost',
+    DB_PORT: '3306',
+    DB_NAME: 'db',
+    DB_USER: 'user',
+    DB_PASSWORD: 'pw',
+    JWT_SECRET: 'x'.repeat(32),
+    JWT_EXPIRES_IN: '24h',
+    JWT_REFRESH_EXPIRES_IN: '7d',
+  };
+
+  test('is exported', () => {
+    expect(typeof validateEnvOrExit).toBe('function');
+  });
+
+  test('passes for a fully valid config (returns true, does not throw)', () => {
+    expect(validateEnvOrExit({ ...goodBase }, 'test')).toBe(true);
+  });
+
+  test('throws when required vars are missing', () => {
+    expect(() => validateEnvOrExit({ JWT_SECRET: 'x'.repeat(32) }, 'test'))
+      .toThrow(/Missing required environment variables/);
+  });
+
+  test('throws when JWT_SECRET is too short', () => {
+    expect(() => validateEnvOrExit({ ...goodBase, JWT_SECRET: 'short' }, 'test'))
+      .toThrow(/JWT_SECRET must be at least 32 characters/);
+  });
+
+  test('throws when a production secret is missing under NODE_ENV=production', () => {
+    expect(() => validateEnvOrExit(
+      { ...goodBase, LINE_CHANNEL_SECRET: '', CRON_API_KEY: '' },
+      'production'
+    )).toThrow(/Missing required production secrets/);
+  });
+
+  test('throws on an invalid SAFETY_POLICY_MODE', () => {
+    expect(() => validateEnvOrExit({ ...goodBase, SAFETY_POLICY_MODE: 'open' }, 'test'))
+      .toThrow(/SAFETY_POLICY_MODE/);
+  });
+
+  test('throws on an invalid feature dependency', () => {
+    expect(() => validateEnvOrExit(
+      { ...goodBase, FEATURE_VEHICLE_QR: 'false', FEATURE_QR_LEVEL3: 'true' },
+      'test'
+    )).toThrow(/FEATURE_QR_LEVEL3/);
   });
 });

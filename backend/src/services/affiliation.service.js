@@ -266,16 +266,19 @@ async function getStudents(affiliationId, { search, grade, school_id, vehicle_id
   );
 
   const offset = (page - 1) * per_page;
+  // PDPA / data minimization (2026-06-23): the affiliation (เขตพื้นที่) tier is
+  // a read-only oversight role per the RBAC matrix, so parent CONTACT PII
+  // (parent_name / parent_phone) is intentionally NOT selected here. Only
+  // oversight-relevant identity fields (name, grade, classroom, school,
+  // vehicle, status) are returned. The SCHOOL role keeps parent contact via
+  // its own school.service.getStudents — this change does not touch that path.
   const [students] = await pool.query(
     `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.school_id, sc.name AS school_name,
-            s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled,
-            p.name AS parent_name, p.phone AS parent_phone
+            s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled
      FROM students s
      JOIN schools sc ON sc.id = s.school_id
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
-     LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.approved = TRUE
-     LEFT JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
      WHERE ${where}
      ORDER BY s.${sortCol} ${sortDir}
      LIMIT ? OFFSET ?`,

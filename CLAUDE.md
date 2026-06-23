@@ -673,12 +673,19 @@ GET /api/school/students?page=1&per_page=20&sort=first_name&order=asc
 
 ```
 GET /api/school/students?search=ธนันธร&grade=ป.1&morning_enabled=true
-GET /api/district/reports/daily?date=2026-02-06&school_id=SCH0001
+GET /api/reports/daily?date=2026-02-06&school_id=SCH0001
 ```
 
 ---
 
 ## 5. API Endpoints (แยกตามบทบาท)
+
+> **หมายเหตุเรื่อง path ของ API (อัปเดต 2026-06-23):**
+> สเปกรุ่นแรกตั้งชื่อ route ไว้เป็น `/api/district/*` (เขตพื้นที่) และ `/api/central/*` (ส่วนกลาง)
+> แต่ implementation จริงใน `backend/src/app.js` mount เป็น **`/api/affiliation/*`** และ **`/api/province/*`**
+> (ดู `affiliation.routes.js` และ `province.routes.js`) — **ไม่มี** mount `/api/district` หรือ `/api/central` อยู่จริง
+> เอกสาร §5.4 และ §5.5 ด้านล่างได้แก้ให้ตรงกับ path จริงแล้ว
+> นอกจากนี้ รายงาน/Export ทุกบทบาทไม่ได้อยู่ใต้ route ของแต่ละบทบาท แต่ถูกรวมไว้ที่ mount เดียวคือ **`/api/reports/*`** (ดู §5.8)
 
 ### 5.1 Auth
 
@@ -743,58 +750,104 @@ GET    /api/school/students                — รายชื่อนักเ
 POST   /api/school/students                — เพิ่มนักเรียน
 PUT    /api/school/students/:id            — แก้ไข
 DELETE /api/school/students/:id            — soft delete
-POST   /api/school/students/import         — นำเข้า CSV/Excel → สร้าง import_batch
-GET    /api/school/students/template       — ดาวน์โหลด template
-GET    /api/school/import-batches          — ดูประวัติการนำเข้า
+POST   /api/school/students/import              — นำเข้า CSV/Excel → สร้าง import_batch
+GET    /api/school/students/template            — ดาวน์โหลด template
+GET    /api/school/students/import/batches      — ดูประวัติการนำเข้า (ไม่ใช่ /api/school/import-batches)
+GET    /api/school/students/import/:batchId     — รายละเอียดชุดนำเข้า
+POST   /api/school/students/import/preview       — ตรวจสอบไฟล์นำเข้า (ไม่เขียน DB)
+POST   /api/school/students/import/:batchId/apply    — ยืนยันนำเข้าจาก preview
+GET    /api/school/students/import/:batchId/report   — รายงานผลการนำเข้า (รายแถว)
+POST   /api/school/students/import/:batchId/rollback — ย้อนกลับชุดนำเข้า
 GET    /api/school/daily-status            — สถานะขึ้นลงรถวันนี้
-GET    /api/school/parents                 — รายชื่อผู้ปกครอง
-POST   /api/school/parents/:id/approve     — อนุมัติผูกผู้ปกครอง
 GET    /api/school/vehicles                — รถที่ให้บริการโรงเรียนนี้
 POST   /api/school/vehicles                — เพิ่ม/แก้ไขข้อมูลรถ
-GET    /api/school/reports/daily            — รายงานรายวัน
-GET    /api/school/reports/monthly          — รายงานรายเดือน
-GET    /api/school/export/:type            — export (type = excel | csv | pdf)
 ```
+
+> **หมายเหตุ:** รายงาน (`reports/daily`, `reports/monthly`) และ export ของโรงเรียน **ไม่ได้อยู่ใต้
+> `/api/school/*`** — ใช้ mount รวม `/api/reports/*` (ดู §5.8). ส่วนการจัดการผู้ปกครอง
+> (`/parents`, `/parents/:id/approve`) ตามสเปกรุ่นแรกยังไม่ได้ implement ใน `school.routes.js`
+> ปัจจุบัน (โรงเรียนใช้ระบบ pickup-points / roster-requests / teacher-accounts แทน)
 
 ### 5.4 เขตพื้นที่ (role: affiliation, scope: AFF001)
 
+> **Mount จริง: `/api/affiliation/*`** (ไฟล์ `affiliation.routes.js`) — ไม่ใช่ `/api/district`
+> ทุก route ต้อง auth + role `affiliation` หรือ `admin` (admin ระบุ `?affiliation_id=` ได้)
+
 ```
-GET  /api/district/dashboard               — dashboard ภาพรวม
-GET  /api/district/schools                 — โรงเรียนในสังกัด
-GET  /api/district/schools/:id/status      — สถานะรายโรงเรียน
-GET  /api/district/reports/daily
-GET  /api/district/reports/monthly
-GET  /api/district/reports/yearly
-GET  /api/district/export/:type
-GET  /api/district/compare                 — เปรียบเทียบระหว่างโรงเรียน
+GET  /api/affiliation/dashboard                — dashboard ภาพรวมของเขต
+GET  /api/affiliation/schools                  — โรงเรียนในสังกัด
+GET  /api/affiliation/students                 — นักเรียนในสังกัด (search, grade, school_id, vehicle_id, page, per_page, sort, order)
+GET  /api/affiliation/vehicles                 — รถที่ให้บริการโรงเรียนในสังกัด
+GET  /api/affiliation/vehicles-at-risk?limit=10 — รถเสี่ยง (ตรวจสภาพ/ประกัน) เรียงตามคะแนน
+GET  /api/affiliation/status-today             — สถานะขึ้น/ลงรถวันนี้ทั้งเขต
+GET  /api/affiliation/missing?session=morning  — นักเรียนที่ยังไม่ถูกเช็ก (รอบเช้า/เย็น)
+GET  /api/affiliation/emergencies              — เหตุฉุกเฉินในเขต (page, per_page)
+GET  /api/affiliation/audit-logs               — ประวัติการแก้ไขในเขต (page, per_page, action, date_from, date_to; ?format=csv = export CSV)
+GET  /api/affiliation/live-vehicles            — ตำแหน่งรถแบบ live ในเขต (Phase 7.2)
+GET  /api/affiliation/pickup-map               — แผนที่จุดรับ-ส่ง (aggregate, ไม่มี PII) (Phase 7.12.2)
+
+— จัดการบัญชีโรงเรียน (School Account Management) —
+GET    /api/affiliation/school-accounts                      — รายชื่อบัญชีโรงเรียนในเขต
+POST   /api/affiliation/school-accounts                      — สร้างบัญชีให้โรงเรียนที่มีอยู่
+POST   /api/affiliation/school-accounts/new-school          — เพิ่มโรงเรียนใหม่ + สร้างบัญชีในขั้นตอนเดียว
+POST   /api/affiliation/school-accounts/:id/reset-password  — รีเซ็ตรหัสผ่านบัญชีโรงเรียน
+PUT    /api/affiliation/school-accounts/:id                 — เปิด/ปิดการใช้งานบัญชี (is_active)
+GET    /api/affiliation/school-accounts/import-template     — ดาวน์โหลด template .xlsx นำเข้าบัญชีโรงเรียน
+POST   /api/affiliation/school-accounts/import/preview      — ตรวจสอบไฟล์นำเข้า (ไม่เขียน DB)
+POST   /api/affiliation/school-accounts/import/commit       — ยืนยันนำเข้าบัญชีโรงเรียน (transactional)
+POST   /api/affiliation/notify-school                       — บันทึก log การแจ้งเตือนไปยังโรงเรียน
 ```
+
+> **หมายเหตุ:** ไม่มี endpoint `/schools/:id/status`, `/reports/*`, `/export/:type`, หรือ `/compare`
+> ตามสเปกรุ่นแรก — รายงาน/Export ใช้ `/api/reports/*` (ดู §5.8) ส่วน export CSV เฉพาะ audit
+> ทำผ่าน `/api/affiliation/audit-logs?format=csv`
 
 ### 5.5 ส่วนกลาง (role: province, scope: LPG)
 
+> **Mount จริง: `/api/province/*`** (ไฟล์ `province.routes.js`) — ไม่ใช่ `/api/central`
+> ทุก route ต้อง auth + role `province` หรือ `admin`
+
 ```
-GET  /api/central/dashboard                — ภาพรวมทั้งจังหวัด
-GET  /api/central/districts                — ทุกเขตพื้นที่
-GET  /api/central/districts/:id/dashboard
-GET  /api/central/schools                  — ทุกโรงเรียน
-GET  /api/central/reports/policy           — รายงานเชิงนโยบาย
-GET  /api/central/export/:type
-GET  /api/central/audit-logs               — ประวัติการแก้ไข
-GET  /api/central/system-params            — ตั้งค่าระบบ
-PUT  /api/central/system-params/:key
+GET  /api/province/dashboard               — ภาพรวมทั้งจังหวัด
+GET  /api/province/affiliations            — ทุกเขตพื้นที่ (สังกัด)
+GET  /api/province/schools                 — ทุกโรงเรียน (affiliation_id, page, per_page)
+GET  /api/province/students                — นักเรียนทั้งจังหวัด (search, grade, school_id, affiliation_id, vehicle_id, page, per_page, sort, order)
+GET  /api/province/vehicles                — รถทั้งจังหวัด (strip เบอร์โทรออก — summary level)
+GET  /api/province/vehicles-at-risk?limit=10 — รถเสี่ยงทั้งจังหวัด เรียงตามคะแนน
+GET  /api/province/status-today            — สถานะขึ้น/ลงรถวันนี้ทั้งจังหวัด
+GET  /api/province/trend?days=7            — แนวโน้มการเช็กอินรายวัน (1-30 วัน) สำหรับกราฟ dashboard
+GET  /api/province/emergencies             — เหตุฉุกเฉินทั้งจังหวัด (page, per_page)
+GET  /api/province/audit-logs              — ประวัติการแก้ไข (page, per_page, action, date_from, date_to; ?format=csv = export CSV)
+GET  /api/province/live-vehicles           — ตำแหน่งรถแบบ live ทั้งจังหวัด (Phase 7.2)
+GET  /api/province/pickup-map              — แผนที่จุดรับ-ส่งทั้งจังหวัด (aggregate, ไม่มี PII) (Phase 7.12.2)
 ```
+
+> **ยังไม่ implement / deferred:**
+> - `GET /api/province/reports/policy` (รายงานเชิงนโยบาย ตามสเปกรุ่นแรก `/api/central/reports/policy`) — **ยังไม่มีในระบบ** (404 ทุก path) ยังไม่ได้ทำ อย่าถือว่ามีอยู่จริง
+> - ไม่มี `/districts/:id/dashboard`, `/export/:type`, `/system-params` ตามสเปกรุ่นแรก — รายงาน/Export ใช้ `/api/reports/*` (ดู §5.8) ส่วน export CSV เฉพาะ audit ทำผ่าน `/api/province/audit-logs?format=csv`
 
 ### 5.6 ขนส่ง (role: transport)
 
+> **Mount จริง: `/api/transport/*`** (ไฟล์ `transport.routes.js`) — ทุก route ต้อง auth + role `transport` หรือ `admin`
+
 ```
-GET  /api/transport/vehicles               — รถทั้งหมดในโครงการ
+GET  /api/transport/dashboard              — สรุปภาพรวมการตรวจสภาพ
+GET  /api/transport/vehicles               — รถทั้งหมด (status, search, page, per_page)
 GET  /api/transport/vehicles/:id           — รายละเอียดรถ
-GET  /api/transport/inspections            — รายการตรวจสภาพ
+GET  /api/transport/vehicles/check-plate   — เช็กทะเบียนซ้ำก่อนสร้าง (read-only)
+POST /api/transport/vehicles               — เพิ่มรถใหม่เพื่อตรวจสภาพ
+GET  /api/transport/schools                — รายชื่อโรงเรียน (สำหรับ dropdown)
+GET  /api/transport/inspections            — รายการตรวจสภาพ (vehicle_id, result, page, per_page)
 POST /api/transport/inspections            — บันทึกผลตรวจ
 PUT  /api/transport/inspections/:id        — แก้ไขผลตรวจ
-GET  /api/transport/vehicles/pending       — รถที่ยังไม่ตรวจ
-GET  /api/transport/vehicles/expiring      — รถที่ใกล้หมดอายุ
-GET  /api/transport/export/:type
+GET  /api/transport/vehicles/pending       — รถที่ยังไม่ตรวจ (กำลัง implement — 2026-06-23)
+GET  /api/transport/vehicles/expiring      — รถที่ใกล้หมดอายุ (กำลัง implement — 2026-06-23)
+GET  /api/transport/pickup-map             — แผนที่จุดรับ-ส่ง (aggregate, ไม่มี PII) (Phase 7.12.2)
 ```
+
+> **หมายเหตุ:** `vehicles/pending` และ `vehicles/expiring` อยู่ระหว่างการ implement (อีก agent หนึ่ง
+> กำลังเพิ่มอยู่ ณ 2026-06-23) — เก็บไว้ในเอกสารว่าจะมี ไม่ต้อง mark ว่า deferred
+> ส่วน `/export/:type` ตามสเปกรุ่นแรก **ไม่มีอยู่จริง** — export/รายงานใช้ `/api/reports/*` (ดู §5.8)
 
 ### 5.7 LINE Webhook & Parent API
 
@@ -806,6 +859,24 @@ GET  /api/parent/children/:id/history      — ประวัติย้อน
 POST /api/parent/register                  — ลงทะเบียนผู้ปกครอง
 POST /api/parent/link-child                — ผูกบุตรหลาน
 ```
+
+### 5.8 รายงาน & Export (mount รวม `/api/reports/*`)
+
+> **สำคัญ:** รายงานและ Export ของทุกบทบาท (school / affiliation / province / admin) ถูกรวมไว้ที่
+> mount เดียวคือ `/api/reports/*` (ไฟล์ `report.routes.js`) — **ไม่ได้** กระจายอยู่ใต้ route ของแต่ละ
+> บทบาทตามสเปกรุ่นแรก (`/api/school/reports/*`, `/api/district/export/:type` ฯลฯ ไม่มีอยู่จริง)
+> Scope ถูก enforce ภายในตาม role ของ token. mount นี้มี rate-limit สำหรับ export (40 ครั้ง/5 นาที)
+
+```
+GET  /api/reports/daily                    — รายงานรายวัน (JSON)
+GET  /api/reports/monthly                  — รายงานรายเดือน (JSON)
+GET  /api/reports/summary                  — รายงานสรุป (JSON)
+GET  /api/reports/export/csv               — export CSV (มี BOM)
+GET  /api/reports/export/excel             — export Excel (exceljs)
+GET  /api/reports/export/pdf               — export PDF (pdfkit)
+POST /api/reports/decision-log             — บันทึก decision log
+```
+> Query filter ที่รองรับ: `date` (YYYY-MM-DD), `month` (YYYY-MM), `school_id`, `affiliation_id`, `vehicle_id`
 
 ---
 

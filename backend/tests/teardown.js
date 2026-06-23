@@ -6,10 +6,17 @@
  * Order matters: FK children deleted before parents.
  */
 
+// Load .env.test FIRST (see tests/setup.js for the full rationale).
+// globalTeardown runs in its own process where jest `setupFiles` does NOT
+// apply, so the bootstrap must be required here explicitly.
+require('./loadTestEnv');
 require('dotenv').config();
+const { assertDisposableTestDatabase } = require('../src/utils/testDatabaseGuard');
 const mysql = require('mysql2/promise');
 
 module.exports = async function globalTeardown() {
+  assertDisposableTestDatabase(process.env);
+
   const conn = await mysql.createConnection({
     host:     process.env.DB_HOST     || 'localhost',
     port:     parseInt(process.env.DB_PORT || '3306', 10),

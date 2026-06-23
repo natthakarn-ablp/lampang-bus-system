@@ -5,11 +5,19 @@
  * Seeds minimal test data for auth and driver tests.
  */
 
+// Load .env.test FIRST so the safe DB_NAME=lampang_bus_test / NODE_ENV=test
+// values win. globalSetup runs in its own process where jest `setupFiles`
+// does NOT apply, so we must require the bootstrap here explicitly. The
+// subsequent dotenv.config() reads the real .env but cannot override these.
+require('./loadTestEnv');
 require('dotenv').config();
+const { assertDisposableTestDatabase } = require('../src/utils/testDatabaseGuard');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 
 module.exports = async function globalSetup() {
+  assertDisposableTestDatabase(process.env);
+
   const conn = await mysql.createConnection({
     host:     process.env.DB_HOST     || 'localhost',
     port:     parseInt(process.env.DB_PORT || '3306', 10),

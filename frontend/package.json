@@ -11,6 +11,7 @@
     "check:labels": "node ../scripts/check-ui-labels.js",
     "check:labels:strict": "node ../scripts/check-ui-labels.js --strict",
     "check:labels:verbose": "node ../scripts/check-ui-labels.js --verbose",
+    "check:hybrid-ui": "node ./scripts/check-hybrid-motion-ui.mjs",
     "hooks:install": "node ../scripts/install-hooks.js",
     "hooks:install:strict": "node ../scripts/install-hooks.js --strict",
     "hooks:remove": "node ../scripts/install-hooks.js --remove"

@@ -30,6 +30,7 @@ const DriverProfile        = lazy(() => import('./pages/driver/DriverProfile'));
 const DriverRosterRequests = lazy(() => import('./pages/driver/DriverRosterRequests'));
 const DriverPretrip        = lazy(() => import('./pages/driver/DriverPretrip'));
 const DriverPickupMap      = lazy(() => import('./pages/driver/DriverPickupMap'));
+const DriverShift          = lazy(() => import('./pages/driver/DriverShift'));
 
 // School
 const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
@@ -43,6 +44,7 @@ const SchoolAuditLog       = lazy(() => import('./pages/school/SchoolAuditLog'))
 const SchoolPickupMap      = lazy(() => import('./pages/school/SchoolPickupMap'));
 const SchoolLiveVehicles   = lazy(() => import('./pages/school/SchoolLiveVehicles'));
 const SchoolTeacherAccounts = lazy(() => import('./pages/school/SchoolTeacherAccounts'));
+const VehicleVerification    = lazy(() => import('./pages/school/VehicleVerification'));
 
 // Affiliation
 const AffiliationLayout    = lazy(() => import('./pages/affiliation/AffiliationLayout'));
@@ -69,6 +71,7 @@ const ProvEmergencyList    = lazy(() => import('./pages/province/ProvEmergencyLi
 const ProvAuditLog         = lazy(() => import('./pages/province/ProvAuditLog'));
 const ProvinceLiveVehicles = lazy(() => import('./pages/province/ProvinceLiveVehicles'));
 const ProvincePickupMap    = lazy(() => import('./pages/province/ProvincePickupMap'));
+const DeploymentReadiness  = lazy(() => import('./pages/province/DeploymentReadiness'));
 
 // Reports (charts-heavy — own chunk per page)
 const ReportsLayout        = lazy(() => import('./pages/reports/ReportsLayout'));
@@ -82,6 +85,7 @@ const TransportDashboard   = lazy(() => import('./pages/transport/TransportDashb
 const TransportVehicleList = lazy(() => import('./pages/transport/TransportVehicleList'));
 const InspectionForm       = lazy(() => import('./pages/transport/InspectionForm'));
 const TransportPickupMap   = lazy(() => import('./pages/transport/TransportPickupMap'));
+const VerificationQueue    = lazy(() => import('./pages/transport/VerificationQueue'));
 
 // Admin (heaviest cluster — research/measurement/executive)
 const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
@@ -182,6 +186,7 @@ export default function App() {
             <Route path="requests"    element={<DriverRosterRequests />} />
             <Route path="pretrip"     element={<DriverPretrip />} />
             <Route path="pickup-map"  element={<DriverPickupMap />} />
+            <Route path="shift"       element={<DriverShift />} />
           </Route>
 
           {/* School module */}
@@ -196,6 +201,7 @@ export default function App() {
             <Route index               element={<SchoolDashboard />} />
             <Route path="students"     element={<StudentSearch />} />
             <Route path="vehicles"     element={<VehicleList />} />
+            <Route path="vehicle-verification" element={<VehicleVerification />} />
             <Route path="status"       element={<Navigate to="/school" replace />} />
             <Route path="emergencies"  element={<EmergencyList />} />
             <Route path="missing"      element={<Navigate to="/school" replace />} />
@@ -247,6 +253,7 @@ export default function App() {
             <Route path="audit-log"    element={<ProvAuditLog />} />
             <Route path="live-vehicles" element={<ProvinceLiveVehicles />} />
             <Route path="pickup-map"   element={<ProvincePickupMap />} />
+            <Route path="readiness"    element={<DeploymentReadiness />} />
           </Route>
 
           {/* Reports module */}
@@ -276,6 +283,7 @@ export default function App() {
             <Route index             element={<TransportDashboard />} />
             <Route path="vehicles"   element={<TransportVehicleList />} />
             <Route path="inspections" element={<InspectionForm />} />
+            <Route path="verification" element={<VerificationQueue />} />
             <Route path="pickup-map"  element={<TransportPickupMap />} />
           </Route>
 
@@ -358,6 +366,11 @@ export default function App() {
           <Route path="/admin/system-health" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><SystemHealth /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/readiness" element={
+            <PrivateRoute allowedRoles={['admin', 'province']}>
+              <Layout><DeploymentReadiness /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/executive-print" element={

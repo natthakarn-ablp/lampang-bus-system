@@ -1,10 +1,10 @@
 import { CheckCircle2, AlertTriangle, AlertOctagon, Info, X } from 'lucide-react';
 
 const VARIANT_STYLE = {
-  success: { wrap: 'bg-success-soft border-l-success', icon: 'text-success', defaultIcon: CheckCircle2 },
-  warn:    { wrap: 'bg-warn-soft    border-l-warn',    icon: 'text-warn',    defaultIcon: AlertTriangle },
-  danger:  { wrap: 'bg-danger-soft  border-l-danger',  icon: 'text-danger',  defaultIcon: AlertOctagon },
-  info:    { wrap: 'bg-info-soft    border-l-info',    icon: 'text-info',    defaultIcon: Info },
+  success: { wrap: 'bg-success-soft border-success/30', icon: 'text-success', defaultIcon: CheckCircle2 },
+  warn:    { wrap: 'bg-warn-soft    border-warn/35',    icon: 'text-warn',    defaultIcon: AlertTriangle },
+  danger:  { wrap: 'bg-danger-soft  border-danger/35',  icon: 'text-danger',  defaultIcon: AlertOctagon },
+  info:    { wrap: 'bg-info-soft    border-info/35',    icon: 'text-info',    defaultIcon: Info },
 };
 
 export default function AlertBanner({
@@ -21,7 +21,7 @@ export default function AlertBanner({
   return (
     <div
       role="alert"
-      className={`flex gap-3 rounded-xl border-l-4 px-4 py-3 ${style.wrap} ${className}`}
+      className={`flex gap-3 rounded-xl border px-4 py-3 ${style.wrap} ${className}`}
     >
       {Icon && (
         <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${style.icon}`} strokeWidth={2} aria-hidden="true" />

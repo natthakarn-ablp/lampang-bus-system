@@ -4,7 +4,7 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert,
+  ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
@@ -17,6 +17,7 @@ const DRIVER_NAV = [
   { section: 'ภาพรวม' },
   { to: '/driver',             icon: BarChart3,      label: PAGE_TITLES.DRIVER_DASHBOARD },
   { section: 'งานประจำวัน' },
+  { to: '/driver/shift',       icon: Bus,            label: 'เลือกรถและเริ่มรอบ' },
   { to: '/driver/pickup-map',  icon: Map,            label: 'แผนที่จุดรับส่ง' },
   { to: '/driver/requests',    icon: ClipboardList,  label: 'คำขอรายชื่อ' },
   { to: '/driver/emergency',   icon: AlertTriangle,  label: 'แจ้งเหตุฉุกเฉิน' },
@@ -33,6 +34,7 @@ const SCHOOL_NAV = [
   { section: 'นักเรียนและรถรับส่ง' },
   { to: '/school/students',      icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
+  { to: '/school/vehicle-verification', icon: CheckSquare, label: 'ส่งตรวจและรับรองรถ' },
   { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
   { section: 'แผนที่และตำแหน่ง' },
   { to: '/school/pickup-map',    icon: Map,           label: 'แผนที่จุดรับส่ง' },
@@ -86,6 +88,7 @@ const PROVINCE_NAV = [
   { to: '/province/live-vehicles', icon: Activity,     label: 'ตำแหน่งปัจจุบัน' },
   { to: '/province/pickup-map',   icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { section: 'ติดตามและบันทึก' },
+  { to: '/province/readiness',    icon: ShieldCheck,   label: 'ความพร้อมเปิดใช้งาน' },
   { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
   { section: 'รายงาน' },
@@ -97,6 +100,7 @@ const TRANSPORT_NAV = [
   { to: '/transport',              icon: BarChart3,    label: 'ภาพรวมตรวจสภาพรถ' },
   { to: '/transport/pickup-map',   icon: Map,          label: 'แผนที่จุดรับส่ง' },
   { section: 'บันทึก' },
+  { to: '/transport/verification', icon: CheckSquare,  label: 'ตรวจรับรองรถ' },
   { to: '/transport/inspections',  icon: ClipboardList, label: 'บันทึกตรวจสภาพ' },
 ];
 
@@ -114,6 +118,7 @@ const ADMIN_NAV = [
   { to: '/affiliation/accounts',  icon: Key,         label: 'เพิ่มโรงเรียนใหม่' },
   { to: '/transport',             icon: Wrench,      label: 'ตรวจสภาพรถ' },
   { section: 'ตรวจสอบและสนับสนุน' },
+  { to: '/admin/readiness',       icon: ShieldCheck, label: 'ความพร้อมเปิดใช้งาน' },
   { to: '/admin/pickup-points',   icon: Map,         label: 'ตรวจสอบจุดรับส่ง' },
   { to: '/admin/live-vehicles',   icon: ShieldAlert, label: 'ตรวจสอบตำแหน่งรถ' },
   { to: '/admin/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },

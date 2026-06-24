@@ -10,6 +10,7 @@ export default function SchoolApprovals() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
+  const [processingId, setProcessingId] = useState(null); // double-submit guard
   const toast = useToast();
   const { user } = useAuth();
   const isTeacher = isGradeTeacher(user); // teacher views in read-only mode
@@ -25,6 +26,10 @@ export default function SchoolApprovals() {
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
   async function handleReview(id, status) {
+    // Double-submit guard: prevent approving/rejecting the same request twice
+    // (double-click or impatient repeat click).
+    if (processingId === id) return;
+    setProcessingId(id);
     const note = status === 'rejected' ? prompt('เหตุผลที่ปฏิเสธ (ถ้ามี):') : '';
     try {
       await api.put(`/school/roster-requests/${id}`, { status, review_note: note || '' });
@@ -32,6 +37,8 @@ export default function SchoolApprovals() {
       fetchRequests();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถดำเนินการได้');
+    } finally {
+      setProcessingId(null);
     }
   }
 
@@ -80,12 +87,14 @@ export default function SchoolApprovals() {
               {r.status === 'pending' && !isTeacher && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
                   <button onClick={() => handleReview(r.id, 'approved')}
-                    className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white font-medium px-5 py-2.5 rounded-lg transition">
-                    อนุมัติ
+                    disabled={processingId === r.id}
+                    className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-5 py-2.5 rounded-lg transition">
+                    {processingId === r.id ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
                   </button>
                   <button onClick={() => handleReview(r.id, 'rejected')}
-                    className="flex-1 sm:flex-none bg-red-100 hover:bg-red-200 text-red-700 font-medium px-5 py-2.5 rounded-lg transition">
-                    ปฏิเสธ
+                    disabled={processingId === r.id}
+                    className="flex-1 sm:flex-none bg-red-100 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed text-red-700 font-medium px-5 py-2.5 rounded-lg transition">
+                    {processingId === r.id ? 'กำลังดำเนินการ...' : 'ปฏิเสธ'}
                   </button>
                 </div>
               )}

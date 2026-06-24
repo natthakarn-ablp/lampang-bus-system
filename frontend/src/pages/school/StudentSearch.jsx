@@ -13,6 +13,16 @@ import StudentTransferModal from './StudentTransferModal';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
 
+// Mask parent phone in list views for PDPA compliance — shows first 3 and
+// last 2 digits only (e.g. 081****67). The edit form shows the full number
+// because the school needs it to make changes.
+function maskPhone(s) {
+  if (!s) return '';
+  const d = String(s).replace(/\D/g, '');
+  if (d.length < 5) return d;
+  return d.slice(0, 3) + '****' + d.slice(-2);
+}
+
 const PREFIX_OPTIONS = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นางสาว', 'นาง'];
 
 export default function StudentSearch() {
@@ -285,7 +295,7 @@ export default function StudentSearch() {
                       {s.evening_enabled ? <span className="text-green-600 text-xs font-medium">ใช้</span> : <span className="text-gray-400 text-xs">-</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
-                      {s.parent_name ? <span>{s.parent_name}{s.parent_phone && <span className="text-gray-400"> {s.parent_phone}</span>}</span> : <span className="text-gray-400">-</span>}
+                      {s.parent_name ? <span>{s.parent_name}{s.parent_phone && <span className="text-gray-400"> {maskPhone(s.parent_phone)}</span>}</span> : <span className="text-gray-400">-</span>}
                     </td>
                     {!isTeacher && (
                       <td className="px-4 py-3 text-center">
@@ -343,7 +353,7 @@ export default function StudentSearch() {
                 {s.parent_name && (
                   <p className="text-sm text-gray-500 mt-1.5">
                     👤 {s.parent_name}
-                    {s.parent_phone && <span className="text-gray-400 ml-1">{s.parent_phone}</span>}
+                    {s.parent_phone && <span className="text-gray-400 ml-1">{maskPhone(s.parent_phone)}</span>}
                   </p>
                 )}
               </div>
@@ -376,7 +386,7 @@ export default function StudentSearch() {
       {/* ── Import Modal (legacy fallback) ── */}
       {showImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowImport(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-md max-h-[85vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-800 mb-1">นำเข้าข้อมูลนักเรียน</h2>
             <p className="text-sm text-gray-400 mb-5">อัปโหลดไฟล์ CSV หรือ Excel (.xlsx)</p>
 
@@ -430,7 +440,7 @@ export default function StudentSearch() {
       {/* ── Edit Modal ── */}
       {editStudent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeEdit}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-800 mb-1">แก้ไขข้อมูลนักเรียน</h2>
             <p className="text-sm text-gray-400 mb-5">รหัส: {editStudent.student_code ?? editStudent.id}</p>
 

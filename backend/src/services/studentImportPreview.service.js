@@ -14,6 +14,35 @@ const { classifyStudentImport } = require('../utils/studentImport');
 const { allocateStudentId } = require('./idAllocator.service');
 const { logAudit } = require('../utils/audit');
 
+/**
+ * Minimal RFC 4180 CSV parser — handles quoted fields with embedded commas
+ * and escaped double-quotes. Replaces split(',') which broke on fields
+ * containing commas (e.g. parent names).
+ */
+function parseCsvRow(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else { field += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { row.push(field); field = ''; }
+      else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else if (ch === '\r') { /* skip */ }
+      else { field += ch; }
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim() !== ''));
+}
+
 const TERM = env.app.currentTerm;
 const canonOf = (plate) => { const p = plateId.parseLegacyPlateText(plate); return p ? plateId.buildCanonicalPlate(p) : ''; };
 const normalizePhone = (p) => String(p == null ? '' : p).replace(/\D/g, '');
@@ -65,11 +94,11 @@ async function parseImportFile(filePath, originalName) {
     }
   } else {
     const raw = fs.readFileSync(filePath, 'utf-8').replace(/^﻿/, '');
-    const lines = raw.split(/\r?\n/).filter((l) => l.trim());
-    const headers = (lines[0] || '').split(',').map((h) => h.trim());
+    const csvRows = parseCsvRow(raw);
+    const headers = (csvRows[0] || []).map((h) => h.trim());
     const map = buildMap(headers);
-    for (let i = 1; i < lines.length; i++) {
-      const cells = lines[i].split(',').map((c) => c.trim());
+    for (let i = 1; i < csvRows.length; i++) {
+      const cells = csvRows[i].map((c) => c.trim());
       rows.push(toRow(cells, map, i + 1));
     }
   }
@@ -195,8 +224,33 @@ const normOf = (row) => (typeof row.normalized_json === 'string' ? JSON.parse(ro
 async function linkParent(conn, studentId, name, phone, userId) {
   if (!name && !phone) return;
   let parentId;
-  if (phone) { const [[ep]] = await conn.query('SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1', [phone]); parentId = ep && ep.id; }
-  if (!parentId) { const [pr] = await conn.query('INSERT INTO parents (name, phone) VALUES (?, ?)', [name || null, phone || null]); parentId = pr.insertId; }
+  if (phone) {
+    const [[ep]] = await conn.query(
+      'SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1', [phone]
+    );
+    parentId = ep && ep.id;
+  }
+  if (!parentId) {
+    try {
+      const [pr] = await conn.query(
+        'INSERT INTO parents (name, phone) VALUES (?, ?)', [name || null, phone || null]
+      );
+      parentId = pr.insertId;
+    } catch (dupErr) {
+      // Medium fix: concurrent imports can race past the SELECT above and
+      // both INSERT. The unique index (migration 042) makes the second
+      // INSERT fail with ER_DUP_ENTRY — re-fetch the winning row.
+      if (dupErr.code === 'ER_DUP_ENTRY') {
+        const [[ep2]] = await conn.query(
+          'SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1', [phone]
+        );
+        parentId = ep2 && ep2.id;
+        if (!parentId) throw dupErr; // shouldn't happen, but fail loudly
+      } else {
+        throw dupErr;
+      }
+    }
+  }
   await conn.query('INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW()) ON DUPLICATE KEY UPDATE approved = TRUE', [parentId, studentId, userId]);
 }
 

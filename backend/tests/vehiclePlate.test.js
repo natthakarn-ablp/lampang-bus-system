@@ -6,9 +6,10 @@ const { getTestConnection } = require('./dbHelper');
 const app     = require('../src/app');
 const { normalizePlate, validatePlateNo } = require('../src/utils/vehiclePlate');
 
-// All bulk-test plates share this prefix so afterAll can clean them up safely
-// without touching real production rows.
-const TEST_PLATE_PREFIX = '__TEST DUP';
+// All bulk-test plates share this synthetic prefix so afterAll can clean them
+// up safely without touching real production rows. 'ZZTEST' can never collide
+// with a real Thai plate (real plates start with Thai characters, not ASCII).
+const TEST_PLATE_PREFIX = 'ZZTEST';
 
 const SCHOOL = { username: '__test_school', password: 'testpass123' };
 let schoolToken = '';
@@ -108,9 +109,9 @@ describe('validatePlateNo helper', () => {
 // All variants below collide on normalized_plate.
 
 describe('Vehicle duplicate prevention (POST /api/school/vehicles)', () => {
-  const PLATE = `${TEST_PLATE_PREFIX} 0001`;          // canonical
-  const VARIANT_SPACING = `${TEST_PLATE_PREFIX}0001`; // no spaces
-  const VARIANT_HYPHEN  = `${TEST_PLATE_PREFIX}-0001`; // hyphenated
+  const PLATE = `${TEST_PLATE_PREFIX} 9001 ลำปาง`;          // canonical
+  const VARIANT_SPACING = `${TEST_PLATE_PREFIX}9001ลำปาง`; // no spaces
+  const VARIANT_HYPHEN  = `${TEST_PLATE_PREFIX}-9001-ลำปาง`; // hyphenated
 
   // The school POST endpoint returns 201 for BOTH create and reuse paths —
   // the dedup signal is the vehicle_id staying constant across variants,

@@ -233,7 +233,16 @@ router.get('/audit-logs', async (req, res, next) => {
       [...params, per_page, offset]
     );
 
-    return sendSuccess(res, rows, 'OK', { page, per_page, total });
+    // H1 fix: redact PII (parent phone, driver phone, line_user_id) from
+    // old_value/new_value JSON before returning to the province viewer.
+    // The CSV path already does this; the JSON path was leaking raw values.
+    const redactedRows = rows.map((r) => ({
+      ...r,
+      old_value: r.old_value ? redactAuditValue(r.old_value) : null,
+      new_value: r.new_value ? redactAuditValue(r.new_value) : null,
+    }));
+
+    return sendSuccess(res, redactedRows, 'OK', { page, per_page, total });
   } catch (err) { next(err); }
 });
 

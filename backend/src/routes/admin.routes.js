@@ -878,7 +878,7 @@ router.get('/research-export', async (req, res, next) => {
          ORDER BY al.created_at`,
         [from, to]
       );
-      result.audit_logs = rows;
+      result.audit_logs = rows.map((r) => ({ ...r, new_value: r.new_value ? redactAuditValue(r.new_value) : null }));
     }
 
     if (include.includes('exports')) {
@@ -891,7 +891,7 @@ router.get('/research-export', async (req, res, next) => {
          ORDER BY al.created_at`,
         [from, to]
       );
-      result.export_evidence = rows;
+      result.export_evidence = rows.map((r) => ({ ...r, new_value: r.new_value ? redactAuditValue(r.new_value) : null }));
     }
 
     if (include.includes('summary')) {

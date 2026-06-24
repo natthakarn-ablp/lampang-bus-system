@@ -1070,6 +1070,136 @@ CREATE TABLE `vehicles` (
   KEY `idx_vehicles_canonical` (`canonical_plate`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Migration 040 — Intelligent Tracking Layer (synced from migration 040/041)
+-- ════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS vehicle_location_history (
+  id bigint NOT NULL AUTO_INCREMENT,
+  vehicle_id varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  driver_id int DEFAULT NULL,
+  latitude decimal(10,8) NOT NULL,
+  longitude decimal(11,8) NOT NULL,
+  accuracy_meters int DEFAULT NULL,
+  speed_mps float DEFAULT NULL,
+  heading_deg float DEFAULT NULL,
+  recorded_at timestamp(3) NOT NULL,
+  received_at timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  source enum('web','line') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'web',
+  PRIMARY KEY (id),
+  KEY idx_vlh_vehicle_time (vehicle_id, recorded_at DESC),
+  KEY idx_vlh_received (received_at),
+  CONSTRAINT fk_vlh_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id),
+  CONSTRAINT fk_vlh_driver FOREIGN KEY (driver_id) REFERENCES drivers (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS geofences (
+  id int NOT NULL AUTO_INCREMENT,
+  name varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL,
+  target_type enum('SCHOOL','PICKUP_POINT','DEPOT') COLLATE utf8mb4_unicode_ci NOT NULL,
+  target_id int DEFAULT NULL,
+  vehicle_id varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  center_lat decimal(10,8) NOT NULL,
+  center_lng decimal(11,8) NOT NULL,
+  radius_meters int NOT NULL DEFAULT '150',
+  trigger_on enum('ENTER','EXIT','BOTH') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'BOTH',
+  notify_roles varchar(120) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'parent,school',
+  is_active tinyint(1) NOT NULL DEFAULT '1',
+  polygon_geojson json DEFAULT NULL,
+  created_by int DEFAULT NULL,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_gf_target (target_type, target_id, is_active),
+  KEY idx_gf_vehicle (vehicle_id, is_active),
+  CONSTRAINT fk_gf_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS geofence_events (
+  id bigint NOT NULL AUTO_INCREMENT,
+  geofence_id int NOT NULL,
+  vehicle_id varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  driver_id int DEFAULT NULL,
+  event_type enum('ENTER','EXIT') COLLATE utf8mb4_unicode_ci NOT NULL,
+  latitude decimal(10,8) NOT NULL,
+  longitude decimal(11,8) NOT NULL,
+  occurred_at timestamp(3) NOT NULL,
+  received_at timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  notifications_sent int NOT NULL DEFAULT '0',
+  PRIMARY KEY (id),
+  KEY idx_gfe_geofence_time (geofence_id, occurred_at DESC),
+  KEY idx_gfe_vehicle_time (vehicle_id, occurred_at DESC),
+  KEY idx_gfe_geofence_vehicle (geofence_id, vehicle_id, occurred_at DESC),
+  CONSTRAINT fk_gfe_geofence FOREIGN KEY (geofence_id) REFERENCES geofences (id) ON DELETE CASCADE,
+  CONSTRAINT fk_gfe_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS route_baselines (
+  id int NOT NULL AUTO_INCREMENT,
+  vehicle_id varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  session enum('morning','evening') COLLATE utf8mb4_unicode_ci NOT NULL,
+  day_of_week tinyint NOT NULL,
+  typical_start time DEFAULT NULL,
+  typical_end time DEFAULT NULL,
+  typical_path json DEFAULT NULL,
+  sample_count int NOT NULL DEFAULT '0',
+  computed_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_rb_vehicle_session_dow (vehicle_id, session, day_of_week),
+  CONSTRAINT fk_rb_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS route_deviations (
+  id bigint NOT NULL AUTO_INCREMENT,
+  vehicle_id varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  driver_id int DEFAULT NULL,
+  session enum('morning','evening') COLLATE utf8mb4_unicode_ci NOT NULL,
+  deviation_type enum('OFF_ROUTE','LATE','STALLED') COLLATE utf8mb4_unicode_ci NOT NULL,
+  severity enum('INFO','WARN','CRITICAL') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'WARN',
+  expected_lat decimal(10,8) DEFAULT NULL,
+  expected_lng decimal(11,8) DEFAULT NULL,
+  actual_lat decimal(10,8) NOT NULL,
+  actual_lng decimal(11,8) NOT NULL,
+  offset_meters int DEFAULT NULL,
+  delay_minutes int DEFAULT NULL,
+  occurred_at timestamp(3) NOT NULL,
+  received_at timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  resolved_at timestamp NULL DEFAULT NULL,
+  notified_roles varchar(120) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  PRIMARY KEY (id),
+  KEY idx_rd_vehicle_time (vehicle_id, occurred_at DESC),
+  KEY idx_rd_unresolved (resolved_at, occurred_at DESC),
+  KEY idx_rd_severity (severity, occurred_at DESC),
+  KEY idx_rd_dedup (vehicle_id, deviation_type, resolved_at),
+  CONSTRAINT fk_rd_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id),
+  CONSTRAINT fk_rd_driver FOREIGN KEY (driver_id) REFERENCES drivers (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS eta_predictions (
+  id int NOT NULL AUTO_INCREMENT,
+  vehicle_id varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  pickup_point_id int NOT NULL,
+  session enum('morning','evening') COLLATE utf8mb4_unicode_ci NOT NULL,
+  eta_date date NOT NULL,
+  eta_seconds int DEFAULT NULL,
+  eta_at timestamp NULL DEFAULT NULL,
+  distance_meters int DEFAULT NULL,
+  confidence enum('HIGH','MEDIUM','LOW','UNKNOWN') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'UNKNOWN',
+  computed_at timestamp(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_eta_vehicle_point_session_date (vehicle_id, pickup_point_id, session, eta_date),
+  CONSTRAINT fk_eta_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id),
+  CONSTRAINT fk_eta_point FOREIGN KEY (pickup_point_id) REFERENCES pickup_points (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Migration 040: extend audit_logs action enum
+ALTER TABLE audit_logs
+  MODIFY COLUMN action
+  ENUM('CREATE','UPDATE','DELETE','EXPORT','LOGIN','IMPORT','APPROVE','VIEW',
+       'GEOFENCE_ENTER','GEOFENCE_EXIT','ROUTE_DEVIATION','ETA_REFRESH')
+  NOT NULL, ALGORITHM=INSTANT;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

@@ -22,6 +22,50 @@ const vllSvc = require('../services/vehicleLocation.service');
 const checkinSvc = require('../services/checkin.service');
 
 /**
+ * Minimal RFC 4180 CSV parser — handles quoted fields with embedded commas
+ * and escaped double-quotes ("" inside a quoted field). Replaces the old
+ * split(',') which broke on any field containing a comma.
+ * @param {string} text
+ * @returns {string[][]} array of rows, each an array of field strings
+ */
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        row.push(field); field = '';
+      } else if (ch === '\n') {
+        row.push(field); rows.push(row); row = []; field = '';
+      } else if (ch === '\r') {
+        // skip — handled by \n
+      } else {
+        field += ch;
+      }
+    }
+  }
+  // last field/row if file doesn't end with newline
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  // drop empty trailing rows
+  return rows.filter(r => r.some(c => c.trim() !== ''));
+}
+
+/**
  * Resolve school scope: admin uses ?school_id query param, school role uses scopeId.
  * Returns null if admin doesn't specify (for list-all queries).
  */
@@ -1219,12 +1263,15 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
 
     if (ext === '.csv') {
       // Parse CSV (UTF-8 with BOM support)
+      // Medium fix: use a proper RFC 4180 CSV parser that handles quoted
+      // fields (e.g. parent names containing commas like "สมชาย, สมหญิง")
+      // instead of split(',') which would shift columns silently.
       const raw = fs.readFileSync(req.file.path, 'utf-8').replace(/^\uFEFF/, '');
-      const lines = raw.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
+      const csvRows = parseCsv(raw);
+      if (csvRows.length < 2) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
 
       // Detect column order from header
-      const headers = lines[0].split(',').map(h => h.trim().replace(/\*/g, ''));
+      const headers = csvRows[0].map(h => h.trim().replace(/\*/g, ''));
       const colMap = {};
       headers.forEach((h, i) => {
         if (h.includes('รหัสนักเรียน')) colMap.id = i;
@@ -1238,9 +1285,9 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
         else if (h.includes('เบอร์โทร')) colMap.parent_phone = i;
       });
 
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',').map(c => c.trim());
-        const get = (key) => cols[colMap[key]] || '';
+      for (let i = 1; i < csvRows.length; i++) {
+        const cols = csvRows[i];
+        const get = (key) => (cols[colMap[key]] || '').trim();
         rows.push({
           rowNum: i + 1,
           id: get('id'), prefix: get('prefix'),
@@ -1333,10 +1380,11 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
           continue;
         }
 
-        // Normalize + validate parent phone
+        // Normalize + validate parent phone (Phase 11A audit fix M8: accept
+        // 9-10 digits after normalization, matching the student edit endpoint)
         r.parent_phone = normalizePhone(r.parent_phone);
-        if (r.parent_phone && !/^\d{10}$/.test(r.parent_phone)) {
-          results.errors.push({ row: r.rowNum, message: 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 10 หลัก (รองรับ 0XX-XXXXXXX)' });
+        if (r.parent_phone && !/^\d{9,10}$/.test(r.parent_phone)) {
+          results.errors.push({ row: r.rowNum, message: 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก' });
           continue;
         }
 

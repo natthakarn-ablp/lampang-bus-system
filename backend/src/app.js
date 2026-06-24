@@ -108,6 +108,22 @@ const exportLimiter = rateLimit({
 });
 app.use('/api/reports',     exportLimiter, reportRoutes);
 
+// ─── Global rate-limit floor (Medium fix) ───────────────────────────────────
+// A single authenticated token should not be able to hammer any API endpoint
+// unchecked. The per-route limiters (login/refresh/export/webhook) stay in
+// place; this is a catch-all floor for /api/{school,affiliation,province,
+// transport,admin}/* which had no limiter at all. Generous enough for normal
+// UI usage, tight enough to prevent pool exhaustion (pool=10).
+const globalApiLimiter = rateLimit({
+  windowMs: 60 * 1000,       // 1 minute
+  max: 120,                  // 120 requests/min per IP — ~2/sec, plenty for UI
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { success: false, message: 'คำขอถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+});
+app.use('/api/', globalApiLimiter);
+
 // ─── Phase 7+ routes ────────────────────────────────────────────────────────
 app.use('/api/transport', require('./routes/transport.routes'));
 app.use('/api/verification', require('./routes/verification.routes'));
@@ -123,6 +139,23 @@ app.use('/api/readiness', require('./routes/readiness.routes'));
 if (env.features.vehicleQr) {
   app.use('/api/qr',      require('./routes/qr.routes'));
   app.use('/api/consent', require('./routes/consent.routes'));
+}
+
+// ─── Phase 11A — Intelligent Tracking Layer (2026-06-23) ─────────────────────
+// Three feature-flagged routers: ETA predictions, geofencing, and route
+// deviation detection. Each flag is independent so operators can roll out
+// one capability at a time. Migration 040 must be applied before flipping
+// any of these on (index.js asserts this at boot). When a flag is off the
+// corresponding paths 404 and the per-ping hooks in driver.routes.js skip
+// the relevant check, so the existing system is byte-for-byte unchanged.
+if (env.features.eta) {
+  app.use('/api/eta', require('./routes/eta.routes'));
+}
+if (env.features.geofence) {
+  app.use('/api/geofences', require('./routes/geofence.routes'));
+}
+if (env.features.routeDeviation) {
+  app.use('/api/route-deviations', require('./routes/routeDeviation.routes'));
 }
 
 // ─── Serve frontend build in production ──────────────────────────────────────

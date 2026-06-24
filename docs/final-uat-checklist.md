@@ -77,6 +77,15 @@ UAT credentials เก็บแยกใน password manager — ไม่อย
 | A4 | Audit log | เปิดดู audit_logs → กรองวันได้, แสดง action ครบ | ▢ |
 | A5 | Reports & dashboards | เปิดทุก dashboard ที่ admin มีสิทธิ์ → ไม่มี 403 | ▢ |
 | A6 | Hidden permission test | login เป็น admin → ลองเปิด `/parent` หรือ `/driver` → ระบบจะ render หรือ redirect ตาม design | ▢ |
+| A7 | ความพร้อมเปิดใช้งาน (2026-06-22) | `/admin/readiness` → เห็นหน้าเดียวกับ province (อ่านอย่างเดียว ไม่มี PII) | ▢ |
+| A8 | คำขอโอนย้ายนักเรียน (Phase 10.13B) | `/admin/transfer-requests` → อนุมัติคำขอ → นักเรียนต้นทางปิด + ปลายทางถูกสร้าง; รหัสซ้ำ → บล็อก | ▢ |
+| A9 | คำขอเกี่ยวกับรถ (Phase 10.13B) | `/admin/vehicle-requests` → อนุมัติ RESTORE → รถกู้คืน; ทะเบียนซ้ำ → บล็อก | ▢ |
+| A10 | สุขภาพข้อมูลคนขับ (Phase 10.13B) | `/admin/driver-integrity` → เห็น dashboard + กู้คืน/ย้าย/ปิดคนขับได้; บัญชีซ้ำ → บล็อก | ▢ |
+| A11 | จุดเตือนภัย (Phase 11A) | `/admin/geofences` → เห็น list; กด "สร้างอัตโนมัติ" → geofences ถูกสร้างจากจุดรับ-ส่ง + โรงเรียน | ▢ |
+| A12 | Geofence CRUD | สร้าง/แก้ไข/ปิด geofence ใหม่ → audit log บันทึก; ลบ → is_active=FALSE | ▢ |
+| A13 | Geofence event log | `/admin/geofences` → ดู event log ล่าสุด (ENTER/EXIT) พร้อมจำนวนการแจ้งเตือน | ▢ |
+| A14 | การเบี่ยงเส้นทาง (Phase 11A) | `/admin/route-deviations` → เห็น list; กรอง unresolved / severity ได้ | ▢ |
+| A15 | Sidebar entries | sidebar admin เห็น "จุดเตือนภัย" + "การเบี่ยงเส้นทาง" | ▢ |
 
 Evidence/Notes:
 
@@ -98,6 +107,8 @@ Evidence/Notes:
 | P6 | Reports | เปิด `/reports/daily` แล้วเลือกวันได้, ไม่มี data leak จากเขตอื่น | ▢ |
 | P7 | MobileBottomNav | บน 375px เห็น tab `หน้าแรก / โรงเรียน / ตำแหน่ง / รายงาน` | ▢ |
 | P8 | Privacy | ไม่เห็นเลข CID เต็ม; เบอร์ผู้ปกครองอาจถูก mask | ▢ |
+| P9 | การเบี่ยงเส้นทาง (Phase 11A) | `/admin/route-deviations` → เห็น list ได้ (province มีสิทธิ์ read); กรอง severity ได้ | ▢ |
+| P10 | Sidebar province | sidebar เห็น "การเบี่ยงเส้นทาง" ใต้ "ติดตามและบันทึก" | ▢ |
 
 ---
 
@@ -130,6 +141,8 @@ Evidence/Notes:
 | T7 | Reports export | export ผลตรวจสภาพรถเป็น Excel/CSV/PDF ได้ | ▢ |
 | T8 | Hidden permission | เปิด `/school` หรือ `/parent` → 403 | ▢ |
 | T9 | Mobile 375px | layout ใช้ได้, ไม่มี horizontal scroll | ▢ |
+| T10 | คิวตรวจรับรองรถ (2026-06-22) | `/transport/verification-queue` → เห็นรถที่ส่งตรวจ + ปุ่ม "ตรวจรับรอง" | ▢ |
+| T11 | ตรวจรับรองรถ | กดตรวจ → กรอกผล (APPROVED/REJECTED) + หมายเหตุ → save → สถานะเปลี่ยน + audit log | ▢ |
 
 > **ข้อสำคัญ T2 + T5**: transport เห็นเฉพาะข้อมูลรถและการตรวจสภาพ ไม่มีสิทธิ์
 > เห็นจำนวนหรือชื่อนักเรียน — ถ้าเห็น แจ้ง dev ทันที (regression)
@@ -151,6 +164,8 @@ Evidence/Notes:
 | S9 | Driver badge sync | login เป็น driver ของรถนั้นทันทีหลัง S7 → roster เห็น chip "ครูยืนยันแทนแล้ว" บนแถวนักเรียน | ▢ |
 | S10 | MobileBottomNav | บน 375px เห็น tab `หน้าแรก / ค้นหา / ตำแหน่ง / รายงาน` | ▢ |
 | S11 | Hidden permission | เปิดข้อมูลโรงเรียนอื่น → 403; เปิด `/admin` → 403 | ▢ |
+| S12 | ส่งตรวจรับรองรถ (2026-06-22) | `/school/vehicles` → เลือกรถ → กด "ส่งตรวจรับรอง" → สถานะเปลี่ยนเป็น PENDING_VERIFICATION | ▢ |
+| S13 | สถานะตรวจรับรอง | หลัง transport ตรวจแล้ว → หน้ารถแสดงผล (APPROVED/REJECTED) + หมายเหตุ | ▢ |
 
 ---
 
@@ -186,6 +201,9 @@ Evidence/Notes:
 | D9 | Mobile-first | ใช้บนมือถือจริงระหว่างขับ — touch target ≥ 44px, ปุ่มหลักนิ้วโป้งถึง | ▢ |
 | D10 | Hidden permission | เปิด `/school` หรือ `/admin` → 403 หรือ redirect | ▢ |
 | D11 | LINE notification | หลัง check-in/check-out → ผู้ปกครองที่ผูก LINE ได้รับ push (ดู `notifications` table) | ▢ |
+| D12 | เลือกรถและเริ่มรอบ (2026-06-22) | `/driver/shift` → เลือกรถ + รอบ (เช้า/เย็น) → กด "เริ่มรอบ" → สถานะเปลี่ยน ACTIVE + audit log | ▢ |
+| D13 | สิ้นสุดรอบ | กด "สิ้นสุดรอบ" → สถานะเปลี่ยน COMPLETED; กดเริ่มรอบใหม่ได้ | ▢ |
+| D14 | ป้องกันรอบซ้อนทับ | ถ้ามีรอบ ACTIVE อยู่ → ปุ่ม "เริ่มรอบ" บนรถอื่นถูก disable | ▢ |
 
 ---
 
@@ -203,6 +221,10 @@ Evidence/Notes:
 | L8 | "ยกเลิกผูกบัญชี" | พิมพ์ `ยกเลิกผูกบัญชี` → bot ส่ง confirm card → กด/พิมพ์ยืนยัน → DB row ถูกลบจาก `line_bindings`; `line_users.parent_id=NULL` | ▢ |
 | L9 | Re-bind | หลัง L8 → พิมพ์ `ผูกบัญชี` อีกครั้ง → ผูกใหม่ได้ (idempotent) | ▢ |
 | L10 | LIFF Endpoint fallback | (defensive test) ถ้า LINE Console LIFF Endpoint เผลอตั้งเป็น `/` → ปุ่มยังพาไปหน้า `/parent/link` ได้ (10.9D-2 fix) | ▢ |
+| L11 | ETA ปุ่ม (Phase 11A) | ใน child card เห็นปุ่ม "📍 ETA" → กด → เห็น ETA (นาที) + ระยะทาง + confidence | ▢ |
+| L12 | ETA ไม่มีข้อมูล | ถ้ารถออฟไลน์ → หน้า ETA แสดง "ยังไม่มีข้อมูล ETA" (ไม่ crash) | ▢ |
+| L13 | ETA รีเฟรช | กด "รีเฟรช ETA" → ข้อมูลอัปเดต (age_seconds เปลี่ยน) | ▢ |
+| L14 | Geofence push (Phase 11A) | ถ้า FEATURE_GEOFENCE=true + รถเข้า geofence จุดรับ-ส่ง → ผู้ปกครองได้ LINE push "รถถึงจุด ..." | ▢ |
 
 > **ข้อสำคัญ L4 + L7**: ทดสอบเคสที่ตอบโจทย์ resolver phase 10.9B —
 > sibling under same phone ต้องได้รับ notification ครบทุกคน
@@ -221,6 +243,33 @@ Evidence/Notes:
 | O6 | Cron scheduled | `crontab -l` → backup 02:30 + health 5-min present; `systemctl is-active cron` → active | ▢ |
 | O7 | PM2 systemd | `systemctl is-active pm2-schoolbus` → active; `pm2 list` → backend + logrotate online | ▢ |
 | O8 | Off-host backup | (pending operator config) → ดู §9 ของเอกสารนี้ ถ้ายัง YELLOW ระบุไว้ | ▢ |
+| O9 | Migration 040 applied | `mysql -e "SHOW TABLES LIKE 'geofences'"` → 1 row; `SHOW TABLES LIKE 'eta_predictions'` → 1 row | ▢ |
+| O10 | Nightly baseline job | `crontab -l` → `refresh-route-baselines.js` present; รัน manual → exit 0 | ▢ |
+| O11 | History prune job | `crontab -l` → `prune-location-history.sh` present; รัน manual → exit 0 | ▢ |
+| O12 | Feature flags | `.env` มี `FEATURE_ETA` / `FEATURE_GEOFENCE` / `FEATURE_ROUTE_DEVIATION` (true หรือ false ตามที่ต้องการ roll out) | ▢ |
+| O13 | Boot guard | ถ้า flag=true แต่ migration 040 ยังไม่รัน → backend exit(1) พร้อมข้อความ "missing table(s)" | ▢ |
+
+---
+
+### 5.10 Intelligent Tracking — GPS ping integration smoke (Phase 11A)
+
+> ทดสอบเฉพาะเมื่อ FEATURE_*=true แล้วเท่านั้น ถ้า flag ปิดอยู่ ข้าม section นี้
+
+| # | Check | Method | Result |
+|---|---|---|---|
+| IT1 | GPS ping → ETA cache | driver ล็อกอิน → เปิด live location → รอ 30s → `SELECT * FROM eta_predictions WHERE eta_date=CURDATE()` → มี row | ▢ |
+| IT2 | GPS ping → history | หลัง ping → `SELECT COUNT(*) FROM vehicle_location_history WHERE vehicle_id=? AND recorded_at > NOW() - INTERVAL 1 MINUTE` → ≥ 1 | ▢ |
+| IT3 | Geofence ENTER event | ถ้ามี geofence รอบโรงเรียน + รถเข้าใกล้ → `SELECT * FROM geofence_events ORDER BY id DESC LIMIT 1` → event_type='ENTER' | ▢ |
+| IT4 | Geofence → LINE push | หลัง IT3 → ผู้ปกครองที่ผูก LINE ของนักเรียนในรถ → ได้รับ push "รถถึงจุด ..." | ▢ |
+| IT5 | Geofence EXIT event | รถออกจากรัศมี → geofence_events event_type='EXIT' | ▢ |
+| IT6 | Route deviation — STALLED | รถหยุดนิ่ง > 15 นาที (speed < 0.5) → `SELECT * FROM route_deviations WHERE deviation_type='STALLED' ORDER BY id DESC LIMIT 1` → มี row | ▢ |
+| IT7 | Route deviation — OFF_ROUTE | (ต้องมี baseline ≥ 3 วัน) รถเบี่ยง > 500m จาก typical_path → route_deviations deviation_type='OFF_ROUTE' | ▢ |
+| IT8 | Route deviation — LATE | (ต้องมี baseline) รถล่าช้า > 10 นาที → route_deviations deviation_type='LATE' | ▢ |
+| IT9 | Deviation de-dup | ถ้ามี deviation ยังไม่ resolved ใน 30 นาที → ไม่มี row ใหม่ซ้ำ (COUNT ไม่เพิ่ม) | ▢ |
+| IT10 | Deviation resolve | รถกลับเส้นทาง → `UPDATE route_deviations SET resolved_at` โดย service → resolved_at ไม่เป็น NULL | ▢ |
+| IT11 | ETA endpoint — parent | `GET /api/parent/children/:id/eta` (ผ่าน LIFF) → 200 + มี eta_seconds + confidence | ▢ |
+| IT12 | ETA endpoint — admin | `GET /api/eta/vehicle/:id` → 200 + array ของ pickup points พร้อม ETA | ▢ |
+| IT13 | Operations alert webhook | หลัก geofence/deviation event → ALERT_LINE_WEBHOOK_URL ได้รับ POST (ถ้าตั้งค่าไว้) | ▢ |
 
 ---
 

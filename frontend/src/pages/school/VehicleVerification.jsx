@@ -19,7 +19,7 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { CommandHero, StatusStepRail } from '../../components/ui';
+import { AlertBanner, CommandHero, StatusStepRail } from '../../components/ui';
 
 const STATUS = {
   DRAFT: ['ฉบับร่าง', 'neutral'],
@@ -98,24 +98,21 @@ function VerificationProgress({ selected }) {
 
 function VehiclePrivacyNotice({ className = '' }) {
   return (
-    <div className={`rounded-xl border border-info/30 bg-info-soft px-4 py-3 text-sm text-ink ${className}`}>
-      <div className="flex gap-3">
-        <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-info" strokeWidth={2.2} aria-hidden="true" />
-        <div>
-          <p className="font-semibold">ขนส่งเห็นข้อมูลเท่าที่จำเป็นต่อการตรวจรถ</p>
-          <p className="mt-1 text-ink-muted">
-            เอกสารนี้แสดงข้อมูลรถ คนขับ จำนวนผู้โดยสารแยกโรงเรียน และพื้นที่รับส่ง ไม่แสดงรายชื่อนักเรียนหรือข้อมูลผู้ปกครอง
-          </p>
-        </div>
-      </div>
-    </div>
+    <AlertBanner
+      variant="info"
+      icon={ShieldCheck}
+      title="ขนส่งเห็นข้อมูลเท่าที่จำเป็นต่อการตรวจรถ"
+      className={className}
+    >
+      เอกสารนี้แสดงข้อมูลรถ คนขับ จำนวนผู้โดยสารแยกโรงเรียน และพื้นที่รับส่ง ไม่แสดงรายชื่อนักเรียนหรือข้อมูลผู้ปกครอง
+    </AlertBanner>
   );
 }
 
 function VehicleRequestCard({ vehicle, activeApplication, disabled, busy, onCreate, onOpen }) {
   const hasActive = Boolean(activeApplication);
   return (
-    <div className="rounded-xl border border-surface-border bg-white p-4 transition hover:border-brand-200 hover:bg-brand-50/30">
+    <div className="rounded-xl border border-surface-border bg-surface-raised p-4 transition hover:border-brand-200 hover:bg-brand-50/30">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -179,7 +176,7 @@ function VerificationHistoryRow({ application, onOpen }) {
 
 function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMarkReady }) {
   return (
-    <AppCard className="print:shadow-none print:border-0">
+    <AppCard className="motion-safe:animate-fade-in-up motion-reduce:animate-none print:animate-none print:shadow-none print:border-0">
       <div className="flex flex-wrap justify-between gap-3 border-b border-surface-border pb-4 print:border-slate-400">
         <div className="min-w-0">
           <p className="text-xs text-ink-muted">องค์การบริหารส่วนจังหวัดลำปาง</p>
@@ -259,7 +256,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-surface-border bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-surface"
+          className="inline-flex min-h-[44px] items-center justify-center rounded-lg border border-surface-border bg-surface-raised px-4 py-2 text-sm font-semibold text-ink transition hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40"
         >
           กลับไปเลือกรถ
         </button>
@@ -278,7 +275,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink/40"
           >
             <Printer className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
             พิมพ์ใบส่งตรวจ
@@ -394,7 +391,7 @@ export default function VehicleVerification() {
             <button
               type="button"
               onClick={load}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-blue-950 transition hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-surface-raised px-4 py-2 text-sm font-semibold text-brand-900 transition hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             >
               <RefreshCw className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
               รีเฟรชข้อมูล
@@ -408,15 +405,14 @@ export default function VehicleVerification() {
       {error && <ErrorState message={error} />}
 
       {isGradeTeacher && (
-        <div className="print:hidden rounded-xl border border-warn/35 bg-warn-soft p-4 text-sm text-ink">
-          <div className="flex gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warn" strokeWidth={2.2} aria-hidden="true" />
-            <div>
-              <p className="font-semibold">บัญชีครูประจำสายชั้นดูสถานะได้เท่านั้น</p>
-              <p className="mt-1 text-ink-muted">การสร้างหรือยืนยันใบส่งตรวจต้องใช้บัญชีโรงเรียนหลัก</p>
-            </div>
-          </div>
-        </div>
+        <AlertBanner
+          variant="warn"
+          icon={AlertTriangle}
+          title="บัญชีครูประจำสายชั้นดูสถานะได้เท่านั้น"
+          className="print:hidden"
+        >
+          การสร้างหรือยืนยันใบส่งตรวจต้องใช้บัญชีโรงเรียนหลัก
+        </AlertBanner>
       )}
 
       {!selected && (
@@ -434,7 +430,7 @@ export default function VehicleVerification() {
               {vehicles.length === 0 ? (
                 <EmptyState icon={Bus} title="ยังไม่มีรถรับส่ง" />
               ) : (
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3 md:grid-cols-2 motion-safe:animate-fade-in-up motion-reduce:animate-none">
                   {vehicles.map(vehicle => {
                     const active = applications.find(application => (
                       application.vehicle_id === vehicle.id && activeVehicleIds.has(vehicle.id)
@@ -493,12 +489,9 @@ export default function VehicleVerification() {
       )}
 
       {!selected && applications.some(application => application.status === 'PASSED') && (
-        <div className="print:hidden rounded-xl border border-success/30 bg-success-soft p-4 text-sm text-ink">
-          <div className="flex gap-3">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" strokeWidth={2.2} aria-hidden="true" />
-            <p>มีรถที่ผ่านการรับรองแล้ว โรงเรียนสามารถใช้หน้าประวัติเพื่อติดตามอายุเอกสารและผลตรวจย้อนหลัง</p>
-          </div>
-        </div>
+        <AlertBanner variant="success" icon={CheckCircle2} className="print:hidden">
+          มีรถที่ผ่านการรับรองแล้ว โรงเรียนสามารถใช้หน้าประวัติเพื่อติดตามอายุเอกสารและผลตรวจย้อนหลัง
+        </AlertBanner>
       )}
     </div>
   );

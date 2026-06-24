@@ -194,7 +194,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onClick={close}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-start justify-between">
           <div>
@@ -352,7 +352,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
         {/* Confirm-apply modal */}
         {confirming && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirming(false)}>
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-base font-semibold text-gray-800 mb-2">ยืนยันการนำเข้า</h3>
               <div className="text-sm text-gray-600 space-y-1 mb-3">
                 <div className="flex justify-between"><span>ชุดนำเข้า</span><span className="text-gray-400">#{batchId}</span></div>

@@ -63,6 +63,14 @@ export default {
           '0%':   { opacity: '0', transform: 'scale(0.97)' },
           '100%': { opacity: '1', transform: 'scale(1)' },
         },
+        'shimmer': {
+          '0%':   { backgroundPosition: '200% 50%' },
+          '100%': { backgroundPosition: '-200% 50%' },
+        },
+        'pulse-ring': {
+          '0%':   { transform: 'scale(1)', opacity: '0.7' },
+          '100%': { transform: 'scale(2.2)', opacity: '0' },
+        },
       },
       animation: {
         'slide-in': 'slide-in 0.25s ease-out',
@@ -70,6 +78,8 @@ export default {
         'fade-in-up': 'fade-in-up 0.3s ease-out',
         'fade-in': 'fade-in 0.2s ease-out',
         'scale-in': 'scale-in 0.25s ease-out',
+        'shimmer': 'shimmer 1.4s ease-in-out infinite',
+        'pulse-ring': 'pulse-ring 1.8s ease-out infinite',
       },
     },
   },

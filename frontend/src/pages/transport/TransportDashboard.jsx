@@ -16,6 +16,7 @@ import {
 } from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { PageTransition } from '../../lib/motion';
 
 // SLA configuration — days allowed to resolve a risk item
 const SLA_DAYS = 7;
@@ -208,8 +209,9 @@ export default function TransportDashboard() {
   const readyPct = data.total_vehicles > 0 ? Math.round((readyCount / data.total_vehicles) * 100) : 0;
 
   return (
+    <PageTransition>
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
-      <header>
+      <header className="motion-safe:animate-fade-in-up">
         <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">ภาพรวมตรวจสภาพรถ</h1>
         <p className="text-sm text-ink-muted mt-1">สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด</p>
       </header>
@@ -220,14 +222,14 @@ export default function TransportDashboard() {
       <div className="flex flex-wrap items-stretch gap-2">
         <Link
           to="/transport/inspections"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
         >
           <ClipboardList className="w-4 h-4" strokeWidth={2} />
           บันทึกตรวจสภาพ
         </Link>
         <Link
           to="/transport/pickup-map"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
         >
           <MapIcon className="w-4 h-4" strokeWidth={2} />
           แผนที่จุดรับส่ง
@@ -344,9 +346,9 @@ export default function TransportDashboard() {
               key={f.key}
               type="button"
               onClick={() => setActiveFilter(f.key)}
-              className={`text-sm font-medium px-3 py-2 rounded-lg transition border ${
+              className={`inline-flex items-center text-sm font-medium px-3 py-2 min-h-[44px] rounded-lg transition border ${
                 isActive
-                  ? 'bg-brand-700 text-white border-brand-700'
+                  ? 'bg-brand-700 text-surface-raised border-brand-700'
                   : 'bg-surface-raised text-ink-muted border-surface-border hover:bg-surface'
               }`}
             >
@@ -365,7 +367,7 @@ export default function TransportDashboard() {
           value={vSearch}
           onChange={e => setVSearch(e.target.value)}
           placeholder="ค้นหาทะเบียนรถ…"
-          className="w-full border border-surface-border rounded-xl pl-9 pr-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-400"
+          className="w-full min-h-[44px] border border-surface-border rounded-xl pl-9 pr-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-400"
         />
       </div>
 
@@ -428,6 +430,7 @@ export default function TransportDashboard() {
         </AppCard>
       </div>
     </div>
+    </PageTransition>
   );
 }
 

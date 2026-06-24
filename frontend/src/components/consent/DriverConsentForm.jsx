@@ -54,7 +54,7 @@ export default function DriverConsentForm() {
               </div>
               {granted
                 ? <button onClick={() => withdraw(c.type, c.required)} disabled={busy} className="text-xs text-red-600 hover:text-red-800 border border-red-200 rounded-lg px-3 py-1.5">ถอน</button>
-                : <button onClick={() => grant(c.type)} disabled={busy} className="text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg px-3 py-1.5">ยินยอม</button>}
+                : <button onClick={() => grant(c.type)} disabled={busy} className="text-xs text-white bg-brand-600 hover:bg-brand-700 rounded-lg px-3 py-1.5">ยินยอม</button>}
             </div>
           );
         })}

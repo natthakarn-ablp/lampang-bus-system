@@ -13,15 +13,17 @@
 
 import { Link } from 'react-router-dom';
 
-const ICON_GRADIENTS = {
-  blue:    'from-blue-500 to-indigo-600',
-  indigo:  'from-indigo-500 to-purple-600',
-  green:   'from-emerald-500 to-teal-600',
-  amber:   'from-amber-500 to-orange-600',
-  red:     'from-red-500 to-rose-600',
-  purple:  'from-purple-500 to-pink-600',
-  sky:     'from-sky-500 to-blue-600',
-  teal:    'from-teal-500 to-cyan-600',
+// Solid token chip fills per tone — no decorative gradients (DESIGN.md).
+// Each maps the iconColor prop to a single semantic/brand background; icon stays white.
+const ICON_TONES = {
+  blue:    'bg-brand-600',
+  indigo:  'bg-brand-700',
+  green:   'bg-success',
+  amber:   'bg-warn',
+  red:     'bg-danger',
+  purple:  'bg-brand-800',
+  sky:     'bg-info',
+  teal:    'bg-info',
 };
 
 export default function PageHeader({
@@ -33,7 +35,7 @@ export default function PageHeader({
   actions,
   breadcrumb,
 }) {
-  const gradient = ICON_GRADIENTS[iconColor] || ICON_GRADIENTS.blue;
+  const toneClass = ICON_TONES[iconColor] || ICON_TONES.blue;
 
   return (
     <div className="mb-6 animate-fade-in-up">
@@ -55,7 +57,7 @@ export default function PageHeader({
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-start gap-3 min-w-0 flex-1">
           {Icon && (
-            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md shrink-0 text-white`}>
+            <div className={`w-11 h-11 rounded-xl ${toneClass} flex items-center justify-center shrink-0 text-white`}>
               <Icon className="w-6 h-6" />
             </div>
           )}

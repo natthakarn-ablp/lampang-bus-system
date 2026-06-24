@@ -31,7 +31,7 @@ export default function AttentionCard({
   const Wrapper = isJumpable ? 'button' : 'div';
   const wrapperProps = isJumpable
     ? { type: 'button', onClick: onJump,
-        className: 'block w-full text-left transition hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-xl' }
+        className: 'block w-full text-left rounded-2xl transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-elevate focus:outline-none focus-visible:ring-4 focus-visible:ring-brand-600/25' }
     : { className: 'block w-full text-left' };
 
   return (

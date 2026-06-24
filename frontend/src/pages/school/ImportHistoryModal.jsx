@@ -113,7 +113,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onClick={close}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {view === 'detail' && <button onClick={loadList} className="text-sm text-blue-600 hover:text-blue-800">‹ ย้อนกลับ</button>}
@@ -243,7 +243,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
         {/* Rollback confirm */}
         {confirmRollback && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmRollback(false)}>
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
               <h3 className="text-base font-semibold text-gray-800 mb-2">ยืนยันการย้อนกลับ</h3>
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5 mb-3">ระบบจะย้อนกลับโดยการปิดใช้งานนักเรียนที่ถูกเพิ่มจากชุดนำเข้านี้เท่านั้น ({selRollback.size} รายการ) ไม่ลบข้อมูลถาวร</p>
               <label className="block text-xs text-gray-500 mb-1">เหตุผล <span className="text-red-500">*</span></label>

@@ -345,7 +345,7 @@ export default function UserManagement() {
 function Modal({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={e => e.stopPropagation()}>
+      <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-gray-800 mb-4">{title}</h2>
         {children}
         <button onClick={onClose} className="w-full text-gray-500 hover:text-gray-700 text-sm py-2 mt-2 transition">ยกเลิก</button>

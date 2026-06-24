@@ -4,10 +4,10 @@
 import { CheckCircle2, XCircle, AlertTriangle, Clock } from 'lucide-react';
 
 const INSPECTION_MAP = {
-  PASSED:    { label: 'ผ่าน',     cls: 'bg-green-100 text-green-700 border-green-200',   Icon: CheckCircle2 },
-  FAILED:    { label: 'ไม่ผ่าน',  cls: 'bg-red-100 text-red-700 border-red-200',         Icon: XCircle },
-  NEEDS_FIX: { label: 'ต้องแก้ไข', cls: 'bg-yellow-100 text-yellow-700 border-yellow-200', Icon: AlertTriangle },
-  PENDING:   { label: 'รอตรวจ',    cls: 'bg-gray-100 text-gray-600 border-gray-200',     Icon: Clock },
+  PASSED:    { label: 'ผ่าน',     cls: 'bg-success-soft text-success border-success/20',   Icon: CheckCircle2 },
+  FAILED:    { label: 'ไม่ผ่าน',  cls: 'bg-danger-soft text-danger border-danger/20',       Icon: XCircle },
+  NEEDS_FIX: { label: 'ต้องแก้ไข', cls: 'bg-warn-soft text-warn border-warn/20',           Icon: AlertTriangle },
+  PENDING:   { label: 'รอตรวจ',    cls: 'bg-surface text-ink-muted border-surface-border',  Icon: Clock },
 };
 
 function getInsuranceStatus(expiry) {

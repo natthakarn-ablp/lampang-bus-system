@@ -247,7 +247,7 @@ export default function InspectionForm() {
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">วันที่ตรวจ</label>
-              <input type="date" value={form.inspection_date}
+              <input type="date" value={form.inspection_date} required
                 onChange={e => setForm({ ...form, inspection_date: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>

@@ -15,13 +15,14 @@ import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
 import { relativeTime } from '../../utils/datetime';
 import {
-  AppCard, AlertBanner,
+  AppCard, AlertBanner, StatusBadge,
   DashboardSection, AttentionCard,
 } from '../../components/ui';
 import {
   PAGE_TITLES, CHART_TITLES,
   UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS,
 } from '../../constants/uiLabels';
+import { PageTransition } from '../../lib/motion';
 
 export default function AffiliationDashboard() {
   const toast = useToast();
@@ -58,6 +59,7 @@ export default function AffiliationDashboard() {
     : null;
 
   return (
+    <PageTransition>
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
       <PageHeader
         title={PAGE_TITLES.AFFILIATION_DASHBOARD}
@@ -127,7 +129,7 @@ export default function AffiliationDashboard() {
               of action-driving adoption + data-quality + at-risk + alerts.
               Auxiliary totals moved to "ภาพรวมเพิ่มเติม" below. Cards 4 + 5
               are tap-through to the existing drill-down sections. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 motion-safe:animate-fade-in-up">
 
             {/* Card 1 — School adoption. 14-day window matches province. */}
             <AppCard padding="md">
@@ -212,7 +214,7 @@ export default function AffiliationDashboard() {
               as="button"
               padding="md"
               onClick={() => scrollTo(schoolsRef)}
-              className="text-left transition hover:shadow-elevate focus:outline-none focus:ring-2 focus:ring-warn/40"
+              className="text-left motion-safe:transition-shadow hover:shadow-elevate focus:outline-none focus-visible:ring-2 focus-visible:ring-warn/40"
               aria-label="ดูรายชื่อโรงเรียนเสี่ยง"
             >
               <div className="flex items-start gap-2 mb-2">
@@ -253,7 +255,7 @@ export default function AffiliationDashboard() {
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-xs text-ink-muted">การลาวันนี้</span>
+                  <span className="text-xs text-ink-muted">นักเรียนลา</span>
                   <span className={`text-base font-semibold tabular-nums ${(data.leave_today ?? data.leave_count ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
                     {data.leave_today ?? data.leave_count ?? 0}
                   </span>
@@ -349,6 +351,7 @@ export default function AffiliationDashboard() {
         );
       })()}
     </div>
+    </PageTransition>
   );
 }
 
@@ -444,15 +447,26 @@ function SchoolRiskRow({ school: s, notifiedAt, onNotify }) {
   const ePct = eTotal > 0 ? Math.round((eDone / eTotal) * 100) : 0;
   const totalPending = mPend + ePend;
   const level = totalPending > 50 ? 'high' : totalPending > 20 ? 'medium' : 'low';
+  // Risk level carries text + semantic color (DESIGN.md §6: no color-only
+  // status, no decorative >1px border strip). The whole card border tints to
+  // the level instead of the former before: pseudo-element bar.
+  const RISK = {
+    high:   { variant: 'danger', label: 'เสี่ยงสูง',     border: 'border-danger/30' },
+    medium: { variant: 'warn',   label: 'เสี่ยงปานกลาง', border: 'border-warn/30'   },
+    low:    { variant: 'success', label: 'เสี่ยงน้อย',    border: 'border-success/30' },
+  }[level];
 
   return (
-    <AppCard padding="md" className={`relative pl-5 before:content-[''] before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-r-full ${
-      level === 'high' ? 'before:bg-danger' : level === 'medium' ? 'before:bg-warn' : 'before:bg-success'
-    }`}>
+    <AppCard padding="md" className={RISK.border}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <p className="text-base font-semibold text-ink truncate">{s.school_name}</p>
-          <div className="flex items-center gap-3 text-xs text-ink-muted mt-0.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-base font-semibold text-ink truncate">{s.school_name}</p>
+            <StatusBadge variant={RISK.variant} size="sm" icon={AlertTriangle} className="shrink-0">
+              {RISK.label}
+            </StatusBadge>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-ink-muted mt-1">
             <span className="inline-flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5" strokeWidth={2} /> {s.student_count ?? '-'} คน</span>
             <span className="inline-flex items-center gap-1"><Bus className="w-3.5 h-3.5" strokeWidth={2} /> {s.vehicle_count ?? '-'} คัน</span>
           </div>

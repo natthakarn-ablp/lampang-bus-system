@@ -16,6 +16,7 @@ export default function ParentStatus() {
   const [selectedChild, setSelectedChild] = useState(null);
   const [status, setStatus] = useState(null);
   const [history, setHistory] = useState([]);
+  const [eta, setEta] = useState(null);
   const [view, setView] = useState('list');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,7 +28,12 @@ export default function ParentStatus() {
       const token = await getLiffIdToken();
       if (cancelled) return;
       setIdToken(token);
-      if (!token) { setLoading(false); return; }
+      if (!token) {
+        // Phase 11A audit fix C5: clear error message when not in LIFF
+        if (!cancelled) setError('กรุณาเปิดหน้านี้ผ่านลิงก์ใน LINE OA เท่านั้น — ไม่สามารถเข้าถึงได้โดยตรง');
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError('');
       try {
@@ -77,17 +83,32 @@ export default function ParentStatus() {
     }
   }
 
+  async function viewEta(child) {
+    setSelectedChild(child);
+    setView('eta');
+    setEta(null);
+    try {
+      const res = await axios.get(`/api/parent/children/${child.id}/eta`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      setEta(res.data.data);
+    } catch {
+      setEta(null);
+    }
+  }
+
   function goBack() {
     setView('list');
     setSelectedChild(null);
     setStatus(null);
     setHistory([]);
+    setEta(null);
   }
 
   // ── Unlinked state (no LIFF id_token — opened outside LINE or not linked) ──
   if (!loading && !idToken) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
+      <div className="min-h-screen bg-surface flex items-center justify-center p-4">
         <AppCard padding="lg" className="max-w-sm w-full text-center">
           <p className="text-5xl mb-4">🔗</p>
           <h1 className="text-xl font-semibold text-gray-800 mb-3">ยังไม่ได้ผูกบัญชี LINE</h1>
@@ -137,7 +158,7 @@ export default function ParentStatus() {
   // ── No children linked ──
   if (children.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex items-center justify-center p-4">
+      <div className="min-h-screen bg-surface flex items-center justify-center p-4">
         <AppCard padding="lg" className="max-w-sm w-full text-center">
           <p className="text-5xl mb-4">👨‍👩‍👧‍👦</p>
           <h1 className="text-xl font-semibold text-gray-800 mb-3">ไม่พบข้อมูลบุตรหลาน</h1>
@@ -221,6 +242,10 @@ export default function ParentStatus() {
                   <button onClick={() => viewStatus(child)}
                     className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-3 rounded-xl transition text-base">
                     📋 สถานะวันนี้
+                  </button>
+                  <button onClick={() => viewEta(child)}
+                    className="flex-1 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-700 font-semibold py-3 rounded-xl transition border-2 border-amber-200 text-base">
+                    📍 ETA
                   </button>
                   <button onClick={() => viewHistory(child)}
                     className="flex-1 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 font-semibold py-3 rounded-xl transition border-2 border-blue-200 text-base">
@@ -326,6 +351,62 @@ export default function ParentStatus() {
                   );
                 })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ETA (Phase 11A) ── */}
+        {view === 'eta' && selectedChild && (
+          <div className="space-y-4">
+            <AppCard padding="md">
+              <p className="text-lg font-semibold text-gray-900">
+                {selectedChild.first_name} {selectedChild.last_name}
+              </p>
+              <p className="text-base text-gray-500">
+                {selectedChild.school_name || '-'}
+              </p>
+            </AppCard>
+
+            <p className="text-base font-semibold text-gray-600">เวลาถึงโดยประมาณ (ETA)</p>
+
+            {eta == null ? (
+              <AppCard padding="lg" className="text-center">
+                <p className="text-4xl mb-2">📍</p>
+                <p className="text-gray-500 text-base">
+                  ยังไม่มีข้อมูล ETA — รถอาจออฟไลน์ หรือยังไม่เริ่มรอบ
+                </p>
+                <p className="text-sm text-gray-400 mt-2">
+                  ลองกดรีเฟรชอีกครั้งเมื่อรถเริ่มวิ่ง
+                </p>
+              </AppCard>
+            ) : (
+              <AppCard padding="lg" className="text-center">
+                <p className="text-5xl mb-3">🚌</p>
+                <p className="text-sm text-gray-500 mb-1">รถ {eta.plate_no}</p>
+                <p className="text-base font-semibold text-gray-700 mb-3">
+                  จุด: {eta.label}
+                </p>
+                <div className="inline-flex flex-col items-center bg-amber-50 border-2 border-amber-200 rounded-2xl px-6 py-4">
+                  <p className="text-3xl font-bold text-amber-700 tabular-nums">
+                    {eta.eta_seconds != null
+                      ? `${Math.max(1, Math.round(eta.eta_seconds / 60))} นาที`
+                      : '—'}
+                  </p>
+                  <p className="text-sm text-amber-600 mt-1">
+                    ระยะทาง {eta.distance_meters != null ? `${(eta.distance_meters / 1000).toFixed(1)} กม.` : 'ไม่ทราบ'}
+                  </p>
+                  <p className="text-xs text-amber-500 mt-1">
+                    ความมั่นใจ: {eta.confidence === 'HIGH' ? 'สูง' : eta.confidence === 'MEDIUM' ? 'ปานกลาง' : eta.confidence === 'LOW' ? 'ต่ำ' : 'ไม่ทราบ'}
+                  </p>
+                </div>
+                <p className="text-xs text-gray-400 mt-3">
+                  อัปเดต {eta.age_seconds != null ? `${eta.age_seconds}s ที่แล้ว` : '-'}
+                </p>
+                <button onClick={() => viewEta(selectedChild)}
+                  className="mt-4 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold px-6 py-2.5 rounded-xl border-2 border-amber-200 transition">
+                  🔄 รีเฟรช ETA
+                </button>
+              </AppCard>
             )}
           </div>
         )}

@@ -4,11 +4,12 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert, ShieldCheck,
+  ShieldAlert, ShieldCheck, MapPin, Route, Clock,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
 import { PAGE_TITLES } from '../constants/uiLabels';
+import { motion } from 'motion/react';
 
 // section: string = section heading (not a link)
 // to + label + icon (lucide component) = nav link item
@@ -89,6 +90,7 @@ const PROVINCE_NAV = [
   { to: '/province/pickup-map',   icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { section: 'ติดตามและบันทึก' },
   { to: '/province/readiness',    icon: ShieldCheck,   label: 'ความพร้อมเปิดใช้งาน' },
+  { to: '/admin/route-deviations', icon: Route,        label: 'การเบี่ยงเส้นทาง' },
   { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
   { section: 'รายงาน' },
@@ -124,6 +126,8 @@ const ADMIN_NAV = [
   { to: '/admin/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },
   { to: '/admin/vehicle-requests', icon: Wrench,     label: 'คำขอเกี่ยวกับรถ' },
   { to: '/admin/driver-integrity', icon: ShieldAlert, label: 'สุขภาพข้อมูลคนขับ' },
+  { to: '/admin/geofences',       icon: MapPin,      label: 'จุดเตือนภัย (Geofences)' },
+  { to: '/admin/route-deviations', icon: Route,      label: 'การเบี่ยงเส้นทาง' },
   { to: '/admin/audit-logs',      icon: FileText,    label: 'ประวัติการใช้งาน' },
   { to: '/admin/system-health',   icon: Activity,    label: 'สุขภาพระบบ' },
   { section: 'มุมมองจังหวัด' },
@@ -153,10 +157,22 @@ const TEACHER_BLOCKED_PATHS = new Set([
   '/school/teacher-accounts',
 ]);
 
-function navItemsForUser(user) {
+function navItemsForUser(user, features) {
   const base = NAV_MAP[user?.role] || [];
-  if (!isGradeTeacher(user)) return base;
-  return base.filter(item => item.section || !TEACHER_BLOCKED_PATHS.has(item.to));
+  // Phase 11A audit fix M7: hide sidebar links for flag-gated routes when
+  // the corresponding feature flag is off, so users don't click into a 404.
+  const FLAG_GATED = {
+    '/admin/geofences': 'geofence',
+    '/admin/route-deviations': 'routeDeviation',
+  };
+  const filtered = base.filter(item => {
+    if (!item.to) return true;
+    const flag = FLAG_GATED[item.to];
+    if (!flag) return true;
+    return features ? !!features[flag] : false;
+  });
+  if (!isGradeTeacher(user)) return filtered;
+  return filtered.filter(item => item.section || !TEACHER_BLOCKED_PATHS.has(item.to));
 }
 
 // Phase 8.2 — collapsible groups for roles that crossed the 10-item
@@ -208,11 +224,11 @@ function readStoredSections() {
 }
 
 export default function Sidebar({ onClose }) {
-  const { user, logout } = useAuth();
+  const { user, features, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
-  const groups = useMemo(() => buildGroups(navItemsForUser(user)), [user?.role, user?.grade_scope, user?.gradeScope]);
+  const groups = useMemo(() => buildGroups(navItemsForUser(user, features)), [user?.role, user?.grade_scope, user?.gradeScope, features]);
   const teacherGrade = getGradeScope(user);
   const useCollapsible = isCollapsibleForUser(user);
 
@@ -253,17 +269,17 @@ export default function Sidebar({ onClose }) {
   }
 
   return (
-    <aside className="w-full md:w-56 shrink-0 h-full bg-blue-800 text-white flex flex-col">
+    <aside className="w-full md:w-56 shrink-0 h-full bg-brand-800 text-white flex flex-col">
       {/* Brand */}
-      <div className="px-5 py-5 border-b border-blue-700 shrink-0 flex items-start justify-between">
+      <div className="px-5 py-5 border-b border-brand-700 shrink-0 flex items-start justify-between">
         <div>
           <p className="font-semibold text-sm leading-tight">ระบบรถรับส่งนักเรียน</p>
-          <p className="text-blue-300 text-xs mt-0.5">จังหวัดลำปาง</p>
+          <p className="text-brand-200 text-xs mt-0.5">จังหวัดลำปาง</p>
         </div>
         {onClose && (
           <button
             onClick={onClose}
-            className="md:hidden -mr-2 -mt-1 inline-flex items-center justify-center w-10 h-10 rounded-md hover:bg-blue-700 active:bg-blue-600 transition"
+            className="md:hidden -mr-2 -mt-1 inline-flex items-center justify-center w-10 h-10 rounded-md hover:bg-brand-700 active:bg-brand-600 transition"
             aria-label="ปิดเมนู"
           >
             <X className="w-5 h-5" strokeWidth={2} />
@@ -272,11 +288,11 @@ export default function Sidebar({ onClose }) {
       </div>
 
       {/* User info */}
-      <div className="px-5 py-3 border-b border-blue-700 shrink-0">
-        <p className="text-xs text-blue-300">เข้าสู่ระบบในฐานะ</p>
+      <div className="px-5 py-3 border-b border-brand-700 shrink-0">
+        <p className="text-xs text-brand-200">เข้าสู่ระบบในฐานะ</p>
         <p className="font-semibold text-sm truncate">{user?.display_name || user?.username}</p>
         {teacherGrade && (
-          <p className="text-[11px] text-blue-200 mt-0.5">
+          <p className="text-[11px] text-brand-100 mt-0.5">
             ครูประจำสายชั้น · ขอบเขต {teacherGrade}
           </p>
         )}
@@ -298,7 +314,7 @@ export default function Sidebar({ onClose }) {
                   onClick={() => toggleSection(key)}
                   aria-expanded={isOpen}
                   aria-controls={panelId}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-[10px] font-semibold uppercase tracking-wider text-blue-400 hover:text-blue-200 hover:bg-blue-700/40 active:bg-blue-700/60 transition ${gi === 0 ? 'mt-0' : 'mt-2'}`}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-[10px] font-semibold uppercase tracking-wider text-brand-300 hover:text-brand-100 hover:bg-brand-700/40 active:bg-brand-700/60 transition ${gi === 0 ? 'mt-0' : 'mt-2'}`}
                 >
                   <span>{group.section}</span>
                   <ChevronDown
@@ -309,7 +325,7 @@ export default function Sidebar({ onClose }) {
                 </button>
               )}
               {hasHeader && !sectionCollapsible && (
-                <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-blue-400 ${gi === 0 ? 'pt-1' : 'pt-4'}`}>
+                <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-brand-300 ${gi === 0 ? 'pt-1' : 'pt-4'}`}>
                   {group.section}
                 </p>
               )}
@@ -330,13 +346,24 @@ export default function Sidebar({ onClose }) {
                       end={item.to.split('/').length === 2}
                       tabIndex={isOpen ? 0 : -1}
                       className={({ isActive }) =>
-                        `flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm transition mb-0.5 min-h-[40px] ${
-                          isActive ? 'bg-white text-blue-800 font-semibold' : 'text-blue-100 hover:bg-blue-700 active:bg-blue-600'
+                        `relative flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm transition mb-0.5 min-h-[40px] ${
+                          isActive ? 'text-brand-800 font-semibold' : 'text-brand-50 hover:bg-brand-700 active:bg-brand-600'
                         }`
                       }
                     >
-                      {item.icon && <item.icon className="w-4 h-4 shrink-0" strokeWidth={2} />}
-                      <span className="truncate">{item.label}</span>
+                      {({ isActive }) => (
+                        <>
+                          {isActive && (
+                            <motion.span
+                              layoutId="sidebar-active"
+                              className="absolute inset-0 rounded-lg bg-white"
+                              transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                            />
+                          )}
+                          {item.icon && <item.icon className="w-4 h-4 shrink-0 relative z-10" strokeWidth={2} />}
+                          <span className="truncate relative z-10">{item.label}</span>
+                        </>
+                      )}
                     </NavLink>
                   ))}
                 </div>
@@ -347,9 +374,9 @@ export default function Sidebar({ onClose }) {
       </nav>
 
       {/* Logout */}
-      <div className="px-5 py-3 border-t border-blue-700 shrink-0">
+      <div className="px-5 py-3 border-t border-brand-700 shrink-0">
         <button onClick={handleLogout}
-          className="w-full text-sm text-blue-200 hover:text-white hover:bg-blue-700 active:bg-blue-600 rounded-lg px-4 py-2.5 min-h-[40px] transition">
+          className="w-full text-sm text-brand-100 hover:text-white hover:bg-brand-700 active:bg-brand-600 rounded-lg px-4 py-2.5 min-h-[40px] transition">
           ออกจากระบบ
         </button>
       </div>

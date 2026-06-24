@@ -1,4 +1,5 @@
 import { useState, useCallback, createContext, useContext } from 'react';
+import { AnimatePresence, ToastSlide } from '../lib/motion';
 
 const ToastContext = createContext(null);
 
@@ -9,9 +10,9 @@ const ICONS = {
 };
 
 const COLORS = {
-  success: 'bg-green-600',
-  error: 'bg-red-600',
-  info: 'bg-blue-600',
+  success: 'bg-success',
+  error: 'bg-danger',
+  info: 'bg-brand-600',
 };
 
 export function ToastProvider({ children }) {
@@ -40,15 +41,17 @@ export function ToastProvider({ children }) {
         className="fixed right-4 z-50 flex flex-col gap-2 pointer-events-none"
         style={{ bottom: 'calc(1rem + var(--app-bottom-nav, 0px))' }}
       >
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg text-white text-sm shadow-lg animate-slide-in ${COLORS[t.type]}`}
-          >
-            <span className="font-semibold text-base leading-none">{ICONS[t.type]}</span>
-            <span>{t.message}</span>
-          </div>
-        ))}
+        <AnimatePresence>
+          {toasts.map((t) => (
+            <ToastSlide
+              key={t.id}
+              className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg text-white text-sm shadow-lg ${COLORS[t.type]}`}
+            >
+              <span className="font-semibold text-base leading-none">{ICONS[t.type]}</span>
+              <span>{t.message}</span>
+            </ToastSlide>
+          ))}
+        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );

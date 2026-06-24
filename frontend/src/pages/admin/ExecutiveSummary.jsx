@@ -84,7 +84,7 @@ export default function ExecutiveSummary() {
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto pb-10">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-800 to-blue-900 text-white rounded-xl px-5 py-5 mb-5">
+      <div className="bg-brand-900 text-white rounded-xl px-5 py-5 mb-5">
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs text-blue-200 uppercase tracking-wider">Executive Summary</p>

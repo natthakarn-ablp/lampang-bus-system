@@ -7,6 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
+import AlertBanner from '../../components/ui/AlertBanner';
 import { CommandHero } from '../../components/ui';
 
 const REASONS = {
@@ -69,23 +70,17 @@ function DriverVehicleCard({ vehicle, busy, onStart }) {
           type="button"
           disabled={busy}
           onClick={() => onStart(vehicle.vehicle_id)}
-          className="mt-5 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-base font-bold text-white transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-5 inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 py-3 text-base font-bold text-surface-raised transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Clock3 className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
           เริ่มรอบด้วยรถคันนี้
         </button>
       ) : (
-        <div className="mt-5 rounded-xl border border-danger/30 bg-danger-soft p-3 text-sm text-ink">
-          <div className="flex gap-2">
-            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-danger" strokeWidth={2.2} aria-hidden="true" />
-            <div>
-              <p className="font-semibold">ยังเริ่มรอบด้วยรถคันนี้ไม่ได้</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-ink-muted">
-                {blockedReasons.length ? blockedReasons.map(reason => <li key={reason}>{reason}</li>) : <li>ระบบยังไม่พบเงื่อนไขที่อนุญาตให้เริ่มรอบ</li>}
-              </ul>
-            </div>
-          </div>
-        </div>
+        <AlertBanner variant="danger" icon={ShieldAlert} title="ยังเริ่มรอบด้วยรถคันนี้ไม่ได้" className="mt-5">
+          <ul className="list-disc space-y-1 pl-5">
+            {blockedReasons.length ? blockedReasons.map(reason => <li key={reason}>{reason}</li>) : <li>ระบบยังไม่พบเงื่อนไขที่อนุญาตให้เริ่มรอบ</li>}
+          </ul>
+        </AlertBanner>
       )}
     </AppCard>
   );
@@ -93,12 +88,12 @@ function DriverVehicleCard({ vehicle, busy, onStart }) {
 
 function ActiveShiftCard({ active, busy, onEnd }) {
   return (
-    <AppCard className="border-success/30 bg-success-soft">
+    <AppCard className="border-success/30 bg-success-soft motion-safe:animate-fade-in-up motion-reduce:animate-none">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-success">กำลังปฏิบัติงาน</p>
-          <h2 className="mt-1 text-3xl font-bold leading-tight text-green-950">{active.plate_no}</h2>
-          <p className="mt-2 text-sm leading-6 text-green-900">
+          <h2 className="mt-1 text-3xl font-bold leading-tight text-ink">{active.plate_no}</h2>
+          <p className="mt-2 text-sm leading-6 text-ink-muted">
             รอบ {sessionLabel(active.session)} · เริ่ม {new Date(active.started_at).toLocaleString('th-TH')}
           </p>
           <StatusBadge variant="success" className="mt-3">
@@ -112,7 +107,7 @@ function ActiveShiftCard({ active, busy, onEnd }) {
         type="button"
         disabled={busy}
         onClick={onEnd}
-        className="mt-6 inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-danger px-4 py-3 text-base font-bold text-white transition hover:bg-red-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-6 inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-danger px-4 py-3 text-base font-bold text-surface-raised transition hover:bg-danger/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 disabled:cursor-not-allowed disabled:opacity-50"
       >
         สิ้นสุดรอบ
       </button>
@@ -192,7 +187,7 @@ export default function DriverShift() {
           <button
             type="button"
             onClick={load}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-blue-950 transition hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-surface-raised px-4 py-2 text-sm font-semibold text-brand-900 transition hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             <RefreshCw className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
             รีเฟรช
@@ -212,7 +207,7 @@ export default function DriverShift() {
               <select
                 value={session}
                 onChange={event => setSession(event.target.value)}
-                className="mt-2 min-h-[44px] w-full rounded-lg border border-surface-border bg-white p-2 text-sm"
+                className="mt-2 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 text-sm text-ink transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               >
                 <option value="MORNING">เช้า</option>
                 <option value="EVENING">เย็น</option>
@@ -229,13 +224,18 @@ export default function DriverShift() {
             />
           ) : (
             <div className="space-y-3">
-              {vehicles.map(vehicle => (
-                <DriverVehicleCard
+              {vehicles.map((vehicle, index) => (
+                <div
                   key={vehicle.assignment_id}
-                  vehicle={vehicle}
-                  busy={busy}
-                  onStart={start}
-                />
+                  className="motion-safe:animate-fade-in-up motion-reduce:animate-none"
+                  style={{ animationDelay: `${Math.min(index, 6) * 50}ms` }}
+                >
+                  <DriverVehicleCard
+                    vehicle={vehicle}
+                    busy={busy}
+                    onStart={start}
+                  />
+                </div>
               ))}
             </div>
           )}

@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { Lock, Bus } from 'lucide-react';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { AdminContextProvider } from './hooks/useAdminContext';
 import { ToastProvider } from './components/Toast';
@@ -92,6 +92,8 @@ const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
 const StudentTransferRequests = lazy(() => import('./pages/admin/StudentTransferRequests'));
 const VehicleRequests      = lazy(() => import('./pages/admin/VehicleRequests'));
 const DriverIntegrity      = lazy(() => import('./pages/admin/DriverIntegrity'));
+const AdminGeofences       = lazy(() => import('./pages/admin/AdminGeofences'));
+const AdminRouteDeviations = lazy(() => import('./pages/admin/AdminRouteDeviations'));
 const AdminAuditLog        = lazy(() => import('./pages/admin/AdminAuditLog'));
 const AdminPickupPointManagement = lazy(() => import('./pages/admin/AdminPickupPointManagement'));
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -138,7 +140,20 @@ function PrivateRoute({ children, allowedRoles }) {
 
 // ── Suspense fallback for lazy-loaded routes ────────────────────────────────
 function RouteFallback() {
-  return <div className="flex items-center justify-center h-screen text-ink-muted">กำลังโหลด…</div>;
+  return (
+    <div className="flex flex-col items-center justify-center h-screen gap-4 bg-surface">
+      <div className="w-12 h-12 bg-brand-800 rounded-2xl flex items-center justify-center shadow-soft">
+        <Bus className="w-6 h-6 text-white" strokeWidth={2} aria-hidden="true" />
+      </div>
+      <div className="flex flex-col gap-2 w-48">
+        <div className="h-3 rounded-full bg-surface-border/60 overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-[shimmer_1.4s_ease-in-out_infinite]" style={{ backgroundSize: '200% 100%' }} />
+        </div>
+        <div className="h-3 rounded-full bg-surface-border/40 w-32" />
+      </div>
+      <p className="text-xs text-ink-muted">กำลังโหลด…</p>
+    </div>
+  );
 }
 
 // ── VisitTracker: fires once per browser tab session ────────────────────────
@@ -316,6 +331,16 @@ export default function App() {
           <Route path="/admin/driver-integrity" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><DriverIntegrity /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/geofences" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><AdminGeofences /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/route-deviations" element={
+            <PrivateRoute allowedRoles={['admin', 'province']}>
+              <Layout><AdminRouteDeviations /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/vehicle-qr" element={

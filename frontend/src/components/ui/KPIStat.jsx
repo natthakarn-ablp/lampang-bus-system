@@ -1,5 +1,6 @@
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import AppCard from './AppCard';
+import { CountUp } from '../../lib/motion';
 
 const ICON_BG = {
   brand:   'bg-brand-50    text-brand-700',
@@ -46,7 +47,11 @@ export default function KPIStat({
         )}
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-bold text-ink leading-none tabular-nums">{value}</span>
+        <span className="text-3xl font-bold text-ink leading-none tabular-nums">
+          {typeof value === 'number' || /^\d+$/.test(String(value)) ? (
+            <CountUp value={value} />
+          ) : value}
+        </span>
         {trend && trendStyle && (
           <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${trendStyle.className}`}>
             <trendStyle.icon className="w-3.5 h-3.5" strokeWidth={2.2} />

@@ -18,7 +18,7 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { CommandHero, StatusStepRail } from '../../components/ui';
+import { CommandHero, StatusStepRail, AlertBanner } from '../../components/ui';
 
 const STATUS = {
   DRAFT: ['ฉบับร่าง', 'neutral'],
@@ -72,7 +72,7 @@ function QueueItem({ application, selected, onOpen }) {
       type="button"
       onClick={() => onOpen(application.id)}
       className={`w-full rounded-xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/40 ${
-        selected ? 'border-brand-600 bg-brand-50' : 'border-surface-border bg-white hover:bg-surface'
+        selected ? 'border-brand-600 bg-brand-50' : 'border-surface-border bg-surface-raised hover:bg-surface'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -167,10 +167,9 @@ function VehicleDetailSummary({ detail, onStart, busy, attemptId }) {
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border border-danger/30 bg-danger-soft p-3 text-sm text-ink">
-              <AlertTriangle className="mr-1 inline h-4 w-4 text-danger" strokeWidth={2.2} aria-hidden="true" />
+            <AlertBanner variant="danger" icon={AlertTriangle}>
               ยังไม่มีคนขับที่ได้รับอนุญาตสำหรับรถคันนี้
-            </div>
+            </AlertBanner>
           )}
 
           <div className="mt-4 rounded-xl bg-surface p-3">
@@ -224,7 +223,7 @@ function DriverAuthorizationPanel({
           <select
             value={driverForm.driver_id}
             onChange={event => setDriverForm(form => ({ ...form, driver_id: event.target.value }))}
-            className="min-h-[44px] w-full rounded-lg border border-surface-border bg-white p-2 text-sm"
+            className="min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
           >
             <option value="">เลือกคนขับ</option>
             {drivers.map(driver => (
@@ -235,7 +234,7 @@ function DriverAuthorizationPanel({
             <select
               value={driverForm.assignment_role}
               onChange={event => setDriverForm(form => ({ ...form, assignment_role: event.target.value }))}
-              className="min-h-[44px] rounded-lg border border-surface-border bg-white p-2 text-sm"
+              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             >
               <option value="PRIMARY">คนขับหลัก</option>
               <option value="BACKUP">คนขับสำรอง</option>
@@ -244,7 +243,7 @@ function DriverAuthorizationPanel({
               type="date"
               value={driverForm.valid_until}
               onChange={event => setDriverForm(form => ({ ...form, valid_until: event.target.value }))}
-              className="min-h-[44px] rounded-lg border border-surface-border bg-white p-2 text-sm"
+              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               title="วันสิ้นสุดสิทธิ์"
             />
           </div>
@@ -261,7 +260,7 @@ function DriverAuthorizationPanel({
           <select
             value={qualificationForm.driver_id}
             onChange={event => setQualificationForm(form => ({ ...form, driver_id: event.target.value }))}
-            className="min-h-[44px] w-full rounded-lg border border-surface-border bg-white p-2 text-sm"
+            className="min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
           >
             <option value="">เลือกคนขับ</option>
             {drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name}</option>)}
@@ -271,26 +270,26 @@ function DriverAuthorizationPanel({
               value={qualificationForm.license_no}
               onChange={event => setQualificationForm(form => ({ ...form, license_no: event.target.value }))}
               placeholder="เลขใบอนุญาต"
-              className="min-h-[44px] rounded-lg border border-surface-border bg-white p-2 text-sm"
+              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             />
             <input
               value={qualificationForm.license_type}
               onChange={event => setQualificationForm(form => ({ ...form, license_type: event.target.value }))}
               placeholder="ประเภท เช่น ท.2"
-              className="min-h-[44px] rounded-lg border border-surface-border bg-white p-2 text-sm"
+              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             />
             <input
               type="date"
               value={qualificationForm.license_expiry}
               onChange={event => setQualificationForm(form => ({ ...form, license_expiry: event.target.value }))}
-              className="min-h-[44px] rounded-lg border border-surface-border bg-white p-2 text-sm"
+              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               title="วันหมดอายุใบอนุญาต"
             />
             <input
               value={qualificationForm.provider_reference}
               onChange={event => setQualificationForm(form => ({ ...form, provider_reference: event.target.value }))}
               placeholder="เลขอ้างอิงขนส่ง"
-              className="min-h-[44px] rounded-lg border border-surface-border bg-white p-2 text-sm"
+              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             />
           </div>
           <button
@@ -341,8 +340,8 @@ function InspectionChecklistPanel({
                       type="button"
                       key={value}
                       onClick={() => setCheck(item.item_code, { result: value })}
-                      className={`min-h-[36px] rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                        selected ? RESULT_STYLE[value] : 'border-surface-border bg-white text-ink hover:bg-surface'
+                      className={`min-h-[44px] rounded-lg border px-3 py-1.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 ${
+                        selected ? RESULT_STYLE[value] : 'border-surface-border bg-surface-raised text-ink hover:bg-surface'
                       }`}
                     >
                       {value === 'PASS' ? 'ผ่าน' : value === 'FAIL' ? 'ไม่ผ่าน' : 'ไม่เกี่ยวข้อง'}
@@ -356,7 +355,7 @@ function InspectionChecklistPanel({
                 value={checks[item.item_code]?.notes || ''}
                 onChange={event => setCheck(item.item_code, { notes: event.target.value })}
                 placeholder="ระบุสิ่งที่ต้องแก้ไข"
-                className="mt-3 min-h-24 w-full rounded-lg border border-surface-border p-2 text-sm"
+                className="mt-3 min-h-24 w-full rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               />
             )}
           </div>
@@ -368,7 +367,7 @@ function InspectionChecklistPanel({
             <select
               value={form.result}
               onChange={event => setForm(current => ({ ...current, result: event.target.value }))}
-              className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border p-2"
+              className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             >
               <option value="PASSED">ผ่าน</option>
               <option value="NEEDS_FIX">ต้องแก้ไข</option>
@@ -382,7 +381,7 @@ function InspectionChecklistPanel({
               type="date"
               value={form.expiry_date}
               onChange={event => setForm(current => ({ ...current, expiry_date: event.target.value }))}
-              className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border p-2"
+              className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             />
           </label>
           <label className="text-sm font-medium text-ink">
@@ -390,7 +389,7 @@ function InspectionChecklistPanel({
             <input
               value={form.provider_reference}
               onChange={event => setForm(current => ({ ...current, provider_reference: event.target.value }))}
-              className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border p-2"
+              className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             />
           </label>
           <label className="text-sm font-medium text-ink">
@@ -398,7 +397,7 @@ function InspectionChecklistPanel({
             <input
               value={form.notes}
               onChange={event => setForm(current => ({ ...current, notes: event.target.value }))}
-              className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border p-2"
+              className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             />
           </label>
         </div>
@@ -591,7 +590,7 @@ export default function VerificationQueue() {
           <button
             type="button"
             onClick={loadQueue}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-blue-950 transition hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-surface-raised px-4 py-2 text-sm font-semibold text-ink transition hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             <RefreshCw className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
             รีเฟรชคิว
@@ -614,13 +613,13 @@ export default function VerificationQueue() {
                 value={filter.search}
                 onChange={event => setFilter(current => ({ ...current, search: event.target.value }))}
                 placeholder="ทะเบียน/เลขคำขอ/โรงเรียน"
-                className="min-h-[44px] w-full rounded-lg border border-surface-border pl-9 pr-3 text-sm"
+                className="min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised pl-9 pr-3 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
               />
             </label>
             <select
               value={filter.status}
               onChange={event => setFilter(current => ({ ...current, status: event.target.value }))}
-              className="min-h-[44px] rounded-lg border border-surface-border bg-white px-2 text-sm"
+              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised px-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
             >
               <option value="">ทุกสถานะ</option>
               {Object.entries(STATUS).map(([value, [label]]) => (
@@ -654,7 +653,7 @@ export default function VerificationQueue() {
             />
           </AppCard>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 motion-safe:animate-fade-in-up motion-reduce:animate-none">
             <VehicleDetailSummary detail={detail} onStart={start} busy={busy} attemptId={attemptId} />
             <DriverAuthorizationPanel
               drivers={drivers}

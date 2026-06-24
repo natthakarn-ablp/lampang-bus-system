@@ -16,9 +16,10 @@ import { safePct, kpiColor } from '../../utils/kpi';
 import { relativeTime } from '../../utils/datetime';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
 import {
-  AppCard, AlertBanner,
+  AppCard, AlertBanner, KPIGrid,
   RiskCard, DashboardSection, StatusBadge, AttentionCard,
 } from '../../components/ui';
+import { PageTransition } from '../../lib/motion';
 
 export default function ProvinceDashboard() {
   const [data, setData] = useState(null);
@@ -95,9 +96,10 @@ export default function ProvinceDashboard() {
     : null;
 
   return (
+    <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <header className="flex items-start justify-between gap-3">
+      <header className="flex items-start justify-between gap-3 motion-safe:animate-fade-in-up">
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">{PAGE_TITLES.PROVINCE_DASHBOARD}</h1>
           {dateLabel && <p className="text-sm text-ink-muted mt-1">ข้อมูล ณ {dateLabel}</p>}
@@ -116,21 +118,21 @@ export default function ProvinceDashboard() {
       <div className="flex flex-wrap items-stretch gap-2">
         <Link
           to="/province/live-vehicles"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
         >
           <Activity className="w-4 h-4" strokeWidth={2} />
           ตำแหน่งปัจจุบัน
         </Link>
         <Link
           to="/province/emergencies"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
         >
           <AlertTriangle className="w-4 h-4" strokeWidth={2} />
           เหตุฉุกเฉิน
         </Link>
         <Link
           to="/reports/daily"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
         >
           <FileText className="w-4 h-4" strokeWidth={2} />
           รายงาน
@@ -159,8 +161,10 @@ export default function ProvinceDashboard() {
           from Phase 10.7B-1; legacy totals (students/schools/affiliations)
           moved below the fold to "ภาพรวมระบบ" so the at-a-glance row stays
           action-driving. The 5 cards intentionally include zero student PII
-          and no transport-leaked counts. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          and no transport-leaked counts. KPIGrid staggers the tiles in as the
+          dashboard data lands (motion-with-evidence; reduced-motion users land
+          on the final state instantly). */}
+      <KPIGrid cols={3} gap="sm">
 
         {/* Card 1 — Fleet vs trackable. The 48-of-51 non-broadcast bucket
             is the headline adoption signal post-10.7B-1; surface it loudly. */}
@@ -304,7 +308,7 @@ export default function ProvinceDashboard() {
           )}
         </AppCard>
 
-      </div>
+      </KPIGrid>
 
       {/* Auxiliary system size — was hero cards 2/3 in the pre-10.7B-2 layout.
           Demoted below the action-driving hero because these numbers change
@@ -445,6 +449,7 @@ export default function ProvinceDashboard() {
         </ul>
       </AlertBanner>
     </div>
+    </PageTransition>
   );
 }
 
@@ -520,7 +525,7 @@ function ExecutiveAttentionPanel({ schools, incidents, vehicles, onJump }) {
                        : vehicles.length > 0                     ? 'warn'
                        :                                            'neutral';
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 motion-safe:stagger-children">
       <AttentionCard
         icon={Building2}
         title="โรงเรียนเสี่ยง"

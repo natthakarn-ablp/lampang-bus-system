@@ -11,23 +11,23 @@ export default function KpiCard({ label, pct, detail, sub }) {
   const raw = Number(pct);
   const value = Number.isFinite(raw) ? raw : 0;
   const color =
-    value >= 95   ? 'green'  :
-    value >= 85   ? 'yellow' :
-    value > 0     ? 'red'    :
-                    'gray';
+    value >= 95   ? 'success' :
+    value >= 85   ? 'warn'    :
+    value > 0     ? 'danger'  :
+                    'ink-muted';
 
   const colors = {
-    green:  'bg-green-50  border-green-200  text-green-700',
-    yellow: 'bg-yellow-50 border-yellow-200 text-yellow-700',
-    red:    'bg-red-50    border-red-200    text-red-700',
-    gray:   'bg-gray-50   border-gray-200   text-gray-700',
+    success:   'bg-success-soft  border-success/20  text-success',
+    warn:      'bg-warn-soft     border-warn/20     text-warn',
+    danger:    'bg-danger-soft   border-danger/20   text-danger',
+    'ink-muted': 'bg-surface    border-surface-border text-ink-muted',
   };
 
   const barColors = {
-    green:  'bg-green-500',
-    yellow: 'bg-yellow-500',
-    red:    'bg-red-500',
-    gray:   'bg-gray-300',
+    success:   'bg-success',
+    warn:      'bg-warn',
+    danger:    'bg-danger',
+    'ink-muted': 'bg-ink-muted',
   };
 
   return (

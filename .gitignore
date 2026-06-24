@@ -1,6 +1,12 @@
 node_modules/
 dist/
 .env
+# Local test env (contains test DB credentials) — never commit; but keep the
+# tracked .env.test.example template so the safe values are documented.
+.env.test
+**/.env.test
+!.env.test.example
+!**/.env.test.example
 .vscode/
 .claude/
 .DS_Store

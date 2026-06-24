@@ -9,6 +9,7 @@
  *
  * Exported functions:
  *  getDriverVehicle(pool, username)
+ *  resolveVehicleForEmergency(pool, user)  ← shift-independent (emergency path)
  *  getRoster(pool, vehicleId, session)
  *  processCheckin(pool, params)   ← CHECKED_IN
  *  processCheckout(pool, params)  ← CHECKED_OUT
@@ -65,6 +66,57 @@ async function getDriverVehicle(pool, userOrUsername) {
   const username = isObj ? (userOrUsername.username || '') : String(userOrUsername || '');
   const driverId = isObj ? (userOrUsername.driver_id ?? userOrUsername.driverId ?? null) : null;
 
+  // Optional rollout gate for the multi-vehicle driver pool. Once enabled,
+  // every operational endpoint that resolves a vehicle uses the driver's
+  // explicitly opened shift, so check-in/location/emergency writes are always
+  // attributed to the actual vehicle and driver for that round.
+  if (env.features.driverShiftSelection) {
+    if (driverId == null) {
+      throw makeError('Driver profile is not linked to this account', 409, 'DRIVER_PROFILE_NOT_LINKED');
+    }
+    const [activeShifts] = await pool.query(
+      `SELECT vos.id AS shift_id, v.id AS vehicle_id, v.plate_no
+         FROM vehicle_operating_shifts vos
+         JOIN vehicles v ON v.id = vos.vehicle_id AND v.is_deleted = FALSE
+        WHERE vos.driver_id = ? AND vos.status = 'OPEN' AND vos.ended_at IS NULL
+        LIMIT 2`,
+      [driverId]
+    );
+    if (activeShifts.length === 1) {
+      return {
+        vehicle_id: activeShifts[0].vehicle_id,
+        plate_no: activeShifts[0].plate_no,
+        driver_id: Number(driverId),
+        shift_id: activeShifts[0].shift_id ?? null,
+      };
+    }
+    if (activeShifts.length > 1) {
+      throw makeError('Multiple open shifts found for this driver', 409, 'MULTIPLE_OPEN_SHIFTS');
+    }
+    throw makeError('กรุณาเลือกรถและเริ่มรอบก่อนปฏิบัติงาน', 409, 'ACTIVE_SHIFT_REQUIRED');
+  }
+
+  // Shift feature OFF — resolve via relational link / legacy plate.
+  return resolveVehicleShiftIndependent(pool, { username, driverId });
+}
+
+// ─── resolveVehicleShiftIndependent ───────────────────────────────────────────
+
+/**
+ * Resolve a driver's vehicle WITHOUT requiring an open operating shift.
+ *
+ * This is exactly the resolution getDriverVehicle uses when the shift feature is
+ * OFF: prefer the relational path (driver_id → single active assignment → linked
+ * vehicle), else the legacy plate / normalized-plate path. Extracted so the
+ * emergency path (FIX 1) can reuse it even while FEATURE_DRIVER_SHIFT_SELECTION
+ * is ON — an emergency must never be gated on having opened a shift.
+ *
+ * @param {import('mysql2/promise').Pool} pool
+ * @param {{username:string, driverId:number|null}} ident
+ * @returns {{ vehicle_id, plate_no, driver_id, shift_id }}
+ * @throws 400 if no vehicle / no active assignment / ambiguous match
+ */
+async function resolveVehicleShiftIndependent(pool, { username = '', driverId = null } = {}) {
   // 1) Linked drivers resolve via the relational model (authoritative — works
   //    even if the login username no longer matches the plate text).
   if (driverId != null) {
@@ -78,7 +130,7 @@ async function getDriverVehicle(pool, userOrUsername) {
       [driverId]
     );
     if (linked.length === 1) {
-      return { vehicle_id: linked[0].vehicle_id, plate_no: linked[0].plate_no };
+      return { vehicle_id: linked[0].vehicle_id, plate_no: linked[0].plate_no, driver_id: Number(driverId), shift_id: null };
     }
     if (linked.length > 1) {
       // Never guess which vehicle — surface the misconfiguration.
@@ -115,11 +167,11 @@ async function getDriverVehicle(pool, userOrUsername) {
   // Confirm at least one active assignment exists for this vehicle (validates
   // the vehicle is still in-service this term).
   const [assignments] = await pool.query(
-    `SELECT 1
+    `SELECT driver_id
      FROM   driver_vehicle_assignments
      WHERE  vehicle_id = ?
        AND  is_active  = TRUE
-     LIMIT  1`,
+     LIMIT  2`,
     [vehicle_id]
   );
 
@@ -127,7 +179,39 @@ async function getDriverVehicle(pool, userOrUsername) {
     throw makeError('No active driver assignment found for vehicle ' + plate_no, 400);
   }
 
-  return { vehicle_id, plate_no };
+  const assignmentDriverId = assignments.length === 1 && assignments[0].driver_id != null
+    ? Number(assignments[0].driver_id)
+    : null;
+
+  return {
+    vehicle_id,
+    plate_no,
+    driver_id: Number.isFinite(assignmentDriverId) ? assignmentDriverId : null,
+    shift_id: null,
+  };
+}
+
+// ─── resolveVehicleForEmergency ───────────────────────────────────────────────
+
+/**
+ * Resolve a driver's vehicle for the EMERGENCY path (FIX 1, HIGH).
+ *
+ * Emergency reporting must NEVER be gated on having opened a shift. This resolver
+ * ignores FEATURE_DRIVER_SHIFT_SELECTION entirely and always uses the
+ * shift-independent resolution (relational link first, then legacy plate) — i.e.
+ * the same logic getDriverVehicle uses when the shift feature is OFF. This lets
+ * an emergency be filed even when the driver has no open shift (which otherwise
+ * makes getDriverVehicle throw ACTIVE_SHIFT_REQUIRED / MULTIPLE_OPEN_SHIFTS).
+ *
+ * @param {import('mysql2/promise').Pool} pool
+ * @param {{username:string, driver_id?:number}|string} userOrUsername
+ * @returns {{ vehicle_id, plate_no, driver_id, shift_id }}
+ */
+async function resolveVehicleForEmergency(pool, userOrUsername) {
+  const isObj = userOrUsername != null && typeof userOrUsername === 'object';
+  const username = isObj ? (userOrUsername.username || '') : String(userOrUsername || '');
+  const driverId = isObj ? (userOrUsername.driver_id ?? userOrUsername.driverId ?? null) : null;
+  return resolveVehicleShiftIndependent(pool, { username, driverId });
 }
 
 // ─── getRoster ───────────────────────────────────────────────────────────────
@@ -250,13 +334,25 @@ async function _buildCheckinTransaction(conn, {
   // retry can't create duplicate checkin_logs AND duplicate parent notifications.
   // A different status (board CHECKED_IN → dropoff CHECKED_OUT) is still allowed.
   const [dupLog] = await conn.query(
-    `SELECT id FROM checkin_logs
-     WHERE student_id = ? AND session = ? AND status = ? AND check_date = CURDATE()
+    `SELECT id, status FROM checkin_logs
+     WHERE student_id = ? AND session = ? AND check_date = CURDATE()
+     ORDER BY id DESC
      LIMIT 1`,
-    [student.id, session, status]
+    [student.id, session]
   );
   if (dupLog.length) {
-    throw makeError('รายการนี้ถูกบันทึกไปแล้ว', 409);
+    const lastStatus = dupLog[0].status;
+    if (lastStatus === status) {
+      // Exact duplicate — same status as the most recent log for today.
+      throw makeError('รายการนี้ถูกบันทึกไปแล้ว', 409);
+    }
+    // Phase 11A audit fix H2: reject invalid state transitions.
+    // CHECKED_OUT → CHECKED_IN is not allowed (student already dropped off).
+    // CHECKED_IN → CHECKED_IN is caught above. Only CHECKED_IN → CHECKED_OUT
+    // is a valid forward transition.
+    if (lastStatus === 'CHECKED_OUT' && status === 'CHECKED_IN') {
+      throw makeError('นักเรียนถูกส่งแล้วในรอบนี้ — ไม่สามารถเช็กอินซ้ำได้', 409);
+    }
   }
 
   // 2. Insert checkin_log
@@ -803,6 +899,7 @@ async function getNoShowStudents(pool, { schoolId, session, date = null }) {
 
 module.exports = {
   getDriverVehicle,
+  resolveVehicleForEmergency,
   getRoster,
   processCheckin,
   processCheckout,

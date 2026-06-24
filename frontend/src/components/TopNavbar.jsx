@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Menu, Bell, ChevronDown, LogOut, KeyRound } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import api from '../api/axios';
+import { PulseDot } from '../lib/motion';
 
 const ROLE_LABEL = {
   driver:      'คนขับรถ',
@@ -95,8 +96,9 @@ export default function TopNavbar({ onOpenDrawer }) {
             >
               <Bell className="w-5 h-5" strokeWidth={2} />
               {pending.total > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-blue-600 text-white text-[10px] font-semibold inline-flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] font-semibold inline-flex items-center justify-center">
                   {pending.total > 9 ? '9+' : pending.total}
+                  <PulseDot color="bg-danger" size="sm" className="-top-1 -right-1" />
                 </span>
               )}
             </button>

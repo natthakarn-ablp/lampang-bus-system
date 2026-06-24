@@ -27,7 +27,7 @@ export default function ParentConsentModal({ idToken, onConsented, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 sm:p-6 max-h-[85vh] overflow-y-auto">
+      <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-md p-5 sm:p-6 max-h-[85vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-gray-800 mb-3">{text?.title || 'ความยินยอมสำหรับผู้ปกครอง'}</h2>
         <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed mb-4">{text?.body || 'กำลังโหลด…'}</p>
 
@@ -40,7 +40,7 @@ export default function ParentConsentModal({ idToken, onConsented, onClose }) {
 
         <div className="flex gap-2">
           <button onClick={confirm} disabled={!checked || busy}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-lg transition">
+            className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-lg transition">
             {busy ? 'กำลังบันทึก…' : 'ยืนยันความยินยอม'}
           </button>
           <button onClick={onClose} className="px-4 text-gray-500 hover:text-gray-700 text-sm">ไม่ใช่ตอนนี้</button>

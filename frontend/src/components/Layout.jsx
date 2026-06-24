@@ -44,7 +44,12 @@ export default function Layout({ children, bottomNav = null }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopNavbar onOpenDrawer={openDrawer} />
         <main className="flex-1 overflow-y-auto bg-surface">
-          {children}
+          {/* App-wide route transition: content fades in on navigation. Keyed by
+              pathname so each route re-triggers; reduced-motion users get it
+              instantly (motion-safe + the global prefers-reduced-motion rule). */}
+          <div key={location.pathname} className="motion-safe:animate-fade-in">
+            {children}
+          </div>
         </main>
         {bottomNav}
       </div>

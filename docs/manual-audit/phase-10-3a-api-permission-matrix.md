@@ -50,6 +50,15 @@
 | `/research-export` | GET | admin | none | high | yes | CSV/Excel/JSON; contains role-action telemetry |
 | `/research-export/preview` | GET | admin | none | low | yes | row-count preview |
 | `/live-vehicles` | GET | admin | none | med | yes | live GPS aggregate |
+| `/transfer-requests` | GET | admin | none | med | yes | **Phase 10.13B** — list pending transfer requests |
+| `/transfer-requests/:id/approve` | POST | admin | none | high | yes | **Phase 10.13B** — Option B: soft-close source + create target; idempotent; blocks on duplicate student code |
+| `/transfer-requests/:id/reject` | POST | admin | none | high | yes | **Phase 10.13B** — requires reason |
+| `/vehicle-requests` | GET | admin | none | med | yes | **Phase 10.13B** — list vehicle requests (RESTORE / use / add / inspect) |
+| `/vehicle-requests/:id/approve` | POST | admin | none | high | yes | **Phase 10.13B** — RESTORE only meaningful action; blocks on duplicate plate |
+| `/driver-integrity` | GET | admin | none | low | yes | **Phase 10.13B** — dashboard: orphan drivers/vehicles, duplicate accounts |
+| `/driver-integrity/restore` | POST | admin | none | high | yes | **Phase 10.13B** — restore canonical driver account only |
+| `/driver-integrity/move` | POST | admin | none | high | yes | **Phase 10.13B** — end current assignment + create new |
+| `/driver-integrity/disable` | POST | admin | none | high | yes | **Phase 10.13B** — end assignment + disable account (no history delete) |
 
 ## /api/province/*
 
@@ -69,6 +78,14 @@
 | `/audit-logs` | GET | province, admin | none | med | yes | CSV export |
 | `/live-vehicles` | GET | province, admin | none | med | yes | live GPS (audited) |
 | `/pickup-map` | GET | province, admin | none | med | yes | read-only province-wide |
+
+## /api/readiness/*
+
+`router.use(authenticate, requireRole('province','admin'))` at mount. Read-only, no PII.
+
+| Endpoint | Method | Allowed roles | Scope | Sensitivity | Manual | Risk note |
+|---|---|---|---|---|---|---|
+| `/` | GET | province, admin | none | low | yes | **2026-06-22** — deployment readiness checklist (no PII) |
 
 ## /api/affiliation/*
 
@@ -121,6 +138,7 @@
 | `/accounts` | GET | school, admin | JWT.scope_id | med | yes | grade-teacher account list |
 | `/accounts` | POST | school (full), admin | JWT.scope_id | high | yes | create grade-teacher account |
 | `/accounts/:id` | PUT/DELETE | school (full), admin | JWT.scope_id | high | yes | edit / soft-delete |
+| `/vehicles/:id/verify` | POST | school (full), admin | JWT.scope_id | high | yes | **2026-06-22** — submit vehicle for verification (PENDING_VERIFICATION) |
 
 ## /api/driver/*
 
@@ -142,6 +160,9 @@
 | `/upload-photo` | POST | driver | JWT.user_id | high | yes | multer; image only |
 | `/leaves` | GET/POST | driver | JWT.user_id | med | yes | leave requests |
 | `/roster-requests` | GET | driver | JWT vehicle | med | yes | pending requests for vehicle |
+| `/shift` | GET | driver | JWT.user_id | low | yes | **2026-06-22** — current/active shift status |
+| `/shift/start` | POST | driver | JWT.user_id + vehicle | high | yes | **2026-06-22** — start shift; blocks if ACTIVE shift exists |
+| `/shift/end` | POST | driver | JWT.user_id + vehicle | high | yes | **2026-06-22** — end active shift (COMPLETED) |
 
 ## /api/transport/*
 
@@ -158,6 +179,9 @@
 | `/inspections` | POST | transport, admin | none | high | yes | record new inspection |
 | `/inspections/:id` | PUT | transport, admin | none | high | yes | edit existing |
 | `/pickup-map` | GET | transport, admin | none | med | yes | read-only overlay |
+| `/verification-queue` | GET | transport, admin | none | low | yes | **2026-06-22** — list vehicles pending verification |
+| `/verification-queue/:id/approve` | POST | transport, admin | none | high | yes | **2026-06-22** — approve verification + audit log |
+| `/verification-queue/:id/reject` | POST | transport, admin | none | high | yes | **2026-06-22** — reject verification + reason + audit log |
 
 ## /api/reports/*
 
@@ -207,9 +231,9 @@ Public; identifies caller via LINE signature.
 
 ## Summary stats
 
-- **Total endpoints inventoried:** ~110
-- **Endpoints user-manual-relevant:** ~85
-- **Endpoints admin-only:** ~25
+- **Total endpoints inventoried:** ~130 (post-2026-06-22 additions: transfer-requests, vehicle-requests, driver-integrity, readiness, shift, verification-queue)
+- **Endpoints user-manual-relevant:** ~100
+- **Endpoints admin-only:** ~35
 - **Endpoints with bulk import:** 4 (school students, school vehicles, affiliation school-accounts preview, affiliation school-accounts commit)
 - **Endpoints with file export:** 8 (CSV / Excel / PDF across admin, province, affiliation, school, reports)
 - **Endpoints with PII sanitization explicitly applied:** 1 (province `/vehicles` strips driver/attendant/owner phone)

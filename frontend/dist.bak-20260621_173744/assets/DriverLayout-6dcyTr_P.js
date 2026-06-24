@@ -1,0 +1,1 @@
+import{j as t,L as o}from"./index-H_tNlNvV.js";import{M as r}from"./MobileBottomNav-B2sd0B7o.js";import{O as a}from"./react-vendor-C-PLMXBs.js";import"./lucide-sxRlRDOU.js";function u(){return t.jsx(o,{bottomNav:t.jsx(r,{}),children:t.jsx(a,{})})}export{u as default};

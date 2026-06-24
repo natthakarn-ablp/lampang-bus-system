@@ -15,7 +15,9 @@ const STAFF_ROLES = new Set(['transport', 'admin', 'province']);
 async function getVehicleByQrToken(qrToken) {
   if (!qrToken || typeof qrToken !== 'string') return null;
   const [[v]] = await pool.query(
-    `SELECT id, plate_no, vehicle_type, insurance_status, insurance_expiry, is_deleted
+    `SELECT id, plate_no, vehicle_type, insurance_status, insurance_expiry,
+            registration_expiry, compulsory_insurance_expiry, tax_expiry,
+            verification_status, verification_updated_at, is_deleted
        FROM vehicles
       WHERE qr_token = ? AND qr_revoked_at IS NULL AND COALESCE(is_deleted, FALSE) = FALSE
       LIMIT 1`,
@@ -76,14 +78,55 @@ async function deriveDriverDisplayStatus(driverId) {
 async function getLatestInspectionStatus(vehicleId) {
   // Deterministic tie-break on id DESC so two same-day inspections never let an
   // older same-day PASSED mask a newer FAILED (inspection_date is day-granularity).
+  const [[shared]] = await pool.query(
+    `SELECT ia.result, ia.inspection_date, ia.expiry_date
+       FROM inspection_attempts ia
+       JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+      WHERE a.vehicle_id = ? AND ia.result <> 'IN_PROGRESS' AND ia.finalized_at IS NOT NULL
+      ORDER BY ia.inspection_date DESC, ia.finalized_at DESC
+      LIMIT 1`,
+    [vehicleId]
+  );
+  if (shared) {
+    const expired = shared.expiry_date ? new Date(shared.expiry_date) < new Date() : false;
+    return {
+      status: shared.result,
+      expired,
+      inspection_date: shared.inspection_date || null,
+      expiry_date: shared.expiry_date || null,
+      source: 'SHARED_VERIFICATION',
+    };
+  }
   const [[row]] = await pool.query(
-    `SELECT result, expiry_date FROM vehicle_inspections
+    `SELECT result, inspection_date, expiry_date FROM vehicle_inspections
       WHERE vehicle_id = ? ORDER BY inspection_date DESC, id DESC LIMIT 1`,
     [vehicleId]
   );
   if (!row) return { status: 'PENDING', expired: false };
   const expired = row.expiry_date ? new Date(row.expiry_date) < new Date() : false;
-  return { status: row.result, expired };
+  return {
+    status: row.result, expired,
+    inspection_date: row.inspection_date || null,
+    expiry_date: row.expiry_date || null,
+    source: 'LEGACY_INSPECTION',
+  };
+}
+
+function documentStatus(expiry, today = new Date()) {
+  if (!expiry) return 'MISSING';
+  const end = new Date(expiry);
+  if (end < today) return 'EXPIRED';
+  const days = Math.ceil((end - today) / 86400000);
+  return days <= 30 ? 'EXPIRING' : 'VALID';
+}
+
+function buildDocumentStatus(vehicle) {
+  return {
+    insurance: documentStatus(vehicle.insurance_expiry),
+    registration: documentStatus(vehicle.registration_expiry),
+    compulsory_insurance: documentStatus(vehicle.compulsory_insurance_expiry),
+    tax: documentStatus(vehicle.tax_expiry),
+  };
 }
 
 function deriveInsuranceStatus(vehicle) {
@@ -142,6 +185,10 @@ async function buildPublicView(vehicle, ctx) {
     vehicle_type: vehicle.vehicle_type || null,
     inspection_status: ctx.inspection.status,
     inspection_expired: ctx.inspection.expired,
+    last_inspection_date: ctx.inspection.inspection_date || null,
+    inspection_expiry: ctx.inspection.expiry_date || null,
+    eligibility_status: vehicle.verification_status || 'UNVERIFIED',
+    document_status: buildDocumentStatus(vehicle),
     insurance_status: deriveInsuranceStatus(vehicle),
     driver_status: ctx.driverStatus, // normal | suspended | no_driver
     // No driver name, no phone, no owner info, no history.
@@ -219,4 +266,5 @@ module.exports = {
   getVehicleByQrToken, isParentLinkedToVehicle, hasGrantedParentConsent, resolveAccessLevel,
   buildPublicView, buildParentView, buildStaffView, buildViewForLevel,
   deriveDriverDisplayStatus, resolveEmergencyContact, getActiveDriver, getLatestInspectionStatus,
+  buildDocumentStatus,
 };

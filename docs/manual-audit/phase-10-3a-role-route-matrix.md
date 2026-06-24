@@ -34,6 +34,10 @@
 | `/admin/executive` | สรุปผู้บริหาร | ExecutiveSummary | Executive summary view | view summary, print | `/api/admin/evaluation-summary` | full | — | — | — | — | **M** |
 | `/admin/system-health` | สุขภาพระบบ | SystemHealth | System health gauge | view operational metrics | `/api/admin/system-health` | full | — | — | — | — | **H** |
 | `/admin/executive-print` | — | ExecutivePrint | Printable executive summary | print only | `/api/admin/evaluation-summary` | full | — | — | — | ✓ | **L** |
+| `/admin/readiness` | ความพร้อมเปิดใช้งาน | AdminReadiness | Deployment readiness dashboard (2026-06-22) | view (read-only, no PII) | `/api/readiness` | full | — | — | — | — | **M** |
+| `/admin/transfer-requests` | คำขอโอนย้ายนักเรียน | AdminTransferRequests | Student transfer approvals (Phase 10.13B) | approve / reject (Option B) | `/api/admin/transfer-requests*` | full | — | ✓ | — | — | **H** |
+| `/admin/vehicle-requests` | คำขอเกี่ยวกับรถ | AdminVehicleRequests | Vehicle request approvals (Phase 10.13B) | approve RESTORE / informational | `/api/admin/vehicle-requests*` | full | — | ✓ | — | — | **H** |
+| `/admin/driver-integrity` | สุขภาพข้อมูลคนขับ | AdminDriverIntegrity | Driver data health dashboard (Phase 10.13B) | restore / move / disable driver | `/api/admin/driver-integrity*` | full | ✓ | ✓ | ✓ | — | **H** |
 
 **Sidebar groups for admin:** ภาพรวม / จัดการระบบ / ตรวจสอบและสนับสนุน / มุมมองจังหวัด (cross-link) / รายงานและวิเคราะห์.
 
@@ -51,6 +55,7 @@
 | `/province/pickup-map` | แผนที่จุดรับส่ง | ProvincePickupMap | Read-only pickup-point map | view, SearchableSelect filters | `/api/province/pickup-map` | full | — | — | — | — | **M** |
 | `/province/emergencies` | เหตุฉุกเฉิน | ProvEmergencyList | Emergency reports | view | `/api/province/emergencies` | full | — | — | — | — | **M** |
 | `/province/audit-log` | ประวัติการแก้ไข | ProvAuditLog | Province audit log | filter, CSV export | `/api/province/audit-logs` | full | — | — | — | ✓ | **H** |
+| `/province/readiness` | ความพร้อมเปิดใช้งาน | ProvReadiness | Deployment readiness (2026-06-22) | view (read-only, no PII) | `/api/readiness` | full | — | — | — | — | **M** |
 
 ## Affiliation (`role='affiliation'`)
 
@@ -81,6 +86,7 @@
 | `/school/teacher-accounts` | บัญชีครูประจำสายชั้น | SchoolTeacherAccounts | Grade-teacher account CRUD | create / edit / delete | `/api/school/accounts*` | own school (full only) | ✓ | ✓ | ✓ | — | **M** |
 | `/school/emergencies` | เหตุฉุกเฉิน | EmergencyList | Emergency reports | view | `/api/school/emergencies` | own school | — | — | — | — | **M** |
 | `/school/audit-log` | ประวัติการแก้ไข | SchoolAuditLog | School audit log | view, CSV export | `/api/school/audit-log` | own school (full only) | — | — | — | ✓ | **L** |
+| `/school/vehicle-verification` | ส่งตรวจรับรองรถ | SchoolVehicleVerification | Submit vehicle for verification (2026-06-22) | submit / view status | `/api/school/vehicles/:id/verify` | own school (full only) | ✓ | — | — | — | **M** |
 
 **Grade-teacher (school sub-account with `grade_scope` set):** sees only ภาพรวม / นักเรียนและรถรับส่ง / แผนที่และตำแหน่ง / ติดตามและบันทึก (sub-set). **Blocked routes:** `/school/audit-log`, `/school/bulk-vehicles`, `/school/teacher-accounts`. Backend enforces via `requireFullSchoolScope()` middleware.
 
@@ -95,6 +101,7 @@
 | `/driver/pretrip` | — (linked from dashboard) | DriverPretrip | Pre-trip checklist | record pre-trip status | `/api/driver/pretrip*` (verify) | own vehicle | ✓ | — | — | — | **M** |
 | `/driver/emergency` | แจ้งเหตุฉุกเฉิน | EmergencyPage | Emergency report | submit | `/api/driver/emergency` | own vehicle | ✓ | — | — | — | **H** |
 | `/driver/profile` | ข้อมูลคนขับ | DriverProfile | Driver profile + photo + leaves | view / edit photo+phone / request leave | `/api/driver/profile`, `/upload-photo`, `/leaves*` | own driver | — | ✓ | — | — | **M** |
+| `/driver/shift` | เลือกรถและเริ่มรอบ | DriverShift | Shift selection + start/end round (2026-06-22) | start / end shift (own vehicle) | `/api/driver/shift*` | own driver | ✓ | ✓ | — | — | **H** |
 
 Background: `POST /api/driver/location` (rate-limited 6/min) is called automatically by the driver app to feed live-vehicle maps.
 
@@ -106,6 +113,7 @@ Background: `POST /api/driver/location` (rate-limited 6/min) is called automatic
 | `/transport/vehicles` | — (linked from dashboard) | TransportVehicleList | Vehicle list with inspection status | filter by status + create new vehicle | `/api/transport/vehicles*`, `/api/transport/schools` | full | ✓ | — | — | — | **H** |
 | `/transport/inspections` | บันทึกตรวจสภาพ | InspectionForm | Inspection records | create / edit / view | `/api/transport/inspections*` | full | ✓ | ✓ | — | — | **H** |
 | `/transport/pickup-map` | แผนที่จุดรับส่ง | TransportPickupMap | Read-only pickup map (overlay) | view | `/api/transport/pickup-map` | full | — | — | — | — | **L** |
+| `/transport/verification-queue` | คิวตรวจรับรองรถ | TransportVerificationQueue | Vehicle verification queue (2026-06-22) | approve / reject verification | `/api/transport/verification-queue*` | full | — | ✓ | — | — | **H** |
 
 ## Parent / LINE OA (`no JWT — line_user_id`)
 

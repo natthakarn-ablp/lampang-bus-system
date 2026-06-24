@@ -149,6 +149,41 @@ router.get('/vehicles', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── GET /api/transport/vehicles/pending (CLAUDE.md §5.6 — รถที่ยังไม่ตรวจ) ──
+// MUST be declared BEFORE '/vehicles/:id' so Express does not capture
+// "pending" as the :id param (which would 404 "Vehicle not found").
+// Lists the vehicles the dashboard counts under `not_inspected` (vehicles with
+// no inspection row). Pass ?include_pending=true to also include vehicles whose
+// latest inspection result is PENDING (the dashboard's `pending` KPI).
+router.get('/vehicles/pending', async (req, res, next) => {
+  try {
+    const { page, per_page, include_pending } = req.query;
+    const data = await transportSvc.getPendingVehicles({
+      page: parseInt(page) || 1,
+      per_page: parseInt(per_page) || 50,
+      includePending: include_pending === 'true' || include_pending === '1',
+    });
+    sendSuccess(res, data.vehicles, 'OK', data.meta);
+  } catch (err) { next(err); }
+});
+
+// ─── GET /api/transport/vehicles/expiring (CLAUDE.md §5.6 — รถที่ใกล้หมดอายุ) ─
+// MUST be declared BEFORE '/vehicles/:id' (same capture-collision reason).
+// Default lists vehicles whose insurance/registration/พ.ร.บ./tax expires within
+// 30 days (matches the dashboard `expiring_docs_count`). Pass ?expired=true to
+// list already-expired documents instead (matches `expired_docs_count`).
+router.get('/vehicles/expiring', async (req, res, next) => {
+  try {
+    const { page, per_page, expired } = req.query;
+    const data = await transportSvc.getExpiringVehicles({
+      page: parseInt(page) || 1,
+      per_page: parseInt(per_page) || 50,
+      expired: expired === 'true' || expired === '1',
+    });
+    sendSuccess(res, data.vehicles, 'OK', data.meta);
+  } catch (err) { next(err); }
+});
+
 // ─── GET /api/transport/vehicles/:id ────────────────────────────────────────
 router.get('/vehicles/:id', async (req, res, next) => {
   try {

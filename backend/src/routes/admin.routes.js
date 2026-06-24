@@ -545,7 +545,10 @@ router.get('/audit-logs', async (req, res, next) => {
 
     // Phase 10.13B-1 — redact/mask PII (phones, LINE ids, secrets) in the
     // old/new audit values before returning JSON, matching the CSV export.
-    const { redactAuditValue } = require('../utils/exportSecurity');
+    // redactAuditValue is imported once at module scope (top of file). Do NOT
+    // re-declare it here: a function-scoped `const` shadowed it across the whole
+    // handler and put the CSV branch above in a temporal dead zone, throwing
+    // "Cannot access 'redactAuditValue' before initialization" (500 on ?format=csv).
     const redactVal = (v) => {
       if (v === null || v === undefined) return v;
       const s = redactAuditValue(v);
@@ -875,7 +878,7 @@ router.get('/research-export', async (req, res, next) => {
          ORDER BY al.created_at`,
         [from, to]
       );
-      result.audit_logs = rows;
+      result.audit_logs = rows.map((r) => ({ ...r, new_value: r.new_value ? redactAuditValue(r.new_value) : null }));
     }
 
     if (include.includes('exports')) {
@@ -888,7 +891,7 @@ router.get('/research-export', async (req, res, next) => {
          ORDER BY al.created_at`,
         [from, to]
       );
-      result.export_evidence = rows;
+      result.export_evidence = rows.map((r) => ({ ...r, new_value: r.new_value ? redactAuditValue(r.new_value) : null }));
     }
 
     if (include.includes('summary')) {

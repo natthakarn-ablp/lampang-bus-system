@@ -10,6 +10,7 @@ import {
   AppCard, AlertBanner, KPIGrid, KPIStat, DashboardSection, AttentionCard,
 } from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
+import { PageTransition } from '../../lib/motion';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -71,9 +72,10 @@ export default function AdminDashboard() {
                        || recentDeletes.total > 0;
 
   return (
+    <PageTransition>
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">ศูนย์ควบคุมระบบ</h1>
+      <header className="motion-safe:animate-fade-in-up">
+        <h1 className="text-2xl sm:text-3xl font-bold text-ink leading-tight">ศูนย์ควบคุมระบบ</h1>
         <p className="text-sm text-ink-muted mt-1">ภาพรวมระบบรถรับส่งนักเรียนจังหวัดลำปาง</p>
       </header>
 
@@ -131,6 +133,7 @@ export default function AdminDashboard() {
         </DashboardSection>
       )}
     </div>
+    </PageTransition>
   );
 }
 
@@ -200,8 +203,9 @@ function ActionCard({ icon: Icon, title, desc, onClick }) {
     <AppCard
       as="button"
       padding="md"
+      interactive
       onClick={onClick}
-      className="text-left hover:shadow-elevate hover:-translate-y-0.5 transition cursor-pointer"
+      className="text-left"
     >
       <div className="flex items-center gap-3">
         <span className="shrink-0 w-10 h-10 rounded-xl bg-brand-50 inline-flex items-center justify-center">

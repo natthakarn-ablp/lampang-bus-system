@@ -15,7 +15,7 @@
 
 require('dotenv').config();
 const request = require('supertest');
-const mysql   = require('mysql2/promise');
+const { getTestConnection } = require('./dbHelper');
 const app     = require('../src/app');
 
 const DRIVER          = { username: '__TEST PLATE 9999', password: 'testpass123' };
@@ -23,15 +23,11 @@ const TEST_STUDENT_ID = 99999;
 let driverToken = '';
 let schoolUserId = null;
 
+// Guarded connection factory (defense-in-depth, issue #8): getTestConnection()
+// asserts the disposable-test-DB guard before opening the socket. Returns a
+// Promise<Connection>, so existing `await db()` call sites are unchanged.
 function db() {
-  return mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    database: process.env.DB_NAME || 'lampang_bus',
-    user: process.env.DB_USER || 'lampang',
-    password: process.env.DB_PASSWORD || '',
-    charset: 'utf8mb4',
-  });
+  return getTestConnection();
 }
 
 async function login(creds) {

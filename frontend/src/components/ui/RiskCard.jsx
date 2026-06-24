@@ -1,10 +1,14 @@
 import { ChevronRight } from 'lucide-react';
 import AppCard from './AppCard';
+import StatusBadge from './StatusBadge';
 
+// Risk level conveyed by a semantic-tinted icon chip + a labelled StatusBadge —
+// never a decorative left bar or color alone (DESIGN.md: status needs text/icon,
+// no border-left accent strips).
 const LEVEL = {
-  low:    { accent: 'before:bg-success', dot: 'bg-success', label: 'ปกติ',    text: 'text-success' },
-  medium: { accent: 'before:bg-warn',    dot: 'bg-warn',    label: 'เฝ้าระวัง', text: 'text-warn' },
-  high:   { accent: 'before:bg-danger',  dot: 'bg-danger',  label: 'เสี่ยงสูง', text: 'text-danger' },
+  low:    { chip: 'bg-success-soft text-success', badge: 'success', label: 'ปกติ' },
+  medium: { chip: 'bg-warn-soft    text-warn',    badge: 'warn',    label: 'เฝ้าระวัง' },
+  high:   { chip: 'bg-danger-soft  text-danger',  badge: 'danger',  label: 'เสี่ยงสูง' },
 };
 
 export default function RiskCard({
@@ -24,23 +28,21 @@ export default function RiskCard({
     <AppCard
       as={Tag}
       padding="md"
+      interactive={interactive}
       onClick={onClick}
-      className={`relative pl-5 text-left flex items-center gap-3 before:content-[''] before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-r-full ${style.accent} ${interactive ? 'hover:shadow-elevate transition cursor-pointer' : ''} ${className}`}
+      className={`flex items-center gap-3 text-left ${className}`}
     >
       {Icon && (
-        <span className="shrink-0 w-10 h-10 rounded-xl bg-surface inline-flex items-center justify-center text-ink-muted">
+        <span className={`shrink-0 w-10 h-10 rounded-xl inline-flex items-center justify-center ${style.chip}`}>
           <Icon className="w-5 h-5" strokeWidth={2} aria-hidden="true" />
         </span>
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide ${style.text}`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-            {style.label}
-          </span>
-          {meta && <span className="text-[11px] text-ink-muted">· {meta}</span>}
+          <StatusBadge variant={style.badge} size="sm">{style.label}</StatusBadge>
+          {meta && <span className="text-[11px] text-ink-muted">{meta}</span>}
         </div>
-        {title && <p className="text-sm font-semibold text-ink truncate mt-0.5">{title}</p>}
+        {title && <p className="mt-1 text-sm font-semibold text-ink truncate">{title}</p>}
         {subtitle && <p className="text-xs text-ink-muted truncate">{subtitle}</p>}
       </div>
       {interactive && (

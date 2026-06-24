@@ -1,0 +1,1 @@
+import{j as t}from"./index-H_tNlNvV.js";import{r as n}from"./react-vendor-C-PLMXBs.js";const r={none:"",sm:"p-3",md:"p-4",lg:"p-6"},i=n.forwardRef(function({as:o="div",padding:s="lg",className:a="",children:e,...d},p){return t.jsx(o,{ref:p,className:`bg-surface-raised border border-surface-border rounded-2xl shadow-soft ${r[s]||r.lg} ${a}`,...d,children:e})});export{i as A};

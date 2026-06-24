@@ -20,6 +20,10 @@
 | `emergency_logs` | เหตุฉุกเฉิน + ผลดำเนินการ | 0 records | Incident response, resolution |
 | `line_message_logs` | ข้อความ LINE + ผลลัพธ์ | 43 records | Parent engagement, binding rate |
 | `users` | last_login, is_active, password_changed_at | 66 users | Active rate, adoption rate |
+| `driver_shifts` *(2026-06-22)* | รอบขับ + รถ + เวลาเริ่ม/สิ้นสุด + สถานะ | 0 records (new) | Shift coverage, round completion rate, driver-vehicle pairing |
+| `vehicle_verifications` *(2026-06-22)* | คำขอตรวจรับรองรถ + ผล + ผู้ตรวจ | 0 records (new) | Verification throughput, approval rate, queue backlog |
+| `transfer_requests` *(Phase 10.13B)* | คำขอโอนย้ายนักเรียน + ผล + เหตุผล | 0 records (new) | Transfer volume, approval rate, duplicate-code blocks |
+| `vehicle_requests` *(Phase 10.13B)* | คำขอเกี่ยวกับรถ (RESTORE/use/add/inspect) | 0 records (new) | Restore frequency, request type distribution |
 
 ---
 
@@ -32,6 +36,9 @@
 | เวลาเช็กอินเฉลี่ย | `daily_status.morning_ts` | AVG(TIME(morning_ts)) per vehicle |
 | ความสม่ำเสมอ (% วันที่ทำ) | `daily_status` + `checkin_logs` | COUNT DISTINCT check_date per driver / total working days |
 | อัตราการลา | `student_leaves` | COUNT per vehicle per month |
+| ความครบถ้วนรอบขับ (2026-06-22) | `driver_shifts` | SUM(status='COMPLETED') / COUNT(*) per date |
+| เวลาเริ่มรอบเฉลี่ย | `driver_shifts.started_at` | AVG(TIME(started_at)) per session |
+| รอบที่เริ่มแล้วไม่จบ | `driver_shifts` WHERE status='ACTIVE' AND started_at < today | COUNT (orphan shifts) |
 
 ### School Efficiency
 | ตัวชี้วัด | แหล่งข้อมูล | SQL/Logic |
@@ -46,6 +53,9 @@
 | อัตราการตรวจสภาพรถ | `vehicle_inspections` vs `vehicles` | inspected_count / total_vehicles |
 | อัตราผ่านการตรวจ | `vehicle_inspections` | SUM(result='PASSED') / COUNT(*) |
 | ความครอบคลุมประกันภัย | `vehicles` | SUM(insurance_expiry > NOW()) / COUNT(*) |
+| อัตราตรวจรับรองรถ (2026-06-22) | `vehicle_verifications` vs `vehicles` | verified_count / total_vehicles |
+| คิวตรวจรับรองค้าง | `vehicle_verifications` WHERE status='PENDING' | COUNT + AVG wait time |
+| อัตราอนุมัติรับรอง | `vehicle_verifications` | SUM(result='APPROVED') / COUNT(*) |
 
 ### Admin Efficiency
 | ตัวชี้วัด | แหล่งข้อมูล | SQL/Logic |
@@ -53,6 +63,10 @@
 | Active account rate | `users` | SUM(is_active AND last_login IS NOT NULL) / COUNT(*) |
 | Password reset frequency | `audit_logs` WHERE new_value LIKE '%reset_password%' | COUNT per month |
 | Login success/failure ratio | `audit_logs` WHERE action='LOGIN' | COUNT by result |
+| อัตราอนุมัติโอนย้าย (Phase 10.13B) | `transfer_requests` | SUM(status='APPROVED') / COUNT(*) |
+| ระยะเวลาตอบคำขอโอนย้าย | `transfer_requests` | AVG(approved_at - created_at) |
+| อัตรากู้คืนรถ (Phase 10.13B) | `vehicle_requests` WHERE type='RESTORE' | SUM(status='APPROVED') / COUNT(*) |
+| สุขภาพข้อมูลคนขับ (Phase 10.13B) | `drivers` + `driver_vehicle_assignments` | orphan drivers / duplicate accounts / unassigned |
 
 ### Province/Affiliation Effectiveness
 | ตัวชี้วัด | แหล่งข้อมูล | SQL/Logic |
@@ -155,15 +169,19 @@
 |------|------------------|----------|--------|
 | Driver | อัตราเช็กอินรายวัน | daily_status.morning_done | ✅ มีแล้ว |
 | Driver | ความสม่ำเสมอ | COUNT DISTINCT dates in daily_status | ✅ มีแล้ว |
+| Driver | ความครบถ้วนรอบขับ (2026-06-22) | driver_shifts.status='COMPLETED' | ✅ มีแล้ว (ใหม่) |
 | School | ความครบถ้วนข้อมูล | students.vehicle_id IS NOT NULL | ✅ มีแล้ว |
 | School | ภาระงานลดลง | audit_logs IMPORT/UPDATE count per month | ✅ มีแล้ว |
 | Transport | อัตราตรวจสภาพ | vehicle_inspections vs vehicles | ✅ มีแล้ว |
+| Transport | อัตราตรวจรับรองรถ (2026-06-22) | vehicle_verifications vs vehicles | ✅ มีแล้ว (ใหม่) |
 | Transport | Risk closure time | risk_cases.opened_at → resolved_at | ❌ ต้องเพิ่ม table |
 | Province | Dashboard ใช้ก่อนประชุม | audit_logs dashboard_view | ❌ ต้องเพิ่ม event |
 | Province | Policy response time | audit_logs action='ACKNOWLEDGE' | ❌ ต้องเพิ่ม action button |
 | Affiliation | Proactive detection | audit_logs dashboard_view before emergency | ❌ ต้องเพิ่ม event |
 | Admin | Active account rate | users.last_login IS NOT NULL | ✅ มีแล้ว |
 | Admin | Data health score | computed from multiple tables | ❌ ต้องคำนวณ |
+| Admin | อัตราอนุมัติโอนย้าย (Phase 10.13B) | transfer_requests | ✅ มีแล้ว (ใหม่) |
+| Admin | สุขภาพข้อมูลคนขับ (Phase 10.13B) | drivers + driver_vehicle_assignments | ✅ มีแล้ว (ใหม่) |
 
 ---
 
@@ -171,11 +189,12 @@
 
 | ชั้น | สถานะ | สิ่งที่ต้องทำ |
 |------|-------|-------------|
-| **Operational** | ✅ ครบ | ทุก role ใช้งานได้จริง |
-| **Evidence** | ⚠️ บางส่วน | มี audit_logs + checkin_logs แต่ยังไม่มี dashboard_view event, risk_cases, incident status |
+| **Operational** | ✅ ครบ | ทุก role ใช้งานได้จริง + ฟีเจอร์ใหม่ 2026-06-22 (verification, shift, transfer, driver-integrity) |
+| **Evidence** | ⚠️ บางส่วน | มี audit_logs + checkin_logs + driver_shifts + vehicle_verifications + transfer_requests + vehicle_requests (ใหม่) แต่ยังไม่มี dashboard_view event, risk_cases, incident status |
 | **Evaluation** | ❌ ยังไม่มี | ต้องสร้าง evaluation dashboard + research export |
 | **Research** | ❌ ยังไม่มี | ต้องสร้าง anonymized export + baseline snapshot |
 
 ---
 
 *เอกสารนี้จัดทำเพื่อรองรับการวิจัยเชิงประเมินผลระบบ — เมษายน 2569*
+*อัปเดตล่าสุด: 2026-06-23 — เพิ่ม evidence layer สำหรับฟีเจอร์ใหม่ (driver shifts, vehicle verification, transfer/vehicle requests, driver integrity)*

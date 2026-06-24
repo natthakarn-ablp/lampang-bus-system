@@ -45,7 +45,7 @@ export default function StudentTransferModal({ student, onClose, onChanged }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-gray-800 mb-1">ขอโอนย้ายนักเรียน</h2>
         <p className="text-sm text-gray-400 mb-3">{student.prefix}{student.first_name} {student.last_name} · รหัส {student.student_code ?? student.id}</p>
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800 mb-4">

@@ -128,7 +128,7 @@ export default function EmergencyPage() {
     switch (gpsStatus) {
       case 'requesting':
         return {
-          tone: 'border-blue-300 bg-blue-50 text-blue-900',
+          tone: 'border-info bg-info-soft text-info',
           icon: '📡',
           title: 'กำลังขอตำแหน่ง GPS…',
           body: 'กรุณาอนุญาตการเข้าถึงตำแหน่งเมื่อเบราว์เซอร์ถาม',
@@ -137,7 +137,7 @@ export default function EmergencyPage() {
         };
       case 'granted':
         return {
-          tone: 'border-emerald-300 bg-emerald-50 text-emerald-900',
+          tone: 'border-success bg-success-soft text-success',
           icon: '📍',
           title: 'ระบุตำแหน่งได้แล้ว',
           body: `ความแม่นยำ ±${Math.round(position?.accuracy ?? 0)} เมตร`,
@@ -146,7 +146,7 @@ export default function EmergencyPage() {
         };
       case 'denied':
         return {
-          tone: 'border-amber-300 bg-amber-50 text-amber-900',
+          tone: 'border-warn bg-warn-soft text-warn',
           icon: '⚠️',
           title: 'ปฏิเสธการเข้าถึงตำแหน่ง',
           body: 'เปิดสิทธิ์ตำแหน่งใน Safari → Settings → Privacy แล้วกดลองอีกครั้ง',
@@ -155,7 +155,7 @@ export default function EmergencyPage() {
         };
       case 'timeout':
         return {
-          tone: 'border-amber-300 bg-amber-50 text-amber-900',
+          tone: 'border-warn bg-warn-soft text-warn',
           icon: '⚠️',
           title: 'ระบุตำแหน่งไม่สำเร็จ',
           body: 'ลองออกไปนอกอาคารแล้วกดลองอีกครั้ง หรือส่งโดยไม่มี GPS ก็ได้',
@@ -165,7 +165,7 @@ export default function EmergencyPage() {
       case 'unsupported':
       default:
         return {
-          tone: 'border-amber-300 bg-amber-50 text-amber-900',
+          tone: 'border-warn bg-warn-soft text-warn',
           icon: '⚠️',
           title: 'อุปกรณ์ไม่รองรับ GPS',
           body: 'จะส่งโดยไม่มีตำแหน่ง',
@@ -210,7 +210,7 @@ export default function EmergencyPage() {
 
         <div
           data-testid="gps-status-card"
-          className={`rounded-xl border-l-4 px-4 py-3.5 flex items-start gap-3 ${gpsCard.tone} ${gpsCard.pulse ? 'animate-pulse' : ''}`}
+          className={`rounded-xl border px-4 py-3.5 flex items-start gap-3 ${gpsCard.tone} ${gpsCard.pulse ? 'animate-pulse' : ''}`}
         >
           <span className="text-2xl leading-none mt-0.5" aria-hidden>{gpsCard.icon}</span>
           <div className="flex-1 min-w-0">
@@ -220,7 +220,7 @@ export default function EmergencyPage() {
               <button
                 type="button"
                 onClick={requestGps}
-                className="mt-2 text-xs font-semibold underline underline-offset-2 hover:opacity-80"
+                className="mt-1 inline-flex min-h-[44px] items-center text-xs font-semibold underline underline-offset-2 hover:opacity-80"
               >
                 ลองขอตำแหน่งอีกครั้ง
               </button>

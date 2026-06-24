@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const { pool } = require('../src/config/database');
 const { computeOperationsHealth } = require('../src/services/operationsHealth.service');
+const { deliverOperationsAlert } = require('../src/services/operationsAlert.service');
 
 const args = process.argv.slice(2);
 const jsonMode = args.includes('--json');
@@ -27,6 +28,7 @@ function writeSnapshot(p, report) {
 (async () => {
   const report = await computeOperationsHealth(pool);
   if (writePath) { try { writeSnapshot(writePath, report); } catch (e) { console.error('[integrity-monitor] snapshot write failed:', e.code || e.message); } }
+  const alert = await deliverOperationsAlert(report).catch((e) => ({ delivered: false, reason: e.message }));
 
   if (jsonMode) {
     console.log(JSON.stringify(report));
@@ -36,9 +38,9 @@ function writeSnapshot(p, report) {
       const mark = c.severity === 'CRITICAL' ? 'CRIT' : c.severity === 'WARN' ? 'WARN' : c.severity === 'INFO' ? 'info' : ' ok ';
       console.log(`  [${mark}] ${String(c.key).padEnd(26)} ${String(c.value ?? '-').padEnd(9)} ${c.label}${c.detail ? ' — ' + c.detail : ''}`);
     }
-    // Alerting is config-gated; report state so it can be enabled later without a rewrite.
-    const alertEnabled = !!(process.env.ALERT_LINE_WEBHOOK_URL || process.env.ALERT_EMAIL_TO);
-    if ((report.status === 'WARN' || report.status === 'CRITICAL')) console.log(`Alert: ${alertEnabled ? 'configured (delivery not implemented in this phase)' : 'disabled (no ALERT_* config)'}`);
+    if ((report.status === 'WARN' || report.status === 'CRITICAL')) {
+      console.log(`Alert: ${alert.delivered ? 'delivered' : alert.reason}`);
+    }
     console.log(`Operations health: ${report.status}`);
   }
   await pool.end();

@@ -37,7 +37,7 @@ async function removeLineUser(lineUserId) {
 // State machine: per-user linking state stored in memory (MVP — no Redis needed for small scale)
 // States expire after 10 minutes to prevent memory leaks from abandoned linking flows.
 const linkingState = new Map(); // lineUserId -> { step, phone, createdAt }
-const LINKING_STATE_TTL = 10 * 60 * 1000; // 10 minutes
+const LINKING_STATE_TTL = 30 * 60 * 1000; // 30 minutes (Phase 11A audit fix L5)
 
 function getLinkState(lineUserId) {
   const state = linkingState.get(lineUserId);
@@ -429,7 +429,16 @@ async function getChildStatusToday(studentId) {
      WHERE ds.student_id = ? AND ds.check_date = ?`,
     [studentId, today]
   );
-  return status || { morning_done: false, morning_ts: null, evening_done: false, evening_ts: null };
+  // Phase 11A audit fix H6: include a status indicator so the caller / Flex
+  // template can distinguish "no checkin today" from "checked in but not out".
+  if (!status) {
+    return {
+      morning_done: false, morning_ts: null,
+      evening_done: false, evening_ts: null,
+      has_checkin_today: false,
+    };
+  }
+  return { ...status, has_checkin_today: true };
 }
 
 // ─── Message Sending ────────────────────────────────────────────────────────
@@ -1248,6 +1257,8 @@ async function auditBind({ sub, phone, studentCode, action, reason, ip, ua }) {
 
 // ─── Notification Processor ─────────────────────────────────────────────────
 
+// ─── Notification Processor ─────────────────────────────────────────────────
+
 // maxAgeMinutes: only dispatch notifications created within this window, so a
 // backlog of stale rows (left over from testing, or piled up during a dispatcher
 // outage) is NEVER blasted to parents — a hours/months-old "checked in" push is
@@ -1256,48 +1267,63 @@ async function auditBind({ sub, phone, studentCode, action, reason, ip, ua }) {
 // ONLY exceptions, leaving routine checkin/checkout for the free pull/LIFF view).
 // Reserves the scarce LINE free-tier quota (~500 msg/mo) for what matters.
 // Pass null to push every type (paid-plan / back-office use).
+//
+// Medium fix (code review): uses FOR UPDATE SKIP LOCKED inside a transaction so
+// that overlapping cron runs (or manual + cron) cannot pick up the same rows.
 async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180, types = null) {
-  const where = ['sent = FALSE', 'retry_count < 3'];
-  const params = [];
-  if (maxAgeMinutes != null) {
-    where.push('created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)');
-    params.push(maxAgeMinutes);
-  }
-  if (Array.isArray(types) && types.length) {
-    where.push(`notification_type IN (${types.map(() => '?').join(',')})`);
-    params.push(...types);
-  }
-  params.push(limit);
-  const [rows] = await pool.query(
-    `SELECT id, target_line_user_id, notification_type, student_id, message_json
-     FROM notifications
-     WHERE ${where.join(' AND ')}
-     ORDER BY created_at ASC
-     LIMIT ?`,
-    params
-  );
-
-  let sent = 0, failed = 0;
-  for (const n of rows) {
-    const data = typeof n.message_json === 'string' ? JSON.parse(n.message_json) : n.message_json;
-    const typeLabel = { checkin: 'ส่งเช้า', checkout: 'รับเย็น', emergency: 'เหตุฉุกเฉิน', system: 'แจ้งเตือน' };
-    const text = `📢 แจ้งเตือน: ${typeLabel[n.notification_type] || n.notification_type}\n` +
-      `นักเรียน: ${data.studentName || '-'}\n` +
-      `สถานะ: ${data.status || '-'}\n` +
-      `รอบ: ${data.session === 'morning' ? 'เช้า' : 'เย็น'}\n` +
-      `เวลา: ${data.checkedAt ? new Date(data.checkedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-'}`;
-
-    const result = await sendTextMessage(n.target_line_user_id, text);
-    if (result.sent || result.dryRun) {
-      await pool.query('UPDATE notifications SET sent = TRUE, sent_at = NOW() WHERE id = ?', [n.id]);
-      sent++;
-    } else {
-      await pool.query('UPDATE notifications SET retry_count = retry_count + 1, error_message = ? WHERE id = ?',
-        [result.error || 'unknown', n.id]);
-      failed++;
+  const conn = await pool.getConnection();
+  let sent = 0, failed = 0, processed = 0;
+  try {
+    await conn.beginTransaction();
+    const where = ['sent = FALSE', 'retry_count < 3'];
+    const params = [];
+    if (maxAgeMinutes != null) {
+      where.push('created_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)');
+      params.push(maxAgeMinutes);
     }
+    if (Array.isArray(types) && types.length) {
+      where.push(`notification_type IN (${types.map(() => '?').join(',')})`);
+      params.push(...types);
+    }
+    params.push(limit);
+    const [rows] = await conn.query(
+      `SELECT id, target_line_user_id, notification_type, student_id, message_json
+       FROM notifications
+       WHERE ${where.join(' AND ')}
+       ORDER BY created_at ASC
+       LIMIT ?
+       FOR UPDATE SKIP LOCKED`,
+      params
+    );
+    processed = rows.length;
+
+    for (const n of rows) {
+      const data = typeof n.message_json === 'string' ? JSON.parse(n.message_json) : n.message_json;
+      const typeLabel = { checkin: 'ส่งเช้า', checkout: 'รับเย็น', emergency: 'เหตุฉุกเฉิน', system: 'แจ้งเตือน' };
+      const text = `📢 แจ้งเตือน: ${typeLabel[n.notification_type] || n.notification_type}\n` +
+        `นักเรียน: ${data.studentName || '-'}\n` +
+        `สถานะ: ${data.status || '-'}\n` +
+        `รอบ: ${data.session === 'morning' ? 'เช้า' : 'เย็น'}\n` +
+        `เวลา: ${data.checkedAt ? new Date(data.checkedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-'}`;
+
+      const result = await sendTextMessage(n.target_line_user_id, text);
+      if (result.sent || result.dryRun) {
+        await conn.query('UPDATE notifications SET sent = TRUE, sent_at = NOW() WHERE id = ?', [n.id]);
+        sent++;
+      } else {
+        await conn.query('UPDATE notifications SET retry_count = retry_count + 1, error_message = ? WHERE id = ?',
+          [result.error || 'unknown', n.id]);
+        failed++;
+      }
+    }
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* ignore */ }
+    throw err;
+  } finally {
+    conn.release();
   }
-  return { processed: rows.length, sent, failed };
+  return { processed, sent, failed };
 }
 
 module.exports = {

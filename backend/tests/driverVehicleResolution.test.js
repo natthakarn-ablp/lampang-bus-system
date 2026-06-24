@@ -28,7 +28,7 @@ describe('getDriverVehicle — normalized plate resolution', () => {
   test('1. exact plate_no == username still resolves, and passes [username, normalized]', async () => {
     const pool = makePool([{ vehicle_id: 'V-1', plate_no: 'นข4337 ลำปาง' }]);
     const res = await getDriverVehicle(pool, 'นข4337 ลำปาง');
-    expect(res).toEqual({ vehicle_id: 'V-1', plate_no: 'นข4337 ลำปาง' });
+    expect(res).toEqual({ vehicle_id: 'V-1', plate_no: 'นข4337 ลำปาง', driver_id: null, shift_id: null });
     const { sql, params } = pool.calls[0];
     expect(sql).toMatch(/plate_no = \?/);
     expect(sql).toMatch(/normalized_plate = \?/);

@@ -1,0 +1,1 @@
+import{j as t}from"./index-H_tNlNvV.js";import{A as o}from"./AuditLogTable-CUZQC_gY.js";import"./react-vendor-C-PLMXBs.js";import"./lucide-sxRlRDOU.js";import"./AppCard-CtAgCkFD.js";import"./StatusBadge-DMANgU8Q.js";import"./EmptyState-a_VdUkh5.js";function u(){return t.jsx(o,{apiPath:"/province/audit-logs",title:"ประวัติการแก้ไข (จังหวัด)"})}export{u as default};

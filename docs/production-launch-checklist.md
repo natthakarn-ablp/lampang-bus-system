@@ -152,11 +152,21 @@ mysql -u root -p lampang_bus < /path/to/backup.sql
 
 ---
 
-## ข้อจำกัดที่ทราบ (ไม่กระทบ go-live)
+## ข้อจำกัดที่ทราบ (สถานะ ณ 2026-06-23)
 
-| รายการ | สถานะ | ผลกระทบ |
+> หมายเหตุ: เอกสารนี้เขียนตอน 2026-04-05 (Phase 10.11A) และเคยระบุว่า Transport
+> module และ Parent LIFF "ยังไม่สร้าง" ทั้งสองฟีเจอร์นี้ **สร้างและขึ้น production
+> แล้ว** ในเฟสถัด ๆ มา รายการด้านล่างคือสถานะปัจจุบัน
+
+| รายการ | สถานะ | หมายเหตุ |
 |--------|--------|---------|
-| Transport module (ตรวจสภาพรถ) | ยังไม่สร้าง | ไม่มี UI ตรวจรถ — วางแผนทำในเฟสถัดไป |
-| Parent LIFF app | ยังไม่สร้าง | ผู้ปกครองใช้ LINE chat commands ได้ |
-| PDF ภาษาไทย | ต้องมี font file | ถ้าไม่มี font จะ fallback เป็น Helvetica |
-| import_batches | table มีแต่ยังไม่ใช้ | ระบบ track import ผ่าน audit_logs แทน |
+| Transport module (ตรวจสภาพรถ) | ✅ สร้างแล้ว | `backend/src/routes/transport.routes.js` + `frontend/src/pages/transport/*` (Dashboard / VehicleList / InspectionForm / PickupMap) ใช้งานบน production |
+| Parent LIFF app | ✅ สร้างแล้ว | `frontend/src/pages/parent/ParentStatus.jsx` + `ParentLink.jsx` เปิดให้ผู้ปกครองผ่าน LINE LIFF และมี chat commands ครบ |
+| ระบบตรวจรับรองรถรวมหลายโรงเรียน | ✅ สร้างแล้ว (2026-06-22) | `/api/verification/*` + `/school/vehicle-verification` + `/transport/verification` (migration 038) — โค้ดเสร็จ รอ migration 038/039 บน production |
+| ระบบคนขับหลายคัน + เลือกรอบ | ✅ สร้างแล้ว (2026-06-22) | `/api/driver/shifts/*` + `/driver/shift` (migration 039) — โค้ดเสร็จ อยู่หลัง flag `FEATURE_DRIVER_SHIFT_SELECTION` |
+| Deployment Readiness dashboard | ✅ สร้างแล้ว (2026-06-22) | `/api/readiness/*` + `/province/readiness` + `/admin/readiness` (aggregate ระดับจังหวัด) |
+| QR สาธารณะ + consent | ✅ สร้างแล้ว | `/api/qr/*` + `/api/consent/*` + `/qr/:token` (migration 034/035) |
+| PDF ภาษาไทย | ✅ ใช้งานได้ | ใช้ THSarabunNew font ฝังใน PDF export |
+| import_batches | ✅ ใช้งานแล้ว | ตั้งแต่ Phase 10.13B — ระบบ import preview/apply/rollback ใช้ `import_batches` track ทุกชุด |
+| รายงานเชิงนโยบาย `/api/province/reports/policy` | ⬜ ยังไม่ implement | ยังคงเป็น known gap — วางไว้ทำในเฟสถัดไป |
+| Readiness drill-down ราย รร./เขต | ⬜ ยังไม่ทำ | ปัจจุบันเป็น aggregate ระดับจังหวัดเท่านั้น |

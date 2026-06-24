@@ -128,6 +128,24 @@ router.get('/children/:id/history', requireParentLineAuth, async (req, res, next
   } catch (err) { next(err); }
 });
 
+// ─── GET /api/parent/children/:id/eta ────────────────────────────────────────
+// Phase 11A (2026-06-23) — predicted ETA of the child's bus at their pickup
+// point. Returns a structured response: either ETA data or an error code
+// ('feature_disabled', 'no_vehicle', 'no_pickup_point', 'vehicle_offline').
+// The response contains NO PII — only the pickup point label, ETA seconds,
+// distance, and confidence.
+router.get('/children/:id/eta', requireParentLineAuth, async (req, res, next) => {
+  try {
+    const children = await lineSvc.getLinkedChildren(req.lineUserId);
+    const child = children.find(c => c.id === parseInt(req.params.id));
+    if (!child) return sendError(res, 'Student not linked to this account', [], 403);
+
+    const etaSvc = require('../services/eta.service');
+    const eta = await etaSvc.getForStudent(parseInt(req.params.id));
+    return sendSuccess(res, eta);
+  } catch (err) { next(err); }
+});
+
 // ─── LIFF bind flow (Phase 10.3E-UX1) ───────────────────────────────────────
 // Two-step server-trusted bind: preview (read-only) then confirm (writes).
 // Both endpoints require a valid LIFF ID token — line_user_id is NEVER taken

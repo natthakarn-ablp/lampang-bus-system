@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { Lock, Bus } from 'lucide-react';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { AdminContextProvider } from './hooks/useAdminContext';
 import { ToastProvider } from './components/Toast';
@@ -30,6 +30,7 @@ const DriverProfile        = lazy(() => import('./pages/driver/DriverProfile'));
 const DriverRosterRequests = lazy(() => import('./pages/driver/DriverRosterRequests'));
 const DriverPretrip        = lazy(() => import('./pages/driver/DriverPretrip'));
 const DriverPickupMap      = lazy(() => import('./pages/driver/DriverPickupMap'));
+const DriverShift          = lazy(() => import('./pages/driver/DriverShift'));
 
 // School
 const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
@@ -43,6 +44,7 @@ const SchoolAuditLog       = lazy(() => import('./pages/school/SchoolAuditLog'))
 const SchoolPickupMap      = lazy(() => import('./pages/school/SchoolPickupMap'));
 const SchoolLiveVehicles   = lazy(() => import('./pages/school/SchoolLiveVehicles'));
 const SchoolTeacherAccounts = lazy(() => import('./pages/school/SchoolTeacherAccounts'));
+const VehicleVerification    = lazy(() => import('./pages/school/VehicleVerification'));
 
 // Affiliation
 const AffiliationLayout    = lazy(() => import('./pages/affiliation/AffiliationLayout'));
@@ -69,6 +71,7 @@ const ProvEmergencyList    = lazy(() => import('./pages/province/ProvEmergencyLi
 const ProvAuditLog         = lazy(() => import('./pages/province/ProvAuditLog'));
 const ProvinceLiveVehicles = lazy(() => import('./pages/province/ProvinceLiveVehicles'));
 const ProvincePickupMap    = lazy(() => import('./pages/province/ProvincePickupMap'));
+const DeploymentReadiness  = lazy(() => import('./pages/province/DeploymentReadiness'));
 
 // Reports (charts-heavy — own chunk per page)
 const ReportsLayout        = lazy(() => import('./pages/reports/ReportsLayout'));
@@ -82,12 +85,15 @@ const TransportDashboard   = lazy(() => import('./pages/transport/TransportDashb
 const TransportVehicleList = lazy(() => import('./pages/transport/TransportVehicleList'));
 const InspectionForm       = lazy(() => import('./pages/transport/InspectionForm'));
 const TransportPickupMap   = lazy(() => import('./pages/transport/TransportPickupMap'));
+const VerificationQueue    = lazy(() => import('./pages/transport/VerificationQueue'));
 
 // Admin (heaviest cluster — research/measurement/executive)
 const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
 const StudentTransferRequests = lazy(() => import('./pages/admin/StudentTransferRequests'));
 const VehicleRequests      = lazy(() => import('./pages/admin/VehicleRequests'));
 const DriverIntegrity      = lazy(() => import('./pages/admin/DriverIntegrity'));
+const AdminGeofences       = lazy(() => import('./pages/admin/AdminGeofences'));
+const AdminRouteDeviations = lazy(() => import('./pages/admin/AdminRouteDeviations'));
 const AdminAuditLog        = lazy(() => import('./pages/admin/AdminAuditLog'));
 const AdminPickupPointManagement = lazy(() => import('./pages/admin/AdminPickupPointManagement'));
 const AdminDashboard       = lazy(() => import('./pages/admin/AdminDashboard'));
@@ -134,7 +140,20 @@ function PrivateRoute({ children, allowedRoles }) {
 
 // ── Suspense fallback for lazy-loaded routes ────────────────────────────────
 function RouteFallback() {
-  return <div className="flex items-center justify-center h-screen text-ink-muted">กำลังโหลด…</div>;
+  return (
+    <div className="flex flex-col items-center justify-center h-screen gap-4 bg-surface">
+      <div className="w-12 h-12 bg-brand-800 rounded-2xl flex items-center justify-center shadow-soft">
+        <Bus className="w-6 h-6 text-white" strokeWidth={2} aria-hidden="true" />
+      </div>
+      <div className="flex flex-col gap-2 w-48">
+        <div className="h-3 rounded-full bg-surface-border/60 overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-[shimmer_1.4s_ease-in-out_infinite]" style={{ backgroundSize: '200% 100%' }} />
+        </div>
+        <div className="h-3 rounded-full bg-surface-border/40 w-32" />
+      </div>
+      <p className="text-xs text-ink-muted">กำลังโหลด…</p>
+    </div>
+  );
 }
 
 // ── VisitTracker: fires once per browser tab session ────────────────────────
@@ -182,6 +201,7 @@ export default function App() {
             <Route path="requests"    element={<DriverRosterRequests />} />
             <Route path="pretrip"     element={<DriverPretrip />} />
             <Route path="pickup-map"  element={<DriverPickupMap />} />
+            <Route path="shift"       element={<DriverShift />} />
           </Route>
 
           {/* School module */}
@@ -196,6 +216,7 @@ export default function App() {
             <Route index               element={<SchoolDashboard />} />
             <Route path="students"     element={<StudentSearch />} />
             <Route path="vehicles"     element={<VehicleList />} />
+            <Route path="vehicle-verification" element={<VehicleVerification />} />
             <Route path="status"       element={<Navigate to="/school" replace />} />
             <Route path="emergencies"  element={<EmergencyList />} />
             <Route path="missing"      element={<Navigate to="/school" replace />} />
@@ -247,6 +268,7 @@ export default function App() {
             <Route path="audit-log"    element={<ProvAuditLog />} />
             <Route path="live-vehicles" element={<ProvinceLiveVehicles />} />
             <Route path="pickup-map"   element={<ProvincePickupMap />} />
+            <Route path="readiness"    element={<DeploymentReadiness />} />
           </Route>
 
           {/* Reports module */}
@@ -276,6 +298,7 @@ export default function App() {
             <Route index             element={<TransportDashboard />} />
             <Route path="vehicles"   element={<TransportVehicleList />} />
             <Route path="inspections" element={<InspectionForm />} />
+            <Route path="verification" element={<VerificationQueue />} />
             <Route path="pickup-map"  element={<TransportPickupMap />} />
           </Route>
 
@@ -308,6 +331,16 @@ export default function App() {
           <Route path="/admin/driver-integrity" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><DriverIntegrity /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/geofences" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><AdminGeofences /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/route-deviations" element={
+            <PrivateRoute allowedRoles={['admin', 'province']}>
+              <Layout><AdminRouteDeviations /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/vehicle-qr" element={
@@ -358,6 +391,11 @@ export default function App() {
           <Route path="/admin/system-health" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><SystemHealth /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/readiness" element={
+            <PrivateRoute allowedRoles={['admin', 'province']}>
+              <Layout><DeploymentReadiness /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/executive-print" element={

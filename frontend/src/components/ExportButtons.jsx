@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useToast } from './Toast';
 
 const FORMATS = [
-  { key: 'csv',   label: 'CSV',   ext: 'csv',  style: 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200' },
-  { key: 'excel', label: 'Excel', ext: 'xlsx', style: 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200' },
-  { key: 'pdf',   label: 'PDF',   ext: 'pdf',  style: 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200' },
+  { key: 'csv',   label: 'CSV',   ext: 'csv',  style: 'bg-success-soft hover:bg-success-soft/80 text-success border-success/20' },
+  { key: 'excel', label: 'Excel', ext: 'xlsx', style: 'bg-brand-50 hover:bg-brand-50/80 text-brand-700 border-brand-200' },
+  { key: 'pdf',   label: 'PDF',   ext: 'pdf',  style: 'bg-danger-soft hover:bg-danger-soft/80 text-danger border-danger/20' },
 ];
 
 export default function ExportButtons({ queryParams = '', filenamePrefix = 'report', onPdf, onBeforeExport }) {

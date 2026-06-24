@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { getDeploymentReadiness } = require('./deploymentReadiness.service');
 
 const BACKUP_DIR = '/home/schoolbus/backups/lampang-bus';
 const MIGRATIONS_DIR = path.join(__dirname, '../../migrations');
@@ -25,8 +26,8 @@ async function computeOperationsHealth(pool) {
   add('students_missing_identity', 'นักเรียนไม่มี school_id/student_code', missingId > 0 ? 'CRITICAL' : 'OK', missingId);
   const orphanAsg = await q1("SELECT COUNT(*) n FROM driver_vehicle_assignments d JOIN vehicles v ON v.id=d.vehicle_id WHERE d.is_active=1 AND v.is_deleted=1");
   add('orphan_assignment', 'งานมอบหมายชี้รถที่ถูกปิดใช้งาน', orphanAsg > 0 ? 'CRITICAL' : 'OK', orphanAsg);
-  const dupAsg = await q1("SELECT COUNT(*) n FROM (SELECT 1 FROM driver_vehicle_assignments WHERE is_active=1 GROUP BY vehicle_id HAVING COUNT(*)>1) t");
-  add('dup_active_assignment', 'รถมีคนขับที่ใช้งานซ้ำ', dupAsg > 0 ? 'CRITICAL' : 'OK', dupAsg);
+  const dupAsg = await q1("SELECT COUNT(*) n FROM (SELECT 1 FROM driver_vehicle_assignments WHERE is_active=1 GROUP BY driver_id, vehicle_id HAVING COUNT(*)>1) t");
+  add('dup_active_assignment', 'คนขับถูกมอบหมายรถคันเดิมซ้ำ', dupAsg > 0 ? 'CRITICAL' : 'OK', dupAsg);
   const canonDup = await q1("SELECT COUNT(*) n FROM (SELECT 1 FROM vehicles WHERE active_canonical_plate IS NOT NULL GROUP BY active_canonical_plate HAVING COUNT(*)>1) t");
   add('canonical_vehicle_dup', 'รถทะเบียนซ้ำที่ใช้งานอยู่', canonDup > 0 ? 'CRITICAL' : 'OK', canonDup);
 
@@ -41,6 +42,29 @@ async function computeOperationsHealth(pool) {
   add('inactive_dup_candidates', 'บัญชีคนขับซ้ำที่ถูกปิดใช้งาน', inactiveDup > 0 ? 'WARN' : 'OK', inactiveDup);
   const blocked24 = await q1("SELECT COUNT(*) n FROM audit_logs WHERE entity_type='user' AND JSON_EXTRACT(new_value,'$.reactivation_blocked')=true AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)");
   add('blocked_reactivation_24h', 'การเปิดใช้งานบัญชีซ้ำที่ถูกบล็อก (24 ชม.)', blocked24 > 0 ? 'WARN' : 'OK', blocked24);
+
+  // ── Deployment readiness (aggregate only, no PII) ─────────────────────────
+  try {
+    const readiness = await getDeploymentReadiness(pool, { mode: process.env.SAFETY_POLICY_MODE || 'OBSERVE' });
+    const mode = String(readiness.policy_mode || 'OBSERVE').toUpperCase();
+    const hardGateCount = Number(readiness.hard_gate_count || 0);
+    add(
+      'deployment_readiness',
+      'ความพร้อมเปิดบังคับใช้',
+      mode === 'ENFORCE' && hardGateCount > 0 ? 'CRITICAL' : hardGateCount > 0 ? 'WARN' : 'OK',
+      hardGateCount,
+      `mode=${mode}`
+    );
+  } catch (e) {
+    const mode = String(process.env.SAFETY_POLICY_MODE || 'OBSERVE').toUpperCase();
+    add(
+      'deployment_readiness',
+      'ความพร้อมเปิดบังคับใช้',
+      mode === 'ENFORCE' ? 'CRITICAL' : 'WARN',
+      null,
+      'check error: ' + (e.code || e.message)
+    );
+  }
 
   // ── Import health ──────────────────────────────────────────────────────────
   const allFailed = await q1("SELECT COUNT(*) n FROM import_batches WHERE total_rows>0 AND error_rows>=total_rows AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)");

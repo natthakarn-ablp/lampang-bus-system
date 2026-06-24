@@ -136,7 +136,8 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT id, username, password_hash, role, scope_type, scope_id,
-              grade_scope, display_name, is_active, is_deleted, must_change_password
+              grade_scope, display_name, is_active, is_deleted, must_change_password,
+              driver_id
        FROM users
        WHERE username = ? AND is_deleted = FALSE
        LIMIT 1`,
@@ -210,7 +211,12 @@ router.post('/login', loginLimiter, async (req, res, next) => {
           grade_scope: user.grade_scope || null,
           display_name: user.display_name,
           must_change_password: !!user.must_change_password,
+          driver_id: user.driver_id || null,
         },
+        // Phase 11A audit fix M7: expose feature flags so the frontend can
+        // conditionally show/hide sidebar links and route guards without
+        // hitting a 404 when a flag-gated route is not mounted on the backend.
+        features: env.features,
       },
       'Login successful',
       null,
@@ -227,7 +233,7 @@ router.get('/me', authenticate, async (req, res, next) => {
   try {
     const [rows] = await pool.query(
       `SELECT id, username, role, scope_type, scope_id, grade_scope,
-              display_name, last_login, created_at
+              display_name, driver_id, last_login, created_at
        FROM users
        WHERE id = ? AND is_deleted = FALSE AND is_active = TRUE
        LIMIT 1`,
@@ -357,10 +363,21 @@ router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
 
     const accessToken = generateAccessToken(user);
 
+    // Medium fix: rotate the refresh token — revoke the old one and issue a
+    // new one. This limits a stolen refresh token to a single use instead of
+    // being valid for the full 7-day window.
+    const { token: newRefreshToken, jti: newJti } = generateRefreshToken(user.id);
+    const oldExp = payload.exp ? expToDate(payload.exp) : new Date(Date.now() + 7 * 86400000);
+    await pool.query(
+      'INSERT INTO revoked_tokens (jti, user_id, expires_at) VALUES (?, ?, ?)',
+      [payload.jti, user.id, oldExp]
+    );
+
     return sendSuccess(
       res,
       {
         access_token: accessToken,
+        refresh_token: newRefreshToken,
         token_type: 'Bearer',
         expires_in: env.jwt.expiresIn,
       },

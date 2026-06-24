@@ -11,6 +11,7 @@ import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import LiveLocationToggle from '../../components/LiveLocationToggle';
+import { PageTransition, PulseDot } from '../../lib/motion';
 import {
   resolveSession,
   SESSION_LABEL,
@@ -206,10 +207,11 @@ export default function DriverDashboard() {
   const s = status?.summary;
 
   if (!session) {
-    return <div className="p-6 text-center text-lg text-gray-400">กำลังตรวจสอบโหมด…</div>;
+    return <div className="p-6 text-center text-lg text-ink-muted">กำลังตรวจสอบโหมด…</div>;
   }
 
   return (
+    <PageTransition>
     <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
       {/* ══ BLOCKING PRE-TRIP MODAL (inline checklist) ══ */}
       {pretripBlocked && !pretripLoading && (
@@ -228,7 +230,7 @@ export default function DriverDashboard() {
             here for at-a-glance scanning. The wider AlertBanner that previously
             showed "ตรวจรถแล้ววันนี้ เวลา HH:MM" is replaced by a compact pill;
             the underlying pretrip gate (PretripModal) is UNCHANGED. ── */}
-      <AppCard padding="md" className="mb-4">
+      <AppCard padding="md" className="mb-4 motion-safe:animate-fade-in-up">
         <div className="flex items-center justify-between mb-2">
           <span className="inline-flex items-center gap-2 text-lg font-semibold text-ink">
             {session === 'morning'
@@ -306,7 +308,7 @@ export default function DriverDashboard() {
             return (
               <div className="mb-4">
                 <div className="flex justify-between items-end mb-1">
-                  <span className="text-lg font-semibold text-gray-800">
+                  <span className="text-lg font-semibold text-ink">
                     {session === 'morning' ? 'ส่งแล้ว' : 'รับแล้ว'} {done.length}/{total} คน
                   </span>
                   <span className={`text-2xl font-bold tabular-nums ${pct === 100 ? 'text-success' : pct >= 50 ? 'text-warn' : 'text-danger'}`}>{pct}%</span>
@@ -378,19 +380,19 @@ export default function DriverDashboard() {
                 <button
                   onClick={handleBulkAction}
                   disabled={bulkLoading || pending.length === 0}
-                  className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-base font-semibold px-5 py-3 rounded-xl transition"
+                  className="bg-success hover:bg-success/90 disabled:opacity-50 text-white text-base font-semibold px-5 py-3 rounded-xl transition"
                 >
                   {bulkLoading ? '...' : `${BULK_LABEL[session]} (${pending.length} คน)`}
                 </button>
                 <button onClick={() => setShowIndividual(false)}
-                  className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2">
+                  className="text-sm text-ink-muted hover:text-ink px-3 py-2">
                   ← กลับโหมดรวม
                 </button>
               </div>
             )}
             {bulkMsg && (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mt-2 text-center">
-                <p className="text-sm text-green-700 font-medium">{bulkMsg}</p>
+              <div className="bg-success-soft border border-success/30 rounded-xl px-4 py-3 mt-2 text-center">
+                <p className="text-sm text-success font-medium">{bulkMsg}</p>
               </div>
             )}
           </div>
@@ -403,7 +405,7 @@ export default function DriverDashboard() {
                 รอดำเนินการ ({pending.length})
               </h2>
               {groupBySchool(pending).map(([school, sts]) => (
-                <div key={school} className="mb-5 border-l-2 border-surface-border pl-3">
+                <div key={school} className="mb-5 border-l border-surface-border pl-3">
                   <p className="inline-flex items-center gap-1.5 text-base font-semibold text-ink mb-2">
                     <Building2 className="w-4 h-4 text-ink-muted" strokeWidth={2} />
                     {school} ({sts.length} คน)
@@ -461,28 +463,30 @@ export default function DriverDashboard() {
           )}
 
           {students.length === 0 && (
-            <p className="text-center text-gray-400 py-10 text-lg">ไม่มีนักเรียนในรถ</p>
+            <p className="text-center text-ink-muted py-10 text-lg">ไม่มีนักเรียนในรถ</p>
           )}
 
-          <p className="text-center text-xs text-gray-300 mt-6">
+          <p className="text-center text-xs text-ink-muted mt-6 inline-flex items-center gap-1.5 justify-center">
+            <PulseDot color="bg-success" size="sm" />
             รีเฟรชอัตโนมัติทุก 30 วินาที
           </p>
         </>
       )}
     </div>
+    </PageTransition>
   );
 }
 
 /* ── Summary pill (compact counter) ── */
 function SummaryPill({ label, value, color }) {
   const cls = {
-    blue:  'bg-blue-50 text-blue-700 border-blue-200',
-    green: 'bg-green-50 text-green-700 border-green-200',
-    amber: 'bg-amber-50 text-amber-700 border-amber-200',
-    red:   'bg-red-50 text-red-700 border-red-200',
+    blue:  'bg-brand-50   text-brand-700 border-brand-200',
+    green: 'bg-success-soft text-success border-success/30',
+    amber: 'bg-warn-soft    text-warn    border-warn/30',
+    red:   'bg-danger-soft  text-danger  border-danger/30',
   };
   return (
-    <div className={`rounded-xl border-2 text-center py-2 px-1 ${cls[color] || cls.blue}`}>
+    <div className={`rounded-xl border text-center py-2 px-1 ${cls[color] || cls.blue}`}>
       <p className="text-2xl font-semibold leading-tight">{value}</p>
       <p className="text-sm font-medium mt-0.5">{label}</p>
     </div>
@@ -497,21 +501,21 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
   const leaveText = LEAVE_LABEL[student.leave_session] || 'ลา';
 
   const borderCls = {
-    pending: 'border-gray-200',
-    done: 'border-green-300 bg-green-50/50',
-    leave: 'border-amber-300 bg-amber-50/50',
+    pending: 'border-surface-border',
+    done: 'border-success/40 bg-success-soft/50',
+    leave: 'border-warn/40 bg-warn-soft/50',
   }[state];
 
   return (
-    <div className={`rounded-2xl border-2 overflow-hidden transition ${borderCls}`}>
+    <div className={`rounded-2xl border overflow-hidden transition ${borderCls}`}>
       {/* ── Student info ── */}
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-base font-semibold text-gray-900 leading-snug">
+            <p className="text-base font-semibold text-ink leading-snug">
               {student.first_name} {student.last_name}
             </p>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-ink-muted mt-0.5">
               {student.grade && student.classroom ? `${student.grade}/${student.classroom}` : student.grade || '-'}
             </p>
           </div>
@@ -533,9 +537,9 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
               </StatusBadge>
             )}
             {partialLeaveLabel && state !== 'leave' && (
-              <span className="text-sm text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full shrink-0">
+              <StatusBadge variant="warn" size="md" className="shrink-0">
                 {partialLeaveLabel}
-              </span>
+              </StatusBadge>
             )}
             {((session === 'morning' && student.morning_override_by_school) ||
               (session === 'evening' && student.evening_override_by_school)) && (
@@ -555,8 +559,8 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
             disabled={checkinLoading}
             className={`flex-1 text-white font-semibold text-base py-3 rounded-xl transition ${
               session === 'morning'
-                ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
-                : 'bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800'
+                ? 'bg-brand-600 hover:bg-brand-700 active:bg-brand-800'
+                : 'bg-info hover:bg-info/90 active:bg-info/80'
             } disabled:opacity-50`}
           >
             {checkinLoading ? 'กำลังบันทึก…' : ACTION_LABEL[session]}
@@ -564,7 +568,7 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
           <button
             onClick={() => setShowLeave(true)}
             disabled={leaveLoading}
-            className="bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-800 font-semibold text-base px-4 py-3 rounded-xl transition border border-amber-300 disabled:opacity-50"
+            className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-base px-4 py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
           >
             ลา
           </button>
@@ -578,28 +582,28 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
             <button
               onClick={() => { onLeave('morning'); setShowLeave(false); }}
               disabled={leaveLoading}
-              className="bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-800 font-semibold text-sm py-3 rounded-xl transition border border-amber-300 disabled:opacity-50"
+              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
             >
               ลาเช้า
             </button>
             <button
               onClick={() => { onLeave('evening'); setShowLeave(false); }}
               disabled={leaveLoading}
-              className="bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-800 font-semibold text-sm py-3 rounded-xl transition border border-amber-300 disabled:opacity-50"
+              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
             >
               ลาเย็น
             </button>
             <button
               onClick={() => { onLeave('both'); setShowLeave(false); }}
               disabled={leaveLoading}
-              className="bg-amber-200 hover:bg-amber-300 active:bg-amber-400 text-amber-900 font-semibold text-sm py-3 rounded-xl transition border border-amber-400 disabled:opacity-50"
+              className="bg-warn/15 hover:bg-warn/25 active:bg-warn/30 text-warn font-semibold text-sm py-3 rounded-xl transition border border-warn/40 disabled:opacity-50"
             >
               ลาทั้งวัน
             </button>
           </div>
           <button
             onClick={() => setShowLeave(false)}
-            className="w-full text-gray-500 text-sm py-2 hover:text-gray-700 transition"
+            className="w-full text-ink-muted text-sm py-2 hover:text-ink transition"
           >
             ยกเลิก
           </button>
@@ -671,8 +675,8 @@ function PretripModal({ onComplete }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-ink/60 z-50 flex items-center justify-center p-3 motion-safe:animate-fade-in">
+      <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-elevate max-w-md w-full max-h-[90vh] overflow-y-auto motion-safe:animate-scale-in">
 
         {/* ── Mode: Summary (default) ── */}
         {mode === 'summary' && (
@@ -680,15 +684,15 @@ function PretripModal({ onComplete }) {
             <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-brand-50 inline-flex items-center justify-center">
               <Bus className="w-8 h-8 text-brand-700" strokeWidth={2} aria-hidden="true" />
             </div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-1">ตรวจรถก่อนออก</h2>
-            <p className="text-base text-gray-500 mb-5">เพื่อความปลอดภัยของนักเรียน</p>
+            <h2 className="text-xl font-semibold text-ink mb-1">ตรวจรถก่อนออก</h2>
+            <p className="text-base text-ink-muted mb-5">เพื่อความปลอดภัยของนักเรียน</p>
 
             {/* Checklist preview */}
-            <div className="bg-gray-50 rounded-2xl p-4 mb-5 text-left">
-              <p className="text-sm font-medium text-gray-600 mb-2">รายการตรวจ 6 รายการ:</p>
+            <div className="bg-surface rounded-2xl p-4 mb-5 text-left">
+              <p className="text-sm font-medium text-ink-muted mb-2">รายการตรวจ 6 รายการ:</p>
               <ul className="space-y-1.5">
                 {PRETRIP_ITEMS.map(c => (
-                  <li key={c.id} className="flex items-center gap-2 text-base text-gray-700">
+                  <li key={c.id} className="flex items-center gap-2 text-base text-ink">
                     <Check className="w-4 h-4 text-success" strokeWidth={2.4} />
                     <span>{c.label}</span>
                   </li>
@@ -717,16 +721,16 @@ function PretripModal({ onComplete }) {
         {/* ── Mode: Detail (toggle items) ── */}
         {mode === 'detail' && (
           <div className="p-5">
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">ระบุรายการผิดปกติ</h2>
-            <p className="text-sm text-gray-500 mb-4">กดรายการที่ <strong>ผิดปกติ</strong></p>
+            <h2 className="text-lg font-semibold text-ink mb-1">ระบุรายการผิดปกติ</h2>
+            <p className="text-sm text-ink-muted mb-4">กดรายการที่ <strong>ผิดปกติ</strong></p>
 
             <div className="space-y-2 mb-4">
               {items.map(item => (
                 <button key={item.id} onClick={() => toggleItem(item.id)}
-                  className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 text-left text-base font-medium transition ${
+                  className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left text-base font-medium transition ${
                     item.ok
-                      ? 'bg-green-50 border-green-300 text-green-800'
-                      : 'bg-red-50 border-red-400 text-red-800'
+                      ? 'bg-success-soft border-success/40 text-success'
+                      : 'bg-danger-soft border-danger/50 text-danger'
                   }`}>
                   {item.ok
                     ? <CheckCircle2 className="w-6 h-6 shrink-0 text-success" strokeWidth={2.2} />
@@ -738,12 +742,12 @@ function PretripModal({ onComplete }) {
 
             {failedItems.length > 0 && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-ink mb-1">
                   รายละเอียด (ถ้ามี)
                 </label>
                 <textarea value={note} onChange={e => setNote(e.target.value)}
                   rows={2} placeholder="เช่น ยางหลังขวาลมอ่อน…"
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  className="w-full border border-surface-border rounded-xl px-4 py-3 text-base text-ink bg-surface-raised focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/25" />
               </div>
             )}
 
@@ -770,7 +774,7 @@ function PretripModal({ onComplete }) {
             )}
 
             <button onClick={() => { setMode('summary'); setItems(PRETRIP_ITEMS.map(c => ({ ...c, ok: true }))); setNote(''); }}
-              className="w-full text-gray-500 hover:text-gray-700 text-base py-3 transition">
+              className="w-full text-ink-muted hover:text-ink text-base py-3 transition">
               ← กลับ
             </button>
           </div>

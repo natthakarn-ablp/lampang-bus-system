@@ -71,6 +71,29 @@ async function upsertLocation({
     [vehicleId, driverId, latitude, longitude, accuracyMeters,
      speedMps, headingDeg, recordedAt, source]
   );
+
+  // Phase 11A — append to the history trail. Best-effort: a failure here
+  // only means a gap in the trail (ETA / deviation will be slightly less
+  // accurate for this ping); the latest-location row is already written.
+  // The history table is created by migration 040 and only exists when the
+  // intelligent tracking layer is in use, so wrap in try/catch + a table
+  // probe to avoid spamming errors on systems that haven't run 040 yet.
+  try {
+    await pool.query(
+      `INSERT INTO vehicle_location_history
+         (vehicle_id, driver_id, latitude, longitude, accuracy_meters,
+          speed_mps, heading_deg, recorded_at, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [vehicleId, driverId, latitude, longitude, accuracyMeters,
+       speedMps, headingDeg, recordedAt, source]
+    );
+  } catch (err) {
+    // ER_NO_SUCH_TABLE = migration 040 not applied yet — silent.
+    // Other errors = log once, never throw.
+    if (String(err.code || '') !== 'ER_NO_SUCH_TABLE') {
+      console.warn('[vehicleLocation] history insert failed:', err.message);
+    }
+  }
 }
 
 /**

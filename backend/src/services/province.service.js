@@ -422,18 +422,21 @@ async function getStudents({ search, grade, school_id, affiliation_id, vehicle_i
   );
 
   const offset = (page - 1) * per_page;
+  // PDPA / data minimization (2026-06-24 review H2): the province (ส่วนกลาง)
+  // tier is the broadest oversight role, so parent CONTACT PII (parent_name /
+  // parent_phone) is intentionally NOT selected here — consistent with the
+  // affiliation tier. Only oversight-relevant identity fields (name, grade,
+  // classroom, school, affiliation, vehicle, status) are returned. The
+  // SCHOOL role keeps parent contact via its own school.service.getStudents.
   const [students] = await pool.query(
     `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.school_id, sc.name AS school_name,
             sc.affiliation_id, a.name AS affiliation_name,
-            s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled,
-            p.name AS parent_name, p.phone AS parent_phone
+            s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled
      FROM students s
      JOIN schools sc ON sc.id = s.school_id
      LEFT JOIN affiliations a ON a.id = sc.affiliation_id
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
-     LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.approved = TRUE
-     LEFT JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
      WHERE ${where}
      ORDER BY s.${sortCol} ${sortDir}
      LIMIT ? OFFSET ?`,

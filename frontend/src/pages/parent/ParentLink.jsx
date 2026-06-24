@@ -132,7 +132,7 @@ export default function ParentLink() {
   // ─── UI ───────────────────────────────────────────────────────────────────
   if (!liffReady) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-6">
+      <div className="min-h-screen bg-surface flex items-center justify-center p-6">
         <div className="text-gray-500 text-sm">กำลังเริ่มต้น LIFF…</div>
       </div>
     );
@@ -140,7 +140,7 @@ export default function ParentLink() {
 
   if (step === STEP.SUCCESS) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6">
         <div className="text-6xl mb-5">✅</div>
         <h2 className="text-xl font-bold text-gray-800 mb-2">ผูกบัญชีสำเร็จ</h2>
         <p className="text-gray-500 text-sm text-center max-w-xs mb-8">
@@ -159,7 +159,7 @@ export default function ParentLink() {
     const fullName = [s.prefix, s.first_name, s.last_name].filter(Boolean).join('');
     const gradeRoom = [s.grade, s.classroom].filter(Boolean).join(' / ');
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-4 sm:p-6">
+      <div className="min-h-screen bg-surface p-4 sm:p-6">
         <div className="max-w-lg mx-auto">
           <div className="mb-5">
             <h1 className="text-xl font-bold text-blue-700">ตรวจสอบข้อมูล</h1>
@@ -207,7 +207,7 @@ export default function ParentLink() {
 
   // STEP.FORM
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-4 sm:p-6">
+    <div className="min-h-screen bg-surface p-4 sm:p-6">
       <div className="max-w-lg mx-auto">
         <div className="mb-5">
           <h1 className="text-xl font-bold text-blue-700">🔗 ผูกบัญชีผู้ปกครอง</h1>

@@ -29,6 +29,7 @@ import {
 // write-only action button ("จัดการรถ") from teacher accounts.
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
+import { PageTransition } from '../../lib/motion';
 
 export default function SchoolDashboard() {
   // Phase 10.7E-1 — read user from auth context to decide whether to
@@ -79,6 +80,7 @@ export default function SchoolDashboard() {
   const notStarted = totalBase === 0 && !hasEmerg;
 
   return (
+    <PageTransition>
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-5">
       <PageHeader
         title={PAGE_TITLES.SCHOOL_DASHBOARD}
@@ -103,7 +105,7 @@ export default function SchoolDashboard() {
       <div className="flex flex-wrap items-stretch gap-2">
         <Link
           to="/school/students"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition min-h-[40px]"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-surface-raised text-sm font-medium px-3.5 py-2 rounded-lg transition min-h-[44px]"
         >
           <Search className="w-4 h-4" strokeWidth={2} />
           ค้นหานักเรียน
@@ -111,7 +113,7 @@ export default function SchoolDashboard() {
         {!isTeacher && (
           <Link
             to="/school/vehicles"
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
           >
             <Bus className="w-4 h-4" strokeWidth={2} />
             จัดการรถ
@@ -119,7 +121,7 @@ export default function SchoolDashboard() {
         )}
         <Link
           to="/reports/daily"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
         >
           <FileText className="w-4 h-4" strokeWidth={2} />
           รายงานวันนี้
@@ -132,7 +134,7 @@ export default function SchoolDashboard() {
           <button
             type="button"
             onClick={() => setOverrideOpen(true)}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[40px]"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
           >
             <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
             ยืนยันแทนคนขับ
@@ -155,18 +157,22 @@ export default function SchoolDashboard() {
         </div>
       ) : (
         <>
-          {/* Status banner */}
-          {notStarted ? (
-            <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>
-          ) : issues.length > 0 ? (
-            <AlertBanner variant="warn" title="สิ่งที่ต้องติดตามวันนี้">
-              <ul className="space-y-0.5 mt-1">
-                {issues.map((msg, i) => <li key={i}>{msg}</li>)}
-              </ul>
-            </AlertBanner>
-          ) : (
-            <AlertBanner variant="success" title="ดำเนินการครบแล้ว ไม่มีรายการค้าง" />
-          )}
+          {/* Status banner — entrance fade explains today's state arriving
+              after the loading skeleton (motion-safe, ≤300ms, reduced-motion
+              users see it instantly). */}
+          <div className="motion-safe:animate-fade-in-up">
+            {notStarted ? (
+              <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>
+            ) : issues.length > 0 ? (
+              <AlertBanner variant="warn" title="สิ่งที่ต้องติดตามวันนี้">
+                <ul className="space-y-0.5 mt-1">
+                  {issues.map((msg, i) => <li key={i}>{msg}</li>)}
+                </ul>
+              </AlertBanner>
+            ) : (
+              <AlertBanner variant="success" title="ดำเนินการครบแล้ว ไม่มีรายการค้าง" />
+            )}
+          </div>
 
           {/* Phase 10.7E-3 — data completeness moved below the fold.
               Overall % shown in the collapsible subtitle so the at-a-glance
@@ -250,9 +256,9 @@ export default function SchoolDashboard() {
             };
             return (
               <div className="flex flex-wrap items-center gap-2">
-                <Chip tone={totalLeaveNow > 0 ? 'warn'    : 'neutral'} label="ลาวันนี้"        value={totalLeaveNow} />
+                <Chip tone={totalLeaveNow > 0 ? 'warn'    : 'neutral'} label="นักเรียนลา"      value={totalLeaveNow} />
                 <Chip tone={totalPending  > 0 ? 'danger'  : 'success'} label="ยังไม่ยืนยัน"     value={totalPending} />
-                <Chip tone={totalDone     > 0 ? 'success' : 'neutral'} label="ดำเนินการแล้ว" value={totalDone} />
+                <Chip tone={totalDone     > 0 ? 'success' : 'neutral'} label="สำเร็จแล้ว"   value={totalDone} />
                 <Chip tone={emerg7d       > 0 ? 'danger'  : 'neutral'} label="เหตุฉุกเฉิน 7 วัน" value={emerg7d} />
               </div>
             );
@@ -357,6 +363,7 @@ export default function SchoolDashboard() {
         </>
       )}
     </div>
+    </PageTransition>
   );
 }
 
@@ -498,9 +505,15 @@ function VehicleRow({ vehicle, isExpanded, onToggle }) {
   const leaveCount = vehicle.students.filter(s => s.leave_session).length;
   const allMorningDone = mPending === 0 && mEnabled.length > 0;
   const allEveningDone = ePending === 0 && eEnabled.length > 0;
-  const railColor = allMorningDone && allEveningDone ? 'bg-success'
-                  : mPending + ePending > 0 ? 'bg-warn'
-                  : 'bg-surface-border';
+  // Semantic status: pairs an icon + soft background + accessible label so the
+  // row state is never communicated by color alone (DESIGN.md No Color-Only
+  // Status Rule). Replaces the former bare colored vertical strip.
+  const status = allMorningDone && allEveningDone
+    ? { Icon: CheckCircle2, cls: 'bg-success-soft text-success', label: 'ครบแล้ว' }
+    : mPending + ePending > 0
+    ? { Icon: AlertTriangle, cls: 'bg-warn-soft text-warn', label: 'มีรายการค้าง' }
+    : { Icon: Bus, cls: 'bg-surface text-ink-muted', label: 'ยังไม่เริ่ม' };
+  const StatusIcon = status.Icon;
 
   return (
     <AppCard padding="none" className="overflow-hidden">
@@ -510,7 +523,13 @@ function VehicleRow({ vehicle, isExpanded, onToggle }) {
         aria-expanded={isExpanded}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-1.5 h-9 rounded-full shrink-0 ${railColor}`} />
+          <span
+            className={`flex items-center justify-center w-9 h-9 rounded-lg shrink-0 ${status.cls}`}
+            title={status.label}
+          >
+            <StatusIcon className="w-5 h-5" strokeWidth={2} aria-hidden="true" />
+            <span className="sr-only">{status.label}</span>
+          </span>
           <div className="min-w-0">
             <h3 className="font-semibold text-ink text-base truncate">{vehicle.plate_no}</h3>
             <p className="text-sm text-ink-muted">{vehicle.students.length} คน{leaveCount > 0 ? ` · ลา ${leaveCount}` : ''}</p>

@@ -6,10 +6,13 @@ const COLS = {
   6: 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6',
 };
 
-export default function KPIGrid({ cols = 4, gap = 'md', className = '', children }) {
+export default function KPIGrid({ cols = 4, gap = 'md', stagger = true, className = '', children }) {
   const gapCls = gap === 'sm' ? 'gap-3' : gap === 'lg' ? 'gap-6' : 'gap-4';
+  // Cards reveal in sequence as the dashboard data lands (motion-with-evidence).
+  // motion-safe so reduced-motion users see them instantly.
+  const staggerCls = stagger ? 'motion-safe:stagger-children' : '';
   return (
-    <div className={`grid ${COLS[cols] || COLS[4]} ${gapCls} ${className}`}>
+    <div className={`grid ${COLS[cols] || COLS[4]} ${gapCls} ${staggerCls} ${className}`}>
       {children}
     </div>
   );

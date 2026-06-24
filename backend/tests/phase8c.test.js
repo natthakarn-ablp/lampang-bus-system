@@ -2,7 +2,7 @@
 
 require('dotenv').config();
 const request = require('supertest');
-const mysql   = require('mysql2/promise');
+const { getTestConnection } = require('./dbHelper');
 const app     = require('../src/app');
 
 const DRIVER = { username: '__TEST PLATE 9999', password: 'testpass123' };
@@ -24,14 +24,8 @@ async function login(creds) {
  * the next POST for the same (date, student, session) returns 409.
  */
 async function hardCleanTestStudentLeaves() {
-  const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    database: process.env.DB_NAME || 'lampang_bus',
-    user: process.env.DB_USER || 'lampang',
-    password: process.env.DB_PASSWORD || '',
-    charset: 'utf8mb4',
-  });
+  // Guarded via getTestConnection() (issue #8).
+  const conn = await getTestConnection();
   await conn.query(`DELETE FROM student_leaves WHERE student_id = ?`, [TEST_STUDENT_ID]);
   await conn.end();
 }
@@ -48,14 +42,8 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  const conn = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    database: process.env.DB_NAME || 'lampang_bus',
-    user: process.env.DB_USER || 'lampang',
-    password: process.env.DB_PASSWORD || '',
-    charset: 'utf8mb4',
-  });
+  // Guarded via getTestConnection() (issue #8).
+  const conn = await getTestConnection();
   await conn.query(`DELETE FROM roster_change_requests WHERE vehicle_id = 'V-test000000ab'`);
   await conn.query(`DELETE FROM student_leaves WHERE student_id = ?`, [TEST_STUDENT_ID]);
   await conn.end();

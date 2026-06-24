@@ -23,7 +23,7 @@ export default function ErrorState({
 }) {
   const body = message || 'กรุณาลองใหม่อีกครั้ง';
   return (
-    <AlertBanner variant="danger" title={title} className={className}>
+    <AlertBanner variant="danger" title={title} className={`motion-safe:animate-fade-in ${className}`}>
       <div className="space-y-2">
         <p>{body}</p>
         {onRetry && (

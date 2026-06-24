@@ -158,10 +158,16 @@ export default function InspectionForm() {
           <h1 className="text-xl font-bold text-gray-800">บันทึกตรวจสภาพรถ</h1>
           <p className="text-xs text-gray-400 mt-0.5">บันทึกและดูประวัติการตรวจสภาพ</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg transition">
-          {showForm ? 'ปิดฟอร์ม' : 'บันทึกผลตรวจ'}
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button onClick={() => navigate('/transport/verification')}
+            className="border border-blue-200 bg-blue-50 text-blue-700 font-medium px-4 py-2.5 rounded-lg transition">
+            ไปคิวรับรองแบบใหม่
+          </button>
+          <button onClick={() => setShowForm(!showForm)}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg transition">
+            {showForm ? 'ปิดฟอร์ม' : 'บันทึกผลตรวจเดิม'}
+          </button>
+        </div>
       </div>
 
       {/* Prefill indicator */}
@@ -242,7 +248,7 @@ export default function InspectionForm() {
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">วันที่ตรวจ</label>
-              <input type="date" value={form.inspection_date}
+              <input type="date" value={form.inspection_date} required
                 onChange={e => setForm({ ...form, inspection_date: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
             </div>

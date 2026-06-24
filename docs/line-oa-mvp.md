@@ -46,9 +46,13 @@
 - `backend/src/services/line.service.js` — linking, queries, messaging
 - `backend/src/app.js` — route registration + raw body for webhook
 
-## ข้อจำกัดปัจจุบัน
+## ข้อจำกัดปัจจุบัน (อัปเดต 2026-06-23)
 
 - ยังไม่มี Rich Menu
-- ยังไม่มี Flex Message (ใช้ text ธรรมดา)
-- ยังไม่มี LIFF app
-- Notification processing ต้องเรียก POST /api/line/process-notifications เป็น cron
+- ยังไม่มี Flex Message (ใช้ text ธรรมดา) — *หมายเหตุ: Flex card สถานะผู้ปกครองมีใช้งานแล้วตั้งแต่ Phase 10.9 ผ่าน `line.service.js` ดูรายละเอียดใน `docs/user-manual.md` §9*
+- ~~ยังไม่มี LIFF app~~ → **มีแล้ว** ตั้งแต่ Phase 10.9D:
+  - `frontend/src/pages/parent/ParentStatus.jsx` — หน้าสถานะบุตรหลาน (LIFF webview)
+  - `frontend/src/pages/parent/ParentLink.jsx` — หน้าผูกบัญชี LINE
+  - route: `/parent` และ `/parent/link` ใน `frontend/src/App.jsx`
+  - LIFF Endpoint URL ตั้งที่ `https://schoolbuslampang.com/parent/link` ใน LINE Console
+- Notification processing ต้องเรียก POST /api/line/process-notifications เป็น cron (ตั้งไว้ทุก 5 นาทีใน crontab)

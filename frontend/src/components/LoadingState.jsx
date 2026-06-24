@@ -20,7 +20,7 @@ export default function LoadingState({
     <div
       role="status"
       aria-live="polite"
-      className={`flex flex-col items-center justify-center ${padding} text-center text-ink-muted ${className}`}
+      className={`flex flex-col items-center justify-center ${padding} text-center text-ink-muted motion-safe:animate-fade-in ${className}`}
     >
       <Loader2 className="w-5 h-5 mb-2 animate-spin" strokeWidth={2} aria-hidden="true" />
       <p className="text-sm">{message}</p>

@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-22T00:00:00+07:00",
+  "title": "Design System: Lampang Bus System",
+  "extensions": {
+    "colorMeta": {
+      "brand-primary": {
+        "role": "primary",
+        "displayName": "Lampang Authority Blue",
+        "canonical": "#1D4ED8",
+        "tonalRamp": ["#0B1D4D", "#102E7A", "#1E3A8A", "#1E40AF", "#1D4ED8", "#3B82F6", "#93C5FD", "#DBEAFE"]
+      },
+      "brand-primary-800": {
+        "role": "primary",
+        "displayName": "Command Navy",
+        "canonical": "#1E40AF",
+        "tonalRamp": ["#07122F", "#0B1D4D", "#102E7A", "#1E3A8A", "#1E40AF", "#1D4ED8", "#60A5FA", "#BFDBFE"]
+      },
+      "surface-app": {
+        "role": "neutral",
+        "displayName": "Work Surface",
+        "canonical": "#F8FAFC",
+        "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#64748B", "#94A3B8", "#CBD5E1", "#E2E8F0", "#F8FAFC"]
+      },
+      "surface-raised": {
+        "role": "neutral",
+        "displayName": "Raised Paper",
+        "canonical": "#FFFFFF",
+        "tonalRamp": ["#111827", "#374151", "#6B7280", "#9CA3AF", "#D1D5DB", "#E5E7EB", "#F3F4F6", "#FFFFFF"]
+      },
+      "success": {
+        "role": "success",
+        "displayName": "Route Green",
+        "canonical": "#10B981",
+        "tonalRamp": ["#022C22", "#064E3B", "#047857", "#059669", "#10B981", "#34D399", "#A7F3D0", "#D1FAE5"]
+      },
+      "warning": {
+        "role": "warning",
+        "displayName": "Document Amber",
+        "canonical": "#F59E0B",
+        "tonalRamp": ["#451A03", "#78350F", "#92400E", "#B45309", "#F59E0B", "#FBBF24", "#FDE68A", "#FEF3C7"]
+      },
+      "danger": {
+        "role": "danger",
+        "displayName": "Safety Red",
+        "canonical": "#EF4444",
+        "tonalRamp": ["#450A0A", "#7F1D1D", "#991B1B", "#B91C1C", "#EF4444", "#F87171", "#FECACA", "#FEE2E2"]
+      },
+      "info": {
+        "role": "info",
+        "displayName": "Inspection Sky",
+        "canonical": "#0EA5E9",
+        "tonalRamp": ["#082F49", "#075985", "#0369A1", "#0284C7", "#0EA5E9", "#38BDF8", "#BAE6FD", "#E0F2FE"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page title for dashboard or command surfaces only."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Major section titles and verification packet headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card titles, modal titles, and grouped data labels."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Thai UI copy, descriptions, table cells, and form help text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Badges, field labels, metadata, and compact table headers."
+      }
+    },
+    "shadows": [
+      {
+        "name": "soft-card",
+        "value": "0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)",
+        "purpose": "Default card depth for raised content surfaces."
+      },
+      {
+        "name": "elevated-popover",
+        "value": "0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.04)",
+        "purpose": "Dropdown, menu, popover, and floating layer depth."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-fast",
+        "value": "150ms ease-out",
+        "purpose": "Hover, focus, active, and small state feedback."
+      },
+      {
+        "name": "drawer-slide",
+        "value": "200ms ease-out",
+        "purpose": "Mobile drawer and collapsible navigation."
+      },
+      {
+        "name": "fade-in-up",
+        "value": "300ms ease-out",
+        "purpose": "Popover and non-blocking panel entrance."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "@media (prefers-reduced-motion: reduce)",
+        "purpose": "Disable travel animations and keep state changes immediate."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary workflow action such as creating a verification packet or confirming ready-to-print state.",
+      "html": "<button class=\"ds-btn-primary\">ยืนยันข้อมูลพร้อมพิมพ์</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 16px; border: 0; border-radius: 8px; background: #2563EB; color: #FFFFFF; font-family: Sarabun, sans-serif; font-size: 14px; font-weight: 700; line-height: 1.35; transition: background 150ms ease-out, transform 150ms ease-out; } .ds-btn-primary:hover { background: #1D4ED8; } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.32); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; } @media (prefers-reduced-motion: reduce) { .ds-btn-primary { transition: none; } }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Secondary action for refresh, back, open details, and non-destructive workflow steps.",
+      "html": "<button class=\"ds-btn-secondary\">รีเฟรช</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 16px; border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; color: #0F172A; font-family: Sarabun, sans-serif; font-size: 14px; font-weight: 600; line-height: 1.35; transition: background 150ms ease-out, border-color 150ms ease-out; } .ds-btn-secondary:hover { background: #F8FAFC; border-color: #CBD5E1; } .ds-btn-secondary:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.25); outline-offset: 2px; } @media (prefers-reduced-motion: reduce) { .ds-btn-secondary { transition: none; } }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "badge-info",
+      "description": "Compact semantic status with text, never color alone.",
+      "html": "<span class=\"ds-status-badge\">กำลังตรวจ</span>",
+      "css": ".ds-status-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; padding: 2px 10px; border-radius: 9999px; background: #E0F2FE; color: #0EA5E9; font-family: Sarabun, sans-serif; font-size: 12px; font-weight: 600; line-height: 1.35; }"
+    },
+    {
+      "name": "App Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Raised content container for forms, queues, verification packets, and grouped dashboard content.",
+      "html": "<section class=\"ds-app-card\"><h2>รถที่โรงเรียนใช้งาน</h2><p>ข้อมูลรถและสถานะส่งตรวจล่าสุด</p></section>",
+      "css": ".ds-app-card { padding: 24px; border: 1px solid #E2E8F0; border-radius: 16px; background: #FFFFFF; color: #0F172A; box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06); font-family: Sarabun, sans-serif; } .ds-app-card h2 { margin: 0 0 8px; font-size: 18px; font-weight: 700; line-height: 1.4; } .ds-app-card p { margin: 0; color: #64748B; font-size: 14px; line-height: 1.5; }"
+    },
+    {
+      "name": "Sidebar Active Item",
+      "kind": "nav",
+      "refersTo": "sidebar-active-item",
+      "description": "Current route marker inside the dark desktop sidebar.",
+      "html": "<a class=\"ds-sidebar-active\" href=\"#\">ส่งตรวจและรับรองรถ</a>",
+      "css": ".ds-sidebar-active { display: flex; align-items: center; min-height: 40px; padding: 10px 16px; border-radius: 8px; background: #FFFFFF; color: #1E40AF; font-family: Sarabun, sans-serif; font-size: 14px; font-weight: 700; line-height: 1.35; text-decoration: none; } .ds-sidebar-active:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.45); outline-offset: 2px; }"
+    },
+    {
+      "name": "Verification Packet",
+      "kind": "custom",
+      "refersTo": "card-surface",
+      "description": "Document-like online packet for vehicle inspection handoff between school and transport officer.",
+      "html": "<article class=\"ds-verification-packet\"><div><p class=\"ds-kicker\">องค์การบริหารส่วนจังหวัดลำปาง</p><h2>ใบส่งรถรับส่งนักเรียนเข้ารับการตรวจ</h2><p class=\"ds-meta\">เลขที่ LB-2026-001</p></div><span class=\"ds-pass\">ผ่าน</span></article>",
+      "css": ".ds-verification-packet { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px; border: 1px solid #E2E8F0; border-radius: 16px; background: #FFFFFF; color: #0F172A; font-family: Sarabun, sans-serif; box-shadow: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06); } .ds-verification-packet h2 { margin: 2px 0 4px; font-size: 20px; font-weight: 700; line-height: 1.35; } .ds-kicker, .ds-meta { margin: 0; color: #64748B; font-size: 12px; line-height: 1.35; } .ds-pass { display: inline-flex; padding: 2px 10px; border-radius: 9999px; background: #D1FAE5; color: #10B981; font-size: 12px; font-weight: 700; white-space: nowrap; } @media print { .ds-verification-packet { box-shadow: none; border-color: #94A3B8; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "ศูนย์ควบคุมความปลอดภัยที่ตรวจสอบได้",
+    "overview": "ระบบนี้เป็น product UI สำหรับงานราชการเชิงปฏิบัติการ ไม่ใช่ landing page และไม่ใช่งานโชว์ visual effect เป้าหมายคือให้โรงเรียน ขนส่ง คนขับ และ อบจ. เห็นสถานะรถ คนขับ เอกสาร และงานถัดไปได้ภายในไม่กี่วินาที บุคลิกหลักคือ น่าเชื่อถือ คล่องตัว ทันสมัย โดยความทันสมัยมาจาก hierarchy, state feedback, และ motion ที่อธิบายการเปลี่ยนสถานะเท่านั้น",
+    "keyCharacteristics": [
+      "Task-first: ทุกหน้าต้องเห็นสถานะปัจจุบัน ความเสี่ยง และ action ถัดไปก่อนข้อมูลรอง",
+      "Hybrid surfaces: dark เฉพาะส่วน command และ navigation, light สำหรับงานตรวจเอกสารและฟอร์ม",
+      "Safety hierarchy: สถานะรถ ใบอนุญาต ความจุ และข้อห้ามต้องเด่นกว่าการตกแต่ง",
+      "Thai-first readability: Sarabun เป็นฟอนต์หลัก ใช้ขนาดและ contrast ที่อ่านได้บนจอสำนักงานและมือถือกลางแจ้ง",
+      "Motion with evidence: motion ใช้เพื่อบอกสถานะ เปิดรายละเอียด อัปเดตผล หรือเชื่อมความสัมพันธ์ของข้อมูล"
+    ],
+    "rules": [
+      {
+        "name": "The Safety Beats Brand Rule",
+        "body": "สี brand ใช้เพื่อบอก current task และ primary action เท่านั้น ถ้าสถานะ safety ขัดกับสี brand ให้สถานะ safety ชนะเสมอ",
+        "section": "colors"
+      },
+      {
+        "name": "The Light Work Surface Rule",
+        "body": "ฟอร์ม ตาราง checklist เอกสารพิมพ์ และหน้าที่ใช้ตรวจรายละเอียดต้องอยู่บนพื้นสว่าง ห้ามใช้ dark dashboard กับงานอ่านเอกสารยาว",
+        "section": "colors"
+      },
+      {
+        "name": "The No Color-Only Status Rule",
+        "body": "สถานะต้องมีข้อความหรือไอคอนประกอบเสมอ สีเป็นตัวเร่งการรับรู้ ไม่ใช่ข้อมูลเดียว",
+        "section": "colors"
+      },
+      {
+        "name": "The One Thai UI Voice Rule",
+        "body": "ใช้ Sarabun เป็นฟอนต์เดียวทั้งระบบ ห้ามใช้ display font แปลก ๆ กับ label, button, table หรือข้อมูลรถ",
+        "section": "typography"
+      },
+      {
+        "name": "The Small Text Must Survive Sunlight Rule",
+        "body": "ข้อความรองห้ามอ่อนกว่า ink-muted บนพื้นสว่าง และต้องมี contrast พออ่านบนมือถือกลางแจ้ง",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-Until-Needed Rule",
+        "body": "Surface ปกติใช้ border และ background ก่อนใช้ shadow Shadow ปรากฏเมื่อมี layer ซ้อนหรือ interaction เท่านั้น",
+        "section": "elevation"
+      },
+      {
+        "name": "The No Ghost Card Rule",
+        "body": "ห้ามจับคู่ border บางกับ shadow ใหญ่เพื่อสร้าง card ตกแต่ง ถ้าเป็น card ข้อมูลให้ใช้ border + soft shadow ตาม token เท่านั้น",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do ใช้ Hybrid ตามลักษณะงาน: dashboard และ command center ใช้โทนเข้มได้ แต่ฟอร์ม ตาราง checklist เอกสาร และหน้าพิมพ์ต้องใช้พื้นสว่าง",
+      "Do ทำให้สถานะปัจจุบัน ความเสี่ยง และ action ถัดไปอยู่เหนือ fold โดยเฉพาะหน้าคนขับ โรงเรียน และขนส่ง",
+      "Do ใช้ semantic status พร้อมข้อความหรือไอคอน ไม่ใช้สีเพียงอย่างเดียว",
+      "Do ใช้ motion 150 ถึง 250ms เพื่อบอก state change, drawer, dropdown, loading skeleton, หรือเปิดรายละเอียด",
+      "Do รองรับ prefers-reduced-motion โดยลด animation เหลือ transition สั้นหรือแสดงผลทันที",
+      "Do รักษาพื้นที่สัมผัสอย่างน้อย 44 x 44px สำหรับ mobile และหน้าคนขับ",
+      "Do ออกแบบ print state สำหรับเอกสารตรวจรถให้ชัดในขาวดำ"
+    ],
+    "donts": [
+      "Don't ใช้ภาพลักษณ์แบบเกม คริปโต หรือ cyberpunk",
+      "Don't ใช้แสงนีออน กระจกเบลอ หรือเอฟเฟกต์เคลื่อนไหวต่อเนื่องจนรบกวนการอ่าน",
+      "Don't ทำให้ dashboard มืดจนใช้งานกลางแจ้งไม่ได้",
+      "Don't ซ่อนงานหลักไว้หลัง animation หรือ interaction ที่ผู้ใช้ต้องค้นหาเอง",
+      "Don't ใช้ motion เพื่อความสวยเพียงอย่างเดียว",
+      "Don't ลดความชัดเจนของฟอร์ม ตาราง เอกสารพิมพ์ และข้อความด้านความปลอดภัย",
+      "Don't ใช้ border-left หรือ border-right หนากว่า 1px เป็นแถบสีตกแต่งบน alert หรือ card การเตือนควรใช้ icon, semantic background, full border, และข้อความชัดเจนแทน",
+      "Don't ใช้ gradient text, card กระจกเบลอ, shadow ใหญ่, หรือ card มุมโค้งเกิน 16px สำหรับงานระบบ"
+    ]
+  }
+}

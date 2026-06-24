@@ -10,12 +10,14 @@
  */
 
 const { getDriverVehicle } = require('../src/services/checkin.service');
+const env = require('../src/config/env');
 
 // Dispatch by SQL shape: relational (driver_id), legacy vehicle, legacy assignment.
-function makePool({ relational = [], legacyVehicle = [], legacyAsg = [[{ ok: 1 }]] } = {}) {
+function makePool({ activeShift = [], relational = [], legacyVehicle = [], legacyAsg = [[{ ok: 1 }]] } = {}) {
   const calls = [];
   const query = jest.fn(async (sql, params) => {
     calls.push({ sql, params });
+    if (/vehicle_operating_shifts/.test(sql)) return [activeShift];
     if (/driver_vehicle_assignments dva/.test(sql)) return [relational];      // relational (driver_id path)
     if (/FROM\s+vehicles/.test(sql)) return [legacyVehicle];                  // legacy vehicle lookup
     if (/driver_vehicle_assignments/.test(sql)) return legacyAsg;             // legacy assignment check
@@ -26,10 +28,22 @@ function makePool({ relational = [], legacyVehicle = [], legacyAsg = [[{ ok: 1 }
 const ran = (pool, re) => pool.calls.some(({ sql }) => re.test(sql));
 
 describe('getDriverVehicle — prefer users.driver_id (10.13A-20)', () => {
+  afterEach(() => { env.features.driverShiftSelection = false; });
+
+  test('0. when shift rollout is enabled, operational routes use the explicitly selected vehicle', async () => {
+    env.features.driverShiftSelection = true;
+    const pool = makePool({ activeShift: [{ vehicle_id: 'V-selected', plate_no: 'กก 2 ลำปาง' }] });
+    await expect(getDriverVehicle(pool, { username: 'legacy-plate', driver_id: 121 }))
+      .resolves.toEqual({ vehicle_id: 'V-selected', plate_no: 'กก 2 ลำปาง', driver_id: 121, shift_id: null });
+
+    const noShift = makePool();
+    await expect(getDriverVehicle(noShift, { username: 'legacy-plate', driver_id: 121 }))
+      .rejects.toMatchObject({ statusCode: 409, errors: [{ code: 'ACTIVE_SHIFT_REQUIRED' }] });
+  });
   test('1. linked user + one active assignment resolves by driver_id (not username)', async () => {
     const pool = makePool({ relational: [{ vehicle_id: 'V-real', plate_no: 'ออ 7332 กทม' }] });
     const res = await getDriverVehicle(pool, { username: 'ออ 7332 กทม', driver_id: 121 });
-    expect(res).toEqual({ vehicle_id: 'V-real', plate_no: 'ออ 7332 กทม' });
+    expect(res).toEqual({ vehicle_id: 'V-real', plate_no: 'ออ 7332 กทม', driver_id: 121, shift_id: null });
     expect(pool.calls[0].params).toEqual([121]);       // resolved via driver_id
     expect(ran(pool, /FROM\s+vehicles/)).toBe(false);  // legacy path not used
   });

@@ -21,6 +21,7 @@ const fs      = require('fs');
 const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = rateLimit;
 const { pool }          = require('../config/database');
+const env               = require('../config/env');
 const { authenticate }  = require('../middleware/auth');
 const { requireRole }   = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
@@ -33,6 +34,21 @@ const leaveSvc          = require('../services/leave.service');
 const rosterReqSvc      = require('../services/rosterRequest.service');
 const vllSvc            = require('../services/vehicleLocation.service');
 const lineSvc           = require('../services/line.service');
+const driverShiftSvc    = require('../services/driverShift.service');
+const safetyPolicySvc   = require('../services/safetyPolicy.service');
+// Phase 11A — Intelligent Tracking Layer (2026-06-23). Lazy-required inside
+// the /vehicle-location hook so the modules are only loaded when their
+// feature flag is on; this keeps the driver router's startup cost flat on
+// systems that haven't enabled the tracking layer.
+const etaSvc  = env.features.eta           ? require('../services/eta.service')           : null;
+const gfSvc   = env.features.geofence      ? require('../services/geofence.service')      : null;
+const devSvc  = env.features.routeDeviation ? require('../services/routeDeviation.service') : null;
+
+function dateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  return String(value).slice(0, 10);
+}
 
 // Phase 7.2 — per-driver rate limit on the location-write endpoint.
 // Keyed on req.user.id (NOT IP) so multiple drivers behind one NAT
@@ -68,6 +84,109 @@ const router = express.Router();
 
 // Apply auth + role guard to every route in this file
 router.use(authenticate, requireRole('driver'));
+
+/**
+ * Shared safety-policy gate for driver operations.
+ *
+ * Options:
+ *   emergency          — never BLOCK (emergency must always proceed).
+ *   requireActiveShift — override the shift requirement (default: the feature
+ *                        flag). /shifts/start passes false: it is the operation
+ *                        that OPENS a shift, so it must not demand one first.
+ *   skipAudit          — never write the per-call safety_policy_decision row
+ *                        (FIX 2: /vehicle-location GPS pings would otherwise add
+ *                        one audit_logs row per ping in OBSERVE).
+ *
+ * The safety-policy audit row is best-effort: logAudit swallows all errors and
+ * never throws (see utils/audit.js), so no try/catch is needed here — a failed
+ * audit insert must not break the operation (FIX 3).
+ */
+async function assessSafety(req, vehicle, operation, {
+  emergency = false,
+  requireActiveShift = env.features.driverShiftSelection,
+  skipAudit = false,
+} = {}) {
+  const policy = await safetyPolicySvc.assessDriverOperation(pool, {
+    vehicleId: vehicle.vehicle_id,
+    driverId: vehicle.driver_id || req.user.driver_id,
+    mode: env.safetyPolicy.mode,
+    requireActiveShift,
+  });
+
+  // Only audit when the policy says so AND the caller hasn't opted out. Steady-
+  // state ALLOW_WITH_WARNING on high-frequency endpoints (location) is skipped to
+  // avoid ballooning audit_logs; BLOCK/checkin/checkout/etc. still audit.
+  if (policy.audit_required && !skipAudit) {
+    await logAudit({
+      userId: req.user.id,
+      action: 'CREATE',
+      entityType: 'safety_policy_decision',
+      entityId: `${operation}:${req.user.id}:${Date.now()}`,
+      newValue: { operation, vehicle_id: vehicle.vehicle_id, ...policy },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  if (policy.decision === 'BLOCK' && !emergency) {
+    const error = new Error('ไม่สามารถดำเนินการได้ เนื่องจากข้อมูลความปลอดภัยยังไม่ผ่านเกณฑ์');
+    error.statusCode = 409;
+    error.errors = [{ code: 'SAFETY_POLICY_BLOCKED', reasons: policy.reasons }];
+    throw error;
+  }
+  return policy;
+}
+
+// ─── Authorized vehicle pool and actual-driver shift attribution ────────────
+router.get('/authorized-vehicles', async (req, res, next) => {
+  try {
+    const data = await driverShiftSvc.listAuthorizedVehicles(pool, { driverId: req.user.driver_id });
+    return sendSuccess(res, data);
+  } catch (error) { return next(error); }
+});
+
+router.get('/active-shift', async (req, res, next) => {
+  try {
+    const data = await driverShiftSvc.getActiveShift(pool, { driverId: req.user.driver_id });
+    return sendSuccess(res, data);
+  } catch (error) { return next(error); }
+});
+
+router.post('/shifts/start', async (req, res, next) => {
+  try {
+    // FIX 4 — reuse the shared assessSafety gate (single source of truth) instead
+    // of duplicating the assess + audit + BLOCK logic. requireActiveShift:false
+    // because this IS the operation that opens a shift, so it must not demand one
+    // first. assessSafety derives the driver_id from req.user.driver_id when the
+    // vehicle stub doesn't carry one.
+    await assessSafety(
+      req,
+      { vehicle_id: req.body.vehicle_id },
+      'SHIFT_START',
+      { requireActiveShift: false }
+    );
+    const data = await driverShiftSvc.startShift(pool, {
+      driverId: req.user.driver_id,
+      vehicleId: req.body.vehicle_id,
+      session: req.body.session,
+      userId: req.user.id,
+      note: req.body.note || null,
+    });
+    return sendSuccess(res, data, 'เริ่มรอบปฏิบัติงานแล้ว', null, 201);
+  } catch (error) { return next(error); }
+});
+
+router.post('/shifts/:id/end', async (req, res, next) => {
+  try {
+    const data = await driverShiftSvc.endShift(pool, {
+      driverId: req.user.driver_id,
+      shiftId: Number(req.params.id),
+      userId: req.user.id,
+      note: req.body.note || null,
+    });
+    return sendSuccess(res, data, data.already_closed ? 'รอบนี้ปิดแล้ว' : 'ปิดรอบปฏิบัติงานแล้ว');
+  } catch (error) { return next(error); }
+});
 
 // ─── GET /roster ─────────────────────────────────────────────────────────────
 
@@ -292,6 +411,7 @@ router.post('/checkin', async (req, res, next) => {
     }
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    const policy = await assessSafety(req, vehicle, 'CHECKIN');
 
     const result = await checkinSvc.processCheckin(pool, {
       userId:    req.user.id,
@@ -302,7 +422,7 @@ router.post('/checkin', async (req, res, next) => {
       source:    'web',
     });
 
-    return sendSuccess(res, result, 'Student checked in successfully', null, 201);
+    return sendSuccess(res, { ...result, safety_policy: policy }, 'Student checked in successfully', null, 201);
   } catch (err) {
     return next(err);
   }
@@ -325,6 +445,7 @@ router.post('/checkout', async (req, res, next) => {
     }
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    const policy = await assessSafety(req, vehicle, 'CHECKOUT');
 
     const result = await checkinSvc.processCheckout(pool, {
       userId:    req.user.id,
@@ -335,7 +456,7 @@ router.post('/checkout', async (req, res, next) => {
       source:    'web',
     });
 
-    return sendSuccess(res, result, 'Student checked out successfully', null, 201);
+    return sendSuccess(res, { ...result, safety_policy: policy }, 'Student checked out successfully', null, 201);
   } catch (err) {
     return next(err);
   }
@@ -355,6 +476,7 @@ router.post('/checkin-all', async (req, res, next) => {
     }
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    const policy = await assessSafety(req, vehicle, 'CHECKIN_ALL');
 
     const result = await checkinSvc.processCheckinAll(pool, {
       userId:    req.user.id,
@@ -367,7 +489,7 @@ router.post('/checkin-all', async (req, res, next) => {
     const message = `Checked in ${result.succeeded.length} student(s)` +
       (result.failed.length > 0 ? `, ${result.failed.length} failed` : '');
 
-    return sendSuccess(res, result, message, null, 201);
+    return sendSuccess(res, { ...result, safety_policy: policy }, message, null, 201);
   } catch (err) {
     return next(err);
   }
@@ -446,7 +568,26 @@ router.post('/emergency', async (req, res, next) => {
       accuracy: acc,
     });
 
-    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    // FIX 1 (HIGH) — an emergency must NEVER be blocked by the shift gate.
+    // getDriverVehicle throws ACTIVE_SHIFT_REQUIRED / MULTIPLE_OPEN_SHIFTS when
+    // FEATURE_DRIVER_SHIFT_SELECTION is on and the driver hasn't opened a shift,
+    // BEFORE assessSafety's emergency bypass can run. Resolve shift-independently
+    // instead; if even that can't pin a vehicle, still log the emergency with
+    // whatever identity we have rather than hard-failing.
+    let vehicle;
+    try {
+      vehicle = await checkinSvc.resolveVehicleForEmergency(pool, req.user);
+    } catch (resolveErr) {
+      console.warn('[emergency] vehicle resolution failed, filing without vehicle:', resolveErr.message);
+      vehicle = { vehicle_id: null, plate_no: null, driver_id: req.user.driver_id || null };
+    }
+
+    // Safety assessment stays non-blocking for emergencies. Skip it entirely when
+    // we couldn't resolve a vehicle (assessDriverOperation needs a vehicle_id).
+    let policy = null;
+    if (vehicle.vehicle_id) {
+      policy = await assessSafety(req, vehicle, 'EMERGENCY_REPORT', { emergency: true });
+    }
 
     const [result] = await pool.query(
       `INSERT INTO emergency_logs
@@ -468,6 +609,7 @@ router.post('/emergency', async (req, res, next) => {
         detail,
         hasGps:    lat != null,
         gpsStatus,
+        safety_policy: policy,
       },
       ipAddress:  req.ip,
       userAgent:  req.headers['user-agent'],
@@ -509,6 +651,8 @@ router.post('/emergency', async (req, res, next) => {
         vehicle_id: vehicle.vehicle_id,
         plate_no: vehicle.plate_no,
         has_gps: lat != null,
+        vehicle_warning: vehicle.vehicle_id ? null : 'ไม่พบรถที่คนขับคันนี้ประจำ — บันทึกเหตุฉุกเฉินโดยไม่ระบุรถ',
+        safety_policy: policy,
       },
       'Emergency reported',
       null,
@@ -557,7 +701,11 @@ router.get('/profile', async (req, res, next) => {
        LIMIT 1`,
       [vehicle.vehicle_id]
     );
-    return sendSuccess(res, { ...driver, vehicle_id: vehicle.vehicle_id });
+    return sendSuccess(res, {
+      ...driver,
+      vehicle_id: vehicle.vehicle_id,
+      insurance_expiry: dateOnly(driver.insurance_expiry),
+    });
   } catch (err) { return next(err); }
 });
 
@@ -905,6 +1053,7 @@ const PRETRIP_ITEMS = [
 router.post('/pretrip', async (req, res, next) => {
   try {
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    const policy = await assessSafety(req, vehicle, 'PRETRIP');
     const { items, all_pass, note } = req.body;
 
     if (typeof all_pass !== 'boolean') {
@@ -925,6 +1074,7 @@ router.post('/pretrip', async (req, res, next) => {
         all_pass,
         items: items || PRETRIP_ITEMS.map(label => ({ label, ok: all_pass })),
         note: note || null,
+        safety_policy: policy,
       },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
@@ -940,7 +1090,7 @@ router.post('/pretrip', async (req, res, next) => {
       );
     }
 
-    return sendSuccess(res, { date: today, all_pass }, 'บันทึกผลตรวจรถก่อนออกสำเร็จ', null, 201);
+    return sendSuccess(res, { date: today, all_pass, safety_policy: policy }, 'บันทึกผลตรวจรถก่อนออกสำเร็จ', null, 201);
   } catch (err) { return next(err); }
 });
 
@@ -975,6 +1125,11 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
     // Resolve vehicle from JWT scope — server-trusted
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+    // FIX 2 — do NOT write a per-ping safety_policy_decision audit row. In OBSERVE
+    // every vehicle is UNVERIFIED so audit_required is always true, which would
+    // add one audit_logs row for every GPS ping (~every 15s). The BLOCK path in
+    // ENFORCE still works (assessSafety throws before reaching the upsert).
+    const policy = await assessSafety(req, vehicle, 'VEHICLE_LOCATION', { skipAudit: true });
 
     const driverId = await vllSvc.getActiveDriverIdForVehicle(vehicle.vehicle_id);
     if (!driverId) return sendError(res, 'ไม่พบการมอบหมายคนขับสำหรับรถคันนี้', [], 400);
@@ -995,7 +1150,52 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
       source: 'web',
     });
 
-    return sendSuccess(res, { received_at: new Date().toISOString() }, 'OK');
+    // ─── Phase 11A — Intelligent Tracking hooks (2026-06-23) ───────────────
+    // Each hook is feature-flagged and best-effort: a failure only means a
+    // missed event / stale ETA for this ping; the next ping re-evaluates.
+    // The hooks run AFTER the response is prepared so the driver's ping
+    // latency is unaffected (we fire-and-await in the same tick but the
+    // work is cheap: a few SELECTs + at most one INSERT per active
+    // geofence). All three hooks share the same GPS coordinates.
+    const trackingPayload = {
+      vehicleId: vehicle.vehicle_id,
+      driverId,
+      latitude: lat,
+      longitude: lng,
+      speedMps: Number.isFinite(Number(speed_mps)) ? Number(speed_mps) : null,
+      accuracyMeters: Number.isFinite(Number(accuracy_meters)) ? Math.round(Number(accuracy_meters)) : null,
+    };
+    // Phase 11A audit fix M1: track hook health so monitoring can detect
+    // silent tracking failures. Each hook is still best-effort (never blocks
+    // the GPS ping) but failures are now logged with a structured tag and
+    // surfaced in the response as tracking_health.
+    const trackingHealth = { eta: 'ok', geofence: 'ok', deviation: 'ok' };
+    try {
+      if (env.features.eta) {
+        await etaSvc.refreshForVehicle(trackingPayload);
+      } else { trackingHealth.eta = 'disabled'; }
+    } catch (e) {
+      trackingHealth.eta = 'error';
+      console.error('[tracking] eta refresh failed:', { vehicle: vehicle.vehicle_id, err: e.message });
+    }
+    try {
+      if (env.features.geofence) {
+        await gfSvc.checkForVehicle(trackingPayload);
+      } else { trackingHealth.geofence = 'disabled'; }
+    } catch (e) {
+      trackingHealth.geofence = 'error';
+      console.error('[tracking] geofence check failed:', { vehicle: vehicle.vehicle_id, err: e.message });
+    }
+    try {
+      if (env.features.routeDeviation) {
+        await devSvc.checkForVehicle(trackingPayload);
+      } else { trackingHealth.deviation = 'disabled'; }
+    } catch (e) {
+      trackingHealth.deviation = 'error';
+      console.error('[tracking] deviation check failed:', { vehicle: vehicle.vehicle_id, err: e.message });
+    }
+
+    return sendSuccess(res, { received_at: new Date().toISOString(), safety_policy: policy, tracking_health: trackingHealth }, 'OK');
   } catch (err) { return next(err); }
 });
 

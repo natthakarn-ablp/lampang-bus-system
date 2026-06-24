@@ -244,7 +244,7 @@ export default function ResearchMetrics() {
       {/* Pre-measure Baseline Confirmation Modal */}
       {showPreMeasure && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+          <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-elevate max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-purple-800 mb-2">บันทึก Baseline (Pre-measure)</h3>
             <p className="text-sm text-gray-600 mb-3">
               ระบบจะบันทึก snapshot ปัจจุบันเป็น <strong>Baseline สำหรับการวิจัย R2 (Pre-measure)</strong>

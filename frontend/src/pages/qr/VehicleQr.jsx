@@ -10,21 +10,47 @@ import PublicPrivacyNotice from '../../components/consent/PublicPrivacyNotice';
 // linked to this vehicle (after parent opt-in). The level is decided by the
 // server; the client only renders whatever fields it receives.
 
+// Each status entry carries an icon (glyph) alongside the Thai label so colour is
+// never the only signal — DESIGN.md "No Color-Only Status Rule".
 const INSPECTION = {
-  PASSED: { label: 'ผ่านการตรวจสภาพ', tone: 'emerald' },
-  FAILED: { label: 'ไม่ผ่านการตรวจสภาพ', tone: 'red' },
-  NEEDS_FIX: { label: 'ต้องแก้ไข', tone: 'amber' },
-  PENDING: { label: 'รอตรวจสภาพ', tone: 'slate' },
+  PASSED: { label: 'ผ่านการตรวจสภาพ', tone: 'emerald', icon: '✓' },
+  FAILED: { label: 'ไม่ผ่านการตรวจสภาพ', tone: 'red', icon: '✕' },
+  NEEDS_FIX: { label: 'ต้องแก้ไข', tone: 'amber', icon: '!' },
+  PENDING: { label: 'รอตรวจสภาพ', tone: 'slate', icon: '…' },
 };
+// Shown when the inspection certificate has lapsed — never green even if PASSED.
+// "Unknown is not safe": a stale certificate must read as expired, not current.
+const INSPECTION_EXPIRED = { label: 'หมดอายุการตรวจสภาพ', tone: 'red', icon: '⚠' };
 const INSURANCE = {
-  active: { label: 'มีประกันภัย', tone: 'emerald' },
-  expired: { label: 'ประกันภัยหมดอายุ', tone: 'amber' },
-  none: { label: 'ไม่มีประกันภัย', tone: 'red' },
+  active: { label: 'มีประกันภัย', tone: 'emerald', icon: '✓' },
+  expired: { label: 'ประกันภัยหมดอายุ', tone: 'amber', icon: '⚠' },
+  none: { label: 'ไม่มีประกันภัย', tone: 'red', icon: '✕' },
 };
 const DRIVER = {
-  normal: { label: 'ปกติ', tone: 'emerald' },
-  suspended: { label: 'ระงับการแสดงผล', tone: 'red' },
-  no_driver: { label: 'ยังไม่มีคนขับ', tone: 'slate' },
+  normal: { label: 'ปกติ', tone: 'emerald', icon: '✓' },
+  suspended: { label: 'ระงับการแสดงผล', tone: 'red', icon: '✕' },
+  no_driver: { label: 'ยังไม่มีคนขับ', tone: 'slate', icon: '—' },
+};
+// vehicle.verification_status — UNVERIFIED must never read as green ("ผ่าน").
+const ELIGIBILITY = {
+  UNVERIFIED: { label: 'ยังไม่ได้รับรอง', tone: 'amber', icon: '?' },
+  ELIGIBLE: { label: 'พร้อมใช้งาน', tone: 'emerald', icon: '✓' },
+  EXPIRING: { label: 'ใกล้หมดอายุ', tone: 'amber', icon: '⚠' },
+  INELIGIBLE: { label: 'ยังไม่ผ่านเกณฑ์', tone: 'red', icon: '✕' },
+  SUSPENDED: { label: 'ถูกระงับใช้งาน', tone: 'red', icon: '✕' },
+};
+// Per-document certificate status. MISSING/unknown stays neutral, never green.
+const DOCUMENT = {
+  VALID: { label: 'ปกติ', tone: 'emerald', icon: '✓' },
+  EXPIRING: { label: 'ใกล้หมดอายุ', tone: 'amber', icon: '⚠' },
+  EXPIRED: { label: 'หมดอายุ', tone: 'red', icon: '✕' },
+  MISSING: { label: 'ไม่มีข้อมูล', tone: 'slate', icon: '—' },
+};
+const DOCUMENT_LABELS = {
+  insurance: 'ประกันภัย',
+  registration: 'ทะเบียน',
+  compulsory_insurance: 'พ.ร.บ.',
+  tax: 'ภาษี',
 };
 const TONE = {
   emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -33,9 +59,37 @@ const TONE = {
   slate: 'bg-slate-50 text-slate-600 border-slate-200',
 };
 
-function Badge({ map, value }) {
-  const m = (map && map[value]) || { label: value || '—', tone: 'slate' };
-  return <span className={`text-sm px-3 py-1 rounded-full border ${TONE[m.tone]}`}>{m.label}</span>;
+// Thai date (พ.ศ.). Returns null on missing/invalid input so callers can skip the row.
+function formatThaiDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
+}
+
+function Badge({ map, value, entry }) {
+  const m = entry || (map && map[value]) || { label: value || '—', tone: 'slate' };
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-sm px-3 py-1 rounded-full border ${TONE[m.tone]}`}>
+      {m.icon && <span aria-hidden="true" className="font-semibold leading-none">{m.icon}</span>}
+      <span>{m.label}</span>
+    </span>
+  );
+}
+// Compact status chip used inside the document group (smaller than Badge).
+function Chip({ label, entry }) {
+  const m = entry || { label: '—', tone: 'slate' };
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${TONE[m.tone]}`}>
+      {m.icon && <span aria-hidden="true" className="font-semibold leading-none">{m.icon}</span>}
+      <span className="text-gray-600">{label}</span>
+      <span>{m.label}</span>
+    </span>
+  );
 }
 function Row({ label, children }) {
   return (
@@ -44,6 +98,12 @@ function Row({ label, children }) {
       <span>{children}</span>
     </div>
   );
+}
+// Inspection badge must reflect BOTH status and certificate expiry. A PASSED
+// inspection whose certificate has lapsed must NOT show green "ผ่าน".
+function inspectionEntry(status, expired) {
+  if (expired) return INSPECTION_EXPIRED;
+  return INSPECTION[status] || { label: status || '—', tone: 'slate', icon: '?' };
 }
 
 export default function VehicleQr() {
@@ -108,11 +168,41 @@ export default function VehicleQr() {
           </div>
           <p className="text-2xl font-bold text-gray-900 tabular-nums mb-4">{data.plate_no}</p>
 
+          {(() => {
+            const lastInspection = formatThaiDate(data.last_inspection_date);
+            const inspectionExpiry = formatThaiDate(data.inspection_expiry);
+            const docStatus = data.document_status || {};
+            const docKeys = Object.keys(DOCUMENT_LABELS).filter((k) => docStatus[k] != null);
+            return (
           <div className="space-y-0">
             {data.vehicle_type && <Row label="ประเภทรถ"><span className="text-sm text-gray-700">{data.vehicle_type}</span></Row>}
-            <Row label="สถานะตรวจสภาพ"><Badge map={INSPECTION} value={data.inspection_status} /></Row>
+            {data.eligibility_status != null && (
+              <Row label="สถานะการรับรอง"><Badge map={ELIGIBILITY} value={data.eligibility_status} /></Row>
+            )}
+            <Row label="สถานะตรวจสภาพ">
+              <Badge entry={inspectionEntry(data.inspection_status, data.inspection_expired)} />
+            </Row>
+            {lastInspection && (
+              <Row label="ตรวจสภาพล่าสุด"><span className="text-sm text-gray-700 tabular-nums">{lastInspection}</span></Row>
+            )}
+            {inspectionExpiry && (
+              <Row label="ตรวจสภาพหมดอายุ">
+                <span className={`text-sm tabular-nums ${data.inspection_expired ? 'text-red-700 font-medium' : 'text-gray-700'}`}>{inspectionExpiry}</span>
+              </Row>
+            )}
             <Row label="สถานะประกันภัย"><Badge map={INSURANCE} value={data.insurance_status} /></Row>
             <Row label="สถานะคนขับ"><Badge map={DRIVER} value={data.driver_status} /></Row>
+
+            {docKeys.length > 0 && (
+              <div className="py-3 border-b border-gray-50 last:border-0">
+                <span className="text-sm text-gray-500">สถานะเอกสาร</span>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {docKeys.map((k) => (
+                    <Chip key={k} label={DOCUMENT_LABELS[k]} entry={DOCUMENT[docStatus[k]] || DOCUMENT.MISSING} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {data.level >= 2 && (
               <>
@@ -125,6 +215,8 @@ export default function VehicleQr() {
               </>
             )}
           </div>
+            );
+          })()}
 
           {data.level === 1 && (
             <p className="text-xs text-gray-400 mt-4">เปิดผ่าน LINE และผูกบัญชีผู้ปกครองเพื่อดูชื่อคนขับและช่องทางติดต่อ</p>

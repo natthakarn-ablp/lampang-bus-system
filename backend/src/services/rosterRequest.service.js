@@ -81,6 +81,27 @@ async function createRequest({ vehicleId, studentId, schoolId, requestType, reas
     throw err;
   }
 
+  // H3 fix (authz scope): the student must belong to a school that this
+  // vehicle actually serves. Without this check a driver could submit a
+  // roster "add" request for ANY student_id in the system (IDs are sequential
+  // ints), bypassing the scope constraint that /search-students enforces.
+  // A vehicle with no students yet has no served schools → reject.
+  if (requestType === 'add') {
+    const [[served]] = await pool.query(
+      `SELECT 1 WHERE EXISTS (
+         SELECT 1 FROM students sx
+          WHERE sx.vehicle_id = ? AND sx.is_deleted = FALSE
+            AND sx.school_id = ? AND sx.school_id IS NOT NULL
+       ) LIMIT 1`,
+      [vehicleId, student.school_id]
+    );
+    if (!served) {
+      const err = new Error('นักเรียนไม่ได้อยู่ในโรงเรียนที่รถคันนี้ให้บริการ');
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+
   // For 'add': student must not already be on this vehicle
   if (requestType === 'add' && student.vehicle_id === vehicleId) {
     const err = new Error('นักเรียนอยู่ในรถคันนี้แล้ว');

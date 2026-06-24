@@ -11,6 +11,7 @@
     "check:labels": "node ../scripts/check-ui-labels.js",
     "check:labels:strict": "node ../scripts/check-ui-labels.js --strict",
     "check:labels:verbose": "node ../scripts/check-ui-labels.js --verbose",
+    "check:hybrid-ui": "node ./scripts/check-hybrid-motion-ui.mjs",
     "hooks:install": "node ../scripts/install-hooks.js",
     "hooks:install:strict": "node ../scripts/install-hooks.js --strict",
     "hooks:remove": "node ../scripts/install-hooks.js --remove"
@@ -20,6 +21,7 @@
     "axios": "^1.7.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.14.0",
+    "motion": "^12.41.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

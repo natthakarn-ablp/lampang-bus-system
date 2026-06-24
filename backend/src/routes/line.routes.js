@@ -375,6 +375,9 @@ async function handleTextMessage(lineUserId, text) {
 
   if (state?.step === 'confirm_rebind') {
     if (intent === 'confirmRebind') {
+      // Phase 11A audit fix M9: set state to 'rebinding' BEFORE unlinking
+      // to prevent concurrent messages from triggering a double unlink.
+      lineSvc.setLinkState(lineUserId, { step: 'rebinding' });
       const unlinkResult = await lineSvc.unlinkAccount(lineUserId);
       if (unlinkResult.success) {
         await lineSvc.logMessage(lineUserId, 'system', 'rebind_unlink', 'ok', `old_parent_id=${unlinkResult.unlinkedParentId}`);

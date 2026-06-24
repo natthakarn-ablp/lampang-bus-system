@@ -5,7 +5,11 @@ const { pool } = require('../config/database');
 /**
  * Valid audit actions as defined in the schema.
  */
-const AUDIT_ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'EXPORT', 'LOGIN', 'IMPORT', 'APPROVE', 'VIEW'];
+const AUDIT_ACTIONS = [
+  'CREATE', 'UPDATE', 'DELETE', 'EXPORT', 'LOGIN', 'IMPORT', 'APPROVE', 'VIEW',
+  // Phase 11A — tracking event types (must match migration 040 enum)
+  'GEOFENCE_ENTER', 'GEOFENCE_EXIT', 'ROUTE_DEVIATION', 'ETA_REFRESH',
+];
 
 /**
  * Write a record to audit_logs.

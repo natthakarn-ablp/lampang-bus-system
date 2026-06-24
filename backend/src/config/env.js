@@ -178,6 +178,30 @@ const env = {
     driverShiftSelection: process.env.FEATURE_DRIVER_SHIFT_SELECTION === 'true',
     qrLevel3: process.env.FEATURE_QR_LEVEL3 === 'true',   // Level-3 sensitive viewer (default off, DPO-gated)
     qrEmergencyContactSource: process.env.QR_EMERGENCY_CONTACT_SOURCE || 'driver', // driver | attendant | school
+    // Phase 11A — Intelligent Tracking Layer (2026-06-23). Dark by default.
+    // Each flag independently gates its router + the per-ping hooks in
+    // driver.routes.js /vehicle-location, so operators can roll out one
+    // capability at a time. Migration 040 must be applied before flipping
+    // any of these on (index.js asserts this at boot).
+    eta: process.env.FEATURE_ETA === 'true',
+    geofence: process.env.FEATURE_GEOFENCE === 'true',
+    routeDeviation: process.env.FEATURE_ROUTE_DEVIATION === 'true',
+  },
+  // Phase 11A — tunable thresholds for the intelligent tracking layer.
+  // Exposed via env so operators can adjust without code changes.
+  tracking: {
+    locationHistoryRetentionDays: parseInt(process.env.LOCATION_HISTORY_RETENTION_DAYS || '30', 10),
+    geofenceDefaultRadiusM: parseInt(process.env.GEOFENCE_DEFAULT_RADIUS_M || '150', 10),
+    deviationRadiusM: parseInt(process.env.DEVIATION_RADIUS_M || '500', 10),
+    delayThresholdMin: parseInt(process.env.DELAY_THRESHOLD_MIN || '10', 10),
+    stalledThresholdMin: parseInt(process.env.STALLED_THRESHOLD_MIN || '15', 10),
+    etaMinConfidenceSpeedMps: parseFloat(process.env.ETA_MIN_CONFIDENCE_SPEED_MPS || '1.5'),
+    // Fallback speed when the driver app omits speed from the GPS ping.
+    // Must be a realistic urban average, NOT the confidence threshold (1.5 m/s
+    // is walking speed — using it as fallback makes ETAs unrealistically long).
+    etaFallbackSpeedMps: parseFloat(process.env.ETA_FALLBACK_SPEED_MPS || '8'),
+    baselineWindowDays: parseInt(process.env.BASELINE_WINDOW_DAYS || '14', 10),
+    baselineSampleEveryM: parseInt(process.env.BASELINE_SAMPLE_EVERY_M || '200', 10),
   },
 };
 

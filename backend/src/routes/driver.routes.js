@@ -36,6 +36,19 @@ const vllSvc            = require('../services/vehicleLocation.service');
 const lineSvc           = require('../services/line.service');
 const driverShiftSvc    = require('../services/driverShift.service');
 const safetyPolicySvc   = require('../services/safetyPolicy.service');
+// Phase 11A — Intelligent Tracking Layer (2026-06-23). Lazy-required inside
+// the /vehicle-location hook so the modules are only loaded when their
+// feature flag is on; this keeps the driver router's startup cost flat on
+// systems that haven't enabled the tracking layer.
+const etaSvc  = env.features.eta           ? require('../services/eta.service')           : null;
+const gfSvc   = env.features.geofence      ? require('../services/geofence.service')      : null;
+const devSvc  = env.features.routeDeviation ? require('../services/routeDeviation.service') : null;
+
+function dateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  return String(value).slice(0, 10);
+}
 
 // Phase 7.2 — per-driver rate limit on the location-write endpoint.
 // Keyed on req.user.id (NOT IP) so multiple drivers behind one NAT
@@ -604,6 +617,7 @@ router.post('/emergency', async (req, res, next) => {
         vehicle_id: vehicle.vehicle_id,
         plate_no: vehicle.plate_no,
         has_gps: lat != null,
+        vehicle_warning: vehicle.vehicle_id ? null : 'ไม่พบรถที่คนขับคันนี้ประจำ — บันทึกเหตุฉุกเฉินโดยไม่ระบุรถ',
         safety_policy: policy,
       },
       'Emergency reported',
@@ -653,7 +667,11 @@ router.get('/profile', async (req, res, next) => {
        LIMIT 1`,
       [vehicle.vehicle_id]
     );
-    return sendSuccess(res, { ...driver, vehicle_id: vehicle.vehicle_id });
+    return sendSuccess(res, {
+      ...driver,
+      vehicle_id: vehicle.vehicle_id,
+      insurance_expiry: dateOnly(driver.insurance_expiry),
+    });
   } catch (err) { return next(err); }
 });
 
@@ -1098,7 +1116,52 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
       source: 'web',
     });
 
-    return sendSuccess(res, { received_at: new Date().toISOString(), safety_policy: policy }, 'OK');
+    // ─── Phase 11A — Intelligent Tracking hooks (2026-06-23) ───────────────
+    // Each hook is feature-flagged and best-effort: a failure only means a
+    // missed event / stale ETA for this ping; the next ping re-evaluates.
+    // The hooks run AFTER the response is prepared so the driver's ping
+    // latency is unaffected (we fire-and-await in the same tick but the
+    // work is cheap: a few SELECTs + at most one INSERT per active
+    // geofence). All three hooks share the same GPS coordinates.
+    const trackingPayload = {
+      vehicleId: vehicle.vehicle_id,
+      driverId,
+      latitude: lat,
+      longitude: lng,
+      speedMps: Number.isFinite(Number(speed_mps)) ? Number(speed_mps) : null,
+      accuracyMeters: Number.isFinite(Number(accuracy_meters)) ? Math.round(Number(accuracy_meters)) : null,
+    };
+    // Phase 11A audit fix M1: track hook health so monitoring can detect
+    // silent tracking failures. Each hook is still best-effort (never blocks
+    // the GPS ping) but failures are now logged with a structured tag and
+    // surfaced in the response as tracking_health.
+    const trackingHealth = { eta: 'ok', geofence: 'ok', deviation: 'ok' };
+    try {
+      if (env.features.eta) {
+        await etaSvc.refreshForVehicle(trackingPayload);
+      } else { trackingHealth.eta = 'disabled'; }
+    } catch (e) {
+      trackingHealth.eta = 'error';
+      console.error('[tracking] eta refresh failed:', { vehicle: vehicle.vehicle_id, err: e.message });
+    }
+    try {
+      if (env.features.geofence) {
+        await gfSvc.checkForVehicle(trackingPayload);
+      } else { trackingHealth.geofence = 'disabled'; }
+    } catch (e) {
+      trackingHealth.geofence = 'error';
+      console.error('[tracking] geofence check failed:', { vehicle: vehicle.vehicle_id, err: e.message });
+    }
+    try {
+      if (env.features.routeDeviation) {
+        await devSvc.checkForVehicle(trackingPayload);
+      } else { trackingHealth.deviation = 'disabled'; }
+    } catch (e) {
+      trackingHealth.deviation = 'error';
+      console.error('[tracking] deviation check failed:', { vehicle: vehicle.vehicle_id, err: e.message });
+    }
+
+    return sendSuccess(res, { received_at: new Date().toISOString(), safety_policy: policy, tracking_health: trackingHealth }, 'OK');
   } catch (err) { return next(err); }
 });
 

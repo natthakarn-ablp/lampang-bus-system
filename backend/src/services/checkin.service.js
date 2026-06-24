@@ -87,7 +87,7 @@ async function getDriverVehicle(pool, userOrUsername) {
         vehicle_id: activeShifts[0].vehicle_id,
         plate_no: activeShifts[0].plate_no,
         driver_id: Number(driverId),
-        shift_id: activeShifts[0].shift_id,
+        shift_id: activeShifts[0].shift_id ?? null,
       };
     }
     if (activeShifts.length > 1) {
@@ -179,10 +179,14 @@ async function resolveVehicleShiftIndependent(pool, { username = '', driverId = 
     throw makeError('No active driver assignment found for vehicle ' + plate_no, 400);
   }
 
+  const assignmentDriverId = assignments.length === 1 && assignments[0].driver_id != null
+    ? Number(assignments[0].driver_id)
+    : null;
+
   return {
     vehicle_id,
     plate_no,
-    driver_id: assignments.length === 1 ? Number(assignments[0].driver_id) : null,
+    driver_id: Number.isFinite(assignmentDriverId) ? assignmentDriverId : null,
     shift_id: null,
   };
 }
@@ -330,13 +334,25 @@ async function _buildCheckinTransaction(conn, {
   // retry can't create duplicate checkin_logs AND duplicate parent notifications.
   // A different status (board CHECKED_IN → dropoff CHECKED_OUT) is still allowed.
   const [dupLog] = await conn.query(
-    `SELECT id FROM checkin_logs
-     WHERE student_id = ? AND session = ? AND status = ? AND check_date = CURDATE()
+    `SELECT id, status FROM checkin_logs
+     WHERE student_id = ? AND session = ? AND check_date = CURDATE()
+     ORDER BY id DESC
      LIMIT 1`,
-    [student.id, session, status]
+    [student.id, session]
   );
   if (dupLog.length) {
-    throw makeError('รายการนี้ถูกบันทึกไปแล้ว', 409);
+    const lastStatus = dupLog[0].status;
+    if (lastStatus === status) {
+      // Exact duplicate — same status as the most recent log for today.
+      throw makeError('รายการนี้ถูกบันทึกไปแล้ว', 409);
+    }
+    // Phase 11A audit fix H2: reject invalid state transitions.
+    // CHECKED_OUT → CHECKED_IN is not allowed (student already dropped off).
+    // CHECKED_IN → CHECKED_IN is caught above. Only CHECKED_IN → CHECKED_OUT
+    // is a valid forward transition.
+    if (lastStatus === 'CHECKED_OUT' && status === 'CHECKED_IN') {
+      throw makeError('นักเรียนถูกส่งแล้วในรอบนี้ — ไม่สามารถเช็กอินซ้ำได้', 409);
+    }
   }
 
   // 2. Insert checkin_log

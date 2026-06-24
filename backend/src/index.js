@@ -67,10 +67,62 @@ async function assertDriverShiftMigrationPresent() {
   console.log('[app] Driver-shift migration check passed (migration 039 tables present)');
 }
 
+// ─── Phase 11A — Intelligent Tracking migration guard (2026-06-23) ───────────
+// Same pattern as the driver-shift guard: if any of FEATURE_ETA /
+// FEATURE_GEOFENCE / FEATURE_ROUTE_DEVIATION is on, migration 040 must have
+// been applied. Probe once at boot and refuse to start on a missing table so
+// the failure is a single clear fatal message instead of per-ping errors.
+const REQUIRED_TRACKING_TABLES = [
+  'vehicle_location_history',
+  'geofences',
+  'geofence_events',
+  'route_baselines',
+  'route_deviations',
+  'eta_predictions',
+];
+
+async function assertTrackingMigrationPresent() {
+  const anyTrackingFlag =
+    env.features.eta || env.features.geofence || env.features.routeDeviation;
+  if (!anyTrackingFlag) return; // all flags off → nothing to check
+
+  let presentTables;
+  try {
+    const placeholders = REQUIRED_TRACKING_TABLES.map(() => '?').join(', ');
+    const [rows] = await pool.query(
+      `SELECT table_name AS table_name
+         FROM information_schema.tables
+        WHERE table_schema = ?
+          AND table_name IN (${placeholders})`,
+      [env.db.name, ...REQUIRED_TRACKING_TABLES]
+    );
+    presentTables = new Set(rows.map((r) => String(r.table_name).toLowerCase()));
+  } catch (err) {
+    console.warn(
+      `[app] WARNING: could not verify tracking migration presence (${err.message}). ` +
+      'Continuing startup; verify migration 040 was applied.'
+    );
+    return;
+  }
+
+  const missing = REQUIRED_TRACKING_TABLES.filter((t) => !presentTables.has(t));
+  if (missing.length > 0) {
+    console.error(
+      `[app] FATAL: Intelligent Tracking feature flag(s) require migration 040 — ` +
+      `missing table(s): ${missing.join(', ')}. ` +
+      'Apply backend/migrations/040_intelligent_tracking.sql or set ' +
+      'FEATURE_ETA / FEATURE_GEOFENCE / FEATURE_ROUTE_DEVIATION = false before starting.'
+    );
+    process.exit(1);
+  }
+  console.log('[app] Intelligent Tracking migration check passed (migration 040 tables present)');
+}
+
 // ─── Start ───────────────────────────────────────────────────────────────────
 async function start() {
   await testConnection();
   await assertDriverShiftMigrationPresent();
+  await assertTrackingMigrationPresent();
   server = app.listen(env.app.port, HOST, () => {
     console.log(`[app] Lampang Bus System API running on ${HOST}:${env.app.port}`);
     console.log(`[app] Environment: ${env.app.nodeEnv}`);

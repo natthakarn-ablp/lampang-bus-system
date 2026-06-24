@@ -10,7 +10,7 @@
 UPDATE users SET password_changed_at = created_at WHERE password_changed_at IS NULL;
 
 -- Step 2: make the column NOT NULL with a sensible default so future
--- inserts always have a value. ALGORITHM=INSTANT for fail-fast.
+-- inserts always have a value. ALGORITHM=COPY for fail-fast.
 ALTER TABLE users
   MODIFY COLUMN password_changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  ALGORITHM=INSTANT;
+  ALGORITHM=COPY;

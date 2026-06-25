@@ -83,6 +83,36 @@ async function cancelLeave(leaveId, userId, vehicleId) {
 }
 
 /**
+ * Cancel a leave — scoped to the SCHOOL of the leave's student. A school user
+ * may cancel a leave they recorded in error for one of their own students. A
+ * leave that does not exist OR belongs to another school both resolve to 404
+ * (privacy-preserving — never reveals an out-of-scope leave).
+ *
+ * @param {number} leaveId
+ * @param {number} userId    - users.id of the canceller
+ * @param {string} schoolId  - the canceller's school scope
+ */
+async function cancelLeaveBySchool(leaveId, userId, schoolId) {
+  const [[row]] = await pool.query(
+    `SELECT sl.id FROM student_leaves sl
+       JOIN students s ON s.id = sl.student_id
+      WHERE sl.id = ? AND s.school_id = ? AND sl.cancelled = FALSE`,
+    [leaveId, schoolId]
+  );
+  if (!row) {
+    const err = new Error('ไม่พบรายการลาหรือยกเลิกไปแล้ว');
+    err.statusCode = 404;
+    throw err;
+  }
+  await pool.query(
+    `UPDATE student_leaves SET cancelled = TRUE, cancelled_by = ?, cancelled_at = NOW() WHERE id = ?`,
+    [userId, leaveId]
+  );
+  await logAudit({ userId, action: 'UPDATE', entityType: 'leave', entityId: leaveId, newValue: { cancelled: true, by: 'school' } });
+  return { id: leaveId, cancelled: true };
+}
+
+/**
  * Get leaves for a vehicle on a date.
  */
 async function getLeavesForVehicle(vehicleId, date) {
@@ -133,4 +163,4 @@ async function getActiveLeaves(date) {
   return rows;
 }
 
-module.exports = { createLeave, cancelLeave, getLeavesForVehicle, getLeavesForSchool, getActiveLeaves };
+module.exports = { createLeave, cancelLeave, cancelLeaveBySchool, getLeavesForVehicle, getLeavesForSchool, getActiveLeaves };

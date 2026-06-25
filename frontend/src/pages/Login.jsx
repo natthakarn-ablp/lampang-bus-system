@@ -160,7 +160,7 @@ export default function Login() {
         {/* Trust line */}
         <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-ink-muted">
           <ShieldCheck className="w-3.5 h-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
-          ระบบกำกับความปลอดภัยรถรับส่งนักเรียน · อบจ.ลำปาง
+          ระบบกำกับความปลอดภัยรถรับส่งนักเรียน
         </p>
       </div>
     </div>

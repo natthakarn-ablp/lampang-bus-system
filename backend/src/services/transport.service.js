@@ -346,6 +346,32 @@ async function updateInspection({ inspectionId, expiryDate, result, notes, userI
   );
 }
 
+/**
+ * Delete a wrongly-recorded inspection (self-correction). vehicle_inspections
+ * has no soft-delete column, so this is a hard delete — the removed row is
+ * preserved in audit_logs by the caller. Only the inspector who recorded it
+ * (or an admin) may delete. Recomputes the vehicle's eligibility afterwards
+ * because refreshVehicleEligibility falls back to vehicle_inspections.
+ * @returns the deleted row (for the caller's audit oldValue)
+ */
+async function deleteInspection({ inspectionId, userId, isAdmin = false }) {
+  const [[row]] = await pool.query(
+    `SELECT id, vehicle_id, inspected_by, result, expiry_date, inspection_date, notes
+       FROM vehicle_inspections WHERE id = ?`,
+    [inspectionId]
+  );
+  if (!row) { const e = new Error('ไม่พบผลตรวจ'); e.statusCode = 404; throw e; }
+  if (!isAdmin && row.inspected_by !== userId) {
+    const e = new Error('ลบได้เฉพาะผลตรวจที่คุณเป็นผู้บันทึก'); e.statusCode = 403; throw e;
+  }
+  await pool.query(`DELETE FROM vehicle_inspections WHERE id = ?`, [inspectionId]);
+  try {
+    const { refreshVehicleEligibility } = require('./vehicleVerification.service');
+    await refreshVehicleEligibility(pool, row.vehicle_id);
+  } catch (e) { /* non-fatal: eligibility recompute is best-effort */ }
+  return row;
+}
+
 module.exports = {
   getDashboard,
   getVehicles,
@@ -354,4 +380,5 @@ module.exports = {
   getInspections,
   createInspection,
   updateInspection,
+  deleteInspection,
 };

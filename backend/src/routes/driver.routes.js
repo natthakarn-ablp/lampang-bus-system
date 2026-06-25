@@ -326,6 +326,32 @@ router.post('/pickup-points', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+// ─── DELETE /api/driver/pickup-points/:id — ลบจุดรับส่งของรถตัวเอง ───────────
+// Driver self-service cleanup. Scoped to the driver's own active vehicle.
+router.delete('/pickup-points/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    const point = await ppSvc.getPickupPointById(id);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    if (point.vehicle_id !== vehicle.vehicle_id) {
+      return sendError(res, 'จุดรับส่งนี้ไม่ใช่ของรถคุณ', [], 403);
+    }
+
+    await ppSvc.softDeletePickupPoint(id);
+    await logAudit({
+      userId: req.user.id, action: 'DELETE', entityType: 'pickup_point', entityId: id,
+      oldValue: { vehicle_id: point.vehicle_id, label: point.label, latitude: point.latitude, longitude: point.longitude },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, null, 'ลบจุดรับส่งสำเร็จ');
+  } catch (err) { return next(err); }
+});
+
 // ─── GET /api/driver/pickup-points/:id/assignable-students ──────────────────
 // Phase 6.1 hotfix-7: feeds the edit-students modal. Returns the
 // driver-vehicle's roster filtered to students that can be ON this

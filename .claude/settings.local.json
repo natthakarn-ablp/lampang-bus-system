@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node -e ':*)"
+      "Bash(node -e ':*)",
+      "Bash(npm run *)",
+      "Bash(node scripts/_tmp_verify_prep.js)",
+      "Bash(node verify-redesign.js)",
+      "Bash(curl -s -o /dev/null -w \"backend localhost:3000 -> %{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"DELETE /api/transport/inspections/0 \\(no auth\\) -> %{http_code}\\\\n\" -X DELETE http://localhost:3000/api/transport/inspections/0)",
+      "Bash(curl -s -o /dev/null -w \"PUT /api/school/vehicles/x \\(no auth\\) -> %{http_code}\\\\n\" -X PUT http://localhost:3000/api/school/vehicles/x)",
+      "Bash(node scripts/_tmp_selfservice_prep.js)",
+      "Bash(node verify-selfservice.js)",
+      "mcp__claude_ai_Google_Drive__search_files"
     ]
   }
 }

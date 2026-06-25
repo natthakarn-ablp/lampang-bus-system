@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือปฏิบัติงาน — คนขับรถ — ระบบรถรับส่งนักเรียนจังหวัดลำปาง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#1e5fa8; --accent-dark:#16467d; --accent-soft:#eaf2fb;
+  --ink:#1a2230; --ink-soft:#475067; --muted:#6b7488;
+  --line:#e3e8f0; --bg:#f5f7fb; --card:#ffffff;
+  --warn-bg:#fff7e6; --warn-bd:#e8a33d; --warn-ink:#7a4d06;
+  --tip-bg:#eef6ff; --tip-bd:#4a90d9; --tip-ink:#1a4e84;
+  --note-bg:#f3f5f9; --note-bd:#9aa6bd; --note-ink:#3a445a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.topnav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+.nav-inner{max-width:980px; margin:0 auto; padding:8px 20px; display:flex; flex-wrap:wrap; gap:4px;}
+.topnav a{font-size:14.5px; font-weight:500; color:var(--ink-soft); text-decoration:none;
+  padding:6px 12px; border-radius:8px; white-space:nowrap;}
+.topnav a:hover{background:var(--accent-soft); color:var(--accent-dark);}
+.topnav a.active{background:var(--accent); color:#fff;}
+.wrap{max-width:980px; margin:0 auto; padding:0 20px 80px;}
+main{background:var(--card); margin-top:28px; padding:48px 56px; border-radius:var(--radius);
+  border:1px solid var(--line); box-shadow:0 1px 3px rgba(16,30,54,.04);}
+h1{font-size:30px; font-weight:700; line-height:1.3; margin:0 0 8px; color:var(--ink);
+  padding-bottom:16px; border-bottom:3px solid var(--accent);}
+h2{font-size:23px; font-weight:700; margin:40px 0 12px; color:var(--accent-dark);
+  padding-top:12px;}
+h3{font-size:19.5px; font-weight:600; margin:28px 0 8px; color:var(--ink);}
+h4{font-size:17px; font-weight:600; margin:20px 0 6px; color:var(--ink-soft);}
+p{margin:10px 0;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+strong{font-weight:600; color:var(--ink);}
+ul,ol{margin:10px 0; padding-left:26px;}
+li{margin:5px 0;}
+hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+code{font-family:'IBM Plex Mono',monospace; font-size:14.5px; background:#eef1f6;
+  padding:2px 6px; border-radius:5px; color:#7a3a8c;}
+pre{background:#1e2430; color:#e6e9ef; padding:16px 18px; border-radius:10px; overflow:auto;}
+pre code{background:none; color:inherit; padding:0;}
+main img{display:block; max-width:100%; height:auto; margin:16px auto 4px; border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 3px 12px rgba(16,30,54,.10);}
+main p > em:only-child{display:block; text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 18px;}
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15.5px;
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+thead th{background:var(--accent); color:#fff; font-weight:600; text-align:left;
+  padding:11px 14px; font-size:15px;}
+tbody td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top;}
+tbody tr:nth-child(even){background:#fafbfd;}
+tbody tr:hover{background:var(--accent-soft);}
+blockquote.callout{margin:16px 0; padding:14px 18px; border-radius:10px; border-left:5px solid;
+  font-size:16px;}
+blockquote.callout p{margin:6px 0;}
+blockquote.callout ul{margin:6px 0;}
+.callout.warn{background:var(--warn-bg); border-color:var(--warn-bd); color:var(--warn-ink);}
+.callout.tip{background:var(--tip-bg); border-color:var(--tip-bd); color:var(--tip-ink);}
+.callout.note{background:var(--note-bg); border-color:var(--note-bd); color:#3a445a;}
+.callout.warn strong,.callout.tip strong,.callout.note strong{color:inherit;}
+.docfoot{max-width:980px; margin:24px auto 0; padding:0 20px; color:var(--muted); font-size:13.5px; text-align:center;}
+.toolbar{max-width:980px; margin:18px auto 0; padding:0 20px; display:flex; justify-content:flex-end;}
+.btn-print{font-size:14px; font-weight:500; color:var(--accent-dark); background:var(--accent-soft);
+  border:1px solid var(--line); padding:7px 14px; border-radius:8px; cursor:pointer;}
+.btn-print:hover{background:#dceafa;}
+@media (max-width:640px){
+  body{font-size:16px;}
+  main{padding:28px 20px;}
+  h1{font-size:24px;} h2{font-size:20px;} h3{font-size:17.5px;}
+  .nav-inner{padding:6px 12px;}
+}
+@media print{
+  .topnav,.toolbar{display:none;}
+  body{background:#fff; font-size:12pt;}
+  main{box-shadow:none; border:none; margin:0; padding:0;}
+  a{color:#000; text-decoration:none;}
+  table,blockquote,h2,h3,figure,img{page-break-inside:avoid;}
+  main img{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html" class="active">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="wrap">
+<main>
+<h1>คู่มือปฏิบัติงาน — คนขับรถ</h1>
+<blockquote class="callout note">
+<p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง — <a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a>
+เวอร์ชัน Phase 10.13C • อัปเดต 2026-06-24</p>
+</blockquote>
+<blockquote class="callout note">
+<p>📷 <strong>หมายเหตุภาพหน้าจอ:</strong> ข้อมูลส่วนบุคคล (ชื่อ/เบอร์) ในภาพถูกเบลอเพื่อความเป็นส่วนตัว — เมื่อใช้งานจริงจะแสดงข้อมูลตามปกติ</p>
+</blockquote>
+<h2>ภาพรวม 30 วินาที</h2>
+<ul>
+<li><strong>บทบาทนี้ทำอะไรได้:</strong>
+<ul>
+<li>ตรวจรถก่อนออก (pre-trip) — บังคับก่อนเช็กชื่อ</li>
+<li>ดูรายชื่อนักเรียนในรถของตัวเองประจำวัน</li>
+<li>บันทึกรับ-ส่งนักเรียน (เช็กชื่อ) ทีละคนหรือทั้งคัน + บันทึกการลา</li>
+<li>ส่งคำขอเพิ่ม/ถอนนักเรียนให้โรงเรียนอนุมัติ</li>
+<li>แจ้งเหตุฉุกเฉิน + ส่งตำแหน่งรถ live + ดู/สร้างจุดรับส่ง</li>
+<li>แก้ไขข้อมูลคนขับ/รถ + เปลี่ยนรหัสผ่าน</li>
+</ul>
+</li>
+<li><strong>เข้าระบบด้วย:</strong> ใช้ <strong>ทะเบียนรถ</strong> เป็นชื่อผู้ใช้ (เช่น <code>นข 2210 ลำปาง</code>)</li>
+<li><strong>อุปกรณ์ที่แนะนำ:</strong> มือถือเป็นหลัก (mobile-first, มีแถบล่าง 4 แท็บ + ปุ่มเมนู ☰ มุมซ้ายบน) — แท็บเล็ต/คอมพิวเตอร์ใช้ได้ (เห็นแถบเมนูด้านข้างค้างตลอด)</li>
+</ul>
+<blockquote class="callout tip">
+<p>💡 แนะนำบันทึก URL ไว้ที่หน้าจอหลักของมือถือ (Add to Home Screen) เพื่อเปิดใช้งานเหมือนแอป</p>
+</blockquote>
+<h2>สารบัญงาน</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>งาน</th>
+<th>ใช้เมื่อ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>เข้าสู่ระบบ</td>
+<td>ทุกครั้งที่เริ่มใช้งาน</td>
+</tr>
+<tr>
+<td>2</td>
+<td>ตรวจรถก่อนออก (Pre-trip)</td>
+<td>บังคับวันละ 1 ครั้ง ก่อนเช็กชื่อ</td>
+</tr>
+<tr>
+<td>3</td>
+<td>ดูหน้าแรก / ภาพรวมวันนี้</td>
+<td>เริ่มงานประจำวัน</td>
+</tr>
+<tr>
+<td>4</td>
+<td>ดูรายชื่อนักเรียน (Roster)</td>
+<td>ตรวจรายชื่อในรถ</td>
+</tr>
+<tr>
+<td>5</td>
+<td>บันทึกรับ-ส่งนักเรียน (เช็กชื่อ)</td>
+<td>ทุกรอบรับ-ส่ง</td>
+</tr>
+<tr>
+<td>6</td>
+<td>บันทึกการลา</td>
+<td>นักเรียนลา</td>
+</tr>
+<tr>
+<td>7</td>
+<td>ส่งตำแหน่งรถ (Live)</td>
+<td>ระหว่างเดินรถ</td>
+</tr>
+<tr>
+<td>8</td>
+<td>ส่งคำขอเปลี่ยนรายชื่อ</td>
+<td>เพิ่ม/ถอนนักเรียน</td>
+</tr>
+<tr>
+<td>9</td>
+<td>แจ้งเหตุฉุกเฉิน</td>
+<td>รถเสีย/อุบัติเหตุ/เจ็บป่วย</td>
+</tr>
+<tr>
+<td>10</td>
+<td>แผนที่จุดรับส่ง</td>
+<td>ดู/สร้างจุดรับส่ง</td>
+</tr>
+<tr>
+<td>11</td>
+<td>เลือกรถและเริ่มรอบ</td>
+<td>(ฟีเจอร์ปิดอยู่ — ครั้งคราว)</td>
+</tr>
+<tr>
+<td>12</td>
+<td>ข้อมูลคนขับ / โปรไฟล์ + เปลี่ยนรหัสผ่าน</td>
+<td>แก้ข้อมูล/เปลี่ยนรหัส</td>
+</tr>
+<tr>
+<td>13</td>
+<td>ออกจากระบบ</td>
+<td>เลิกใช้งาน</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>งานที่ 1 — เข้าสู่ระบบ</h2>
+<p><strong>ใช้เมื่อ:</strong> เริ่มใช้งานระบบ</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเบราว์เซอร์ไปที่ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong></li>
+<li>กรอกช่อง <strong>&quot;ชื่อผู้ใช้ / ทะเบียนรถ&quot;</strong> ด้วยทะเบียนรถของคุณ เช่น <code>นข 2210 ลำปาง</code> (พิมพ์ไทยได้ เว้นวรรคตามทะเบียนจริง)</li>
+<li>กรอก <strong>รหัสผ่าน</strong> (รหัสตั้งต้นคือ <code>1234</code> ใช้ได้ครั้งแรกเท่านั้น)</li>
+<li>กด <strong>เข้าสู่ระบบ</strong></li>
+</ol>
+<p><img src="screenshots/shared/00-login-desktop.png" alt="หน้าเข้าสู่ระบบ (เดสก์ท็อป)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (เดสก์ท็อป)</em></p>
+<p><img src="screenshots/shared/00-login-mobile.png" alt="หน้าเข้าสู่ระบบ (มือถือ)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (มือถือ)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เข้าสู่หน้าแรก/ภาพรวมวันนี้ได้ (เข้าครั้งเดียวอยู่ได้ทั้งวัน — token อายุ 24 ชั่วโมง)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>&quot;ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง&quot; → ทะเบียนรถหรือรหัสผ่านผิด</li>
+<li>&quot;บัญชีนี้ถูกปิดการใช้งาน&quot; → ติดต่อ admin</li>
+<li>&quot;มีการพยายามเข้าสู่ระบบหลายครั้งจากเครือข่ายนี้&quot; → รอประมาณ 15 นาที</li>
+<li><strong>ลืมรหัสผ่าน:</strong> ระบบไม่มีปุ่ม &quot;ลืมรหัสผ่าน&quot; และคนขับตั้งรหัสใหม่เองไม่ได้ → ติดต่อ admin หรือเจ้าหน้าที่โรงเรียนให้รีเซ็ตให้</li>
+</ul>
+<h3>บังคับเปลี่ยนรหัสครั้งแรก</h3>
+<p><strong>ใช้เมื่อ:</strong> บัญชีถูกตั้งให้ต้องเปลี่ยนรหัส (เพิ่งสร้าง/ถูกรีเซ็ต) — ขึ้นข้อความ &quot;กรุณาเปลี่ยนรหัสผ่านเริ่มต้น&quot;</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ระบบพาไปหน้า <strong>เปลี่ยนรหัสผ่าน</strong> อัตโนมัติ (ใช้เมนูอื่นไม่ได้จนเปลี่ยนเสร็จ)</li>
+<li>ตั้งรหัสใหม่ตามเงื่อนไข แล้วกรอกยืนยันให้ตรงกัน</li>
+<li>บันทึก แล้วเข้าสู่ระบบใหม่ถ้าระบบให้</li>
+</ol>
+<p><img src="screenshots/shared/01-change-password.png" alt="หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)"></p>
+<p><em>ภาพ: หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)</em></p>
+<blockquote class="callout warn">
+<p>⚠️ <strong>เงื่อนไขรหัสผ่าน (บังคับที่เซิร์ฟเวอร์):</strong> อย่างน้อย <strong>8 ตัวอักษร</strong>, ห้ามคาดเดาง่าย (เช่น <code>12345678</code>, <code>password</code>, ตัวอักษรซ้ำตัวเดียวทั้งหมด), <strong>ห้ามตรงกับชื่อผู้ใช้ (ทะเบียนรถ)</strong> และ <strong>ต้องไม่ซ้ำกับรหัสผ่านเดิม</strong> — ถ้าไม่ผ่านจะขึ้น เช่น &quot;รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร&quot; หรือ &quot;รหัสผ่านนี้คาดเดาง่ายเกินไป กรุณาใช้รหัสผ่านอื่น&quot;
+⚠️ หลังเปลี่ยนรหัสผ่าน เซสชันเดิม (token เก่า) ใช้ไม่ได้ทันที — อาจต้องเข้าสู่ระบบใหม่</p>
+</blockquote>
+<hr>
+<h2>งานที่ 2 — ตรวจรถก่อนออก (Pre-trip)</h2>
+<p><strong>ใช้เมื่อ:</strong> ก่อนเช็กชื่อทุกวัน — <strong>บังคับวันละ 1 ครั้ง</strong> (ถ้ายังไม่ตรวจ ปุ่มเช็กชื่อจะถูกล็อก)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดหน้าแรกครั้งแรกของวัน — หน้าต่าง <strong>&quot;ตรวจรถก่อนออก&quot;</strong> จะเด้งขึ้นมา (มี 6 รายการ: ยางรถ/ลมยาง, ไฟหน้า-ไฟท้าย, กระจก/กระจกมองข้าง, เบรก, เข็มขัดนิรภัย/ที่นั่ง, ความสะอาดภายในรถ)</li>
+<li>ถ้าทุกอย่างปกติ กด <strong>&quot;ทุกรายการปกติ — ออกได้&quot;</strong> (ปุ่มเขียว)</li>
+<li>ถ้ามีปัญหา กด <strong>&quot;มีรายการผิดปกติ&quot;</strong> (ปุ่มเหลือง) → เลือกรายการที่ผิดปกติ → กรอก <strong>&quot;รายละเอียด (ถ้ามี)&quot;</strong> → กด <strong>&quot;บันทึกรายการผิดปกติ (N รายการ)&quot;</strong></li>
+</ol>
+<p><img src="screenshots/driver/02-pretrip.png" alt="แบบฟอร์มตรวจสภาพรถก่อนออก (6 รายการ)"></p>
+<p><em>ภาพ: แบบฟอร์มตรวจสภาพรถก่อนออก (6 รายการ)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ป้ายสถานะการตรวจรถบนหน้าแรกเปลี่ยนเป็น &quot;ตรวจสภาพรถแล้ว&quot; (หรือ &quot;ตรวจสภาพรถแล้ว · มีรายการผิดปกติ&quot;) และปุ่มเช็กชื่อใช้งานได้</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>กดเช็กชื่อแล้วขึ้น &quot;กรุณาตรวจรถก่อนออกก่อนเช็กชื่อ&quot; → ทำขั้นตอนตรวจรถให้เสร็จก่อน</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ ถ้าบันทึกว่ามีรายการผิดปกติพร้อมรายละเอียด ระบบจะสร้างบันทึกเหตุฉุกเฉินให้อัตโนมัติ เพื่อแจ้งผู้เกี่ยวข้อง</p>
+</blockquote>
+<hr>
+<h2>งานที่ 3 — ดูหน้าแรก / ภาพรวมวันนี้</h2>
+<p><strong>ใช้เมื่อ:</strong> เริ่มงานประจำวัน (หน้าแรกหลังเข้าสู่ระบบ รวมงานประจำวันไว้ที่เดียว)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดหน้าแรก — ถ้ายังไม่ตรวจรถวันนี้ ระบบจะเด้งหน้าต่างให้ตรวจรถก่อน (งานที่ 2)</li>
+<li>ดูข้อมูลบนจอ: การ์ดบนสุดบอกรอบปัจจุบัน (<strong>&quot;โหมดส่งเช้า&quot;</strong> / <strong>&quot;โหมดรับเย็น&quot;</strong>) + ทะเบียนรถ + ปุ่ม <strong>&quot;ฉุกเฉิน&quot;</strong> (สีแดง มุมขวา), ป้ายสถานะตรวจรถ, ป้ายความคืบหน้า (&quot;เหลือเช็กอิน N คน&quot; / &quot;เสร็จครบทุกคน&quot;), แถบ &quot;ส่งแล้ว/รับแล้ว X/Y คน&quot;</li>
+<li>เมื่อตรวจรถผ่านแล้ว กด <strong>&quot;นักเรียนขึ้นรถครบทุกคน (N คน)&quot;</strong> หรือ <strong>&quot;มีข้อยกเว้น — เลือกทีละคน&quot;</strong></li>
+</ol>
+<p><img src="screenshots/driver/01-dashboard.png" alt="หน้าแรก — ระบบบังคับ &quot;ตรวจรถก่อนออก&quot; (Pre-trip) ก่อนเข้าหน้าเช็กชื่อ"></p>
+<p><em>ภาพ: เมื่อเปิดหน้าแรกครั้งแรกของวัน — ระบบบังคับ &quot;ตรวจรถก่อนออก&quot; (Pre-trip) ก่อน</em></p>
+<p><img src="screenshots/driver/01c-checkin-top.png" alt="หน้าเช็กชื่อนักเรียน (หลังผ่านการตรวจรถ)"></p>
+<p><em>ภาพ: หน้าเช็กชื่อนักเรียนหลังผ่าน Pre-trip — แสดงโหมด (รับเช้า/รับเย็น), ทะเบียนรถ, จำนวนที่เหลือเช็กอิน, แถบความคืบหน้า, ปุ่ม &quot;นักเรียนขึ้นรถครบทุกคน&quot; (เช็กทั้งคัน) และ &quot;มีข้อยกเว้น — เลือกทีละคน&quot; (เช็กรายคน), ปุ่มส่งตำแหน่งรถ และปุ่มฉุกเฉิน</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรอบปัจจุบัน ทะเบียนรถ และความคืบหน้าการเช็กชื่อครบถ้วน</p>
+<blockquote class="callout tip">
+<p>💡 หน้านี้รีเฟรชอัตโนมัติทุก 30 วินาที (มีข้อความ &quot;รีเฟรชอัตโนมัติทุก 30 วินาที&quot;)
+ℹ️ ระบบเลือกรอบเช้า/เย็นให้อัตโนมัติตามเวลามาตรฐานไทย (โดยปริยายหลังเที่ยงเป็น &quot;รับเย็น&quot;) — ไม่อิงนาฬิกาในเครื่องคุณ</p>
+</blockquote>
+<h3>เมนู / หน้าจอ (อ้างอิงด่วน)</h3>
+<p><strong>บนมือถือ — แถบล่าง 4 แท็บ:</strong></p>
+<table>
+<thead>
+<tr>
+<th>แท็บ</th>
+<th>ทำอะไร</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>หน้าแรก</strong></td>
+<td>ภาพรวมวันนี้ + ตรวจรถ + เช็กชื่อ + ส่งตำแหน่งรถ</td>
+</tr>
+<tr>
+<td><strong>คำขอ</strong></td>
+<td>สร้าง/ดูคำขอเพิ่ม-ถอนนักเรียน</td>
+</tr>
+<tr>
+<td><strong>ฉุกเฉิน</strong></td>
+<td>แจ้งเหตุฉุกเฉิน</td>
+</tr>
+<tr>
+<td><strong>โปรไฟล์</strong></td>
+<td>ข้อมูลคนขับและรถ + เปลี่ยนรหัสผ่าน</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ เมนู <strong>&quot;เลือกรถและเริ่มรอบ&quot;</strong> และ <strong>&quot;แผนที่จุดรับส่ง&quot;</strong> ไม่อยู่ในแถบล่าง 4 แท็บ — บนมือถือเข้าได้โดยกดปุ่ม <strong>☰ มุมซ้ายบน</strong> เพื่อเปิดแถบเมนูด้านข้าง (มีครบทุกหน้า)</p>
+</blockquote>
+<p><strong>บนคอมพิวเตอร์ — แถบเมนูด้านข้าง (Sidebar):</strong></p>
+<table>
+<thead>
+<tr>
+<th>กลุ่ม</th>
+<th>เมนู</th>
+<th>ทำอะไร</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ภาพรวม</td>
+<td><strong>ภาพรวมวันนี้</strong></td>
+<td>หน้าแรก เช็กชื่อนักเรียน</td>
+</tr>
+<tr>
+<td>งานประจำวัน</td>
+<td><strong>เลือกรถและเริ่มรอบ</strong></td>
+<td>เลือกรถ + เปิด/ปิดรอบงาน</td>
+</tr>
+<tr>
+<td>งานประจำวัน</td>
+<td><strong>แผนที่จุดรับส่ง</strong></td>
+<td>ดู/สร้างจุดรับส่ง</td>
+</tr>
+<tr>
+<td>งานประจำวัน</td>
+<td><strong>คำขอรายชื่อ</strong></td>
+<td>คำขอเพิ่ม-ถอนนักเรียน</td>
+</tr>
+<tr>
+<td>งานประจำวัน</td>
+<td><strong>แจ้งเหตุฉุกเฉิน</strong></td>
+<td>แจ้งเหตุฉุกเฉิน</td>
+</tr>
+<tr>
+<td>ข้อมูล</td>
+<td><strong>ข้อมูลคนขับ</strong></td>
+<td>โปรไฟล์ + เปลี่ยนรหัสผ่าน</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ ทุกขนาดจอมี <strong>แถบบนสุด (Top bar)</strong>: ปุ่ม ☰ (เฉพาะมือถือ) ทางซ้าย และ <strong>เมนูบัญชี</strong> (รูป/ชื่อผู้ใช้) ทางขวา ซึ่งมี <strong>&quot;เปลี่ยนรหัสผ่าน&quot;</strong> และ <strong>&quot;ออกจากระบบ&quot;</strong></p>
+</blockquote>
+<hr>
+<h2>งานที่ 4 — ดูรายชื่อนักเรียน (Roster)</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการตรวจรายชื่อนักเรียนในรถวันนี้</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดหน้าเช็กชื่อ — รายชื่อจัดกลุ่มตามโรงเรียน แต่ละคนแสดงคำนำหน้า + ชื่อ + นามสกุล และชั้น/ห้อง</li>
+<li>ดูรายชื่อ 3 ส่วน: <strong>&quot;รอดำเนินการ (N)&quot;</strong> (ยังไม่เช็ก), <strong>&quot;เสร็จแล้ว (N)&quot;</strong> (มีป้าย &quot;รับแล้ว&quot;/&quot;ส่งแล้ว&quot;), <strong>&quot;ลาวันนี้ (N)&quot;</strong> (มีป้าย &quot;ลาเช้า&quot;/&quot;ลาเย็น&quot;/&quot;ลาทั้งวัน&quot;)</li>
+<li>สังเกตป้าย <strong>&quot;ครูยืนยันแทนแล้ว&quot;</strong> บางคน = โรงเรียนได้บันทึกสถานะแทนคุณแล้ว</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นจำนวนนักเรียนแยกตามสถานะครบถ้วน</p>
+<blockquote class="callout note">
+<p>ℹ️ ป้าย &quot;ครูยืนยันแทนแล้ว&quot; เป็นข้อมูลอ่านอย่างเดียว — คุณ <strong>ไม่ต้องทำอะไรเพิ่ม</strong> ระบบไม่เปิดเผยเหตุผล/ผู้ที่ยืนยันแทนให้คนขับ (ตามนโยบายความเป็นส่วนตัว)</p>
+</blockquote>
+<p><img src="screenshots/driver/01c-checkin-top.png" alt="หน้าเช็กชื่อ — รายชื่อนักเรียนในรถ (Roster) พร้อมปุ่มเช็ก"></p>
+<p><em>ภาพ: หน้าเช็กชื่อ — รายชื่อนักเรียนในรถ (Roster) พร้อมปุ่มเช็ก</em></p>
+<hr>
+<h2>งานที่ 5 — บันทึกรับ-ส่งนักเรียน (เช็กชื่อ)</h2>
+<p><strong>ใช้เมื่อ:</strong> ทุกรอบรับ-ส่งนักเรียน (ต้องตรวจรถก่อนออกเสร็จแล้ว)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ตรวจรอบที่ระบบเลือกให้ (เช้า/เย็น) — ชื่อปุ่มจะเปลี่ยนตามรอบ:
+<ul>
+<li><strong>รอบเช้า:</strong> ทีละคน <strong>&quot;ส่งถึงโรงเรียน&quot;</strong> / ทั้งคัน <strong>&quot;ส่งเช้าทั้งหมด&quot;</strong></li>
+<li><strong>รอบเย็น:</strong> ทีละคน <strong>&quot;รับกลับบ้าน&quot;</strong> / ทั้งคัน <strong>&quot;รับเย็นทั้งหมด&quot;</strong></li>
+</ul>
+</li>
+<li>กด <strong>&quot;นักเรียนขึ้นรถครบทุกคน (N คน)&quot;</strong> เพื่อเช็กทุกคนพร้อมกัน หรือเลือกเช็กทีละคน</li>
+<li>เมื่อส่ง/รับนักเรียนลงจากรถครบแล้ว กด <strong>&quot;ยืนยันส่งนักเรียนลงครบแล้ว (จบรอบ)&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ระบบบันทึกประวัติพร้อมเวลา และส่งแจ้งเตือนทาง LINE ให้ผู้ปกครองที่ผูกบัญชีไว้</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>&quot;รายการนี้ถูกบันทึกไปแล้ว&quot; → กดสถานะเดิมซ้ำในรอบ/วันเดียวกัน (กันการกดซ้ำ) ไม่ต้องกดอีก</li>
+<li>&quot;นักเรียนถูกส่งแล้วในรอบนี้ — ไม่สามารถเช็กอินซ้ำได้&quot; → เช็กออกไปแล้ว ย้อนกลับมาไม่ได้ ถ้าจำเป็นติดต่อโรงเรียน</li>
+<li>&quot;Student not found in this vehicle&quot; → นักเรียนคนนี้ไม่ได้อยู่ในรถของคุณ</li>
+</ul>
+<blockquote class="callout warn">
+<p>⚠️ <strong>กดผิดแก้เองไม่ได้</strong> — ระบบไม่มีปุ่มลบ/แก้สถานะ (เก็บประวัติทั้งหมดเพื่อตรวจสอบ) ถ้าต้องแก้สถานะอย่างเป็นทางการให้ติดต่อโรงเรียน
+ℹ️ คนที่บันทึกลาในรอบนั้น จะถูกตัดออกจากการเช็กทั้งคันโดยอัตโนมัติ
+ℹ️ &quot;ส่งลงครบ&quot; จะเลือกเฉพาะคนที่ขึ้นรถแล้วแต่ยังไม่ได้ลง</p>
+</blockquote>
+<p><img src="screenshots/driver/01c-checkin-top.png" alt="เช็กชื่อรับ-ส่ง: ปุ่ม &quot;นักเรียนขึ้นรถครบทุกคน&quot; (ทั้งคัน) และ &quot;มีข้อยกเว้น — เลือกทีละคน&quot; (รายคน)"></p>
+<p><em>ภาพ: เช็กชื่อรับ-ส่ง: ปุ่ม &quot;นักเรียนขึ้นรถครบทุกคน&quot; (ทั้งคัน) และ &quot;มีข้อยกเว้น — เลือกทีละคน&quot; (รายคน)</em></p>
+<hr>
+<h2>งานที่ 6 — บันทึกการลา (Leave)</h2>
+<p><strong>ใช้เมื่อ:</strong> นักเรียนลา (เช้า/เย็น/ทั้งวัน)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>กดปุ่ม <strong>&quot;ลา&quot;</strong> ที่การ์ดของนักเรียน</li>
+<li>เลือกประเภท: <strong>&quot;ลาเช้า&quot;</strong> / <strong>&quot;ลาเย็น&quot;</strong> / <strong>&quot;ลาทั้งวัน&quot;</strong></li>
+<li>ถ้าต้องการยกเลิก กด <strong>&quot;ยกเลิกการลา&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> นักเรียนย้ายไปอยู่ส่วน &quot;ลาวันนี้&quot; และถูกตัดออกจากการเช็กทั้งคัน</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>บันทึกลารอบ/วันเดิมซ้ำไม่ได้ → จะขึ้นข้อความว่านักเรียนคนนี้ถูกบันทึกการลาในวันนี้แล้ว</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ ยกเลิกการลาได้เฉพาะรายการของรถคุณเองเท่านั้น</p>
+</blockquote>
+<p><img src="screenshots/driver/01c-checkin-top.png" alt="บันทึกการลา: เข้าจาก &quot;มีข้อยกเว้น — เลือกทีละคน&quot; บนหน้าเช็กชื่อ"></p>
+<p><em>ภาพ: บันทึกการลา: เข้าจาก &quot;มีข้อยกเว้น — เลือกทีละคน&quot; บนหน้าเช็กชื่อ</em></p>
+<hr>
+<h2>งานที่ 7 — ส่งตำแหน่งรถ (Live Location)</h2>
+<p><strong>ใช้เมื่อ:</strong> ระหว่างเดินรถ ต้องการให้ระบบเห็นตำแหน่งรถ (การ์ด &quot;ส่งตำแหน่งรถ&quot; บนหน้าแรก)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>กด <strong>&quot;เริ่มส่งตำแหน่ง&quot;</strong> เพื่อเริ่มส่งพิกัดรถ</li>
+<li>ดูระหว่างเปิดอยู่: &quot;อัปเดตล่าสุด HH:MM น.&quot; และ &quot;ความแม่นยำ ±N เมตร&quot;</li>
+<li>กด <strong>&quot;หยุดส่งตำแหน่ง&quot;</strong> เมื่อต้องการหยุด</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> การ์ดแสดงเวลาอัปเดตล่าสุดและความแม่นยำขณะส่งตำแหน่ง</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>&quot;ส่งตำแหน่งถี่เกินไป กรุณารอสักครู่&quot; → กดบ่อยเกินไป (ปกติไม่เกิดเพราะระบบส่งให้เองทุก ~15 วินาที)</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ ระบบส่งตำแหน่ง <strong>เฉพาะตอนที่คุณเปิดใช้งานเท่านั้น</strong> และหยุดทันทีเมื่อกด &quot;หยุดส่งตำแหน่ง&quot; ปิดเบราว์เซอร์ หรือออกจากระบบ
+ℹ️ ทุกครั้งที่เปิดหน้าใหม่ การส่งตำแหน่งจะเริ่มที่ปิดเสมอ (ระบบไม่จำสถานะเดิม)</p>
+</blockquote>
+<p><img src="screenshots/driver/01c-checkin-top.png" alt="ส่งตำแหน่งรถ: การ์ด &quot;ส่งตำแหน่งรถ&quot; + ปุ่ม &quot;เริ่มส่งตำแหน่ง&quot; ด้านบนหน้าเช็กชื่อ"></p>
+<p><em>ภาพ: ส่งตำแหน่งรถ: การ์ด &quot;ส่งตำแหน่งรถ&quot; + ปุ่ม &quot;เริ่มส่งตำแหน่ง&quot; ด้านบนหน้าเช็กชื่อ</em></p>
+<hr>
+<h2>งานที่ 8 — ส่งคำขอเปลี่ยนรายชื่อ (แท็บ &quot;คำขอ&quot;)</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการเพิ่มหรือถอนนักเรียนจากรถ (โรงเรียนเป็นผู้อนุมัติ)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>กดปุ่ม <strong>&quot;สร้างคำขอ&quot;</strong></li>
+<li>เลือกประเภท <strong>&quot;ถอนนักเรียนออกจากรถ&quot;</strong> หรือ <strong>&quot;เพิ่มนักเรียนเข้ารถ&quot;</strong></li>
+<li><strong>กรณีถอน:</strong> เลือกนักเรียนจากรายการ <strong>&quot;เลือกนักเรียนในรถ&quot;</strong> (รายชื่อนักเรียนในรถคุณปัจจุบัน)</li>
+<li><strong>กรณีเพิ่ม:</strong> กรอกข้อมูลนักเรียนใหม่ในแบบฟอร์ม — รหัสนักเรียน [ถ้ามี], คำนำหน้า, <strong>ชื่อ*</strong>, <strong>นามสกุล*</strong>, <strong>โรงเรียน*</strong>, ระดับชั้น, ห้อง, และข้อมูลผู้ปกครอง (ชื่อ/เบอร์)</li>
+<li>ใส่ <strong>เหตุผล</strong> (ไม่บังคับ) แล้วกด <strong>&quot;ส่งคำขอ&quot;</strong> — ดูสถานะได้ที่ <strong>&quot;รออนุมัติ (N)&quot;</strong> และ <strong>&quot;สำเร็จแล้ว (N)&quot;</strong></li>
+</ol>
+<p><img src="screenshots/driver/03-requests.png" alt="คำขอเปลี่ยนรายชื่อนักเรียน"></p>
+<p><em>ภาพ: คำขอเปลี่ยนรายชื่อนักเรียน</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> คำขอปรากฏใน &quot;รออนุมัติ (N)&quot; — นักเรียนจะปรากฏใน roster จริงเมื่อโรงเรียนอนุมัติแล้ว</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>เพิ่มนักเรียนแล้วยังไม่เห็นในรายชื่อ → คำขออยู่สถานะรออนุมัติจนกว่าโรงเรียนจะอนุมัติ</li>
+</ul>
+<blockquote class="callout warn">
+<p>⚠️ คนขับ <strong>สร้างคำขอได้เท่านั้น</strong> การอนุมัติ/ปฏิเสธเป็นหน้าที่ของโรงเรียน
+ℹ️ การเพิ่มนักเรียนทำได้โดย <strong>กรอกข้อมูลใหม่เท่านั้น</strong> (ไม่มีช่องค้นหา/เลือกนักเรียนที่มีอยู่) โรงเรียนจะตรวจสอบตอนอนุมัติว่ามีนักเรียนนี้อยู่แล้วหรือไม่
+ℹ️ เบอร์ผู้ปกครอง (ถ้ากรอก) ต้องเป็นตัวเลข 10 หลัก</p>
+</blockquote>
+<hr>
+<h2>งานที่ 9 — แจ้งเหตุฉุกเฉิน (แท็บ &quot;ฉุกเฉิน&quot;)</h2>
+<p><strong>ใช้เมื่อ:</strong> รถเสีย, อุบัติเหตุ, นักเรียนเจ็บป่วย หรือเหตุที่ต้องแจ้งทันที</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ไปที่แท็บ <strong>&quot;ฉุกเฉิน&quot;</strong> (หน้าจอ &quot;🚨 แจ้งเหตุฉุกเฉิน&quot;)</li>
+<li>กรอก <strong>&quot;รายละเอียด *&quot;</strong> (จำเป็น) เช่น &quot;รถเสีย, อุบัติเหตุ, นักเรียนเจ็บป่วย&quot; และ <strong>&quot;หมายเหตุ&quot;</strong> (ไม่บังคับ)</li>
+<li>กด <strong>&quot;แจ้งเหตุฉุกเฉิน&quot;</strong> (ปุ่มแดง) หรือ <strong>&quot;ยกเลิก&quot;</strong> หากกดผิด</li>
+</ol>
+<p><img src="screenshots/driver/05-emergency.png" alt="แจ้งเหตุฉุกเฉิน"></p>
+<p><em>ภาพ: แจ้งเหตุฉุกเฉิน</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เหตุฉุกเฉินถูกบันทึก — <strong>ส่งได้เสมอแม้ไม่มี GPS</strong> (ระบบรอตำแหน่ง 8 วินาที ถ้าไม่ได้ก็ส่งต่อให้) และ <strong>ไม่ต้องเปิดรอบงานก่อน</strong></p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>GPS ไม่ขึ้น/ถูกปฏิเสธสิทธิ์ → เปิดสิทธิ์ตำแหน่งในเบราว์เซอร์ (เช่น Safari → Settings → Privacy) แล้วกด <strong>&quot;ลองขอตำแหน่งอีกครั้ง&quot;</strong> (การ์ดสถานะ GPS)</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ ถ้าระบบตั้งค่า LINE ไว้ จะส่งการ์ดแจ้งเตือนเข้ากลุ่ม LINE ของโรงเรียนอัตโนมัติ (ทำงานเบื้องหลัง — หากส่ง LINE ไม่สำเร็จ เหตุฉุกเฉินก็ยังถูกบันทึกในระบบอยู่ดี)</p>
+</blockquote>
+<hr>
+<h2>งานที่ 10 — แผนที่จุดรับส่ง</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการดูหรือสร้างจุดรับส่งของรถคุณ (เข้าจากแถบเมนูด้านข้าง — บนมือถือกด <strong>☰ มุมซ้ายบน</strong>)</p>
+<p><strong>ขั้นตอนสร้างจุดใหม่:</strong></p>
+<ol>
+<li>กดปุ่ม <strong>&quot;เพิ่มจุดรับส่ง&quot;</strong> → เปิดหน้าต่าง <strong>&quot;เพิ่มจุดรับส่งของรถคุณ&quot;</strong></li>
+<li>กรอก <strong>ป้ายชื่อจุด</strong>, ระบุ <strong>Latitude/Longitude</strong> (หรือคลิกบนแผนที่เพื่อกำหนดพิกัด)</li>
+<li>เลือกรอบ: <strong>เช้า / เย็น / ทั้งวัน</strong></li>
+<li>เลือกนักเรียนจาก checklist และใส่หมายเหตุ (ถ้ามี) → บันทึก</li>
+</ol>
+<p><img src="screenshots/driver/04-pickup-map.png" alt="แผนที่จุดรับ-ส่ง"></p>
+<p><em>ภาพ: แผนที่จุดรับ-ส่ง</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> จุดปรากฏบนแผนที่ — ที่การ์ดของจุดมีปุ่ม <strong>&quot;แก้ไขรายชื่อนักเรียน&quot;</strong> และ <strong>&quot;เปิดใน Google Maps →&quot;</strong> และกรองตามรอบได้ด้วย <strong>&quot;ทั้งหมด / รอบเช้า / รอบเย็น&quot;</strong></p>
+<blockquote class="callout note">
+<p>ℹ️ สร้าง/แก้ไขจุดได้เฉพาะรถของคุณ และเลือกได้เฉพาะนักเรียนในรถคุณ — ป้ายชื่อจุดยาวไม่เกิน 100 ตัวอักษร และห้ามให้นักเรียนคนเดิมมีจุดซ้ำในรอบเดียวกัน</p>
+</blockquote>
+<hr>
+<h2>งานที่ 11 — เลือกรถและเริ่มรอบ</h2>
+<p><strong>ใช้เมื่อ:</strong> กรณีคนขับ 1 คนขับได้หลายคันและต้องเลือกรถก่อนเริ่มงาน</p>
+<blockquote class="callout warn">
+<p>⚠️ <strong>ฟีเจอร์นี้ปัจจุบัน &quot;ยังไม่เปิดใช้งาน&quot; บนระบบจริง (production)</strong> — ควบคุมด้วย feature flag <code>FEATURE_DRIVER_SHIFT_SELECTION</code> ซึ่งขณะนี้ปิดอยู่
+เมื่อปิดอยู่: หน้านี้ยังเข้าได้ (อยู่ในแถบเมนูด้านข้างบนคอมพิวเตอร์) แต่ <strong>ไม่จำเป็นต้องใช้</strong> ระบบจะหารถของคุณให้อัตโนมัติจากการมอบหมาย (assignment) — คุณ <strong>เช็กชื่อ/แจ้งเหตุได้ทันทีโดยไม่ต้องกด &quot;เริ่มรอบ&quot;</strong> และจะ <strong>ไม่เห็น</strong> ข้อความ &quot;กรุณาเลือกรถและเริ่มรอบก่อนปฏิบัติงาน&quot;
+เนื้อหาด้านล่างมีผลก็ต่อเมื่อผู้ดูแลระบบเปิดฟีเจอร์ในอนาคต</p>
+</blockquote>
+<p><strong>ขั้นตอน (เมื่อฟีเจอร์เปิด):</strong></p>
+<ol>
+<li>เลือกรอบ: <strong>เช้า / เย็น / อื่น ๆ</strong></li>
+<li>ดูการ์ดรถที่ได้รับอนุญาต — แต่ละคันมีป้าย <strong>&quot;คนขับหลัก&quot;</strong> หรือ <strong>&quot;คนขับสำรอง&quot;</strong> และสถานะรถ (พร้อมเริ่มรอบ / ใกล้หมดอายุ / หมดอายุ / ยังไม่ผ่านเงื่อนไข / ต้องแก้ไข)</li>
+<li>กด <strong>&quot;เริ่มรอบด้วยรถคันนี้&quot;</strong></li>
+<li>เมื่อทำงานเสร็จ กด <strong>&quot;สิ้นสุดรอบ&quot;</strong> ที่การ์ด <strong>&quot;กำลังปฏิบัติงาน&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> การ์ด &quot;กำลังปฏิบัติงาน&quot; แสดงรถที่เลือก และเริ่มเช็กชื่อได้</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>กล่องแดง <strong>&quot;ยังเริ่มรอบด้วยรถคันนี้ไม่ได้&quot;</strong> พร้อมเหตุผล เช่น รถยังไม่ผ่านเงื่อนไขความปลอดภัย / คุณสมบัติคนขับยังไม่รับรอง / ใบอนุญาตขับรถหมดอายุ → ติดต่อเขตพื้นที่หรือขนส่ง</li>
+<li>ขึ้น &quot;กรุณาเลือกรถและเริ่มรอบก่อนปฏิบัติงาน&quot; (เฉพาะเมื่อฟีเจอร์เปิด) → ไปหน้านี้แล้วกด &quot;เริ่มรอบด้วยรถคันนี้&quot; ก่อน (การแจ้งฉุกเฉินยังทำได้เสมอ)</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ ระบบป้องกันไม่ให้คนขับเปิด 2 รอบพร้อมกัน และไม่ให้รถคันเดียวมี 2 คนขับพร้อมกัน</p>
+</blockquote>
+<blockquote class="callout note">
+<p>📷 <strong>ไม่มีภาพหน้าจอ</strong> — ฟีเจอร์ &quot;เลือกรถและเริ่มรอบ&quot; ถูกปิดด้วย feature flag (<code>FEATURE_DRIVER_SHIFT_SELECTION</code>) ยังไม่เปิดใช้งานจริง จึงยังไม่มีหน้าจอให้แสดง</p>
+</blockquote>
+<hr>
+<h2>งานที่ 12 — ข้อมูลคนขับ / โปรไฟล์ + เปลี่ยนรหัสผ่าน (แท็บ &quot;โปรไฟล์&quot;)</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการแก้ข้อมูลคนขับ/รถ หรือเปลี่ยนรหัสผ่าน</p>
+<p>หน้า <strong>&quot;ข้อมูลคนขับและรถ&quot;</strong> แสดงข้อมูลเป็นหมวด: <strong>ข้อมูลรถ</strong> (ทะเบียนรถ [แก้ไม่ได้], ประเภทรถ), <strong>ข้อมูลคนขับ</strong> (ชื่อ, เบอร์), <strong>ข้อมูลผู้ดูแลรถ</strong>, <strong>ข้อมูลผู้ครอบครองรถ</strong>, และ <strong>ประกันภัย</strong> (สถานะ, ประเภท, วันหมดอายุ)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>กด <strong>&quot;แก้ไขข้อมูล&quot;</strong> เพื่อแก้ชื่อ/เบอร์/ข้อมูลที่แก้ได้ (เบอร์โทรต้อง 9-10 หลัก)</li>
+<li>กด <strong>&quot;เปลี่ยนรูป&quot;</strong> เพื่ออัปโหลดรูป JPG/PNG/WebP ขนาดไม่เกิน 2MB</li>
+<li>กด <strong>&quot;เปลี่ยนรหัสผ่าน&quot;</strong> → กรอกรหัสเดิมให้ถูก → ตั้งรหัสใหม่ (อย่างน้อย <strong>8 ตัวอักษร</strong>, ห้ามคาดเดาง่าย, ห้ามตรงกับทะเบียนรถ) → ยืนยันให้ตรงกัน</li>
+</ol>
+<p><img src="screenshots/driver/06-profile.png" alt="ข้อมูลคนขับ / เปลี่ยนรหัสผ่าน (ทั้งหน้าเบลอเพราะมีข้อมูลส่วนตัวคนขับ)"></p>
+<p><em>ภาพ: ข้อมูลคนขับ / เปลี่ยนรหัสผ่าน (ทั้งหน้าเบลอเพราะมีข้อมูลส่วนตัวคนขับ)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ข้อมูลที่แก้ถูกบันทึก — หลังเปลี่ยนรหัสผ่านต้องเข้าสู่ระบบใหม่</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ทะเบียนรถแก้จากหน้านี้ไม่ได้ → ถ้าต้องเปลี่ยนทะเบียน ติดต่อผู้ดูแลระบบ</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ นอกจากหน้านี้ ยังเปลี่ยนรหัสผ่านได้จาก <strong>เมนูบัญชี</strong> (รูป/ชื่อผู้ใช้ มุมขวาบน) → <strong>&quot;เปลี่ยนรหัสผ่าน&quot;</strong> ซึ่งเมนูเดียวกันนี้มีปุ่ม <strong>&quot;ออกจากระบบ&quot;</strong> ด้วย</p>
+</blockquote>
+<hr>
+<h2>งานที่ 13 — ออกจากระบบ</h2>
+<p><strong>ใช้เมื่อ:</strong> เลิกใช้งาน</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิด <strong>เมนูบัญชี</strong> (รูป/ชื่อผู้ใช้ มุมขวาบนของแถบบนสุด)</li>
+<li>กด <strong>&quot;ออกจากระบบ&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> กลับมาที่หน้าเข้าสู่ระบบ และการส่งตำแหน่งรถจะหยุดทันที</p>
+<p><img src="screenshots/shared/account-menu.png" alt="เมนูบัญชี (แตะรูป/ชื่อผู้ใช้มุมขวาบน) — มี &quot;เปลี่ยนรหัสผ่าน&quot; และ &quot;ออกจากระบบ&quot;"></p>
+<p><em>ภาพ: เมนูบัญชี (แตะรูป/ชื่อผู้ใช้มุมขวาบน) — มี &quot;เปลี่ยนรหัสผ่าน&quot; และ &quot;ออกจากระบบ&quot;</em></p>
+<hr>
+<h2>ตารางขอบเขตสิทธิ์ (อ้างอิงด่วน)</h2>
+<h3>คุณเห็นข้อมูลได้แค่ไหน</h3>
+<table>
+<thead>
+<tr>
+<th>ข้อมูล</th>
+<th>ขอบเขต</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>นักเรียน</td>
+<td>เฉพาะนักเรียนในรถของคุณ (ในรอบที่เปิดอยู่)</td>
+</tr>
+<tr>
+<td>โปรไฟล์รถ/คนขับ/ผู้ดูแล/ประกัน</td>
+<td>เฉพาะรถของคุณ</td>
+</tr>
+<tr>
+<td>คำขอรายชื่อ / การลา / จุดรับส่ง</td>
+<td>เฉพาะของรถคุณเท่านั้น</td>
+</tr>
+<tr>
+<td>ค้นนักเรียนเพื่อ &quot;เพิ่ม&quot;</td>
+<td>เฉพาะภายในโรงเรียนที่รถคุณให้บริการ</td>
+</tr>
+</tbody>
+</table>
+<h3>สิ่งที่ทำไม่ได้ (และใครทำแทน)</h3>
+<table>
+<thead>
+<tr>
+<th>ทำไม่ได้</th>
+<th>ใครทำแทน</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>แก้/ลบสถานะเช็กชื่อที่บันทึกไปแล้ว</td>
+<td><strong>โรงเรียน</strong> (ครูยืนยันแทน)</td>
+</tr>
+<tr>
+<td>เพิ่ม/ถอน/ย้ายนักเรียนในรถโดยตรง</td>
+<td><strong>โรงเรียน</strong> (คนขับส่งคำขอ → โรงเรียนอนุมัติ)</td>
+</tr>
+<tr>
+<td>เพิ่มนักเรียนใหม่เข้าระบบจริง</td>
+<td><strong>โรงเรียน</strong> (สร้างจริงเมื่ออนุมัติ)</td>
+</tr>
+<tr>
+<td>จัดการผู้ใช้ / รีเซ็ตรหัสคนอื่น</td>
+<td><strong>admin</strong></td>
+</tr>
+<tr>
+<td>ดู dashboard เขต/จังหวัด, รายงาน/export, audit log</td>
+<td>บทบาทอื่น (เขต/ส่วนกลาง/admin)</td>
+</tr>
+<tr>
+<td>ตรวจสภาพรถอย่างเป็นทางการ</td>
+<td><strong>ขนส่ง (transport)</strong></td>
+</tr>
+<tr>
+<td>แก้ทะเบียนรถ</td>
+<td><strong>admin</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>❌ <strong>บทบาทคนขับไม่มีสิทธิ์เข้าถึงรายงานหรือการส่งออก (export) ใด ๆ</strong> — ไม่มีหน้ารายงาน CSV/Excel/PDF สำหรับคนขับ สิ่งที่ใกล้เคียงที่สุดคือ <strong>สรุปวันนี้บนหน้าจอ</strong> (จำนวนนักเรียนทั้งหมด, ส่งเช้าแล้ว, รับเย็นแล้ว, ที่เหลือ และกิจกรรมล่าสุด) ซึ่งเป็นข้อมูลแสดงผลบนจอเท่านั้น ไม่ใช่ไฟล์ส่งออก ข้อมูลการรับ-ส่งของรถคุณจะถูกนำไปออกรายงานโดยบทบาทอื่น (โรงเรียน/เขต/ส่วนกลาง/admin)
+ℹ️ ถ้าพยายามเข้าหน้าของบทบาทอื่น (เช่น ของโรงเรียน) จะขึ้นหน้า <strong>&quot;ไม่มีสิทธิ์เข้าถึง&quot;</strong></p>
+</blockquote>
+<hr>
+<h2>สรุปปัญหาที่พบบ่อย</h2>
+<table>
+<thead>
+<tr>
+<th>อาการ / ข้อความ</th>
+<th>วิธีแก้</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>กดเช็กชื่อไม่ได้ &quot;กรุณาตรวจรถก่อนออกก่อนเช็กชื่อ&quot;</td>
+<td>ทำขั้นตอนตรวจรถก่อนออก (pre-trip) ของวันนั้นให้เสร็จก่อน (วันละ 1 ครั้ง)</td>
+</tr>
+<tr>
+<td>&quot;รายการนี้ถูกบันทึกไปแล้ว&quot;</td>
+<td>กดสถานะเดิมซ้ำในรอบ/วันเดียวกัน (กันการกดซ้ำ) — ไม่ต้องกดอีก</td>
+</tr>
+<tr>
+<td>&quot;นักเรียนถูกส่งแล้วในรอบนี้ — ไม่สามารถเช็กอินซ้ำได้&quot;</td>
+<td>เช็กออกไปแล้ว ระบบไม่ให้ย้อนกลับมาเช็กอินซ้ำ ถ้าจำเป็นติดต่อโรงเรียน</td>
+</tr>
+<tr>
+<td>กดผิด แก้เองไม่ได้</td>
+<td>ระบบไม่มีปุ่มลบ/แก้สถานะ — ติดต่อโรงเรียนให้ครูยืนยันแทน</td>
+</tr>
+<tr>
+<td>หาเมนู &quot;เลือกรถและเริ่มรอบ&quot; / &quot;แผนที่จุดรับส่ง&quot; บนมือถือไม่เจอ</td>
+<td>กดปุ่ม <strong>☰ มุมซ้ายบน</strong> เปิดแถบเมนูด้านข้าง (มีครบทุกหน้า) — desktop เห็นค้างอยู่แล้ว</td>
+</tr>
+<tr>
+<td>แจ้งฉุกเฉินแล้ว GPS ไม่ขึ้น</td>
+<td>ส่งได้แม้ไม่มี GPS (รอ 8 วินาทีแล้วส่งต่อ) ถ้าถูกปฏิเสธสิทธิ์ ให้เปิดสิทธิ์ตำแหน่งในเบราว์เซอร์แล้วกด &quot;ลองขอตำแหน่งอีกครั้ง&quot;</td>
+</tr>
+<tr>
+<td>ผู้ปกครองบ่นว่าไม่ได้รับแจ้งเตือนทาง LINE</td>
+<td>ผู้ปกครองจะได้รับเฉพาะคนที่ผูกบัญชี LINE และได้รับการยืนยัน/อนุมัติแล้ว — ให้แจ้งผู้ปกครองตรวจการผูกบัญชี</td>
+</tr>
+<tr>
+<td>เพิ่มนักเรียนเข้ารถแล้วยังไม่เห็นในรายชื่อ</td>
+<td>คำขออยู่สถานะรออนุมัติจนกว่าโรงเรียนจะอนุมัติ และเพิ่มได้เฉพาะในโรงเรียนที่รถคุณให้บริการ</td>
+</tr>
+<tr>
+<td>&quot;กรุณาเลือกรถและเริ่มรอบก่อนปฏิบัติงาน&quot;</td>
+<td>เกิดเฉพาะเมื่อผู้ดูแลเปิดฟีเจอร์เลือกรถ (<code>FEATURE_DRIVER_SHIFT_SELECTION</code> — ปัจจุบันปิดอยู่) ถ้าพบให้ไปหน้า &quot;เลือกรถและเริ่มรอบ&quot; แล้วกด &quot;เริ่มรอบด้วยรถคันนี้&quot; (แจ้งฉุกเฉินไม่ต้องเปิดรอบ)</td>
+</tr>
+<tr>
+<td>เช็กชื่อไม่ได้เมื่อสัญญาณขาด</td>
+<td>ระบบต้องออนไลน์ขณะเช็กชื่อ (ไม่มีโหมดออฟไลน์) รอสัญญาณกลับมาแล้วลองใหม่</td>
+</tr>
+</tbody>
+</table>
+<h3>การขอความช่วยเหลือ</h3>
+<ul>
+<li><strong>ลืมรหัสผ่าน / บัญชีถูกปิด</strong> → ติดต่อผู้ดูแลระบบ (admin) หรือเจ้าหน้าที่โรงเรียน</li>
+<li><strong>ต้องการแก้สถานะเช็กชื่อ / เพิ่ม-ถอนนักเรียน</strong> → ติดต่อโรงเรียน</li>
+<li><strong>เริ่มรอบไม่ได้ (รถ/ใบอนุญาต/คุณสมบัติ)</strong> → ติดต่อเขตพื้นที่หรือขนส่ง</li>
+</ul>
+<p>เวลาแจ้งปัญหา โปรดส่ง: ทะเบียนรถ, เวลาที่เกิดปัญหา, ภาพหน้าจอ (screenshot), สัญญาณตอนนั้น (4G / WiFi)</p>
+<hr>
+<p><strong>สิ้นสุดคู่มือปฏิบัติงานสำหรับคนขับ — ขับขี่ปลอดภัย ส่งเด็กถึงบ้านอย่างปลอดภัย</strong></p>
+
+</main>
+</div>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML สร้างจากเอกสาร Markdown (Phase 10.13C · 2026-06-24)</footer>
+</body>
+</html>

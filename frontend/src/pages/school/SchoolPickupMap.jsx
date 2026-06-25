@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Map as MapIcon, Bus, Users, Sunrise, Sunset, Plus, X, Pencil } from 'lucide-react';
+import { Map as MapIcon, Bus, Users, Sunrise, Sunset, Plus, X, Pencil, Trash2 } from 'lucide-react';
 import api from '../../api/axios';
+import { useToast } from '../../components/Toast';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
 import PickupMap from '../../components/PickupMap';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
@@ -15,6 +16,7 @@ const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเ
 
 export default function SchoolPickupMap() {
   const { user } = useAuth();
+  const toast = useToast();
   const isTeacher = isGradeTeacher(user); // read-only for grade teacher
   const [points, setPoints] = useState([]);
   const [sessionFilter, setSessionFilter] = useState('all');
@@ -24,6 +26,7 @@ export default function SchoolPickupMap() {
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);  // null | { ...point }
+  const [deletingId, setDeletingId] = useState(null);
 
   const fetchPoints = useCallback(async (sf) => {
     setLoading(true);
@@ -42,6 +45,19 @@ export default function SchoolPickupMap() {
   }, []);
 
   useEffect(() => { fetchPoints(sessionFilter); }, [fetchPoints, sessionFilter]);
+
+  const handleDelete = useCallback(async (point) => {
+    if (!window.confirm(`ลบจุดรับส่ง "${point.label}" ?\nนักเรียนในจุดนี้จะไม่ถูกลบ แต่จุดนี้จะหายไป`)) return;
+    setDeletingId(point.id);
+    try {
+      await api.delete(`/school/pickup-points/${point.id}`);
+      toast.success('ลบจุดรับส่งสำเร็จ');
+      if (selectedId === point.id) setSelectedId(null);
+      fetchPoints(sessionFilter);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'ลบจุดรับส่งไม่สำเร็จ');
+    } finally { setDeletingId(null); }
+  }, [fetchPoints, sessionFilter, selectedId, toast]);
 
   // Vehicle dropdown options derived from the loaded points (so the
   // filter only shows vehicles that actually serve this school).
@@ -121,6 +137,8 @@ export default function SchoolPickupMap() {
                   selected={selectedId === p.id}
                   onClick={() => setSelectedId(p.id)}
                   onEdit={isTeacher ? undefined : () => setEditing(p)}
+                  onDelete={isTeacher ? undefined : () => handleDelete(p)}
+                  deleting={deletingId === p.id}
                 />
               ))}
             </div>
@@ -526,7 +544,7 @@ function SessionFilter({ value, onChange }) {
 }
 
 /* ── Pickup-point row (clickable; highlight = selected on map) ── */
-function PickupPointRow({ point, selected, onClick, onEdit }) {
+function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }) {
   const studentCount = Array.isArray(point.students) ? point.students.length : 0;
   const previewNames = (point.students || []).slice(0, 3)
     .map(s => `${s.first_name} ${s.last_name}`).join(', ');
@@ -577,16 +595,29 @@ function PickupPointRow({ point, selected, onClick, onEdit }) {
           >
             เปิดใน Google Maps →
           </a>
-          {onEdit && (
-            <button
-              type="button"
-              onClick={e => { e.stopPropagation(); onEdit(); }}
-              className="inline-flex items-center gap-1 text-xs font-medium text-brand bg-brand-50 hover:bg-brand-100 rounded-md px-2 py-1 transition"
-            >
-              <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
-              แก้ไขรายชื่อนักเรียน
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {onDelete && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onDelete(); }}
+                disabled={deleting}
+                className="inline-flex items-center gap-1 text-xs font-medium text-danger bg-danger-soft hover:opacity-90 rounded-md px-2 py-1 transition disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
+                {deleting ? 'กำลังลบ…' : 'ลบ'}
+              </button>
+            )}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onEdit(); }}
+                className="inline-flex items-center gap-1 text-xs font-medium text-brand bg-brand-50 hover:bg-brand-100 rounded-md px-2 py-1 transition"
+              >
+                <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                แก้ไขรายชื่อนักเรียน
+              </button>
+            )}
+          </div>
         </div>
       </AppCard>
     </div>

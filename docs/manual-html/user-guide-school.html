@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือปฏิบัติงาน — โรงเรียน — ระบบรถรับส่งนักเรียนจังหวัดลำปาง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#1e5fa8; --accent-dark:#16467d; --accent-soft:#eaf2fb;
+  --ink:#1a2230; --ink-soft:#475067; --muted:#6b7488;
+  --line:#e3e8f0; --bg:#f5f7fb; --card:#ffffff;
+  --warn-bg:#fff7e6; --warn-bd:#e8a33d; --warn-ink:#7a4d06;
+  --tip-bg:#eef6ff; --tip-bd:#4a90d9; --tip-ink:#1a4e84;
+  --note-bg:#f3f5f9; --note-bd:#9aa6bd; --note-ink:#3a445a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.topnav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+.nav-inner{max-width:980px; margin:0 auto; padding:8px 20px; display:flex; flex-wrap:wrap; gap:4px;}
+.topnav a{font-size:14.5px; font-weight:500; color:var(--ink-soft); text-decoration:none;
+  padding:6px 12px; border-radius:8px; white-space:nowrap;}
+.topnav a:hover{background:var(--accent-soft); color:var(--accent-dark);}
+.topnav a.active{background:var(--accent); color:#fff;}
+.wrap{max-width:980px; margin:0 auto; padding:0 20px 80px;}
+main{background:var(--card); margin-top:28px; padding:48px 56px; border-radius:var(--radius);
+  border:1px solid var(--line); box-shadow:0 1px 3px rgba(16,30,54,.04);}
+h1{font-size:30px; font-weight:700; line-height:1.3; margin:0 0 8px; color:var(--ink);
+  padding-bottom:16px; border-bottom:3px solid var(--accent);}
+h2{font-size:23px; font-weight:700; margin:40px 0 12px; color:var(--accent-dark);
+  padding-top:12px;}
+h3{font-size:19.5px; font-weight:600; margin:28px 0 8px; color:var(--ink);}
+h4{font-size:17px; font-weight:600; margin:20px 0 6px; color:var(--ink-soft);}
+p{margin:10px 0;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+strong{font-weight:600; color:var(--ink);}
+ul,ol{margin:10px 0; padding-left:26px;}
+li{margin:5px 0;}
+hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+code{font-family:'IBM Plex Mono',monospace; font-size:14.5px; background:#eef1f6;
+  padding:2px 6px; border-radius:5px; color:#7a3a8c;}
+pre{background:#1e2430; color:#e6e9ef; padding:16px 18px; border-radius:10px; overflow:auto;}
+pre code{background:none; color:inherit; padding:0;}
+main img{display:block; max-width:100%; height:auto; margin:16px auto 4px; border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 3px 12px rgba(16,30,54,.10);}
+main p > em:only-child{display:block; text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 18px;}
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15.5px;
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+thead th{background:var(--accent); color:#fff; font-weight:600; text-align:left;
+  padding:11px 14px; font-size:15px;}
+tbody td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top;}
+tbody tr:nth-child(even){background:#fafbfd;}
+tbody tr:hover{background:var(--accent-soft);}
+blockquote.callout{margin:16px 0; padding:14px 18px; border-radius:10px; border-left:5px solid;
+  font-size:16px;}
+blockquote.callout p{margin:6px 0;}
+blockquote.callout ul{margin:6px 0;}
+.callout.warn{background:var(--warn-bg); border-color:var(--warn-bd); color:var(--warn-ink);}
+.callout.tip{background:var(--tip-bg); border-color:var(--tip-bd); color:var(--tip-ink);}
+.callout.note{background:var(--note-bg); border-color:var(--note-bd); color:#3a445a;}
+.callout.warn strong,.callout.tip strong,.callout.note strong{color:inherit;}
+.docfoot{max-width:980px; margin:24px auto 0; padding:0 20px; color:var(--muted); font-size:13.5px; text-align:center;}
+.toolbar{max-width:980px; margin:18px auto 0; padding:0 20px; display:flex; justify-content:flex-end;}
+.btn-print{font-size:14px; font-weight:500; color:var(--accent-dark); background:var(--accent-soft);
+  border:1px solid var(--line); padding:7px 14px; border-radius:8px; cursor:pointer;}
+.btn-print:hover{background:#dceafa;}
+@media (max-width:640px){
+  body{font-size:16px;}
+  main{padding:28px 20px;}
+  h1{font-size:24px;} h2{font-size:20px;} h3{font-size:17.5px;}
+  .nav-inner{padding:6px 12px;}
+}
+@media print{
+  .topnav,.toolbar{display:none;}
+  body{background:#fff; font-size:12pt;}
+  main{box-shadow:none; border:none; margin:0; padding:0;}
+  a{color:#000; text-decoration:none;}
+  table,blockquote,h2,h3,figure,img{page-break-inside:avoid;}
+  main img{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html" class="active">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="wrap">
+<main>
+<h1>คู่มือปฏิบัติงาน — โรงเรียน</h1>
+<blockquote class="callout note">
+<p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง — <a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a>
+เวอร์ชัน Phase 10.13C • อัปเดต 2026-06-24</p>
+</blockquote>
+<blockquote class="callout note">
+<p>📷 <strong>หมายเหตุภาพหน้าจอ:</strong> ข้อมูลส่วนบุคคล (ชื่อนักเรียน/ผู้ปกครอง เบอร์โทร) ในภาพถูกเบลอเพื่อความเป็นส่วนตัว — เมื่อใช้งานจริงจะแสดงข้อมูลตามปกติ</p>
+</blockquote>
+<h2>ภาพรวม 30 วินาที</h2>
+<ul>
+<li><strong>บทบาทนี้ทำอะไรได้ (บัญชีหลัก):</strong>
+<ul>
+<li>ดูแดชบอร์ดประจำวัน (สถานะรับ-ส่ง รายรอบ/รายคันรถ)</li>
+<li>จัดการข้อมูลนักเรียน (ค้นหา/เพิ่ม/แก้ไข/ย้ายรถ/ลบ) + นำเข้าจาก Excel/CSV + ย้อนกลับ</li>
+<li>เพิ่มรถรับส่ง (สร้างบัญชีคนขับอัตโนมัติ) + ส่งตรวจและรับรองรถ</li>
+<li>ดู/สร้างจุดรับส่ง + ดูตำแหน่งรถ live + อนุมัติคำขอจากคนขับ + ยืนยันแทนคนขับ</li>
+<li>จัดการบัญชีครูประจำสายชั้น + ดูเหตุฉุกเฉิน + ประวัติการแก้ไข</li>
+<li>ดูรายงานรายวัน/รายเดือน/สรุป และส่งออก CSV/Excel/PDF</li>
+</ul>
+</li>
+<li><strong>บัญชีนี้มี 2 ระดับ:</strong> <strong>บัญชีหลักของโรงเรียน</strong> (จัดการเต็มรูปแบบ) และ <strong>บัญชีครูประจำสายชั้น</strong> (ดูข้อมูลได้อย่างเดียว เฉพาะระดับชั้นที่รับผิดชอบ — สร้างโดยบัญชีหลัก)</li>
+<li><strong>เข้าระบบด้วย:</strong> ชื่อผู้ใช้ (username) + รหัสผ่าน — บัญชีหลักได้จากเขตพื้นที่/admin, ครูสายชั้นได้จากบัญชีหลัก (รูปแบบเช่น <code>SCH0001-P4</code>)</li>
+<li><strong>อุปกรณ์ที่แนะนำ:</strong> คอมพิวเตอร์เป็นหลัก (งานจัดการ/นำเข้า/รายงานสะดวกบนจอใหญ่ เห็นเมนูครบในแถบข้าง) — มือถือใช้ดูภาพรวม/ค้นหา/ตำแหน่ง/รายงาน (แถบล่าง 4 แท็บ)</li>
+</ul>
+<blockquote class="callout tip">
+<p>💡 แนะนำบันทึก URL ไว้ที่หน้าจอหลัก (Add to Home Screen) เพื่อเปิดใช้งานเหมือนแอป
+🔒 หัวข้อที่มีป้าย <strong>(บัญชีหลักเท่านั้น)</strong> บัญชีครูประจำสายชั้นทำไม่ได้ — ถ้าหลุดเข้าไปได้ ระบบจะตอบ &quot;บัญชีครูประจำสายชั้นเข้าถึงได้เฉพาะข้อมูลในการดูเท่านั้น&quot;</p>
+</blockquote>
+<h2>สารบัญงาน</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>งาน</th>
+<th>ใช้เมื่อ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>เข้าสู่ระบบ (+ เปลี่ยนรหัสครั้งแรก)</td>
+<td>ทุกครั้งที่เริ่มใช้งาน</td>
+</tr>
+<tr>
+<td>2</td>
+<td>ดูแดชบอร์ดประจำวัน</td>
+<td>ดูภาพรวมสถานะรับ-ส่งวันนี้</td>
+</tr>
+<tr>
+<td>3</td>
+<td>ค้นหา/แก้ไขข้อมูลนักเรียน</td>
+<td>จัดการข้อมูลนักเรียนรายคน</td>
+</tr>
+<tr>
+<td>4</td>
+<td>นำเข้านักเรียน (ตรวจสอบก่อน/ยืนยัน)</td>
+<td>เพิ่มนักเรียนทีละหลายคนจากไฟล์</td>
+</tr>
+<tr>
+<td>5</td>
+<td>ดูประวัติการนำเข้า + ย้อนกลับ</td>
+<td>ตรวจสอบ/ยกเลิกชุดนำเข้าที่ทำไปแล้ว</td>
+</tr>
+<tr>
+<td>6</td>
+<td>นำเข้าแบบเดิม (สำรอง)</td>
+<td>นำเข้าแบบทันทีครั้งเดียว</td>
+</tr>
+<tr>
+<td>7</td>
+<td>ดูรถรับส่ง</td>
+<td>ดูรถ/คนขับ/ความปลอดภัย/นักเรียนในรถ</td>
+</tr>
+<tr>
+<td>8</td>
+<td>เพิ่มรถรับส่ง</td>
+<td>เพิ่มรถใหม่ + สร้างบัญชีคนขับ</td>
+</tr>
+<tr>
+<td>9</td>
+<td>ส่งตรวจและรับรองรถ</td>
+<td>ส่งใบตรวจสภาพรถให้ขนส่ง</td>
+</tr>
+<tr>
+<td>10</td>
+<td>แผนที่จุดรับส่ง</td>
+<td>สร้าง/แก้จุดรับส่ง + กำหนดนักเรียน</td>
+</tr>
+<tr>
+<td>11</td>
+<td>ดูตำแหน่งรถ live</td>
+<td>ติดตามตำแหน่งรถปัจจุบัน</td>
+</tr>
+<tr>
+<td>12</td>
+<td>อนุมัติคำขอรายชื่อ</td>
+<td>คนขับขอเพิ่ม/ถอนนักเรียน</td>
+</tr>
+<tr>
+<td>13</td>
+<td>ยืนยันรับ-ส่งแทนคนขับ</td>
+<td>คนขับลืมเช็กชื่อ</td>
+</tr>
+<tr>
+<td>14</td>
+<td>จัดการบัญชีครูประจำสายชั้น</td>
+<td>สร้าง/รีเซ็ต/ลบบัญชีครู</td>
+</tr>
+<tr>
+<td>15</td>
+<td>ดูเหตุฉุกเฉิน</td>
+<td>ตรวจเหตุจากรถที่ให้บริการ</td>
+</tr>
+<tr>
+<td>16</td>
+<td>ดูประวัติการแก้ไข (Audit Log)</td>
+<td>สอบทานการกระทำในโรงเรียน</td>
+</tr>
+<tr>
+<td>17</td>
+<td>ขอโอนย้ายนักเรียน / กู้คืนรถ</td>
+<td>ย้ายนักเรียนข้ามโรงเรียน / กู้รถถูกปิด</td>
+</tr>
+<tr>
+<td>18</td>
+<td>รายงานและส่งออก</td>
+<td>ดู/ดาวน์โหลดรายงาน</td>
+</tr>
+<tr>
+<td>19</td>
+<td>ออกจากระบบ / ลืมรหัสผ่าน</td>
+<td>สิ้นสุดการใช้งาน / กู้รหัส</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>งานที่ 1 — เข้าสู่ระบบ (+ เปลี่ยนรหัสครั้งแรก)</h2>
+<p><strong>ใช้เมื่อ:</strong> เริ่มใช้งานระบบ</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเบราว์เซอร์ไปที่ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong></li>
+<li>กรอก <strong>ชื่อผู้ใช้ (username)</strong> ที่ช่อง <strong>&quot;ชื่อผู้ใช้ / ทะเบียนรถ&quot;</strong> (บัญชีหลัก = ชื่อที่เขต/admin สร้างให้; ครูสายชั้น = ชื่อที่บัญชีหลักตั้งให้ เช่น <code>SCH0001-P4</code>)</li>
+<li>กรอก <strong>รหัสผ่าน</strong></li>
+<li>กด <strong>เข้าสู่ระบบ</strong></li>
+</ol>
+<p><img src="screenshots/shared/00-login-desktop.png" alt="หน้าเข้าสู่ระบบ (เดสก์ท็อป)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (เดสก์ท็อป)</em></p>
+<p><img src="screenshots/shared/00-login-mobile.png" alt="หน้าเข้าสู่ระบบ (มือถือ)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (มือถือ)</em></p>
+<p><strong>ขั้นตอน (เปลี่ยนรหัสครั้งแรก — เฉพาะบัญชีที่ยังต้องเปลี่ยน):</strong></p>
+<ol>
+<li>เมื่อเข้าระบบ ระบบจะพาไปหน้า <strong>&quot;เปลี่ยนรหัสผ่าน&quot;</strong> พร้อมข้อความ <strong>&quot;กรุณาเปลี่ยนรหัสผ่านเริ่มต้น&quot;</strong> (ใช้เมนูอื่นไม่ได้จนกว่าจะเปลี่ยนสำเร็จ)</li>
+<li>กรอก <strong>รหัสผ่านปัจจุบัน</strong> / <strong>รหัสผ่านใหม่</strong> / <strong>ยืนยันรหัสผ่านใหม่</strong> (รหัสใหม่อย่างน้อย 8 ตัวอักษร, ไม่ซ้ำรหัสเดิม, ยืนยันต้องตรงกัน)</li>
+<li>กดยืนยัน → ขึ้น <strong>&quot;เปลี่ยนรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบใหม่&quot;</strong> → เข้าสู่ระบบใหม่อีกครั้ง</li>
+</ol>
+<p><img src="screenshots/shared/01-change-password.png" alt="หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)"></p>
+<p><em>ภาพ: หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เข้าถึงแดชบอร์ดโรงเรียนได้ (token อายุ 24 ชั่วโมง — ปิดเครื่องแล้วเปิดมาใหม่ยังอยู่ในเซสชันเดิม)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>หลังเปลี่ยนรหัส token เก่าใช้ไม่ได้ทันที → ต้องเข้าสู่ระบบใหม่</li>
+<li>&quot;ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง&quot; → ชื่อผู้ใช้/รหัสผิด</li>
+<li>&quot;บัญชีนี้ถูกปิดการใช้งาน / กรุณาติดต่อผู้ดูแลระบบ&quot; → บัญชีถูกระงับ ติดต่อ admin/เขต</li>
+<li>&quot;มีการพยายามเข้าสู่ระบบหลายครั้ง… ลองใหม่อีกประมาณ 15 นาที&quot; → พยายามถี่เกินไป (บัญชีไม่ถูกปิดถาวร)</li>
+<li>&quot;ไม่สามารถเชื่อมต่อระบบได้&quot; → ไม่มีอินเทอร์เน็ต</li>
+</ul>
+<hr>
+<h2>งานที่ 2 — ดูแดชบอร์ดประจำวัน</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการดูภาพรวมสถานะรับ-ส่งของวันนี้ (หน้าแรกหลังเข้าสู่ระบบ)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>แดชบอร์ดโรงเรียน</strong> (มือถือ = แท็บ <strong>หน้าแรก</strong>)</li>
+<li>ดู <strong>แถบแจ้งเตือนด้านบน</strong> — &quot;ยังไม่เริ่มดำเนินการวันนี้&quot; / &quot;สิ่งที่ต้องติดตามวันนี้&quot; (รอส่งเช้า, รอรับเย็น, เหตุฉุกเฉิน 7 วัน) / &quot;ดำเนินการครบแล้ว ไม่มีรายการค้าง&quot;</li>
+<li>กางหัวข้อ <strong>&quot;ความครบถ้วนข้อมูล&quot;</strong> ดู % นักเรียนมีรถ / ผู้ปกครองครบ / รถผ่านตรวจ / ประกันครบ (มีลิงก์ &quot;ดูรายชื่อ&quot; / &quot;ดูรถ&quot;)</li>
+<li>ดู <strong>KPI 4 ตัว</strong> (นักเรียนทั้งหมด / รถรับส่ง / นักเรียนลา เช้า-เย็น / เหตุฉุกเฉิน 7 วัน) และ <strong>ชิปสรุป 4 อัน</strong> (นักเรียนลา / ยังไม่ยืนยัน / สำเร็จแล้ว / เหตุฉุกเฉิน 7 วัน)</li>
+<li>ดู <strong>การ์ดรอบ 2 ใบ</strong> (&quot;ส่งเช้า&quot; และ &quot;รับเย็น&quot; — เสร็จ/ทั้งหมด, %, รอ, ลา) และกาง <strong>&quot;วิเคราะห์ภาพรวม&quot;</strong> (กราฟวงกลมเช้า/เย็น + กราฟแท่งรถที่มีรายการค้างมากสุด)</li>
+<li>ดู <strong>&quot;สถานะรายคัน&quot;</strong> — กดขยายแต่ละแถวรถดูนักเรียนรายคน (ส่งเช้า/รับเย็น/เวลา/ลา) มีช่องค้นหาทะเบียน</li>
+<li>ใช้ <strong>ปุ่มลัด (Action Row)</strong> ได้แก่ <strong>&quot;ค้นหานักเรียน&quot;</strong> (ทุกบัญชี) · <strong>&quot;จัดการรถ&quot;</strong> <em>(บัญชีหลักเท่านั้น)</em> · <strong>&quot;รายงานวันนี้&quot;</strong> (ทุกบัญชี) · <strong>&quot;ยืนยันแทนคนขับ&quot;</strong> <em>(บัญชีหลักเท่านั้น)</em></li>
+</ol>
+<p><img src="screenshots/school/01-dashboard.png" alt="แดชบอร์ดโรงเรียน"></p>
+<p><em>ภาพ: แดชบอร์ดโรงเรียน</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นภาพรวมสถานะรับ-ส่งวันนี้ครบทุกการ์ด</p>
+<blockquote class="callout note">
+<p>ℹ️ บัญชีครูสายชั้นจะเห็นแดชบอร์ดเฉพาะตัวเลขของระดับชั้นที่รับผิดชอบเท่านั้น</p>
+</blockquote>
+<hr>
+<h2>งานที่ 3 — ค้นหา/แก้ไขข้อมูลนักเรียน</h2>
+<p><strong>ใช้เมื่อ:</strong> ค้นหา/เพิ่ม/แก้ไข/ย้ายรถ/ลบ นักเรียนรายคน</p>
+<p><strong>ขั้นตอน (ค้นหา — ทุกบัญชี):</strong></p>
+<ol>
+<li>เปิดเมนู <strong>ข้อมูลนักเรียน</strong> (มือถือ = แท็บ <strong>ค้นหา</strong>)</li>
+<li>พิมพ์ในช่อง <strong>&quot;ค้นหาชื่อ นามสกุล หรือรหัส…&quot;</strong> (ค้นจากชื่อ/นามสกุล/รหัสนักเรียน)</li>
+<li>กรองด้วยตัวกรอง <strong>&quot;ทุกระดับชั้น&quot;</strong> (อ.1 – ม.6) ตามต้องการ</li>
+</ol>
+<p><strong>ขั้นตอน (แก้ไขนักเรียน — บัญชีหลักเท่านั้น):</strong></p>
+<ol>
+<li>กดเลือกนักเรียน → เปิดหน้าต่าง <strong>&quot;แก้ไขข้อมูลนักเรียน&quot;</strong> (มี 3 ส่วน)</li>
+<li>แก้ <strong>ข้อมูลนักเรียน:</strong> คำนำหน้า, ชื่อ*, นามสกุล*, ระดับชั้น, ห้อง, ใช้บริการรอบเช้า/เย็น</li>
+<li>แก้ <strong>ผู้ปกครอง:</strong> ชื่อ + เบอร์</li>
+<li>แก้ <strong>รถรับส่ง:</strong> เลือกรถจากช่องค้นหา (combobox)</li>
+<li>กด <strong>&quot;บันทึกข้อมูลนักเรียน&quot;</strong> — หรือใช้ <strong>&quot;เปลี่ยนรถ / เพิ่มเข้ารถ / ลบออกจากรถ&quot;</strong> (โผล่เมื่อเปลี่ยนรถ), <strong>&quot;ขอโอนย้ายนักเรียน&quot;</strong>, <strong>&quot;ลาออก / ลบออกจากระบบ&quot;</strong></li>
+</ol>
+<p><img src="screenshots/school/02-students.png" alt="ข้อมูลนักเรียน (ค้นหา/จัดการ/นำเข้า)"></p>
+<p><em>ภาพ: ข้อมูลนักเรียน (ค้นหา/จัดการ/นำเข้า)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> บันทึกแล้วข้อมูลนักเรียนอัปเดต / รถเปลี่ยนตามที่ตั้ง</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>เปลี่ยนชื่อ/เบอร์ผู้ปกครอง = สร้างผู้ปกครองใหม่เฉพาะนักเรียนคนนี้ (ไม่กระทบพี่น้องที่ใช้ผู้ปกครองร่วมกัน) และผู้ปกครองใหม่ยังไม่ผูกบัญชี LINE → ต้องให้ผู้ปกครองผูกใหม่เองทาง LINE OA (มีคำเตือนสีฟ้าในหน้าต่าง)</li>
+<li>เบอร์ผู้ปกครองต้องเป็นตัวเลข 9–10 หลัก (ระบบลบขีดและเติม 0 นำหน้าให้เบอร์มือถือ 9 หลักอัตโนมัติ)</li>
+<li>ลบนักเรียน = soft delete → ซ่อนจากรายการแต่ประวัติยังอยู่ (ค้นหาไม่เจอเพราะถูกกรองออก)</li>
+</ul>
+<blockquote class="callout note">
+<p>🔒 ปุ่มด้านบน (&quot;ดาวน์โหลดตัวอย่าง&quot; / &quot;นำเข้าข้อมูล&quot; / &quot;ประวัติการนำเข้า&quot; / &quot;แบบเดิม&quot;) และการแก้ไขทั้งหมด เป็น <strong>บัญชีหลักเท่านั้น</strong> — ครูสายชั้นดูรายชื่อได้อย่างเดียว, เบอร์ผู้ปกครองถูกปกปิดเป็น <code>081****67</code> และไม่เห็นที่อยู่จุดลงรถ</p>
+</blockquote>
+<hr>
+<h2>งานที่ 4 — นำเข้านักเรียน (ตรวจสอบก่อน/ยืนยัน) — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> เพิ่มนักเรียนทีละหลายคนจาก Excel/CSV แบบปลอดภัย (ตรวจทีละแถวก่อนเขียนจริง)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ที่หน้าข้อมูลนักเรียน กด <strong>&quot;ดาวน์โหลดตัวอย่าง&quot;</strong> เพื่อได้ไฟล์ template (ดาวน์โหลดเป็น <code>แบบฟอร์มนำเข้านักเรียน.csv</code> มีหัวคอลัมน์ + แถวตัวอย่าง 2 แถว) แล้วกรอกข้อมูลทับแถวตัวอย่าง บันทึกเป็น .csv หรือ .xlsx</li>
+<li>กด <strong>&quot;นำเข้าข้อมูล&quot;</strong> → อัปโหลดไฟล์ → ระบบ <strong>&quot;ตรวจสอบไฟล์ก่อนนำเข้า&quot;</strong> (ยังไม่บันทึก)</li>
+<li>ดูตารางผลรายแถว + การ์ดสรุป (ทั้งหมด / พร้อมนำเข้า / ซ้ำในโรงเรียน / คำเตือน / ข้อผิดพลาด / รถมีปัญหา) + ตัวกรอง</li>
+<li>ติ๊กเลือกรายการที่ต้องยืนยัน (เช่น อัปเดตผู้ปกครอง, กู้คืนนักเรียนที่เคยลบ)</li>
+<li>กด <strong>&quot;ยืนยันนำเข้า&quot;</strong></li>
+</ol>
+<p><strong>คอลัมน์ไฟล์ที่รับ:</strong> รหัสนักเรียน*, คำนำหน้า, ชื่อ*, นามสกุล*, ชั้น, ห้อง, ชื่อผู้ปกครอง, เบอร์โทรผู้ปกครอง, ทะเบียนรถ</p>
+<p><strong>สถานะรายแถวที่อาจพบ:</strong> พร้อมนำเข้า / รหัสซ้ำต่างโรงเรียน (นำเข้าได้) / มีอยู่แล้วในโรงเรียนนี้ (ข้าม) / ผู้ปกครองไม่ตรง (ยืนยันได้) / เคยถูกลบ ต้องยืนยันกู้คืน / ไม่พบรถ / ขาดจังหวัดทะเบียน / รถถูกปิดใช้งาน / รหัสนักเรียนผิด / ข้อมูลไม่ครบ / เบอร์ผู้ปกครองผิด / พบรหัสซ้ำในไฟล์เดียวกัน (นำเข้าไม่ได้)</p>
+<p><strong>ปุ่มเสริมในแถว:</strong> <strong>&quot;ขอกู้คืนรถ&quot;</strong> (กรณีรถถูกปิดใช้งาน) · <strong>&quot;ดาวน์โหลดรายงาน (CSV)&quot;</strong></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> นักเรียนที่เลือกถูกเพิ่มเข้าระบบ และมีชุดนำเข้าให้ตรวจสอบย้อนหลังได้ (เก็บ 14 วัน)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ไฟล์ต้องเป็น .xlsx หรือ .csv เท่านั้น (ไฟล์ .xls Excel เก่านำเข้าไม่ได้) · ขนาด ≤ 5MB · ≤ 5000 แถว</li>
+<li>&quot;ไม่พบรถ&quot; → ระบบไม่สร้างรถอัตโนมัติ ต้องไปเพิ่มรถที่เมนู <strong>&quot;เพิ่มรถรับส่ง&quot;</strong> ก่อน แล้วตรวจไฟล์ใหม่ (ข้อความในหน้าตรวจสอบอาจเขียนว่า &quot;เพิ่มรถได้ที่เมนูจัดการรถ&quot; — หมายถึงเมนูเดียวกัน)</li>
+<li>ทะเบียนต้องระบุจังหวัด (กทม/กรุงเทพมหานคร ถือเป็นทะเบียนเดียวกัน)</li>
+<li>รหัสนักเรียนซ้ำในโรงเรียนเดียวกัน = ข้าม; รหัสเดียวกันต่างโรงเรียน = นำเข้าเป็นคนละคนได้</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ ขั้นตอน Preview ไม่เขียนข้อมูลนักเรียน/รถ/ผู้ปกครอง — เก็บเฉพาะข้อมูลชุดนำเข้าไว้ตรวจสอบ</p>
+</blockquote>
+<p><img src="screenshots/school/04-import-preview.png" alt="นำเข้านักเรียน: เลือกไฟล์ CSV/Excel แล้วกด &quot;ตรวจสอบไฟล์ก่อนนำเข้า&quot;"></p>
+<p><em>ภาพ: นำเข้านักเรียน: เลือกไฟล์ CSV/Excel แล้วกด &quot;ตรวจสอบไฟล์ก่อนนำเข้า&quot;</em></p>
+<hr>
+<h2>งานที่ 5 — ดูประวัติการนำเข้า + ย้อนกลับ — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจสอบชุดนำเข้าย้อนหลัง หรือต้องการยกเลิก (rollback) ชุดที่ทำผิด</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>กด <strong>&quot;ประวัติการนำเข้า&quot;</strong> → เลือกชุดที่ต้องการ (เปิดรายละเอียดรายแถว, ดาวน์โหลดรายงาน, นำเข้าต่อได้)</li>
+<li>(ย้อนกลับ) เลือกแถวที่ต้องย้อนกลับ + ใส่เหตุผล → ยืนยัน</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> นักเรียนที่ชุดนั้นเพิ่มเข้ามาเองถูกย้อนกลับ (soft delete)</p>
+<blockquote class="callout note">
+<p>ℹ️ rollback ปลอดภัยจำกัด — ย้อนได้เฉพาะนักเรียนที่ชุดนั้นเพิ่มเข้ามาเอง ไม่แตะนักเรียนเดิม, นักเรียนต่างโรงเรียน หรือการอัปเดตผู้ปกครอง/กู้คืน</p>
+</blockquote>
+<p><img src="screenshots/school/05-import-history.png" alt="ประวัติการนำเข้า — รายการชุดนำเข้าที่ผ่านมา"></p>
+<p><em>ภาพ: ประวัติการนำเข้า — รายการชุดนำเข้าที่ผ่านมา</em></p>
+<hr>
+<h2>งานที่ 6 — นำเข้าแบบเดิม (สำรอง) — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการนำเข้าทันทีในครั้งเดียว (ไม่ผ่านขั้นตอน Preview)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ที่หน้าข้อมูลนักเรียน กดปุ่มเล็กสีจาง <strong>&quot;แบบเดิม&quot;</strong> (tooltip &quot;นำเข้าแบบเดิม (สำรอง)&quot;)</li>
+<li>อัปโหลดไฟล์ (ดาวน์โหลด template ได้จากปุ่ม &quot;ดาวน์โหลดตัวอย่าง&quot;)</li>
+<li>ดูผลและข้อผิดพลาดรายแถวในผลลัพธ์</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> นำเข้าทันที (มีการกันข้อมูลซ้ำ, กู้คืนนักเรียนที่เคยลบ, รวมผู้ปกครองตามเบอร์)</p>
+<blockquote class="callout tip">
+<p>💡 แนะนำใช้ <strong>&quot;นำเข้าข้อมูล&quot;</strong> (Preview, งานที่ 4) เป็นหลัก เพราะปลอดภัยกว่าและตรวจสอบก่อนได้</p>
+</blockquote>
+<p><img src="screenshots/school/06-import-legacy.png" alt="นำเข้าแบบเดิม (สำรอง)"></p>
+<p><em>ภาพ: นำเข้าแบบเดิม (สำรอง)</em></p>
+<hr>
+<h2>งานที่ 7 — ดูรถรับส่ง</h2>
+<p><strong>ใช้เมื่อ:</strong> ดูรถที่ให้บริการนักเรียนของโรงเรียน + คนขับ/ผู้ดูแล/เจ้าของ + ความปลอดภัย + รายชื่อนักเรียนในรถ</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>รถรับส่ง</strong></li>
+<li>ดูรายการรถ + ข้อมูลคนขับ/ผู้ดูแล/เจ้าของ + ความปลอดภัย (ตรวจสภาพ + ประกัน)</li>
+<li>กดขยายแต่ละรถดูรายชื่อนักเรียนในรถ</li>
+</ol>
+<p><img src="screenshots/school/03-vehicles.png" alt="รถรับส่ง"></p>
+<p><em>ภาพ: รถรับส่ง</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นเฉพาะรถที่มีนักเรียนของโรงเรียนคุณใช้</p>
+<blockquote class="callout note">
+<p>ℹ️ หน้านี้เป็นมุมมองอ่านอย่างเดียว — การเพิ่มรถจริงอยู่ที่เมนู &quot;เพิ่มรถรับส่ง&quot; (งานที่ 8)
+🔒 บัญชีครูสายชั้น: เบอร์โทรเจ้าของ/คนขับ/ผู้ดูแลถูกปกปิด และจำนวนนักเรียนนับเฉพาะชั้นของตน</p>
+</blockquote>
+<hr>
+<h2>งานที่ 8 — เพิ่มรถรับส่ง — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> เพิ่มรถใหม่ (สูงสุด 10 คันต่อครั้ง) + สร้างบัญชีคนขับให้อัตโนมัติ</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>เพิ่มรถรับส่ง</strong></li>
+<li>(ทางเลือก) ค้นหารถที่มีอยู่ก่อน</li>
+<li>กรอกทะเบียนแบบ 3 ช่อง: <strong>หมวดอักษร / เลขทะเบียน / จังหวัด</strong> (ค่าเริ่มต้น ลำปาง)</li>
+<li>เลือก <strong>ประเภทรถ</strong> (รถตู้ / รถสองแถว / รถบัส / อื่นๆ)</li>
+<li>กรอก <strong>ชื่อคนขับ + เบอร์โทรคนขับ</strong> และ <strong>ชื่อผู้ครอบครองรถ (เจ้าของรถ)</strong> — เว้นว่างได้ถ้าเป็นคนเดียวกับคนขับ</li>
+<li>กด <strong>&quot;บันทึก N คัน&quot;</strong></li>
+</ol>
+<p><img src="screenshots/school/05-bulk-vehicles.png" alt="เพิ่มรถรับส่ง"></p>
+<p><em>ภาพ: เพิ่มรถรับส่ง</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> รถถูกเพิ่ม และระบบสร้างบัญชีคนขับให้อัตโนมัติ</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ชื่อผู้ใช้และรหัสตั้งต้นของคนขับ = ทะเบียนรถ (รูปแบบล็อกอินแสดงใต้ช่องกรอกว่า &quot;ชื่อเข้าระบบ: …&quot;) คนขับถูกบังคับเปลี่ยนรหัสครั้งแรก</li>
+<li>หน้าจอไม่แสดงรหัสผ่านคนขับแยกต่างหาก → จดทะเบียนรถไว้แจ้งคนขับ เพราะทะเบียนรถคือทั้งชื่อผู้ใช้และรหัสผ่านเริ่มต้น</li>
+<li>ทะเบียนซ้ำกับที่มีอยู่ → ระบบใช้รถเดิมหรือแจ้ง &quot;ทะเบียนรถนี้มีอยู่ในระบบแล้ว&quot;</li>
+<li>รถถูกปิดใช้งานอยู่ → ระบบไม่กู้คืนอัตโนมัติ มีปุ่ม <strong>&quot;ส่งคำขอกู้คืนรถนี้&quot;</strong> ให้ admin อนุมัติ</li>
+<li>เกิน 10 คัน → ขึ้น &quot;สูงสุด 10 คันต่อครั้ง&quot;</li>
+</ul>
+<hr>
+<h2>งานที่ 9 — ส่งตรวจและรับรองรถ</h2>
+<p><strong>ใช้เมื่อ:</strong> สร้างใบส่งตรวจรวมออนไลน์ (รวมจำนวนผู้โดยสารจากทุกโรงเรียนที่ใช้รถคันเดียวกัน) ส่งให้ขนส่งจังหวัดตรวจ + พิมพ์ + มี QR</p>
+<p><strong>ขั้นตอน <em>(บัญชีหลักเท่านั้น)</em>:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>ส่งตรวจและรับรองรถ</strong></li>
+<li>เลือกรถ → กด <strong>&quot;สร้างใบส่งตรวจ&quot;</strong></li>
+<li>กด <strong>&quot;ยืนยันข้อมูลพร้อมพิมพ์&quot;</strong></li>
+<li>กด <strong>&quot;พิมพ์ใบส่งตรวจ&quot;</strong> (มี QR ให้ขนส่งสแกน)</li>
+<li>ติดตามสถานะ</li>
+</ol>
+<p><img src="screenshots/school/04-vehicle-verification.png" alt="ส่งตรวจและรับรองรถ"></p>
+<p><em>ภาพ: ส่งตรวจและรับรองรถ</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> มีใบส่งตรวจสถานะหนึ่งใน: ฉบับร่าง / พร้อมพิมพ์ / ยื่นแล้ว / กำลังตรวจ / ต้องแก้ไข / ผ่าน / ไม่ผ่าน / ยกเลิก / หมดอายุ / มีฉบับใหม่</p>
+<blockquote class="callout note">
+<p>ℹ️ 1 รถมีคำขอที่ใช้งานอยู่ได้ชุดเดียวต่อภาคเรียน
+ℹ️ เอกสารที่ส่งให้ขนส่งไม่มีข้อมูลส่วนบุคคล (ไม่มีรายชื่อนักเรียน/ผู้ปกครอง/เบอร์) — แสดงเฉพาะจำนวนแยกโรงเรียน + พื้นที่รับส่งสรุป
+🔒 บัญชีครูสายชั้นดูสถานะได้เท่านั้น สร้าง/ยืนยันไม่ได้ (มีแถบแจ้ง &quot;บัญชีครูประจำสายชั้นดูสถานะได้เท่านั้น&quot;)</p>
+</blockquote>
+<hr>
+<h2>งานที่ 10 — แผนที่จุดรับส่ง</h2>
+<p><strong>ใช้เมื่อ:</strong> ดู/สร้าง/แก้ไขจุดรับส่งของรถที่ให้บริการโรงเรียน + กำหนดนักเรียนเข้าจุด</p>
+<p><strong>ขั้นตอน (สร้างจุด — บัญชีหลักเท่านั้น):</strong></p>
+<ol>
+<li>เปิดเมนู <strong>แผนที่จุดรับส่ง</strong></li>
+<li>กด <strong>&quot;เพิ่มจุดรับส่ง&quot;</strong> → กรอก <strong>ป้ายชื่อจุด</strong> (ไม่เกิน 100 ตัวอักษร) + พิกัด (lat/lng หรือคลิกบนแผนที่)</li>
+<li>เลือกรอบ: เช้า / เย็น / ทั้งวัน</li>
+<li>เลือกนักเรียนเข้าจุด → บันทึก</li>
+</ol>
+<p><img src="screenshots/school/06-pickup-map.png" alt="แผนที่จุดรับ-ส่ง"></p>
+<p><em>ภาพ: แผนที่จุดรับ-ส่ง</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> จุดถูกสร้างพร้อมนักเรียนที่กำหนด</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>เลือกได้เฉพาะนักเรียนในโรงเรียนคุณที่อยู่ในรถคันนั้น และห้ามให้นักเรียนคนเดิมมีจุดซ้ำในรอบเดียวกัน</li>
+<li>จุดที่ใช้ร่วมข้ามโรงเรียน เมื่อคุณลบนักเรียนของตน ระบบจะคงนักเรียนของโรงเรียนอื่นไว้</li>
+</ul>
+<blockquote class="callout note">
+<p>🔒 บัญชีครูสายชั้นดูได้อย่างเดียว สร้าง/แก้ไขไม่ได้</p>
+</blockquote>
+<hr>
+<h2>งานที่ 11 — ดูตำแหน่งรถ live</h2>
+<p><strong>ใช้เมื่อ:</strong> ติดตามตำแหน่งรถปัจจุบันของรถที่ให้บริการโรงเรียน (อัปเดตทุก ~15 วินาที)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>ตำแหน่งปัจจุบัน</strong> (มือถือ = แท็บ <strong>ตำแหน่ง</strong>)</li>
+<li>ดูแผนที่ + รายการตำแหน่งรถ พร้อม KPI: ออนไลน์ / สัญญาณเก่า / หยุดส่ง / ออฟไลน์</li>
+</ol>
+<p><img src="screenshots/school/07-live-vehicles.png" alt="ตำแหน่งรถปัจจุบัน (live)"></p>
+<p><em>ภาพ: ตำแหน่งรถปัจจุบัน (live)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นตำแหน่งรถที่กำลังส่งสัญญาณ</p>
+<blockquote class="callout note">
+<p>ℹ️ รถจะปรากฏบนแผนที่เฉพาะตอนที่คนขับเปิดส่งตำแหน่งเท่านั้น
+🔒 บัญชีครูสายชั้นเห็นเฉพาะรถที่เกี่ยวกับชั้นของตน</p>
+</blockquote>
+<hr>
+<h2>งานที่ 12 — อนุมัติคำขอรายชื่อ — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> คนขับส่งคำขอเพิ่ม-ถอนนักเรียนในรถ (เมนู &quot;คำขอรายชื่อ&quot;; หัวข้อบนหน้าจอ &quot;คำขอเปลี่ยนแปลงรายชื่อ&quot;)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>คำขอรายชื่อ</strong></li>
+<li>กรองตามสถานะ: <strong>รออนุมัติ / อนุมัติแล้ว / ปฏิเสธแล้ว</strong></li>
+<li>ตรวจคำขอแต่ละรายการ (ชนิด &quot;เพิ่มนักเรียน&quot; หรือ &quot;ถอนนักเรียน&quot; + ชื่อนักเรียน + ทะเบียนรถ + ผู้ขอ)</li>
+<li>กด <strong>&quot;อนุมัติ&quot;</strong> หรือ <strong>&quot;ปฏิเสธ&quot;</strong> (กรณีปฏิเสธ ระบบจะถามเหตุผลผ่านกล่องข้อความ)</li>
+</ol>
+<p><img src="screenshots/school/08-approvals.png" alt="คำขอเปลี่ยนรายชื่อ"></p>
+<p><em>ภาพ: คำขอเปลี่ยนรายชื่อ</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> นักเรียนปรากฏใน roster จริงของรถเมื่อโรงเรียนอนุมัติแล้ว</p>
+<blockquote class="callout note">
+<p>🔒 บัญชีครูสายชั้นดูได้อย่างเดียว อนุมัติ/ปฏิเสธไม่ได้</p>
+</blockquote>
+<hr>
+<h2>งานที่ 13 — ยืนยันรับ-ส่งแทนคนขับ (School Override) — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> คนขับลืมเช็กชื่อ ต้องบันทึกสถานะรับ/ส่งแทน</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ที่แดชบอร์ด กด <strong>&quot;ยืนยันแทนคนขับ&quot;</strong></li>
+<li>เลือก <strong>นักเรียน</strong> + <strong>รอบ</strong> (ส่งเช้า / รับเย็น) + <strong>สถานะ</strong> — ตัวเลือกคือ <strong>&quot;ยืนยันรับ/มาถึง&quot;</strong> (รับเข้ารถ) และ <strong>&quot;ยืนยันส่ง/ออก&quot;</strong> (ส่งถึงปลายทาง) ระบบเลือกให้อัตโนมัติตามรอบ (เช้า = ยืนยันรับ, เย็น = ยืนยันส่ง) แก้เองได้</li>
+<li>กรอก <strong>เหตุผล</strong> (จำเป็น ไม่เกิน 500 ตัวอักษร) → กดยืนยัน</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> สถานะถูกบันทึก และส่งแจ้งเตือน LINE ถึงผู้ปกครอง</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ไม่กรอกเหตุผล → ขึ้น &quot;กรุณาระบุเหตุผลการยืนยันแทน&quot;</li>
+<li>การยืนยันแทนส่งแจ้งเตือน LINE ถึงผู้ปกครองทันที — อย่ากดเล่น</li>
+<li>กลับคำตรง ๆ ไม่ได้ ถ้าผิดต้องลงสถานะใหม่ (คนขับยังกดเช็กชื่อซ้ำได้ปกติ — override ไม่ล็อก)</li>
+</ul>
+<p><img src="screenshots/school/13-override.png" alt="ยืนยันรับ-ส่งแทนคนขับ: เลือกรอบ/สถานะ + เลือกนักเรียน + เหตุผล"></p>
+<p><em>ภาพ: ยืนยันรับ-ส่งแทนคนขับ: เลือกรอบ/สถานะ + เลือกนักเรียน + เหตุผล</em></p>
+<hr>
+<h2>งานที่ 14 — จัดการบัญชีครูประจำสายชั้น — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> สร้าง/รีเซ็ตรหัส/ลบ บัญชีครูที่ดูข้อมูลได้เฉพาะระดับชั้น (read-only) ของโรงเรียนตน</p>
+<p><strong>ขั้นตอน (สร้างบัญชี):</strong></p>
+<ol>
+<li>เปิดเมนู <strong>บัญชีครูประจำสายชั้น</strong></li>
+<li>กด <strong>&quot;+ เพิ่มบัญชีครู&quot;</strong></li>
+<li>กรอก <strong>ชื่อผู้ใช้</strong> (แนะนำรูปแบบ <code>SCH0001-P4</code>) + <strong>ชื่อแสดง</strong> + <strong>ระดับชั้น</strong> (อ.1 – ม.6) + <strong>รหัสผ่าน</strong> (อย่างน้อย 6 ตัว) + <strong>ยืนยันรหัสผ่าน</strong></li>
+<li>บันทึก — ครูจะถูกบังคับเปลี่ยนรหัสตอนเข้าครั้งแรก</li>
+</ol>
+<p><strong>ขั้นตอน (รีเซ็ต/ลบ):</strong></p>
+<ol>
+<li>ที่รายการครูแต่ละคน กด <strong>&quot;รีเซ็ตรหัสผ่าน&quot;</strong> หรือ <strong>&quot;ลบ&quot;</strong></li>
+</ol>
+<p><img src="screenshots/school/09-teacher-accounts.png" alt="บัญชีครูประจำสายชั้น"></p>
+<p><em>ภาพ: บัญชีครูประจำสายชั้น</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> บัญชีครูถูกสร้าง/รีเซ็ต/ลบตามที่ทำ</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>รีเซ็ตรหัส → ครูถูกบังคับเปลี่ยนรหัสครั้งถัดไป และเซสชันเดิมของครูถูกตัดทันที</li>
+<li>ชื่อผู้ใช้ห้ามซ้ำ (ขึ้นข้อความถ้าซ้ำ) · ลบบัญชีตัวเองไม่ได้</li>
+<li>ลบ = soft delete + ตัดเซสชันครูทันที</li>
+</ul>
+<hr>
+<h2>งานที่ 15 — ดูเหตุฉุกเฉิน</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจรายงานเหตุฉุกเฉินจากรถที่ให้บริการโรงเรียน</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>เหตุฉุกเฉิน</strong></li>
+<li>ดูรายการ (ทะเบียน, ช่องทาง LINE/เว็บ, รายละเอียด, หมายเหตุ, ผลลัพธ์, ผู้รายงาน)</li>
+</ol>
+<p><img src="screenshots/school/10-emergencies.png" alt="เหตุฉุกเฉิน"></p>
+<p><em>ภาพ: เหตุฉุกเฉิน</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นเหตุฉุกเฉินของรถที่ให้บริการโรงเรียน</p>
+<blockquote class="callout note">
+<p>ℹ️ หน้านี้อ่านอย่างเดียว — โรงเรียนรายงานเหตุเองไม่ได้ ผู้รายงานคือคนขับ
+🔒 บัญชีครูสายชั้นเห็นเฉพาะเหตุของรถที่เกี่ยวกับชั้นของตน</p>
+</blockquote>
+<hr>
+<h2>งานที่ 16 — ดูประวัติการแก้ไข (Audit Log) — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> สอบทานบันทึกการกระทำในโรงเรียน (สร้าง/แก้ไข/ลบ/นำเข้า/อนุมัติ) + ส่งออก CSV</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>ประวัติการแก้ไข</strong></li>
+<li>กรองด้วย <strong>ประเภทการกระทำ (action)</strong> และ <strong>ช่วงวันที่</strong> (date_from / date_to)</li>
+<li>(ทางเลือก) ส่งออกเป็น CSV</li>
+</ol>
+<p><img src="screenshots/school/11-audit-log.png" alt="ประวัติการแก้ไข"></p>
+<p><em>ภาพ: ประวัติการแก้ไข</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรายการ audit ตามตัวกรอง / ได้ไฟล์ CSV (มี BOM, ปกปิดข้อมูลอ่อนไหว, จำกัด 5000 แถว)</p>
+<blockquote class="callout note">
+<p>🔒 บัญชีครูสายชั้นเข้าไม่ได้ (หน้าแสดงการ์ด &quot;ไม่สามารถเข้าถึงหน้านี้ได้&quot;)</p>
+</blockquote>
+<hr>
+<h2>งานที่ 17 — ขอโอนย้ายนักเรียน / กู้คืนรถ — <em>(บัญชีหลักเท่านั้น)</em></h2>
+<p><strong>ใช้เมื่อ:</strong> ย้ายนักเรียนข้ามโรงเรียน หรือกู้คืนรถที่ถูกปิดใช้งาน (ทั้งคู่เป็นคำขอที่รอ admin อนุมัติ ไม่เกิดทันที)</p>
+<p><strong>ขั้นตอน (โอนย้ายนักเรียน):</strong></p>
+<ol>
+<li>เปิดหน้าต่างแก้ไขนักเรียน → กด <strong>&quot;ขอโอนย้ายนักเรียน&quot;</strong></li>
+<li>กรอก <strong>รหัสโรงเรียนปลายทาง*</strong> + <strong>เหตุผล*</strong> + หลักฐาน → ส่งคำขอ</li>
+<li>ติดตามสถานะ / ยกเลิกคำขอที่ยังรออนุมัติได้</li>
+</ol>
+<p><strong>ขั้นตอน (กู้คืนรถที่ถูกปิดใช้งาน):</strong></p>
+<ol>
+<li>กดปุ่ม <strong>&quot;ขอกู้คืนรถ&quot;</strong> (ในหน้าต่างตรวจสอบการนำเข้า) หรือ <strong>&quot;ส่งคำขอกู้คืนรถนี้&quot;</strong> (ในหน้าเพิ่มรถ)</li>
+<li>ส่งคำขอให้ admin อนุมัติ</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> มีคำขอสถานะหนึ่งใน: รออนุมัติ / โอนย้ายแล้ว / ไม่อนุมัติ / ยกเลิกแล้ว</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> การโอนย้ายและการกู้คืนรถไม่เกิดทันที — ต้องรอ admin อนุมัติ</p>
+<blockquote class="callout note">
+<p>ℹ️ ระบบมีฟังก์ชัน &quot;การลา&quot; ของนักเรียนอยู่เบื้องหลัง (จำนวนคนลาแสดงบนแดชบอร์ดและในตารางสถานะ) แต่ปัจจุบันยังไม่มีปุ่ม/หน้าจอสำหรับบันทึกการลาด้วยตนเองในบทบาทโรงเรียน — การลาถูกบันทึกผ่านช่องทางอื่น (เช่น ผู้ปกครอง/คนขับ)</p>
+</blockquote>
+<p><img src="screenshots/school/17-transfer.png" alt="ขอโอนย้ายนักเรียน (เปิดจากแก้ไขนักเรียน → ปุ่ม &quot;ขอโอนย้ายนักเรียน&quot;)"></p>
+<p><em>ภาพ: ขอโอนย้ายนักเรียน (เปิดจากแก้ไขนักเรียน → ปุ่ม &quot;ขอโอนย้ายนักเรียน&quot;)</em></p>
+<hr>
+<h2>งานที่ 18 — รายงานและส่งออก</h2>
+<p><strong>ใช้เมื่อ:</strong> ดู/ดาวน์โหลดรายงาน (ทั้งบัญชีหลักและครูสายชั้น แต่ครูสายชั้นเห็นเฉพาะข้อมูลในขอบเขตของตน)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>รายงาน</strong> (มือถือ = แท็บ <strong>รายงาน</strong>)</li>
+<li>เลือกแท็บ: <strong>รายวัน</strong> (เลือกวันที่ที่หัวรายงาน) / <strong>รายเดือน</strong> (เลือกเดือน) / <strong>สรุปภาพรวม</strong></li>
+<li>(รายวัน) ดู KPI 4 ใบ (รถรับส่ง / นักเรียน / ส่งเช้าสำเร็จ % / รับเย็นสำเร็จ %) + แถบ &quot;จุดที่ต้องติดตาม&quot; + ตาราง &quot;สรุปรายโรงเรียน&quot; และ &quot;สรุปรายรถ&quot;</li>
+<li>ที่ท้ายหน้า แถบ <strong>&quot;ดาวน์โหลด:&quot;</strong> เลือกปุ่ม <strong>CSV</strong> / <strong>Excel</strong> / <strong>PDF</strong></li>
+</ol>
+<p><img src="screenshots/school/12-reports-daily.png" alt="รายงานรายวัน"></p>
+<p><em>ภาพ: รายงานรายวัน</em></p>
+<p><img src="screenshots/school/13-reports-monthly.png" alt="รายงานรายเดือน"></p>
+<p><em>ภาพ: รายงานรายเดือน</em></p>
+<p><img src="screenshots/school/14-reports-summary.png" alt="รายงานสรุปภาพรวม"></p>
+<p><em>ภาพ: รายงานสรุปภาพรวม</em></p>
+<p><strong>รูปแบบไฟล์ส่งออก:</strong></p>
+<table>
+<thead>
+<tr>
+<th>ปุ่ม</th>
+<th>รายละเอียด</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CSV</strong></td>
+<td>มี BOM (เปิดด้วย Excel แสดงไทยถูก) · คอลัมน์: รหัสนักเรียน, ชื่อ-นามสกุล, ระดับชั้น, ห้อง, โรงเรียน, เขตพื้นที่, ทะเบียนรถ, บริการเช้า/เย็น, สถานะ+เวลาเช้า/เย็น</td>
+</tr>
+<tr>
+<td><strong>Excel</strong></td>
+<td>ไฟล์ .xlsx มีการจัดรูปแบบ (styling)</td>
+</tr>
+<tr>
+<td><strong>PDF</strong></td>
+<td>ฟอนต์ไทย Sarabun · สรุป + ตารางรายโรงเรียน + รายคัน</td>
+</tr>
+</tbody>
+</table>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ได้ไฟล์รายงานตามรูปแบบที่เลือก (ข้อมูลจำกัดตามขอบเขตของคุณ — โรงเรียนเห็นเฉพาะข้อมูลของตนเอง)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>กดส่งออกแล้วไฟล์ไม่เปิด มักเป็นเพราะเบราว์เซอร์บล็อกป๊อปอัป → อนุญาตป๊อปอัปสำหรับ <a href="http://schoolbuslampang.com" target="_blank" rel="noopener">schoolbuslampang.com</a></li>
+<li>เบื้องหลัง API รองรับ <code>school_id</code>, <code>vehicle_id</code> ด้วย แต่ขอบเขตถูกบังคับตาม role ของบัญชีอยู่แล้ว</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ กล่อง &quot;บันทึกการตัดสินใจ&quot; ก่อนดาวน์โหลด PDF เป็นของบทบาทส่วนกลาง (province) เท่านั้น — บัญชีโรงเรียนดาวน์โหลดได้ทันทีโดยไม่มีกล่องนี้</p>
+</blockquote>
+<hr>
+<h2>งานที่ 19 — ออกจากระบบ / ลืมรหัสผ่าน</h2>
+<p><strong>ใช้เมื่อ:</strong> สิ้นสุดการใช้งาน หรือต้องการกู้รหัสผ่าน</p>
+<p><strong>ขั้นตอน (ออกจากระบบ):</strong></p>
+<ol>
+<li>ปิดเบราว์เซอร์ หรือกดออกจากระบบในเมนูบัญชี (เซสชันอยู่ได้ 24 ชั่วโมง หากไม่ออกเอง)</li>
+</ol>
+<p><strong>ขั้นตอน (ลืมรหัสผ่าน):</strong></p>
+<ol>
+<li><strong>ระบบไม่มีปุ่ม &quot;ลืมรหัสผ่าน&quot;</strong> และตั้งรหัสใหม่เองไม่ได้</li>
+<li><strong>ครูสายชั้น</strong> ลืมรหัส → ให้บัญชีหลักรีเซ็ตให้ (เมนู &quot;บัญชีครูประจำสายชั้น&quot; → &quot;รีเซ็ตรหัสผ่าน&quot;)</li>
+<li><strong>บัญชีหลัก</strong> ลืมรหัส → ติดต่อเขตพื้นที่ (affiliation) หรือผู้ดูแลระบบ (admin) ให้รีเซ็ต</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ออกจากระบบเรียบร้อย / ได้รหัสใหม่จากผู้มีสิทธิ์รีเซ็ต</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> หลังเปลี่ยนหรือถูกรีเซ็ตรหัส เซสชันเดิมใช้ไม่ได้ (&quot;เซสชันหมดอายุจากการเปลี่ยนรหัสผ่าน&quot;) → เข้าสู่ระบบใหม่</p>
+<p><img src="screenshots/shared/account-menu.png" alt="เมนูบัญชี (มุมขวาบน) — &quot;เปลี่ยนรหัสผ่าน&quot; / &quot;ออกจากระบบ&quot;"></p>
+<p><em>ภาพ: เมนูบัญชี (มุมขวาบน) — &quot;เปลี่ยนรหัสผ่าน&quot; / &quot;ออกจากระบบ&quot;</em></p>
+<hr>
+<h2>ตารางขอบเขตสิทธิ์ (อ้างอิงด่วน)</h2>
+<h3>บัญชีหลักของโรงเรียน</h3>
+<table>
+<thead>
+<tr>
+<th>ด้าน</th>
+<th>ขอบเขต</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ข้อมูลที่เห็น</td>
+<td>เฉพาะข้อมูลของ <strong>โรงเรียนตนเอง</strong> ทั้งหมด (นักเรียน, รถที่ใช้, สถานะ, เหตุฉุกเฉิน, audit, รายงาน)</td>
+</tr>
+<tr>
+<td>จัดการนักเรียน</td>
+<td>เพิ่ม/แก้ไข/ย้ายรถ/ลบ/นำเข้า/ย้อนกลับ ได้</td>
+</tr>
+<tr>
+<td>รถ</td>
+<td>เพิ่มรถ + สร้างบัญชีคนขับ, ส่งตรวจรถ, จุดรับส่ง</td>
+</tr>
+<tr>
+<td>คำขอ/บัญชี</td>
+<td>อนุมัติ roster request, ยืนยันแทนคนขับ, จัดการบัญชีครู, ขอโอนย้าย/กู้คืนรถ</td>
+</tr>
+<tr>
+<td>รายงาน</td>
+<td>ดู + ส่งออก CSV/Excel/PDF</td>
+</tr>
+</tbody>
+</table>
+<h3>บัญชีครูประจำสายชั้น</h3>
+<table>
+<thead>
+<tr>
+<th>ด้าน</th>
+<th>ขอบเขต</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ข้อมูลที่เห็น</td>
+<td><strong>ดูอย่างเดียว</strong> เฉพาะนักเรียนในระดับชั้นที่ผูกไว้</td>
+</tr>
+<tr>
+<td>ถูกปกปิด (PDPA)</td>
+<td>เบอร์ผู้ปกครอง, ที่อยู่จุดลงรถ, เบอร์เจ้าของ/คนขับ/ผู้ดูแล</td>
+</tr>
+<tr>
+<td>ทำไม่ได้</td>
+<td>แก้/ย้าย/ลบนักเรียน, นำเข้า/ย้อนกลับ, เพิ่มรถ, ยืนยันแทนคนขับ, จัดการบัญชีครู, อนุมัติคำขอ, audit log, จุดรับส่ง(แก้ไข), โอนย้าย/คำขอรถ, สร้าง/ยืนยันใบส่งตรวจรถ</td>
+</tr>
+<tr>
+<td>เมนูที่ถูกซ่อน</td>
+<td>ประวัติการแก้ไข, เพิ่มรถรับส่ง, บัญชีครูประจำสายชั้น</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ บัญชีครูสายชั้นจะเห็นป้ายขอบเขต เช่น &quot;ขอบเขตข้อมูล: ป.X · บัญชีครูประจำสายชั้น — ดูข้อมูลได้อย่างเดียว&quot;</p>
+</blockquote>
+<h3>สิ่งที่บทบาทโรงเรียนทำไม่ได้ (และใครทำแทน)</h3>
+<table>
+<thead>
+<tr>
+<th>ทำไม่ได้</th>
+<th>ใครทำแทน</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>เช็กชื่อรับ-ส่งตามปกติ</td>
+<td><strong>คนขับ</strong> (โรงเรียนทำได้แค่ &quot;ยืนยันแทนคนขับ&quot; พร้อมเหตุผล)</td>
+</tr>
+<tr>
+<td>รายงานเหตุฉุกเฉิน</td>
+<td><strong>คนขับ</strong> (โรงเรียนดูอย่างเดียว)</td>
+</tr>
+<tr>
+<td>โอนย้ายนักเรียนข้ามโรงเรียน / กู้คืนรถถูกปิด</td>
+<td>ส่งคำขอ → <strong>admin อนุมัติ</strong> (ไม่เกิดทันที)</td>
+</tr>
+<tr>
+<td>ตรวจสภาพรถ / ลงผลตรวจ</td>
+<td><strong>เจ้าหน้าที่ขนส่ง (transport)</strong></td>
+</tr>
+<tr>
+<td>สร้างบัญชีโรงเรียน / เพิ่มโรงเรียนใหม่</td>
+<td><strong>เขตพื้นที่ (affiliation)</strong> หรือ admin</td>
+</tr>
+<tr>
+<td>จัดการ user ข้ามโรงเรียน / ตั้งค่าระบบ</td>
+<td><strong>admin</strong></td>
+</tr>
+<tr>
+<td>เห็นข้อมูลโรงเรียนอื่น</td>
+<td><strong>ไม่ได้</strong> (จะขึ้นไม่มีสิทธิ์/ไม่พบข้อมูล)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>สรุปปัญหาที่พบบ่อย</h2>
+<table>
+<thead>
+<tr>
+<th>อาการ</th>
+<th>วิธีแก้</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>นำเข้าไฟล์ไม่ได้ ขึ้นว่าไฟล์ไม่รองรับ</td>
+<td>รับเฉพาะ .xlsx หรือ .csv (.xls Excel เก่าไม่ได้ — ตรวจชนิดไฟล์จริง) · ขนาด ≤ 5MB · ≤ 5000 แถว</td>
+</tr>
+<tr>
+<td>นำเข้าแล้วขึ้น &quot;ไม่พบรถ&quot;</td>
+<td>ระบบไม่สร้างรถอัตโนมัติ → ไปเพิ่มรถที่เมนู &quot;เพิ่มรถรับส่ง&quot; ก่อน แล้วตรวจไฟล์ใหม่ · ทะเบียนต้องระบุจังหวัดเสมอ</td>
+</tr>
+<tr>
+<td>แก้เบอร์ผู้ปกครองแล้วผู้ปกครองไม่ได้รับแจ้งเตือน LINE</td>
+<td>การเปลี่ยนชื่อ/เบอร์ = สร้างผู้ปกครองใหม่เฉพาะนักเรียนคนนี้ ซึ่งยังไม่ผูก LINE → ให้ผู้ปกครองผูก LINE ใหม่เองทาง LINE OA</td>
+</tr>
+<tr>
+<td>ค้นหานักเรียนไม่เจอทั้งที่เคยมี</td>
+<td>การลบเป็น soft delete (ซ่อนจากรายการ ประวัติยังอยู่) → นำเข้าใหม่หรือกู้คืนผ่านการนำเข้า</td>
+</tr>
+<tr>
+<td>รหัสนักเรียนซ้ำตอนนำเข้า</td>
+<td>ซ้ำในโรงเรียนเดียวกัน = ข้าม/บล็อก · ซ้ำในไฟล์เดียวกัน = ต้องแก้ไฟล์ก่อน · ซ้ำต่างโรงเรียน = คนละคน นำเข้าได้</td>
+</tr>
+<tr>
+<td>ครูประจำชั้นกดปุ่มแก้ไขไม่ได้ / &quot;ไม่มีสิทธิ์&quot;</td>
+<td>บัญชีครูสายชั้นดูอย่างเดียว — แก้ไข/นำเข้า/อนุมัติ/เพิ่มรถทำไม่ได้ (บางเมนูถูกซ่อน) → ให้บัญชีหลักทำ</td>
+</tr>
+<tr>
+<td>ครูสายชั้นลืมรหัสผ่าน</td>
+<td>ไม่มีระบบรีเซ็ตด้วยตัวเอง → บัญชีหลักไปเมนู &quot;บัญชีครูประจำสายชั้น&quot; → &quot;รีเซ็ตรหัสผ่าน&quot;</td>
+</tr>
+<tr>
+<td>ส่งออก PDF/ไฟล์ไม่ทำงาน</td>
+<td>เบราว์เซอร์บล็อกป๊อปอัป → อนุญาตป๊อปอัปสำหรับ <a href="http://schoolbuslampang.com" target="_blank" rel="noopener">schoolbuslampang.com</a> แล้วลองใหม่</td>
+</tr>
+<tr>
+<td>โอนย้ายนักเรียน/กู้คืนรถแล้วยังไม่เกิดอะไร</td>
+<td>เป็นคำขอที่รอ admin อนุมัติ (ไม่ทันที) → ติดตามสถานะ (รออนุมัติ/โอนย้ายแล้ว/ไม่อนุมัติ/ยกเลิกแล้ว) ยกเลิกคำขอที่ยังรอได้</td>
+</tr>
+<tr>
+<td>เปลี่ยน/ถูกรีเซ็ตรหัสแล้วถูกเด้งออก</td>
+<td>token เดิมใช้ไม่ได้ (&quot;เซสชันหมดอายุจากการเปลี่ยนรหัสผ่าน&quot;) → เข้าสู่ระบบใหม่</td>
+</tr>
+</tbody>
+</table>
+<p><strong>เมื่อแจ้งปัญหากับทีม</strong> ส่งข้อมูลนี้เพื่อช่วยได้เร็วขึ้น: ชื่อผู้ใช้ + รหัสโรงเรียน (เช่น SCH0001) · เมนู/หน้าที่เกิดปัญหา · เวลาที่เกิด · ภาพหน้าจอ + ข้อความ error</p>
+<p><strong>ติดต่อขอความช่วยเหลือ:</strong></p>
+<ul>
+<li>บัญชีหลักลืมรหัส / บัญชีถูกปิด → เขตพื้นที่ (affiliation) หรือผู้ดูแลระบบ (admin)</li>
+<li>ครูสายชั้นลืมรหัส → บัญชีหลักของโรงเรียนรีเซ็ตให้</li>
+<li>โอนย้ายนักเรียน / เพิ่มโรงเรียน / กู้คืนรถ → ส่งคำขอในระบบ รอ admin/เขต อนุมัติ</li>
+<li>ตรวจสภาพรถ → เจ้าหน้าที่ขนส่ง (transport)</li>
+</ul>
+<hr>
+<p><strong>สิ้นสุดคู่มือปฏิบัติงานสำหรับโรงเรียน — ขอบคุณที่ดูแลความปลอดภัยของนักเรียนทุกคน</strong></p>
+
+</main>
+</div>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML สร้างจากเอกสาร Markdown (Phase 10.13C · 2026-06-24)</footer>
+</body>
+</html>

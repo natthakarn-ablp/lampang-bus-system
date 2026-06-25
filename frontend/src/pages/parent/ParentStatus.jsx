@@ -117,7 +117,7 @@ export default function ParentStatus() {
           <div className="text-left space-y-4 mb-6">
             <StepItem number="1" text="เพิ่มเพื่อน LINE OA ระบบรถรับส่งนักเรียน" />
             <StepItem number="2" text='พิมพ์คำว่า "ผูกบัญชี" ในแชท' />
-            <StepItem number="3" text="กรอกเลขบัตรประชาชนของบุตรหลาน" />
+            <StepItem number="3" text="กรอกเบอร์โทร + รหัสนักเรียนของบุตรหลาน" />
             <StepItem number="4" text="รอโรงเรียนอนุมัติ" />
           </div>
 
@@ -172,7 +172,7 @@ export default function ParentStatus() {
           <div className="text-left space-y-3 mb-6 bg-gray-50 rounded-xl p-4">
             <p className="text-sm font-semibold text-gray-600 mb-2">วิธีผูกบัญชี:</p>
             <StepItem number="1" text='พิมพ์ "ผูกบัญชี" ใน LINE OA' />
-            <StepItem number="2" text="กรอกเลขบัตรประชาชนบุตรหลาน" />
+            <StepItem number="2" text="กรอกเบอร์โทร + รหัสนักเรียนของบุตรหลาน" />
             <StepItem number="3" text="รอโรงเรียนอนุมัติ" />
           </div>
 

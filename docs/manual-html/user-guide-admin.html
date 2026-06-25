@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือปฏิบัติงาน — ผู้ดูแลระบบ (Admin) — ระบบรถรับส่งนักเรียนจังหวัดลำปาง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#1e5fa8; --accent-dark:#16467d; --accent-soft:#eaf2fb;
+  --ink:#1a2230; --ink-soft:#475067; --muted:#6b7488;
+  --line:#e3e8f0; --bg:#f5f7fb; --card:#ffffff;
+  --warn-bg:#fff7e6; --warn-bd:#e8a33d; --warn-ink:#7a4d06;
+  --tip-bg:#eef6ff; --tip-bd:#4a90d9; --tip-ink:#1a4e84;
+  --note-bg:#f3f5f9; --note-bd:#9aa6bd; --note-ink:#3a445a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.topnav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+.nav-inner{max-width:980px; margin:0 auto; padding:8px 20px; display:flex; flex-wrap:wrap; gap:4px;}
+.topnav a{font-size:14.5px; font-weight:500; color:var(--ink-soft); text-decoration:none;
+  padding:6px 12px; border-radius:8px; white-space:nowrap;}
+.topnav a:hover{background:var(--accent-soft); color:var(--accent-dark);}
+.topnav a.active{background:var(--accent); color:#fff;}
+.wrap{max-width:980px; margin:0 auto; padding:0 20px 80px;}
+main{background:var(--card); margin-top:28px; padding:48px 56px; border-radius:var(--radius);
+  border:1px solid var(--line); box-shadow:0 1px 3px rgba(16,30,54,.04);}
+h1{font-size:30px; font-weight:700; line-height:1.3; margin:0 0 8px; color:var(--ink);
+  padding-bottom:16px; border-bottom:3px solid var(--accent);}
+h2{font-size:23px; font-weight:700; margin:40px 0 12px; color:var(--accent-dark);
+  padding-top:12px;}
+h3{font-size:19.5px; font-weight:600; margin:28px 0 8px; color:var(--ink);}
+h4{font-size:17px; font-weight:600; margin:20px 0 6px; color:var(--ink-soft);}
+p{margin:10px 0;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+strong{font-weight:600; color:var(--ink);}
+ul,ol{margin:10px 0; padding-left:26px;}
+li{margin:5px 0;}
+hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+code{font-family:'IBM Plex Mono',monospace; font-size:14.5px; background:#eef1f6;
+  padding:2px 6px; border-radius:5px; color:#7a3a8c;}
+pre{background:#1e2430; color:#e6e9ef; padding:16px 18px; border-radius:10px; overflow:auto;}
+pre code{background:none; color:inherit; padding:0;}
+main img{display:block; max-width:100%; height:auto; margin:16px auto 4px; border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 3px 12px rgba(16,30,54,.10);}
+main p > em:only-child{display:block; text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 18px;}
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15.5px;
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+thead th{background:var(--accent); color:#fff; font-weight:600; text-align:left;
+  padding:11px 14px; font-size:15px;}
+tbody td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top;}
+tbody tr:nth-child(even){background:#fafbfd;}
+tbody tr:hover{background:var(--accent-soft);}
+blockquote.callout{margin:16px 0; padding:14px 18px; border-radius:10px; border-left:5px solid;
+  font-size:16px;}
+blockquote.callout p{margin:6px 0;}
+blockquote.callout ul{margin:6px 0;}
+.callout.warn{background:var(--warn-bg); border-color:var(--warn-bd); color:var(--warn-ink);}
+.callout.tip{background:var(--tip-bg); border-color:var(--tip-bd); color:var(--tip-ink);}
+.callout.note{background:var(--note-bg); border-color:var(--note-bd); color:#3a445a;}
+.callout.warn strong,.callout.tip strong,.callout.note strong{color:inherit;}
+.docfoot{max-width:980px; margin:24px auto 0; padding:0 20px; color:var(--muted); font-size:13.5px; text-align:center;}
+.toolbar{max-width:980px; margin:18px auto 0; padding:0 20px; display:flex; justify-content:flex-end;}
+.btn-print{font-size:14px; font-weight:500; color:var(--accent-dark); background:var(--accent-soft);
+  border:1px solid var(--line); padding:7px 14px; border-radius:8px; cursor:pointer;}
+.btn-print:hover{background:#dceafa;}
+@media (max-width:640px){
+  body{font-size:16px;}
+  main{padding:28px 20px;}
+  h1{font-size:24px;} h2{font-size:20px;} h3{font-size:17.5px;}
+  .nav-inner{padding:6px 12px;}
+}
+@media print{
+  .topnav,.toolbar{display:none;}
+  body{background:#fff; font-size:12pt;}
+  main{box-shadow:none; border:none; margin:0; padding:0;}
+  a{color:#000; text-decoration:none;}
+  table,blockquote,h2,h3,figure,img{page-break-inside:avoid;}
+  main img{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html" class="active">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="wrap">
+<main>
+<h1>คู่มือปฏิบัติงาน — ผู้ดูแลระบบ (Admin)</h1>
+<blockquote class="callout note">
+<p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง — <a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a>
+เวอร์ชัน Phase 10.13C • อัปเดต 2026-06-24</p>
+</blockquote>
+<blockquote class="callout note">
+<p>📷 <strong>หมายเหตุภาพหน้าจอ:</strong> ข้อมูลส่วนบุคคล (ชื่อนักเรียน/ผู้ปกครอง เบอร์โทร) ในภาพถูกเบลอเพื่อความเป็นส่วนตัว — เมื่อใช้งานจริงจะแสดงข้อมูลตามปกติ</p>
+</blockquote>
+<h2>ภาพรวม 30 วินาที</h2>
+<ul>
+<li><strong>บทบาทนี้ทำอะไรได้:</strong>
+<ul>
+<li>จัดการบัญชีผู้ใช้ทุกบทบาท (คนขับ/โรงเรียน/สังกัด/จังหวัด/ขนส่ง/ผู้ดูแลระบบ) — สร้าง แก้ไข รีเซ็ตรหัส เปิด/ปิด</li>
+<li>ดูประวัติการใช้งานทั้งระบบ (audit log) + ส่งออก CSV</li>
+<li>อนุมัติคำขอโอนย้ายนักเรียน และคำขอเกี่ยวกับรถ (กู้คืน/เพิ่ม/ตรวจสอบ)</li>
+<li>ดูแลสุขภาพข้อมูลคนขับ + ใช้ wizard กู้คืน/ย้าย/ปิดคนขับ</li>
+<li>ตรวจสอบจุดรับส่งและตำแหน่งรถ (GPS) ทั้งระบบ, ดูความพร้อมเปิดใช้งาน + สุขภาพระบบ</li>
+<li>เข้าใช้ทุกโมดูล (โรงเรียน/สังกัด/จังหวัด/ขนส่ง/รายงาน) + หน้างานวิจัย/ประเมินผล (เป็นสิทธิ์สูงสุดของระบบ)</li>
+</ul>
+</li>
+<li><strong>เข้าระบบด้วย:</strong> ชื่อผู้ใช้ (username) ของบัญชี admin (ไม่ใช่ทะเบียนรถ) — บัญชีสร้างโดยระบบติดตั้งครั้งแรก หรือ admin อีกคน</li>
+<li><strong>อุปกรณ์ที่แนะนำ:</strong> คอมพิวเตอร์ (desktop) เป็นหลัก เพราะมีตาราง/ฟอร์ม/รายงานเยอะ และเห็นแถบเมนูด้านข้างครบ — มือถือ/แท็บเล็ตใช้ดูข้อมูลเร่งด่วนได้แต่ไม่เหมาะกับงานจัดการซับซ้อน</li>
+</ul>
+<h2>สารบัญงาน</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>งาน</th>
+<th>ใช้เมื่อ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>เข้าสู่ระบบ + เปลี่ยนรหัสครั้งแรก</td>
+<td>ทุกครั้งที่เริ่มใช้งาน / บัญชีถูกสร้างใหม่หรือถูกรีเซ็ต</td>
+</tr>
+<tr>
+<td>2</td>
+<td>ดูศูนย์ควบคุมระบบ (หน้าแรก)</td>
+<td>ตรวจภาพรวม + การเตือนประจำวัน</td>
+</tr>
+<tr>
+<td>3</td>
+<td>จัดการผู้ใช้งาน (สร้าง/แก้ไข/รีเซ็ต/ลบ)</td>
+<td>สร้างหรือดูแลบัญชีทุกบทบาท</td>
+</tr>
+<tr>
+<td>4</td>
+<td>อนุมัติคำขอโอนย้ายนักเรียน</td>
+<td>มีคำขอย้าย/แก้โรงเรียนที่ผิด</td>
+</tr>
+<tr>
+<td>5</td>
+<td>อนุมัติคำขอเกี่ยวกับรถ</td>
+<td>มีคำขอกู้คืน/เพิ่ม/ใช้รถ/ตรวจสอบ</td>
+</tr>
+<tr>
+<td>6</td>
+<td>ดูแลสุขภาพข้อมูลคนขับ + wizard</td>
+<td>ข้อมูลคนขับผิดพลาด/ซ้ำ/ต้องย้าย-ปิด</td>
+</tr>
+<tr>
+<td>7</td>
+<td>ตรวจสอบจุดรับส่ง</td>
+<td>จัดการกรณีพิเศษของจุดรับส่ง</td>
+</tr>
+<tr>
+<td>8</td>
+<td>ตรวจสอบตำแหน่งรถ (GPS)</td>
+<td>ดูสถานะ GPS รถทั้งระบบ</td>
+</tr>
+<tr>
+<td>9</td>
+<td>ดูความพร้อมเปิดใช้งาน</td>
+<td>ตรวจว่าข้อมูลพร้อมบังคับนโยบายแค่ไหน</td>
+</tr>
+<tr>
+<td>10</td>
+<td>ดูสุขภาพระบบ</td>
+<td>ดูสถิติการใช้งานย้อนหลัง 30 วัน</td>
+</tr>
+<tr>
+<td>11</td>
+<td>ดูประวัติการใช้งาน (Audit Log) + ส่งออก</td>
+<td>ตรวจสอบ/ตามรอยการกระทำในระบบ</td>
+</tr>
+<tr>
+<td>12</td>
+<td>งานวิจัย/ประเมินผล</td>
+<td>สร้าง baseline, ส่งออกข้อมูลวิจัย, ประเมินผล</td>
+</tr>
+<tr>
+<td>13</td>
+<td>รายงานและการส่งออก</td>
+<td>ออกรายงานรายวัน/เดือน/สรุป + export</td>
+</tr>
+<tr>
+<td>14</td>
+<td>เข้าใช้งานโมดูลบทบาทอื่น</td>
+<td>ทำงานแทนโรงเรียน/สังกัด/ขนส่ง/จังหวัด</td>
+</tr>
+<tr>
+<td>15</td>
+<td>ฟีเจอร์ขั้นสูงที่ปิดอยู่ (Geofence/เบี่ยงเส้นทาง/QR)</td>
+<td>อ้างอิงเมื่อถามถึงฟีเจอร์ที่ยังปิด</td>
+</tr>
+<tr>
+<td>16</td>
+<td>ออกจากระบบ</td>
+<td>เลิกใช้งาน</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>🔒 ทุกหน้าใต้ส่วน admin บังคับสิทธิ์ผู้ดูแลระบบ — บทบาทอื่นเข้าไม่ได้ และ <strong>ทุกการกระทำถูกบันทึกใน audit log</strong></p>
+</blockquote>
+<hr>
+<h2>งานที่ 1 — เข้าสู่ระบบ + เปลี่ยนรหัสครั้งแรก</h2>
+<p><strong>ใช้เมื่อ:</strong> เริ่มใช้งานระบบทุกครั้ง / บัญชีถูกสร้างใหม่หรือถูกรีเซ็ตรหัส</p>
+<p><strong>ขั้นตอนเข้าสู่ระบบ:</strong></p>
+<ol>
+<li>เปิดเบราว์เซอร์ไปที่ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong> → ระบบพาไปหน้าเข้าสู่ระบบ</li>
+<li>กรอก <strong>ชื่อผู้ใช้ (username)</strong> ของบัญชี admin ที่ช่อง <strong>&quot;ชื่อผู้ใช้ / ทะเบียนรถ&quot;</strong> (admin ใช้ชื่อผู้ใช้ ไม่ใช่ทะเบียนรถ)</li>
+<li>กรอก <strong>รหัสผ่าน</strong></li>
+<li>กด <strong>เข้าสู่ระบบ</strong></li>
+</ol>
+<p><img src="screenshots/shared/00-login-desktop.png" alt="หน้าเข้าสู่ระบบ (เดสก์ท็อป)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (เดสก์ท็อป)</em></p>
+<p><img src="screenshots/shared/00-login-mobile.png" alt="หน้าเข้าสู่ระบบ (มือถือ)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (มือถือ)</em></p>
+<p><strong>ขั้นตอนเปลี่ยนรหัสครั้งแรก (เมื่อบัญชีถูกสร้างใหม่/ถูกรีเซ็ต):</strong></p>
+<ol>
+<li>เข้าสู่ระบบครั้งแรก → ระบบพาไปหน้า <strong>เปลี่ยนรหัสผ่าน</strong> พร้อมข้อความ <strong>&quot;กรุณาเปลี่ยนรหัสผ่านเริ่มต้น&quot;</strong></li>
+<li>ตั้งรหัสใหม่ให้แข็งแรง: อย่างน้อย <strong>8 ตัวอักษร</strong> (ไม่เกิน 128), ห้ามตรงกับชื่อผู้ใช้, ห้ามเดาง่าย (เช่น 12345678, password), ห้ามใช้อักขระตัวเดียวซ้ำทั้งหมด</li>
+<li>บันทึก แล้วจึงใช้งานเมนูอื่นได้</li>
+</ol>
+<p><img src="screenshots/shared/01-change-password.png" alt="หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)"></p>
+<p><em>ภาพ: หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เข้าสู่ &quot;ศูนย์ควบคุมระบบ&quot; ได้ (ถ้าต้องเปลี่ยนรหัส จะใช้งานเมนูอื่นได้หลังเปลี่ยนสำเร็จ)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ขึ้น <strong>&quot;กรุณาเปลี่ยนรหัสผ่านก่อนใช้งานระบบ&quot;</strong> → ต้องเปลี่ยนรหัสให้เสร็จก่อน จึงใช้เมนูอื่นได้</li>
+<li><strong>ระบบไม่มีปุ่ม &quot;ลืมรหัสผ่าน&quot;</strong> และไม่มี self-service — ถ้าลืมรหัส ต้องให้ <strong>admin อีกคน</strong> รีเซ็ตให้ที่หน้า &quot;จัดการผู้ใช้งาน&quot; (ควรมี admin สำรองอย่างน้อย 2 บัญชีเสมอ; ถ้าเป็น admin คนเดียวและถูกล็อกออก ต้องพึ่งผู้ดูแลเซิร์ฟเวอร์แก้ที่ฐานข้อมูล)</li>
+<li>ขณะ admin สร้าง/รีเซ็ตให้ ตั้งรหัสชั่วคราวสั้นได้ (ขั้นต่ำ <strong>6 ตัว</strong>) แต่ผู้ใช้จะถูกบังคับตั้งใหม่ให้แข็งแรง (≥8 ตัว) ตอนล็อกอินครั้งถัดไป</li>
+<li>ข้อความผิดพลาดและสาเหตุ:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>ข้อความ</th>
+<th>สาเหตุ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</td>
+<td>ชื่อผู้ใช้หรือรหัสผ่านผิด (ระบบไม่ระบุว่าผิดตรงไหนเพื่อความปลอดภัย)</td>
+</tr>
+<tr>
+<td>บัญชีนี้ถูกปิดการใช้งาน</td>
+<td>บัญชีถูกระงับระหว่างใช้งานอยู่</td>
+</tr>
+<tr>
+<td>มีการพยายามเข้าสู่ระบบหลายครั้ง…</td>
+<td>พยายามถี่เกินไป (จำกัด 20 ครั้ง/15 นาที) รอประมาณ 15 นาที</td>
+</tr>
+<tr>
+<td>เซสชันหมดอายุจากการเปลี่ยนรหัสผ่าน…</td>
+<td>มีการเปลี่ยน/รีเซ็ตรหัสบัญชีคุณ — ต้องเข้าสู่ระบบใหม่</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ <strong>เรื่องเซสชัน:</strong> access token อายุ 24 ชั่วโมง แต่ระบบต่ออายุอัตโนมัติเบื้องหลังด้วย refresh token (อายุ 7 วัน) — ใช้งานต่อเนื่องจะไม่ถูกเด้งออกบ่อย โดยทั่วไปอยู่ได้สูงสุดราว 7 วันต่อการเข้าสู่ระบบหนึ่งครั้ง เมื่อมีการเปลี่ยน/รีเซ็ตรหัสบัญชีใด token เก่าของบัญชีนั้นจะถูกยกเลิกทันที</p>
+</blockquote>
+<hr>
+<h2>งานที่ 2 — ดูศูนย์ควบคุมระบบ (หน้าแรก)</h2>
+<p><strong>ใช้เมื่อ:</strong> เริ่มงานแต่ละวัน เพื่อดูภาพรวมและการเตือนสำคัญ</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>หลังเข้าสู่ระบบ ระบบเปิดหน้า <strong>&quot;ศูนย์ควบคุมระบบ&quot;</strong> ให้อัตโนมัติ</li>
+<li>ดู <strong>KPI 4 ตัว:</strong> รถรับส่ง / นักเรียน / โรงเรียน / ผู้ใช้งาน</li>
+<li>ดู <strong>แบนเนอร์สถานะวันนี้:</strong> รอส่งเช้า / รอรับเย็น / เหตุฉุกเฉิน</li>
+<li>ตรวจ <strong>Executive Attention Panel</strong> (การ์ดที่ต้องดูแล) 3 ใบ:
+<ul>
+<li><strong>&quot;ผู้ใช้ต้องดูแล&quot;</strong> → คลิกไป &quot;จัดการผู้ใช้งาน&quot; แบบกรองเฉพาะบัญชีที่ถูกปิดใช้งาน</li>
+<li><strong>&quot;คำขอรออนุมัติ&quot;</strong> → แสดงจำนวนคำขอที่รอ</li>
+<li><strong>&quot;ลบข้อมูล (24 ชม.)&quot;</strong> → คลิกไป audit log กรองเฉพาะการลบ</li>
+</ul>
+</li>
+<li>ใช้ <strong>ทางลัด</strong> ไปงานที่ใช้บ่อย: จัดการผู้ใช้งาน / ประวัติการใช้งาน / จัดการโรงเรียน / ตรวจสภาพรถ</li>
+</ol>
+<p><img src="screenshots/admin/01-dashboard.png" alt="ศูนย์ควบคุมระบบ"></p>
+<p><em>ภาพ: ศูนย์ควบคุมระบบ</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็น KPI, แบนเนอร์สถานะวันนี้, การ์ดเตือน และทางลัดครบ</p>
+<blockquote class="callout note">
+<p>ℹ️ การ์ด &quot;คำขอรออนุมัติ&quot; แสดงตัวเลขรวมเพื่อเตือนเท่านั้น ยังไม่มีหน้าคำขอรายชื่อรวมของ admin — การอนุมัติคำขอเปลี่ยนรายชื่อ (roster) ทำที่ฝั่งโรงเรียน</p>
+</blockquote>
+<hr>
+<h2>งานที่ 3 — จัดการผู้ใช้งาน (สร้าง/แก้ไข/รีเซ็ต/ลบ)</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องสร้างหรือดูแลบัญชีทุกบทบาท (สิทธิ์เฉพาะ admin)</p>
+<p><img src="screenshots/admin/02-users.png" alt="จัดการผู้ใช้งาน"></p>
+<p><em>ภาพ: จัดการผู้ใช้งาน</em></p>
+<p><strong>สิ่งที่เห็นบนหน้าจอ:</strong> ปุ่ม <strong>&quot;+ สร้างผู้ใช้ใหม่&quot;</strong>, ช่องค้นหา <strong>&quot;ค้นหาชื่อผู้ใช้…&quot;</strong>, ตัวกรอง <strong>&quot;ทุกบทบาท&quot;</strong>, ตารางผู้ใช้ (ชื่อผู้ใช้ / ชื่อแสดง / บทบาท / หน่วยงาน / ระดับชั้น / สถานะ / จัดการ) แต่ละแถวมีปุ่ม <strong>&quot;แก้ไข&quot;</strong> <strong>&quot;รีเซ็ตรหัส&quot;</strong> <strong>&quot;ลบ&quot;</strong> — ป้ายสถานะ: <strong>ระงับ</strong> (แดง) / <strong>รอเปลี่ยนรหัส</strong> (เหลือง) / <strong>ใช้งาน</strong> (เขียว)</p>
+<p><strong>ขั้นตอน — สร้างผู้ใช้ใหม่:</strong></p>
+<ol>
+<li>กด <strong>&quot;+ สร้างผู้ใช้ใหม่&quot;</strong></li>
+<li>กรอก <strong>ชื่อผู้ใช้</strong> และ <strong>รหัสผ่าน</strong> (ชั่วคราว, อย่างน้อย 6 ตัว)</li>
+<li>เลือก <strong>บทบาท</strong> — คนขับ / โรงเรียน / สังกัด / จังหวัด / ขนส่ง / ผู้ดูแลระบบ</li>
+<li>ถ้าบทบาทเป็น <strong>โรงเรียน / สังกัด / จังหวัด</strong> เลือก <strong>&quot;หน่วยงาน&quot;</strong> (scope) ให้ถูกต้อง</li>
+<li>ถ้าบทบาท <strong>โรงเรียน</strong> เลือก <strong>&quot;ระดับชั้น&quot;</strong> ได้ (= สร้างบัญชีครูประจำสายชั้น แบบอ่านอย่างเดียวเฉพาะชั้นนั้น)</li>
+<li>กด <strong>&quot;สร้างผู้ใช้&quot;</strong></li>
+</ol>
+<p><strong>ขั้นตอน — แก้ไขผู้ใช้:</strong></p>
+<ol>
+<li>กด <strong>&quot;แก้ไข&quot;</strong> ที่แถวของผู้ใช้</li>
+<li>ปรับได้ 2 อย่าง: <strong>ชื่อแสดง</strong> และ <strong>สถานะ (ใช้งาน ↔ ระงับ)</strong></li>
+<li>กด <strong>&quot;บันทึก&quot;</strong></li>
+</ol>
+<p><strong>ขั้นตอน — รีเซ็ตรหัสผ่าน:</strong></p>
+<ol>
+<li>กด <strong>&quot;รีเซ็ตรหัส&quot;</strong> ที่แถวของผู้ใช้</li>
+<li>กรอกรหัสใหม่ (ชั่วคราว) อย่างน้อย <strong>6 ตัว</strong></li>
+<li>ยืนยัน → ระบบแสดง <strong>&quot;รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อ login ครั้งถัดไป&quot;</strong></li>
+</ol>
+<p><strong>ขั้นตอน — ลบผู้ใช้:</strong></p>
+<ol>
+<li>กด <strong>&quot;ลบ&quot;</strong> ที่แถวของผู้ใช้ → ยืนยันในกล่องที่เด้งขึ้น</li>
+<li>ระบบลบแบบ <strong>soft delete</strong> (ซ่อนจากระบบแต่ยังเก็บประวัติ)</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> บัญชีใหม่ถูกตั้งเป็น &quot;ต้องเปลี่ยนรหัส&quot; เสมอ / การแก้ไข-รีเซ็ต-ลบ มีผลในตารางทันที</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ชื่อผู้ใช้ซ้ำ → ขึ้น <strong>&quot;ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว&quot;</strong> ให้เลือกชื่อใหม่</li>
+<li>หน้าจอแก้ไข <strong>ไม่มีช่องเปลี่ยนบทบาท/หน่วยงาน</strong> — ถ้าต้องเปลี่ยน แนะนำให้สร้างบัญชีใหม่ให้ถูกบทบาทแล้วปิดบัญชีเดิม</li>
+<li><strong>เปิดใช้งานบัญชีคนขับซ้ำอาจถูกบล็อก</strong> → ขึ้น <strong>&quot;ไม่สามารถเปิดใช้งานบัญชีคนขับนี้ได้…&quot;</strong> (บัญชีซ้ำ/ผูกรถที่ถูกปิด) ให้ใช้บัญชีหลัก (canonical) หรือใช้ wizard ที่ &quot;สุขภาพข้อมูลคนขับ&quot; (งานที่ 6)</li>
+<li>รีเซ็ตรหัสจะทำให้ session เดิมของผู้ใช้คนนั้นหมดอายุทันที (ต้องเข้าสู่ระบบใหม่)</li>
+<li><strong>ลบบัญชีตัวเองไม่ได้</strong> → ขึ้น <strong>&quot;ไม่สามารถลบตัวเองได้&quot;</strong></li>
+</ul>
+<hr>
+<h2>งานที่ 4 — อนุมัติคำขอโอนย้ายนักเรียน</h2>
+<p><strong>ใช้เมื่อ:</strong> มีคำขอย้าย/แก้โรงเรียนที่ผิด — ไม่มีอะไรถูกย้ายจนกว่าคุณจะกดอนุมัติ</p>
+<p><img src="screenshots/admin/03-transfer-requests.png" alt="คำขอโอนย้ายนักเรียน"></p>
+<p><em>ภาพ: คำขอโอนย้ายนักเรียน</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เลือกตัวกรอง: <strong>รออนุมัติ / โอนย้ายแล้ว / ไม่อนุมัติ / ทั้งหมด</strong></li>
+<li>กด <strong>&quot;เปิดดู&quot;</strong> ที่คำขอ — อ่านรายละเอียดและคำเตือน (เช่น รหัสนักเรียนซ้ำที่ปลายทาง หรือนักเรียนยังมีรถผูกอยู่)</li>
+<li>ใส่ *<em>&quot;หมายเหตุผู้ดูแล <em>&quot;</em></em> (จำเป็น)</li>
+<li>กด <strong>&quot;อนุมัติและดำเนินการโอนย้าย&quot;</strong> หรือ <strong>&quot;ไม่อนุมัติคำขอ&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เมื่ออนุมัติ ระบบปิดข้อมูลนักเรียนเดิม (soft delete + ตัดรถ) แล้วสร้างนักเรียนใหม่ที่โรงเรียนปลายทาง (รหัสใหม่อัตโนมัติ, คัดลอกการผูกผู้ปกครอง, ไม่ผูกรถ) ในขั้นตอนเดียว — กดอนุมัติซ้ำปลอดภัย (ระบบจะแจ้งว่าดำเนินการไปแล้ว)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ผลออกมา <strong>FAILED</strong> = พบรหัสนักเรียนซ้ำที่ปลายทาง หรือข้อมูลไม่ครบ</li>
+<li>ผลออกมา <strong>STALE_NEEDS_REVIEW</strong> = ข้อมูลนักเรียนเปลี่ยนหลังส่งคำขอ ต้องเปิดดูและตรวจใหม่ก่อนอนุมัติ</li>
+</ul>
+<hr>
+<h2>งานที่ 5 — อนุมัติคำขอเกี่ยวกับรถ</h2>
+<p><strong>ใช้เมื่อ:</strong> มีคำขอ &quot;ขอกู้คืนรถ / ขอใช้รถที่มีอยู่ / ขอเพิ่มรถ / ขอตรวจสอบ&quot;</p>
+<p><img src="screenshots/admin/04-vehicle-requests.png" alt="คำขอเกี่ยวกับรถ"></p>
+<p><em>ภาพ: คำขอเกี่ยวกับรถ</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เลือกตัวกรอง (เหมือนคำขอโอนย้าย: รออนุมัติ/อนุมัติแล้ว/ไม่อนุมัติ/ทั้งหมด)</li>
+<li>กด <strong>&quot;เปิดดู&quot;</strong> เพื่อดูรายละเอียด</li>
+<li>ใส่ <strong>หมายเหตุผู้ดูแล</strong> (จำเป็น)</li>
+<li>กด <strong>&quot;อนุมัติและกู้คืนรถ&quot;</strong> / <strong>&quot;อนุมัติคำขอ&quot;</strong> หรือ <strong>&quot;ไม่อนุมัติ&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> มีเพียงคำขอ <strong>กู้คืนรถ</strong> เท่านั้นที่แก้ข้อมูลรถจริง (นำรถที่ถูกลบกลับมาใช้) — คำขอประเภทอื่นเป็นเพียงข้อมูลแจ้งให้ทราบ ไม่แตะข้อมูลรถ</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> ถ้ามีรถ <strong>ทะเบียนเดียวกันที่ยังใช้งานอยู่</strong> ปุ่มอนุมัติจะถูกปิด (disable) และการกู้คืนจะ <strong>FAILED</strong> พร้อมข้อความ &quot;ไม่สามารถกู้คืนรถได้ เนื่องจากมีรถทะเบียนเดียวกันที่ใช้งานอยู่แล้ว&quot; — ต้องจัดการรถที่ทะเบียนชนกันก่อน</p>
+<hr>
+<h2>งานที่ 6 — ดูแลสุขภาพข้อมูลคนขับ + wizard</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจความถูกต้องข้อมูลคนขับ หรือต้องกู้คืน/ย้าย/ปิดคนขับ</p>
+<p><img src="screenshots/admin/05-driver-integrity.png" alt="สุขภาพข้อมูลคนขับ"></p>
+<p><em>ภาพ: สุขภาพข้อมูลคนขับ</em></p>
+<p><strong>สิ่งที่เห็นบนหน้าจอ:</strong> การ์ดสรุป 7 รายการ — <strong>&quot;รถที่ยังไม่มีคนขับ&quot; / &quot;คนขับที่ยังไม่มีรถ&quot; / &quot;บัญชีซ้ำ/ถูกปิดใช้งาน&quot; / &quot;คนขับยังไม่ผูกโปรไฟล์&quot; / &quot;งานชี้รถที่ถูกปิดใช้งาน&quot; / &quot;รถมีคนขับซ้ำ&quot; / &quot;บล็อกการเปิดใช้งานซ้ำ (30 วัน)&quot;</strong>, รายการ <strong>&quot;รถที่ยังไม่มีคนขับ&quot;</strong> (เฉพาะเมื่อมีรถค้าง), และปุ่ม <strong>&quot;เครื่องมือจัดการคนขับ&quot;</strong> ที่เปิด wizard</p>
+<p><strong>ขั้นตอน — ใช้ wizard เครื่องมือจัดการคนขับ:</strong></p>
+<ol>
+<li>กด <strong>&quot;เครื่องมือจัดการคนขับ&quot;</strong> เปิด wizard</li>
+<li>เลือก <strong>action</strong>: <strong>กู้คืนบัญชีคนขับ</strong> / <strong>ย้ายคนขับไปรถใหม่</strong> / <strong>ปิดใช้งานคนขับ</strong></li>
+<li>กรอก <strong>user id</strong> ของคนขับ (และ <strong>vehicle id</strong> ปลายทาง ถ้าเป็นการย้าย)</li>
+<li>กด <strong>&quot;ตรวจสอบก่อนดำเนินการ&quot;</strong> — ระบบแสดงผลตรวจล่วงหน้า (preflight): อนุญาต / ถูกบล็อก / คำเตือน</li>
+<li>ถ้าผ่าน ใส่ *<em>&quot;เหตุผล <em>&quot;</em></em> (จำเป็น) แล้วกด <strong>&quot;ยืนยันดำเนินการ&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> preflight แสดงผลล่วงหน้า; <strong>ปิดใช้งานคนขับ</strong> จะปิดบัญชีและจบงานมอบหมายที่ active ให้ในขั้นตอนเดียว</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li><strong>กู้คืน:</strong> ถ้าเป็นบัญชีคนขับซ้ำจะถูกบล็อก — ต้องใช้บัญชีหลัก (canonical); กรณีไม่มีรถ active เป็นเพียงคำเตือน ดำเนินการต่อได้</li>
+<li><strong>ย้ายคนขับ:</strong> ถ้ารถปลายทางมีคนขับอยู่แล้ว ต้องติ๊ก <strong>&quot;ยืนยันสิ้นสุดงานคนขับเดิม&quot;</strong> ไม่งั้นระบบจะปฏิเสธ (กันคนขับซ้ำในรถคันเดียว)</li>
+</ul>
+<hr>
+<h2>งานที่ 7 — ตรวจสอบจุดรับส่ง</h2>
+<p><strong>ใช้เมื่อ:</strong> จัดการกรณีพิเศษของจุดรับส่งทั้งระบบ (การเพิ่มจุดหลักทำผ่านบัญชีคนขับ/โรงเรียน)</p>
+<p><img src="screenshots/admin/06-pickup-points.png" alt="ตรวจสอบจุดรับ-ส่ง"></p>
+<p><em>ภาพ: ตรวจสอบจุดรับ-ส่ง</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>กด <strong>&quot;เพิ่มกรณีพิเศษ&quot;</strong> เพื่อเพิ่มจุดรับส่งกรณีพิเศษ (override)</li>
+<li>กรองตามรถเพื่อหารายการที่ต้องการ</li>
+<li>(ถ้าลบหลายรายการ) เลือกหลายรายการแล้วกด <strong>&quot;ลบรายการที่เลือก&quot;</strong></li>
+<li>ใช้ปุ่มแถวตามต้องการ: <strong>จัดการนักเรียน</strong> / <strong>แก้ไข</strong> / <strong>ลบ</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> จุดกรณีพิเศษถูกบันทึก; การลบเป็น <strong>soft delete</strong> (ข้อมูลซ่อนแต่ยังอยู่ใน audit log)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> ป้ายชื่อจุดต้องไม่เกิน 100 ตัวอักษร, พิกัดต้องอยู่ในช่วงที่ถูกต้อง, นักเรียนที่ผูกต้องเป็นของรถคันนั้นและไม่มีจุดซ้ำในรอบเดียวกัน</p>
+<hr>
+<h2>งานที่ 8 — ตรวจสอบตำแหน่งรถ (GPS)</h2>
+<p><strong>ใช้เมื่อ:</strong> ดูสถานะ GPS ของรถทั้งระบบ (อ่านอย่างเดียว — ไม่มีปุ่มแก้ไข)</p>
+<p><img src="screenshots/admin/07-live-vehicles.png" alt="ตรวจสอบตำแหน่งรถ (live)"></p>
+<p><em>ภาพ: ตรวจสอบตำแหน่งรถ (live)</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;ตรวจสอบตำแหน่งรถ&quot;</strong></li>
+<li>ดูตัวเลขสรุป: ออนไลน์ / สัญญาณเก่า / หยุดส่ง / ออฟไลน์ / มีพิกัดจริง / ยังไม่เคยส่ง / ความแม่นยำต่ำ / ไม่อัปเดตเกิน 5 นาที</li>
+<li>ดูแผนที่และรายการรถ (หน้านี้รีเฟรชอัตโนมัติทุก 15 วินาที)</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นตัวเลขสรุป + แผนที่ + รายการรถ และข้อมูลอัปเดตเองทุก 15 วินาที</p>
+<blockquote class="callout note">
+<p>ℹ️ แบนเนอร์ระบุ &quot;ทุกการเปิดดูจะถูกบันทึกใน audit log&quot; — การเข้าดูหน้านี้ถูกบันทึกเพื่อความโปร่งใส</p>
+</blockquote>
+<hr>
+<h2>งานที่ 9 — ดูความพร้อมเปิดใช้งาน</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจว่าข้อมูลพร้อมเปิดบังคับใช้นโยบายความปลอดภัยแค่ไหน (รายงานรวม ไม่มีข้อมูลส่วนบุคคล)</p>
+<p><img src="screenshots/admin/08-readiness.png" alt="ความพร้อมเปิดใช้งาน"></p>
+<p><em>ภาพ: ความพร้อมเปิดใช้งาน</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;ความพร้อมเปิดใช้งาน&quot;</strong></li>
+<li>ดูสถานะรถ (พร้อมใช้งาน / ต้องเติมข้อมูล / มีข้อมูลเสี่ยง / ถูกระงับ)</li>
+<li>ดูสถานะคนขับ (การผูกบัญชี/ใบอนุญาต) และการมอบหมายคนขับ + คนขับสำรอง</li>
+<li>ดูรายการ <strong>&quot;ช่องว่าง (gaps)&quot;</strong> พร้อมเจ้าของงานที่ต้องแก้ แล้วประสานให้แก้ไข</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นภาพรวมความพร้อมและรายการ gaps พร้อมเจ้าของงาน</p>
+<blockquote class="callout note">
+<p>ℹ️ โหมดนโยบาย (policy_mode) ปัจจุบันเป็น <strong>OBSERVE</strong> (เฝ้าสังเกต ยังไม่บังคับ) — การสลับเป็นโหมดบังคับใช้ (ENFORCE) ตั้งค่าโดยผู้ดูแลเซิร์ฟเวอร์เท่านั้น ไม่สามารถสลับจากหน้าจอนี้</p>
+</blockquote>
+<hr>
+<h2>งานที่ 10 — ดูสุขภาพระบบ</h2>
+<p><strong>ใช้เมื่อ:</strong> ดูสถิติการใช้งานระบบย้อนหลัง 30 วัน</p>
+<p><img src="screenshots/admin/10-system-health.png" alt="สุขภาพระบบ"></p>
+<p><em>ภาพ: สุขภาพระบบ</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;สุขภาพระบบ&quot;</strong></li>
+<li>ดูตัวเลข: ผู้ใช้ active, จำนวน login / login ล้มเหลว, การรีเซ็ตรหัสเดือนนี้, การเข้าชมเว็บไซต์ (วันนี้ / 7 วัน / 30 วัน)</li>
+<li>ดู 5 ฟีเจอร์ที่ใช้มากสุด/น้อยสุด, การใช้งานแยกตามประเภทการกระทำ, กิจกรรมแยกตามบทบาท, กิจกรรมรายวัน 14 วัน</li>
+<li>กด <strong>&quot;รีเฟรช&quot;</strong> เพื่ออัปเดตตัวเลข</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นสถิติการใช้งานครบทุกส่วน</p>
+<blockquote class="callout note">
+<p>ℹ️ ตัวเลข &quot;Error count&quot; เป็นค่าประมาณจากการ login ล้มเหลวเท่านั้น (ระบบยังไม่มีบันทึก error แบบถาวร) — ใช้ดูแนวโน้มคร่าว ๆ ไม่ใช่ตัวเลขแม่นยำ</p>
+</blockquote>
+<hr>
+<h2>งานที่ 11 — ดูประวัติการใช้งาน (Audit Log) + ส่งออก</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจสอบ/ตามรอยการกระทำในระบบ — หน้า &quot;ประวัติการใช้งานระบบ (ทั้งหมด)&quot; แสดง audit log ทั้งระบบโดยไม่จำกัดขอบเขต</p>
+<p><img src="screenshots/admin/09-audit-logs.png" alt="ประวัติการใช้งานระบบ (Audit log)"></p>
+<p><em>ภาพ: ประวัติการใช้งานระบบ (Audit log)</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ใช้ตัวกรอง <strong>action</strong> (ประเภทการกระทำ), <strong>date_from</strong>, <strong>date_to</strong> เพื่อจำกัดช่วง</li>
+<li>เลื่อนดูตาราง (แบ่งหน้า สูงสุด 100 รายการต่อหน้า)</li>
+<li>กดส่งออกเป็น <strong>CSV</strong> ตามต้องการ</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรายการ audit ตามตัวกรอง / CSV มี BOM (เปิดในภาษาไทยได้)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ข้อมูลส่วนบุคคล (เบอร์โทร / LINE id / ความลับ) จะถูก <strong>ปกปิด (redact)</strong> ก่อนแสดงและก่อนส่งออกเสมอ (เป็นพฤติกรรมปกติ)</li>
+<li>CSV จำกัดสูงสุด 5,000 แถว — ถ้าเกินจะมีหมายเหตุระบุว่าถูกตัด</li>
+</ul>
+<hr>
+<h2>งานที่ 12 — งานวิจัย / ประเมินผล</h2>
+<p><strong>ใช้เมื่อ:</strong> สร้าง baseline, ส่งออกข้อมูลวิจัย, ประเมินผลแยกบทบาท, ทำสรุปผู้บริหาร (เฉพาะ admin)</p>
+<p><strong>12.1 กรอบวัดผลระบบ</strong> — คู่มือตัวชี้วัด เกณฑ์ การปรับระบบ และข้อพึงระวัง แยกตามบทบาท (เอกสารอ้างอิง ไม่มีปุ่มสั่งงาน)</p>
+<p><img src="screenshots/admin/11-measurement.png" alt="กรอบวัดผลระบบ"></p>
+<p><em>ภาพ: กรอบวัดผลระบบ</em></p>
+<p><strong>12.2 เปรียบเทียบ Baseline</strong> — เทียบ baseline กับปัจจุบัน 8 ตัวชี้วัด
+<strong>ขั้นตอน:</strong> กด <strong>&quot;📸 Snapshot วันนี้&quot;</strong>, <strong>&quot;🔖 สร้าง Baseline&quot;</strong>, หรือ <strong>&quot;🔬 Baseline (Pre-measure)&quot;</strong> ตามต้องการ
+<strong>⚠️ ถ้าติดปัญหา:</strong> สร้าง Baseline ซ้ำภายใน 24 ชั่วโมงไม่ได้ (กัน baseline ซ้อนกัน) — รอครบ 24 ชั่วโมงหรือใช้ baseline ที่มีอยู่</p>
+<p><img src="screenshots/admin/12-research.png" alt="เปรียบเทียบ Baseline"></p>
+<p><em>ภาพ: เปรียบเทียบ Baseline</em></p>
+<p><strong>12.3 ส่งออกข้อมูลวิจัย</strong>
+<strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เลือกช่วงวันที่ + ชุดข้อมูล (Snapshots / Action Logs / Export Evidence / Summary)</li>
+<li>ดูหน้าตัวอย่าง (preview)</li>
+<li>ดาวน์โหลดเป็น <strong>JSON / CSV / Excel</strong>
+<strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ข้อมูลส่งออกตัด IP/User Agent/ค่าก่อนแก้ไขออก และปกปิดข้อมูลส่วนบุคคลในค่าหลังแก้ไข เพื่อความเป็นส่วนตัว</li>
+</ol>
+<p><img src="screenshots/admin/13-research-export.png" alt="ส่งออกข้อมูลวิจัย"></p>
+<p><em>ภาพ: ส่งออกข้อมูลวิจัย</em></p>
+<p><strong>12.4 ประเมินผลแยก Role</strong> — การ์ดต่อบทบาทพร้อมสถานะ &quot;พร้อมประเมิน / ประเมินได้บางส่วน / ยังต้องเพิ่มหลักฐาน&quot; และเทียบกับ baseline</p>
+<p><img src="screenshots/admin/14-evaluation.png" alt="ประเมินผลแยก Role"></p>
+<p><em>ภาพ: ประเมินผลแยก Role</em></p>
+<p><strong>12.5 สรุปผู้บริหาร</strong> — สรุปความพร้อมรายสิทธิ์ พร้อมรายการปรับปรุง/ความเสี่ยง
+<strong>ขั้นตอน:</strong> กด <strong>&quot;🖨️ พิมพ์รายงาน&quot;</strong> เพื่อเปิดหน้าพิมพ์สำหรับผู้บริหาร</p>
+<p><img src="screenshots/admin/15-executive.png" alt="สรุปผู้บริหาร"></p>
+<p><em>ภาพ: สรุปผู้บริหาร</em></p>
+<hr>
+<h2>งานที่ 13 — รายงานและการส่งออก</h2>
+<p><strong>ใช้เมื่อ:</strong> ออกรายงานรายวัน/รายเดือน/สรุป — admin เห็นข้อมูลทั้งจังหวัด และส่งออกได้ทุกแบบ</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;รายงาน&quot;</strong></li>
+<li>เลือกประเภท: <strong>รายวัน / รายเดือน / สรุป</strong> (แสดงเป็นข้อมูล JSON บนหน้าจอ)</li>
+<li>ตั้งตัวกรองที่รองรับ: วันที่ (YYYY-MM-DD), เดือน (YYYY-MM), โรงเรียน, สังกัด, ทะเบียนรถ</li>
+<li>ส่งออกตามต้องการ: <strong>CSV</strong> (มี BOM เปิดภาษาไทยได้), <strong>Excel</strong> (.xlsx), <strong>PDF</strong></li>
+</ol>
+<p><strong>การส่งออกอื่น ๆ ของ admin:</strong></p>
+<ul>
+<li><strong>Audit CSV</strong> — ส่งออกประวัติการใช้งานทั้งระบบ (ปกปิดข้อมูลส่วนบุคคล สูงสุด 5,000 แถว) จากหน้า &quot;ประวัติการใช้งาน&quot; (งานที่ 11)</li>
+<li><strong>ชุดข้อมูลวิจัย</strong> — ส่งออก JSON/CSV/Excel จากหน้า &quot;ส่งออกข้อมูลวิจัย&quot; (งานที่ 12.3, เฉพาะ admin)</li>
+</ul>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ได้ไฟล์รายงานตามรูปแบบที่เลือก / ทุกการส่งออกถูกบันทึกใน audit log (action = EXPORT) และใช้เป็น &quot;หลักฐานการส่งออก (Export Evidence)&quot; ในรายงานวิจัยได้</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> การส่งออกมีการจำกัดอัตรา (rate limit) ที่ 40 ครั้งต่อ 5 นาที — ถ้าส่งออกถี่เกินไปให้รอสักครู่</p>
+<p><img src="screenshots/shared/reports-daily.png" alt="หน้ารายงาน — แท็บ รายวัน/รายเดือน/สรุปภาพรวม พร้อมปุ่มส่งออก"></p>
+<p><em>ภาพ: หน้ารายงาน — แท็บ รายวัน/รายเดือน/สรุปภาพรวม พร้อมปุ่มส่งออก</em></p>
+<hr>
+<h2>งานที่ 14 — เข้าใช้งานโมดูลบทบาทอื่น</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องทำงานแทนบทบาทอื่น (admin เข้าได้เต็มสิทธิ์ทุกโมดูล)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เลือกเมนูตามงาน:
+<ul>
+<li><strong>จัดการโรงเรียน</strong> → โมดูลโรงเรียน (จัดการนักเรียน/นำเข้า)</li>
+<li><strong>เพิ่มโรงเรียนใหม่</strong> → โมดูลสังกัด (จัดการบัญชีโรงเรียน/เพิ่มโรงเรียน)</li>
+<li><strong>ตรวจสภาพรถ</strong> → โมดูลขนส่ง (บันทึก/ดูผลตรวจสภาพ)</li>
+<li><strong>มุมมองจังหวัด</strong> → ภาพรวมจังหวัด / ข้อมูลนักเรียน / รถรับส่ง</li>
+<li><strong>รายงาน</strong> → ดูงานที่ 13</li>
+</ul>
+</li>
+<li>ใช้งานแต่ละโมดูลตามคู่มือของบทบาทนั้น ๆ</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เข้าทำงานในโมดูลของบทบาทอื่นได้เต็มสิทธิ์</p>
+<p><img src="screenshots/admin/14-scope.png" alt="เข้าโมดูลบทบาทอื่น: แถบ &quot;Admin — เลือกโรงเรียน&quot; ด้านบน"></p>
+<p><em>ภาพ: เข้าโมดูลบทบาทอื่น: แถบ &quot;Admin — เลือกโรงเรียน&quot; ด้านบน</em></p>
+<hr>
+<h2>งานที่ 15 — ฟีเจอร์ขั้นสูงที่ปิดอยู่ (อ้างอิง)</h2>
+<p><strong>ใช้เมื่อ:</strong> มีคนถามถึงฟีเจอร์เหล่านี้ หรือเปิดเมนู/หน้าแล้วได้ 404</p>
+<blockquote class="callout note">
+<p>ℹ️ เมนู <strong>&quot;จุดเตือนภัย (Geofences)&quot;</strong> และ <strong>&quot;การเบี่ยงเส้นทาง&quot;</strong> จะถูก <strong>ซ่อนอัตโนมัติ</strong> เมื่อฟีเจอร์ยังไม่เปิด — ปัจจุบันคุณจะ <strong>ไม่เห็น</strong> 2 เมนูนี้ ส่วน <strong>&quot;QR รถรับส่ง&quot;</strong> มีอยู่ในระบบแต่ <strong>ไม่อยู่ในเมนู</strong> และปัจจุบันปิดอยู่</p>
+</blockquote>
+<p><strong>15.1 จุดเตือนภัย (Geofences)</strong></p>
+<blockquote class="callout warn">
+<p>⚠️ <strong>ฟีเจอร์นี้เปิดด้วย feature flag <code>FEATURE_GEOFENCE</code> — ปัจจุบันปิดอยู่ในการใช้งานจริง</strong> เมนูถูกซ่อนและการเปิดหน้าจะได้ผล 404 ต้องให้ผู้ดูแลเซิร์ฟเวอร์เปิด flag ก่อน</p>
+</blockquote>
+<p>หน้านี้ (เมื่อเปิดใช้) จัดการ geofence (พื้นที่เสมือนรอบโรงเรียน/จุดรับส่ง): เพิ่ม/แก้ไข/ลบ, ปุ่ม <strong>&quot;สร้างอัตโนมัติ&quot;</strong> (สร้างชุดเริ่มต้น), ดูเหตุการณ์เข้า/ออกพื้นที่ 50 รายการล่าสุด — การตั้งค่าต้องระบุประเภทเป้าหมาย (โรงเรียน/จุดรับส่ง/อู่), เงื่อนไขทริกเกอร์ (เข้า/ออก/ทั้งสอง), พิกัด, รัศมี (1–50,000 เมตร), ผู้รับการแจ้งเตือน; การลบเป็น soft delete</p>
+<p><strong>15.2 การเบี่ยงเส้นทาง</strong></p>
+<blockquote class="callout warn">
+<p>⚠️ <strong>ฟีเจอร์นี้เปิดด้วย feature flag <code>FEATURE_ROUTE_DEVIATION</code> — ปัจจุบันปิดอยู่ในการใช้งานจริง</strong> เมนูถูกซ่อนและการเปิดหน้าจะได้ผล 404</p>
+</blockquote>
+<p>หน้านี้ (เมื่อเปิดใช้) เป็น log แบบ <strong>อ่านอย่างเดียว</strong> ของเหตุการณ์รถเบี่ยงเส้นทาง/ล่าช้า/หยุดนิ่งนาน กรองได้ด้วย &quot;เฉพาะที่ยังไม่ resolved&quot; และระดับความรุนแรง (WARN / CRITICAL / INFO)</p>
+<p><strong>15.3 QR รถรับส่ง</strong></p>
+<blockquote class="callout warn">
+<p>⚠️ <strong>ฟีเจอร์นี้เปิดด้วย feature flag <code>FEATURE_VEHICLE_QR</code> — ปัจจุบันปิดอยู่ในการใช้งานจริง</strong> หน้านี้ <strong>ไม่มีในเมนู</strong> และการเรียก API จะได้ผล 404 ต้องให้ผู้ดูแลเซิร์ฟเวอร์เปิด flag ก่อน</p>
+</blockquote>
+<p>หน้านี้ (เมื่อเปิดใช้) ใช้สร้าง/หมุน/ดู QR token ของรถ + พิมพ์ QR + ดูตัวอย่างข้อมูลระดับเจ้าหน้าที่</p>
+<blockquote class="callout note">
+<p>ℹ️ การดูข้อมูลระดับ 3 (ข้อมูลอ่อนไหว) ต้องเปิด flag เพิ่มอีกตัว (<code>FEATURE_QR_LEVEL3</code>) ซึ่งต้องผ่านการอนุมัติของผู้คุ้มครองข้อมูล (DPO) — ปิดเป็นค่าตั้งต้น</p>
+</blockquote>
+<blockquote class="callout note">
+<p>📷 <strong>ไม่มีภาพหน้าจอ</strong> — ฟีเจอร์ขั้นสูง (Geofence / การเบี่ยงเส้นทาง / QR) ถูกปิดด้วย feature flag ยังไม่เปิดใช้งานจริง จึงยังไม่มีหน้าจอให้แสดง</p>
+</blockquote>
+<hr>
+<h2>งานที่ 16 — ออกจากระบบ</h2>
+<p><strong>ใช้เมื่อ:</strong> เลิกใช้งานระบบ</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>กดปุ่ม <strong>&quot;ออกจากระบบ&quot;</strong> ที่มุมล่างของแถบเมนูด้านข้าง (Sidebar)</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> กลับไปหน้าเข้าสู่ระบบ</p>
+<p><img src="screenshots/shared/account-menu.png" alt="เมนูบัญชี (มุมขวาบน) — &quot;เปลี่ยนรหัสผ่าน&quot; / &quot;ออกจากระบบ&quot;"></p>
+<p><em>ภาพ: เมนูบัญชี (มุมขวาบน) — &quot;เปลี่ยนรหัสผ่าน&quot; / &quot;ออกจากระบบ&quot;</em></p>
+<hr>
+<h2>ตารางขอบเขตสิทธิ์ (อ้างอิงด่วน)</h2>
+<p><strong>คุณเห็นข้อมูลได้แค่ไหน:</strong></p>
+<table>
+<thead>
+<tr>
+<th>ข้อมูล</th>
+<th>ขอบเขต</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>นักเรียน / รถ / โรงเรียน / สังกัด</td>
+<td>เห็นทั้งจังหวัด (ไม่จำกัดขอบเขต)</td>
+</tr>
+<tr>
+<td>บัญชีผู้ใช้ทุกบทบาท</td>
+<td>จัดการได้ทั้งหมด</td>
+</tr>
+<tr>
+<td>ประวัติการใช้งาน (audit log)</td>
+<td>เห็นทั้งระบบ</td>
+</tr>
+<tr>
+<td>ตำแหน่งรถ / จุดรับส่ง</td>
+<td>เห็นทั้งระบบ</td>
+</tr>
+<tr>
+<td>รายงาน / การส่งออก</td>
+<td>ทุกระดับทั้งจังหวัด</td>
+</tr>
+</tbody>
+</table>
+<p><strong>สิทธิ์เฉพาะ admin (ไม่มีบทบาทอื่นทำได้):</strong> จัดการบัญชีผู้ใช้ทุกบทบาท • เครื่องมือจัดการวงจรชีวิตคนขับ (กู้คืน/ย้าย/ปิด) • อนุมัติคำขอโอนย้ายนักเรียนและคำขอเกี่ยวกับรถ • จัดการ geofence (เมื่อเปิดใช้) • ตรวจสอบจุดรับส่ง/ตำแหน่งรถ (มุมมอง admin) • หน้าวิจัย/snapshot/ส่งออกข้อมูลวิจัย • สุขภาพระบบ</p>
+<p><strong>สิ่งที่ทำไม่ได้ (และใครทำแทน):</strong></p>
+<table>
+<thead>
+<tr>
+<th>ทำไม่ได้</th>
+<th>หมายเหตุ / ใครทำแทน</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ลบบัญชีตัวเอง</td>
+<td>ระบบป้องกัน (ขึ้น &quot;ไม่สามารถลบตัวเองได้&quot;)</td>
+</tr>
+<tr>
+<td>เปิดใช้งานบัญชีคนขับซ้ำ</td>
+<td>ต้องใช้บัญชีหลัก (canonical) หรือใช้ wizard ที่ &quot;สุขภาพข้อมูลคนขับ&quot;</td>
+</tr>
+<tr>
+<td>กู้คืนรถที่ทะเบียนชนกับรถที่ใช้งานอยู่</td>
+<td>ต้องจัดการรถที่ชนกันก่อน</td>
+</tr>
+<tr>
+<td>รีเซ็ตรหัส admin ของตัวเองเมื่อถูกล็อก</td>
+<td>ต้องให้ admin อีกคนทำ (ควรมี admin สำรอง)</td>
+</tr>
+<tr>
+<td>สลับโหมด OBSERVE → ENFORCE จากหน้าจอ</td>
+<td>ตั้งค่าโดยผู้ดูแลเซิร์ฟเวอร์ (env) เท่านั้น</td>
+</tr>
+<tr>
+<td>อนุมัติคำขอเปลี่ยนรายชื่อ (roster) รวมศูนย์</td>
+<td>ทำที่ฝั่งโรงเรียน (admin เห็นแค่ตัวเลขเตือน)</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ ฟีเจอร์ที่แชร์กับบทบาทอื่น: <strong>ความพร้อมเปิดใช้งาน</strong> และ <strong>การเบี่ยงเส้นทาง</strong> (ใช้ร่วมกับจังหวัด); <strong>QR token</strong> (ใช้ร่วมกับขนส่ง)</p>
+</blockquote>
+<hr>
+<h2>สรุปปัญหาที่พบบ่อย</h2>
+<table>
+<thead>
+<tr>
+<th>อาการ</th>
+<th>วิธีแก้</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>สร้างผู้ใช้ใส่รหัส 6 ตัวได้ แต่ผู้ใช้ login แล้วบังคับ 8 ตัว</td>
+<td>พฤติกรรมปกติ — admin ตั้งรหัสชั่วคราว ≥6 ตัวได้ แต่ผู้ใช้ต้องตั้งใหม่ให้แข็งแรง ≥8 ตัว + ห้ามเดาง่าย ตอนเปลี่ยนเองครั้งแรก</td>
+</tr>
+<tr>
+<td>เปิดใช้งานบัญชีคนขับที่ปิดไว้ไม่ได้ (&quot;ไม่สามารถเปิดใช้งานบัญชีคนขับนี้ได้…&quot;)</td>
+<td>บัญชีซ้ำ/ผูกรถที่ถูกปิด — ใช้บัญชีหลัก (canonical) หรือใช้ wizard ที่ &quot;สุขภาพข้อมูลคนขับ&quot; (งานที่ 6)</td>
+</tr>
+<tr>
+<td>อนุมัติคำขอโอนย้ายแล้วได้ FAILED</td>
+<td>มีรหัสนักเรียนซ้ำที่โรงเรียนปลายทาง หรือข้อมูลไม่ครบ — แก้ที่ปลายทางก่อน</td>
+</tr>
+<tr>
+<td>อนุมัติคำขอโอนย้ายแล้วได้ STALE_NEEDS_REVIEW</td>
+<td>ข้อมูลนักเรียนเปลี่ยนหลังส่งคำขอ — เปิดดูและตรวจสอบใหม่ก่อนอนุมัติ</td>
+</tr>
+<tr>
+<td>กู้คืนรถไม่สำเร็จ ปุ่มอนุมัติเป็นสีจาง (disable)</td>
+<td>มีรถทะเบียนเดียวกันที่ยังใช้งานอยู่ (canonical conflict) — จัดการรถที่ทะเบียนชนกันก่อน</td>
+</tr>
+<tr>
+<td>ลบจุดรับส่ง/ผู้ใช้แล้ว ยังเห็นใน audit log</td>
+<td>เป็น soft delete โดยตั้งใจ — ซ่อนจากการใช้งานแต่เก็บประวัติไว้ตรวจสอบ</td>
+</tr>
+<tr>
+<td>เข้า &quot;จุดเตือนภัย&quot;/&quot;การเบี่ยงเส้นทาง&quot;/&quot;QR รถรับส่ง&quot; แล้ว 404 หรือไม่เห็นเมนู</td>
+<td>ฟีเจอร์ปิดด้วย feature flag (งานที่ 15) ไม่ใช่บั๊ก — ให้ผู้ดูแลเซิร์ฟเวอร์เปิด flag ก่อน</td>
+</tr>
+<tr>
+<td>ถูกเด้งออก/ถูกบังคับเปลี่ยนรหัสกะทันหัน (&quot;เซสชันหมดอายุจากการเปลี่ยนรหัสผ่าน&quot;)</td>
+<td>admin อีกคนรีเซ็ตรหัสคุณ หรือคุณเปลี่ยนรหัสที่เครื่องอื่น — เข้าสู่ระบบใหม่ด้วยรหัสล่าสุด</td>
+</tr>
+<tr>
+<td>สร้าง Baseline ซ้ำไม่ได้</td>
+<td>ระบบห้ามสร้างซ้ำภายใน 24 ชั่วโมง — รอครบเวลา หรือใช้ baseline ที่มีอยู่</td>
+</tr>
+<tr>
+<td>ตัวเลข Error count ในสุขภาพระบบดูไม่ตรง</td>
+<td>เป็นค่าประมาณจาก login ล้มเหลวเท่านั้น — ใช้ดูแนวโน้ม ไม่ใช่ตัวเลขแม่นยำ</td>
+</tr>
+<tr>
+<td>&quot;ตรวจสอบตำแหน่งรถ&quot;/&quot;ตรวจสอบจุดรับส่ง&quot; แก้อะไรไม่ได้</td>
+<td>&quot;ตรวจสอบตำแหน่งรถ&quot; อ่านอย่างเดียว; &quot;ตรวจสอบจุดรับส่ง&quot; ใช้กรณีพิเศษ (override) — เพิ่มจุดหลักผ่านบัญชีคนขับ/โรงเรียน</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>การขอความช่วยเหลือ</h2>
+<ul>
+<li><strong>admin ลืมรหัส / ถูกล็อกออก</strong> → ให้ admin อีกคนรีเซ็ตให้ (ถ้าไม่มี admin สำรอง ต้องพึ่งผู้ดูแลเซิร์ฟเวอร์)</li>
+<li><strong>ต้องการเปิดฟีเจอร์ขั้นสูง</strong> (Geofences / การเบี่ยงเส้นทาง / QR / โหมดบังคับใช้ความปลอดภัย) → ติดต่อผู้ดูแลเซิร์ฟเวอร์ให้เปิด feature flag</li>
+<li><strong>ปัญหาข้อมูลคนขับ/รถที่ซับซ้อน</strong> → ใช้หน้า &quot;สุขภาพข้อมูลคนขับ&quot; (งานที่ 6) และ &quot;คำขอเกี่ยวกับรถ&quot; (งานที่ 5) เป็นเครื่องมือหลัก</li>
+</ul>
+<p><strong>เวลาแจ้งปัญหากับทีม โปรดส่ง:</strong> ชื่อผู้ใช้ (username) ของบัญชีที่เกี่ยวข้อง • เวลาที่เกิดปัญหา • ภาพหน้าจอ (รวมข้อความผิดพลาด) • หน้า/เมนูที่ใช้งานตอนเกิดปัญหา</p>
+<hr>
+<p><strong>สิ้นสุดคู่มือปฏิบัติงานสำหรับผู้ดูแลระบบ — ดูแลระบบอย่างรอบคอบ ปกป้องข้อมูลนักเรียนและความปลอดภัยเป็นสำคัญ</strong></p>
+
+</main>
+</div>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML สร้างจากเอกสาร Markdown (Phase 10.13C · 2026-06-24)</footer>
+</body>
+</html>

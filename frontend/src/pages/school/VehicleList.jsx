@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Bus } from 'lucide-react';
+import { Bus, Pencil } from 'lucide-react';
 import api from '../../api/axios';
+import { useToast } from '../../components/Toast';
 import { VehicleSafetySection } from '../../components/VehicleSafety';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import EmptyState from '../../components/EmptyState';
@@ -10,6 +11,7 @@ import ErrorState from '../../components/ErrorState';
 
 export default function VehicleList() {
   const [searchParams] = useSearchParams();
+  const toast = useToast();
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -17,12 +19,45 @@ export default function VehicleList() {
   const [expandedVehicle, setExpandedVehicle] = useState(null);
   const [studentCache, setStudentCache] = useState({});
 
-  useEffect(() => {
+  // ─── Edit vehicle (self-service) ──────────────────────────────────────
+  const [editVehicle, setEditVehicle] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
     api.get('/school/vehicles')
       .then((res) => setVehicles(res.data.data))
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  function openEdit(v) {
+    setEditVehicle(v);
+    setEditForm({
+      vehicle_type: v.vehicle_type || '',
+      owner_name: v.owner_name || '',
+      owner_phone: v.owner_phone || '',
+      insurance_status: v.insurance_status || '',
+      insurance_type: v.insurance_type || '',
+      insurance_expiry: v.insurance_expiry ? String(v.insurance_expiry).slice(0, 10) : '',
+    });
+  }
+
+  async function handleSaveEdit(e) {
+    e.preventDefault();
+    setSavingEdit(true);
+    try {
+      await api.put(`/school/vehicles/${editVehicle.id}`, editForm);
+      toast.success('แก้ไขข้อมูลรถสำเร็จ');
+      setEditVehicle(null);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'แก้ไขข้อมูลรถไม่สำเร็จ');
+    } finally { setSavingEdit(false); }
+  }
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
@@ -51,9 +86,19 @@ export default function VehicleList() {
                   <h3 className="font-semibold text-gray-800">{v.plate_no}</h3>
                   <p className="text-xs text-gray-500">{v.vehicle_type || 'ไม่ระบุประเภท'}</p>
                 </div>
-                <span className="text-sm font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded-full">
-                  {v.student_count} คน
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium bg-blue-50 text-blue-700 px-3 py-1 rounded-full">
+                    {v.student_count} คน
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => openEdit(v)}
+                    className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
+                    แก้ไขข้อมูลรถ
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
@@ -143,6 +188,78 @@ export default function VehicleList() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ─── Edit vehicle modal ────────────────────────────────────────── */}
+      {editVehicle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditVehicle(null)}>
+          <form
+            onSubmit={handleSaveEdit}
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl max-h-[90vh] overflow-y-auto"
+          >
+            <h3 className="text-base font-bold text-gray-800">แก้ไขข้อมูลรถ</h3>
+            <p className="mt-0.5 text-sm text-gray-500">{editVehicle.plate_no}</p>
+
+            <div className="mt-4 space-y-3 text-sm">
+              <div>
+                <label className="block text-gray-600 mb-1">ประเภทรถ</label>
+                <input value={editForm.vehicle_type}
+                  onChange={e => setEditForm(f => ({ ...f, vehicle_type: e.target.value }))}
+                  placeholder="เช่น รถตู้ / รถสองแถว"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-gray-600 mb-1">ชื่อเจ้าของรถ</label>
+                  <input value={editForm.owner_name}
+                    onChange={e => setEditForm(f => ({ ...f, owner_name: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-gray-600 mb-1">เบอร์เจ้าของรถ</label>
+                  <input value={editForm.owner_phone}
+                    onChange={e => setEditForm(f => ({ ...f, owner_phone: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-gray-600 mb-1">สถานะประกัน</label>
+                  <input value={editForm.insurance_status}
+                    onChange={e => setEditForm(f => ({ ...f, insurance_status: e.target.value }))}
+                    placeholder="เช่น มีประกัน / หมดอายุ"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-gray-600 mb-1">ประเภทประกัน</label>
+                  <input value={editForm.insurance_type}
+                    onChange={e => setEditForm(f => ({ ...f, insurance_type: e.target.value }))}
+                    placeholder="เช่น ชั้น 1 / พ.ร.บ."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-gray-600 mb-1">วันหมดอายุประกัน</label>
+                <input type="date" value={editForm.insurance_expiry}
+                  onChange={e => setEditForm(f => ({ ...f, insurance_expiry: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              </div>
+              <p className="text-xs text-gray-400">ข้อมูลคนขับ ให้คนขับแก้ไขเองในหน้าโปรไฟล์คนขับ</p>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditVehicle(null)}
+                className="text-sm font-medium px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">
+                ยกเลิก
+              </button>
+              <button type="submit" disabled={savingEdit}
+                className="text-sm font-medium px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition">
+                {savingEdit ? 'กำลังบันทึก…' : 'บันทึก'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

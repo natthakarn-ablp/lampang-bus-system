@@ -102,8 +102,7 @@ const TRANSPORT_NAV = [
   { to: '/transport',              icon: BarChart3,    label: 'ภาพรวมตรวจสภาพรถ' },
   { to: '/transport/pickup-map',   icon: Map,          label: 'แผนที่จุดรับส่ง' },
   { section: 'บันทึก' },
-  { to: '/transport/verification', icon: CheckSquare,  label: 'ตรวจรับรองรถ' },
-  { to: '/transport/inspections',  icon: ClipboardList, label: 'บันทึกตรวจสภาพ' },
+  { to: '/transport/verification', icon: CheckSquare,  label: 'ตรวจและรับรองรถ' },
 ];
 
 // Phase 8.2 — the old "ข้อมูลจังหวัด" mixed read-only province views with

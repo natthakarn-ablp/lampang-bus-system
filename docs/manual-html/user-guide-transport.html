@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือปฏิบัติงาน — เจ้าหน้าที่ขนส่ง — ระบบรถรับส่งนักเรียนจังหวัดลำปาง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#1e5fa8; --accent-dark:#16467d; --accent-soft:#eaf2fb;
+  --ink:#1a2230; --ink-soft:#475067; --muted:#6b7488;
+  --line:#e3e8f0; --bg:#f5f7fb; --card:#ffffff;
+  --warn-bg:#fff7e6; --warn-bd:#e8a33d; --warn-ink:#7a4d06;
+  --tip-bg:#eef6ff; --tip-bd:#4a90d9; --tip-ink:#1a4e84;
+  --note-bg:#f3f5f9; --note-bd:#9aa6bd; --note-ink:#3a445a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.topnav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+.nav-inner{max-width:980px; margin:0 auto; padding:8px 20px; display:flex; flex-wrap:wrap; gap:4px;}
+.topnav a{font-size:14.5px; font-weight:500; color:var(--ink-soft); text-decoration:none;
+  padding:6px 12px; border-radius:8px; white-space:nowrap;}
+.topnav a:hover{background:var(--accent-soft); color:var(--accent-dark);}
+.topnav a.active{background:var(--accent); color:#fff;}
+.wrap{max-width:980px; margin:0 auto; padding:0 20px 80px;}
+main{background:var(--card); margin-top:28px; padding:48px 56px; border-radius:var(--radius);
+  border:1px solid var(--line); box-shadow:0 1px 3px rgba(16,30,54,.04);}
+h1{font-size:30px; font-weight:700; line-height:1.3; margin:0 0 8px; color:var(--ink);
+  padding-bottom:16px; border-bottom:3px solid var(--accent);}
+h2{font-size:23px; font-weight:700; margin:40px 0 12px; color:var(--accent-dark);
+  padding-top:12px;}
+h3{font-size:19.5px; font-weight:600; margin:28px 0 8px; color:var(--ink);}
+h4{font-size:17px; font-weight:600; margin:20px 0 6px; color:var(--ink-soft);}
+p{margin:10px 0;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+strong{font-weight:600; color:var(--ink);}
+ul,ol{margin:10px 0; padding-left:26px;}
+li{margin:5px 0;}
+hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+code{font-family:'IBM Plex Mono',monospace; font-size:14.5px; background:#eef1f6;
+  padding:2px 6px; border-radius:5px; color:#7a3a8c;}
+pre{background:#1e2430; color:#e6e9ef; padding:16px 18px; border-radius:10px; overflow:auto;}
+pre code{background:none; color:inherit; padding:0;}
+main img{display:block; max-width:100%; height:auto; margin:16px auto 4px; border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 3px 12px rgba(16,30,54,.10);}
+main p > em:only-child{display:block; text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 18px;}
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15.5px;
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+thead th{background:var(--accent); color:#fff; font-weight:600; text-align:left;
+  padding:11px 14px; font-size:15px;}
+tbody td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top;}
+tbody tr:nth-child(even){background:#fafbfd;}
+tbody tr:hover{background:var(--accent-soft);}
+blockquote.callout{margin:16px 0; padding:14px 18px; border-radius:10px; border-left:5px solid;
+  font-size:16px;}
+blockquote.callout p{margin:6px 0;}
+blockquote.callout ul{margin:6px 0;}
+.callout.warn{background:var(--warn-bg); border-color:var(--warn-bd); color:var(--warn-ink);}
+.callout.tip{background:var(--tip-bg); border-color:var(--tip-bd); color:var(--tip-ink);}
+.callout.note{background:var(--note-bg); border-color:var(--note-bd); color:#3a445a;}
+.callout.warn strong,.callout.tip strong,.callout.note strong{color:inherit;}
+.docfoot{max-width:980px; margin:24px auto 0; padding:0 20px; color:var(--muted); font-size:13.5px; text-align:center;}
+.toolbar{max-width:980px; margin:18px auto 0; padding:0 20px; display:flex; justify-content:flex-end;}
+.btn-print{font-size:14px; font-weight:500; color:var(--accent-dark); background:var(--accent-soft);
+  border:1px solid var(--line); padding:7px 14px; border-radius:8px; cursor:pointer;}
+.btn-print:hover{background:#dceafa;}
+@media (max-width:640px){
+  body{font-size:16px;}
+  main{padding:28px 20px;}
+  h1{font-size:24px;} h2{font-size:20px;} h3{font-size:17.5px;}
+  .nav-inner{padding:6px 12px;}
+}
+@media print{
+  .topnav,.toolbar{display:none;}
+  body{background:#fff; font-size:12pt;}
+  main{box-shadow:none; border:none; margin:0; padding:0;}
+  a{color:#000; text-decoration:none;}
+  table,blockquote,h2,h3,figure,img{page-break-inside:avoid;}
+  main img{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html" class="active">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="wrap">
+<main>
+<h1>คู่มือปฏิบัติงาน — เจ้าหน้าที่ขนส่ง</h1>
+<blockquote class="callout note">
+<p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง — <a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a>
+เวอร์ชัน Phase 10.13C • อัปเดต 2026-06-24</p>
+</blockquote>
+<blockquote class="callout note">
+<p>📷 <strong>หมายเหตุภาพหน้าจอ:</strong> ข้อมูลส่วนบุคคล (ชื่อ/เบอร์) ในภาพถูกเบลอเพื่อความเป็นส่วนตัว — เมื่อใช้งานจริงจะแสดงข้อมูลตามปกติ</p>
+</blockquote>
+<h2>ภาพรวม 30 วินาที</h2>
+<ul>
+<li><strong>บทบาทนี้ทำอะไรได้:</strong>
+<ul>
+<li>ดูภาพรวมตรวจสภาพรถทั้งจังหวัด (รถเสี่ยง / ยังไม่ตรวจ / ประกัน-เอกสารใกล้หมด)</li>
+<li>บันทึกผลตรวจสภาพรถ (ผลสรุปครั้งเดียว: ผ่าน/ไม่ผ่าน/ต้องแก้ไข/รอตรวจ)</li>
+<li>ทำงานในคิวตรวจรับรองรถแบบใหม่ — ลง checklist + รับรองใบอนุญาตคนขับ (หลัก/สำรอง)</li>
+<li>ดูแผนที่จุดรับส่ง (ข้อมูลรวม ไม่มีรายชื่อนักเรียน) และรายการรถทั้งหมด (อ่านอย่างเดียว)</li>
+<li>เปลี่ยนรหัสผ่านของตัวเอง</li>
+</ul>
+</li>
+<li><strong>เข้าระบบด้วย:</strong> ชื่อผู้ใช้ของเจ้าหน้าที่ขนส่ง (ไม่ใช่ทะเบียนรถ — ทะเบียนรถใช้เฉพาะคนขับ) admin เป็นผู้สร้างให้</li>
+<li><strong>อุปกรณ์ที่แนะนำ:</strong> คอมพิวเตอร์ / แท็บเล็ต เป็นหลัก (ฟอร์มและตารางเยอะ) มือถือใช้ได้ผ่านเมนูลิ้นชัก (ปุ่มขีดสามขีด) แต่บทบาทนี้ไม่มีแถบเมนูล่างบนมือถือ</li>
+<li>บัญชีนี้ดูข้อมูลรถได้ทั้งจังหวัด ไม่ผูกกับโรงเรียน/เขตใด และ <strong>ไม่เห็นรายชื่อ/รหัส/ผู้ปกครองนักเรียน</strong> ตามนโยบาย PDPA (เห็นได้แค่ตัวเลขจำนวนผู้โดยสารแบบรวม)</li>
+</ul>
+<h2>สารบัญงาน</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>งาน</th>
+<th>ใช้เมื่อ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>เข้าสู่ระบบ</td>
+<td>ทุกครั้งที่เริ่มใช้งาน</td>
+</tr>
+<tr>
+<td>2</td>
+<td>เปลี่ยนรหัสผ่านครั้งแรก (บังคับ)</td>
+<td>ครั้งแรกที่ใช้รหัสตั้งต้น</td>
+</tr>
+<tr>
+<td>3</td>
+<td>ดูภาพรวมตรวจสภาพรถ (หน้าหลัก)</td>
+<td>เริ่มงานประจำวัน จับรถที่ต้องตรวจ</td>
+</tr>
+<tr>
+<td>4</td>
+<td>บันทึกผลตรวจสภาพรถ (ฟอร์มเดิม)</td>
+<td>บันทึกผลตรวจแบบผลสรุปครั้งเดียว</td>
+</tr>
+<tr>
+<td>5</td>
+<td>ตรวจรับรองรถ (คิว checklist แบบใหม่)</td>
+<td>รับรองรถ-คนขับจากคำขอของโรงเรียน</td>
+</tr>
+<tr>
+<td>6</td>
+<td>ดูแผนที่จุดรับส่ง</td>
+<td>ตรวจสอบเส้นทาง/จุดรับส่งแบบรวม</td>
+</tr>
+<tr>
+<td>7</td>
+<td>ดูรายการรถทั้งหมด</td>
+<td>ดูสถานะรถทั้งจังหวัดแบบอ่านอย่างเดียว</td>
+</tr>
+<tr>
+<td>8</td>
+<td>รายงาน/ส่งออก</td>
+<td>(บทบาทนี้ไม่มีสิทธิ์ — ดูในงาน)</td>
+</tr>
+<tr>
+<td>9</td>
+<td>ออกจากระบบ</td>
+<td>เลิกใช้งาน</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>งานที่ 1 — เข้าสู่ระบบ</h2>
+<p><strong>ใช้เมื่อ:</strong> เริ่มใช้งานระบบทุกครั้ง</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเบราว์เซอร์ไปที่ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong></li>
+<li>กรอก <strong>ชื่อผู้ใช้ของเจ้าหน้าที่ขนส่ง</strong> ที่ช่อง <strong>&quot;ชื่อผู้ใช้ / ทะเบียนรถ&quot;</strong> (ไม่ใช่ทะเบียนรถ)</li>
+<li>กรอก <strong>รหัสผ่าน</strong></li>
+<li>กด <strong>เข้าสู่ระบบ</strong></li>
+</ol>
+<p><img src="screenshots/shared/00-login-desktop.png" alt="หน้าเข้าสู่ระบบ (เดสก์ท็อป)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (เดสก์ท็อป)</em></p>
+<p><img src="screenshots/shared/00-login-mobile.png" alt="หน้าเข้าสู่ระบบ (มือถือ)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (มือถือ)</em></p>
+<p><strong>รหัสผ่านตั้งต้น:</strong></p>
+<ul>
+<li>บัญชีที่ admin สร้างให้ผ่าน &quot;จัดการผู้ใช้งาน&quot; → admin กำหนดรหัสเริ่มต้นและแจ้งให้ทราบ</li>
+<li>บัญชีที่นำเข้าจากระบบเดิม (migrate) ถ้าไม่ได้ระบุรหัส → รหัสตั้งต้นคือ <strong><code>1234</code></strong></li>
+<li>รหัสตั้งต้นใช้ได้ครั้งแรกเท่านั้น จากนั้นถูกบังคับให้เปลี่ยน (ดูงานที่ 2)</li>
+</ul>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เข้าหน้าภาพรวมตรวจสภาพรถได้ (หรือถูกพาไปเปลี่ยนรหัสถ้ายังใช้รหัสตั้งต้น)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>&quot;ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง&quot; → ชื่อผู้ใช้หรือรหัสผ่านผิด</li>
+<li>&quot;บัญชีนี้ถูกปิดการใช้งาน / กรุณาติดต่อผู้ดูแลระบบ&quot; → บัญชีถูกระงับ ติดต่อ admin</li>
+<li>&quot;มีการพยายามเข้าสู่ระบบหลายครั้งจากเครือข่ายนี้…&quot; → พยายามถี่เกินไป รอประมาณ 15 นาที</li>
+<li>&quot;ไม่สามารถเชื่อมต่อระบบได้&quot; → อินเทอร์เน็ต/เซิร์ฟเวอร์มีปัญหา</li>
+<li>ไม่ทราบชื่อผู้ใช้ → ติดต่อ admin</li>
+<li><strong>ลืมรหัสผ่าน:</strong> ไม่มีปุ่ม &quot;ลืมรหัสผ่าน&quot; และตั้งรหัสใหม่เองไม่ได้ → ติดต่อ admin ให้รีเซ็ต จากนั้นต้องเปลี่ยนรหัสใหม่อีกครั้งตอนเข้าสู่ระบบ</li>
+</ul>
+<hr>
+<h2>งานที่ 2 — เปลี่ยนรหัสผ่านครั้งแรก (บังคับ)</h2>
+<p><strong>ใช้เมื่อ:</strong> เข้าสู่ระบบครั้งแรกด้วยรหัสตั้งต้น ระบบขึ้น &quot;กรุณาเปลี่ยนรหัสผ่านเริ่มต้น&quot;</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ระบบพาไปหน้า <strong>เปลี่ยนรหัสผ่าน</strong> อัตโนมัติ (ใช้เมนูอื่นไม่ได้จนกว่าจะเปลี่ยนสำเร็จ)</li>
+<li>ตั้ง <strong>รหัสผ่านใหม่</strong></li>
+<li>กรอก <strong>ยืนยันรหัสผ่าน</strong> ให้ตรงกัน</li>
+<li>บันทึก → เปลี่ยนรหัสผ่านสำเร็จ</li>
+</ol>
+<p><img src="screenshots/shared/01-change-password.png" alt="หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)"></p>
+<p><em>ภาพ: หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เปลี่ยนรหัสสำเร็จ และใช้งานเมนูอื่นได้ตามปกติ</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>หลังเปลี่ยนรหัส อาจขึ้น &quot;เซสชันหมดอายุจากการเปลี่ยนรหัสผ่าน กรุณาเข้าสู่ระบบใหม่&quot; → เข้าสู่ระบบใหม่ด้วยรหัสใหม่ (token เก่าใช้ไม่ได้แล้ว)</li>
+<li>เปิดหน้าภาพรวม/หน้าตรวจรถแล้วถูกเด้งกลับ → ยังเปลี่ยนรหัสไม่สำเร็จ ทำให้เสร็จก่อน (ระบบยอมให้เฉพาะหน้าเปลี่ยนรหัสและออกจากระบบ)</li>
+</ul>
+<hr>
+<h2>งานที่ 3 — ดูภาพรวมตรวจสภาพรถ (หน้าหลัก)</h2>
+<p><strong>ใช้เมื่อ:</strong> เริ่มงานประจำวัน เพื่อจับรถที่ต้องตรวจ/ต้องจัดการเร่งด่วน (เมนู <strong>&quot;ภาพรวมตรวจสภาพรถ&quot;</strong>)</p>
+<p><strong>สิ่งที่เห็นบนหน้าจอ:</strong></p>
+<ul>
+<li><strong>ปุ่มลัด 2 ปุ่ม</strong> ใต้หัวข้อ: <strong>&quot;บันทึกตรวจสภาพ&quot;</strong> และ <strong>&quot;แผนที่จุดรับส่ง&quot;</strong></li>
+<li><strong>แบนเนอร์สรุป (Hero)</strong> เปลี่ยนสีตามความเสี่ยง: แดง = &quot;X คัน ต้องจัดการเร่งด่วน&quot; / น้ำเงิน = &quot;ยังไม่มีรถในระบบ&quot; / เขียว = &quot;รถทุกคันพร้อมใช้งาน&quot;</li>
+<li><strong>การ์ด KPI 6 ใบ:</strong> เร่งด่วน / ยังไม่ตรวจ / ไม่มีข้อมูลประกัน / พร้อมใช้งาน / <strong>เอกสารใกล้หมด</strong> (กดได้ → กรอง) / <strong>เอกสารหมดอายุ</strong> (กดได้ → กรอง)</li>
+<li><strong>ปุ่มกรองด่วน 11 ปุ่ม</strong> (มีตัวเลขนับแต่ละปุ่ม): ทั้งหมด / เร่งด่วน / ยังไม่ตรวจ / ไม่ผ่าน / ต้องแก้ไข / ประกันหมด / ไม่มีข้อมูลประกัน / ใกล้หมดอายุ / เอกสารใกล้หมด / เอกสารหมดอายุ / พร้อมใช้งาน</li>
+<li><strong>ช่องค้นหาทะเบียนรถ</strong></li>
+<li><strong>รายการรถเรียงตามความเสี่ยง</strong> (สูงสุด 20 คัน): ทะเบียน, ป้ายความสำคัญ, ชื่อคนขับ, ป้ายสถานะ, วันตรวจ/วันประกัน, <strong>ป้าย SLA</strong> (เหลือ X วัน / เกิน SLA X วัน — SLA ตั้งไว้ 7 วัน), คำแนะนำ, ปุ่ม <strong>&quot;บันทึกตรวจ&quot;</strong> และ <strong>&quot;โทรคนขับ&quot;</strong></li>
+<li><strong>กราฟ 2 ใบ:</strong> วงกลม (donut) &quot;ผลตรวจสภาพรถ&quot; และแท่ง (bar) &quot;สถานะประกันภัย&quot;</li>
+</ul>
+<p><img src="screenshots/transport/01-dashboard.png" alt="ภาพรวมการตรวจสภาพรถ"></p>
+<p><em>ภาพ: ภาพรวมการตรวจสภาพรถ</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;ภาพรวมตรวจสภาพรถ&quot;</strong></li>
+<li>ดูแบนเนอร์และการ์ด KPI เพื่อจับรถที่เสี่ยง/ต้องตรวจ</li>
+<li>กดปุ่มกรองด่วน หรือพิมพ์ค้นหาทะเบียนรถ เพื่อกรองรายการ</li>
+<li>ที่แถวรถที่ต้องการ กด <strong>&quot;บันทึกตรวจ&quot;</strong> เพื่อไปฟอร์มบันทึกผลตรวจ (ระบบเลือกรถคันนั้นให้อัตโนมัติ) หรือกด <strong>&quot;โทรคนขับ&quot;</strong> (ถ้ามีเบอร์)</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรายการรถเรียงตามความเสี่ยง และกดไปบันทึกผลตรวจรถที่ต้องการได้</p>
+<p><strong>หมายเหตุสำคัญ:</strong></p>
+<ul>
+<li>&quot;เอกสาร&quot; หมายรวม 4 อย่าง: <strong>ประกัน · ทะเบียน · พ.ร.บ. · ภาษี</strong> — &quot;เอกสารใกล้หมด/หมดอายุ&quot; คิดในกรอบ 30 วัน</li>
+<li>การ์ด <strong>&quot;พร้อมใช้งาน&quot;</strong> บน KPI นับเฉพาะรถที่ผลตรวจล่าสุดเป็น &quot;ผ่าน&quot; ส่วนป้ายความเสี่ยงในรายการใช้เกณฑ์รวม (ผลตรวจ + ประกัน) จึงอาจเป็นคนละตัวเลข ไม่ใช่ข้อผิดพลาด</li>
+<li>dashboard นับเฉพาะรถที่ยังไม่ถูกลบ และ <strong>ไม่แสดงข้อมูลนักเรียนใด ๆ</strong> (ตัด roster ออกตาม PDPA)</li>
+<li>💡 เมื่อบันทึกผลตรวจเสร็จแล้วกลับมาหน้านี้ ระบบจะเลื่อนไปไฮไลต์รถคันนั้น พร้อมแถบเขียว &quot;บันทึกผลตรวจของรถ X เรียบร้อยแล้ว&quot;</li>
+</ul>
+<hr>
+<h2>งานที่ 4 — บันทึกผลตรวจสภาพรถ (ฟอร์มเดิม)</h2>
+<p><strong>ใช้เมื่อ:</strong> บันทึกผลตรวจแบบ &quot;ผลสรุปครั้งเดียว&quot; (ระบบเดิม ไม่ใช่ checklist) และดูประวัติการตรวจ (เมนู <strong>&quot;บันทึกตรวจสภาพ&quot;</strong>)</p>
+<p><strong>ปุ่มมุมขวาบน:</strong></p>
+<ul>
+<li><strong>&quot;ไปคิวรับรองแบบใหม่&quot;</strong> → ไปหน้าคิวตรวจรับรอง (งานที่ 5)</li>
+<li><strong>&quot;บันทึกผลตรวจเดิม&quot;</strong> → เปิดฟอร์ม (เปิดแล้วปุ่มเปลี่ยนเป็น <strong>&quot;ปิดฟอร์ม&quot;</strong>)</li>
+</ul>
+<p><strong>ฟิลด์ในฟอร์ม (ช่องมี * = บังคับ):</strong></p>
+<ul>
+<li><strong>เลือกรถ *</strong> — ค้นหาทะเบียนได้; มีตัวเลือก <strong>&quot;อื่นๆ (เพิ่มทะเบียนรถใหม่)&quot;</strong> → กรอกแบบมีโครงสร้าง (เลขนำหน้า / หมวดอักษร / หมายเลข / จังหวัด)</li>
+<li><strong>ผลตรวจ *</strong> — ผ่าน / ไม่ผ่าน / ต้องแก้ไข / รอตรวจ</li>
+<li><strong>วันที่ตรวจ *</strong> — ค่าเริ่มต้นเป็นวันนี้ (รูปแบบ ปี-เดือน-วัน)</li>
+<li><strong>วันหมดอายุผลตรวจ</strong> (ไม่บังคับ)</li>
+<li><strong>โรงเรียนที่ออกใบรับรอง</strong> — ค้นหาได้; มี &quot;อื่นๆ (ระบุเอง)&quot;</li>
+<li><strong>หมายเหตุ</strong></li>
+</ul>
+<p>ส่วนล่างคือ <strong>ประวัติการตรวจ</strong> (กรองตามผลตรวจได้) แสดงเป็นตาราง (จอใหญ่) หรือการ์ด (มือถือ): ทะเบียน, ผลตรวจ, วันที่ตรวจ, วันหมดอายุ, ผู้ตรวจ, หมายเหตุ — หน้าละ 20 รายการ</p>
+<p><img src="screenshots/transport/03-inspections.png" alt="บันทึกตรวจสภาพ"></p>
+<p><em>ภาพ: บันทึกตรวจสภาพ</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;บันทึกตรวจสภาพ&quot;</strong> แล้วกด <strong>&quot;บันทึกผลตรวจเดิม&quot;</strong> เพื่อเปิดฟอร์ม (ถ้าเข้ามาจากปุ่ม &quot;บันทึกตรวจ&quot; ในหน้าภาพรวม ฟอร์มจะเปิดให้อัตโนมัติ พร้อมแถบ &quot;กำลังบันทึกผลตรวจสำหรับรถ: &lt;ทะเบียน&gt;&quot;)</li>
+<li>เลือก <strong>รถ</strong>, เลือก <strong>ผลตรวจ</strong>, ตรวจสอบ <strong>วันที่ตรวจ</strong></li>
+<li>(ถ้าผลเป็น &quot;ผ่าน&quot;) ใส่ <strong>วันหมดอายุผลตรวจ</strong> ด้วย — ไม่บังคับ แต่ถ้าไม่ใส่ รถจะยังไม่ถูกนับว่า &quot;พร้อมใช้งาน&quot;</li>
+<li>กด <strong>&quot;บันทึกผลตรวจ&quot;</strong> → ระบบแจ้ง &quot;บันทึกผลตรวจสำเร็จ&quot; (ถ้ามาจากหน้าภาพรวม ระบบจะพากลับไปไฮไลต์รถคันนั้น)</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ขึ้น &quot;บันทึกผลตรวจสำเร็จ&quot; และผลปรากฏในประวัติการตรวจ</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ฟอร์มเดิมบังคับเฉพาะ <strong>รถ</strong>, <strong>วันที่ตรวจ</strong>, <strong>ผลตรวจ</strong> (วันหมดอายุไม่บังคับแม้ผลเป็น &quot;ผ่าน&quot;) — วันที่ต้องเป็นรูปแบบ ปี-เดือน-วัน</li>
+<li>เพิ่มรถใหม่แล้วขึ้น &quot;รถ X มีในระบบแล้ว — ใช้ข้อมูลเดิม&quot; → เป็นพฤติกรรมตั้งใจ ระบบจับทะเบียนซ้ำแม้เขียนเว้นวรรค/ขีด/ชื่อจังหวัดต่างกัน แล้วใช้รถเดิมให้บันทึกต่อได้</li>
+<li>กรอกทะเบียนใหม่ไม่ผ่าน → หมวดอักษรต้องเป็นอักษรไทย 2 ตัว, หมายเลข 1-4 หลัก, เลขนำหน้าเป็นตัวเลขตัวเดียว และต้องเลือกจังหวัด</li>
+<li>ประวัติการตรวจเป็น <strong>อ่านอย่างเดียว</strong> หน้านี้ไม่มีปุ่มแก้ไขในตัว (แก้ไขผลตรวจได้เฉพาะของตัวเอง — ดูตารางขอบเขตสิทธิ์)</li>
+</ul>
+<hr>
+<h2>งานที่ 5 — ตรวจรับรองรถ (คิว checklist แบบใหม่)</h2>
+<p><strong>ใช้เมื่อ:</strong> รับรองรถรับส่งร่วม (shared-vehicle) จากคำขอที่โรงเรียนเปิดเข้ามา — ลง checklist รับรองรถ + รับรองใบอนุญาตคนขับ (เมนู <strong>&quot;ตรวจรับรองรถ&quot;</strong>)</p>
+<p>หัวข้อ <strong>&quot;คิวตรวจและรับรองรถ&quot;</strong> มีปุ่ม <strong>&quot;รีเฟรชคิว&quot;</strong> และแถบขั้นตอน 4 ขั้น: เลือกคำขอ → ตรวจข้อมูลรถ → ลง checklist → รับรองผล</p>
+<p><strong>หน้าจอแบ่งเป็น 3 ส่วน:</strong></p>
+<p><strong>(1) คิวด้านซ้าย</strong> — ช่องค้นหา (ทะเบียน / เลขคำขอ / โรงเรียน) + ตัวกรองสถานะ + ตัวเลขสรุป (รอรับรถ / กำลังตรวจ / ต้องแก้ไข / ผ่านแล้ว); แต่ละการ์ดแสดง ทะเบียน, เลขคำขอ, สถานะ, &quot;สูงสุด X คน&quot;, ชื่อโรงเรียนผู้ออกเอกสาร. สถานะภาษาไทย: ฉบับร่าง / รอรับรถ / ยื่นแล้ว / กำลังตรวจ / ต้องแก้ไข / ผ่าน / ไม่ผ่าน / ยกเลิก</p>
+<p><strong>(2) รายละเอียดรถ + จัดการคนขับ</strong> (เปิดเมื่อเลือกคำขอ) — แสดง ทะเบียน, ประเภทรถ, ความจุที่รับรอง, ผู้โดยสารสูงสุด, <strong>โรงเรียนและจำนวนผู้โดยสาร (เช้า/เย็น) แยกตามโรงเรียน</strong>, <strong>คนขับที่ได้รับอนุญาต (หลัก/สำรอง)</strong> และ <strong>พื้นที่รับส่ง</strong></p>
+<ul>
+<li>ปุ่ม <strong>&quot;เริ่มการตรวจครั้งใหม่&quot;</strong> (กดได้เมื่อสถานะเป็น รอรับรถ / ยื่นแล้ว / ต้องแก้ไข / กำลังตรวจ)</li>
+<li>กล่อง <strong>&quot;จัดการคนขับหลักและคนขับสำรอง&quot;</strong> มี 2 ฟอร์ม:
+<ul>
+<li><strong>&quot;เพิ่มสิทธิ์ขับรถคันนี้&quot;</strong> — เลือกคนขับ + บทบาท (คนขับหลัก/คนขับสำรอง) + วันสิ้นสุดสิทธิ์ → ปุ่ม <strong>&quot;เพิ่มเข้ากลุ่มรถ&quot;</strong></li>
+<li><strong>&quot;รับรองใบอนุญาตคนขับ&quot;</strong> — เลือกคนขับ + เลขใบอนุญาต + ประเภท (เช่น ท.2) + วันหมดอายุใบอนุญาต + เลขอ้างอิงขนส่ง → ปุ่ม <strong>&quot;บันทึกรับรองคนขับ&quot;</strong></li>
+</ul>
+</li>
+</ul>
+<p><strong>(3) แบบตรวจ (checklist)</strong> (แสดงหลังกด &quot;เริ่มการตรวจครั้งใหม่&quot;) — หัวข้อ &quot;แบบตรวจ &lt;ชื่อ&gt; รุ่น <version>&quot;; แต่ละหัวข้อเลือก <strong>ผ่าน / ไม่ผ่าน / ไม่เกี่ยวข้อง</strong> (เลือก &quot;ไม่เกี่ยวข้อง&quot; ได้เฉพาะหัวข้อที่อนุญาต); หัวข้อที่เลือก &quot;ไม่ผ่าน&quot; ต้องกรอก <strong>&quot;ระบุสิ่งที่ต้องแก้ไข&quot;</strong>; ท้ายฟอร์มเลือกผลรวม (ผ่าน/ต้องแก้ไข/ไม่ผ่าน/รอข้อมูลเพิ่ม) + วันหมดอายุ + เลขอ้างอิงขนส่ง + หมายเหตุ → ปุ่ม <strong>&quot;ยืนยันและลงผลรับรอง&quot;</strong></p>
+<p><img src="screenshots/transport/02-verification.png" alt="ตรวจรับรองรถ (คิวใบส่งตรวจ)"></p>
+<p><em>ภาพ: ตรวจรับรองรถ (คิวใบส่งตรวจ)</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เลือกคำขอจากคิวด้านซ้าย</li>
+<li>ตรวจรายละเอียดรถและคนขับ — ถ้าจำเป็น เพิ่มสิทธิ์คนขับ และ/หรือ รับรองใบอนุญาตคนขับ</li>
+<li>กด <strong>&quot;เริ่มการตรวจครั้งใหม่&quot;</strong></li>
+<li>ลงผลให้ครบทุกหัวข้อใน checklist (หัวข้อที่ไม่ผ่าน ต้องระบุรายละเอียด)</li>
+<li>เลือกผลรวม และใส่วันหมดอายุ → กด <strong>&quot;ยืนยันและลงผลรับรอง&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ลงผลรับรองสำเร็จ และระบบคำนวณความพร้อมใช้งานของรถ (eligibility) ใหม่ ซึ่งมีผลต่อการที่คนขับจะเริ่มรอบได้หรือไม่</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li><strong>คำขอ (application) ถูกสร้างโดยโรงเรียน ไม่ใช่ขนส่ง</strong> — ขนส่งทำได้แค่ตรวจ/รับรองคำขอที่โรงเรียนเปิดเข้ามา ถ้าไม่เห็นคำขอ/คำขอผิด ติดต่อโรงเรียน</li>
+<li>กด &quot;เริ่มการตรวจครั้งใหม่&quot; ไม่ได้ → คำขอต้องเป็นสถานะ รอรับรถ / ยื่นแล้ว / ต้องแก้ไข / กำลังตรวจ (ฉบับร่าง/ยกเลิก/ผ่านแล้ว เริ่มไม่ได้)</li>
+<li>เพื่อนเริ่มตรวจไว้ แต่เราสรุปผลไม่ได้ → <strong>เฉพาะเจ้าหน้าที่ผู้เริ่มตรวจเท่านั้นที่สรุปผล (finalize) ได้</strong></li>
+<li>จะรับรองผลรวม &quot;ผ่าน&quot; แต่มีหัวข้อ &quot;ไม่ผ่าน&quot; → ระบบปฏิเสธ &quot;ไม่สามารถรับรองว่าผ่านเมื่อมีหัวข้อตรวจไม่ผ่าน&quot; ให้เปลี่ยนผลรวมเป็น &quot;ต้องแก้ไข&quot; หรือ &quot;ไม่ผ่าน&quot;</li>
+<li>ผลรวม &quot;ผ่าน&quot; บันทึกไม่ได้ → ผลรวม &quot;ผ่าน&quot; ต้องระบุ <strong>วันหมดอายุ</strong> เสมอ</li>
+<li>ปุ่ม &quot;ยืนยันและลงผลรับรอง&quot; เป็นสีจาง → ต้องลงผลครบทุกหัวข้อก่อน และหัวข้อ &quot;ไม่ผ่าน&quot; ต้องกรอกรายละเอียด</li>
+</ul>
+<hr>
+<h2>งานที่ 6 — ดูแผนที่จุดรับส่ง</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจสอบเส้นทาง/จุดรับส่งแบบรวม เพื่อสนับสนุนความปลอดภัย (เมนู <strong>&quot;แผนที่จุดรับส่ง&quot;</strong>) — เป็นข้อมูล <strong>รวม (aggregate)</strong> ไม่มีรายชื่อ/เบอร์/ที่อยู่นักเรียน</p>
+<p><strong>สิ่งที่เห็นบนหน้าจอ:</strong></p>
+<ul>
+<li>การ์ดตัวเลข 3 ใบ: &quot;จุดรับส่งทั้งหมด&quot; / &quot;โรงเรียนที่เกี่ยวข้อง&quot; / &quot;รถที่เกี่ยวข้อง&quot;</li>
+<li>ตัวกรอง: ค้นหา / รอบ (เช้า/เย็น/ทั้งคู่) / ระดับชั้น / สังกัด / โรงเรียน / รถ</li>
+<li>ปุ่ม <strong>&quot;ใช้ตัวกรอง&quot;</strong> และ <strong>&quot;ล้างตัวกรอง&quot;</strong></li>
+</ul>
+<p><img src="screenshots/transport/04-pickup-map.png" alt="แผนที่จุดรับ-ส่ง"></p>
+<p><em>ภาพ: แผนที่จุดรับ-ส่ง</em></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;แผนที่จุดรับส่ง&quot;</strong></li>
+<li>เลือกตัวกรองที่ต้องการ</li>
+<li>กด <strong>&quot;ใช้ตัวกรอง&quot;</strong></li>
+<li>คลิกหมุด (pin) บนแผนที่เพื่อดูรายละเอียดจุด</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นจุดรับส่งบนแผนที่แบบรวม (ไม่มีจำนวนนักเรียนรายจุด/รายชื่อ ตาม PDPA)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> ขึ้น &quot;ไม่มีสิทธิ์เข้าถึงข้อมูลนี้&quot; → บัญชีไม่มีสิทธิ์เข้าถึงข้อมูลนี้</p>
+<hr>
+<h2>งานที่ 7 — ดูรายการรถทั้งหมด</h2>
+<p><strong>ใช้เมื่อ:</strong> ดูสถานะรถทั้งจังหวัดแบบ <strong>อ่านอย่างเดียว</strong> (หน้า <code>/transport/vehicles</code> — <strong>ไม่มีลิงก์ในเมนูซ้าย</strong>)</p>
+<blockquote class="callout note">
+<p>ℹ️ เมนูซ้ายมีแค่ 4 รายการ (ภาพรวมตรวจสภาพรถ / แผนที่จุดรับส่ง / ตรวจรับรองรถ / บันทึกตรวจสภาพ) หน้ารายการรถทั้งหมดต้องเข้าผ่าน URL <code>/transport/vehicles</code> เอง หรือดูรถผ่านหน้า &quot;ภาพรวมตรวจสภาพรถ&quot; แทน</p>
+</blockquote>
+<p><strong>สิ่งที่เห็นบนหน้าจอ:</strong></p>
+<ul>
+<li>ช่องค้นหาทะเบียน + ตัวเลือกสถานะ: ทุกสถานะ / ประกันใกล้หมด (30 วัน) / ประกันหมดแล้ว / เอกสารใกล้หมด (30 วัน) / เอกสารหมดอายุ</li>
+<li>ตารางรถ (หน้าละ 50 คัน): ทะเบียน, ประเภท, คนขับ, ผลตรวจล่าสุด (ป้ายสี ผ่าน/ไม่ผ่าน/ต้องแก้ไข/รอตรวจ/ยังไม่ตรวจ), วันตรวจ, ประกันหมดอายุ (แดงถ้าหมด), เอกสาร (รวม 4 อย่าง — แสดงวันที่ใกล้สุด พร้อมป้าย หมดอายุ/ใกล้หมด)</li>
+</ul>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิด URL <code>/transport/vehicles</code></li>
+<li>พิมพ์ค้นหาทะเบียน หรือเลือกตัวกรองสถานะ</li>
+<li>ดูสถานะรวมของรถแต่ละคัน</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นตารางรถทั้งจังหวัดพร้อมสถานะตรวจ/ประกัน/เอกสาร</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ค้นหาทะเบียนรองรับการพิมพ์แบบไม่เว้นวรรค (พิมพ์ &quot;นข4031&quot; ก็เจอ &quot;นข 4031&quot;)</li>
+<li>หน้านี้ <strong>ไม่มีปุ่มสร้าง/แก้ไขรถ</strong> — ถ้าต้องการบันทึกผลตรวจ ไปที่หน้า &quot;บันทึกตรวจสภาพ&quot; (งานที่ 4)</li>
+</ul>
+<p><img src="screenshots/transport/01-dashboard.png" alt="รายการรถทั้งหมด + ตัวกรองสถานะ (อยู่บนหน้าภาพรวมตรวจสภาพรถ)"></p>
+<p><em>ภาพ: รายการรถทั้งหมด + ตัวกรองสถานะ (อยู่บนหน้าภาพรวมตรวจสภาพรถ)</em></p>
+<hr>
+<h2>งานที่ 8 — รายงาน/ส่งออก</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการรายงานหรือส่งออกข้อมูล</p>
+<blockquote class="callout note">
+<p>❌ <strong>บทบาทขนส่งไม่มีสิทธิ์เข้าถึงรายงานหรือการส่งออก (export) ใด ๆ</strong> — ไม่มีเมนู &quot;รายงาน&quot; และไม่มีปุ่มดาวน์โหลด CSV/Excel/PDF ในทุกหน้าของบทบาทนี้</p>
+</blockquote>
+<p><strong>ข้อเท็จจริง:</strong></p>
+<ul>
+<li>ระบบรายงานส่วนกลาง (<code>/api/reports/*</code>) อนุญาตเฉพาะบทบาท <strong>โรงเรียน / เขตพื้นที่ / ส่วนกลาง / admin</strong> — ขนส่งจะถูกปฏิเสธ</li>
+<li><strong>รายงานเชิงปฏิบัติของขนส่ง</strong> คือ <strong>&quot;ประวัติการตรวจ&quot;</strong> ในหน้า <strong>&quot;บันทึกตรวจสภาพ&quot;</strong> (ดูบนจอ + กรองตามผลตรวจได้) เท่านั้น — ไม่มีปุ่มดาวน์โหลดเป็นไฟล์</li>
+<li>หากคู่มือรุ่นเก่าระบุว่าขนส่ง &quot;ส่งออกรายงานตรวจสภาพได้&quot; — ปัจจุบัน <strong>ทำไม่ได้</strong> ให้ยึดตามคู่มือฉบับนี้</li>
+</ul>
+<blockquote class="callout note">
+<p>📷 <strong>ไม่มีภาพหน้าจอ</strong> — บทบาทขนส่งไม่มีสิทธิ์เข้าหน้ารายงาน/ส่งออก (เป็นสิทธิ์ของโรงเรียน/เขต/จังหวัด/admin)</p>
+</blockquote>
+<hr>
+<h2>งานที่ 9 — ออกจากระบบ</h2>
+<p><strong>ใช้เมื่อ:</strong> เลิกใช้งาน</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดแถบเมนูด้านข้าง (บนมือถือกดปุ่มขีดสามขีดเพื่อเปิดเมนูลิ้นชัก)</li>
+<li>กด <strong>&quot;ออกจากระบบ&quot;</strong> ที่ก้นแถบเมนู</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> กลับสู่หน้าเข้าสู่ระบบ</p>
+<blockquote class="callout note">
+<p>ℹ️ มุมบนของแถบเมนูแสดง &quot;ระบบรถรับส่งนักเรียน / จังหวัดลำปาง&quot; และกล่อง &quot;เข้าสู่ระบบในฐานะ &lt;ชื่อผู้ใช้&gt;&quot;</p>
+</blockquote>
+<p><img src="screenshots/shared/account-menu.png" alt="เมนูบัญชี (มุมขวาบน) — &quot;เปลี่ยนรหัสผ่าน&quot; / &quot;ออกจากระบบ&quot;"></p>
+<p><em>ภาพ: เมนูบัญชี (มุมขวาบน) — &quot;เปลี่ยนรหัสผ่าน&quot; / &quot;ออกจากระบบ&quot;</em></p>
+<hr>
+<h2>ฟีเจอร์ที่อาจยังไม่เปิดใช้งาน (Feature Flag)</h2>
+<p>ฟีเจอร์หลักของบทบาทขนส่ง (ภาพรวม, บันทึกตรวจสภาพ, คิวตรวจรับรอง, แผนที่จุดรับส่ง, รายการรถ) <strong>เปิดใช้งานจริงทั้งหมด</strong> ส่วนต่อไปนี้ขึ้นกับ feature flag ซึ่งปัจจุบัน <strong>ยังไม่เปิดใช้จริง</strong>:</p>
+<ul>
+<li><strong>QR ประจำรถ / QR บนหนังสือส่งตรวจ</strong> (หน้า <code>/admin/vehicle-qr</code>)</li>
+</ul>
+<blockquote class="callout warn">
+<p>⚠️ ฟีเจอร์ QR เปิดใช้เมื่อระบบเปิดใช้งาน (feature flag <code>FEATURE_VEHICLE_QR</code>) — <strong>อาจยังไม่พร้อมในการใช้งานจริง</strong> หากเปิดหน้านี้ขณะ flag ปิดอยู่ ระบบจะเรียกข้อมูลไม่สำเร็จ (404) ตอนนี้ยังไม่ต้องใช้ฟีเจอร์ QR (ใช้ไม่ได้/ขึ้น 404 → ติดต่อ admin เพื่อสอบถามสถานะ)</p>
+</blockquote>
+<hr>
+<h2>ตารางขอบเขตสิทธิ์ (อ้างอิงด่วน)</h2>
+<p>บทบาทขนส่งเห็นข้อมูล <strong>ทั้งจังหวัด</strong> (ไม่ผูกกับโรงเรียน/เขต) แต่จำกัดเฉพาะ <strong>ข้อมูลรถ/การตรวจ</strong> เท่านั้น</p>
+<p><strong>เห็นข้อมูลได้แค่ไหน:</strong></p>
+<table>
+<thead>
+<tr>
+<th>ข้อมูล</th>
+<th>ขอบเขต</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>รถทุกคันในระบบ</td>
+<td>เห็นทั้งจังหวัด (ประเภท, เจ้าของ+เบอร์เจ้าของ, ประกัน, วันหมดอายุ ทะเบียน/พ.ร.บ./ภาษี/ประกัน, ความจุที่รับรอง, สถานะรับรอง)</td>
+</tr>
+<tr>
+<td>คนขับ</td>
+<td>เห็นชื่อ + เบอร์คนขับที่ active ของรถแต่ละคัน</td>
+</tr>
+<tr>
+<td>การตรวจสภาพ</td>
+<td>เห็นประวัติการตรวจ + ผลตรวจ + ผู้ตรวจ ทั้งหมด</td>
+</tr>
+<tr>
+<td>คิวคำขอตรวจ</td>
+<td>เห็นจำนวนผู้โดยสาร (เช้า/เย็น) แยกโรงเรียน + พื้นที่รับส่ง (แบบรวม ไม่ใช่รายคน)</td>
+</tr>
+<tr>
+<td>แผนที่จุดรับส่ง</td>
+<td>เห็นแบบรวม (ไม่มีรายชื่อ/เบอร์/ที่อยู่)</td>
+</tr>
+<tr>
+<td>ข้อมูลนักเรียน</td>
+<td>❌ <strong>ไม่เห็นเลย</strong> — ไม่มีชื่อ/รหัส/จำนวนต่อรถ/ผู้ปกครอง/ประวัติเช็กชื่อรายคน</td>
+</tr>
+</tbody>
+</table>
+<p><strong>สิ่งที่ทำไม่ได้ (และใครทำแทน):</strong></p>
+<table>
+<thead>
+<tr>
+<th>ทำไม่ได้</th>
+<th>ใครทำแทน</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ดูข้อมูลนักเรียน (ชื่อ/รหัส/จำนวน/ผู้ปกครอง)</td>
+<td>ไม่มีบทบาทใดให้ขนส่งเข้าถึงได้ (ตาม PDPA)</td>
+</tr>
+<tr>
+<td>สร้างคำขอส่งตรวจ (application)</td>
+<td><strong>โรงเรียน</strong> (ผู้สร้าง/พิมพ์คำขอ)</td>
+</tr>
+<tr>
+<td>แก้ไขผลตรวจของเจ้าหน้าที่คนอื่น</td>
+<td>เจ้าหน้าที่ผู้บันทึกผลนั้นเอง (แก้ได้เฉพาะของตัวเอง)</td>
+</tr>
+<tr>
+<td>สรุปผล (finalize) การตรวจที่คนอื่นเริ่ม</td>
+<td>เจ้าหน้าที่ผู้เริ่มตรวจครั้งนั้นเอง</td>
+</tr>
+<tr>
+<td>ดูรายงาน/ส่งออก (export) ส่วนกลาง</td>
+<td><strong>โรงเรียน / เขต / ส่วนกลาง / admin</strong></td>
+</tr>
+<tr>
+<td>จัดการผู้ใช้ / รีเซ็ตรหัสคนอื่น</td>
+<td><strong>admin</strong></td>
+</tr>
+<tr>
+<td>ดู dashboard เขต/จังหวัด/โรงเรียน, audit log บทบาทอื่น</td>
+<td>บทบาทที่เกี่ยวข้อง (เขต/ส่วนกลาง/admin)</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ ถ้าพยายามเข้าหน้าของบทบาทอื่น (เช่น โรงเรียนหรือเขต) จะขึ้น &quot;ไม่มีสิทธิ์เข้าถึง&quot; — admin ทำงานของขนส่งแทนได้ทุกอย่าง</p>
+</blockquote>
+<p><strong>ขอความช่วยเหลือเมื่อแก้เองไม่ได้:</strong> ลืมรหัส/บัญชีถูกปิด/เปลี่ยนชื่อผู้ใช้ → admin · ไม่เห็นคำขอในคิว/คำขอผิด → โรงเรียนผู้สร้างคำขอ · แก้ผลตรวจของคนอื่น → ให้ผู้บันทึกผลนั้นแก้ หรือ admin · QR ใช้ไม่ได้/404 → admin
+เวลาแจ้งปัญหาให้ส่ง: ชื่อผู้ใช้, ทะเบียนรถ/เลขคำขอที่เกี่ยวข้อง, เวลาที่เกิดปัญหา, ภาพหน้าจอพร้อมข้อความผิดพลาด</p>
+<hr>
+<h2>สรุปปัญหาที่พบบ่อย</h2>
+<table>
+<thead>
+<tr>
+<th>อาการ</th>
+<th>วิธีแก้</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>เปิดหน้าไหนก็โดนเด้งไปหน้าเปลี่ยนรหัสผ่าน / ใช้เมนูไม่ได้</td>
+<td>บัญชียังใช้รหัสตั้งต้น — ตั้งรหัสใหม่ที่หน้า &quot;เปลี่ยนรหัสผ่าน&quot; ให้สำเร็จก่อน จึงใช้เมนูอื่นได้</td>
+</tr>
+<tr>
+<td>ลืมรหัสผ่าน</td>
+<td>ไม่มีปุ่ม &quot;ลืมรหัสผ่าน&quot; และตั้งเองไม่ได้ — ติดต่อ admin ให้รีเซ็ต จากนั้นเปลี่ยนรหัสใหม่ตอนเข้าสู่ระบบ</td>
+</tr>
+<tr>
+<td>หาเมนู &quot;รถทั้งหมด&quot; ไม่เจอ</td>
+<td>เมนูซ้ายมีแค่ 4 รายการ — เข้าหน้ารายการรถผ่าน URL <code>/transport/vehicles</code> หรือดูผ่าน &quot;ภาพรวมตรวจสภาพรถ&quot;</td>
+</tr>
+<tr>
+<td>เพิ่มรถใหม่แล้วขึ้น &quot;รถคันนี้มีในระบบแล้ว&quot;</td>
+<td>พฤติกรรมตั้งใจ ระบบจับทะเบียนซ้ำแม้เขียนเว้นวรรค/ขีด/จังหวัดต่างกัน และใช้รถเดิมให้บันทึกผลตรวจต่อได้</td>
+</tr>
+<tr>
+<td>กรอกทะเบียนรถใหม่ไม่ผ่าน</td>
+<td>หมวดอักษรอักษรไทย 2 ตัว, หมายเลข 1-4 หลัก, เลขนำหน้าเป็นตัวเลขตัวเดียว, ต้องเลือกจังหวัด</td>
+</tr>
+<tr>
+<td>เลือกผล &quot;ผ่าน&quot; ในคิวรับรองแบบใหม่ แล้วบันทึกไม่ได้</td>
+<td>คิวรับรองแบบใหม่ ถ้าผลรวม &quot;ผ่าน&quot; ต้องระบุวันหมดอายุเสมอ (ฟอร์มเดิมไม่บังคับ แต่แนะนำให้ใส่ทุกครั้ง)</td>
+</tr>
+<tr>
+<td>กด &quot;ยืนยันและลงผลรับรอง&quot; ไม่ได้ / ปุ่มสีจาง</td>
+<td>ลงผลครบทุกหัวข้อก่อน และหัวข้อ &quot;ไม่ผ่าน&quot; ต้องกรอกรายละเอียด</td>
+</tr>
+<tr>
+<td>จะรับรอง &quot;ผ่าน&quot; แต่มีบางหัวข้อไม่ผ่าน</td>
+<td>ทำไม่ได้ ระบบปฏิเสธ — เปลี่ยนผลรวมเป็น &quot;ต้องแก้ไข&quot; หรือ &quot;ไม่ผ่าน&quot;</td>
+</tr>
+<tr>
+<td>เพื่อนเริ่มตรวจไว้ แต่เราสรุปผลไม่ได้</td>
+<td>เฉพาะผู้เริ่มตรวจครั้งนั้นเท่านั้นที่สรุปผลได้ — ให้ผู้เริ่มตรวจเป็นผู้สรุปเอง</td>
+</tr>
+<tr>
+<td>กด &quot;เริ่มการตรวจครั้งใหม่&quot; ไม่ได้</td>
+<td>คำขอต้องเป็นสถานะ รอรับรถ / ยื่นแล้ว / ต้องแก้ไข / กำลังตรวจ (ฉบับร่าง/ยกเลิก/ผ่านแล้ว เริ่มไม่ได้)</td>
+</tr>
+<tr>
+<td>ไม่เห็นรายชื่อนักเรียนในรถ</td>
+<td>นโยบาย PDPA โดยเจตนา — ขนส่งเห็นได้แค่ตัวเลขผู้โดยสารแบบรวม (สูงสุด + เช้า/เย็นแยกโรงเรียน) ไม่มีรายชื่อรายคน</td>
+</tr>
+<tr>
+<td>รถผ่านตรวจแล้วยังขึ้น &quot;ยังไม่พร้อม&quot; / คนขับเริ่มรอบไม่ได้</td>
+<td>eligibility คิดรวม: ผลตรวจล่าสุดผ่านและยังไม่หมดอายุ + เอกสารบังคับ 4 อย่างยังมีผล + ความจุ ≥ ผู้โดยสารสูงสุด + มีคนขับที่รับรองใบอนุญาตแล้วอย่างน้อย 1 คน — ถ้าขาด ให้รับรองใบอนุญาตคนขับ/อัปเดตเอกสารก่อน</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p><strong>สิ้นสุดคู่มือปฏิบัติงานสำหรับเจ้าหน้าที่ขนส่ง — ตรวจรถให้พร้อม เพื่อความปลอดภัยของนักเรียนทุกคน</strong></p>
+
+</main>
+</div>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML สร้างจากเอกสาร Markdown (Phase 10.13C · 2026-06-24)</footer>
+</body>
+</html>

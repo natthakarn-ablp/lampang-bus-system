@@ -410,6 +410,31 @@ router.post('/pickup-points', requireFullSchoolScope, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
+// ─── DELETE /pickup-points/:id — ลบจุดรับส่งของรถที่ให้บริการโรงเรียนนี้ ──────────
+// School self-service cleanup of an obsolete pickup point (soft-delete).
+router.delete('/pickup-points/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const point = await ppSvc.getPickupPointById(id);
+    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    // Scope: the point's vehicle must serve this school
+    const serves = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
+    if (!serves) return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในขอบเขตโรงเรียนของท่าน', [], 403);
+
+    await ppSvc.softDeletePickupPoint(id);
+    await logAudit({
+      userId: req.user.id, action: 'DELETE', entityType: 'pickup_point', entityId: id,
+      oldValue: { vehicle_id: point.vehicle_id, label: point.label, latitude: point.latitude, longitude: point.longitude },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, null, 'ลบจุดรับส่งสำเร็จ');
+  } catch (err) { next(err); }
+});
+
 /**
  * GET /api/school/pickup-points/:id/assignable-students
  * Phase 6.1 hotfix-7: edit-students modal feed. Returns the school's
@@ -583,6 +608,18 @@ router.post('/leave', requireFullSchoolScope, async (req, res, next) => {
       leaveDate: date, session, reason, userId: req.user.id, userRole: 'school',
     });
     return sendSuccess(res, result, 'บันทึกการลาสำเร็จ', null, 201);
+  } catch (err) { next(err); }
+});
+
+// ─── DELETE /leaves/:id — ยกเลิกการลาที่บันทึกผิด (ในขอบเขตโรงเรียน) ─────────────
+router.delete('/leaves/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const result = await leaveSvc.cancelLeaveBySchool(id, req.user.id, schoolId);
+    return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
   } catch (err) { next(err); }
 });
 
@@ -1103,6 +1140,60 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
     } finally {
       conn.release();
     }
+  } catch (err) { next(err); }
+});
+
+// ─── PUT /vehicles/:id — แก้ไขข้อมูลรถในขอบเขตโรงเรียน (ลดการพึ่งแอดมิน) ─────────
+// School self-service: edit vehicle type / owner / insurance for a vehicle that
+// serves this school. Does NOT touch plate identity or driver assignment (Tier 3).
+router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const vehicleId = req.params.id;
+
+    // Scope: the vehicle must serve this school
+    const serves = await ppSvc.validateVehicleServesSchool(vehicleId, schoolId);
+    if (!serves) return sendError(res, 'ไม่พบรถคันนี้ในโรงเรียนของท่าน', [], 404);
+
+    const [[old]] = await pool.query(
+      `SELECT id, vehicle_type, owner_name, owner_phone, insurance_status, insurance_type, insurance_expiry
+         FROM vehicles WHERE id = ? AND is_deleted = FALSE`,
+      [vehicleId]
+    );
+    if (!old) return sendError(res, 'ไม่พบรถในระบบ', [], 404);
+
+    const b = req.body || {};
+    const sets = [], params = [], newVal = {};
+    // whitelist of editable columns (column names are hardcoded → safe to interpolate)
+    const strField = (key, max) => {
+      if (b[key] === undefined) return;
+      const v = (b[key] === null || String(b[key]).trim() === '') ? null : String(b[key]).trim().slice(0, max);
+      sets.push(`${key} = ?`); params.push(v); newVal[key] = v;
+    };
+    strField('vehicle_type', 50);
+    strField('owner_name', 100);
+    strField('owner_phone', 20);
+    strField('insurance_status', 50);
+    strField('insurance_type', 50);
+    if (b.insurance_expiry !== undefined) {
+      const v = b.insurance_expiry || null;
+      sets.push('insurance_expiry = ?'); params.push(v); newVal.insurance_expiry = v;
+    }
+    if (!sets.length) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
+
+    params.push(vehicleId);
+    await pool.query(`UPDATE vehicles SET ${sets.join(', ')} WHERE id = ?`, params);
+
+    await logAudit({
+      userId: req.user.id, action: 'UPDATE', entityType: 'vehicle', entityId: vehicleId,
+      oldValue: {
+        vehicle_type: old.vehicle_type, owner_name: old.owner_name, owner_phone: old.owner_phone,
+        insurance_status: old.insurance_status, insurance_type: old.insurance_type, insurance_expiry: old.insurance_expiry,
+      },
+      newValue: newVal, ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, { vehicle_id: vehicleId }, 'แก้ไขข้อมูลรถสำเร็จ');
   } catch (err) { next(err); }
 });
 

@@ -11,10 +11,9 @@ import EmptyState from '../../components/EmptyState';
  *   A) Manual single-school form (school_code + school_name + username)
  *   B) Bulk Excel/CSV import (download template → preview → commit)
  *
- * The page deliberately drops the previous "โรงเรียนที่มีอยู่แล้ว" mode and
- * the per-row reset/toggle controls — those endpoints still exist on the
- * backend but live elsewhere if operators need them. The page below stays
- * focused on the new-school workflow.
+ * Self-service (Tier 1) — the affiliation manages its own school accounts
+ * without admin: add an account to an existing school, reset a school's
+ * password, and enable/disable an account (per-row controls in Section C).
  */
 export default function AffSchoolAccounts() {
   const [accounts, setAccounts] = useState([]);
@@ -33,6 +32,16 @@ export default function AffSchoolAccounts() {
   const [committing, setCommitting] = useState(false);
   const fileInputRef = useRef(null);
 
+  // ─── Self-service: reset password / toggle / add-to-existing ──────────
+  const [resetTarget, setResetTarget] = useState(null);           // account row
+  const [resetForm, setResetForm] = useState({ password: '', confirm: '' });
+  const [resetting, setResetting] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
+  const [schools, setSchools] = useState([]);
+  const [showAddExisting, setShowAddExisting] = useState(false);
+  const [addForm, setAddForm] = useState({ school_id: '', username: '', display_name: '' });
+  const [addingExisting, setAddingExisting] = useState(false);
+
   const fetchAccounts = useCallback(async () => {
     try {
       const res = await api.get('/affiliation/school-accounts');
@@ -44,7 +53,62 @@ export default function AffSchoolAccounts() {
     }
   }, []);
 
-  useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
+  const fetchSchools = useCallback(async () => {
+    try {
+      const res = await api.get('/affiliation/schools');
+      setSchools(res.data.data || []);
+    } catch { /* dropdown optional */ }
+  }, []);
+
+  useEffect(() => { fetchAccounts(); fetchSchools(); }, [fetchAccounts, fetchSchools]);
+
+  // ─── Reset password ───────────────────────────────────────────────────
+  async function handleReset() {
+    if (!resetForm.password || resetForm.password.length < 8) { toast.error('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'); return; }
+    if (resetForm.password !== resetForm.confirm) { toast.error('รหัสผ่านยืนยันไม่ตรงกัน'); return; }
+    setResetting(true);
+    try {
+      await api.post(`/affiliation/school-accounts/${resetTarget.id}/reset-password`, { password: resetForm.password });
+      toast.success('รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้ต้องเปลี่ยนรหัสเมื่อเข้าสู่ระบบครั้งถัดไป');
+      setResetTarget(null);
+      setResetForm({ password: '', confirm: '' });
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'รีเซ็ตรหัสผ่านไม่สำเร็จ');
+    } finally { setResetting(false); }
+  }
+
+  // ─── Toggle enable/disable ────────────────────────────────────────────
+  async function handleToggle(acc) {
+    setTogglingId(acc.id);
+    try {
+      await api.put(`/affiliation/school-accounts/${acc.id}`, { is_active: !acc.is_active });
+      toast.success(acc.is_active ? 'ปิดการใช้งานบัญชีแล้ว' : 'เปิดการใช้งานบัญชีแล้ว');
+      fetchAccounts();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'เปลี่ยนสถานะไม่สำเร็จ');
+    } finally { setTogglingId(null); }
+  }
+
+  // ─── Add account to an existing school ────────────────────────────────
+  async function handleAddExisting(e) {
+    e.preventDefault();
+    if (!addForm.school_id) { toast.error('กรุณาเลือกโรงเรียน'); return; }
+    if (!/^\d{6}$/.test(addForm.username)) { toast.error('ชื่อผู้ใช้ต้องเป็นรหัส OBEC 6 หลัก'); return; }
+    setAddingExisting(true);
+    try {
+      await api.post('/affiliation/school-accounts', {
+        school_id: addForm.school_id,
+        username: addForm.username,
+        display_name: addForm.display_name.trim() || undefined,
+      });
+      toast.success('เพิ่มบัญชีให้โรงเรียนสำเร็จ — รหัสผ่านเริ่มต้นคือรหัสโรงเรียน');
+      setAddForm({ school_id: '', username: '', display_name: '' });
+      setShowAddExisting(false);
+      fetchAccounts();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'เพิ่มบัญชีไม่สำเร็จ');
+    } finally { setAddingExisting(false); }
+  }
 
   // ─── Manual single-add ────────────────────────────────────────────────
   function resetManual() {
@@ -207,6 +271,64 @@ export default function AffSchoolAccounts() {
         )}
       </section>
 
+      {/* ─── Section A2: เพิ่มบัญชีให้โรงเรียนที่มีอยู่ ───────────────── */}
+      <section className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-700">เพิ่มบัญชีให้โรงเรียนที่มีอยู่</h2>
+          <button
+            type="button"
+            onClick={() => setShowAddExisting(s => !s)}
+            className="text-sm font-medium px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50 transition"
+          >
+            {showAddExisting ? 'ซ่อนฟอร์ม' : 'เปิดฟอร์ม'}
+          </button>
+        </div>
+        {showAddExisting && (
+          <form onSubmit={handleAddExisting} className="mt-4 space-y-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">โรงเรียน <span className="text-red-500">*</span></label>
+              <select
+                value={addForm.school_id}
+                onChange={e => setAddForm({ ...addForm, school_id: e.target.value })}
+                className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" required
+              >
+                <option value="">— เลือกโรงเรียนในสังกัด —</option>
+                {schools.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.id})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">ชื่อผู้ใช้ (รหัส OBEC 6 หลัก) <span className="text-red-500">*</span></label>
+              <input
+                type="text" value={addForm.username}
+                onChange={e => setAddForm({ ...addForm, username: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                required pattern="\d{6}" maxLength={6} placeholder="เช่น 520341"
+                className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">ชื่อที่แสดง (ไม่บังคับ)</label>
+              <input
+                type="text" value={addForm.display_name}
+                onChange={e => setAddForm({ ...addForm, display_name: e.target.value })}
+                placeholder="เช่น บัญชีธุรการ"
+                className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-700">
+              ใช้สำหรับโรงเรียนที่อยู่ในระบบแล้วแต่ยังไม่มีบัญชี (หรือต้องการบัญชีเพิ่ม) — รหัสผ่านเริ่มต้นคือรหัสโรงเรียน
+            </div>
+            <button
+              type="submit" disabled={addingExisting}
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition"
+            >
+              {addingExisting ? 'กำลังเพิ่ม…' : 'เพิ่มบัญชี'}
+            </button>
+          </form>
+        )}
+      </section>
+
       {/* ─── Section B: เพิ่มหลายโรงเรียนจาก Excel ───────────────────── */}
       <section className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="flex items-center justify-between flex-wrap gap-2">
@@ -337,6 +459,7 @@ export default function AffSchoolAccounts() {
                   <th className="px-3 py-2 font-medium">โรงเรียน</th>
                   <th className="px-3 py-2 font-medium">ชื่อผู้ใช้</th>
                   <th className="px-3 py-2 font-medium text-center">สถานะ</th>
+                  <th className="px-3 py-2 font-medium text-right">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -349,6 +472,29 @@ export default function AffSchoolAccounts() {
                         {a.is_active ? 'ใช้งาน' : 'ปิด'}
                       </span>
                     </td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setResetTarget(a); setResetForm({ password: '', confirm: '' }); }}
+                          className="text-xs font-medium px-2.5 py-1 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50 transition"
+                        >
+                          รีเซ็ตรหัส
+                        </button>
+                        <button
+                          type="button"
+                          disabled={togglingId === a.id}
+                          onClick={() => handleToggle(a)}
+                          className={`text-xs font-medium px-2.5 py-1 rounded-lg border transition disabled:opacity-50 ${
+                            a.is_active
+                              ? 'border-amber-300 text-amber-700 hover:bg-amber-50'
+                              : 'border-green-300 text-green-700 hover:bg-green-50'
+                          }`}
+                        >
+                          {togglingId === a.id ? '…' : a.is_active ? 'ปิดบัญชี' : 'เปิดบัญชี'}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -359,6 +505,44 @@ export default function AffSchoolAccounts() {
           <p className="text-xs text-gray-400 mt-2 text-right">แสดง {recentAccounts.length} จากทั้งหมด {accounts.length} บัญชี</p>
         )}
       </section>
+
+      {/* ─── Reset password modal ──────────────────────────────────────── */}
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setResetTarget(null)}>
+          <div className="w-full max-w-sm rounded-xl bg-white p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-bold text-gray-800">รีเซ็ตรหัสผ่านบัญชีโรงเรียน</h3>
+            <p className="mt-1 text-sm text-gray-500">{resetTarget.school_name} · <span className="font-mono text-xs">{resetTarget.username}</span></p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">รหัสผ่านใหม่ (อย่างน้อย 8 ตัว)</label>
+                <input
+                  type="password" value={resetForm.password}
+                  onChange={e => setResetForm({ ...resetForm, password: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">ยืนยันรหัสผ่านใหม่</label>
+                <input
+                  type="password" value={resetForm.confirm}
+                  onChange={e => setResetForm({ ...resetForm, confirm: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setResetTarget(null)}
+                className="text-sm font-medium px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition">
+                ยกเลิก
+              </button>
+              <button type="button" disabled={resetting} onClick={handleReset}
+                className="text-sm font-medium px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition">
+                {resetting ? 'กำลังรีเซ็ต…' : 'รีเซ็ตรหัสผ่าน'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

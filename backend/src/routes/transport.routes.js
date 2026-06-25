@@ -281,6 +281,26 @@ router.put('/inspections/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── DELETE /api/transport/inspections/:id — ลบผลตรวจที่ลงผิด (แก้เอง) ────────
+router.delete('/inspections/:id', async (req, res, next) => {
+  try {
+    const inspectionId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(inspectionId) || inspectionId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const old = await transportSvc.deleteInspection({
+      inspectionId, userId: req.user.id, isAdmin: req.user.role === 'admin',
+    });
+
+    await logAudit({
+      userId: req.user.id, action: 'DELETE', entityType: 'vehicle_inspection', entityId: inspectionId,
+      oldValue: { vehicle_id: old.vehicle_id, result: old.result, expiry_date: old.expiry_date, inspection_date: old.inspection_date, notes: old.notes },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+
+    sendSuccess(res, null, 'ลบผลตรวจสำเร็จ');
+  } catch (err) { next(err); }
+});
+
 // ─── Phase 7.12.2 — GET /api/transport/pickup-map ───────────────────────────
 // Read-only multi-role pickup-point map for transport oversight. Aggregate-only
 // rows: no student names / phones / addresses.

@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือปฏิบัติงาน — ผู้ปกครอง (LINE) — ระบบรถรับส่งนักเรียนจังหวัดลำปาง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#1e5fa8; --accent-dark:#16467d; --accent-soft:#eaf2fb;
+  --ink:#1a2230; --ink-soft:#475067; --muted:#6b7488;
+  --line:#e3e8f0; --bg:#f5f7fb; --card:#ffffff;
+  --warn-bg:#fff7e6; --warn-bd:#e8a33d; --warn-ink:#7a4d06;
+  --tip-bg:#eef6ff; --tip-bd:#4a90d9; --tip-ink:#1a4e84;
+  --note-bg:#f3f5f9; --note-bd:#9aa6bd; --note-ink:#3a445a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.topnav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+.nav-inner{max-width:980px; margin:0 auto; padding:8px 20px; display:flex; flex-wrap:wrap; gap:4px;}
+.topnav a{font-size:14.5px; font-weight:500; color:var(--ink-soft); text-decoration:none;
+  padding:6px 12px; border-radius:8px; white-space:nowrap;}
+.topnav a:hover{background:var(--accent-soft); color:var(--accent-dark);}
+.topnav a.active{background:var(--accent); color:#fff;}
+.wrap{max-width:980px; margin:0 auto; padding:0 20px 80px;}
+main{background:var(--card); margin-top:28px; padding:48px 56px; border-radius:var(--radius);
+  border:1px solid var(--line); box-shadow:0 1px 3px rgba(16,30,54,.04);}
+h1{font-size:30px; font-weight:700; line-height:1.3; margin:0 0 8px; color:var(--ink);
+  padding-bottom:16px; border-bottom:3px solid var(--accent);}
+h2{font-size:23px; font-weight:700; margin:40px 0 12px; color:var(--accent-dark);
+  padding-top:12px;}
+h3{font-size:19.5px; font-weight:600; margin:28px 0 8px; color:var(--ink);}
+h4{font-size:17px; font-weight:600; margin:20px 0 6px; color:var(--ink-soft);}
+p{margin:10px 0;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+strong{font-weight:600; color:var(--ink);}
+ul,ol{margin:10px 0; padding-left:26px;}
+li{margin:5px 0;}
+hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+code{font-family:'IBM Plex Mono',monospace; font-size:14.5px; background:#eef1f6;
+  padding:2px 6px; border-radius:5px; color:#7a3a8c;}
+pre{background:#1e2430; color:#e6e9ef; padding:16px 18px; border-radius:10px; overflow:auto;}
+pre code{background:none; color:inherit; padding:0;}
+main img{display:block; max-width:100%; height:auto; margin:16px auto 4px; border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 3px 12px rgba(16,30,54,.10);}
+main p > em:only-child{display:block; text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 18px;}
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15.5px;
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+thead th{background:var(--accent); color:#fff; font-weight:600; text-align:left;
+  padding:11px 14px; font-size:15px;}
+tbody td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top;}
+tbody tr:nth-child(even){background:#fafbfd;}
+tbody tr:hover{background:var(--accent-soft);}
+blockquote.callout{margin:16px 0; padding:14px 18px; border-radius:10px; border-left:5px solid;
+  font-size:16px;}
+blockquote.callout p{margin:6px 0;}
+blockquote.callout ul{margin:6px 0;}
+.callout.warn{background:var(--warn-bg); border-color:var(--warn-bd); color:var(--warn-ink);}
+.callout.tip{background:var(--tip-bg); border-color:var(--tip-bd); color:var(--tip-ink);}
+.callout.note{background:var(--note-bg); border-color:var(--note-bd); color:#3a445a;}
+.callout.warn strong,.callout.tip strong,.callout.note strong{color:inherit;}
+.docfoot{max-width:980px; margin:24px auto 0; padding:0 20px; color:var(--muted); font-size:13.5px; text-align:center;}
+.toolbar{max-width:980px; margin:18px auto 0; padding:0 20px; display:flex; justify-content:flex-end;}
+.btn-print{font-size:14px; font-weight:500; color:var(--accent-dark); background:var(--accent-soft);
+  border:1px solid var(--line); padding:7px 14px; border-radius:8px; cursor:pointer;}
+.btn-print:hover{background:#dceafa;}
+@media (max-width:640px){
+  body{font-size:16px;}
+  main{padding:28px 20px;}
+  h1{font-size:24px;} h2{font-size:20px;} h3{font-size:17.5px;}
+  .nav-inner{padding:6px 12px;}
+}
+@media print{
+  .topnav,.toolbar{display:none;}
+  body{background:#fff; font-size:12pt;}
+  main{box-shadow:none; border:none; margin:0; padding:0;}
+  a{color:#000; text-decoration:none;}
+  table,blockquote,h2,h3,figure,img{page-break-inside:avoid;}
+  main img{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html" class="active">ผู้ปกครอง</a></div></nav>
+<div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="wrap">
+<main>
+<h1>คู่มือปฏิบัติงาน — ผู้ปกครอง (LINE)</h1>
+<blockquote class="callout note">
+<p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง — <a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a>
+เวอร์ชัน Phase 10.13C • อัปเดต 2026-06-24</p>
+</blockquote>
+<blockquote class="callout note">
+<p>📷 <strong>หมายเหตุภาพหน้าจอ:</strong> ข้อมูลส่วนบุคคล (ชื่อ/เบอร์) ในภาพถูกเบลอเพื่อความเป็นส่วนตัว — เมื่อใช้งานจริงจะแสดงข้อมูลตามปกติ</p>
+</blockquote>
+<h2>ภาพรวม 30 วินาที</h2>
+<ul>
+<li>บทบาทนี้ทำอะไรได้:
+<ul>
+<li>ผูกบัญชี LINE เข้ากับข้อมูลบุตรหลาน (ด้วยเบอร์โทร + รหัสนักเรียน)</li>
+<li>ดูสถานะการรับ-ส่งวันนี้ของบุตรหลาน (รอบเช้า / รอบเย็น)</li>
+<li>ดูข้อมูลบุตรหลาน (ชั้น/ห้อง, โรงเรียน, ทะเบียนรถ, ชื่อผู้ขับ)</li>
+<li>ดูประวัติย้อนหลัง 7 วัน (ในหน้า LIFF)</li>
+<li>รับการแจ้งเตือนทาง LINE อัตโนมัติเมื่อคนขับเช็กชื่อบุตรหลาน</li>
+<li>ยกเลิกการผูกบัญชี / เปลี่ยนบัญชีผู้ปกครอง</li>
+</ul>
+</li>
+<li>เข้าระบบด้วย: <strong>บัญชี LINE ของคุณ</strong> — ไม่มีชื่อผู้ใช้/รหัสผ่าน ระบบยืนยันตัวตนจากบัญชี LINE อัตโนมัติ ทุกอย่างทำผ่านแชต LINE OA และหน้า LIFF (หน้าเว็บที่เปิดจากลิงก์ใน LINE)</li>
+<li>อุปกรณ์ที่แนะนำ: <strong>มือถือที่ติดตั้งแอป LINE</strong> — เปิดทุกหน้าจากลิงก์ใน LINE OA เท่านั้น (ห้ามเปิดในเบราว์เซอร์ภายนอก จะยืนยันตัวตนไม่ได้)</li>
+</ul>
+<blockquote class="callout tip">
+<p>💡 เพิ่มบัญชี LINE OA ของระบบรถรับส่งเป็นเพื่อนไว้ แล้วปักหมุดแชตไว้ด้านบน เพื่อเข้าถึงได้รวดเร็ว</p>
+</blockquote>
+<h2>สารบัญงาน</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>งาน</th>
+<th>ใช้เมื่อ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>เข้าใช้งาน (ผูกบัญชี)</td>
+<td>ครั้งแรกที่เริ่มใช้งาน</td>
+</tr>
+<tr>
+<td>2</td>
+<td>ดูสถานะรับ-ส่งวันนี้</td>
+<td>งานประจำวัน ใช้บ่อยสุด</td>
+</tr>
+<tr>
+<td>3</td>
+<td>รับการแจ้งเตือนทาง LINE</td>
+<td>ทุกวันโดยอัตโนมัติ</td>
+</tr>
+<tr>
+<td>4</td>
+<td>ดูข้อมูลบุตรหลาน</td>
+<td>ตรวจรถ/ชั้น/คนขับ</td>
+</tr>
+<tr>
+<td>5</td>
+<td>ดูประวัติย้อนหลัง 7 วัน</td>
+<td>ตรวจย้อนหลัง</td>
+</tr>
+<tr>
+<td>6</td>
+<td>ดู ETA เวลาถึงโดยประมาณ</td>
+<td>(⚠️ ฟีเจอร์ยังปิด)</td>
+</tr>
+<tr>
+<td>7</td>
+<td>ดูข้อมูลรถจาก QR + ความยินยอม PDPA</td>
+<td>(⚠️ ฟีเจอร์ยังปิด)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>ยกเลิกผูกบัญชี</td>
+<td>เลิกใช้/เปลี่ยนเครื่อง</td>
+</tr>
+<tr>
+<td>9</td>
+<td>เปลี่ยนบัญชี (สลับผู้ปกครอง)</td>
+<td>เปลี่ยนผู้ปกครอง/เบอร์</td>
+</tr>
+<tr>
+<td>10</td>
+<td>ใช้เมนูคำสั่งในแชต</td>
+<td>อ้างอิงคำสั่งทั้งหมด</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ <strong>ผู้ปกครองไม่มีรายงาน/ส่งออกไฟล์</strong> — ไม่มีรายงานรายวัน/รายเดือน/สรุป และไม่มีไฟล์ CSV/Excel/PDF (เป็นสิทธิ์ของโรงเรียน/เขต/ส่วนกลาง/admin) สิ่งที่ทำได้คือ &quot;ดู&quot; สถานะ ข้อมูลบุตรหลาน และประวัติย้อนหลังของบุตรหลานตัวเองเท่านั้น</p>
+</blockquote>
+<hr>
+<h2>งานที่ 1 — เข้าใช้งาน (ผูกบัญชี)</h2>
+<p><strong>ใช้เมื่อ:</strong> ครั้งแรกที่เริ่มใช้งาน — ต้องผูกบัญชีก่อนจึงจะดูสถานะและรับการแจ้งเตือนได้ (ระบบตรวจจาก <strong>เบอร์โทรผู้ปกครอง + รหัสนักเรียน</strong>)</p>
+<h3>ทาง A — ผ่านฟอร์มในหน้า LIFF (แนะนำ)</h3>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดหน้า <strong>&quot;🔗 ผูกบัญชีผู้ปกครอง&quot;</strong> จากลิงก์ใน LINE</li>
+<li>กรอก <strong>เบอร์โทรศัพท์ (10 หลัก)</strong> และ <strong>รหัสนักเรียน</strong></li>
+<li>กดปุ่ม <strong>&quot;ค้นหาข้อมูลบุตรหลาน&quot;</strong></li>
+<li>ตรวจหน้า <strong>&quot;ตรวจสอบข้อมูล&quot;</strong> — ชื่อนักเรียน / ชั้น / โรงเรียน และเบอร์โทรที่ถูกปิดบางส่วน (เช่น <code>090****567</code>)</li>
+<li>กด <strong>&quot;ยืนยันผูกบัญชี&quot;</strong> ถ้าถูกต้อง (หรือ <strong>&quot;ย้อนกลับ&quot;</strong> เพื่อแก้)</li>
+<li>เมื่อขึ้น <strong>&quot;✅ ผูกบัญชีสำเร็จ&quot;</strong> กลับไปที่แชต แล้วพิมพ์ <strong>&quot;สถานะ&quot;</strong> เพื่อทดสอบ</li>
+</ol>
+<p><img src="screenshots/parent/02-link.png" alt="ผูกบัญชีผู้ปกครอง (เปิดผ่าน LINE / LIFF)"></p>
+<p><em>ภาพ: ผูกบัญชีผู้ปกครอง (เปิดผ่าน LINE / LIFF)</em></p>
+<blockquote class="callout warn">
+<p>⚠️ ฟอร์มในหน้า LIFF <strong>บังคับรหัสนักเรียนเป็นตัวเลขเท่านั้น</strong> — ถ้ารหัสนักเรียนมีตัวอักษรปน ให้ผูกผ่านแชต (ทาง B) แทน</p>
+</blockquote>
+<h3>ทาง B — ผ่านแชต LINE</h3>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>พิมพ์ <strong>&quot;ผูกบัญชี&quot;</strong> ในแชต</li>
+<li>พิมพ์ <strong>เบอร์โทรผู้ปกครอง (10 หลัก)</strong> เมื่อระบบขอ</li>
+<li>พิมพ์ <strong>รหัสนักเรียน</strong> เมื่อระบบขอ</li>
+<li>รอระบบผูกอัตโนมัติ แล้วส่งการ์ด <strong>&quot;ผูกบัญชีสำเร็จ&quot;</strong></li>
+</ol>
+<blockquote class="callout note">
+<p>ℹ️ ขั้นตอนผูกผ่านแชตหมดอายุภายใน <strong>30 นาที</strong> — ถ้าทำค้างนานเกินไปต้องพิมพ์ &quot;ผูกบัญชี&quot; เริ่มใหม่ • พิมพ์ &quot;ยกเลิก&quot; เพื่อเริ่มต้นใหม่ได้ทุกเมื่อ</p>
+</blockquote>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ขึ้นหน้า/การ์ด &quot;ผูกบัญชีสำเร็จ&quot; และพิมพ์ &quot;สถานะ&quot; แล้วเห็นข้อมูลบุตรหลาน</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>&quot;ไม่พบข้อมูลที่ตรงกัน&quot; → ตรวจ (ก) เบอร์โทรตรงกับที่ลงทะเบียนกับโรงเรียน (ข) รหัสนักเรียนถูกต้อง (ค) <strong>โรงเรียนอนุมัติคุณเป็นผู้ปกครองแล้วหรือยัง</strong> (ถ้ายังไม่อนุมัติจะผูกไม่ได้ ติดต่อโรงเรียน)</li>
+<li>&quot;บัญชี LINE นี้ผูกอยู่กับผู้ปกครองท่านอื่นแล้ว...&quot; → พิมพ์ &quot;ยกเลิกผูกบัญชี&quot; ก่อน (งานที่ 8)</li>
+<li>&quot;เบอร์นี้ผูก LINE อื่นไว้แล้ว&quot; → เบอร์นี้ถูกใช้กับ LINE อื่น ใช้คำสั่ง &quot;เปลี่ยนบัญชี&quot; (งานที่ 9) หรือยกเลิกที่เครื่องเดิม</li>
+<li>&quot;พยายามหลายครั้งเกินไป กรุณารอสักครู่...&quot; → กรอกผิดหลายครั้ง ระบบล็อกชั่วคราว รอประมาณ 30 นาที แล้วลองใหม่</li>
+<li>ไม่ทราบรหัสนักเรียน → สอบถามครูประจำชั้นหรือเจ้าหน้าที่โรงเรียน</li>
+</ul>
+<blockquote class="callout warn">
+<p>⚠️ ใช้ <strong>เบอร์โทรผู้ปกครอง + รหัสนักเรียน</strong> เท่านั้นในการผูกบัญชี • เบอร์โทรต้องเป็นเลข 10 หลัก</p>
+</blockquote>
+<hr>
+<h2>งานที่ 2 — ดูสถานะรับ-ส่งวันนี้</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการรู้ว่าบุตรหลานขึ้นรถ/ถึงจุดรับแล้วหรือยัง (งานที่ใช้บ่อยที่สุด)</p>
+<h3>ในแชต LINE</h3>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>พิมพ์ <strong>&quot;สถานะ&quot;</strong></li>
+<li>อ่านการ์ด <strong>&quot;สถานะรับ-ส่งวันนี้&quot;</strong> ต่อบุตรหลานแต่ละคน — แสดง:
+<ul>
+<li>ชื่อนักเรียน, ชั้น/ห้อง · โรงเรียน</li>
+<li><strong>รอบเช้า:</strong> &quot;ขึ้นรถแล้ว HH:MM&quot; หรือ &quot;ยังไม่ขึ้นรถ&quot;</li>
+<li><strong>รอบเย็น:</strong> &quot;ส่งถึงจุดรับแล้ว HH:MM&quot; หรือ &quot;ยังไม่ส่งถึงจุดรับ&quot;</li>
+<li>🚌 ทะเบียนรถ และ 👤 ชื่อผู้ขับ</li>
+</ul>
+</li>
+</ol>
+<h3>ในหน้า LIFF</h3>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดหน้า LIFF จากลิงก์ใน LINE → เลือกบุตรหลาน</li>
+<li>กด <strong>&quot;📋 สถานะวันนี้&quot;</strong> → ดูการ์ด &quot;ส่งเช้า&quot; / &quot;รับเย็น&quot; พร้อม ✅ (เสร็จแล้ว) หรือ ⏳ (ยังไม่เสร็จ) และเวลา</li>
+</ol>
+<p><img src="screenshots/parent/01-status.png" alt="หน้าสถานะบุตรหลาน (เปิดผ่าน LINE / LIFF)"></p>
+<p><em>ภาพ: หน้าสถานะบุตรหลาน (เปิดผ่าน LINE / LIFF)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นสถานะรอบเช้า/รอบเย็นของบุตรหลานพร้อมเวลา และข้อมูลรถ/คนขับ</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>การ์ดในแชตแสดงสูงสุด <strong>3 คน</strong> — ถ้ามีมากกว่านั้นจะขึ้น &quot;แสดง 3 จาก N คน...&quot; → เปิด <strong>หน้า LIFF</strong> เพื่อดูครบทุกคน (ไม่จำกัดจำนวน)</li>
+<li>หน้า LIFF ขึ้น &quot;ไม่พบข้อมูลบุตรหลาน&quot; → มักเพราะยังไม่ได้รับอนุมัติครบทุกคน หรือเพิ่งผูกพี่น้องไปคนเดียว — รอโรงเรียนอนุมัติ แล้วกด <strong>&quot;🔄 รีเฟรช&quot;</strong></li>
+</ul>
+<hr>
+<h2>งานที่ 3 — รับการแจ้งเตือนทาง LINE</h2>
+<p><strong>ใช้เมื่อ:</strong> อัตโนมัติทุกครั้งที่คนขับเช็กชื่อบุตรหลาน (ส่งเช้า / รับเย็น) — ไม่ต้องตั้งค่าอะไร</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>ผูกบัญชีและได้รับอนุมัติจากโรงเรียนเรียบร้อย (งานที่ 1)</li>
+<li>รอรับข้อความ <strong>&quot;📢 แจ้งเตือน: ...&quot;</strong> เข้า LINE — มีชื่อนักเรียน, สถานะ, รอบ (เช้า/เย็น) และเวลา</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ได้รับข้อความแจ้งเตือนเข้า LINE เมื่อบุตรหลานถูกเช็กชื่อ (เฉพาะบุตรหลานที่ผูกบัญชี + โรงเรียนอนุมัติแล้ว)</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>การแจ้งเตือนมาช้า/ไม่มาในบางช่วง (กระบวนการส่งเบื้องหลังไม่ทำงาน) → พิมพ์ <strong>&quot;สถานะ&quot;</strong> เพื่อดูสถานะล่าสุดด้วยตัวเองได้เสมอ • ถ้าเป็นบ่อยให้แจ้งโรงเรียน/ผู้ดูแลระบบ</li>
+<li>ℹ️ ข้อความที่ค้างนานเกิน 3 ชั่วโมง ระบบจะไม่ส่งย้อนหลัง (ป้องกันข้อความเก่าถูกส่งพร้อมกันจำนวนมาก)</li>
+</ul>
+<p><img src="screenshots/parent/mock-notify.png" alt="ตัวอย่างข้อความแจ้งเตือนรับ-ส่งใน LINE (ภาพจำลอง)"></p>
+<p><em>ภาพ: ตัวอย่างข้อความแจ้งเตือนรับ-ส่งใน LINE (ภาพจำลอง)</em></p>
+<hr>
+<h2>งานที่ 4 — ดูข้อมูลบุตรหลาน</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการตรวจชั้น/ห้อง, โรงเรียน, ทะเบียนรถ, ชื่อคนขับของบุตรหลาน</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>พิมพ์ <strong>&quot;ข้อมูลบุตร&quot;</strong> ในแชต</li>
+<li>อ่านการ์ด <strong>&quot;ข้อมูลบุตรหลาน&quot;</strong> — แสดง ชื่อนักเรียน, ชั้น/ห้อง · โรงเรียน, 🚌 ทะเบียนรถ, 👤 ชื่อผู้ขับ (สูงสุด 3 คน)</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นข้อมูลบุตรหลานทุกคนที่ผูกบัญชีและได้รับอนุมัติแล้ว (รวมพี่น้องที่ใช้เบอร์โทรเดียวกัน)</p>
+<p><img src="screenshots/parent/mock-childdata.png" alt="ตัวอย่างการ์ด &quot;ข้อมูลบุตรหลาน&quot; ในแชต LINE (ภาพจำลอง)"></p>
+<p><em>ภาพ: ตัวอย่างการ์ด &quot;ข้อมูลบุตรหลาน&quot; ในแชต LINE (ภาพจำลอง)</em></p>
+<hr>
+<h2>งานที่ 5 — ดูประวัติย้อนหลัง 7 วัน</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการตรวจสถานะรับ-ส่งย้อนหลัง (หน้า LIFF เท่านั้น)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดหน้า LIFF จากลิงก์ใน LINE → เลือกบุตรหลาน</li>
+<li>กด <strong>&quot;📅 ย้อนหลัง&quot;</strong> → อ่าน <strong>&quot;ประวัติ 7 วันล่าสุด&quot;</strong> — แสดง วันที่ / รอบเช้า-เย็น / สถานะ (รับแล้ว, ส่งแล้ว, ไม่มา, ยกเลิก) พร้อมเวลา</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรายการประวัติ 7 วันล่าสุดของบุตรหลาน</p>
+<p><img src="screenshots/parent/mock-history.png" alt="ตัวอย่างประวัติย้อนหลัง 7 วัน (ภาพจำลอง)"></p>
+<p><em>ภาพ: ตัวอย่างประวัติย้อนหลัง 7 วัน (ภาพจำลอง)</em></p>
+<hr>
+<h2>งานที่ 6 — ดู ETA เวลาถึงโดยประมาณ</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการรู้เวลารถถึงโดยประมาณ (หน้า LIFF เท่านั้น)</p>
+<blockquote class="callout warn">
+<p>⚠️ <strong>ฟีเจอร์นี้เปิดเมื่อ enable (feature flag <code>FEATURE_ETA</code>) — ปัจจุบันยังปิดอยู่ในการใช้งานจริง</strong> ปุ่ม &quot;📍 ETA&quot; จะยังแสดงบนหน้าจอ แต่เมื่อปิด/ยังไม่มีข้อมูล จะยังไม่มีตัวเลขเวลาถึงให้ดู (รถอาจออฟไลน์ หรือยังไม่เริ่มรอบ) — ใช้ปุ่ม <strong>&quot;📋 สถานะวันนี้&quot;</strong> ดูสถานะรับ-ส่งได้ตามปกติ</p>
+</blockquote>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดหน้า LIFF → เลือกบุตรหลาน</li>
+<li>กด <strong>&quot;📍 ETA&quot;</strong> → ถ้าเปิดใช้งานแล้วและรถกำลังวิ่ง จะเห็นเวลาถึงโดยประมาณ (นาที), ระยะทาง (กม.), ระดับความมั่นใจ (สูง/ปานกลาง/ต่ำ), เวลาอัปเดต และปุ่ม <strong>&quot;🔄 รีเฟรช ETA&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง (เมื่อเปิดใช้งาน):</strong> เห็นเวลาถึงโดยประมาณและระยะทาง</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> หน้าจอขึ้น &quot;ยังไม่มีข้อมูล ETA — รถอาจออฟไลน์ หรือยังไม่เริ่มรอบ&quot; → ฟีเจอร์ยังปิดหรือยังไม่มีข้อมูล ใช้ &quot;📋 สถานะวันนี้&quot; แทน</p>
+<blockquote class="callout note">
+<p>📷 <strong>ไม่มีภาพหน้าจอ</strong> — ฟีเจอร์ ETA ถูกปิดด้วย feature flag (<code>FEATURE_ETA</code>) ยังไม่เปิดใช้งานจริง</p>
+</blockquote>
+<hr>
+<h2>งานที่ 7 — ดูข้อมูลรถจาก QR + ความยินยอม PDPA</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการดูข้อมูลรถจากการสแกน QR ที่ติดบนตัวรถ</p>
+<blockquote class="callout warn">
+<p>⚠️ <strong>ฟีเจอร์นี้เปิดเมื่อ enable (feature flag <code>FEATURE_VEHICLE_QR</code>) — ปัจจุบันยังปิดอยู่ในการใช้งานจริง</strong> เมื่อยังปิด การสแกน QR จะเปิดหน้าไม่ได้ (พบ &quot;ไม่พบหน้า / 404&quot;)</p>
+</blockquote>
+<p><strong>ขั้นตอน (เมื่อเปิดใช้งานแล้ว):</strong></p>
+<ol>
+<li>สแกน QR ที่ติดบนตัวรถ</li>
+<li>ดูข้อมูลรถตามระดับสิทธิ์:
+<ul>
+<li><strong>ระดับ 1 (ใครก็ดูได้):</strong> ทะเบียนรถ, ประเภทรถ, สถานะการรับรอง, สถานะตรวจสภาพ (+วันหมดอายุ), สถานะประกันภัย, สถานะคนขับ, สถานะเอกสาร — <strong>ไม่มีชื่อ/เบอร์คนขับ</strong></li>
+<li><strong>ระดับ 2 (เฉพาะผู้ปกครองของนักเรียนบนรถคันนั้น ที่เปิดผ่าน LINE และให้ความยินยอมแล้ว):</strong> เพิ่ม <strong>ชื่อคนขับ</strong> และ <strong>ช่องทางติดต่อฉุกเฉิน</strong> (กดโทรได้)</li>
+</ul>
+</li>
+<li>ถ้าระบบขอความยินยอม (หัวข้อ &quot;แจ้งการเก็บและใช้ข้อมูลส่วนบุคคล สำหรับผู้ปกครอง&quot;) ให้ <strong>ติ๊กช่องยินยอมด้วยตัวเอง</strong> แล้วกดยืนยัน (ปุ่มยืนยันกดไม่ได้จนกว่าจะติ๊ก ระบบไม่ติ๊กให้ล่วงหน้า)</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง (เมื่อเปิดใช้งาน):</strong> เห็นข้อมูลรถระดับ 2 สำหรับรถที่บุตรหลานนั่งจริง และระดับ 1 สำหรับรถคันอื่น</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>สแกน QR แล้วขึ้น 404 → ฟีเจอร์ยังปิดในการใช้งานจริง ยังใช้ไม่ได้ในตอนนี้</li>
+<li>ℹ️ เห็นข้อมูลระดับ 2 ได้เฉพาะ <strong>รถคันที่บุตรหลานนั่งจริง</strong> และต้องให้ความยินยอมก่อน รถคันอื่นเห็นได้แค่ระดับ 1</li>
+<li>ℹ️ ถอนความยินยอมได้ภายหลัง — เมื่อถอนแล้ว สิทธิ์การดู QR จะกลับเป็นระดับ 1 ทันที</li>
+</ul>
+<blockquote class="callout note">
+<p>📷 <strong>ไม่มีภาพหน้าจอ</strong> — ฟีเจอร์ QR + ความยินยอม PDPA ถูกปิดด้วย feature flag (<code>FEATURE_VEHICLE_QR</code>) ยังไม่เปิดใช้งานจริง</p>
+</blockquote>
+<hr>
+<h2>งานที่ 8 — ยกเลิกผูกบัญชี</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการเลิกผูกบัญชี LINE นี้กับบุตรหลาน (หลังยกเลิกจะไม่ได้รับการแจ้งเตือนอีก)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>พิมพ์ <strong>&quot;ยกเลิกผูกบัญชี&quot;</strong> ในแชต</li>
+<li>อ่านการ์ดยืนยัน (แสดงบุตรหลานที่ผูกอยู่ + คำเตือน)</li>
+<li>กดปุ่ม <strong>&quot;ยืนยันยกเลิกบัญชี&quot;</strong> (หรือพิมพ์ &quot;ยืนยันยกเลิก&quot;) — หรือกด <strong>&quot;ไม่ยกเลิก&quot;</strong> เพื่อยกเลิกคำสั่ง</li>
+<li>รอการ์ด <strong>&quot;ยกเลิกผูกบัญชีสำเร็จ&quot;</strong></li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ขึ้นการ์ด &quot;ยกเลิกผูกบัญชีสำเร็จ&quot;</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> ถ้ายังไม่เคยผูกบัญชี ระบบจะแจ้งว่า &quot;ยังไม่ได้ผูกบัญชี&quot;</p>
+<p><img src="screenshots/parent/mock-unbind.png" alt="ตัวอย่างการ์ดยืนยันยกเลิกผูกบัญชีในแชต LINE (ภาพจำลอง)"></p>
+<p><em>ภาพ: ตัวอย่างการ์ดยืนยันยกเลิกผูกบัญชีในแชต LINE (ภาพจำลอง)</em></p>
+<hr>
+<h2>งานที่ 9 — เปลี่ยนบัญชี (สลับผู้ปกครอง)</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการให้บัญชี LINE นี้ผูกกับผู้ปกครอง/เบอร์โทรอื่น</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>พิมพ์ <strong>&quot;เปลี่ยนบัญชี&quot;</strong> ในแชต</li>
+<li>อ่านการ์ดยืนยัน (แสดงบัญชีปัจจุบัน + เบอร์ที่ถูกปิดบางส่วน)</li>
+<li>พิมพ์ <strong>&quot;ยืนยันเปลี่ยนบัญชี&quot;</strong></li>
+<li>ระบบยกเลิกการผูกเดิมแล้วเริ่มขั้นตอนผูกใหม่ทันที (กลับไปขั้นตอนขอเบอร์โทร) — ทำต่อตามงานที่ 1 ทาง B</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ระบบเริ่มขั้นตอนผูกใหม่ (ขอเบอร์โทร) ทำต่อจนผูกสำเร็จ</p>
+<p><img src="screenshots/parent/mock-rebind.png" alt="ตัวอย่างการ์ดยืนยันเปลี่ยนบัญชีในแชต LINE (ภาพจำลอง)"></p>
+<p><em>ภาพ: ตัวอย่างการ์ดยืนยันเปลี่ยนบัญชีในแชต LINE (ภาพจำลอง)</em></p>
+<hr>
+<h2>งานที่ 10 — ใช้เมนูคำสั่งในแชต</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการเรียกเมนูหรืออ้างอิงคำสั่งทั้งหมด</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>พิมพ์ <strong>&quot;ช่วยเหลือ&quot;</strong> (หรือ เมนู / menu / help) เพื่อแสดงเมนูคำสั่งทั้งหมด</li>
+<li>เลือกคำสั่งที่ต้องการจากตารางด้านล่าง (พิมพ์ไทยหรืออังกฤษก็ได้ ไม่สนตัวพิมพ์เล็ก-ใหญ่)</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>พิมพ์คำสั่ง</th>
+<th>คำพ้องที่ใช้ได้</th>
+<th>ทำอะไร</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ผูกบัญชี</strong></td>
+<td>ลงทะเบียน / ผูก / link</td>
+<td>เริ่มผูกบัญชีผู้ปกครอง</td>
+</tr>
+<tr>
+<td><strong>สถานะ</strong></td>
+<td>status</td>
+<td>ดูสถานะรับ-ส่งวันนี้</td>
+</tr>
+<tr>
+<td><strong>ข้อมูลบุตร</strong></td>
+<td>ลูก / ข้อมูลลูก / children</td>
+<td>ดูข้อมูลบุตรหลานที่ผูกไว้</td>
+</tr>
+<tr>
+<td><strong>ยกเลิกผูกบัญชี</strong></td>
+<td>ยกเลิกบัญชี / ยกเลิกผูก / unlink</td>
+<td>ยกเลิกการเชื่อมต่อ</td>
+</tr>
+<tr>
+<td><strong>เปลี่ยนบัญชี</strong></td>
+<td>เปลี่ยนผู้ใช้ / เปลี่ยนผู้ปกครอง / rebind</td>
+<td>สลับเป็นผู้ปกครองคนอื่น</td>
+</tr>
+<tr>
+<td><strong>ช่วยเหลือ</strong></td>
+<td>เมนู / menu / help</td>
+<td>แสดงเมนูคำสั่งทั้งหมด</td>
+</tr>
+<tr>
+<td><strong>ยกเลิก</strong></td>
+<td>cancel</td>
+<td>ยกเลิกขั้นตอนที่ค้างอยู่</td>
+</tr>
+</tbody>
+</table>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นเมนูคำสั่ง — เนื้อหาเมนูจะต่างกันตามสถานะ (ยังไม่ผูกบัญชี = เน้น &quot;ผูกบัญชี&quot;; ผูกแล้ว = เพิ่ม &quot;ยกเลิกผูกบัญชี&quot; และ &quot;เปลี่ยนบัญชี&quot;)</p>
+<blockquote class="callout warn">
+<p>ℹ️ ระบบยังไม่มี <strong>Rich Menu</strong> (เมนูปุ่มด้านล่างแชต) — ใช้วิธี &quot;พิมพ์คำสั่ง&quot; และกดปุ่มในการ์ดข้อความ (Flex card) ที่ระบบส่งมา
+⚠️ หน้า LIFF ต้องเปิดจาก <strong>ลิงก์ใน LINE OA เท่านั้น</strong> — ถ้าขึ้น &quot;กรุณาเปิดผ่านลิงก์ใน LINE OA เท่านั้น&quot; / &quot;ไม่สามารถยืนยันบัญชี LINE ได้...&quot; ให้ปิดหน้านั้นแล้วกลับไปเปิดลิงก์จากแชต LINE ใหม่</p>
+</blockquote>
+<p><img src="screenshots/parent/mock-help.png" alt="ตัวอย่างเมนูคำสั่ง (&quot;ช่วยเหลือ&quot;) ในแชต LINE (ภาพจำลอง)"></p>
+<p><em>ภาพ: ตัวอย่างเมนูคำสั่ง (&quot;ช่วยเหลือ&quot;) ในแชต LINE (ภาพจำลอง)</em></p>
+<hr>
+<h2>ตารางขอบเขตสิทธิ์ (อ้างอิงด่วน)</h2>
+<h3>คุณเห็นข้อมูลได้แค่ไหน</h3>
+<table>
+<thead>
+<tr>
+<th>ข้อมูล</th>
+<th>ขอบเขต</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>บุตรหลาน</td>
+<td>เฉพาะคนที่ <strong>ผูกบัญชี + โรงเรียนอนุมัติแล้ว</strong> (รวมพี่น้องที่ใช้เบอร์โทรเดียวกัน)</td>
+</tr>
+<tr>
+<td>สถานะรับ-ส่ง</td>
+<td>เฉพาะบุตรหลานของคุณ (รอบเช้า/เย็นวันนี้)</td>
+</tr>
+<tr>
+<td>ประวัติย้อนหลัง</td>
+<td>เฉพาะบุตรหลานของคุณ (7 วันในหน้า LIFF)</td>
+</tr>
+<tr>
+<td>ข้อมูลรถ</td>
+<td>ทะเบียนรถ + ชื่อผู้ขับ ของรถที่บุตรหลานนั่ง</td>
+</tr>
+<tr>
+<td>ข้อมูลรถจาก QR</td>
+<td>รถคันที่บุตรหลานนั่ง = ระดับ 2, รถคันอื่น = ระดับ 1 (เมื่อเปิดใช้งาน QR)</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ เพื่อความเป็นส่วนตัว ระบบจะ <strong>ปิดบังเบอร์โทรบางส่วน</strong> (เช่น <code>090****567</code>)</p>
+</blockquote>
+<h3>สิ่งที่ทำไม่ได้ (และใครทำแทน)</h3>
+<table>
+<thead>
+<tr>
+<th>ทำไม่ได้</th>
+<th>ใครทำแทน</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>อนุมัติการผูกบุตรหลานเอง</td>
+<td><strong>โรงเรียน</strong> (ต้องอนุมัติก่อน คุณจึงผูกบัญชีได้)</td>
+</tr>
+<tr>
+<td>แก้ไขข้อมูลนักเรียน / เบอร์โทร / รถ</td>
+<td><strong>โรงเรียน</strong></td>
+</tr>
+<tr>
+<td>เช็กอิน / เช็กเอาท์ (รับ-ส่ง)</td>
+<td><strong>คนขับ</strong> (หรือครูยืนยันแทน)</td>
+</tr>
+<tr>
+<td>ดูข้อมูลรถคันอื่น / นักเรียนคนอื่น</td>
+<td>— (ทำไม่ได้)</td>
+</tr>
+<tr>
+<td>ดูรายงาน / ส่งออกไฟล์ / audit log</td>
+<td>บทบาทอื่น (โรงเรียน/เขต/ส่วนกลาง/admin)</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ℹ️ ถ้าพยายามเข้าดูข้อมูลที่ไม่ใช่ของบุตรหลานตัวเอง ระบบจะปฏิเสธ (เช่น &quot;Student not linked to this account&quot;)</p>
+</blockquote>
+<p><strong>ขอความช่วยเหลือ:</strong></p>
+<ul>
+<li>ผูกบัญชีไม่ได้ / ข้อมูลนักเรียนหรือเบอร์โทรไม่ถูกต้อง / ยังไม่ได้รับการอนุมัติ → ติดต่อ <strong>โรงเรียน</strong></li>
+<li>ไม่ได้รับการแจ้งเตือนทาง LINE เป็นเวลานาน → ตรวจว่าผูกบัญชีและได้รับอนุมัติแล้ว ถ้ายังเป็น แจ้งโรงเรียน/ผู้ดูแลระบบ</li>
+<li>ต้องการแก้สถานะรับ-ส่ง / ข้อมูลที่ผิด → ติดต่อ <strong>โรงเรียน</strong></li>
+<li>เตรียมข้อมูลให้พร้อมเมื่อแจ้งปัญหา: ชื่อ-นามสกุลนักเรียน + โรงเรียน, เบอร์โทรที่ใช้ผูกบัญชี, ภาพหน้าจอข้อความผิดพลาด, เวลาที่เกิดปัญหา</li>
+</ul>
+<hr>
+<h2>สรุปปัญหาที่พบบ่อย</h2>
+<table>
+<thead>
+<tr>
+<th>อาการ</th>
+<th>วิธีแก้</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ผูกบัญชีไม่สำเร็จ &quot;ไม่พบข้อมูลที่ตรงกัน&quot;</td>
+<td>ตรวจเบอร์โทรตรงกับที่ลงทะเบียนกับโรงเรียน + รหัสนักเรียนถูกต้อง + <strong>โรงเรียนอนุมัติแล้วหรือยัง</strong> (ยังไม่อนุมัติจะผูกไม่ได้ ติดต่อโรงเรียน)</td>
+</tr>
+<tr>
+<td>ไม่ทราบรหัสนักเรียน</td>
+<td>สอบถามครูประจำชั้น/เจ้าหน้าที่โรงเรียน (ใช้คู่กับเบอร์โทรที่ลงทะเบียนไว้)</td>
+</tr>
+<tr>
+<td>ฟอร์มบอก &quot;รหัสนักเรียนต้องเป็นตัวเลข&quot; แต่รหัสมีตัวอักษร</td>
+<td>ผูกผ่าน <strong>แชต LINE</strong> แทน (พิมพ์ &quot;ผูกบัญชี&quot;)</td>
+</tr>
+<tr>
+<td>&quot;พยายามหลายครั้งเกินไป กรุณารอสักครู่&quot;</td>
+<td>กรอกผิดหลายครั้ง ระบบล็อกชั่วคราว — รอประมาณ 30 นาทีแล้วลองใหม่ ตรวจข้อมูลให้ถูกก่อน</td>
+</tr>
+<tr>
+<td>ผูกสำเร็จแต่ไม่ได้รับการแจ้งเตือน</td>
+<td>กระบวนการส่งเบื้องหลังบางช่วงอาจไม่ทำงาน และข้อความเก่าเกิน 3 ชม.ไม่ส่งย้อนหลัง — พิมพ์ &quot;สถานะ&quot; ดูเองได้เสมอ ถ้าเป็นบ่อยแจ้งโรงเรียน/ผู้ดูแลระบบ</td>
+</tr>
+<tr>
+<td>&quot;บัญชี LINE นี้ผูกอยู่กับผู้ปกครองท่านอื่นแล้ว&quot; / &quot;เบอร์นี้ผูก LINE อื่นไว้แล้ว&quot;</td>
+<td>พิมพ์ &quot;ยกเลิกผูกบัญชี&quot; ก่อนแล้วผูกใหม่ หรือใช้คำสั่ง &quot;เปลี่ยนบัญชี&quot;</td>
+</tr>
+<tr>
+<td>เปิดหน้า LIFF ขึ้น &quot;กรุณาเปิดผ่านลิงก์ใน LINE OA&quot;</td>
+<td>เปิดจากเบราว์เซอร์ภายนอก/ยังไม่ล็อกอิน LINE — ต้องเปิดจากลิงก์ในแชต LINE OA เท่านั้น</td>
+</tr>
+<tr>
+<td>ผูกแล้วแต่หน้า LIFF ขึ้น &quot;ไม่พบข้อมูลบุตรหลาน&quot;</td>
+<td>ยังไม่ได้รับอนุมัติครบทุกคน หรือเพิ่งผูกพี่น้องไปคนเดียว — รอโรงเรียนอนุมัติ แล้วกด &quot;🔄 รีเฟรช&quot;</td>
+</tr>
+<tr>
+<td>สถานะในแชตแสดงแค่ 3 คน</td>
+<td>การ์ดในแชตจำกัด 3 คน (&quot;แสดง 3 จาก N คน&quot;) — เปิดหน้า LIFF เพื่อดูครบทุกคน</td>
+</tr>
+<tr>
+<td>สแกน QR ที่รถแล้วเปิดไม่ได้ / ขึ้น 404</td>
+<td>ฟีเจอร์ QR ยังปิดในการใช้งานจริง (feature flag) — ยังใช้ไม่ได้ในตอนนี้</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p><strong>สิ้นสุดคู่มือปฏิบัติงานสำหรับผู้ปกครอง — ติดตามการเดินทางของบุตรหลานได้อย่างอุ่นใจ</strong></p>
+
+</main>
+</div>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML สร้างจากเอกสาร Markdown (Phase 10.13C · 2026-06-24)</footer>
+</body>
+</html>

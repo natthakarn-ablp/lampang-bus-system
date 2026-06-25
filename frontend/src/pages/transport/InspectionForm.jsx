@@ -88,6 +88,17 @@ export default function InspectionForm() {
 
   useEffect(() => { fetchInspections(1); }, [fetchInspections]);
 
+  async function handleDeleteInspection(ins) {
+    if (!window.confirm(`ลบผลตรวจของ ${ins.plate_no} (${formatThaiDate(ins.inspection_date)}) ?\nระบบจะคำนวณสถานะรถใหม่ และลบได้เฉพาะผลตรวจที่คุณบันทึกเอง`)) return;
+    try {
+      await api.delete(`/transport/inspections/${ins.id}`);
+      toast.success('ลบผลตรวจสำเร็จ');
+      fetchInspections(1);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ลบผลตรวจไม่สำเร็จ');
+    }
+  }
+
   function buildPlateNo() {
     const { prefix, letters, number, province } = newPlate;
     if (!letters || !number || !province) return '';
@@ -161,13 +172,24 @@ export default function InspectionForm() {
         <div className="flex flex-wrap justify-end gap-2">
           <button onClick={() => navigate('/transport/verification')}
             className="border border-blue-200 bg-blue-50 text-blue-700 font-medium px-4 py-2.5 rounded-lg transition">
-            ไปคิวรับรองแบบใหม่
+            ไปหน้าตรวจและรับรองรถ
           </button>
           <button onClick={() => setShowForm(!showForm)}
             className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg transition">
             {showForm ? 'ปิดฟอร์ม' : 'บันทึกผลตรวจเดิม'}
           </button>
         </div>
+      </div>
+
+      {/* แจ้งให้ใช้หน้าใหม่ — หน้านี้เป็นบันทึกแบบเดิม */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+        <p className="text-sm text-amber-800">
+          ⚠️ หน้านี้เป็น <strong>บันทึกแบบเดิม</strong> (เก็บไว้ดูประวัติ) — สำหรับตรวจและรับรองรถ ให้ใช้เมนู <strong>“ตรวจและรับรองรถ”</strong>
+        </p>
+        <button onClick={() => navigate('/transport/verification')}
+          className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700">
+          ไปหน้าตรวจและรับรองรถ
+        </button>
       </div>
 
       {/* Prefill indicator */}
@@ -320,6 +342,7 @@ export default function InspectionForm() {
                   <th className="px-4 py-3">หมดอายุ</th>
                   <th className="px-4 py-3">ผู้ตรวจ</th>
                   <th className="px-4 py-3">หมายเหตุ</th>
+                  <th className="px-4 py-3 text-right">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border">
@@ -335,6 +358,16 @@ export default function InspectionForm() {
                     <td className="px-4 py-3 text-gray-600">{formatThaiDate(ins.expiry_date)}</td>
                     <td className="px-4 py-3 text-gray-600 text-xs">{ins.inspector_name || '-'}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{ins.notes || '-'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteInspection(ins)}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded-md px-2 py-1 transition"
+                        title="ลบผลตรวจที่ลงผิด"
+                      >
+                        ลบ
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -358,6 +391,15 @@ export default function InspectionForm() {
                 </p>
                 {ins.inspector_name && <p className="text-sm text-gray-400 mt-0.5">ผู้ตรวจ: {ins.inspector_name}</p>}
                 {ins.notes && <p className="text-sm text-gray-400 mt-0.5">หมายเหตุ: {ins.notes}</p>}
+                <div className="mt-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteInspection(ins)}
+                    className="text-xs font-medium text-red-600 hover:bg-red-50 rounded-md px-2 py-1 transition"
+                  >
+                    ลบผลตรวจ
+                  </button>
+                </div>
               </div>
             ))}
           </div>

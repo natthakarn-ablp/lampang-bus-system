@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือใช้งานระบบรถรับส่งนักเรียนจังหวัดลำปาง — ระบบรถรับส่งนักเรียนจังหวัดลำปาง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#1e5fa8; --accent-dark:#16467d; --accent-soft:#eaf2fb;
+  --ink:#1a2230; --ink-soft:#475067; --muted:#6b7488;
+  --line:#e3e8f0; --bg:#f5f7fb; --card:#ffffff;
+  --warn-bg:#fff7e6; --warn-bd:#e8a33d; --warn-ink:#7a4d06;
+  --tip-bg:#eef6ff; --tip-bd:#4a90d9; --tip-ink:#1a4e84;
+  --note-bg:#f3f5f9; --note-bd:#9aa6bd; --note-ink:#3a445a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.topnav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+.nav-inner{max-width:980px; margin:0 auto; padding:8px 20px; display:flex; flex-wrap:wrap; gap:4px;}
+.topnav a{font-size:14.5px; font-weight:500; color:var(--ink-soft); text-decoration:none;
+  padding:6px 12px; border-radius:8px; white-space:nowrap;}
+.topnav a:hover{background:var(--accent-soft); color:var(--accent-dark);}
+.topnav a.active{background:var(--accent); color:#fff;}
+.wrap{max-width:980px; margin:0 auto; padding:0 20px 80px;}
+main{background:var(--card); margin-top:28px; padding:48px 56px; border-radius:var(--radius);
+  border:1px solid var(--line); box-shadow:0 1px 3px rgba(16,30,54,.04);}
+h1{font-size:30px; font-weight:700; line-height:1.3; margin:0 0 8px; color:var(--ink);
+  padding-bottom:16px; border-bottom:3px solid var(--accent);}
+h2{font-size:23px; font-weight:700; margin:40px 0 12px; color:var(--accent-dark);
+  padding-top:12px;}
+h3{font-size:19.5px; font-weight:600; margin:28px 0 8px; color:var(--ink);}
+h4{font-size:17px; font-weight:600; margin:20px 0 6px; color:var(--ink-soft);}
+p{margin:10px 0;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+strong{font-weight:600; color:var(--ink);}
+ul,ol{margin:10px 0; padding-left:26px;}
+li{margin:5px 0;}
+hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+code{font-family:'IBM Plex Mono',monospace; font-size:14.5px; background:#eef1f6;
+  padding:2px 6px; border-radius:5px; color:#7a3a8c;}
+pre{background:#1e2430; color:#e6e9ef; padding:16px 18px; border-radius:10px; overflow:auto;}
+pre code{background:none; color:inherit; padding:0;}
+main img{display:block; max-width:100%; height:auto; margin:16px auto 4px; border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 3px 12px rgba(16,30,54,.10);}
+main p > em:only-child{display:block; text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 18px;}
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15.5px;
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+thead th{background:var(--accent); color:#fff; font-weight:600; text-align:left;
+  padding:11px 14px; font-size:15px;}
+tbody td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top;}
+tbody tr:nth-child(even){background:#fafbfd;}
+tbody tr:hover{background:var(--accent-soft);}
+blockquote.callout{margin:16px 0; padding:14px 18px; border-radius:10px; border-left:5px solid;
+  font-size:16px;}
+blockquote.callout p{margin:6px 0;}
+blockquote.callout ul{margin:6px 0;}
+.callout.warn{background:var(--warn-bg); border-color:var(--warn-bd); color:var(--warn-ink);}
+.callout.tip{background:var(--tip-bg); border-color:var(--tip-bd); color:var(--tip-ink);}
+.callout.note{background:var(--note-bg); border-color:var(--note-bd); color:#3a445a;}
+.callout.warn strong,.callout.tip strong,.callout.note strong{color:inherit;}
+.docfoot{max-width:980px; margin:24px auto 0; padding:0 20px; color:var(--muted); font-size:13.5px; text-align:center;}
+.toolbar{max-width:980px; margin:18px auto 0; padding:0 20px; display:flex; justify-content:flex-end;}
+.btn-print{font-size:14px; font-weight:500; color:var(--accent-dark); background:var(--accent-soft);
+  border:1px solid var(--line); padding:7px 14px; border-radius:8px; cursor:pointer;}
+.btn-print:hover{background:#dceafa;}
+@media (max-width:640px){
+  body{font-size:16px;}
+  main{padding:28px 20px;}
+  h1{font-size:24px;} h2{font-size:20px;} h3{font-size:17.5px;}
+  .nav-inner{padding:6px 12px;}
+}
+@media print{
+  .topnav,.toolbar{display:none;}
+  body{background:#fff; font-size:12pt;}
+  main{box-shadow:none; border:none; margin:0; padding:0;}
+  a{color:#000; text-decoration:none;}
+  table,blockquote,h2,h3,figure,img{page-break-inside:avoid;}
+  main img{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<nav class="topnav"><div class="nav-inner"><a href="index.html" class="active">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="wrap">
+<main>
+<h1>คู่มือใช้งานระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
+<blockquote class="callout note">
+<p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง — เว็บไซต์ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong>
+เวอร์ชัน Phase 10.13C • อัปเดต 2026-06-24</p>
+</blockquote>
+<p>เอกสารนี้เป็น <strong>สารบัญหลัก</strong> ของคู่มือใช้งาน แยกตามสิทธิ์ (role) แต่ละสิทธิ์มีคู่มือเฉพาะของตนเองที่จัดทำโดยอ้างอิงจากโค้ดจริงของระบบ คลิกที่ชื่อสิทธิ์เพื่อเปิดคู่มือฉบับเต็ม</p>
+<hr>
+<h2>คู่มือแยกตามสิทธิ์ (7 สิทธิ์)</h2>
+<table>
+<thead>
+<tr>
+<th>สิทธิ์</th>
+<th>ผู้ใช้งาน</th>
+<th>เข้าสู่ระบบด้วย</th>
+<th>คู่มือ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>คนขับรถ</strong> (Driver)</td>
+<td>คนขับรถรับส่งนักเรียน</td>
+<td>ทะเบียนรถ (บนมือถือ)</td>
+<td><a href="user-guide-driver.html">📖 เปิดคู่มือ</a></td>
+</tr>
+<tr>
+<td><strong>โรงเรียน</strong> (School)</td>
+<td>ครู/เจ้าหน้าที่โรงเรียน (รวมครูสายชั้น)</td>
+<td>ชื่อผู้ใช้ของโรงเรียน</td>
+<td><a href="user-guide-school.html">📖 เปิดคู่มือ</a></td>
+</tr>
+<tr>
+<td><strong>สังกัด/เขต</strong> (Affiliation)</td>
+<td>เจ้าหน้าที่ สพป./สพม./ศธจ.</td>
+<td>ชื่อผู้ใช้ของเขต</td>
+<td><a href="user-guide-affiliation.html">📖 เปิดคู่มือ</a></td>
+</tr>
+<tr>
+<td><strong>ส่วนกลาง/จังหวัด</strong> (Province)</td>
+<td>ส่วนกลางระดับจังหวัด (อบจ./สภาผู้บริโภค)</td>
+<td>ชื่อผู้ใช้ของจังหวัด</td>
+<td><a href="user-guide-province.html">📖 เปิดคู่มือ</a></td>
+</tr>
+<tr>
+<td><strong>ขนส่ง</strong> (Transport)</td>
+<td>เจ้าหน้าที่ตรวจสภาพรถ</td>
+<td>ชื่อผู้ใช้ของขนส่ง</td>
+<td><a href="user-guide-transport.html">📖 เปิดคู่มือ</a></td>
+</tr>
+<tr>
+<td><strong>ผู้ดูแลระบบ</strong> (Admin)</td>
+<td>ผู้ดูแลระบบส่วนกลาง</td>
+<td>ชื่อผู้ใช้ admin</td>
+<td><a href="user-guide-admin.html">📖 เปิดคู่มือ</a></td>
+</tr>
+<tr>
+<td><strong>ผู้ปกครอง</strong> (Parent)</td>
+<td>ผู้ปกครองนักเรียน</td>
+<td>ผ่าน LINE OA / LIFF (ไม่ใช้เว็บ)</td>
+<td><a href="user-guide-parent.html">📖 เปิดคู่มือ</a></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>📥 ดาวน์โหลดเป็นไฟล์ PDF (พร้อมพิมพ์/บันทึกลงมือถือ)</h2>
+<table>
+<thead>
+<tr>
+<th>สิทธิ์</th>
+<th>ไฟล์ PDF</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>คนขับรถ</td>
+<td><a href="pdf/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD-%E0%B8%84%E0%B8%99%E0%B8%82%E0%B8%B1%E0%B8%9A.pdf">ดาวน์โหลด PDF</a></td>
+</tr>
+<tr>
+<td>โรงเรียน</td>
+<td><a href="pdf/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD-%E0%B9%82%E0%B8%A3%E0%B8%87%E0%B9%80%E0%B8%A3%E0%B8%B5%E0%B8%A2%E0%B8%99.pdf">ดาวน์โหลด PDF</a></td>
+</tr>
+<tr>
+<td>สังกัด/เขต</td>
+<td><a href="pdf/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD-%E0%B8%AA%E0%B8%B1%E0%B8%87%E0%B8%81%E0%B8%B1%E0%B8%94%E0%B9%80%E0%B8%82%E0%B8%95.pdf">ดาวน์โหลด PDF</a></td>
+</tr>
+<tr>
+<td>ส่วนกลาง/จังหวัด</td>
+<td><a href="pdf/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD-%E0%B8%88%E0%B8%B1%E0%B8%87%E0%B8%AB%E0%B8%A7%E0%B8%B1%E0%B8%94.pdf">ดาวน์โหลด PDF</a></td>
+</tr>
+<tr>
+<td>ขนส่ง</td>
+<td><a href="pdf/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD-%E0%B8%82%E0%B8%99%E0%B8%AA%E0%B9%88%E0%B8%87.pdf">ดาวน์โหลด PDF</a></td>
+</tr>
+<tr>
+<td>ผู้ดูแลระบบ</td>
+<td><a href="pdf/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD-%E0%B8%9C%E0%B8%B9%E0%B9%89%E0%B8%94%E0%B8%B9%E0%B9%81%E0%B8%A5%E0%B8%A3%E0%B8%B0%E0%B8%9A%E0%B8%9A.pdf">ดาวน์โหลด PDF</a></td>
+</tr>
+<tr>
+<td>ผู้ปกครอง</td>
+<td><a href="pdf/%E0%B8%84%E0%B8%B9%E0%B9%88%E0%B8%A1%E0%B8%B7%E0%B8%AD-%E0%B8%9C%E0%B8%B9%E0%B9%89%E0%B8%9B%E0%B8%81%E0%B8%84%E0%B8%A3%E0%B8%AD%E0%B8%87.pdf">ดาวน์โหลด PDF</a></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>1. ภาพรวมระบบ</h2>
+<p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง เป็นระบบติดตามการรับ-ส่งนักเรียนโดยรถรับส่ง ครอบคลุมตั้งแต่การเช็กชื่อขึ้น-ลงรถประจำวัน การตรวจสภาพรถ การแจ้งเตือนผู้ปกครองผ่าน LINE ไปจนถึงรายงานสรุปสำหรับผู้บริหารทุกระดับ มีการแบ่งสิทธิ์ผู้ใช้ออกเป็น 7 ระดับ แต่ละระดับเห็นและทำได้เฉพาะในขอบเขตของตน (ระบบบังคับสิทธิ์ที่ฝั่งเซิร์ฟเวอร์)</p>
+<hr>
+<h2>2. การเข้าสู่ระบบ (ใช้ร่วมทุกสิทธิ์ ยกเว้นผู้ปกครอง)</h2>
+<ol>
+<li>เปิดเบราว์เซอร์ (Chrome / Safari) ไปที่ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong></li>
+<li>กรอก <strong>ชื่อผู้ใช้</strong>
+<ul>
+<li>คนขับ → ใช้ <strong>ทะเบียนรถ</strong> ของตน (เช่น <code>นข 1571 ลำปาง</code> — เว้นวรรคให้ตรง)</li>
+<li>สิทธิ์อื่น → ใช้ชื่อผู้ใช้ที่ได้รับจากหน่วยงาน/ผู้ดูแลระบบ</li>
+</ul>
+</li>
+<li>กรอก <strong>รหัสผ่าน</strong> แล้วกด <strong>เข้าสู่ระบบ</strong></li>
+</ol>
+<blockquote class="callout note">
+<p>ผู้ปกครองไม่ได้เข้าผ่านเว็บไซต์ — ใช้งานผ่าน LINE Official Account เท่านั้น (ดู <a href="user-guide-parent.html">คู่มือผู้ปกครอง</a>)</p>
+</blockquote>
+<h3>การเปลี่ยนรหัสผ่าน</h3>
+<ul>
+<li>เข้าครั้งแรก หรือเมื่อถูกผู้ดูแลรีเซ็ตรหัส → ระบบ<strong>บังคับเปลี่ยนรหัสผ่าน</strong>ก่อนใช้งาน</li>
+<li><strong>รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร</strong> ห้ามตรงกับชื่อผู้ใช้ ห้ามเป็นรหัสที่เดาง่าย (เช่น <code>12345678</code>, <code>password</code>) และห้ามเป็นตัวอักษรเดียวซ้ำกันทั้งหมด</li>
+<li>เปลี่ยนรหัสเองภายหลังได้จากเมนูบัญชีผู้ใช้ (มุมขวาบน) → <strong>เปลี่ยนรหัสผ่าน</strong></li>
+</ul>
+<h3>ลืมรหัสผ่าน</h3>
+<ul>
+<li><strong>ไม่มี</strong>ระบบรีเซ็ตรหัสด้วยตนเอง — ต้องให้ผู้ที่มีสิทธิ์รีเซ็ตให้:
+<ul>
+<li>บัญชีโรงเรียน/ครู → ผู้ดูแลระบบ (admin)</li>
+<li>บัญชีอื่น ๆ → ผู้ดูแลระบบ (admin)</li>
+</ul>
+</li>
+</ul>
+<h3>ข้อความแจ้งเตือนเมื่อเข้าสู่ระบบไม่ได้</h3>
+<table>
+<thead>
+<tr>
+<th>ข้อความ</th>
+<th>ความหมาย/วิธีแก้</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</td>
+<td>ตรวจสอบชื่อผู้ใช้/รหัสผ่านอีกครั้ง (คนขับ: ดูการเว้นวรรคทะเบียนรถ)</td>
+</tr>
+<tr>
+<td>บัญชีนี้ถูกปิดการใช้งาน</td>
+<td>ติดต่อผู้ดูแลระบบ</td>
+</tr>
+<tr>
+<td>มีการพยายามเข้าสู่ระบบหลายครั้ง</td>
+<td>รอประมาณ 15 นาทีแล้วลองใหม่ — บัญชีไม่ได้ถูกล็อกถาวร</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>3. หมายเหตุเรื่องฟีเจอร์ที่ต้องเปิดใช้งานก่อน (Feature Flags)</h2>
+<p>ระบบมีฟีเจอร์ขั้นสูงบางส่วนที่ <strong>ปิดอยู่โดยค่าเริ่มต้น</strong> ในการใช้งานจริง และจะปรากฏก็ต่อเมื่อผู้ดูแลเปิด feature flag ที่เซิร์ฟเวอร์ ในคู่มือรายสิทธิ์ ฟีเจอร์เหล่านี้จะมีเครื่องหมาย ⚠️ กำกับไว้ ได้แก่:</p>
+<table>
+<thead>
+<tr>
+<th>ฟีเจอร์</th>
+<th>flag</th>
+<th>สถานะปัจจุบัน</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>เลือกรถ/เริ่มรอบของคนขับ (driver shift)</td>
+<td><code>FEATURE_DRIVER_SHIFT_SELECTION</code></td>
+<td>ปิด</td>
+</tr>
+<tr>
+<td>ETA เวลารถถึง (ผู้ปกครอง)</td>
+<td><code>FEATURE_ETA</code></td>
+<td>ปิด</td>
+</tr>
+<tr>
+<td>จุดเตือนภัย / Geofence</td>
+<td><code>FEATURE_GEOFENCE</code></td>
+<td>ปิด</td>
+</tr>
+<tr>
+<td>การเบี่ยงเส้นทาง / Route deviation</td>
+<td><code>FEATURE_ROUTE_DEVIATION</code></td>
+<td>ปิด</td>
+</tr>
+<tr>
+<td>QR ที่ตัวรถ + ความยินยอม PDPA</td>
+<td><code>FEATURE_VEHICLE_QR</code></td>
+<td>ปิด</td>
+</tr>
+</tbody>
+</table>
+<blockquote class="callout note">
+<p>ฟีเจอร์ที่ &quot;พร้อมใช้งานจริง&quot; ได้แก่ การเช็กชื่อขึ้น-ลงรถ, ตรวจสภาพรถ/ใบรับรอง, จัดการนักเรียน/รถ, รายงานและการส่งออก, แดชบอร์ดทุกระดับ, การผูกบัญชี/แจ้งเตือนผู้ปกครองผ่าน LINE, แผนที่จุดรับ-ส่ง และตำแหน่งรถแบบ live</p>
+</blockquote>
+<hr>
+<h2>4. แนวปฏิบัติเมื่อพบปัญหา (ทั่วไป)</h2>
+<h3>เข้าสู่ระบบไม่ได้</h3>
+<ul>
+<li>ตรวจสอบชื่อผู้ใช้/รหัสผ่าน — ถ้าขึ้น &quot;มีการพยายามเข้าสู่ระบบหลายครั้ง&quot; ให้รอ ~15 นาที</li>
+<li>ลืมรหัส → ติดต่อผู้ดูแลระบบเพื่อรีเซ็ต</li>
+</ul>
+<h3>ข้อมูลไม่อัปเดต</h3>
+<ul>
+<li>ตรวจว่าเลือกวันที่ถูกต้อง</li>
+<li>บางหน้ารีเฟรชอัตโนมัติ (เช่น ตำแหน่งรถ live ทุก ~15 วินาที) — ถ้ายังไม่ตรง ให้รีเฟรชหน้าเว็บ</li>
+</ul>
+<h3>PDF ภาษาไทยอ่านไม่ได้</h3>
+<ul>
+<li>ระบบฝังฟอนต์ Sarabun ใน PDF แล้ว — หากยังเพี้ยน ให้เปิดด้วย Chrome หรือ Adobe Acrobat</li>
+</ul>
+<h3>LINE OA ไม่ตอบ (ผู้ปกครอง)</h3>
+<ul>
+<li>ตรวจว่าเพิ่มเพื่อน LINE OA ถูกบัญชี แล้วลองพิมพ์ <strong>&quot;ช่วยเหลือ&quot;</strong> อีกครั้ง</li>
+</ul>
+<h3>ต้องการความช่วยเหลือ</h3>
+<ul>
+<li>ติดต่อผู้ดูแลระบบ หรือแจ้งผ่านช่องทางที่หน่วยงานกำหนด</li>
+</ul>
+<hr>
+<h2>เอกสารที่เกี่ยวข้อง (สำหรับทีมงาน/ผู้ดูแล)</h2>
+<ul>
+<li><a href="../production-readiness.md">Production Readiness</a> — สถานะความพร้อมและความเสี่ยงคงเหลือ</li>
+<li><a href="../ops-backup-restore.md">Backup &amp; Restore Operations</a> — ขั้นตอน backup และกู้คืน</li>
+<li><a href="../OPERATOR_RUNBOOK.md">Operator Runbook</a> — คู่มือปฏิบัติการสำหรับผู้ดูแลระบบ</li>
+</ul>
+<hr>
+<p><em>คู่มือชุดนี้จัดทำโดยอ้างอิงจากโค้ดจริงของระบบ (source of truth) — อัปเดต 2026-06-24 (Phase 10.13C)</em></p>
+
+</main>
+</div>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML สร้างจากเอกสาร Markdown (Phase 10.13C · 2026-06-24)</footer>
+</body>
+</html>

@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือปฏิบัติงาน — ส่วนกลาง/จังหวัด — ระบบรถรับส่งนักเรียนจังหวัดลำปาง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#1e5fa8; --accent-dark:#16467d; --accent-soft:#eaf2fb;
+  --ink:#1a2230; --ink-soft:#475067; --muted:#6b7488;
+  --line:#e3e8f0; --bg:#f5f7fb; --card:#ffffff;
+  --warn-bg:#fff7e6; --warn-bd:#e8a33d; --warn-ink:#7a4d06;
+  --tip-bg:#eef6ff; --tip-bd:#4a90d9; --tip-ink:#1a4e84;
+  --note-bg:#f3f5f9; --note-bd:#9aa6bd; --note-ink:#3a445a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.topnav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+.nav-inner{max-width:980px; margin:0 auto; padding:8px 20px; display:flex; flex-wrap:wrap; gap:4px;}
+.topnav a{font-size:14.5px; font-weight:500; color:var(--ink-soft); text-decoration:none;
+  padding:6px 12px; border-radius:8px; white-space:nowrap;}
+.topnav a:hover{background:var(--accent-soft); color:var(--accent-dark);}
+.topnav a.active{background:var(--accent); color:#fff;}
+.wrap{max-width:980px; margin:0 auto; padding:0 20px 80px;}
+main{background:var(--card); margin-top:28px; padding:48px 56px; border-radius:var(--radius);
+  border:1px solid var(--line); box-shadow:0 1px 3px rgba(16,30,54,.04);}
+h1{font-size:30px; font-weight:700; line-height:1.3; margin:0 0 8px; color:var(--ink);
+  padding-bottom:16px; border-bottom:3px solid var(--accent);}
+h2{font-size:23px; font-weight:700; margin:40px 0 12px; color:var(--accent-dark);
+  padding-top:12px;}
+h3{font-size:19.5px; font-weight:600; margin:28px 0 8px; color:var(--ink);}
+h4{font-size:17px; font-weight:600; margin:20px 0 6px; color:var(--ink-soft);}
+p{margin:10px 0;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+strong{font-weight:600; color:var(--ink);}
+ul,ol{margin:10px 0; padding-left:26px;}
+li{margin:5px 0;}
+hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+code{font-family:'IBM Plex Mono',monospace; font-size:14.5px; background:#eef1f6;
+  padding:2px 6px; border-radius:5px; color:#7a3a8c;}
+pre{background:#1e2430; color:#e6e9ef; padding:16px 18px; border-radius:10px; overflow:auto;}
+pre code{background:none; color:inherit; padding:0;}
+main img{display:block; max-width:100%; height:auto; margin:16px auto 4px; border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 3px 12px rgba(16,30,54,.10);}
+main p > em:only-child{display:block; text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 18px;}
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15.5px;
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+thead th{background:var(--accent); color:#fff; font-weight:600; text-align:left;
+  padding:11px 14px; font-size:15px;}
+tbody td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top;}
+tbody tr:nth-child(even){background:#fafbfd;}
+tbody tr:hover{background:var(--accent-soft);}
+blockquote.callout{margin:16px 0; padding:14px 18px; border-radius:10px; border-left:5px solid;
+  font-size:16px;}
+blockquote.callout p{margin:6px 0;}
+blockquote.callout ul{margin:6px 0;}
+.callout.warn{background:var(--warn-bg); border-color:var(--warn-bd); color:var(--warn-ink);}
+.callout.tip{background:var(--tip-bg); border-color:var(--tip-bd); color:var(--tip-ink);}
+.callout.note{background:var(--note-bg); border-color:var(--note-bd); color:#3a445a;}
+.callout.warn strong,.callout.tip strong,.callout.note strong{color:inherit;}
+.docfoot{max-width:980px; margin:24px auto 0; padding:0 20px; color:var(--muted); font-size:13.5px; text-align:center;}
+.toolbar{max-width:980px; margin:18px auto 0; padding:0 20px; display:flex; justify-content:flex-end;}
+.btn-print{font-size:14px; font-weight:500; color:var(--accent-dark); background:var(--accent-soft);
+  border:1px solid var(--line); padding:7px 14px; border-radius:8px; cursor:pointer;}
+.btn-print:hover{background:#dceafa;}
+@media (max-width:640px){
+  body{font-size:16px;}
+  main{padding:28px 20px;}
+  h1{font-size:24px;} h2{font-size:20px;} h3{font-size:17.5px;}
+  .nav-inner{padding:6px 12px;}
+}
+@media print{
+  .topnav,.toolbar{display:none;}
+  body{background:#fff; font-size:12pt;}
+  main{box-shadow:none; border:none; margin:0; padding:0;}
+  a{color:#000; text-decoration:none;}
+  table,blockquote,h2,h3,figure,img{page-break-inside:avoid;}
+  main img{box-shadow:none;}
+}
+</style>
+</head>
+<body>
+<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html" class="active">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="wrap">
+<main>
+<h1>คู่มือปฏิบัติงาน — ส่วนกลาง/จังหวัด</h1>
+<blockquote class="callout note">
+<p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง — <a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a>
+เวอร์ชัน Phase 10.13C • อัปเดต 2026-06-24</p>
+</blockquote>
+<blockquote class="callout note">
+<p>📷 <strong>หมายเหตุภาพหน้าจอ:</strong> ข้อมูลส่วนบุคคล (ชื่อ/เบอร์) ในภาพถูกเบลอเพื่อความเป็นส่วนตัว — เมื่อใช้งานจริงจะแสดงข้อมูลตามปกติ</p>
+</blockquote>
+<h2>ภาพรวม 30 วินาที</h2>
+<ul>
+<li><strong>บทบาทนี้ทำอะไรได้</strong> (ดูอย่างเดียวเป็นหลัก ครอบคลุมทั้งจังหวัด):
+<ul>
+<li>ดู <strong>ภาพรวมจังหวัด (Dashboard)</strong> — KPI การรับ-ส่ง, รถ, เหตุฉุกเฉิน, โรงเรียนเสี่ยง</li>
+<li>ดูข้อมูล <strong>สังกัด / โรงเรียน / นักเรียน / รถรับส่ง</strong> ทั้งจังหวัด</li>
+<li>ดู <strong>ตำแหน่งรถแบบ live</strong> และ <strong>แผนที่จุดรับส่ง</strong> (ภาพรวม)</li>
+<li>ดู <strong>ความพร้อมเปิดใช้งาน</strong> (Deployment Readiness) และ <strong>เหตุฉุกเฉิน</strong> ทั้งจังหวัด</li>
+<li>ดู <strong>ประวัติการแก้ไข (Audit Log)</strong> — สิทธิ์พิเศษของบทบาทนี้</li>
+<li>ดู/ส่งออก <strong>รายงาน</strong> รายวัน/รายเดือน/สรุป (CSV / Excel / PDF)</li>
+</ul>
+</li>
+<li><strong>เข้าระบบด้วย:</strong> ชื่อผู้ใช้ของบัญชีส่วนกลาง (ผู้ดูแลระบบตั้งให้ — ไม่ใช่ค่าตายตัว) + รหัสผ่าน</li>
+<li><strong>อุปกรณ์ที่แนะนำ:</strong> คอมพิวเตอร์ (desktop) เป็นหลัก เหมาะกับตาราง KPI/แผนที่/รายงาน • มือถือใช้ได้ มีแถบล่าง 4 แท็บ
+<ul>
+<li>💡 ใช้คอมพิวเตอร์เมื่อต้องดูรายงานเชิงลึกหรือส่งออกไฟล์ เพราะตารางและการดาวน์โหลดสะดวกกว่า</li>
+<li>บัญชีนี้เหมาะกับหน่วยงานส่วนกลางระดับจังหวัด เช่น สภาองค์กรของผู้บริโภคจังหวัดลำปาง หรือ อบจ.</li>
+</ul>
+</li>
+</ul>
+<h2>สารบัญงาน</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>งาน</th>
+<th>ใช้เมื่อ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>เข้าสู่ระบบ</td>
+<td>ทุกครั้งที่เริ่มใช้งาน</td>
+</tr>
+<tr>
+<td>2</td>
+<td>ดูภาพรวมจังหวัด (Dashboard)</td>
+<td>งานประจำวัน ดูสถานการณ์รวม</td>
+</tr>
+<tr>
+<td>3</td>
+<td>ดูสถานะวันนี้ (เข้าทาง URL ตรง)</td>
+<td>เจาะดูความคืบหน้าเช้า-เย็นถึงรายคน</td>
+</tr>
+<tr>
+<td>4</td>
+<td>ดูตำแหน่งรถปัจจุบัน (live)</td>
+<td>ติดตามตำแหน่งรถระหว่างวิ่ง</td>
+</tr>
+<tr>
+<td>5</td>
+<td>ดูเหตุฉุกเฉินทั้งจังหวัด</td>
+<td>เฝ้าระวังเหตุการณ์</td>
+</tr>
+<tr>
+<td>6</td>
+<td>ดูสังกัด (5 เขต)</td>
+<td>เปรียบเทียบ KPI รายเขต</td>
+</tr>
+<tr>
+<td>7</td>
+<td>ดูโรงเรียนทั้งจังหวัด</td>
+<td>ตรวจรายชื่อโรงเรียน</td>
+</tr>
+<tr>
+<td>8</td>
+<td>ค้นหานักเรียน</td>
+<td>หานักเรียนรายคน</td>
+</tr>
+<tr>
+<td>9</td>
+<td>ดูรถรับส่งทั้งจังหวัด</td>
+<td>ตรวจข้อมูลรถ/ความปลอดภัย</td>
+</tr>
+<tr>
+<td>10</td>
+<td>ดูแผนที่จุดรับส่ง</td>
+<td>ดูภาพรวมจุดรับ-ส่ง</td>
+</tr>
+<tr>
+<td>11</td>
+<td>ดูความพร้อมเปิดใช้งาน</td>
+<td>ก่อนเปลี่ยนโหมดความปลอดภัย</td>
+</tr>
+<tr>
+<td>12</td>
+<td>ดูประวัติการแก้ไข (Audit Log)</td>
+<td>ตรวจสอบการกระทำในระบบ</td>
+</tr>
+<tr>
+<td>13</td>
+<td>ดูการเบี่ยงเส้นทาง ⚠️</td>
+<td>เมื่อ feature flag เปิดเท่านั้น</td>
+</tr>
+<tr>
+<td>14</td>
+<td>ดู/ส่งออกรายงาน</td>
+<td>สรุปและดาวน์โหลดข้อมูล</td>
+</tr>
+<tr>
+<td>15</td>
+<td>เปลี่ยนรหัสผ่าน / ออกจากระบบ</td>
+<td>ดูแลบัญชี</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2>งานที่ 1 — เข้าสู่ระบบ</h2>
+<p><strong>ใช้เมื่อ:</strong> เริ่มใช้งานระบบทุกครั้ง</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเบราว์เซอร์ไปที่ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong> → ระบบพาไปหน้าเข้าสู่ระบบ</li>
+<li>กรอก <strong>ชื่อผู้ใช้ของบัญชีส่วนกลาง</strong> ที่ช่อง <strong>&quot;ชื่อผู้ใช้ / ทะเบียนรถ&quot;</strong></li>
+<li>กรอก <strong>รหัสผ่าน</strong></li>
+<li>กด <strong>เข้าสู่ระบบ</strong></li>
+</ol>
+<p><img src="screenshots/shared/00-login-desktop.png" alt="หน้าเข้าสู่ระบบ (เดสก์ท็อป)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (เดสก์ท็อป)</em></p>
+<p><img src="screenshots/shared/00-login-mobile.png" alt="หน้าเข้าสู่ระบบ (มือถือ)"></p>
+<p><em>ภาพ: หน้าเข้าสู่ระบบ (มือถือ)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เข้าได้แล้วระบบพาไปหน้า <strong>&quot;ภาพรวมจังหวัด&quot;</strong> อัตโนมัติ</p>
+<p><strong>ข้อควรรู้เรื่องรหัสผ่าน:</strong></p>
+<ul>
+<li>บัญชีที่ย้ายมาจากระบบเดิม รหัสเริ่มต้น (ถ้าไม่ได้กำหนดอื่น) คือ <strong><code>1234</code></strong> — ใช้ได้ครั้งแรกเท่านั้น แล้วระบบบังคับเปลี่ยน</li>
+<li>ถ้าบัญชีต้องเปลี่ยนรหัส (must_change_password) ระบบพาไปหน้า <strong>เปลี่ยนรหัสผ่าน</strong> ทันที และ <strong>ใช้เมนูอื่นไม่ได้</strong> จนเปลี่ยนสำเร็จ (เข้าหน้าอื่นจะขึ้น &quot;กรุณาเปลี่ยนรหัสผ่านก่อนใช้งานระบบ&quot;)</li>
+<li>กฎรหัสผ่านใหม่: ยาว <strong>8–128 ตัว</strong>, ห้ามตรงกับชื่อผู้ใช้, ห้ามคาดเดาง่าย (<code>12345678</code>, <code>password</code>), ห้ามอักขระเดียวซ้ำ (<code>aaaaaaaa</code>)</li>
+</ul>
+<p><img src="screenshots/shared/01-change-password.png" alt="หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)"></p>
+<p><em>ภาพ: หน้าเปลี่ยนรหัสผ่าน (บังคับเปลี่ยนครั้งแรก)</em></p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
+<ul>
+<li>ขึ้น &quot;ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง&quot; → ชื่อผู้ใช้/รหัสผ่านผิด (หรือบัญชีถูกปิด)</li>
+<li>ขึ้น &quot;มีการพยายามเข้าสู่ระบบหลายครั้งจากเครือข่ายนี้&quot; → พยายามถี่เกินไป รอ ~15 นาที (ล็อกชั่วคราว ไม่ใช่ปิดถาวร)</li>
+<li>ตั้งรหัสไม่ผ่าน → อ่านข้อความเตือน เช่น &quot;รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร&quot; หรือ &quot;รหัสผ่านนี้คาดเดาง่ายเกินไป&quot;</li>
+<li><strong>ลืมรหัสผ่าน:</strong> ไม่มีปุ่ม &quot;ลืมรหัสผ่าน&quot; และบัญชีส่วนกลางรีเซ็ตตัวเองไม่ได้ → ติดต่อผู้ดูแลระบบ (admin) ให้รีเซ็ต หลังรีเซ็ตระบบบังคับให้ตั้งรหัสใหม่ก่อนใช้ (เปลี่ยนรหัสเองได้ถ้ารู้รหัสเดิม)</li>
+</ul>
+<hr>
+<h2>งานที่ 2 — ดูภาพรวมจังหวัด (Dashboard)</h2>
+<p><strong>ใช้เมื่อ:</strong> ดูสถานการณ์ทั้งจังหวัดในที่เดียว (งานประจำวัน)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เข้าสู่ระบบ → ระบบพาไปหน้า <strong>&quot;ภาพรวมจังหวัด&quot;</strong> อัตโนมัติ</li>
+<li>อ่านการ์ดและ KPI ภาพรวม (หน้านี้อัปเดตอัตโนมัติทุก 30 วินาที มีป้ายเวลาอัปเดตล่าสุด + ปุ่มรีเฟรชด้วยมือ)</li>
+<li>กดการ์ดเตือนเพื่อเลื่อนไปดูรายละเอียด หรือใช้ปุ่มลัด <strong>&quot;ตำแหน่งปัจจุบัน&quot; / &quot;เหตุฉุกเฉิน&quot; / &quot;รายงาน&quot;</strong></li>
+</ol>
+<p><strong>สิ่งที่เห็นบนหน้าจอ:</strong></p>
+<ul>
+<li><strong>การ์ดผู้บริหาร 5 ใบ:</strong> (1) &quot;รถทั้งหมด / รถที่ติดตามได้&quot; (2) &quot;สถานะสัญญาณรถ&quot; (ออนไลน์/สัญญาณเก่า/ออฟไลน์/หยุดส่ง) (3) &quot;การรับ-ส่งวันนี้&quot; (ส่งเช้า/รับเย็น ทำแล้ว/ทั้งหมด) (4) &quot;โรงเรียนยังไม่เริ่มใช้ระบบ&quot; (ไม่มีการใช้งานใน 14 วันล่าสุด) (5) &quot;โรงเรียนเสี่ยงวันนี้&quot;</li>
+<li><strong>แผงเตือนผู้บริหาร (Executive Attention Panel)</strong> — ปรากฏเมื่อมีปัญหา มีการ์ด &quot;โรงเรียนเสี่ยง&quot;, &quot;เหตุฉุกเฉินล่าสุด&quot;, &quot;รถสำคัญ&quot; กดแล้วเลื่อนไปยังส่วนที่เกี่ยวข้อง</li>
+<li><strong>ภาพรวมระบบ</strong> — ยอดรวม นักเรียน / โรงเรียน / สังกัด / รถบริการนักเรียน</li>
+<li><strong>ผลการดำเนินการวันนี้</strong> — แถบความคืบหน้ารอบเช้า/เย็น (ทำแล้ว/ทั้งหมด/รอ/ลา + KPI %)</li>
+<li><strong>โรงเรียนเสี่ยง</strong> — รายชื่อโรงเรียนที่ยังเช็กไม่ครบ</li>
+<li><strong>สรุปรายสังกัด</strong> — KPI เช้า/เย็น + จำนวนเหตุฉุกเฉินต่อสังกัด</li>
+<li><strong>เหตุฉุกเฉินล่าสุด</strong> — 5 รายการล่าสุด</li>
+<li><strong>รถสำคัญต้องติดตาม</strong> — 10 อันดับแรกเรียงตามคะแนนความเสี่ยง</li>
+<li><strong>สรุปผู้บริหาร</strong> — สรุปเป็นข้อ ๆ</li>
+</ul>
+<p><img src="screenshots/province/01-dashboard.png" alt="แดชบอร์ดภาพรวมจังหวัด"></p>
+<p><em>ภาพ: แดชบอร์ดภาพรวมจังหวัด</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นการ์ด KPI ครบ และตัวเลขอัปเดตล่าสุดภายใน 30 วินาที</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li>&quot;รถสำคัญต้องติดตาม&quot; คำนวณจากคะแนนความเสี่ยง: ไม่ผ่านตรวจ +100, ยังไม่ตรวจ +80, ต้องแก้ไข +60, ประกันหมด +50, ไม่มีข้อมูลประกัน +40, ประกันใกล้หมด (&lt;30 วัน) +20 — นับเฉพาะรถที่มีนักเรียน ≥1 คน และ <strong>ไม่แสดงเบอร์โทร</strong></li>
+<li>&quot;โรงเรียนยังไม่เริ่มใช้ระบบ&quot; = ไม่มีการบันทึกสถานะเลยใน 14 วันล่าสุด</li>
+<li>ตัวเลขรถมี 2 ความหมาย: <strong>&quot;รถทั้งหมด&quot;</strong> (ทุกคันในระบบ) vs <strong>&quot;รถบริการนักเรียน&quot;</strong> (นับจากรายชื่อในรถ) — เป็นคนละตัวเลขโดยตั้งใจ</li>
+</ul>
+<hr>
+<h2>งานที่ 3 — ดูสถานะวันนี้ (เข้าทาง URL ตรง)</h2>
+<p><strong>ใช้เมื่อ:</strong> ต้องการเจาะดูความคืบหน้าเช้า-เย็นถึงรายคน</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>พิมพ์ URL <strong><code>https://schoolbuslampang.com/province/status</code></strong> (หน้านี้ <strong>ไม่มีลิงก์ในเมนู</strong>)</li>
+<li>กดขยายแต่ละระดับเพื่อเจาะลึก: <strong>สังกัด → โรงเรียน → รถ → นักเรียน</strong></li>
+<li>ใช้ช่องค้นทะเบียนรถเพื่อหาเร็วขึ้น</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> โครงสร้างต้นไม้ขยายได้ 3 ระดับ บอก &quot;ทำแล้ว/ทั้งหมด&quot; รอบเช้า-เย็นในแต่ละระดับ และเวลาที่เช็ก (✓ เวลา) ของนักเรียนรายคน</p>
+<p><img src="screenshots/province/06-status.png" alt="สถานะขึ้น-ลงรถวันนี้"></p>
+<p><em>ภาพ: สถานะขึ้น-ลงรถวันนี้</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นต้นไม้ขยายได้ครบ 3 ระดับ ครอบคลุมทั้งจังหวัด (ดูอย่างเดียว)</p>
+<hr>
+<h2>งานที่ 4 — ดูตำแหน่งรถปัจจุบัน (live)</h2>
+<p><strong>ใช้เมื่อ:</strong> ติดตามตำแหน่งรถระหว่างวิ่ง</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;ตำแหน่งปัจจุบัน&quot;</strong></li>
+<li>กดเลือกรถคันใดคันหนึ่งเพื่อโฟกัสบนแผนที่</li>
+<li>สังเกตการแจ้งเตือนเมื่ออุปกรณ์ offline หรือข้อมูลเก่าเกิน 45 วินาที</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> แผนที่ + รายการรถพร้อมสถานะสัญญาณ <strong>ออนไลน์ / สัญญาณเก่า / หยุดส่ง / ออฟไลน์</strong> ทั้งจังหวัด (อัปเดตทุก ~15 วินาที) + KPI: รถทั้งหมด, นักเรียนที่เกี่ยวข้อง, ออนไลน์, สัญญาณเก่า, หยุดส่ง, ออฟไลน์, กำลังมีพิกัดจริง, ยังไม่เคยส่งตำแหน่ง</p>
+<p><img src="screenshots/province/07-live-vehicles.png" alt="ตำแหน่งรถปัจจุบัน (live)"></p>
+<p><em>ภาพ: ตำแหน่งรถปัจจุบัน (live)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นแผนที่และรายการรถพร้อมสถานะสัญญาณ</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li>รถปรากฏบนแผนที่ <strong>เฉพาะตอนคนขับเปิด &quot;เริ่มส่งตำแหน่ง&quot;</strong> — รถที่ไม่เคยส่งจะอยู่กลุ่ม &quot;ยังไม่เคยส่งตำแหน่ง&quot;</li>
+<li>การเข้าหน้านี้ <strong>ถูกบันทึกในประวัติการแก้ไข (audit)</strong></li>
+</ul>
+<hr>
+<h2>งานที่ 5 — ดูเหตุฉุกเฉินทั้งจังหวัด</h2>
+<p><strong>ใช้เมื่อ:</strong> เฝ้าระวังเหตุการณ์ทั้งจังหวัด</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;เหตุฉุกเฉิน&quot;</strong></li>
+<li>เลื่อนดูรายการ / เปลี่ยนหน้า</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> รายการเหตุฉุกเฉินทั้งจังหวัด เรียงใหม่→เก่า แต่ละแถวแสดง <strong>ทะเบียนรถ / ช่องทาง (LINE หรือเว็บ) / เวลา / รายละเอียด / หมายเหตุ / ผลลัพธ์ / รายงานโดย</strong></p>
+<p><img src="screenshots/province/10-emergencies.png" alt="เหตุฉุกเฉินทั้งจังหวัด"></p>
+<p><em>ภาพ: เหตุฉุกเฉินทั้งจังหวัด</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรายการเหตุฉุกเฉินเรียงตามเวลา</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> บทบาทส่วนกลาง <strong>ดูได้อย่างเดียว — แก้ไขหรือปิดเคสไม่ได้</strong></p>
+<hr>
+<h2>งานที่ 6 — ดูสังกัด (5 เขต)</h2>
+<p><strong>ใช้เมื่อ:</strong> เปรียบเทียบ KPI รายเขต</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;สังกัด&quot;</strong></li>
+<li>อ่านตาราง/การ์ดเปรียบเทียบรายเขต (เรียงตาม KPI)</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> KPI รายสังกัดทั้ง 5 เขต แต่ละแถวแสดง <strong>สังกัด / โรงเรียน / นักเรียน / รถ / KPI ส่งเช้า / KPI รับเย็น / ฉุกเฉิน / ระดับ</strong></p>
+<p><img src="screenshots/province/02-affiliations.png" alt="รายการสังกัด"></p>
+<p><em>ภาพ: รายการสังกัด</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นตาราง/การ์ดเปรียบเทียบครบทุกสังกัด (ดูอย่างเดียว)</p>
+<hr>
+<h2>งานที่ 7 — ดูโรงเรียนทั้งจังหวัด</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจรายชื่อโรงเรียน</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;โรงเรียน&quot;</strong></li>
+<li>เลือก <strong>&quot;ทุกสังกัด&quot;</strong> หรือเลือกสังกัดที่ต้องการเพื่อกรอง</li>
+<li>เลื่อนดู / เปลี่ยนหน้า (แสดงสูงสุด 200 รายการต่อหน้า ค่าเริ่มต้น 50)</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> รายชื่อโรงเรียนทั้งจังหวัด แต่ละแถวแสดง <strong>โรงเรียน / สังกัด / จำนวนนักเรียน / จำนวนรถ</strong></p>
+<p><img src="screenshots/province/03-schools.png" alt="โรงเรียนทั้งจังหวัด"></p>
+<p><em>ภาพ: โรงเรียนทั้งจังหวัด</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรายชื่อโรงเรียน (ดูอย่างเดียว)</p>
+<hr>
+<h2>งานที่ 8 — ค้นหานักเรียน</h2>
+<p><strong>ใช้เมื่อ:</strong> หานักเรียนรายคนทั้งจังหวัด</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;ข้อมูลนักเรียน&quot;</strong></li>
+<li>พิมพ์คำค้นในช่องค้นหา (ค้นได้ตามชื่อ / นามสกุล / รหัสนักเรียน — ระบบรอพิมพ์เสร็จ ~0.4 วินาทีจึงค้น)</li>
+<li>ใช้ตัวกรอง <strong>&quot;ทุกชั้น&quot; / &quot;ทุกสังกัด&quot; / &quot;ทุกโรงเรียน&quot;</strong> เพื่อจำกัดผลลัพธ์</li>
+<li>คลิก <strong>ทะเบียนรถ</strong> ในแถวเพื่อข้ามไปดูรถคันนั้น</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> แต่ละแถวแสดง <strong>รหัส / ชื่อ-นามสกุล / ชั้น-ห้อง / โรงเรียน / สังกัด / ทะเบียนรถ / เช้า / เย็น</strong></p>
+<p><img src="screenshots/province/04-students.png" alt="ข้อมูลนักเรียนทั้งจังหวัด"></p>
+<p><em>ภาพ: ข้อมูลนักเรียนทั้งจังหวัด</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นผลค้นหาตรงกับคำค้น/ตัวกรอง</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li>หน้านี้ <strong>ไม่แสดงชื่อผู้ปกครองและเบอร์ผู้ปกครอง</strong> โดยตั้งใจ (นโยบายลดการเปิดเผยข้อมูลส่วนบุคคล/PDPA) — ถ้าต้องการข้อมูลผู้ปกครองต้องใช้บัญชีบทบาทโรงเรียน</li>
+<li>การค้นด้วยรหัสคือค้นจาก &quot;รหัสนักเรียน&quot;</li>
+</ul>
+<hr>
+<h2>งานที่ 9 — ดูรถรับส่งทั้งจังหวัด</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจข้อมูลรถและความปลอดภัย</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;รถรับส่ง&quot;</strong></li>
+<li>ค้นหาด้วยทะเบียนรถ</li>
+<li>กด <strong>&quot;▼ แสดงรายชื่อนักเรียน&quot;</strong> เพื่อขยายดูรายชื่อนักเรียนในรถคันนั้น</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> การ์ดรถแต่ละคันแสดง <strong>ทะเบียน / ประเภทรถ / โรงเรียนที่ให้บริการ / จำนวนนักเรียน / คนขับ / ผู้ดูแลรถ / เจ้าของรถ</strong> + ส่วนความปลอดภัย (ผลตรวจล่าสุด / ประกัน)</p>
+<p><img src="screenshots/province/05-vehicles.png" alt="รถรับส่งทั้งจังหวัด"></p>
+<p><em>ภาพ: รถรับส่งทั้งจังหวัด</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นการ์ดรถพร้อมข้อมูลความปลอดภัย และขยายดูรายชื่อนักเรียนได้</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li><strong>เบอร์โทรทั้งหมดถูกตัดออก</strong> (เบอร์คนขับ / ผู้ดูแล / เจ้าของ) — แสดงเฉพาะชื่อ เพราะเป็นมุมมองภาพรวม</li>
+<li>ในตารางรายชื่อนักเรียนแบบขยาย คอลัมน์ <strong>&quot;ผู้ปกครอง&quot;</strong> และ <strong>&quot;เบอร์โทร&quot;</strong> แสดง <strong>&quot;-&quot;</strong> เสมอ (มุมมองส่วนกลางไม่คืนข้อมูลผู้ปกครอง)</li>
+</ul>
+<hr>
+<h2>งานที่ 10 — ดูแผนที่จุดรับส่ง</h2>
+<p><strong>ใช้เมื่อ:</strong> ดูภาพรวมจุดรับ-ส่งระดับจังหวัด</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;แผนที่จุดรับส่ง&quot;</strong></li>
+<li>ใช้ตัวกรองเพื่อจำกัดขอบเขต: ค้นหา / รอบ (เช้า / เย็น / เช้าและเย็น) / ระดับชั้น / สังกัด / โรงเรียน / รถ</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> แผนที่ภาพรวมจุดรับ-ส่ง + KPI (จุดรับส่งทั้งหมด, นักเรียนในขอบเขต, โรงเรียนที่เกี่ยวข้อง, รถที่เกี่ยวข้อง)</p>
+<p><img src="screenshots/province/08-pickup-map.png" alt="แผนที่จุดรับ-ส่ง"></p>
+<p><em>ภาพ: แผนที่จุดรับ-ส่ง</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นแผนที่ภาพรวมและ KPI ตามตัวกรอง</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li>แผนที่นี้เป็น <strong>ภาพรวมเชิงตัวเลข ไม่มีข้อมูลส่วนบุคคล</strong> (ไม่มีชื่อ / เบอร์ / ที่อยู่นักเรียนรายคน)</li>
+<li>การเข้าหน้านี้ <strong>ถูกบันทึกในประวัติการแก้ไข (audit)</strong></li>
+</ul>
+<hr>
+<h2>งานที่ 11 — ดูความพร้อมเปิดใช้งาน</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจความพร้อมก่อนเปลี่ยนโหมด <strong>สังเกตการณ์ (OBSERVE) → บังคับใช้ (ENFORCE)</strong></p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;ความพร้อมเปิดใช้งาน&quot;</strong></li>
+<li>อ่านโหมดปัจจุบันและถังสรุป</li>
+<li>ดูตารางรายการที่ต้องดำเนินการเพื่อประสานหน่วยงานที่รับผิดชอบ</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong></p>
+<ul>
+<li><strong>โหมดความปลอดภัยปัจจุบัน</strong> (สังเกตการณ์ / บังคับใช้)</li>
+<li><strong>4 ถังสรุป</strong> — พร้อมใช้งาน / ต้องเติมข้อมูล / มีข้อมูลเสี่ยง / ถูกระงับ</li>
+<li><strong>ความครบถ้วน 3 หมวด (เป็น %)</strong> — รถพร้อมใช้งาน / คนขับมีใบอนุญาตรับรอง / รถมีคนขับที่อนุญาต</li>
+<li><strong>ตาราง &quot;รายการที่ต้องดำเนินการ&quot;</strong> — ระบุผู้รับผิดชอบ (โรงเรียน / ขนส่ง / จังหวัด) + การกระทำต่อไป + ป้าย <strong>&quot;บังคับ&quot; / &quot;คำเตือน&quot;</strong></li>
+</ul>
+<p><img src="screenshots/province/09-readiness.png" alt="ความพร้อมเปิดใช้งาน"></p>
+<p><em>ภาพ: ความพร้อมเปิดใช้งาน</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นโหมดปัจจุบัน, ถังสรุป, % ความครบถ้วน และตารางรายการที่ต้องทำ</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li>เป็นตัวเลขภาพรวมล้วน <strong>ไม่มีรายชื่อ / เบอร์ / ข้อมูลส่วนบุคคล</strong></li>
+<li>ระบบใช้หลัก <strong>&quot;ไม่รู้ = ไม่ปลอดภัย&quot;</strong> — ข้อมูลที่ยังไม่ได้รับการรับรองจะนับเป็น &quot;ยังไม่พร้อม&quot; ไม่ใช่ &quot;ผ่าน&quot; (เช่น ต้องมีผลตรวจ PASSED ที่ยังไม่หมดอายุ และใบอนุญาตที่ยืนยันแล้ว)</li>
+<li>การเปลี่ยนเป็นโหมดบังคับใช้ <strong>ไม่เกิดอัตโนมัติตามวันที่</strong> — ต้องให้ผู้ดูแลระบบตั้งค่าด้วยมือเท่านั้น (บทบาทส่วนกลางเปลี่ยนโหมดเองไม่ได้)</li>
+</ul>
+<hr>
+<h2>งานที่ 12 — ดูประวัติการแก้ไข (Audit Log)</h2>
+<p><strong>ใช้เมื่อ:</strong> ตรวจสอบการกระทำในระบบ (สิทธิ์พิเศษของบทบาทนี้)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;ประวัติการแก้ไข&quot;</strong></li>
+<li>กรองตาม <strong>การกระทำ</strong> และ <strong>ช่วงวันที่</strong> (date_from / date_to)</li>
+<li>กดปุ่ม <strong>&quot;Export CSV&quot;</strong> เพื่อดาวน์โหลดเป็นไฟล์ CSV (มี BOM เปิดในภาษาไทยได้)</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> ประวัติการกระทำทั้งระบบ — <strong>CREATE / UPDATE / DELETE / IMPORT / APPROVE / EXPORT / LOGIN</strong></p>
+<p><img src="screenshots/province/11-audit-log.png" alt="ประวัติการแก้ไข (Audit log)"></p>
+<p><em>ภาพ: ประวัติการแก้ไข (Audit log)</em></p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรายการการกระทำตามตัวกรอง และดาวน์โหลด CSV ได้</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li>บทบาทส่วนกลาง (และ admin) เป็นบทบาทเดียวที่ดู Audit Log ได้</li>
+<li>ค่าเดิม/ค่าใหม่ในบันทึกถูก <strong>ปกปิดข้อมูลส่วนบุคคล</strong> (เบอร์ผู้ปกครอง / เบอร์คนขับ / รหัสผู้ใช้ LINE) ทั้งในหน้าจอและในไฟล์ CSV</li>
+<li>Export CSV จำกัดสูงสุด <strong>5,000 แถวล่าสุด</strong> (ถ้าเกินจะตัดและแจ้งในไฟล์) — ใช้ตัวกรองวันที่/การกระทำเพื่อจำกัดผลลัพธ์</li>
+<li>การ Export CSV ของหน้านี้จะถูกบันทึกเป็น audit เองด้วย</li>
+</ul>
+<hr>
+<h2>งานที่ 13 — ดูการเบี่ยงเส้นทาง (Route Deviations) ⚠️</h2>
+<p><strong>ใช้เมื่อ:</strong> ดูรายงานการออกนอกเส้นทาง/ความล่าช้าของรถ — <strong>เฉพาะเมื่อ feature flag เปิดเท่านั้น</strong></p>
+<blockquote class="callout warn">
+<p>⚠️ <strong>ฟีเจอร์นี้ปิดอยู่เป็นค่าเริ่มต้น (dark) — ควบคุมด้วย feature flag <code>FEATURE_ROUTE_DEVIATION</code> ฝั่งเซิร์ฟเวอร์ ซึ่งตอนนี้ยังไม่ได้เปิด</strong> เมื่อ flag ปิด เมนู <strong>&quot;การเบี่ยงเส้นทาง&quot;</strong> จะถูกซ่อนจากแถบเมนูอัตโนมัติ ถ้าเข้าหน้าโดยตรงจะเปิดได้แต่ <strong>โหลดข้อมูลไม่สำเร็จ</strong> (ขึ้น &quot;โหลดข้อมูลไม่สำเร็จ&quot;) เพราะ API ยังไม่ถูกเปิด — ต้องให้ผู้ดูแลระบบเปิด flag ก่อน</p>
+</blockquote>
+<p><strong>ขั้นตอน (เมื่อ flag เปิดแล้ว):</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;การเบี่ยงเส้นทาง&quot;</strong> (หรือเข้า URL <code>/admin/route-deviations</code>)</li>
+<li>ดูรายการประเภท <strong>เบี่ยงเส้นทาง / ล่าช้า / หยุดนิ่งนาน</strong> พร้อมระดับความรุนแรง (INFO / WARN / CRITICAL)</li>
+<li>กรองตามความรุนแรง และเลือกเฉพาะรายการที่ &quot;ยังไม่ resolved&quot;</li>
+</ol>
+<p><strong>สิ่งที่เห็น:</strong> หัวข้อหน้า <strong>&quot;การเบี่ยงเส้นทาง / ความล่าช้า&quot;</strong> — รายการพร้อมระดับความรุนแรงและสถานะ resolved</p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เห็นรายการการเบี่ยงเส้นทาง (เมื่อ flag เปิด)</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li>บทบาทที่เข้าได้คือ <strong>ส่วนกลาง (province)</strong> และ <strong>admin</strong> เท่านั้น</li>
+<li>หน้านี้ใช้ร่วมกับฝั่ง admin จึงเข้าผ่าน URL <code>/admin/route-deviations</code> (ไม่ใช่ <code>/province/...</code>) แต่บทบาทส่วนกลางมีสิทธิ์เข้าได้ และมีลิงก์ในแถบเมนูของส่วนกลางอยู่แล้ว (เมื่อ flag เปิด)</li>
+</ul>
+<blockquote class="callout note">
+<p>📷 <strong>ไม่มีภาพหน้าจอ</strong> — ฟีเจอร์ &quot;การเบี่ยงเส้นทาง&quot; ถูกปิดด้วย feature flag (<code>FEATURE_ROUTE_DEVIATION</code>) ยังไม่เปิดใช้งานจริง จึงยังไม่มีหน้าจอให้แสดง</p>
+</blockquote>
+<hr>
+<h2>งานที่ 14 — ดู/ส่งออกรายงาน</h2>
+<p><strong>ใช้เมื่อ:</strong> สรุปและดาวน์โหลดข้อมูลทั้งจังหวัด (เข้าได้เต็มทั้งจังหวัด ไม่ถูกจำกัดขอบเขต)</p>
+<p><strong>ขั้นตอน:</strong></p>
+<ol>
+<li>เปิดเมนู <strong>&quot;รายงาน&quot;</strong> → เลือกประเภท (แท็บด้านบน): <strong>รายวัน</strong> (เริ่มต้น) / <strong>รายเดือน</strong> / <strong>สรุปภาพรวม</strong></li>
+<li>ตั้งค่าตัวกรองตามต้องการ: วันที่ (ปี-เดือน-วัน) / เดือน (ปี-เดือน) / โรงเรียน / สังกัด / ทะเบียนรถ</li>
+<li>กดปุ่มดาวน์โหลด <strong>CSV / Excel / PDF</strong></li>
+</ol>
+<p><strong>รูปแบบไฟล์:</strong></p>
+<table>
+<thead>
+<tr>
+<th>รูปแบบ</th>
+<th>หมายเหตุ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CSV</strong></td>
+<td>มี BOM เปิดในภาษาไทยได้ ป้องกันการแทรกสูตรอันตราย</td>
+</tr>
+<tr>
+<td><strong>Excel (.xlsx)</strong></td>
+<td>มีหัวตารางจัดรูปแบบ ชีต &quot;รายงานประจำวัน&quot;</td>
+</tr>
+<tr>
+<td><strong>PDF</strong></td>
+<td>ฟอนต์ไทย มีสรุปภาพรวม + รายโรงเรียน + รายคัน</td>
+</tr>
+</tbody>
+</table>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ได้ไฟล์รายงานตามประเภทและตัวกรองที่เลือก ครอบคลุมทั้งจังหวัด</p>
+<p><strong>⚠️ ข้อควรระวัง:</strong></p>
+<ul>
+<li><strong>เฉพาะ Export PDF:</strong> ระบบเปิดหน้าต่างให้บันทึก <strong>&quot;การตัดสินใจ&quot; (Decision Log)</strong> ก่อน (ระบุประเภทและบันทึกการตัดสินใจ) — กด <strong>&quot;ข้าม&quot;</strong> ได้ หรือ <strong>&quot;ยกเลิก&quot;</strong> เพื่อไม่ส่งออก • CSV และ Excel ไม่ต้องผ่านหน้าต่างนี้</li>
+<li>การเปิดดูและส่งออกรายงาน <strong>นับรวมกัน จำกัด 40 ครั้ง/5 นาที</strong> ต่อหนึ่งเครือข่าย (ครอบคลุมทุก endpoint ใต้ <code>/api/reports/*</code>) — ถ้าเกินขึ้น &quot;ขอรายงานถี่เกินไป กรุณารอสักครู่&quot;</li>
+<li>การส่งออกทุกครั้งถูกบันทึกในประวัติการแก้ไข</li>
+</ul>
+<p><img src="screenshots/shared/reports-daily.png" alt="หน้ารายงาน — แท็บ รายวัน/รายเดือน/สรุปภาพรวม พร้อมปุ่มส่งออก"></p>
+<p><em>ภาพ: หน้ารายงาน — แท็บ รายวัน/รายเดือน/สรุปภาพรวม พร้อมปุ่มส่งออก</em></p>
+<hr>
+<h2>งานที่ 15 — เปลี่ยนรหัสผ่าน / ออกจากระบบ</h2>
+<p><strong>ใช้เมื่อ:</strong> ดูแลความปลอดภัยของบัญชี</p>
+<p><strong>ขั้นตอน (เปลี่ยนรหัสผ่าน):</strong></p>
+<ol>
+<li>เข้าหน้าเปลี่ยนรหัสผ่าน</li>
+<li>กรอกรหัสเดิม แล้วตั้งรหัสใหม่ตามกฎ (8–128 ตัว, ห้ามตรงชื่อผู้ใช้, ห้ามคาดเดาง่าย, ห้ามอักขระเดียวซ้ำ)</li>
+<li>บันทึก</li>
+</ol>
+<p><strong>ขั้นตอน (ออกจากระบบ):</strong></p>
+<ol>
+<li>กดออกจากระบบเมื่อเลิกใช้งาน</li>
+</ol>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> เปลี่ยนรหัสสำเร็จ / กลับสู่หน้าเข้าสู่ระบบ</p>
+<p><strong>⚠️ ถ้าติดปัญหา:</strong> ลืมรหัสเดิม → ติดต่อผู้ดูแลระบบ (admin) ให้รีเซ็ต (บัญชีส่วนกลางรีเซ็ตตัวเองไม่ได้)</p>
+<p><img src="screenshots/shared/account-menu.png" alt="เมนูบัญชี (มุมขวาบน) — &quot;เปลี่ยนรหัสผ่าน&quot; / &quot;ออกจากระบบ&quot;"></p>
+<p><em>ภาพ: เมนูบัญชี (มุมขวาบน) — &quot;เปลี่ยนรหัสผ่าน&quot; / &quot;ออกจากระบบ&quot;</em></p>
+<hr>
+<h2>ตารางขอบเขตสิทธิ์ (อ้างอิงด่วน)</h2>
+<h3>คุณเห็นข้อมูลได้แค่ไหน</h3>
+<table>
+<thead>
+<tr>
+<th>ข้อมูล</th>
+<th>ขอบเขต</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>สังกัด / โรงเรียน / นักเรียน / รถ</td>
+<td><strong>ทั้งจังหวัด</strong> (ทุกสังกัด ทุกโรงเรียน ทุกคัน)</td>
+</tr>
+<tr>
+<td>สถานะรับ-ส่ง / ตำแหน่งรถ / แผนที่จุดรับส่ง</td>
+<td>ทั้งจังหวัด</td>
+</tr>
+<tr>
+<td>เหตุฉุกเฉิน</td>
+<td>ทั้งจังหวัด (ดูอย่างเดียว)</td>
+</tr>
+<tr>
+<td>ประวัติการแก้ไข (Audit Log)</td>
+<td>ทั้งระบบ — สิทธิ์พิเศษของบทบาทนี้</td>
+</tr>
+<tr>
+<td>รายงาน / ส่งออก</td>
+<td>ทั้งจังหวัด</td>
+</tr>
+</tbody>
+</table>
+<h3>ข้อมูลส่วนบุคคลที่ถูกปิดในมุมมองส่วนกลาง (โดยตั้งใจ)</h3>
+<table>
+<thead>
+<tr>
+<th>มุมมอง</th>
+<th>สิ่งที่ถูกปิด</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>รถรับส่ง</td>
+<td>เบอร์คนขับ / ผู้ดูแล / เจ้าของ (แสดงแต่ชื่อ)</td>
+</tr>
+<tr>
+<td>ข้อมูลนักเรียน</td>
+<td>ชื่อ/เบอร์ผู้ปกครอง (แสดงเป็น &quot;-&quot;)</td>
+</tr>
+<tr>
+<td>ประวัติการแก้ไข</td>
+<td>เบอร์โทร / รหัสผู้ใช้ LINE ถูกปกปิด</td>
+</tr>
+<tr>
+<td>แผนที่จุดรับส่ง / ความพร้อมเปิดใช้งาน</td>
+<td>ภาพรวมเชิงตัวเลข ไม่มีข้อมูลส่วนบุคคล</td>
+</tr>
+</tbody>
+</table>
+<h3>สิ่งที่ทำไม่ได้ (และใครทำแทน)</h3>
+<table>
+<thead>
+<tr>
+<th>ทำไม่ได้</th>
+<th>ใครทำแทน</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>เช็กอิน/เช็กเอาท์นักเรียน</td>
+<td><strong>คนขับ</strong></td>
+</tr>
+<tr>
+<td>เพิ่ม/แก้ไข/ลบนักเรียน, นำเข้าข้อมูล, จัดการบัญชีครู</td>
+<td><strong>โรงเรียน</strong></td>
+</tr>
+<tr>
+<td>สร้าง/รีเซ็ตบัญชีโรงเรียน, เพิ่มโรงเรียนใหม่</td>
+<td><strong>สังกัด (affiliation)</strong> หรือ admin</td>
+</tr>
+<tr>
+<td>ตรวจสภาพ/รับรองรถ, บันทึกผลตรวจ</td>
+<td><strong>ขนส่ง (transport)</strong></td>
+</tr>
+<tr>
+<td>แก้ไข/ปิดเคสเหตุฉุกเฉิน</td>
+<td>ดูได้อย่างเดียว (ไม่มีบทบาทแก้ผ่านหน้านี้)</td>
+</tr>
+<tr>
+<td>จัดการผู้ใช้ทั้งระบบ, geofences, จัดการจุดรับส่ง, ตั้งค่าระบบ</td>
+<td><strong>admin</strong></td>
+</tr>
+<tr>
+<td>เปลี่ยนโหมดความปลอดภัย (OBSERVE → ENFORCE)</td>
+<td><strong>admin</strong> (ตั้งค่าด้วยมือ)</td>
+</tr>
+<tr>
+<td>รีเซ็ตรหัสตัวเอง (ลืมรหัส)</td>
+<td><strong>admin</strong> รีเซ็ตให้</td>
+</tr>
+</tbody>
+</table>
+<h3>สิ่งที่บทบาทส่วนกลาง &quot;เขียน&quot; ได้</h3>
+<ul>
+<li>บันทึกการตัดสินใจ (Decision Log) ตอนส่งออก PDF</li>
+<li>เปลี่ยนรหัสผ่านตัวเอง และออกจากระบบ</li>
+<li>(โดยอ้อม) การเข้าดูตำแหน่งรถ/แผนที่จุดรับส่ง และการส่งออก จะถูกบันทึกในประวัติการแก้ไขเอง</li>
+</ul>
+<blockquote class="callout note">
+<p>ℹ️ รายงานเชิงนโยบาย (<code>/api/province/reports/policy</code>) ที่เคยระบุไว้ในสเปก <strong>ยังไม่มีในระบบ</strong> — อย่าถือว่ามีอยู่จริง</p>
+</blockquote>
+<hr>
+<h2>สรุปปัญหาที่พบบ่อย</h2>
+<table>
+<thead>
+<tr>
+<th>อาการ</th>
+<th>วิธีแก้</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>เบอร์โทรในหน้ารถ/นักเรียนเป็น &quot;-&quot; หมด</td>
+<td>มุมมองภาพรวมระดับจังหวัดตัดเบอร์โทรและไม่แสดงข้อมูลผู้ปกครองโดยตั้งใจ (PDPA) ถ้าต้องการเบอร์ต้องใช้บัญชีบทบาทโรงเรียน</td>
+</tr>
+<tr>
+<td>หาเมนู &quot;การเบี่ยงเส้นทาง&quot; ไม่เจอ</td>
+<td>เมนูถูกซ่อนเมื่อ <code>FEATURE_ROUTE_DEVIATION</code> ปิด เข้าตรง (<code>/admin/route-deviations</code>) จะเปิดได้แต่โหลดข้อมูลไม่สำเร็จ — ให้ admin เปิด flag ก่อน</td>
+</tr>
+<tr>
+<td>เมนูไม่มี &quot;สถานะวันนี้&quot;</td>
+<td>หน้านี้มีจริงแต่ไม่ได้ลิงก์ในเมนู — เข้าทาง URL ตรง <code>/province/status</code></td>
+</tr>
+<tr>
+<td>ลืมรหัสผ่าน</td>
+<td>ไม่มีปุ่มลืมรหัส ติดต่อ admin ให้รีเซ็ต หลังรีเซ็ตระบบบังคับตั้งรหัสใหม่ก่อนใช้ (&quot;กรุณาเปลี่ยนรหัสผ่านก่อนใช้งานระบบ&quot;)</td>
+</tr>
+<tr>
+<td>ตั้งรหัสใหม่ไม่ผ่าน</td>
+<td>ต้องยาว ≥8 ตัว ไม่ตรงชื่อผู้ใช้ ไม่คาดเดาง่าย (<code>12345678</code>, <code>password</code>) ไม่ใช่อักขระเดียวซ้ำ (<code>aaaaaaaa</code>)</td>
+</tr>
+<tr>
+<td>เข้าระบบไม่ได้ ขึ้นให้รอ 15 นาที</td>
+<td>พยายามผิดหลายครั้ง ระบบล็อกชั่วคราว 15 นาที (ไม่ใช่ปิดถาวร) รอแล้วลองใหม่</td>
+</tr>
+<tr>
+<td>กด Export PDF แล้วเด้งหน้าต่างให้กรอก</td>
+<td>เฉพาะ PDF ต้องผ่านหน้าต่าง Decision Log ก่อน — กด &quot;ข้าม&quot; ได้ ส่วน CSV/Excel ไม่ต้อง</td>
+</tr>
+<tr>
+<td>Export CSV ประวัติการแก้ไขได้ไม่ครบ</td>
+<td>ระบบตัดที่ 5,000 แถวล่าสุดและแจ้งในไฟล์ ใช้ตัวกรองวันที่/การกระทำให้แคบลง</td>
+</tr>
+<tr>
+<td>กดส่งออก/เปิดรายงานรัว ๆ แล้วถูกบล็อก</td>
+<td>เปิดดู+ส่งออกนับรวมกัน จำกัด 40 ครั้ง/5 นาที (&quot;ขอรายงานถี่เกินไป กรุณารอสักครู่&quot;) รอแล้วลองใหม่</td>
+</tr>
+<tr>
+<td>รถบนแผนที่ไม่ขึ้น</td>
+<td>รถมีพิกัดเมื่อคนขับเปิด &quot;เริ่มส่งตำแหน่ง&quot; เท่านั้น รถที่ไม่เคยส่งอยู่กลุ่ม &quot;ยังไม่เคยส่งตำแหน่ง&quot;</td>
+</tr>
+<tr>
+<td>เปิดหน้าตำแหน่งรถ/แผนที่จุดรับส่งแล้วถูกบันทึก log</td>
+<td>ใช่ การเข้าดูทั้งสองหน้าถูกบันทึกในประวัติการแก้ไข (audit) ตามนโยบายตรวจสอบ</td>
+</tr>
+<tr>
+<td>จำนวนรถใน Dashboard ดูไม่ตรงกัน</td>
+<td>&quot;รถทั้งหมด&quot; = ทุกคันในระบบ • &quot;รถบริการนักเรียน&quot; = นับจากรายชื่อนักเรียนในรถ — คนละตัวเลขโดยตั้งใจ</td>
+</tr>
+<tr>
+<td>&quot;ความพร้อม&quot; ขึ้นว่ายังไม่พร้อม ทั้งที่กรอกข้อมูลแล้ว</td>
+<td>หลัก &quot;ไม่รู้ = ไม่ปลอดภัย&quot; — ต้องได้รับการ &quot;รับรอง&quot; จริง (ผลตรวจ PASSED ที่ยังไม่หมดอายุ, ใบอนุญาตที่ยืนยันแล้ว) ผู้รับผิดชอบแก้คือโรงเรียน/ขนส่ง</td>
+</tr>
+<tr>
+<td>โหมดบังคับใช้ (ENFORCE) จะเปิดเองตามวันที่ไหม</td>
+<td>ไม่ — ต้องให้ admin ตั้งค่าด้วยมือเท่านั้น ระบบไม่เปลี่ยนโหมดอัตโนมัติตามวันที่</td>
+</tr>
+</tbody>
+</table>
+<h3>การขอความช่วยเหลือ</h3>
+<ul>
+<li><strong>ลืมรหัสผ่าน / บัญชีมีปัญหา</strong> → ติดต่อผู้ดูแลระบบ (admin)</li>
+<li><strong>ต้องการเปิดฟีเจอร์ที่ถูกซ่อน (เช่น &quot;การเบี่ยงเส้นทาง&quot;) หรือเปลี่ยนโหมดความปลอดภัย</strong> → ติดต่อ admin</li>
+<li><strong>ข้อมูลรถ/การตรวจสภาพไม่ถูกต้อง</strong> → ประสานบทบาทขนส่ง (transport)</li>
+<li><strong>ข้อมูลนักเรียน/บัญชีโรงเรียนไม่ถูกต้อง</strong> → ประสานสังกัด (affiliation) หรือโรงเรียน</li>
+</ul>
+<p>เวลาแจ้งปัญหา โปรดส่ง: ชื่อผู้ใช้บัญชีส่วนกลาง, หน้า/เมนูที่เกิดปัญหา (เช่น &quot;ภาพรวมจังหวัด&quot;, &quot;รายงาน&quot;), เวลาที่เกิดปัญหา, ภาพหน้าจอ (screenshot)</p>
+<hr>
+<p><strong>สิ้นสุดคู่มือปฏิบัติงานสำหรับส่วนกลาง/จังหวัด — กำกับดูแลภาพรวมเพื่อความปลอดภัยของนักเรียนทั้งจังหวัด</strong></p>
+
+</main>
+</div>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML สร้างจากเอกสาร Markdown (Phase 10.13C · 2026-06-24)</footer>
+</body>
+</html>

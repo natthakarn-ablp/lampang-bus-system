@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Map as MapIcon, Sunrise, Sunset, X, Plus, Pencil } from 'lucide-react';
+import { Map as MapIcon, Sunrise, Sunset, X, Plus, Pencil, Trash2 } from 'lucide-react';
 import api from '../../api/axios';
+import { useToast } from '../../components/Toast';
 import { AppCard, AlertBanner, StatusBadge } from '../../components/ui';
 import PickupMap from '../../components/PickupMap';
 import PickupCoordPicker from '../../components/PickupCoordPicker';
@@ -10,6 +11,7 @@ import { classroomLabel } from '../../utils/student';
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
 export default function DriverPickupMap() {
+  const toast = useToast();
   const [points, setPoints] = useState([]);
   const [vehicle, setVehicle] = useState(null);
   const [sessionFilter, setSessionFilter] = useState('all');
@@ -18,6 +20,7 @@ export default function DriverPickupMap() {
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null); // null | { ...point }
+  const [deletingId, setDeletingId] = useState(null);
 
   const fetchPoints = useCallback(async (filter) => {
     setLoading(true);
@@ -37,6 +40,19 @@ export default function DriverPickupMap() {
   }, []);
 
   useEffect(() => { fetchPoints(sessionFilter); }, [fetchPoints, sessionFilter]);
+
+  const handleDelete = useCallback(async (point) => {
+    if (!window.confirm(`ลบจุดรับส่ง "${point.label}" ?\nนักเรียนในจุดนี้จะไม่ถูกลบ แต่จุดนี้จะหายไป`)) return;
+    setDeletingId(point.id);
+    try {
+      await api.delete(`/driver/pickup-points/${point.id}`);
+      toast.success('ลบจุดรับส่งสำเร็จ');
+      setSelectedId(null);
+      fetchPoints(sessionFilter);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'ลบจุดรับส่งไม่สำเร็จ');
+    } finally { setDeletingId(null); }
+  }, [fetchPoints, sessionFilter, toast]);
 
   const selected = points.find(p => p.id === selectedId) || null;
 
@@ -111,6 +127,8 @@ export default function DriverPickupMap() {
                   point={selected}
                   onClose={() => setSelectedId(null)}
                   onEdit={() => setEditing(selected)}
+                  onDelete={() => handleDelete(selected)}
+                  deleting={deletingId === selected.id}
                 />
               </div>
             )}
@@ -450,7 +468,7 @@ function SessionFilter({ value, onChange }) {
 }
 
 /* ── Selected-point detail card ── */
-function SelectedPointCard({ point, onClose, onEdit }) {
+function SelectedPointCard({ point, onClose, onEdit, onDelete, deleting }) {
   return (
     <AppCard padding="md" className="shadow-elevate">
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -508,6 +526,17 @@ function SelectedPointCard({ point, onClose, onEdit }) {
         >
           เปิดใน Google Maps →
         </a>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="inline-flex items-center justify-center gap-1.5 w-full text-sm font-medium text-danger bg-danger-soft hover:opacity-90 rounded-lg py-2 transition disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" strokeWidth={2} />
+            {deleting ? 'กำลังลบ…' : 'ลบจุดรับส่ง'}
+          </button>
+        )}
       </div>
     </AppCard>
   );

@@ -9,6 +9,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import api from '../../api/axios';
+import { useToast } from '../../components/Toast';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import { DonutChart, HBarChart } from '../../components/MiniCharts';
 import PageHeader from '../../components/PageHeader';
@@ -37,6 +38,7 @@ export default function SchoolDashboard() {
   // read-only and would 403 if they reached the vehicle management page.
   const { user } = useAuth();
   const isTeacher = isGradeTeacher(user);
+  const toast = useToast();
 
   const [data, setData] = useState(null);
   const [statusData, setStatusData] = useState(null);
@@ -47,19 +49,37 @@ export default function SchoolDashboard() {
   // so the session hero + alert chips + per-vehicle table all reflect the
   // new daily_status row immediately.
   const [overrideOpen, setOverrideOpen] = useState(false);
+  const [leaves, setLeaves] = useState([]);
+  const [leaveLoading, setLeaveLoading] = useState({});
 
   function refetchDashboard() {
     return Promise.all([
       api.get('/school/dashboard').then(r => r.data.data),
       api.get('/school/status-today').then(r => r.data.data),
+      api.get('/school/leaves').then(r => r.data.data).catch(() => []),
     ])
-      .then(([dash, status]) => { setData(dash); setStatusData(status); })
+      .then(([dash, status, lv]) => { setData(dash); setStatusData(status); setLeaves(lv || []); })
       .catch(() => {});
   }
 
   useEffect(() => {
     refetchDashboard().finally(() => setLoading(false));
   }, []);
+
+  async function handleCancelLeave(leaveId) {
+    if (!leaveId) return;
+    if (!confirm('ยืนยันยกเลิกการลานี้?')) return;
+    setLeaveLoading(prev => ({ ...prev, [leaveId]: true }));
+    try {
+      await api.delete(`/school/leaves/${leaveId}`);
+      toast.success('ยกเลิกการลาสำเร็จ');
+      setLeaves(prev => prev.filter(l => l.id !== leaveId));
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ไม่สามารถยกเลิกการลาได้');
+    } finally {
+      setLeaveLoading(prev => ({ ...prev, [leaveId]: false }));
+    }
+  }
 
   function toggleVehicle(vehicleId) {
     setExpandedVehicle(prev => (prev === vehicleId ? null : vehicleId));
@@ -284,6 +304,38 @@ export default function SchoolDashboard() {
               leave={data?.evening_leave ?? 0}
             />
           </div>
+
+          {/* Leave list with cancel — school can cancel leaves recorded in error */}
+          {leaves.length > 0 && !isTeacher && (
+            <CollapsibleSection
+              title="นักเรียนลาวันนี้"
+              subtitle={`${leaves.length} รายการ`}
+              defaultOpen={false}
+            >
+              <div className="space-y-2">
+                {leaves.map(lv => (
+                  <div key={lv.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-surface border border-surface-border">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-ink truncate">{lv.student_name}</p>
+                      <p className="text-xs text-ink-muted">
+                        {lv.grade && lv.classroom ? `${lv.grade}/${lv.classroom}` : lv.grade || ''} · {lv.plate_no}
+                        {lv.session && ` · ${lv.session === 'morning' ? 'เช้า' : lv.session === 'evening' ? 'เย็น' : 'ทั้งวัน'}`}
+                        {lv.reason && ` · ${lv.reason}`}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelLeave(lv.id)}
+                      disabled={!!leaveLoading[lv.id]}
+                      className="shrink-0 text-xs font-medium text-danger hover:text-danger/80 disabled:opacity-50 px-2.5 py-1 rounded border border-danger/30 hover:bg-danger-soft transition min-h-[36px]"
+                    >
+                      {leaveLoading[lv.id] ? 'กำลัง...' : 'ยกเลิก'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+          )}
 
           {/* Phase 10.7E-3 — analytics charts moved below the fold.
               Three charts (morning donut, evening donut, pending bar chart)

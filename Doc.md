@@ -187,9 +187,20 @@
 - **วิธีแก้:** สร้าง symlinks ชื่อ ASCII ใน `docs/manual-pdf/` (`driver.pdf`, `school.pdf`, `affiliation.pdf`, `province.pdf`, `transport.pdf`, `admin.pdf`, `parent.pdf`) แล้วอัปเดตลิงก์ใน HTML ให้ชี้ไปชื่อ ASCII
 - **ผลลัพธ์:** ดาวน์โหลด PDF ทั้ง 7 สิทธิ์ได้ปกติ (`content-type: application/pdf`) ทั้งโดเมน `schoolbuslampang.com`
 
+### 5. แก้ไขลิงก์เอกสารที่เกี่ยวข้อง (Production Readiness / Backup & Restore / Operator Runbook)
+
+**Commit:** `fe9039d`
+
+- **ปัญหา:** ลิงก์ใน `docs/manual-html/index.html` ชี้ไป `../production-readiness.md`, `../ops-backup-restore.md`, `../OPERATOR_RUNBOOK.md` แต่ nginx ไม่ได้รองรับ `.md` ไฟล์ (fallback ไปหน้า login) และ `ops-backup-restore.md` ไม่มีอยู่จริง
+- **วิธีแก้:**
+  - สร้าง symlink `frontend/dist/docs -> ../../docs` เพื่อให้ nginx serve ไฟล์ `.md`
+  - เปลี่ยนลิงก์ใน HTML เป็น `/docs/...`
+  - สร้าง symlink `docs/ops-backup-restore.md -> PRODUCTION-RECOVERY-2026-06-23.md`
+- **ผลลัพธ์:** ทดสอบ 3 ลิงก์ ได้ `HTTP 200` + `application/octet-stream` (ดาวน์โหลด/เปิด .md ได้)
+
 ---
 
-## 5. ไฟล์ที่เปลี่ยนแปลง
+## 6. ไฟล์ที่เปลี่ยนแปลง
 
 ### Backend
 
@@ -225,7 +236,7 @@
 
 ---
 
-## 6. สถาปัตยกรรม
+## 7. สถาปัตยกรรม
 
 ### State Machine: การขึ้นทะเบียนรถ (Role Inversion)
 
@@ -259,7 +270,7 @@ PENDING_SCHOOL_REVIEW    (คนขับยื่นคำขอ)
 
 ---
 
-## 7. API Endpoints
+## 8. API Endpoints
 
 ### ใหม่ทั้งหมด (13 endpoints)
 
@@ -293,7 +304,7 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 
 ---
 
-## 8. งานที่เหลือ
+## 9. งานที่เหลือ
 
 - [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals)
 - [ ] UAT เชิงผู้ใช้กับ workflow ใหม่
@@ -301,9 +312,11 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 
 ---
 
-## 9. Git Log
+## 10. Git Log
 
 ```
+fe9039d docs: fix related documents links and serve .md files
+eeffe6d docs: update Doc.md with PDF download fix and renumber sections
 294ea86 docs: fix remaining admin/parent PDF links to ASCII aliases
 1011bd9 docs: fix manual PDF download links with ASCII aliases
 b94760d docs: add comprehensive change log (Doc.md)

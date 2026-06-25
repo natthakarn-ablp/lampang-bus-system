@@ -681,4 +681,107 @@ router.get('/pickup-map', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+
+// ─── Tier 3: Affiliation-managed approval queues ─────────────────────────────
+
+// Student transfer requests
+router.get('/transfer-requests', async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const affId = affiliationId(req);
+    if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    const data = await transfer.listForAffiliation(pool, { affiliationId: affId, status: req.query.status || null });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+router.get('/transfer-requests/:id', async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const affId = affiliationId(req);
+    if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    const data = await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+router.post('/transfer-requests/:id/approve', async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const affId = affiliationId(req);
+    if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    // Verify the request belongs to this affiliation
+    await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    const out = await transfer.approveAndApply(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+      newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    const msg = out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
+      : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
+      : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้'
+      : out.status === 'STALE_NEEDS_REVIEW' ? 'ข้อมูลนักเรียนเปลี่ยนแปลงตั้งแต่ส่งคำขอ กรุณาตรวจสอบใหม่' : 'ดำเนินการแล้ว';
+    return sendSuccess(res, out, msg);
+  } catch (err) { next(err); }
+});
+
+router.post('/transfer-requests/:id/reject', async (req, res, next) => {
+  try {
+    const transfer = require('../services/studentTransfer.service');
+    const affId = affiliationId(req);
+    if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    const out = await transfer.reject(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+      newValue: { result: 'REJECTED', rejected_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
+  } catch (err) { next(err); }
+});
+
+// Vehicle requests
+router.get('/vehicle-requests', async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    const affId = affiliationId(req);
+    if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    const data = await vr.listForAffiliation(pool, { affiliationId: affId, status: req.query.status || null });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+router.get('/vehicle-requests/:id', async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    const affId = affiliationId(req);
+    if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    const data = await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    const affId = affiliationId(req);
+    if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    const out = await vr.approveVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(req.params.id),
+      newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return sendSuccess(res, out, 'อนุมัติคำขอแล้ว');
+  } catch (err) { next(err); }
+});
+
+router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
+  try {
+    const vr = require('../services/vehicleRequest.service');
+    const affId = affiliationId(req);
+    if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    const out = await vr.rejectVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(req.params.id),
+      newValue: { result: 'REJECTED', rejected_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
+  } catch (err) { next(err); }
+});
+
+
 module.exports = router;

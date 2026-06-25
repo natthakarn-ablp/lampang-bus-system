@@ -161,4 +161,31 @@ async function reject(pool, { requestId, adminUserId, adminNote }) {
   return { id: requestId, status: 'REJECTED' };
 }
 
-module.exports = { createRequest, listForSchool, cancelRequest, listForAdmin, countPendingForAdmin, getDetailForAdmin, approveAndApply, reject };
+
+// ── Affiliation: list transfer requests for schools in this affiliation ──────
+async function listForAffiliation(pool, { affiliationId, status = null }) {
+  const statusSql = status ? ' AND q.status = ?' : '';
+  const params = [affiliationId, ...(status ? [status] : [])];
+  const [rows] = await pool.query(
+    `SELECT ${SELECT_COLS} FROM student_transfer_requests q ${JOIN_SCHOOLS}
+     LEFT JOIN schools sa ON sa.id = q.source_school_id
+     WHERE sa.affiliation_id = ?${statusSql}
+     ORDER BY q.status='PENDING' DESC, q.id DESC LIMIT 200`,
+    params
+  );
+  return rows.map(pubRow);
+}
+
+async function getDetailForAffiliation(pool, { requestId, affiliationId }) {
+  const [[row]] = await pool.query(
+    `SELECT ${SELECT_COLS} FROM student_transfer_requests q ${JOIN_SCHOOLS}
+     LEFT JOIN schools sa ON sa.id = q.source_school_id
+     WHERE q.id = ? AND sa.affiliation_id = ?`,
+    [requestId, affiliationId]
+  );
+  if (!row) throw notFound('ไม่พบคำขอ หรือคำขอนี้ไม่ได้อยู่ในสังกัดของคุณ');
+  return pubRow(row);
+}
+
+
+module.exports = { createRequest, listForSchool, cancelRequest, listForAdmin, countPendingForAdmin, getDetailForAdmin, listForAffiliation, getDetailForAffiliation, approveAndApply, reject };

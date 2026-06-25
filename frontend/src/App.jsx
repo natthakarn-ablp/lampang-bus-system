@@ -59,6 +59,8 @@ const AffSchoolAccounts    = lazy(() => import('./pages/affiliation/AffSchoolAcc
 const AffAuditLog          = lazy(() => import('./pages/affiliation/AffAuditLog'));
 const AffiliationLiveVehicles = lazy(() => import('./pages/affiliation/AffiliationLiveVehicles'));
 const AffiliationPickupMap   = lazy(() => import('./pages/affiliation/AffiliationPickupMap'));
+const AffTransferRequests   = lazy(() => import('./pages/affiliation/AffTransferRequests'));
+const AffVehicleRequests    = lazy(() => import('./pages/affiliation/AffVehicleRequests'));
 
 // Province
 const ProvinceLayout       = lazy(() => import('./pages/province/ProvinceLayout'));
@@ -249,6 +251,8 @@ export default function App() {
             <Route path="audit-log"   element={<AffAuditLog />} />
             <Route path="live-vehicles" element={<AffiliationLiveVehicles />} />
             <Route path="pickup-map"  element={<AffiliationPickupMap />} />
+            <Route path="transfer-requests" element={<AffTransferRequests />} />
+            <Route path="vehicle-requests"  element={<AffVehicleRequests />} />
           </Route>
 
           {/* Province module */}

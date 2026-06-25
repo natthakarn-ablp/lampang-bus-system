@@ -174,7 +174,40 @@ async function rejectVehicleRequest(pool, { requestId, adminUserId, adminNote })
   return { id: requestId, status: 'REJECTED' };
 }
 
+
+// ── Affiliation: list vehicle requests for schools in this affiliation ───────
+async function listForAffiliation(pool, { affiliationId, status = null }) {
+  const where = 'WHERE sc.affiliation_id = ?';
+  const params = [affiliationId];
+  if (status) { params.push(status); }
+  const statusSql = status ? ' AND q.status = ?' : '';
+  const [rows] = await pool.query(
+    `SELECT ${SEL} FROM vehicle_requests q ${JOIN} WHERE sc.affiliation_id = ?${statusSql} ORDER BY q.status='PENDING' DESC, q.id DESC LIMIT 300`,
+    params
+  );
+  return rows.map(pub);
+}
+
+async function getDetailForAffiliation(pool, { requestId, affiliationId }) {
+  const [[q]] = await pool.query(
+    `SELECT ${SEL} FROM vehicle_requests q ${JOIN} WHERE q.id = ? AND sc.affiliation_id = ?`,
+    [requestId, affiliationId]
+  );
+  if (!q) throw err('ไม่พบคำขอ หรือคำขอนี้ไม่ได้อยู่ในสังกัดของคุณ', 404);
+  let vehicle = null, activeSiblingConflict = false;
+  if (q.vehicle_id) { const [[v]] = await pool.query('SELECT id, plate_no, vehicle_type, is_deleted, canonical_plate FROM vehicles WHERE id = ?', [q.vehicle_id]); vehicle = v || null; }
+  if (q.canonical_plate) { const [[sib]] = await pool.query('SELECT id FROM vehicles WHERE canonical_plate = ? AND is_deleted = FALSE LIMIT 1', [q.canonical_plate]); activeSiblingConflict = !!sib; }
+  return {
+    ...pub(q),
+    current_vehicle: vehicle ? { plate_no: vehicle.plate_no, vehicle_type: vehicle.vehicle_type, is_deleted: !!vehicle.is_deleted } : null,
+    active_canonical_conflict: activeSiblingConflict,
+  };
+}
+
+
 module.exports = {
   createVehicleRequest, listSchoolVehicleRequests, getSchoolVehicleRequest, cancelVehicleRequest,
   listAdminVehicleRequests, countPendingForAdmin, getAdminVehicleRequest, approveVehicleRequest, rejectVehicleRequest,
+  listForAffiliation, getDetailForAffiliation,
+  listForAffiliation, getDetailForAffiliation,
 };

@@ -111,6 +111,48 @@ router.post(
   }
 );
 
+// ─── Role Inversion: School reviews driver-submitted application ────────────
+router.post(
+  '/applications/:id/review',
+  requireRole('school', 'admin'),
+  requireFullSchoolScope,
+  async (req, res, next) => {
+    try {
+      const schoolId = schoolIdFor(req);
+      if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', [{ code: 'SCHOOL_SCOPE_REQUIRED' }], 400);
+      const data = await verification.reviewApplication(pool, {
+        applicationId: Number(req.params.id),
+        schoolId,
+        userId: req.user.id,
+        approved: req.body.approved !== false,
+        notes: req.body.notes || null,
+      });
+      return sendSuccess(res, data, req.body.approved !== false ? 'ตรวจสอบถูกต้อง คำขอพร้อมดำเนินการต่อ' : 'ปฏิเสธคำขอแล้ว');
+    } catch (error) { return next(error); }
+  }
+);
+
+// ─── Timeline endpoint (all roles) ──────────────────────────────────────────
+router.get(
+  '/applications/:id/timeline',
+  requireRole('school', 'transport', 'province', 'admin', 'driver'),
+  async (req, res, next) => {
+    try {
+      const [rows] = await pool.query(
+        `SELECT al.id, al.action, al.entity_type, al.old_value, al.new_value,
+                al.created_at, u.display_name AS actor_name, u.role AS actor_role
+           FROM audit_logs al
+           JOIN users u ON u.id = al.user_id
+          WHERE al.entity_type = 'vehicle_inspection_application'
+            AND al.entity_id = ?
+          ORDER BY al.created_at ASC`,
+        [String(req.params.id)]
+      );
+      return sendSuccess(res, rows);
+    } catch (error) { return next(error); }
+  }
+);
+
 router.get('/transport/queue', requireRole('transport', 'admin'), async (req, res, next) => {
   try {
     const data = await verification.listTransportQueue(pool, {

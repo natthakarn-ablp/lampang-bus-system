@@ -1235,4 +1235,41 @@ router.delete('/vehicle-location', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+
+// ─── Role Inversion: Driver-initiated inspection applications ─────────────────
+router.post('/applications', async (req, res, next) => {
+  try {
+    const verification = require('../services/vehicleVerification.service');
+    const data = await verification.createDriverApplication(pool, {
+      vehicleId: req.body.vehicle_id,
+      driverUserId: req.user.id,
+      currentTerm: req.body.current_term,
+    });
+    return res.status(201).json({ success: true, data, message: 'ยื่นคำขอขึ้นทะเบียนรถเรียบร้อย' });
+  } catch (error) { next(error); }
+});
+
+router.get('/applications', async (req, res, next) => {
+  try {
+    const verification = require('../services/vehicleVerification.service');
+    const data = await verification.listDriverApplications(pool, {
+      driverUserId: req.user.id,
+      status: req.query.status || null,
+    });
+    return res.json({ success: true, data });
+  } catch (error) { next(error); }
+});
+
+router.get('/applications/:id', async (req, res, next) => {
+  try {
+    const verification = require('../services/vehicleVerification.service');
+    const data = await verification.getApplication(pool, {
+      applicationId: Number(req.params.id),
+      viewer: { role: 'driver', schoolId: null },
+    });
+    return res.json({ success: true, data });
+  } catch (error) { next(error); }
+});
+
+
 module.exports = router;

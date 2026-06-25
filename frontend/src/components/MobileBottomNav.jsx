@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, ClipboardList, AlertTriangle, User } from 'lucide-react';
+import { Home, AlertTriangle, User, FileCheck2 } from 'lucide-react';
 
 const DRIVER_TABS = [
-  { to: '/driver',           end: true, icon: Home,           label: 'หน้าแรก' },
-  { to: '/driver/requests',  end: false, icon: ClipboardList, label: 'คำขอ' },
-  { to: '/driver/emergency', end: false, icon: AlertTriangle, label: 'ฉุกเฉิน' },
-  { to: '/driver/profile',   end: false, icon: User,          label: 'โปรไฟล์' },
+  { to: '/driver',              end: true,  icon: Home,           label: 'หน้าแรก' },
+  { to: '/driver/applications', end: false, icon: FileCheck2,     label: 'ขึ้นทะเบียน' },
+  { to: '/driver/emergency',    end: false, icon: AlertTriangle,  label: 'ฉุกเฉิน' },
+  { to: '/driver/profile',      end: false, icon: User,           label: 'โปรไฟล์' },
 ];
 
 // Approx height of the bar (used by overlays like Toast to avoid covering it on mobile).

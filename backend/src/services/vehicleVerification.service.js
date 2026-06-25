@@ -812,6 +812,258 @@ async function finalizeInspection(pool, {
   }
 }
 
+
+// ─── Role Inversion: Driver-initiated applications ──────────────────────────
+
+async function createDriverApplication(pool, {
+  vehicleId,
+  driverUserId,
+  currentTerm = env.app.currentTerm,
+}) {
+  if (!vehicleId || !driverUserId) {
+    throw appError('vehicleId และ driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Verify the driver is authorized for this vehicle
+    const [[vehicle]] = await conn.query(
+      `SELECT v.id, v.plate_no, v.vehicle_type, v.certified_capacity,
+              v.insurance_expiry, v.registration_expiry,
+              v.compulsory_insurance_expiry, v.tax_expiry
+         FROM vehicles v
+        WHERE v.id = ? AND v.is_deleted = FALSE
+        FOR UPDATE`,
+      [vehicleId]
+    );
+    if (!vehicle) throw appError('ไม่พบรถที่ต้องการส่งตรวจ', 404, 'VEHICLE_NOT_FOUND');
+
+    // Check driver is authorized for this vehicle
+    const [[assignment]] = await conn.query(
+      `SELECT dva.id, dva.assignment_role, dva.authorization_status
+         FROM driver_vehicle_assignments dva
+        WHERE dva.vehicle_id = ? AND dva.is_active = TRUE
+          AND dva.authorization_status = 'AUTHORIZED'
+          AND dva.driver_id = (
+            SELECT d.id FROM drivers d
+            JOIN users u ON u.driver_id = d.id
+            WHERE u.id = ? AND d.is_deleted = FALSE
+          )
+        LIMIT 1`,
+      [vehicleId, driverUserId]
+    );
+    if (!assignment) {
+      throw appError('คุณไม่ใช่คนขับที่ได้รับอนุญาตของรถคันนี้', 403, 'DRIVER_NOT_AUTHORIZED_FOR_VEHICLE');
+    }
+
+    // Find all schools that have students riding this vehicle
+    const [schools] = await conn.query(
+      `SELECT s.school_id, sc.name AS school_name,
+              SUM(CASE WHEN s.morning_enabled = TRUE THEN 1 ELSE 0 END) AS morning_rider_count,
+              SUM(CASE WHEN s.evening_enabled = TRUE THEN 1 ELSE 0 END) AS evening_rider_count,
+              MAX(s.updated_at) AS source_updated_at
+         FROM students s
+         JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+        WHERE s.vehicle_id = ? AND s.is_deleted = FALSE
+          AND (s.term_id = ? OR s.term_id IS NULL)
+        GROUP BY s.school_id, sc.name
+        ORDER BY sc.name`,
+      [vehicleId, currentTerm]
+    );
+    if (!schools.length) throw appError('รถคันนี้ยังไม่มีข้อมูลผู้โดยสารในภาคเรียนปัจจุบัน', 400, 'NO_CURRENT_RIDERS');
+
+    // Use the first school as issuing school (primary school)
+    const issuingSchoolId = schools[0].school_id;
+
+    // Check for active application
+    const activeKey = `${vehicleId}|${currentTerm}`;
+    const [[existing]] = await conn.query(
+      `SELECT id, request_no, status
+         FROM vehicle_inspection_applications
+        WHERE active_request_key = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [activeKey]
+    );
+    if (existing) {
+      throw appError('รถคันนี้มีคำขอส่งตรวจที่ยังดำเนินการอยู่', 409, 'ACTIVE_APPLICATION_EXISTS', {
+        application_id: existing.id,
+        request_no: existing.request_no,
+        status: existing.status,
+      });
+    }
+
+    const [drivers] = await conn.query(
+      `SELECT d.id AS driver_id, d.name AS driver_name,
+              dva.assignment_role, dq.qualification_status
+         FROM driver_vehicle_assignments dva
+         JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
+         LEFT JOIN driver_qualifications dq ON dq.driver_id = d.id AND dq.is_current = TRUE
+        WHERE dva.vehicle_id = ? AND dva.is_active = TRUE
+          AND dva.authorization_status = 'AUTHORIZED'
+        ORDER BY FIELD(dva.assignment_role, 'PRIMARY', 'BACKUP'), d.name`,
+      [vehicleId]
+    );
+
+    const [routes] = await conn.query(
+      `SELECT pp.label AS pickup_area, pp.session
+         FROM pickup_points pp
+        WHERE pp.vehicle_id = ? AND pp.is_deleted = FALSE
+        ORDER BY pp.sequence, pp.id`,
+      [vehicleId]
+    );
+
+    const transportSnapshot = buildTransportSnapshot({ vehicle, schools, drivers, routes });
+    const requestNo = makeRequestNo();
+    const qrToken = crypto.randomBytes(16).toString('hex');
+    const [insert] = await conn.query(
+      `INSERT INTO vehicle_inspection_applications
+        (request_no, vehicle_id, issuing_school_id, requested_by, current_term,
+         status, version_no, provider_type, qr_token, active_request_key,
+         vehicle_snapshot_json, rider_summary_json, route_summary_json)
+       VALUES (?, ?, ?, ?, ?, 'PENDING_SCHOOL_REVIEW', 1, 'DLT_OFFICER', ?, ?, ?, ?, ?)`,
+      [
+        requestNo, vehicleId, issuingSchoolId, driverUserId, currentTerm,
+        qrToken, activeKey,
+        JSON.stringify(transportSnapshot.vehicle),
+        JSON.stringify({
+          schools: transportSnapshot.schools,
+          morning_rider_count: transportSnapshot.morning_rider_count,
+          evening_rider_count: transportSnapshot.evening_rider_count,
+          peak_rider_count: transportSnapshot.peak_rider_count,
+          total_schools: transportSnapshot.total_schools,
+        }),
+        JSON.stringify({ routes: transportSnapshot.routes }),
+      ]
+    );
+
+    for (const school of transportSnapshot.schools) {
+      const source = schools.find((row) => String(row.school_id) === String(school.school_id));
+      await conn.query(
+        `INSERT INTO inspection_application_schools
+          (application_id, school_id, morning_rider_count, evening_rider_count,
+           peak_rider_count, source_updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [insert.insertId, school.school_id, school.morning_rider_count,
+          school.evening_rider_count, school.peak_rider_count,
+          source && source.source_updated_at ? source.source_updated_at : null]
+      );
+    }
+
+    await logAudit({
+      userId: driverUserId,
+      action: 'CREATE',
+      entityType: 'vehicle_inspection_application',
+      entityId: String(insert.insertId),
+      newValue: {
+        request_no: requestNo,
+        vehicle_id: vehicleId,
+        issuing_school_id: issuingSchoolId,
+        initiated_by: 'driver',
+        total_schools: transportSnapshot.total_schools,
+        peak_rider_count: transportSnapshot.peak_rider_count,
+      },
+      conn,
+    });
+    await conn.commit();
+
+    return {
+      id: insert.insertId,
+      request_no: requestNo,
+      status: 'PENDING_SCHOOL_REVIEW',
+      vehicle_id: vehicleId,
+      issuing_school_id: issuingSchoolId,
+      qr_token: qrToken,
+      total_schools: transportSnapshot.total_schools,
+      morning_rider_count: transportSnapshot.morning_rider_count,
+      evening_rider_count: transportSnapshot.evening_rider_count,
+      peak_rider_count: transportSnapshot.peak_rider_count,
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
+async function listDriverApplications(pool, { driverUserId, status = null } = {}) {
+  if (!driverUserId) {
+    throw appError('driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
+  }
+  const statusSql = status ? ' AND a.status = ?' : '';
+  const params = [driverUserId, ...(status ? [status] : [])];
+  const [rows] = await pool.query(
+    `SELECT a.*, v.plate_no, v.vehicle_type, v.verification_status,
+            sc.name AS issuing_school_name
+       FROM vehicle_inspection_applications a
+       JOIN vehicles v ON v.id = a.vehicle_id
+       JOIN schools sc ON sc.id = a.issuing_school_id
+      WHERE a.requested_by = ?${statusSql}
+      ORDER BY a.created_at DESC`,
+    params
+  );
+  return rows.map(mapApplication);
+}
+
+async function reviewApplication(pool, {
+  applicationId, schoolId, userId, approved, notes = null,
+}) {
+  if (!applicationId || !schoolId || !userId) {
+    throw appError('ข้อมูลคำขอ โรงเรียน หรือผู้ใช้ไม่ครบถ้วน', 400, 'MISSING_REQUIRED_FIELDS');
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[application]] = await conn.query(
+      `SELECT id, request_no, status, issuing_school_id, active_request_key
+         FROM vehicle_inspection_applications
+        WHERE id = ?
+        FOR UPDATE`,
+      [applicationId]
+    );
+    if (!application) throw appError('ไม่พบคำขอ', 404, 'APPLICATION_NOT_FOUND');
+    if (String(application.issuing_school_id) !== String(schoolId)) {
+      throw appError('เฉพาะโรงเรียนผู้ออกเอกสารเท่านั้นที่ตรวจสอบได้', 403, 'ISSUING_SCHOOL_REQUIRED');
+    }
+    if (!['PENDING_SCHOOL_REVIEW', 'DRAFT'].includes(application.status)) {
+      throw appError('สถานะคำขอปัจจุบันไม่อนุญาตให้ตรวจสอบ', 409, 'INVALID_APPLICATION_STATUS', {
+        current_status: application.status,
+      });
+    }
+    const nextStatus = approved ? 'READY_TO_PRINT' : 'REJECTED';
+    await conn.query(
+      `UPDATE vehicle_inspection_applications
+          SET status = ?,
+              ready_at = CASE WHEN ? = 'READY_TO_PRINT' THEN CURRENT_TIMESTAMP ELSE ready_at END,
+              cancelled_by = CASE WHEN ? = 'REJECTED' THEN ? ELSE cancelled_by END,
+              cancel_reason = CASE WHEN ? = 'REJECTED' THEN ? ELSE cancel_reason END,
+              active_request_key = CASE WHEN ? = 'REJECTED' THEN NULL ELSE active_request_key END
+        WHERE id = ?`,
+      [nextStatus, nextStatus, nextStatus, userId, nextStatus, notes, nextStatus, applicationId]
+    );
+    await logAudit({
+      userId,
+      action: 'UPDATE',
+      entityType: 'vehicle_inspection_application',
+      entityId: String(applicationId),
+      oldValue: { status: application.status },
+      newValue: { status: nextStatus, approved, ...(notes ? { review_notes: notes } : {}) },
+      conn,
+    });
+    await conn.commit();
+    return { id: Number(applicationId), request_no: application.request_no, status: nextStatus };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
+
 module.exports = {
   ACTIVE_APPLICATION_STATUSES,
   FINAL_RESULTS,
@@ -821,11 +1073,14 @@ module.exports = {
   buildTransportSnapshot,
   refreshVehicleEligibility,
   createApplication,
+  createDriverApplication,
+  listDriverApplications,
   listSchoolApplications,
   getApplication,
   listTransportQueue,
   markReadyToPrint,
   cancelApplication,
+  reviewApplication,
   validateChecklistResults,
   listChecklistTemplates,
   startInspection,

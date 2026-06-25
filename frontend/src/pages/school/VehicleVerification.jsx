@@ -22,6 +22,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import { AlertBanner, CommandHero, StatusStepRail } from '../../components/ui';
 
 const STATUS = {
+  PENDING_SCHOOL_REVIEW: ['รอตรวจสอบ', 'warn'],
   DRAFT: ['ฉบับร่าง', 'neutral'],
   READY_TO_PRINT: ['พร้อมพิมพ์', 'info'],
   SUBMITTED: ['ยื่นแล้ว', 'info'],
@@ -30,11 +31,12 @@ const STATUS = {
   PASSED: ['ผ่าน', 'success'],
   FAILED: ['ไม่ผ่าน', 'danger'],
   CANCELLED: ['ยกเลิก', 'neutral'],
+  REJECTED: ['ปฏิเสธ', 'danger'],
   EXPIRED: ['หมดอายุ', 'danger'],
   SUPERSEDED: ['มีฉบับใหม่', 'neutral'],
 };
 
-const CLOSED_STATUSES = new Set(['CANCELLED', 'FAILED', 'PASSED', 'EXPIRED', 'SUPERSEDED']);
+const CLOSED_STATUSES = new Set(['CANCELLED', 'FAILED', 'PASSED', 'EXPIRED', 'SUPERSEDED', 'REJECTED']);
 
 function Badge({ status }) {
   const [label, variant] = STATUS[status] || [status || '-', 'neutral'];
@@ -82,13 +84,13 @@ function VerificationProgress({ selected }) {
     {
       key: 'transport',
       label: 'ขนส่งตรวจ',
-      description: 'ขนส่งดำเนินการ (โรงเรียนรอได้)',
+      description: 'เจ้าหน้าที่ลงผลในระบบ',
       status: stepStatus(selected, 'transport'),
     },
     {
       key: 'certified',
       label: 'รับรองผล',
-      description: 'ขนส่งรับรอง · โรงเรียนติดตามได้',
+      description: 'โรงเรียนติดตามสถานะได้',
       status: stepStatus(selected, 'certified'),
     },
   ];
@@ -174,8 +176,7 @@ function VerificationHistoryRow({ application, onOpen }) {
   );
 }
 
-function VerificationPacket({ selected, qr, busy, isGradeTeacher, mySchoolId, onBack, onMarkReady }) {
-  const sharedCount = (selected.schools || []).length;
+function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMarkReady, onReview }) {
   return (
     <AppCard className="motion-safe:animate-fade-in-up motion-reduce:animate-none print:animate-none print:shadow-none print:border-0">
       <div className="flex flex-wrap justify-between gap-3 border-b border-surface-border pb-4 print:border-slate-400">
@@ -207,20 +208,11 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, mySchoolId, on
           </div>
 
           <div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-ink-muted" strokeWidth={2.2} aria-hidden="true" />
               <h3 className="font-semibold text-ink">จำนวนผู้โดยสารแยกโรงเรียน</h3>
-              {sharedCount > 1 && (
-                <span className="rounded-full bg-brand-50 px-2.5 py-0.5 text-xs font-semibold text-brand-700">
-                  ใช้ร่วม {sharedCount} โรงเรียน
-                </span>
-              )}
             </div>
-            <p className="mt-1 text-sm text-ink-muted">
-              {sharedCount > 1
-                ? 'รถคันนี้หลายโรงเรียนใช้ร่วมกัน — รวมเป็นใบส่งตรวจชุดเดียว (แสดงเฉพาะจำนวน ไม่มีรายชื่อนักเรียน)'
-                : 'แสดงเฉพาะจำนวน ไม่มีรายชื่อนักเรียน'}
-            </p>
+            <p className="mt-1 text-sm text-ink-muted">แสดงเฉพาะจำนวน ไม่มีรายชื่อนักเรียน</p>
             <div className="mt-3 overflow-x-auto rounded-xl border border-surface-border">
               <table className="w-full text-sm">
                 <thead>
@@ -232,20 +224,14 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, mySchoolId, on
                   </tr>
                 </thead>
                 <tbody>
-                  {(selected.schools || []).map(school => {
-                    const mine = mySchoolId && String(school.school_id) === String(mySchoolId);
-                    return (
-                      <tr key={school.school_id} className={`border-t border-surface-border ${mine ? 'bg-brand-50' : ''}`}>
-                        <td className="p-3 text-ink">
-                          {school.school_name}
-                          {mine && <span className="ml-2 rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-semibold text-white">โรงเรียนของคุณ</span>}
-                        </td>
-                        <td className="p-3 text-ink-muted">{school.morning_rider_count}</td>
-                        <td className="p-3 text-ink-muted">{school.evening_rider_count}</td>
-                        <td className="p-3 font-semibold text-ink">{school.peak_rider_count}</td>
-                      </tr>
-                    );
-                  })}
+                  {(selected.schools || []).map(school => (
+                    <tr key={school.school_id} className="border-t border-surface-border">
+                      <td className="p-3 text-ink">{school.school_name}</td>
+                      <td className="p-3 text-ink-muted">{school.morning_rider_count}</td>
+                      <td className="p-3 text-ink-muted">{school.evening_rider_count}</td>
+                      <td className="p-3 font-semibold text-ink">{school.peak_rider_count}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -276,6 +262,27 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, mySchoolId, on
         >
           กลับไปเลือกรถ
         </button>
+        {selected.status === 'PENDING_SCHOOL_REVIEW' && !isGradeTeacher && (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onReview(true)}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
+              ตรวจสอบถูกต้อง
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onReview(false)}
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50"
+            >
+              ปฏิเสธคำขอ
+            </button>
+          </>
+        )}
         {selected.status === 'DRAFT' && !isGradeTeacher && (
           <button
             type="button"
@@ -359,13 +366,8 @@ export default function VehicleVerification() {
       await openApplication(res.data.data.id);
     } catch (err) {
       const existing = err.response?.data?.errors?.[0]?.application_id;
-      if (existing) {
-        // รถใช้ร่วมหลายโรงเรียน — มีใบส่งตรวจอยู่แล้ว เปิดให้เลย (ไม่ใช่ error)
-        await openApplication(existing);
-        toast.success('รถคันนี้มีใบส่งตรวจที่ใช้ร่วมกันอยู่แล้ว — เปิดให้แล้ว ข้อมูลโรงเรียนของคุณรวมอยู่ด้วย พิมพ์/ติดตามสถานะได้เลย');
-      } else {
-        toast.error(err.response?.data?.message || 'สร้างคำขอไม่สำเร็จ');
-      }
+      if (existing) await openApplication(existing);
+      toast.error(err.response?.data?.message || 'สร้างคำขอไม่สำเร็จ');
     } finally {
       setBusy(false);
     }
@@ -380,6 +382,25 @@ export default function VehicleVerification() {
       await openApplication(selected.id);
     } catch (err) {
       toast.error(err.response?.data?.message || 'เปลี่ยนสถานะไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function review(approved) {
+    if (!approved && !confirm('ยืนยันปฏิเสธคำขอนี้?')) return;
+    setBusy(true);
+    try {
+      await api.post(`/verification/applications/${selected.id}/review`, { approved });
+      toast.success(approved ? 'ตรวจสอบถูกต้อง คำขอพร้อมดำเนินการต่อ' : 'ปฏิเสธคำขอแล้ว');
+      await load();
+      if (approved) {
+        await openApplication(selected.id);
+      } else {
+        setSelected(null);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ตรวจสอบคำขอไม่สำเร็จ');
     } finally {
       setBusy(false);
     }
@@ -405,7 +426,7 @@ export default function VehicleVerification() {
         <CommandHero
           eyebrow="School vehicle safety workflow"
           title="ส่งตรวจและรับรองรถ"
-          description="ออกใบส่งตรวจออนไลน์จากข้อมูลรถที่โรงเรียนใช้งาน แม้หลายโรงเรียนใช้รถคันเดียวกันก็รวมเป็นเอกสารชุดเดียวให้ขนส่งตรวจได้"
+          description="คนขับยื่นคำขอขึ้นทะเบียนรถ โรงเรียนตรวจสอบความถูกต้อง และขนส่งตรวจสภาพรถ ติดตามสถานะได้ตลอด"
           icon={ShieldCheck}
           meta={heroMeta}
           actions={(
@@ -504,9 +525,9 @@ export default function VehicleVerification() {
           qr={qr}
           busy={busy}
           isGradeTeacher={isGradeTeacher}
-          mySchoolId={user?.scope_id || user?.scopeId}
           onBack={() => setSelected(null)}
           onMarkReady={markReady}
+          onReview={review}
         />
       )}
 

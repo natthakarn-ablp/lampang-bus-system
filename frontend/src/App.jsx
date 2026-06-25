@@ -31,6 +31,7 @@ const DriverRosterRequests = lazy(() => import('./pages/driver/DriverRosterReque
 const DriverPretrip        = lazy(() => import('./pages/driver/DriverPretrip'));
 const DriverPickupMap      = lazy(() => import('./pages/driver/DriverPickupMap'));
 const DriverShift          = lazy(() => import('./pages/driver/DriverShift'));
+const DriverApplications   = lazy(() => import('./pages/driver/DriverApplications'));
 
 // School
 const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
@@ -202,6 +203,7 @@ export default function App() {
             <Route path="pretrip"     element={<DriverPretrip />} />
             <Route path="pickup-map"  element={<DriverPickupMap />} />
             <Route path="shift"       element={<DriverShift />} />
+            <Route path="applications" element={<DriverApplications />} />
           </Route>
 
           {/* School module */}

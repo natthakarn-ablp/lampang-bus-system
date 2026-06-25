@@ -179,9 +179,17 @@
 | `docs/manual-html/user-guide-affiliation.html` | เพิ่มงานที่ 13B/13C อนุมัติคำขอ |
 | `docs/STATUS-2026-06-25.md` | สร้างเอกสารสถานะใหม่ |
 
+### 4. แก้ไขการดาวน์โหลด PDF คู่มือ
+
+**Commit:** `1011bd9` และ `294ea86`
+
+- **ปัญหา:** ลิงก์ PDF ใน `docs/manual-html/index.html` ใช้ชื่อไฟล์ภาษาไทยแบบ URL-encoded (เช่น `%E0%B8%84...%E0%B8%96.pdf`) — nginx ไม่สามารถจับคู่ไฟล์ที่มีชื่อ encoded บน filesystem UTF-8 ได้ ทำให้กลับไปหน้า login ของ SPA
+- **วิธีแก้:** สร้าง symlinks ชื่อ ASCII ใน `docs/manual-pdf/` (`driver.pdf`, `school.pdf`, `affiliation.pdf`, `province.pdf`, `transport.pdf`, `admin.pdf`, `parent.pdf`) แล้วอัปเดตลิงก์ใน HTML ให้ชี้ไปชื่อ ASCII
+- **ผลลัพธ์:** ดาวน์โหลด PDF ทั้ง 7 สิทธิ์ได้ปกติ (`content-type: application/pdf`) ทั้งโดเมน `schoolbuslampang.com`
+
 ---
 
-## 4. ไฟล์ที่เปลี่ยนแปลง
+## 5. ไฟล์ที่เปลี่ยนแปลง
 
 ### Backend
 
@@ -217,7 +225,7 @@
 
 ---
 
-## 5. สถาปัตยกรรม
+## 6. สถาปัตยกรรม
 
 ### State Machine: การขึ้นทะเบียนรถ (Role Inversion)
 
@@ -251,7 +259,7 @@ PENDING_SCHOOL_REVIEW    (คนขับยื่นคำขอ)
 
 ---
 
-## 6. API Endpoints
+## 7. API Endpoints
 
 ### ใหม่ทั้งหมด (13 endpoints)
 
@@ -285,7 +293,7 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 
 ---
 
-## 7. งานที่เหลือ
+## 8. งานที่เหลือ
 
 - [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals)
 - [ ] UAT เชิงผู้ใช้กับ workflow ใหม่
@@ -293,9 +301,12 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 
 ---
 
-## Git Log
+## 9. Git Log
 
 ```
+294ea86 docs: fix remaining admin/parent PDF links to ASCII aliases
+1011bd9 docs: fix manual PDF download links with ASCII aliases
+b94760d docs: add comprehensive change log (Doc.md)
 a1ba2e6 docs: update manuals and status for role inversion + Tier 3
 0f00fbe feat: Tier 3 — distribute admin approval queues to affiliation
 cc1cf93 feat: role inversion — driver-initiated vehicle registration

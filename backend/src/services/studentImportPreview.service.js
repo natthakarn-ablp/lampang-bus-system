@@ -120,6 +120,24 @@ async function analyzeRows(db, schoolId, rows) {
       const alias = ip && hp && plateId.normalizeThaiText(ip.province).toLowerCase() !== plateId.normalizeThaiText(hp.province).toLowerCase();
       return { matched: true, code: alias ? 'VEHICLE_PROVINCE_ALIAS_MATCH' : 'VEHICLE_MATCHED_CANONICAL', vehicle_id: hit.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
     }
+    // Fallback: import file omitted province but exactly one active vehicle matches the base.
+    // We only auto-resolve when the match is unambiguous (one active vehicle, with province).
+    const parsed = plateId.parseLegacyPlateText(plate_no);
+    if (parsed && !plateId.normalizeProvince(parsed.province)) {
+      const inputBase = plateId.normalizePlatePrefix(parsed.plate_prefix) + plateId.normalizePlateNumber(parsed.plate_number);
+      const candidates = allVehicles.filter((v) => {
+        if (v.is_deleted) return false;
+        const vp = plateId.parseLegacyPlateText(v.plate_no);
+        if (!vp) return false;
+        const base = plateId.normalizePlatePrefix(vp.plate_prefix) + plateId.normalizePlateNumber(vp.plate_number);
+        return base === inputBase && plateId.normalizeProvince(vp.province);
+      });
+      if (candidates.length === 1) {
+        const v = candidates[0];
+        const hp = plateId.parseLegacyPlateText(v.plate_no);
+        return { matched: true, code: 'VEHICLE_PROVINCE_ALIAS_MATCH', vehicle_id: v.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
+      }
+    }
     const c = plateId.classifyVehiclePlateConflict(plate_no, allVehicles);
     return { matched: false, code: c.code, vehicle_id: c.vehicle_id, display_plate: c.display_plate };
   };

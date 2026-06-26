@@ -138,6 +138,24 @@ async function analyzeRows(db, schoolId, rows) {
         return { matched: true, code: 'VEHICLE_PROVINCE_ALIAS_MATCH', vehicle_id: v.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
       }
     }
+    // Final fallback: fuzzy normalized match. If the input is close enough to
+    // exactly one active vehicle, normalize it to the system plate format.
+    // "Close enough" means the normalized input appears at the start of the
+    // normalized vehicle plate, or vice versa. We only accept when there is a
+    // single unambiguous candidate to avoid accidental wrong matches.
+    const normalizedInput = plateId.normalizeThaiText(plate_no).toLowerCase();
+    if (normalizedInput && normalizedInput.length >= 4) {
+      const candidates = allVehicles.filter((v) => {
+        if (v.is_deleted) return false;
+        const normalizedVehicle = plateId.normalizeThaiText(v.plate_no).toLowerCase();
+        return normalizedVehicle.startsWith(normalizedInput) || normalizedInput.startsWith(normalizedVehicle);
+      });
+      if (candidates.length === 1) {
+        const v = candidates[0];
+        const hp = plateId.parseLegacyPlateText(v.plate_no);
+        return { matched: true, code: 'VEHICLE_NORMALIZED_MATCH', vehicle_id: v.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
+      }
+    }
     const c = plateId.classifyVehiclePlateConflict(plate_no, allVehicles);
     return { matched: false, code: c.code, vehicle_id: c.vehicle_id, display_plate: c.display_plate };
   };

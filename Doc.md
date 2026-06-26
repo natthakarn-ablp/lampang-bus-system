@@ -187,7 +187,20 @@
 - **วิธีแก้:** สร้าง symlinks ชื่อ ASCII ใน `docs/manual-pdf/` (`driver.pdf`, `school.pdf`, `affiliation.pdf`, `province.pdf`, `transport.pdf`, `admin.pdf`, `parent.pdf`) แล้วอัปเดตลิงก์ใน HTML ให้ชี้ไปชื่อ ASCII
 - **ผลลัพธ์:** ดาวน์โหลด PDF ทั้ง 7 สิทธิ์ได้ปกติ (`content-type: application/pdf`) ทั้งโดเมน `schoolbuslampang.com`
 
-### 5. แก้ไขลิงก์เอกสารที่เกี่ยวข้อง (Production Readiness / Backup & Restore / Operator Runbook)
+### 5. แก้ไขการนำเข้านักเรียนไม่จับคู่ทะเบียนรถ
+
+**Commit:** `8b0990e` และ `9f0ddd1`
+
+- **ปัญหา:** โรงเรียนบ้านหัวทุ่ง (52010056) เพิ่มข้อมูลรถ 2 คัน (`ลป 2204 ลำปาง`, `นข 3402 ลำปาง`) แต่นำเข้านักเรียนไม่ได้ ระบบแจ้ง `ไม่พบทะเบียนรถ` ทั้ง ๆ ที่รถมีในระบบ
+- **สาเหตุ:** ไฟล์ import ใช้รูปแบบทะเบียนรถไม่ตรงกับระบบ
+  - ใช้ขีดกลาง: `ลป-2204`, `นข-3402 ลำปาง` แทนช่องว่าง
+  - ขาดจังหวัด: `ลป-2204` ไม่มี `ลำปาง`
+- **วิธีแก้:**
+  - `plateIdentity.js`: แปลงขีดกลาง/underscore เป็นช่องว่างก่อน parse ทะเบียนรถ
+  - `studentImportPreview.service.js`: ถ้าไฟล์ import ไม่ได้ใส่จังหวัด แต่มีรถที่ใช้งานอยู่คันเดียวที่ตรงกับหมวด+เลข ระบบจะจับคู่อัตโนมัติ ( province-alias match )
+- **ผลลัพธ์:** ทดสอบ `analyzeRows` กับรถ 2 คันของโรงเรียน จับคู่ได้ถูกต้อง สถานะ `READY` พร้อมนำเข้า
+
+### 6. แก้ไขลิงก์เอกสารที่เกี่ยวข้อง (Production Readiness / Backup & Restore / Operator Runbook)
 
 **Commit:** `fe9039d`
 
@@ -200,7 +213,7 @@
 
 ---
 
-## 6. ไฟล์ที่เปลี่ยนแปลง
+## 7. ไฟล์ที่เปลี่ยนแปลง
 
 ### Backend
 
@@ -236,7 +249,7 @@
 
 ---
 
-## 7. สถาปัตยกรรม
+## 8. สถาปัตยกรรม
 
 ### State Machine: การขึ้นทะเบียนรถ (Role Inversion)
 
@@ -270,7 +283,7 @@ PENDING_SCHOOL_REVIEW    (คนขับยื่นคำขอ)
 
 ---
 
-## 8. API Endpoints
+## 9. API Endpoints
 
 ### ใหม่ทั้งหมด (13 endpoints)
 
@@ -304,7 +317,7 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 
 ---
 
-## 9. งานที่เหลือ
+## 10. งานที่เหลือ
 
 - [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals)
 - [ ] UAT เชิงผู้ใช้กับ workflow ใหม่
@@ -312,9 +325,11 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 
 ---
 
-## 10. Git Log
+## 11. Git Log
 
 ```
+9f0ddd1 fix: auto-match import plates that omit province when exactly one active vehicle matches
+8b0990e fix: normalize dash/underscore separators in parseLegacyPlateText so dash-written plates match space-written ones
 fe9039d docs: fix related documents links and serve .md files
 eeffe6d docs: update Doc.md with PDF download fix and renumber sections
 294ea86 docs: fix remaining admin/parent PDF links to ASCII aliases

@@ -202,7 +202,15 @@
   - `studentImportPreview.service.js`: fuzzy normalized match — ถ้าข้อความทะเบียนป้อนเข้ามาใกล้เคียงกับรถในระบบพอดีคันเดียว ระบบจะจับคู่และแปลงเป็นทะเบียนรถตามข้อมูลในระบบ
 - **ผลลัพธ์:** ทดสอบ `analyzeRows` กับรถ 2 คันของโรงเรียน จับคู่ได้ถูกต้องทั้ง `ลป-2204`, `ลป 2204`, `ลป2204`, `ลป 2204 ลำ` และ `นข-3402 ลำปาง` สถานะ `READY` พร้อมนำเข้า
 
-### 6. แก้ไขลิงก์เอกสารที่เกี่ยวข้อง (Production Readiness / Backup & Restore / Operator Runbook)
+### 6. แก้ไขปัญหา /manual ติดหน้า login หลัง Deploy
+
+**Commit:** `22f33b3`
+
+- **ปัญหา:** ทุกครั้งที่ deploy frontend ใหม่ `frontend/dist/` ถูกสร้างใหม่ทั้งหมด (dist อยู่ใน `.gitignore`) ทำให้ symlink `dist/manual` และ `dist/docs` หาย ผลคือ URL `/manual/...` ตกไปหน้า `index.html` ของ SPA แล้ว redirect ไปหน้า login
+- **วิธีแก้:** เพิ่ม `postbuild` script `scripts/postbuild-symlinks.js` ที่รันอัตโนมัติหลัง `npm run build` เพื่อสร้าง symlink `dist/manual -> ../../docs/manual-html` และ `dist/docs -> ../../docs` ใหม่ทุกครั้ง
+- **ผลลัพธ์:** หลัง deploy ใหม่ ลิงก์คู่มือและเอกสารที่เกี่ยวข้องยังเข้าถึงได้ปกติ ไม่ติดหน้า login
+
+### 7. แก้ไขลิงก์เอกสารที่เกี่ยวข้อง (Production Readiness / Backup & Restore / Operator Runbook)
 
 **Commit:** `fe9039d`
 
@@ -215,7 +223,7 @@
 
 ---
 
-## 7. ไฟล์ที่เปลี่ยนแปลง
+## 8. ไฟล์ที่เปลี่ยนแปลง
 
 ### Backend
 
@@ -251,7 +259,7 @@
 
 ---
 
-## 8. สถาปัตยกรรม
+## 9. สถาปัตยกรรม
 
 ### State Machine: การขึ้นทะเบียนรถ (Role Inversion)
 
@@ -285,7 +293,7 @@ PENDING_SCHOOL_REVIEW    (คนขับยื่นคำขอ)
 
 ---
 
-## 9. API Endpoints
+## 10. API Endpoints
 
 ### ใหม่ทั้งหมด (13 endpoints)
 
@@ -319,7 +327,7 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 
 ---
 
-## 10. งานที่เหลือ
+## 11. งานที่เหลือ
 
 - [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals)
 - [ ] UAT เชิงผู้ใช้กับ workflow ใหม่
@@ -327,9 +335,11 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 
 ---
 
-## 11. Git Log
+## 12. Git Log
 
 ```
+22f33b3 fix: recreate manual/docs symlinks in dist after each frontend build
+6cd3570 docs: update Doc.md with fuzzy plate matching fix
 a866222 fix: fuzzy normalized plate matching for student imports
 9f0ddd1 fix: auto-match import plates that omit province when exactly one active vehicle matches
 8b0990e fix: normalize dash/underscore separators in parseLegacyPlateText so dash-written plates match space-written ones

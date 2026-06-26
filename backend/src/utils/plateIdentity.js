@@ -65,8 +65,11 @@ function buildDisplayPlate({ plate_prefix, plate_number, province } = {}) {
 }
 
 // Best-effort split of a legacy free-text plate into structured parts.
+// Normalize dash/underscore separators to spaces so dash-written plates parse
+// the same as space-written ones (production plates are space-separated).
 function parseLegacyPlateText(plate_no) {
-  const m = String(plate_no == null ? '' : plate_no)
+  const cleaned = String(plate_no == null ? '' : plate_no).replace(/[-‐-―_]+/g, ' ');
+  const m = cleaned
     .match(/^\s*([0-9]?[฀-๿]{1,3})\s*([0-9]{1,4})\s*([฀-๿a-zA-Z][฀-๿a-zA-Z\s]*)?\s*$/);
   if (!m) return null;
   return { plate_prefix: m[1], plate_number: m[2], province: (m[3] || '').trim() };

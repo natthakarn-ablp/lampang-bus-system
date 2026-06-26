@@ -189,16 +189,18 @@
 
 ### 5. แก้ไขการนำเข้านักเรียนไม่จับคู่ทะเบียนรถ
 
-**Commit:** `8b0990e` และ `9f0ddd1`
+**Commit:** `8b0990e`, `9f0ddd1` และ `a866222`
 
 - **ปัญหา:** โรงเรียนบ้านหัวทุ่ง (52010056) เพิ่มข้อมูลรถ 2 คัน (`ลป 2204 ลำปาง`, `นข 3402 ลำปาง`) แต่นำเข้านักเรียนไม่ได้ ระบบแจ้ง `ไม่พบทะเบียนรถ` ทั้ง ๆ ที่รถมีในระบบ
 - **สาเหตุ:** ไฟล์ import ใช้รูปแบบทะเบียนรถไม่ตรงกับระบบ
   - ใช้ขีดกลาง: `ลป-2204`, `นข-3402 ลำปาง` แทนช่องว่าง
   - ขาดจังหวัด: `ลป-2204` ไม่มี `ลำปาง`
+  - ใส่จังหวัดไม่ครบ: `ลป 2204 ล`, `ลป 2204 ลำ`
 - **วิธีแก้:**
   - `plateIdentity.js`: แปลงขีดกลาง/underscore เป็นช่องว่างก่อน parse ทะเบียนรถ
-  - `studentImportPreview.service.js`: ถ้าไฟล์ import ไม่ได้ใส่จังหวัด แต่มีรถที่ใช้งานอยู่คันเดียวที่ตรงกับหมวด+เลข ระบบจะจับคู่อัตโนมัติ ( province-alias match )
-- **ผลลัพธ์:** ทดสอบ `analyzeRows` กับรถ 2 คันของโรงเรียน จับคู่ได้ถูกต้อง สถานะ `READY` พร้อมนำเข้า
+  - `studentImportPreview.service.js`: ถ้าไฟล์ import ไม่ได้ใส่จังหวัด แต่มีรถที่ใช้งานอยู่คันเดียวที่ตรงกับหมวด+เลข ระบบจะจับคู่อัตโนมัติ (province-alias match)
+  - `studentImportPreview.service.js`: fuzzy normalized match — ถ้าข้อความทะเบียนป้อนเข้ามาใกล้เคียงกับรถในระบบพอดีคันเดียว ระบบจะจับคู่และแปลงเป็นทะเบียนรถตามข้อมูลในระบบ
+- **ผลลัพธ์:** ทดสอบ `analyzeRows` กับรถ 2 คันของโรงเรียน จับคู่ได้ถูกต้องทั้ง `ลป-2204`, `ลป 2204`, `ลป2204`, `ลป 2204 ลำ` และ `นข-3402 ลำปาง` สถานะ `READY` พร้อมนำเข้า
 
 ### 6. แก้ไขลิงก์เอกสารที่เกี่ยวข้อง (Production Readiness / Backup & Restore / Operator Runbook)
 
@@ -328,6 +330,7 @@ POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 ## 11. Git Log
 
 ```
+a866222 fix: fuzzy normalized plate matching for student imports
 9f0ddd1 fix: auto-match import plates that omit province when exactly one active vehicle matches
 8b0990e fix: normalize dash/underscore separators in parseLegacyPlateText so dash-written plates match space-written ones
 fe9039d docs: fix related documents links and serve .md files

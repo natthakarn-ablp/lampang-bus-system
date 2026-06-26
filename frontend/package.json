@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node ../scripts/postbuild-symlinks.js",
     "preview": "vite preview",
     "qa:browser": "sh -c 'cp ../scripts/browser-review.mjs ./browser-review.mjs && node ./browser-review.mjs; code=$?; rm -f ./browser-review.mjs; exit $code'",
     "check:labels": "node ../scripts/check-ui-labels.js",

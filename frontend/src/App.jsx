@@ -32,6 +32,7 @@ const DriverPretrip        = lazy(() => import('./pages/driver/DriverPretrip'));
 const DriverPickupMap      = lazy(() => import('./pages/driver/DriverPickupMap'));
 const DriverShift          = lazy(() => import('./pages/driver/DriverShift'));
 const DriverApplications   = lazy(() => import('./pages/driver/DriverApplications'));
+const DriverVehicleRegistration = lazy(() => import('./pages/driver/DriverVehicleRegistration'));
 
 // School
 const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
@@ -46,6 +47,7 @@ const SchoolPickupMap      = lazy(() => import('./pages/school/SchoolPickupMap')
 const SchoolLiveVehicles   = lazy(() => import('./pages/school/SchoolLiveVehicles'));
 const SchoolTeacherAccounts = lazy(() => import('./pages/school/SchoolTeacherAccounts'));
 const VehicleVerification    = lazy(() => import('./pages/school/VehicleVerification'));
+const SchoolRegistrationReview = lazy(() => import('./pages/school/SchoolRegistrationReview'));
 
 // Affiliation
 const AffiliationLayout    = lazy(() => import('./pages/affiliation/AffiliationLayout'));
@@ -206,6 +208,7 @@ export default function App() {
             <Route path="pickup-map"  element={<DriverPickupMap />} />
             <Route path="shift"       element={<DriverShift />} />
             <Route path="applications" element={<DriverApplications />} />
+            <Route path="vehicle-registration" element={<DriverVehicleRegistration />} />
           </Route>
 
           {/* School module */}
@@ -230,6 +233,7 @@ export default function App() {
             <Route path="pickup-map"   element={<SchoolPickupMap />} />
             <Route path="live-vehicles" element={<SchoolLiveVehicles />} />
             <Route path="teacher-accounts" element={<SchoolTeacherAccounts />} />
+            <Route path="registration-review" element={<SchoolRegistrationReview />} />
           </Route>
 
           {/* Affiliation module */}

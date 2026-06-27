@@ -63,7 +63,14 @@ function isAllowedImport(buf) { return isXlsx(buf) || (looksTextual(buf) && !isO
 /** Allowed for image uploads (driver photo): JPEG, PNG or WebP. */
 function isAllowedImage(buf) { return isJpeg(buf) || isPng(buf) || isWebp(buf); }
 
+// PDF: "%PDF-" (0x25 0x50 0x44 0x46 0x2d).
+function isPdf(buf) { return startsWith(buf, [0x25, 0x50, 0x44, 0x46, 0x2d]); }
+
+/** Allowed for document uploads (vehicle/driver evidence): PDF or image. */
+function isAllowedDocument(buf) { return isPdf(buf) || isAllowedImage(buf); }
+
 module.exports = {
   isZip, isOle2, isJpeg, isPng, isWebp, isXlsx, looksTextual,
   isAllowedImport, isAllowedImage,
+  isPdf, isAllowedDocument,
 };

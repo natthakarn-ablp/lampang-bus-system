@@ -943,25 +943,43 @@ res.write(BOM + csvString);
 
 ## 8. RBAC Matrix
 
-| Endpoint Group | driver | school | affiliation | province | transport | admin |
-|---------------|--------|--------|-------------|----------|-----------|-------|
-| เช็กอิน/เช็กเอาท์ | ✅ own vehicle | ❌ | ❌ | ❌ | ❌ | ✅ |
-| จัดการนักเรียน | ❌ | ✅ own school | ❌ | ❌ | ❌ | ✅ |
-| นำเข้าข้อมูล | ❌ | ✅ own school | ❌ | ❌ | ❌ | ✅ |
-| Dashboard เขต | ❌ | ❌ | ✅ own district | ✅ all | ❌ | ✅ |
-| Dashboard ส่วนกลาง | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
-| ตรวจสภาพรถ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| จัดการผู้ใช้ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| ดูรายงาน | ✅ own | ✅ own school | ✅ own district | ✅ all | ✅ vehicles | ✅ |
-| Export | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Audit log | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
+> **อัปเดต 2026-06-26 — แก้ให้ตรงโค้ดจริง (ตรวจกับ route ทุกไฟล์).** ตารางรุ่นแรกคลาดเคลื่อนหลายช่อง:
+> admin เช็กอินไม่ได้ (driver-only), school/affiliation เห็น audit log ของตนได้, affiliation จัดการบัญชีโรงเรียนได้,
+> transport export ไม่ได้. ตารางนี้คือสถานะจริง · สัญลักษณ์: ✅ ได้ · ❌ ไม่ได้ · ⚠️ ได้แบบมีเงื่อนไข
+
+| กลุ่มสิทธิ์ | driver | school | affiliation | province | transport | admin |
+|---|---|---|---|---|---|---|
+| เช็กอิน/เช็กเอาท์ | ✅ รถตน | ⚠️ ยืนยันแทน+เหตุผล | ❌ | ❌ | ❌ | ❌ |
+| จัดการนักเรียน (CRUD/import) | ❌ | ✅ own school | ❌ | ❌ | ❌ | ✅ |
+| Dashboard เขต | ❌ | ❌ | ✅ own | ✅ ภาพรวมจังหวัด¹ | ❌ | ✅ |
+| Dashboard จังหวัด | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
+| ตรวจสภาพรถ (inspection) | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| ตรวจสอบรถ/คนขับ (verification) | ❌ | ✅ ยื่น | ❌ | ✅ ดู | ✅ ตรวจ | ✅ |
+| จัดการผู้ใช้ระบบ | ❌ | ❌ | ✅ บัญชีโรงเรียน² | ❌ | ❌ | ✅ ทุกบัญชี |
+| ดูรายงาน (/api/reports) | ❌³ | ✅ own | ✅ เขต | ✅ ทั้งจังหวัด | ❌³ | ✅ |
+| Export (CSV/Excel/PDF) | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Audit log | ❌ | ✅ โรงเรียนตน | ✅ เขตตน | ✅ ทั้งระบบ | ❌ | ✅ |
+| โอนย้ายนักเรียนข้ามโรงเรียน | ❌ | ✅ ยื่น/ยกเลิก | ❌⁵ | ❌ | ❌ | ✅ อนุมัติ |
+| คำขอเกี่ยวกับรถ (กู้คืน/ใช้ร่วม) | ❌ | ✅ ยื่น | ❌⁵ | ❌ | ❌ | ✅ อนุมัติ |
+| ความพร้อมเปิดใช้ (readiness) | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
+| ลงทะเบียนรถ⁴ (Phase 10.14) | ✅ เพิ่ม roster | ✅ ตรวจ/อนุมัติ | ❌ | ❌ | ❌ | ✅ |
+
+¹ province เห็นภาพรวมทั้งจังหวัดผ่าน `/api/province/*` แต่เข้า `/api/affiliation/*` (dashboard รายเขต) ไม่ได้ — drill-down รายเขตทำได้เฉพาะ admin (`?affiliation_id=`)
+² affiliation สร้าง/รีเซ็ตรหัสผ่าน/เปิด-ปิดบัญชีโรงเรียน + import บัญชีเป็นชุด (`affiliation.routes.js` `/school-accounts*`)
+³ driver/transport ไม่อยู่ใน `/api/reports` — ดู "รายงาน" ของตนผ่านโมดูลตัวเอง (`/driver/status-today`, `/transport/dashboard`)
+⁴ feature-flagged `FEATURE_DRIVER_REGISTRATION` (dark by default)
+⁵ ตามสเปกควรให้เขตอนุมัติคำขอในเขตได้ แต่ปัจจุบัน **ยังไม่ implement** — admin อนุมัติทั้งหมด (TODO)
+
+**Sub-role ในโรงเรียน:** `users.grade_scope` (ครูประจำสายชั้น) = `role='school'` ที่อ่านได้เฉพาะชั้นตน (read-only) — `requireFullSchoolScope` กัน write/จัดการออก.
+**parent** = ยืนยันผ่าน LINE id_token (ไม่ใช่ JWT role) เห็นเฉพาะบุตรหลานที่ผูกบัญชีไว้.
 
 **Scope Enforcement:**
 - `driver` → เห็นเฉพาะนักเรียนในรถที่ตัวเอง active assignment
-- `school` → เห็นเฉพาะข้อมูลที่ school_id ตรงกับ scope_id
+- `school` → เห็นเฉพาะข้อมูลที่ school_id ตรงกับ `req.user.scopeId`
 - `affiliation` → เห็นเฉพาะ schools ที่ affiliation_id ตรงกับ scope_id
-- `province` → เห็นทุกอย่าง
-- `transport` → เห็นเฉพาะข้อมูลรถ + ตรวจสภาพ
+- `province` → เห็นทุกอย่างทั้งจังหวัด (read-only เป็นหลัก)
+- `transport` → เห็นเฉพาะข้อมูลรถ + ตรวจสภาพ (ไม่เห็น PII นักเรียน)
+- `admin` → ทุกอย่าง **ยกเว้นเช็กอิน** (driver-only) และ parent API (LINE-only)
 
 ---
 

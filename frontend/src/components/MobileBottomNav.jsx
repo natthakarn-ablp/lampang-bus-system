@@ -1,18 +1,30 @@
 import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, AlertTriangle, User, FileCheck2 } from 'lucide-react';
+import { Home, AlertTriangle, User, FileCheck2, GraduationCap } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
-const DRIVER_TABS = [
-  { to: '/driver',              end: true,  icon: Home,           label: 'หน้าแรก' },
-  { to: '/driver/applications', end: false, icon: FileCheck2,     label: 'ขึ้นทะเบียน' },
-  { to: '/driver/emergency',    end: false, icon: AlertTriangle,  label: 'ฉุกเฉิน' },
-  { to: '/driver/profile',      end: false, icon: User,           label: 'โปรไฟล์' },
-];
+// The driver bottom bar is the PRIMARY surface for elderly / low-tech drivers
+// (the hamburger sidebar is rarely opened). When the consolidated
+// "รายชื่อเด็กในรถ" is enabled, the middle tab leads there — the actual driver
+// task — instead of the inspection-status page (which moves to the sidebar).
+function driverTabs(features) {
+  const reg = features && features.driverRegistration;
+  return [
+    { to: '/driver',           end: true,  icon: Home,          label: 'หน้าแรก' },
+    reg
+      ? { to: '/driver/vehicle-registration', end: false, icon: GraduationCap, label: 'รายชื่อเด็ก' }
+      : { to: '/driver/applications',         end: false, icon: FileCheck2,    label: 'ขึ้นทะเบียน' },
+    { to: '/driver/emergency', end: false, icon: AlertTriangle, label: 'ฉุกเฉิน' },
+    { to: '/driver/profile',   end: false, icon: User,          label: 'โปรไฟล์' },
+  ];
+}
 
 // Approx height of the bar (used by overlays like Toast to avoid covering it on mobile).
 const BAR_HEIGHT_PX = 60;
 
-export default function MobileBottomNav({ tabs = DRIVER_TABS }) {
+export default function MobileBottomNav({ tabs }) {
+  const { features } = useAuth();
+  const resolvedTabs = tabs || driverTabs(features);
   // Expose height to floating elements (Toast etc.) via CSS var, mobile only.
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
@@ -37,7 +49,7 @@ export default function MobileBottomNav({ tabs = DRIVER_TABS }) {
       aria-label="เมนูหลัก"
     >
       <ul className="grid grid-cols-4">
-        {tabs.map(tab => {
+        {resolvedTabs.map(tab => {
           const Icon = tab.icon;
           return (
             <li key={tab.to}>

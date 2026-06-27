@@ -10,6 +10,7 @@ const provSvc = require('../services/province.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
+const { logAudit } = require('../utils/audit');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {

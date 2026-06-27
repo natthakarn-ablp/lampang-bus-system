@@ -21,6 +21,8 @@ const DRIVER_NAV = [
   { to: '/driver/shift',       icon: Bus,            label: 'เลือกรถและเริ่มรอบ' },
   { to: '/driver/pickup-map',  icon: Map,            label: 'แผนที่จุดรับส่ง' },
   { to: '/driver/requests',    icon: ClipboardList,  label: 'คำขอรายชื่อ' },
+  { to: '/driver/vehicle-registration', icon: GraduationCap, label: 'รายชื่อเด็กในรถ' },
+  { to: '/driver/applications', icon: CheckSquare,   label: 'สถานะส่งตรวจรถ' },
   { to: '/driver/emergency',   icon: AlertTriangle,  label: 'แจ้งเหตุฉุกเฉิน' },
   { section: 'ข้อมูล' },
   { to: '/driver/profile',     icon: User,           label: 'ข้อมูลคนขับ' },
@@ -42,6 +44,7 @@ const SCHOOL_NAV = [
   { to: '/school/live-vehicles', icon: Activity,      label: 'ตำแหน่งปัจจุบัน' },
   { section: 'คำขอและบัญชี' },
   { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },
+  { to: '/school/registration-review', icon: ClipboardList, label: 'ตรวจลงทะเบียนรถ' },
   { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
   { section: 'ติดตามและบันทึก' },
   { to: '/school/emergencies',   icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
@@ -167,6 +170,14 @@ function navItemsForUser(user, features) {
   const FLAG_GATED = {
     '/admin/geofences': 'geofence',
     '/admin/route-deviations': 'routeDeviation',
+    // "เลือกรถและเริ่มรอบ" is only meaningful when shift-selection is enabled.
+    // When the flag is off the system auto-resolves the driver's vehicle and a
+    // shift is never required, so the page just shows a confusing INELIGIBLE
+    // state — hide it from the menu until the flag is on.
+    '/driver/shift': 'driverShiftSelection',
+    '/driver/vehicle-registration': 'driverRegistration',
+    '/driver/applications': 'driverRegistration',
+    '/school/registration-review': 'driverRegistration',
   };
   const filtered = base.filter(item => {
     if (!item.to) return true;
@@ -174,8 +185,13 @@ function navItemsForUser(user, features) {
     if (!flag) return true;
     return features ? !!features[flag] : false;
   });
-  if (!isGradeTeacher(user)) return filtered;
-  return filtered.filter(item => item.section || !TEACHER_BLOCKED_PATHS.has(item.to));
+  // When the consolidated "รายชื่อเด็กในรถ" (driver registration) is ON, hide the
+  // older overlapping "คำขอรายชื่อ" so an elderly driver sees ONE place, not two
+  // similar buttons. Reversible: flipping the flag off restores the old menu.
+  const hidden = (features && features.driverRegistration) ? new Set(['/driver/requests']) : new Set();
+  const deduped = filtered.filter(item => !item.to || !hidden.has(item.to));
+  if (!isGradeTeacher(user)) return deduped;
+  return deduped.filter(item => item.section || !TEACHER_BLOCKED_PATHS.has(item.to));
 }
 
 // Phase 8.2 — collapsible groups for roles that crossed the 10-item

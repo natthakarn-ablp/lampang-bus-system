@@ -8,6 +8,8 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const verification = require('../services/vehicleVerification.service');
 const driverShift = require('../services/driverShift.service');
+const env = require('../config/env');
+const docSvc = require('../services/driverDocuments.service');
 
 router.use(authenticate);
 
@@ -281,5 +283,37 @@ router.delete(
     } catch (error) { return next(error); }
   }
 );
+
+// ─── Document review (Phase 10.14 supporting evidence; dark-flagged) ─────────
+// Mounted on the unconditional /api/verification router, so each handler 404s
+// when FEATURE_DRIVER_REGISTRATION is off to keep the surface dark.
+function requireDocFeature(_req, res, next) {
+  if (!env.features.driverRegistration) {
+    return res.status(404).json({ success: false, message: 'Not found', errors: [], data: null });
+  }
+  return next();
+}
+
+router.get('/transport/documents/vehicle/:vehicleId', requireDocFeature, requireRole('transport', 'admin'), async (req, res, next) => {
+  try {
+    return sendSuccess(res, await docSvc.listVehicleDocuments(pool, req.params.vehicleId));
+  } catch (error) { return next(error); }
+});
+
+router.get('/transport/documents/driver/:driverId', requireDocFeature, requireRole('transport', 'admin'), async (req, res, next) => {
+  try {
+    return sendSuccess(res, await docSvc.listDriverDocuments(pool, Number(req.params.driverId)));
+  } catch (error) { return next(error); }
+});
+
+router.post('/transport/documents/:kind/:id/review', requireDocFeature, requireRole('transport', 'admin'), async (req, res, next) => {
+  try {
+    const kind = req.params.kind === 'driver' ? 'driver' : 'vehicle';
+    return sendSuccess(res, await docSvc.reviewDocument(pool, {
+      kind, id: Number(req.params.id),
+      decision: req.body.decision, note: req.body.note, reviewerUserId: req.user.id,
+    }), 'บันทึกผลการตรวจเอกสารแล้ว');
+  } catch (error) { return next(error); }
+});
 
 module.exports = router;

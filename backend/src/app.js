@@ -91,6 +91,22 @@ app.get('/health', async (_req, res) => {
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth',   authRoutes);
+
+// ─── Phase 10.14 — Driver-initiated vehicle registration (feature-flagged) ───
+// Mounted BEFORE the broad /api/driver and /api/school routers so the more
+// specific /api/{driver,school}/registrations paths match first (a fall-through
+// would otherwise run authenticate twice). Dark by default — when
+// FEATURE_DRIVER_REGISTRATION is off these paths 404 and the existing routers
+// are byte-for-byte unchanged. Migration 044 must be applied before flipping on.
+if (env.features.driverRegistration) {
+  const { driverRouter, schoolRouter } = require('./routes/registration.routes');
+  app.use('/api/driver/registrations', driverRouter);
+  app.use('/api/school/registrations', schoolRouter);
+  // Scoped document viewing (vehicle/driver evidence). Real /api route, so it is
+  // NOT caught by the /uploads 404 wall below and nginx won't shadow it.
+  app.use('/api/documents', require('./routes/documents.routes'));
+}
+
 app.use('/api/driver', driverRoutes);
 app.use('/api/school',      schoolRoutes);
 app.use('/api/affiliation', affiliationRoutes);

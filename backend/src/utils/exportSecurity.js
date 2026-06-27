@@ -68,9 +68,11 @@ const SENSITIVE_KEYS = new Set([
   'token', 'access_token', 'refresh_token', 'id_token', 'idtoken',
   'secret', 'channel_secret', 'line_channel_secret', 'db_password', 'jwt_secret',
   'cid', 'cid_hash',
+  // Phase 10.14 — sensitive student fields (health) + driver-typed raw roster PII.
+  'health_note', 'raw_student_name', 'raw_student_code',
 ]);
 // Keys masked (rather than removed) so the audit stays reviewable.
-const MASK_PHONE_KEYS = new Set(['phone', 'parent_phone', 'owner_phone', 'attendant_phone', 'driver_phone']);
+const MASK_PHONE_KEYS = new Set(['phone', 'parent_phone', 'owner_phone', 'attendant_phone', 'driver_phone', 'guardian_phone_alt']);
 const MASK_LINE_KEYS = new Set(['line_user_id', 'lineuserid', 'target_line_user_id']);
 
 function redactObject(obj, depth) {

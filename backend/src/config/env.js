@@ -186,6 +186,10 @@ const env = {
     eta: process.env.FEATURE_ETA === 'true',
     geofence: process.env.FEATURE_GEOFENCE === 'true',
     routeDeviation: process.env.FEATURE_ROUTE_DEVIATION === 'true',
+    // Phase 10.14 — driver-initiated vehicle registration roster + per-school
+    // approval. Dark by default: when false the /api/{driver,school}/registrations
+    // routers are not mounted, so the existing system is byte-for-byte unchanged.
+    driverRegistration: process.env.FEATURE_DRIVER_REGISTRATION === 'true',
   },
   // Phase 11A — tunable thresholds for the intelligent tracking layer.
   // Exposed via env so operators can adjust without code changes.

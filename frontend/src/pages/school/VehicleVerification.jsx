@@ -10,6 +10,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Users,
+  XCircle,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
@@ -37,6 +38,14 @@ const STATUS = {
 };
 
 const CLOSED_STATUSES = new Set(['CANCELLED', 'FAILED', 'PASSED', 'EXPIRED', 'SUPERSEDED', 'REJECTED']);
+
+const CANCELLABLE_STATUSES = new Set([
+  'DRAFT',
+  'READY_TO_PRINT',
+  'SUBMITTED',
+  'INSPECTION_PENDING',
+  'NEEDS_FIX',
+]);
 
 function Badge({ status }) {
   const [label, variant] = STATUS[status] || [status || '-', 'neutral'];
@@ -176,7 +185,7 @@ function VerificationHistoryRow({ application, onOpen }) {
   );
 }
 
-function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMarkReady, onReview }) {
+function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMarkReady, onReview, onCancel }) {
   return (
     <AppCard className="motion-safe:animate-fade-in-up motion-reduce:animate-none print:animate-none print:shadow-none print:border-0">
       <div className="flex flex-wrap justify-between gap-3 border-b border-surface-border pb-4 print:border-slate-400">
@@ -304,6 +313,17 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
             พิมพ์ใบส่งตรวจ
           </button>
         )}
+        {CANCELLABLE_STATUSES.has(selected.status) && !isGradeTeacher && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50"
+          >
+            <XCircle className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
+            ยกเลิกคำขอ
+          </button>
+        )}
       </div>
 
       <VehiclePrivacyNotice className="mt-4 print:border-slate-400" />
@@ -401,6 +421,22 @@ export default function VehicleVerification() {
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'ตรวจสอบคำขอไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel() {
+    if (!confirm('ยืนยันยกเลิกคำขอนี้? เมื่อยกเลิกแล้วจะไม่สามารถนำกลับมาใช้ได้')) return;
+    const reason = prompt('เหตุผลที่ยกเลิก (ถ้ามี):') ?? '';
+    setBusy(true);
+    try {
+      await api.post(`/verification/applications/${selected.id}/cancel`, { reason: reason.trim() || null });
+      toast.success('ยกเลิกคำขอแล้ว');
+      await load();
+      setSelected(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ยกเลิกคำขอไม่สำเร็จ');
     } finally {
       setBusy(false);
     }
@@ -528,6 +564,7 @@ export default function VehicleVerification() {
           onBack={() => setSelected(null)}
           onMarkReady={markReady}
           onReview={review}
+          onCancel={cancel}
         />
       )}
 

@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   UserPlus,
   Users,
+  XCircle,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
@@ -233,6 +234,7 @@ function InspectionChecklistPanel({
   busy,
   disabledReason,
   onFinalize,
+  onAbort,
 }) {
   const groups = groupItems(template.items);
   const total = template.items.length;
@@ -264,6 +266,15 @@ function InspectionChecklistPanel({
             className="inline-flex min-h-[40px] items-center rounded-lg border border-surface-border bg-surface-raised px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface"
           >
             ล้างทั้งหมด
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onAbort}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-1.5 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50"
+          >
+            <XCircle className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
+            ยกเลิกการตรวจ
           </button>
         </div>
       </div>
@@ -606,6 +617,24 @@ export default function VerificationQueue() {
     }
   }
 
+  async function abortAttempt() {
+    if (!attemptId) return;
+    if (!window.confirm('ยืนยันยกเลิกการตรวจครั้งนี้?\nรายการที่ลงไว้จะถูกล้าง และสถานะรถจะกลับไปรอตรวจ')) return;
+    setBusy(true);
+    try {
+      await api.delete(`/verification/transport/attempts/${attemptId}`);
+      toast.success('ยกเลิกการตรวจแล้ว');
+      setAttemptId(null);
+      setChecks({});
+      await loadQueue();
+      await open(detail.id);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ยกเลิกการตรวจไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function setCheck(code, patch) {
     setChecks(prev => ({ ...prev, [code]: { ...(prev[code] || {}), ...patch } }));
   }
@@ -829,6 +858,7 @@ export default function VerificationQueue() {
                     busy={busy}
                     disabledReason={disabledReason}
                     onFinalize={finalize}
+                    onAbort={abortAttempt}
                   />
                 ) : (
                   <StartInspectionCard detail={detail} template={template} onStart={start} busy={busy} />

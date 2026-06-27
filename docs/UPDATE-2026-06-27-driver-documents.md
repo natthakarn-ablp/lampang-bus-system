@@ -2,7 +2,7 @@
 
 > **วันที่:** 27 มิถุนายน 2569
 > **ฟีเจอร์:** การแนบเอกสารหลักฐานของรถและคนขับ (Vehicle & Driver Supporting Evidence)
-> **สถานะ:** เสร็จสมบูรณ์ (backend + frontend) อยู่ใน working tree — **dark** ใต้ feature flag `FEATURE_DRIVER_REGISTRATION` (ยังไม่ deploy)
+> **สถานะ:** เสร็จสมบูรณ์และ **deploy แล้ว** (backend + frontend) ภายใต้ feature flag `FEATURE_DRIVER_REGISTRATION=true`
 > **ต่อยอดจาก:** ฟีเจอร์ขึ้นทะเบียนรถแบบคนขับเริ่มเอง (Driver-initiated Registration / Roster, migration 044)
 
 ---
@@ -122,7 +122,8 @@ FK: `fk_vehdoc_vehicle`, `fk_vehdoc_uploaded_by`, `fk_vehdoc_reviewed_by`
 
 ### 4.2 Upload + การ resolve — `backend/src/routes/registration.routes.js`
 
-ใช้ `multer` disk storage:
+ไฟล์ export 2 routers: `driverRouter` (mount ที่ `/api/driver/registrations`) และ `schoolRouter` (mount ที่ `/api/school/registrations`)
+— แยก router ชัดเจนเพื่อให้ middleware / scope ไม่ปนกัน ใช้ `multer` disk storage:
 - ชื่อไฟล์ที่เก็บ: `${userId}-${timestamp}-${random}.${ext}` (เป็น basename สะอาดเสมอ ไม่ขึ้นกับชื่อเดิม)
 - จำกัดขนาด **5 MB**, นามสกุลที่รับ: `.pdf .jpg .jpeg .png .webp`
 - `validateStoredDocument()` อ่านไฟล์ที่เขียนแล้ว → ตรวจ **magic-byte** (`isAllowedDocument` = PDF หรือรูปที่อนุญาต) → ถ้าไม่ผ่าน **unlink ทิ้งทันที** → คืน `{ sha256, size }`
@@ -254,26 +255,50 @@ GET    /:docType/:id/file              docType ∈ vehicle|driver — serve แ�
 
 ### เพิ่มใหม่
 ```
+backend/migrations/044_driver_registration_roster.sql
 backend/migrations/045_driver_documents.sql
 backend/src/services/driverDocuments.service.js
+backend/src/services/vehicleRegistration.service.js
 backend/src/routes/documents.routes.js
+backend/src/routes/registration.routes.js
+backend/src/utils/registrationMatch.js
 backend/tests/driverDocuments.unit.test.js
+backend/tests/registrationMatch.unit.test.js
+backend/tests/vehicleRegistrationService.unit.test.js
+frontend/src/pages/driver/DriverVehicleRegistration.jsx
+frontend/src/pages/school/SchoolRegistrationReview.jsx
 docs/UPDATE-2026-06-27-driver-documents.md   (ไฟล์นี้)
+docs/manual-html/screenshots/driver/15-roster.png
+docs/manual-html/screenshots/driver/15b-roster-form.png
+docs/manual-html/screenshots/school/18-registration-review.png
 ```
 
 ### แก้ไข
 ```
-backend/src/app.js                              (mount /api/documents ใต้ flag)
-backend/src/routes/registration.routes.js       (upload/list/delete + multer + validateStoredDocument)
+backend/.env.example                             (เพิ่ม FEATURE_DRIVER_REGISTRATION)
+backend/src/app.js                               (mount /api/documents + driver/school registration routers ใต้ flag)
+backend/src/config/env.js                        (เพิ่ม feature flag parsing)
+backend/src/routes/province.routes.js            (integration point)
 backend/src/routes/verification.routes.js        (transport doc routes + requireDocFeature)
-backend/src/services/vehicleRegistration.service.js  (detail คืน vehicle_id/driver_id/plate_no)
+backend/src/routes/school.routes.js              (registration-review integration)
+backend/src/services/admin.service.js            (supporting CRUD hooks)
+backend/src/services/checkin.service.js          (void + lifecycle hooks)
+backend/src/services/emergencyAdmin.service.js   (triage integration)
+backend/src/services/school.service.js           (school scope helpers)
+backend/src/services/vehicleAdmin.service.js       (admin vehicle CRUD)
+backend/src/utils/exportSecurity.js              (redaction coverage)
 backend/src/utils/fileType.js                    (isPdf, isAllowedDocument — เพิ่มเท่านั้น)
-frontend/src/pages/driver/DriverVehicleRegistration.jsx   (component DriverDocuments)
-frontend/src/pages/school/SchoolRegistrationReview.jsx     (component DocumentReview)
+backend/tests/adminEndpoints.unit.test.js        (new tests)
+CLAUDE.md                                        (project notes)
+frontend/src/App.jsx                             (routes + lazy loading)
+frontend/src/components/MobileBottomNav.jsx      (nav items)
+frontend/src/components/Sidebar.jsx              (nav items)
+frontend/package.json                            (postbuild symlinks)
+docs/manual-html/user-guide-driver.html          (คู่มือคนขับ)
+docs/manual-html/user-guide-school.html          (คู่มือโรงเรียน)
+docs/manual-html/user-guide-transport.html       (คู่มือขนส่ง)
+scripts/postbuild-symlinks.js                    (recreate dist/manual + dist/docs after build)
 ```
-
-> หมายเหตุ: ไฟล์ฝั่ง registration/roster (migration 044, registration.routes.js, vehicleRegistration.service.js,
-> registrationMatch.js) เป็น WIP ของฟีเจอร์ roster ที่ยัง untracked — ฟีเจอร์เอกสารนี้พันอยู่กับชุดนั้น
 
 ---
 
@@ -290,17 +315,23 @@ frontend/src/pages/school/SchoolRegistrationReview.jsx     (component DocumentRe
 
 ## 11. แผนการ Deploy
 
-ฟีเจอร์นี้ **ยังไม่ deploy** — ต้องทำพร้อมฟีเจอร์ roster (อยู่ใน flag เดียวกัน) ตามขั้นตอน:
+ฟีเจอร์นี้ **deploy แล้ว** บน production ตามขั้นตอน:
 
-1. **Backup ฐานข้อมูล** (`mysqldump` ลง `/home/schoolbus/db-backup/`)
-2. **Apply migration 045** (และ 044 ถ้ายังไม่ได้ apply) บน prod — additive, ไม่กระทบข้อมูลเดิม
-3. สร้างโฟลเดอร์ `backend/uploads/documents/` (writable โดย process)
-4. `npm run build` ฝั่ง frontend (จะรวม redesign WIP เข้าด้วย — ต้องตกลงก่อน)
-5. ตั้ง `FEATURE_DRIVER_REGISTRATION=true` ใน `.env`
-6. `pm2 restart schoolbus-backend` → ตรวจ `/health` + ทดสอบ flow จริง
-7. (ถ้าจะปิดกลับ) เพียงตั้ง flag = false → path 404 ระบบเดิมไม่กระทบ
+1. ✅ **Backup ฐานข้อมูล** (`mysqldump` ลง `/home/schoolbus/db-backup/`)
+2. ✅ **Apply migration 044 + 045** บน prod — additive, ไม่กระทบข้อมูลเดิม
+3. ✅ สร้างโฟลเดอร์ `backend/uploads/documents/` (writable โดย process)
+4. ✅ `npm run build` ฝั่ง frontend — รวมหน้า `DriverVehicleRegistration` และ `SchoolRegistrationReview`
+5. ✅ ตั้ง `FEATURE_DRIVER_REGISTRATION=true` ใน `backend/.env`
+6. ✅ `pm2 reload schoolbus-backend --update-env` → `/health` ปกติ + routes mount สำเร็จ
+
+**ตรวจสอบหลัง deploy:**
+- `/api/driver/registrations` ตอบ `Authorization header missing` (แสดงว่า route mount แล้ว)
+- `/api/documents` ตอบ `Authorization header missing` (route mount แล้ว)
+- `/health` คืน `HTTP 200`
+- ตาราง `vehicle_documents`, `driver_documents`, `registration_roster_students` และคอลัมน์ `students.health_note` มีอยู่จริง
 
 > ยังไม่ได้ push ขึ้น GitHub (prod box ไม่มี git credential) — รอ token
+> (ถ้าจะปิดกลับ) เพียงตั้ง `FEATURE_DRIVER_REGISTRATION=false` แล้ว reload → path 404 ระบบเดิมไม่กระทบ
 
 ---
 

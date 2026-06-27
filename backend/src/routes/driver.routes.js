@@ -154,17 +154,16 @@ router.get('/active-shift', async (req, res, next) => {
 
 router.post('/shifts/start', async (req, res, next) => {
   try {
-    // FIX 4 — reuse the shared assessSafety gate (single source of truth) instead
-    // of duplicating the assess + audit + BLOCK logic. requireActiveShift:false
-    // because this IS the operation that opens a shift, so it must not demand one
-    // first. assessSafety derives the driver_id from req.user.driver_id when the
-    // vehicle stub doesn't carry one.
-    await assessSafety(
-      req,
-      { vehicle_id: req.body.vehicle_id },
-      'SHIFT_START',
-      { requireActiveShift: false }
-    );
+    // SECURITY (L5) — startShift FIRST validates the driver's own AUTHORIZED
+    // assignment (driver_vehicle_assignments … authorization_status='AUTHORIZED',
+    // FOR UPDATE) and throws DRIVER_NOT_AUTHORIZED before any audit write. Only
+    // after ownership is proven do we run the shared assessSafety gate, so the
+    // safety_policy_decision audit row can never carry an attacker-controlled,
+    // unverified vehicle_id. startShift already hard-enforces every condition
+    // assessSafety checks (eligibility, qualification, licence, authorization),
+    // so running the gate after it loses no enforcement — only the redundant
+    // failure-path audit row for vehicles the driver was never authorized on.
+    // (requireActiveShift:false because this IS the operation that opens a shift.)
     const data = await driverShiftSvc.startShift(pool, {
       driverId: req.user.driver_id,
       vehicleId: req.body.vehicle_id,
@@ -172,6 +171,12 @@ router.post('/shifts/start', async (req, res, next) => {
       userId: req.user.id,
       note: req.body.note || null,
     });
+    await assessSafety(
+      req,
+      { vehicle_id: req.body.vehicle_id },
+      'SHIFT_START',
+      { requireActiveShift: false }
+    );
     return sendSuccess(res, data, 'เริ่มรอบปฏิบัติงานแล้ว', null, 201);
   } catch (error) { return next(error); }
 });

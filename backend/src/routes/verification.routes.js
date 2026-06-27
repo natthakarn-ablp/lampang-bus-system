@@ -138,6 +138,18 @@ router.get(
   requireRole('school', 'transport', 'province', 'admin', 'driver'),
   async (req, res, next) => {
     try {
+      // A driver may only read the timeline of an application they themselves
+      // submitted — mirror getApplication's driver scope (a.requested_by = ?).
+      // Folded into this query as a correlated EXISTS so no extra round-trip is
+      // added: for non-drivers the guard is the constant TRUE and is a no-op.
+      const isDriver = req.user.role === 'driver';
+      const driverGuard = isDriver
+        ? `EXISTS (SELECT 1 FROM vehicle_inspection_applications a
+                    WHERE a.id = al.entity_id AND a.requested_by = ?)`
+        : 'TRUE';
+      const params = isDriver
+        ? [String(req.params.id), req.user.id]
+        : [String(req.params.id)];
       const [rows] = await pool.query(
         `SELECT al.id, al.action, al.entity_type, al.old_value, al.new_value,
                 al.created_at, u.display_name AS actor_name, u.role AS actor_role
@@ -145,8 +157,9 @@ router.get(
            JOIN users u ON u.id = al.user_id
           WHERE al.entity_type = 'vehicle_inspection_application'
             AND al.entity_id = ?
+            AND ${driverGuard}
           ORDER BY al.created_at ASC`,
-        [String(req.params.id)]
+        params
       );
       return sendSuccess(res, rows);
     } catch (error) { return next(error); }

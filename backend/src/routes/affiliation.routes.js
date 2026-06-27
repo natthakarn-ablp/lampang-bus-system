@@ -688,7 +688,7 @@ router.get('/pickup-map', async (req, res, next) => {
 router.get('/transfer-requests', async (req, res, next) => {
   try {
     const transfer = require('../services/studentTransfer.service');
-    const affId = affiliationId(req);
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
     const data = await transfer.listForAffiliation(pool, { affiliationId: affId, status: req.query.status || null });
     return sendSuccess(res, data);
@@ -698,7 +698,7 @@ router.get('/transfer-requests', async (req, res, next) => {
 router.get('/transfer-requests/:id', async (req, res, next) => {
   try {
     const transfer = require('../services/studentTransfer.service');
-    const affId = affiliationId(req);
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
     const data = await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
     return sendSuccess(res, data);
@@ -708,7 +708,7 @@ router.get('/transfer-requests/:id', async (req, res, next) => {
 router.post('/transfer-requests/:id/approve', async (req, res, next) => {
   try {
     const transfer = require('../services/studentTransfer.service');
-    const affId = affiliationId(req);
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
     // Verify the request belongs to this affiliation
     await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
@@ -726,7 +726,7 @@ router.post('/transfer-requests/:id/approve', async (req, res, next) => {
 router.post('/transfer-requests/:id/reject', async (req, res, next) => {
   try {
     const transfer = require('../services/studentTransfer.service');
-    const affId = affiliationId(req);
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
     await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
     const out = await transfer.reject(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
@@ -740,7 +740,7 @@ router.post('/transfer-requests/:id/reject', async (req, res, next) => {
 router.get('/vehicle-requests', async (req, res, next) => {
   try {
     const vr = require('../services/vehicleRequest.service');
-    const affId = affiliationId(req);
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
     const data = await vr.listForAffiliation(pool, { affiliationId: affId, status: req.query.status || null });
     return sendSuccess(res, data);
@@ -750,7 +750,7 @@ router.get('/vehicle-requests', async (req, res, next) => {
 router.get('/vehicle-requests/:id', async (req, res, next) => {
   try {
     const vr = require('../services/vehicleRequest.service');
-    const affId = affiliationId(req);
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
     const data = await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
     return sendSuccess(res, data);
@@ -760,7 +760,7 @@ router.get('/vehicle-requests/:id', async (req, res, next) => {
 router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
   try {
     const vr = require('../services/vehicleRequest.service');
-    const affId = affiliationId(req);
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
     await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
     const out = await vr.approveVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
@@ -773,7 +773,7 @@ router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
 router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
   try {
     const vr = require('../services/vehicleRequest.service');
-    const affId = affiliationId(req);
+    const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
     await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
     const out = await vr.rejectVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });

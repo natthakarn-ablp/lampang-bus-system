@@ -300,3 +300,47 @@ describe('GET /api/affiliation/emergencies', () => {
     expect(res.body.meta).toHaveProperty('total');
   });
 });
+
+// ─── Tier-3 approval queue (transfer-requests / vehicle-requests) ─────────────
+// Security audit 2026-06-27 (HIGH#2): these 8 handlers called an undefined
+// `affiliationId(req)` helper (only `resolveAffiliationId` exists), so every one
+// threw ReferenceError → HTTP 500. They must resolve the caller's affiliation
+// scope and respond normally (never 500). The list endpoints return an empty
+// array for the seeded test affiliation; detail/approve/reject on a bogus id
+// must surface a clean 4xx, not a server crash.
+
+describe('Affiliation Tier-3 approval queue resolves scope (no ReferenceError)', () => {
+  test('GET /transfer-requests returns a scoped list (200, array)', async () => {
+    const res = await request(app)
+      .get('/api/affiliation/transfer-requests')
+      .set('Authorization', `Bearer ${affToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  test('GET /vehicle-requests returns a scoped list (200, array)', async () => {
+    const res = await request(app)
+      .get('/api/affiliation/vehicle-requests')
+      .set('Authorization', `Bearer ${affToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  test.each([
+    ['get',  '/api/affiliation/transfer-requests/999999'],
+    ['post', '/api/affiliation/transfer-requests/999999/approve'],
+    ['post', '/api/affiliation/transfer-requests/999999/reject'],
+    ['get',  '/api/affiliation/vehicle-requests/999999'],
+    ['post', '/api/affiliation/vehicle-requests/999999/approve'],
+    ['post', '/api/affiliation/vehicle-requests/999999/reject'],
+  ])('%s %s does not 500 (clean 4xx, scope resolved)', async (method, path) => {
+    const res = await request(app)[method](path)
+      .set('Authorization', `Bearer ${affToken}`)
+      .send({});
+    expect(res.status).not.toBe(500);
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+  });
+});

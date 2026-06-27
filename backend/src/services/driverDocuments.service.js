@@ -249,10 +249,15 @@ async function softDeleteDocument(pool, { kind, id, userId, isAdmin = false }) {
   try {
     await conn.beginTransaction();
     const [[doc]] = await conn.query(
-      `SELECT id, uploaded_by, is_deleted FROM ${table} WHERE id = ? FOR UPDATE`, [id]);
+      `SELECT id, uploaded_by, review_status, is_deleted FROM ${table} WHERE id = ? FOR UPDATE`, [id]);
     if (!doc || doc.is_deleted) throw appError('ไม่พบเอกสาร', 404, 'DOC_NOT_FOUND');
     if (!isAdmin && Number(doc.uploaded_by) !== Number(userId)) {
       throw appError('ลบได้เฉพาะเอกสารที่คุณอัปโหลด', 403, 'NOT_OWNER');
+    }
+    // Evidence a reviewer already APPROVED is locked from owner deletion —
+    // removing it would erase the reviewed audit trail. Admin can still override.
+    if (!isAdmin && doc.review_status === 'APPROVED') {
+      throw appError('เอกสารที่ผ่านการตรวจแล้วลบไม่ได้ หากต้องแก้ไขโปรดติดต่อผู้ดูแล', 403, 'APPROVED_LOCKED');
     }
     await conn.query(
       `UPDATE ${table} SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP WHERE id = ?`, [id]);

@@ -169,6 +169,18 @@ driverRouter.delete('/documents/:kind/:id', async (req, res, next) => {
 const schoolRouter = express.Router();
 schoolRouter.use(authenticate, requireRole('school', 'admin'));
 
+// Grade-teacher (sub-role) accounts are read-only: they may VIEW the roster and
+// documents but must not match/approve/reject/review. Enforce at the backend so
+// the frontend `!isTeacher` gate is not the only line of defence (CLAUDE.md §12.9).
+// admin has no gradeScope, full-school accounts have a falsy one — both pass.
+function requireFullSchoolScope(req, res, next) {
+  if (req.user.role === 'school' && req.user.gradeScope) {
+    return sendError(res, 'บัญชีครูประจำสายชั้นดูได้อย่างเดียว ไม่มีสิทธิ์ดำเนินการนี้',
+      [{ code: 'FULL_SCHOOL_SCOPE_REQUIRED' }], 403);
+  }
+  return next();
+}
+
 // ─── Documents (school reviews evidence for vehicles/drivers in its scope) ────
 schoolRouter.get('/documents/vehicle/:vehicleId', async (req, res, next) => {
   try {
@@ -194,7 +206,7 @@ schoolRouter.get('/documents/driver/:driverId', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-schoolRouter.post('/documents/:kind/:id/review', async (req, res, next) => {
+schoolRouter.post('/documents/:kind/:id/review', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
@@ -230,7 +242,7 @@ schoolRouter.get('/:applicationId', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-schoolRouter.post('/:applicationId/students/:rosterId/match', async (req, res, next) => {
+schoolRouter.post('/:applicationId/students/:rosterId/match', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
@@ -244,7 +256,7 @@ schoolRouter.post('/:applicationId/students/:rosterId/match', async (req, res, n
   } catch (error) { return next(error); }
 });
 
-schoolRouter.patch('/:applicationId/students/:rosterId', async (req, res, next) => {
+schoolRouter.patch('/:applicationId/students/:rosterId', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
@@ -258,7 +270,7 @@ schoolRouter.patch('/:applicationId/students/:rosterId', async (req, res, next) 
   } catch (error) { return next(error); }
 });
 
-schoolRouter.post('/:applicationId/approve', async (req, res, next) => {
+schoolRouter.post('/:applicationId/approve', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
@@ -268,7 +280,7 @@ schoolRouter.post('/:applicationId/approve', async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
-schoolRouter.post('/:applicationId/reject', async (req, res, next) => {
+schoolRouter.post('/:applicationId/reject', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);

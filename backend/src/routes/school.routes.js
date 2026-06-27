@@ -1837,6 +1837,7 @@ router.get('/live-vehicles', async (req, res, next) => {
 
 const bcrypt = require('bcrypt');
 const BCRYPT_COST_TEACHER = 12;
+const { validatePassword } = require('../utils/passwordPolicy');
 
 router.get('/teacher-accounts', requireFullSchoolScope, async (req, res, next) => {
   try {
@@ -1868,7 +1869,10 @@ router.post('/teacher-accounts', requireFullSchoolScope, async (req, res, next) 
     const errors = [];
     if (!username || !String(username).trim()) errors.push({ field: 'username', message: 'จำเป็นต้องระบุชื่อผู้ใช้' });
     if (!password) errors.push({ field: 'password', message: 'จำเป็นต้องระบุรหัสผ่าน' });
-    else if (String(password).length < 6) errors.push({ field: 'password', message: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' });
+    else {
+      const pwCheck = validatePassword(password, { username: String(username || '').trim() });
+      if (!pwCheck.ok) errors.push({ field: 'password', message: pwCheck.message });
+    }
     if (!isValidGradeScope(grade_scope)) {
       errors.push({ field: 'grade_scope', message: `ระดับชั้นต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_GRADE_SCOPES.join(', ')}` });
     }
@@ -1912,8 +1916,8 @@ router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, asyn
     if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
 
     const { password } = req.body || {};
-    if (!password || String(password).length < 6) {
-      return sendError(res, 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', [], 400);
+    if (!password) {
+      return sendError(res, 'จำเป็นต้องระบุรหัสผ่าน', [], 400);
     }
 
     // Verify the target is a teacher of THIS school
@@ -1925,6 +1929,13 @@ router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, asyn
       [userId, schoolId]
     );
     if (!target) return sendError(res, 'ไม่พบบัญชีครูในโรงเรียนนี้', [], 404);
+
+    // Strength check after the lookup so the username-equality rule sees the
+    // target teacher's username.
+    const pwCheck = validatePassword(password, { username: target.username });
+    if (!pwCheck.ok) {
+      return sendError(res, pwCheck.message, [], 400);
+    }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST_TEACHER);
     await pool.query(

@@ -3,6 +3,7 @@
 const { pool } = require('../config/database');
 const bcrypt = require('bcrypt');
 const { logAudit } = require('../utils/audit');
+const { validatePassword } = require('../utils/passwordPolicy');
 
 /**
  * Get school user accounts under an affiliation.
@@ -83,8 +84,25 @@ async function resetSchoolPassword({ affiliationId, accountId, newPassword, user
     throw err;
   }
 
+  // Enforce the shared password policy (operator-chosen value). The auto-generated
+  // create/import paths in this file are intentionally NOT validated here — their
+  // temp password is the numeric school code (must_change_password forces a change
+  // on first login).
+  const pwCheck = validatePassword(newPassword, { username: account.username });
+  if (!pwCheck.ok) {
+    const err = new Error(pwCheck.message);
+    err.statusCode = 400;
+    throw err;
+  }
+
   const hash = await bcrypt.hash(newPassword, 12);
-  await pool.query(`UPDATE users SET password_hash = ?, must_change_password = TRUE WHERE id = ?`, [hash, accountId]);
+  // password_changed_at = NOW() so any access/refresh token issued before this
+  // reset is rejected (mirrors admin/school reset paths — was the only reset path
+  // missing it, leaving a compromised session valid for up to the refresh TTL).
+  await pool.query(
+    `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?`,
+    [hash, accountId]
+  );
 
   await logAudit({
     userId, action: 'UPDATE', entityType: 'user', entityId: accountId,

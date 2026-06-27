@@ -24,6 +24,7 @@ const BCRYPT_COST = 12;
 const VALID_ROLES = ['driver', 'school', 'affiliation', 'province', 'transport', 'admin'];
 const SCOPED_ROLES = { school: 'SCHOOL', affiliation: 'AFFILIATION', province: 'PROVINCE' };
 const { VALID_GRADE_SCOPES, isValidGradeScope } = require('../utils/gradeScope');
+const { validatePassword } = require('../utils/passwordPolicy');
 
 // All admin routes require admin role
 router.use(authenticate, requireRole('admin'));
@@ -73,8 +74,9 @@ router.post('/users', async (req, res, next) => {
     if (!VALID_ROLES.includes(role)) {
       return sendError(res, `role ไม่ถูกต้อง ต้องเป็น: ${VALID_ROLES.join(', ')}`, [], 400);
     }
-    if (String(password).length < 6) {
-      return sendError(res, 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', [], 400);
+    const pwCheck = validatePassword(password, { username: String(username).trim() });
+    if (!pwCheck.ok) {
+      return sendError(res, pwCheck.message, [], 400);
     }
 
     // Validate scope
@@ -200,12 +202,19 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
     const userId = parseInt(req.params.id, 10);
     const { password } = req.body;
 
-    if (!password || String(password).length < 6) {
-      return sendError(res, 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร', [], 400);
+    if (!password) {
+      return sendError(res, 'รหัสผ่านใหม่จำเป็น', [], 400);
     }
 
     const [[user]] = await pool.query('SELECT id, username FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
+
+    // Strength check after the lookup so the username-equality rule sees the
+    // target user's username.
+    const pwCheck = validatePassword(password, { username: user.username });
+    if (!pwCheck.ok) {
+      return sendError(res, pwCheck.message, [], 400);
+    }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST);
     await pool.query(

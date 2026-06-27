@@ -176,6 +176,16 @@ router.put('/users/:id', async (req, res, next) => {
       const scopeType = SCOPED_ROLES[role] || null;
       updates.push('role = ?', 'scope_type = ?', 'scope_id = ?');
       params.push(role, scopeType, scope_id || null);
+      // L6 — a role change away from 'school' must drop any stale grade_scope
+      // (the create path already rejects grade_scope for non-school roles).
+      if (role !== 'school') updates.push('grade_scope = NULL');
+      // L1 — a role/scope change must invalidate the user's existing access AND
+      // refresh tokens. Bumping password_changed_at trips the iat<password_changed_at
+      // guard in auth.js and /refresh-token, forcing a re-login under the new
+      // role/scope (otherwise the stale elevated role survives up to the token TTL).
+      if (role !== user.role || (scope_id || null) !== (user.scope_id || null) || scopeType !== user.scope_type) {
+        updates.push('password_changed_at = NOW()');
+      }
     }
 
     if (updates.length === 0) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);

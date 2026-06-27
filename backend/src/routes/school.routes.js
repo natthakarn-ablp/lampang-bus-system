@@ -1211,11 +1211,19 @@ router.get('/audit-logs', requireFullSchoolScope, async (req, res, next) => {
     const { action, date_from, date_to } = req.query;
     const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 
+    // Match each entity_type against its OWN id space: 'student' ids live in
+    // students, 'roster_request' ids live in roster_change_requests (a separate
+    // BIGINT sequence). A merged IN(...) leaked another school's roster_request
+    // audit row whenever its rcr.id numerically collided with one of this
+    // school's student ids.
     let scopeWhere = `((u.scope_id = ? AND u.scope_type = 'SCHOOL')
-       OR (al.entity_type IN ('student','roster_request') AND al.entity_id IN (
+       OR (al.entity_type = 'student' AND al.entity_id IN (
          SELECT CAST(s.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci FROM students s WHERE s.school_id = ?
+       ))
+       OR (al.entity_type = 'roster_request' AND al.entity_id IN (
+         SELECT CAST(rcr.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci FROM roster_change_requests rcr WHERE rcr.school_id = ?
        )))`;
-    const params = [schoolId, schoolId];
+    const params = [schoolId, schoolId, schoolId];
 
     if (action) { scopeWhere += ' AND al.action = ?'; params.push(action); }
     if (date_from && isValidDate(date_from)) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }

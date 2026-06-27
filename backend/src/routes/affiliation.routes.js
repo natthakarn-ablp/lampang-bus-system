@@ -548,14 +548,21 @@ router.get('/audit-logs', async (req, res, next) => {
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
 
+    // Match each entity_type against its OWN id space (student ids in students,
+    // roster_request ids in roster_change_requests — a separate BIGINT sequence),
+    // both scoped to schools under this affiliation. A merged IN(...) leaked a
+    // foreign affiliation's roster_request audit row on an id collision.
     let scopeWhere = `(
       (u.scope_id IN (SELECT sc.id FROM schools sc WHERE sc.affiliation_id = ?) AND u.scope_type = 'SCHOOL')
       OR (u.scope_id = ? AND u.scope_type = 'AFFILIATION')
-      OR (al.entity_type IN ('student','roster_request') AND al.entity_id IN (
+      OR (al.entity_type = 'student' AND al.entity_id IN (
         SELECT CAST(s.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci FROM students s JOIN schools sc2 ON sc2.id = s.school_id WHERE sc2.affiliation_id = ?
       ))
+      OR (al.entity_type = 'roster_request' AND al.entity_id IN (
+        SELECT CAST(rcr.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci FROM roster_change_requests rcr JOIN schools sc3 ON sc3.id = rcr.school_id WHERE sc3.affiliation_id = ?
+      ))
     )`;
-    const params = [affId, affId, affId];
+    const params = [affId, affId, affId, affId];
 
     const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (action) { scopeWhere += ' AND al.action = ?'; params.push(action); }

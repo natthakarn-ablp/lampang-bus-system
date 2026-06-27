@@ -84,10 +84,10 @@ async function resetSchoolPassword({ affiliationId, accountId, newPassword, user
     throw err;
   }
 
-  // Enforce the shared password policy (operator-chosen value). The auto-generated
-  // create/import paths in this file are intentionally NOT validated here — their
-  // temp password is the numeric school code (must_change_password forces a change
-  // on first login).
+  // Enforce the shared password policy on this operator-chosen value. (The create
+  // path and the school_code-default import rows use the numeric school code as a
+  // temp credential and stay policy-exempt; an operator-typed import password is
+  // policy-checked in validateImportRow.)
   const pwCheck = validatePassword(newPassword, { username: account.username });
   if (!pwCheck.ok) {
     const err = new Error(pwCheck.message);
@@ -236,6 +236,7 @@ const ERR = Object.freeze({
   USERNAME_REQUIRED:           'USERNAME_REQUIRED',           // can't auto-derive
   INVALID_USERNAME:            'INVALID_USERNAME',            // provided but not 6 digits
   WEAK_PASSWORD:               'WEAK_PASSWORD',               // < 4 chars after defaulting
+  POLICY_PASSWORD:             'POLICY_PASSWORD',             // operator-typed pw fails shared policy
   SCHOOL_CODE_EXISTS:          'SCHOOL_CODE_EXISTS',          // present in DB
   USERNAME_EXISTS:             'USERNAME_EXISTS',             // present in DB
   DUPLICATE_IN_FILE:           'DUPLICATE_IN_FILE',           // same school_code twice in upload
@@ -248,6 +249,7 @@ const ERR_MSG_TH = {
   USERNAME_REQUIRED:           'ต้องระบุชื่อผู้ใช้ (รหัสโรงเรียนไม่ใช่ 6 หลัก จึงไม่สามารถใช้เป็นค่าเริ่มต้นได้)',
   INVALID_USERNAME:            'ชื่อผู้ใช้ต้องเป็นรหัส OBEC 6 หลัก (ตัวเลขเท่านั้น)',
   WEAK_PASSWORD:               'รหัสผ่านเริ่มต้นต้องมีอย่างน้อย 4 ตัวอักษร',
+  POLICY_PASSWORD:             'รหัสผ่านที่ระบุไม่ผ่านเกณฑ์ (อย่างน้อย 8 ตัว ไม่อยู่ในรายการคาดเดาง่าย ไม่ซ้ำตัวเดียว)',
   SCHOOL_CODE_EXISTS:          'รหัสโรงเรียนนี้มีอยู่ในระบบแล้ว',
   USERNAME_EXISTS:             'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว',
   DUPLICATE_IN_FILE:           'รหัสโรงเรียนซ้ำกับแถวอื่นในไฟล์เดียวกัน',
@@ -303,7 +305,14 @@ function validateImportRow(row, rawPassword, existingSchoolCodes, existingUserna
   if (!row.school_name)                               errors.push(ERR.MISSING_SCHOOL_NAME);
   if (!row.username)                                  errors.push(ERR.USERNAME_REQUIRED);
   else if (!/^\d{6}$/.test(row.username))             errors.push(ERR.INVALID_USERNAME);
-  if (!rawPassword || rawPassword.length < 4)         errors.push(ERR.WEAK_PASSWORD);
+  // A blank/short value fails the minimal check. When the operator TYPED an
+  // initial_password in the file (has_password), it must also clear the shared
+  // policy; the school_code default (has_password false) stays policy-exempt so
+  // bulk creation with the numeric code as a temp credential keeps working.
+  if (!rawPassword || rawPassword.length < 4) errors.push(ERR.WEAK_PASSWORD);
+  else if (row.has_password && !validatePassword(rawPassword, { username: row.username }).ok) {
+    errors.push(ERR.POLICY_PASSWORD);
+  }
   if (row.school_code && existingSchoolCodes.has(row.school_code)) errors.push(ERR.SCHOOL_CODE_EXISTS);
   if (row.username    && existingUsernames.has(row.username))      errors.push(ERR.USERNAME_EXISTS);
   if (row.school_code && fileSchoolCodes.has(row.school_code))     errors.push(ERR.DUPLICATE_IN_FILE);

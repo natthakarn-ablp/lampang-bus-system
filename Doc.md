@@ -187,7 +187,8 @@
 - Migrations 044 + 045: ตาราง `registration_roster_students`, `vehicle_documents`, `driver_documents`, คอลัมน์ `approval_status` บน `inspection_application_schools`, คอลัมน์ใหม่บน `students`
 - `registration.routes.js`: `/api/driver/registrations` (upload/list/delete docs, roster) + `/api/school/registrations` (review, match, approve, reject)
 - `documents.routes.js`: `GET /api/documents/:docType/:id/file` (serve scoped + auth)
-- `driverDocuments.service.js`: scoped resolution, path-traversal guard, magic-byte validation, sha256
+- `driverDocuments.service.js`: scoped resolution, path-traversal guard, magic-byte validation, sha256, **APPROVED_LOCKED** (ลบเอกสารที่ผ่านการตรวจไม่ได้ยกเว้น admin)
+- `registration.routes.js`: `requireFullSchoolScope` (บัญชีครูสายชั้นอ่านได้อย่างเดียว ห้าม match/approve/reject/review)
 - `vehicleRegistration.service.js`: จัดการรoster + จับคู่นักเรียน (levenshtein + exact)
 
 ### Frontend หลัก
@@ -406,6 +407,8 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 ## 9. Git Log
 
 ```
+0f76944 fix: harden school scope for registration review + lock APPROVED document deletion
+3ff12c7 docs: restructure Doc.md, add Phase 10.14 section and update git log
 db26fce docs: mark driver documents + registration roster as deployed and fix file list
 3e60d73 feat: driver documents + vehicle registration roster (Phase 10.14)
 a7a19f0 feat(admin): self-service CRUD endpoints to replace manual DB edits (audit #3-#8)

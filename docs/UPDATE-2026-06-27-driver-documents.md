@@ -231,6 +231,8 @@ GET    /:docType/:id/file              docType ∈ vehicle|driver — serve แ�
 | **Path traversal** | `safeResolveStorageKey` ปฏิเสธ NUL, ตัวคั่น path, `..`, `.`, ค่าว่าง, absolute path; รับเฉพาะ basename สะอาด และยืนยันซ้ำว่า resolved path อยู่ใต้ `DOC_BASE_DIR`. `storage_key` ที่ถูก poison (เช่น `../../../etc/passwd`) → 404 |
 | **IDOR / ข้ามขอบเขต** | `resolveDocumentForViewer` ผูก scope จาก **JWT** เสมอ ไม่ใช่จาก URL: โรงเรียนผูก `school_id` ใน JOIN (`inspection_application_schools`), คนขับผูก `uploaded_by = userId OR vehicle_id = (รถของตัวเองที่ resolve ฝั่ง server)`, transport/admin ไม่มี scope (ตาม RBAC). id ที่นอก scope → 0 row → 404 |
 | **Header injection / XSS** | `Content-Disposition` strip `\r \n "`; mime ที่มี CRLF ทำให้ Node โยน error (ไม่ split header); polyglot ถูกคุมด้วย CSP `sandbox` + `nosniff` |
+| **Sub-role bypass (grade teacher)** | `requireFullSchoolScope` ห้ามบัญชีครูสายชั้น (`gradeScope` มีค่า) ทำ match/approve/reject/review — ดูได้อย่างเดียว; ใช้กับ `POST /documents/:kind/:id/review`, `POST /:applicationId/students/:rosterId/match`, `PATCH /:applicationId/students/:rosterId`, `POST /:applicationId/approve`, `POST /:applicationId/reject` |
+| **ลบเอกสารที่ตรวจแล้ว** | `softDeleteDocument` ปฏิเสธการลบเอกสารที่ `review_status = APPROVED` ยกเว้น admin (`APPROVED_LOCKED`) — ป้องกันลบหลักฐานที่ผ่านการตรวจแล้ว |
 | **Mime หลอก (polyglot)** | ตอน serve **clamp `Content-Type`** เป็น whitelist `application/pdf, image/png, image/jpeg, image/webp` เท่านั้น; ชนิดอื่น downgrade เป็น `application/octet-stream` (ดาวน์โหลด ไม่ render inline) → ฆ่า XSS residual โดยไฟล์จริงยังดูได้ปกติ |
 | **Upload ไฟล์อันตราย** | ตรวจ magic-byte ของไบต์จริง (`.exe`/HTML/SVG/ZIP เปลี่ยนนามสกุลเป็น `.pdf` ก็ไม่ผ่าน) + unlink ทุก path ที่ reject (ไม่มีไฟล์ค้าง) |
 | **404 oracle** | ทุกกรณีล้มเหลวคืน 404 + ข้อความ/code เดียวกัน ไม่บอกว่าเอกสารมีอยู่จริงหรือไม่ |
@@ -245,7 +247,8 @@ GET    /:docType/:id/file              docType ∈ vehicle|driver — serve แ�
 | แนบเอกสาร (รถ/คนขับของตน) | ✅ | ❌ | ❌ | ❌ | ❌ |
 | ดูรายการ + เปิดไฟล์ | ✅ ของตน | ✅ ในขอบเขตโรงเรียน | ✅ ทุกคัน | ❌ | ✅ |
 | ตรวจเอกสาร (ผ่าน/ไม่ผ่าน) | ❌ | ✅ ในขอบเขต (ยกเว้นครูสายชั้น) | ✅ | ❌ | ✅ |
-| ลบเอกสาร | ✅ ของตน (ยังไม่ APPROVED) | ❌ | ❌ | ❌ | ✅ |
+| ลบเอกสาร | ✅ ของตน (ยังไม่ APPROVED) — ถ้า APPROVED แล้ว admin ลบได้ | ❌ | ❌ | ❌ | ✅ |
+| จับคู่ roster / อนุมัติคำขอ | ❌ | ✅ เฉพาะบัญชี full-school (ไม่ใช่ครูสายชั้น) | ❌ | ❌ | ✅ |
 
 > `parent` / `province` / `affiliation` ถูกปฏิเสธโดย allow-list ของ router (403)
 
@@ -304,8 +307,8 @@ scripts/postbuild-symlinks.js                    (recreate dist/manual + dist/do
 
 ## 10. การทดสอบและการตรวจสอบ
 
-- **Unit tests:** `npx jest --config jest.unit.config.js` → **18 suites / 185 tests ผ่านทั้งหมด**
-  (รวมไฟล์ใหม่ `driverDocuments.unit.test.js` — 22 เคส: traversal guard, IDOR/scope, CRUD/review guards แบบ DB-free)
+- **Unit tests:** `npx jest --config jest.unit.config.js` → **18 suites / 185 tests ผ่านทั้งหมด** (ก่อน deploy)
+  (รวมไฟล์ `driverDocuments.unit.test.js` — 25 เคส หลัง fact-check: traversal guard, IDOR/scope, CRUD/review guards, APPROVED_LOCKED, grade-teacher scope แบบ DB-free)
 - **Syntax:** `node -c` ผ่านทุกไฟล์ backend; esbuild transform ผ่านทั้ง 2 หน้า frontend (โปรเจกต์ frontend ไม่มี eslint config)
 - **App-graph smoke:** `require('./src/app.js')` ด้วย `FEATURE_DRIVER_REGISTRATION=true` โหลด dark routers ได้
 - **Adversarial verify (workflow):** 2 มุมมอง → **CONFIRMED-CORRECT** (IDOR, traversal, header-injection/XSS, 404-oracle,

@@ -262,4 +262,24 @@ router.post(
   }
 );
 
+// ─── Abort a stuck IN_PROGRESS inspection attempt ───────────────────────────
+// transport: may only abort an attempt they started (INSPECTOR_MISMATCH).
+// admin: bypasses the inspector-match via isAdmin. The un-finalized attempt is
+// hard-deleted and the parent application reverts to READY_TO_PRINT.
+router.delete(
+  '/transport/attempts/:id',
+  requireRole('transport', 'admin'),
+  async (req, res, next) => {
+    try {
+      const data = await verification.abortInspectionAttempt(pool, {
+        attemptId: Number(req.params.id),
+        actorUserId: req.user.id,
+        isAdmin: req.user.role === 'admin',
+        reason: req.body.reason || null,
+      });
+      return sendSuccess(res, data, 'ยกเลิกการตรวจและคืนคำขอสู่สถานะพร้อมตรวจแล้ว');
+    } catch (error) { return next(error); }
+  }
+);
+
 module.exports = router;

@@ -511,8 +511,11 @@ async function listTransportQueue(pool, { status = null, search = null } = {}) {
 
 async function transitionSchoolApplication(pool, {
   applicationId, schoolId, userId, nextStatus, allowedStatuses, reason = null,
+  isAdmin = false,
 }) {
-  if (!applicationId || !schoolId || !userId) {
+  // schoolId is the scope guard for non-admin callers. Admin overrides bypass it
+  // and may pass schoolId = null, so it is no longer part of the required set.
+  if (!applicationId || !userId || (!isAdmin && !schoolId)) {
     throw appError('ข้อมูลคำขอ โรงเรียน หรือผู้ใช้ไม่ครบถ้วน', 400, 'MISSING_REQUIRED_FIELDS');
   }
   const conn = await pool.getConnection();
@@ -526,7 +529,9 @@ async function transitionSchoolApplication(pool, {
       [applicationId]
     );
     if (!application) throw appError('ไม่พบคำขอ', 404, 'APPLICATION_NOT_FOUND');
-    if (String(application.issuing_school_id) !== String(schoolId)) {
+    // Admin override bypasses the issuing-school scope check; non-admin callers
+    // may only act on applications their own school issued.
+    if (!isAdmin && String(application.issuing_school_id) !== String(schoolId)) {
       throw appError('เฉพาะโรงเรียนผู้ออกเอกสารเท่านั้นที่เปลี่ยนสถานะได้', 403, 'ISSUING_SCHOOL_REQUIRED');
     }
     if (!allowedStatuses.includes(application.status)) {
@@ -535,6 +540,35 @@ async function transitionSchoolApplication(pool, {
       });
     }
     const isCancelled = nextStatus === 'CANCELLED';
+    // When cancelling an application that is mid-inspection, any IN_PROGRESS
+    // attempt must be closed in the same transaction — otherwise the attempt is
+    // orphaned IN_PROGRESS and refreshVehicleEligibility / a future startInspection
+    // see inconsistent state. The attempt was never finalized, so no checklist
+    // results or certification exist; a hard-delete is safe (children removed
+    // first to satisfy the FKs from inspection_evidence / inspection_checklist_results).
+    let abortedAttempts = [];
+    if (isCancelled) {
+      const [openAttempts] = await conn.query(
+        `SELECT id, inspected_by, inspection_date, started_at
+           FROM inspection_attempts
+          WHERE application_id = ? AND result = 'IN_PROGRESS'
+          FOR UPDATE`,
+        [applicationId]
+      );
+      for (const attempt of openAttempts) {
+        await conn.query('DELETE FROM inspection_evidence WHERE attempt_id = ?', [attempt.id]);
+        await conn.query('DELETE FROM inspection_checklist_results WHERE attempt_id = ?', [attempt.id]);
+        await conn.query(
+          `DELETE FROM inspection_attempts WHERE id = ? AND result = 'IN_PROGRESS'`,
+          [attempt.id]
+        );
+        abortedAttempts.push({
+          attempt_id: attempt.id,
+          inspected_by: attempt.inspected_by,
+          inspection_date: isoDate(attempt.inspection_date),
+        });
+      }
+    }
     await conn.query(
       `UPDATE vehicle_inspection_applications
           SET status = ?,
@@ -552,11 +586,21 @@ async function transitionSchoolApplication(pool, {
       entityType: 'vehicle_inspection_application',
       entityId: String(applicationId),
       oldValue: { status: application.status },
-      newValue: { status: nextStatus, ...(isCancelled ? { reason: reason || null } : {}) },
+      newValue: {
+        status: nextStatus,
+        ...(isCancelled ? { reason: reason || null } : {}),
+        ...(isAdmin ? { admin_override: true } : {}),
+        ...(abortedAttempts.length ? { aborted_attempts: abortedAttempts } : {}),
+      },
       conn,
     });
     await conn.commit();
-    return { id: Number(applicationId), request_no: application.request_no, status: nextStatus };
+    return {
+      id: Number(applicationId),
+      request_no: application.request_no,
+      status: nextStatus,
+      ...(abortedAttempts.length ? { aborted_attempts: abortedAttempts } : {}),
+    };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -572,10 +616,18 @@ function markReadyToPrint(pool, { applicationId, schoolId, userId }) {
   });
 }
 
-function cancelApplication(pool, { applicationId, schoolId, userId, reason = null }) {
+function cancelApplication(pool, { applicationId, schoolId, userId, reason = null, isAdmin = false }) {
   return transitionSchoolApplication(pool, {
-    applicationId, schoolId, userId, reason,
-    nextStatus: 'CANCELLED', allowedStatuses: ['DRAFT', 'READY_TO_PRINT', 'SUBMITTED'],
+    applicationId, schoolId, userId, reason, isAdmin,
+    // Cancel must rescue stuck applications too: an app mid-inspection
+    // (INSPECTION_PENDING), bounced back to the school (NEEDS_FIX), or a
+    // driver-initiated app awaiting review (PENDING_SCHOOL_REVIEW). The
+    // IN_PROGRESS-attempt abort is handled inside transitionSchoolApplication.
+    nextStatus: 'CANCELLED',
+    allowedStatuses: [
+      'DRAFT', 'READY_TO_PRINT', 'SUBMITTED',
+      'INSPECTION_PENDING', 'NEEDS_FIX', 'PENDING_SCHOOL_REVIEW',
+    ],
   });
 }
 
@@ -815,6 +867,107 @@ async function finalizeInspection(pool, {
     });
     await conn.commit();
     return { attempt_id: Number(attemptId), application_status: applicationStatus, eligibility };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
+async function abortInspectionAttempt(pool, {
+  attemptId, actorUserId, isAdmin = false, reason = null,
+}) {
+  if (!attemptId || !actorUserId) {
+    throw appError('ข้อมูลครั้งการตรวจหรือผู้ใช้ไม่ครบถ้วน', 400, 'MISSING_REQUIRED_FIELDS');
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[attempt]] = await conn.query(
+      `SELECT ia.id, ia.application_id, ia.inspected_by, ia.result,
+              ia.inspection_date, ia.started_at, a.vehicle_id, a.status AS application_status
+         FROM inspection_attempts ia
+         JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+        WHERE ia.id = ?
+        FOR UPDATE`,
+      [attemptId]
+    );
+    if (!attempt) throw appError('ไม่พบครั้งการตรวจ', 404, 'INSPECTION_ATTEMPT_NOT_FOUND');
+    if (attempt.result !== 'IN_PROGRESS') {
+      throw appError('ครั้งการตรวจนี้ถูกสรุปผลแล้ว ไม่สามารถยกเลิกได้', 409, 'ATTEMPT_ALREADY_FINALIZED', {
+        current_result: attempt.result,
+      });
+    }
+    // Non-admin transport users may only abort an attempt they themselves started
+    // (mirrors finalizeInspection's INSPECTOR_MISMATCH guard). Admin overrides it.
+    if (!isAdmin && String(attempt.inspected_by) !== String(actorUserId)) {
+      throw appError('เฉพาะเจ้าหน้าที่ผู้เริ่มตรวจเท่านั้นที่ยกเลิกการตรวจได้', 403, 'INSPECTOR_MISMATCH');
+    }
+
+    // Hard-delete the un-finalized attempt (no certification was issued). Remove
+    // FK children first; an IN_PROGRESS attempt normally has no checklist results
+    // (those are only written at finalize) but evidence may exist, so both are
+    // cleared before the attempt row.
+    await conn.query('DELETE FROM inspection_evidence WHERE attempt_id = ?', [attemptId]);
+    await conn.query('DELETE FROM inspection_checklist_results WHERE attempt_id = ?', [attemptId]);
+    await conn.query(
+      `DELETE FROM inspection_attempts WHERE id = ? AND result = 'IN_PROGRESS'`,
+      [attemptId]
+    );
+
+    // Revert the application to its pre-inspection state. startInspection drives
+    // the app to INSPECTION_PENDING from {READY_TO_PRINT, SUBMITTED, NEEDS_FIX,
+    // INSPECTION_PENDING}; the canonical "ready to be inspected" resting state in
+    // the transport queue is READY_TO_PRINT, so revert there. If the application
+    // is no longer INSPECTION_PENDING (e.g. another attempt already moved it on)
+    // leave it untouched to avoid clobbering newer state.
+    let revertedStatus = attempt.application_status;
+    if (attempt.application_status === 'INSPECTION_PENDING') {
+      revertedStatus = 'READY_TO_PRINT';
+      await conn.query(
+        `UPDATE vehicle_inspection_applications
+            SET status = 'READY_TO_PRINT',
+                ready_at = COALESCE(ready_at, CURRENT_TIMESTAMP)
+          WHERE id = ? AND status = 'INSPECTION_PENDING'`,
+        [attempt.application_id]
+      );
+    }
+
+    // Deleting the open attempt does not by itself change a vehicle's standing
+    // (only finalized attempts feed refreshVehicleEligibility), but recompute so
+    // verification_status/reasons reflect the current finalized-attempt set.
+    const eligibility = await refreshVehicleEligibility(conn, attempt.vehicle_id);
+
+    await logAudit({
+      userId: actorUserId,
+      action: 'DELETE',
+      entityType: 'inspection_attempt',
+      entityId: String(attemptId),
+      oldValue: {
+        result: 'IN_PROGRESS',
+        application_id: attempt.application_id,
+        application_status: attempt.application_status,
+        inspected_by: attempt.inspected_by,
+        inspection_date: isoDate(attempt.inspection_date),
+        started_at: attempt.started_at,
+      },
+      newValue: {
+        aborted: true,
+        application_status: revertedStatus,
+        ...(isAdmin ? { admin_override: true } : {}),
+        ...(reason ? { reason } : {}),
+        eligibility,
+      },
+      conn,
+    });
+    await conn.commit();
+    return {
+      attempt_id: Number(attemptId),
+      application_id: Number(attempt.application_id),
+      application_status: revertedStatus,
+      eligibility,
+    };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -1096,4 +1249,5 @@ module.exports = {
   listChecklistTemplates,
   startInspection,
   finalizeInspection,
+  abortInspectionAttempt,
 };

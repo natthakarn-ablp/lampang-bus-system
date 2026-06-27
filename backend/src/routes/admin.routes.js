@@ -1365,4 +1365,23 @@ router.post('/driver-assignments/:assignmentId/end', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Admin override: cancel ANY vehicle-inspection application (cross-scope) ──
+// Reuses the verification service's cancelApplication with isAdmin to bypass the
+// issuing-school check; the service aborts any IN_PROGRESS inspection attempt and
+// frees active_request_key in the same transaction, and audits the cancel.
+// Operators previously had to hand-edit the DB to clear a stuck application.
+router.post('/verification/applications/:id/cancel', async (req, res, next) => {
+  try {
+    const verification = require('../services/vehicleVerification.service');
+    const data = await verification.cancelApplication(pool, {
+      applicationId: Number(req.params.id),
+      schoolId: null,
+      userId: req.user.id,
+      reason: (req.body || {}).reason || null,
+      isAdmin: true,
+    });
+    return sendSuccess(res, data, 'ยกเลิกคำขอ (สิทธิ์ผู้ดูแลระบบ) แล้ว');
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -2,7 +2,7 @@
 
 **Branch:** `security/audit-fixes-2026-06-18`
 **เซิร์ฟเวอร์:** `ssh.schoolbus.lp-pao.go.th` → `/home/schoolbus/apps/lampang-bus-system/`
-**Production:** ทำงานปกติ, PM2 online, build ผ่าน, ฐานข้อมูล 245 คัน
+**Production:** ทำงานปกติ, PM2 online, build ผ่าน, ฐานข้อมูล 245 คัน, Phase 10.14 deploy แล้ว (27 มิ.ย. 2569)
 
 ---
 
@@ -10,11 +10,12 @@
 
 1. [Role Inversion — กลับทิศบทบาทการขึ้นทะเบียนรถ](#1-role-inversion)
 2. [Tier 3 — กระจายงานแอดมินไปสังกัด](#2-tier-3)
-3. [อัปเดตคู่มือและเอกสาร](#3-อัปเดตคู่มือ)
-4. [รายการไฟล์ที่เปลี่ยนแปลงทั้งหมด](#4-ไฟล์ที่เปลี่ยนแปลง)
-5. [สถาปัตยกรรมและ State Machine](#5-สถาปัตยกรรม)
-6. [API Endpoints ใหม่ทั้งหมด](#6-api-endpoints)
-7. [งานที่เหลือ](#7-งานที่เหลือ)
+3. [Phase 10.14 — แนบเอกสารหลักฐาน + ขึ้นทะเบียนรถแบบคนขับเริ่มเอง](#3-phase-1014)
+4. [อัปเดตคู่มือและเอกสาร](#4-อัปเดตคู่มือ)
+5. [รายการไฟล์ที่เปลี่ยนแปลงทั้งหมด](#5-ไฟล์ที่เปลี่ยนแปลง)
+6. [สถาปัตยกรรมและ State Machine](#6-สถาปัตยกรรม)
+7. [API Endpoints ใหม่ทั้งหมด](#7-api-endpoints)
+8. [งานที่เหลือ](#8-งานที่เหลือ)
 
 ---
 
@@ -168,7 +169,44 @@
 
 ---
 
-## 3. อัปเดตคู่มือ
+## 3. Phase 10.14 — แนบเอกสารหลักฐาน + ขึ้นทะเบียนรถแบบคนขับเริ่มเอง
+
+**Commit:** `3e60d73` — 30 files changed, +4132 -918
+
+> ดูรายละเอียดเต็ม: [`docs/UPDATE-2026-06-27-driver-documents.md`](docs/UPDATE-2026-06-27-driver-documents.md)
+
+### วัตถุประสงค์
+
+- ให้ **คนขับ** ยื่นคำขอขึ้นทะเบียนรถเอง พร้อมระบุรoster นักเรียนที่จะรับส่ง
+- ให้ **โรงเรียน** ตรวจสอบคำขอ + จับคู่ roster กับนักเรียนในระบบ + ตรวจเอกสารหลักฐาน
+- ให้ **ขนส่ง** ตรวจเอกสารหลักฐาน (ผ่าน API) ก่อนตรวจสภาพรถ
+- เอกสารทั้งหมดเป็น **supporting evidence** เท่านั้น ไม่กระทบ `vehicles.verification_status` อัตโนมัติ
+
+### Backend หลัก
+
+- Migrations 044 + 045: ตาราง `registration_roster_students`, `vehicle_documents`, `driver_documents`, คอลัมน์ `approval_status` บน `inspection_application_schools`, คอลัมน์ใหม่บน `students`
+- `registration.routes.js`: `/api/driver/registrations` (upload/list/delete docs, roster) + `/api/school/registrations` (review, match, approve, reject)
+- `documents.routes.js`: `GET /api/documents/:docType/:id/file` (serve scoped + auth)
+- `driverDocuments.service.js`: scoped resolution, path-traversal guard, magic-byte validation, sha256
+- `vehicleRegistration.service.js`: จัดการรoster + จับคู่นักเรียน (levenshtein + exact)
+
+### Frontend หลัก
+
+- `DriverVehicleRegistration.jsx`: คนขับยื่นคำขอ แนบเอกสาร ระบุนักเรียน
+- `SchoolRegistrationReview.jsx`: โรงเรียนตรวจคำขอ จับคู่ roster ตรวจเอกสาร
+- อัปเดต `App.jsx`, `Sidebar.jsx`, `MobileBottomNav.jsx` เพิ่มเมนู/Route ใหม่
+
+### สถานะ
+
+- ✅ Deployed แล้วบน production (27 มิ.ย. 2569, ~15:25)
+- ✅ Migrations 044 + 045 applied
+- ✅ `FEATURE_DRIVER_REGISTRATION=true` ใน `backend/.env`
+- ✅ Backend reload + frontend build สำเร็จ
+- ✅ Routes mount ตรวจสอบแล้ว (`/api/driver/registrations`, `/api/documents` ตอบ auth error ปกติ)
+
+---
+
+## 4. อัปเดตคู่มือ
 
 **Commit:** `a1ba2e6` — 4 files changed, +100 -1
 
@@ -179,7 +217,7 @@
 | `docs/manual-html/user-guide-affiliation.html` | เพิ่มงานที่ 13B/13C อนุมัติคำขอ |
 | `docs/STATUS-2026-06-25.md` | สร้างเอกสารสถานะใหม่ |
 
-### 4. แก้ไขการดาวน์โหลด PDF คู่มือ
+### 4.1 แก้ไขการดาวน์โหลด PDF คู่มือ
 
 **Commit:** `1011bd9` และ `294ea86`
 
@@ -187,7 +225,7 @@
 - **วิธีแก้:** สร้าง symlinks ชื่อ ASCII ใน `docs/manual-pdf/` (`driver.pdf`, `school.pdf`, `affiliation.pdf`, `province.pdf`, `transport.pdf`, `admin.pdf`, `parent.pdf`) แล้วอัปเดตลิงก์ใน HTML ให้ชี้ไปชื่อ ASCII
 - **ผลลัพธ์:** ดาวน์โหลด PDF ทั้ง 7 สิทธิ์ได้ปกติ (`content-type: application/pdf`) ทั้งโดเมน `schoolbuslampang.com`
 
-### 5. แก้ไขการนำเข้านักเรียนไม่จับคู่ทะเบียนรถ
+### 4.2 แก้ไขการนำเข้านักเรียนไม่จับคู่ทะเบียนรถ
 
 **Commit:** `8b0990e`, `9f0ddd1` และ `a866222`
 
@@ -202,7 +240,7 @@
   - `studentImportPreview.service.js`: fuzzy normalized match — ถ้าข้อความทะเบียนป้อนเข้ามาใกล้เคียงกับรถในระบบพอดีคันเดียว ระบบจะจับคู่และแปลงเป็นทะเบียนรถตามข้อมูลในระบบ
 - **ผลลัพธ์:** ทดสอบ `analyzeRows` กับรถ 2 คันของโรงเรียน จับคู่ได้ถูกต้องทั้ง `ลป-2204`, `ลป 2204`, `ลป2204`, `ลป 2204 ลำ` และ `นข-3402 ลำปาง` สถานะ `READY` พร้อมนำเข้า
 
-### 6. แก้ไขปัญหา /manual ติดหน้า login หลัง Deploy
+### 4.3 แก้ไขปัญหา /manual ติดหน้า login หลัง Deploy
 
 **Commit:** `22f33b3`
 
@@ -210,7 +248,7 @@
 - **วิธีแก้:** เพิ่ม `postbuild` script `scripts/postbuild-symlinks.js` ที่รันอัตโนมัติหลัง `npm run build` เพื่อสร้าง symlink `dist/manual -> ../../docs/manual-html` และ `dist/docs -> ../../docs` ใหม่ทุกครั้ง
 - **ผลลัพธ์:** หลัง deploy ใหม่ ลิงก์คู่มือและเอกสารที่เกี่ยวข้องยังเข้าถึงได้ปกติ ไม่ติดหน้า login
 
-### 7. แก้ไขลิงก์เอกสารที่เกี่ยวข้อง (Production Readiness / Backup & Restore / Operator Runbook)
+### 4.4 แก้ไขลิงก์เอกสารที่เกี่ยวข้อง (Production Readiness / Backup & Restore / Operator Runbook)
 
 **Commit:** `fe9039d`
 
@@ -223,7 +261,7 @@
 
 ---
 
-## 8. ไฟล์ที่เปลี่ยนแปลง
+## 5. ไฟล์ที่เปลี่ยนแปลง
 
 ### Backend
 
@@ -259,7 +297,7 @@
 
 ---
 
-## 9. สถาปัตยกรรม
+## 6. สถาปัตยกรรม
 
 ### State Machine: การขึ้นทะเบียนรถ (Role Inversion)
 
@@ -293,7 +331,7 @@ PENDING_SCHOOL_REVIEW    (คนขับยื่นคำขอ)
 
 ---
 
-## 10. API Endpoints
+## 7. API Endpoints
 
 ### ใหม่ทั้งหมด (13 endpoints)
 
@@ -325,19 +363,54 @@ POST   /api/affiliation/vehicle-requests/:id/approve     # { admin_note }
 POST   /api/affiliation/vehicle-requests/:id/reject      # { admin_note }
 ```
 
+#### Driver Registration (Phase 10.14) — ใต้ `/api/driver/registrations`
+
+```http
+POST   /documents/vehicle                  # แนบเอกสารรถ (multipart)
+POST   /documents/driver                   # แนบเอกสารคนขับ (multipart)
+GET    /documents                           # รายการเอกสารของตัวเอง
+DELETE /documents/:kind/:id                # ลบเอกสารของตน (kind=vehicle|driver)
+```
+
+#### School Registration Review (Phase 10.14) — ใต้ `/api/school/registrations`
+
+```http
+GET    /documents/vehicle/:vehicleId        # เอกสารรถใน scope โรงเรียน
+GET    /documents/driver/:driverId          # เอกสารคนขับใน scope โรงเรียน
+POST   /documents/:kind/:id/review          # ตรวจเอกสาร { decision, note }
+GET    /                                    # รายการคำขอขึ้นทะเบียน
+GET    /:applicationId                      # รายละเอียดคำขอ
+POST   /:applicationId/students/:rosterId/match  # จับคู่ roster กับนักเรียน
+PATCH  /:applicationId/students/:rosterId        # แก้ไขรายการ roster
+POST   /:applicationId/approve               # อนุมัติคำขอ
+POST   /:applicationId/reject                # ส่งกลับให้แก้ไข
+```
+
+#### Document Serving (Phase 10.14) — ใต้ `/api/documents`
+
+```http
+GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth + scoped
+```
+
 ---
 
-## 11. งานที่เหลือ
+## 8. งานที่เหลือ
 
-- [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals)
-- [ ] UAT เชิงผู้ใช้กับ workflow ใหม่
+- [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals, driver documents, school registration review)
+- [ ] UAT เชิงผู้ใช้กับ Phase 10.14 (driver-initiated registration + document review)
 - [ ] อัปเดต `docs/manual-html/screenshots/` เมื่อถ่ายภาพเสร็จ
+- [ ] Push commits ขึ้น GitHub (prod box ไม่มี git credential)
 
 ---
 
-## 12. Git Log
+## 9. Git Log
 
 ```
+db26fce docs: mark driver documents + registration roster as deployed and fix file list
+3e60d73 feat: driver documents + vehicle registration roster (Phase 10.14)
+a7a19f0 feat(admin): self-service CRUD endpoints to replace manual DB edits (audit #3-#8)
+bc23137 feat(verification): cancel / abort-inspection buttons (school + transport UI)
+19d6881 feat(verification): admin/operator cancel for stuck inspection applications + abort in-progress attempt
 22f33b3 fix: recreate manual/docs symlinks in dist after each frontend build
 6cd3570 docs: update Doc.md with fuzzy plate matching fix
 a866222 fix: fuzzy normalized plate matching for student imports

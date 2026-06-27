@@ -45,6 +45,10 @@ function parseCsvRow(text) {
 }
 
 const TERM = env.app.currentTerm;
+// Upper bound on rows a single import file may contain — mirrors the legacy
+// POST /students/import cap (school.routes.js). Rejected before any per-row DB
+// work so a (possibly decompression-bombed) file can't amplify into the DB.
+const MAX_IMPORT_ROWS = 5000;
 const canonOf = (plate) => { const p = plateId.parseLegacyPlateText(plate); return p ? plateId.buildCanonicalPlate(p) : ''; };
 const normalizePhone = (p) => String(p == null ? '' : p).replace(/\D/g, '');
 
@@ -239,6 +243,11 @@ function publicRow(r) {
 // ── Preview: persist batch + rows. No student/vehicle/parent writes. ─────────
 async function runPreview(pool, { schoolId, importedBy, filePath, originalName }) {
   const rows = await parseImportFile(filePath, originalName);
+  if (rows.length > MAX_IMPORT_ROWS) {
+    const e = new Error('ไฟล์มีจำนวนแถวมากเกินไป (เกิน 5000 แถว) กรุณาแบ่งไฟล์');
+    e.statusCode = 400;
+    throw e;
+  }
   const results = await analyzeRows(pool, schoolId, rows);
   const summary = summarize(results);
   const sha = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');

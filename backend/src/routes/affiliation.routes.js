@@ -485,6 +485,9 @@ router.post('/school-accounts/import/preview', importUpload.single('file'), asyn
 
     const rawRows = await parseSchoolImportFile(filePath);
     if (!rawRows.length) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
+    // Cap before the per-row commit loop (one bcrypt + 2 INSERTs/row) so an
+    // oversized file can't amplify into the DB. Matches the student import cap.
+    if (rawRows.length > 5000) return sendError(res, 'ไฟล์มีจำนวนแถวมากเกินไป (เกิน 5000 แถว) กรุณาแบ่งไฟล์', [], 400);
 
     const result = await affAdminSvc.previewSchoolImport(rawRows, affId);
     return sendSuccess(res, result);
@@ -516,6 +519,9 @@ router.post('/school-accounts/import/commit', importUpload.single('file'), async
 
     const rawRows = await parseSchoolImportFile(filePath);
     if (!rawRows.length) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
+    // Cap before the per-row commit loop (one bcrypt + 2 INSERTs/row) so an
+    // oversized file can't amplify into the DB. Matches the student import cap.
+    if (rawRows.length > 5000) return sendError(res, 'ไฟล์มีจำนวนแถวมากเกินไป (เกิน 5000 แถว) กรุณาแบ่งไฟล์', [], 400);
 
     const result = await affAdminSvc.commitSchoolImport(rawRows, affId, req.user.id);
     const msg = `นำเข้าสำเร็จ ${result.summary.created} โรงเรียน, ข้าม ${result.summary.skipped} แถว`;

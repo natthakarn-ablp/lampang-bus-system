@@ -11,6 +11,7 @@ const env = require('../config/env');
 const { classifyImportRow, maskPhone } = require('../utils/studentImportClassifier');
 const plateId = require('../utils/plateIdentity');
 const { classifyStudentImport } = require('../utils/studentImport');
+const { isOle2, isAllowedImport } = require('../utils/fileType');
 const { allocateStudentId } = require('./idAllocator.service');
 const { logAudit } = require('../utils/audit');
 
@@ -50,6 +51,24 @@ const normalizePhone = (p) => String(p == null ? '' : p).replace(/\D/g, '');
 // ── Parse a CSV/XLS(X) import file into normalized rows. ─────────────────────
 async function parseImportFile(filePath, originalName) {
   const rows = [];
+
+  // Sniff the real first bytes before parsing so a renamed .xls (OLE2) or
+  // spoofed/corrupt binary can't reach ExcelJS and trigger an unhandled 500.
+  // The legacy POST /students/import already does this; the preview path
+  // (/students/import/preview) reaches here and needs the same guard.
+  let head;
+  try { head = fs.readFileSync(filePath).subarray(0, 16); } catch { head = Buffer.alloc(0); }
+  if (isOle2(head)) {
+    const e = new Error('ไฟล์ .xls (รุ่นเก่า) ไม่รองรับ กรุณาบันทึกเป็น .xlsx หรือ .csv');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (!isAllowedImport(head)) {
+    const e = new Error('ไฟล์ไม่ถูกต้อง รองรับเฉพาะ .xlsx หรือ .csv');
+    e.statusCode = 400;
+    throw e;
+  }
+
   const isExcel = /\.xlsx?$/i.test(originalName || filePath);
   const pick = (cells, map, key) => (map[key] != null ? String(cells[map[key]] ?? '').trim() : '');
   const buildMap = (headers) => {

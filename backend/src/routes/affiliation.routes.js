@@ -15,6 +15,7 @@ const affAdminSvc = require('../services/affiliationAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { logAudit } = require('../utils/audit');
+const { isOle2, isAllowedImport } = require('../utils/fileType');
 
 // ─── Bulk-import upload (Phase 10.2A) ────────────────────────────────────────
 // Disk-backed multer config mirroring backend/src/routes/school.routes.js.
@@ -43,6 +44,24 @@ const importUpload = multer({
 async function parseSchoolImportFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   const rows = [];
+
+  // Validate the real first bytes, not just the extension — mirror the student
+  // import (school.routes.js POST /students/import). Reject legacy .xls (OLE2)
+  // and spoofed/corrupt files before the ExcelJS/CSV parse so a disguised upload
+  // can't trigger an unhandled 500. The temp file is still removed by the
+  // preview/commit `finally` blocks; the tagged 400 is surfaced by their catch.
+  let head;
+  try { head = fs.readFileSync(filePath).subarray(0, 16); } catch { head = Buffer.alloc(0); }
+  if (isOle2(head)) {
+    const e = new Error('ไฟล์ .xls (รุ่นเก่า) ไม่รองรับ กรุณาบันทึกเป็น .xlsx หรือ .csv');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (!isAllowedImport(head)) {
+    const e = new Error('ไฟล์ไม่ถูกต้อง รองรับเฉพาะ .xlsx หรือ .csv');
+    e.statusCode = 400;
+    throw e;
+  }
 
   // Match a column header (case- and accent-tolerant) to one of our 4 keys.
   function matchHeader(h) {
@@ -470,6 +489,9 @@ router.post('/school-accounts/import/preview', importUpload.single('file'), asyn
     const result = await affAdminSvc.previewSchoolImport(rawRows, affId);
     return sendSuccess(res, result);
   } catch (err) {
+    // A tagged 400 from parseSchoolImportFile (magic-byte rejection) becomes a
+    // clean 400 instead of a generic 500; all other errors propagate unchanged.
+    if (err && err.statusCode === 400) return sendError(res, err.message, [], 400);
     next(err);
   } finally {
     if (filePath) { try { fs.unlinkSync(filePath); } catch { /* ignore */ } }
@@ -499,6 +521,9 @@ router.post('/school-accounts/import/commit', importUpload.single('file'), async
     const msg = `นำเข้าสำเร็จ ${result.summary.created} โรงเรียน, ข้าม ${result.summary.skipped} แถว`;
     return sendSuccess(res, result, msg);
   } catch (err) {
+    // A tagged 400 from parseSchoolImportFile (magic-byte rejection) becomes a
+    // clean 400 instead of a generic 500; all other errors propagate unchanged.
+    if (err && err.statusCode === 400) return sendError(res, err.message, [], 400);
     next(err);
   } finally {
     if (filePath) { try { fs.unlinkSync(filePath); } catch { /* ignore */ } }

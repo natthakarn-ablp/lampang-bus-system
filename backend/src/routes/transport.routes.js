@@ -142,8 +142,8 @@ router.get('/vehicles', async (req, res, next) => {
     const data = await transportSvc.getVehicles({
       status,
       search,
-      page: parseInt(page) || 1,
-      per_page: parseInt(per_page) || 50,
+      page: Math.max(1, parseInt(page, 10) || 1),
+      per_page: Math.min(100, Math.max(1, parseInt(per_page, 10) || 50)),
     });
     sendSuccess(res, data.vehicles, 'OK', data.meta);
   } catch (err) { next(err); }
@@ -159,8 +159,8 @@ router.get('/vehicles/pending', async (req, res, next) => {
   try {
     const { page, per_page, include_pending } = req.query;
     const data = await transportSvc.getPendingVehicles({
-      page: parseInt(page) || 1,
-      per_page: parseInt(per_page) || 50,
+      page: Math.max(1, parseInt(page, 10) || 1),
+      per_page: Math.min(100, Math.max(1, parseInt(per_page, 10) || 50)),
       includePending: include_pending === 'true' || include_pending === '1',
     });
     sendSuccess(res, data.vehicles, 'OK', data.meta);
@@ -176,8 +176,8 @@ router.get('/vehicles/expiring', async (req, res, next) => {
   try {
     const { page, per_page, expired } = req.query;
     const data = await transportSvc.getExpiringVehicles({
-      page: parseInt(page) || 1,
-      per_page: parseInt(per_page) || 50,
+      page: Math.max(1, parseInt(page, 10) || 1),
+      per_page: Math.min(100, Math.max(1, parseInt(per_page, 10) || 50)),
       expired: expired === 'true' || expired === '1',
     });
     sendSuccess(res, data.vehicles, 'OK', data.meta);
@@ -212,8 +212,8 @@ router.get('/inspections', async (req, res, next) => {
     const { vehicle_id, result, page, per_page } = req.query;
     const data = await transportSvc.getInspections({
       vehicle_id, result,
-      page: parseInt(page) || 1,
-      per_page: parseInt(per_page) || 20,
+      page: Math.max(1, parseInt(page, 10) || 1),
+      per_page: Math.min(100, Math.max(1, parseInt(per_page, 10) || 20)),
     });
     sendSuccess(res, data.inspections, 'OK', data.meta);
   } catch (err) { next(err); }

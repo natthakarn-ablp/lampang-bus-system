@@ -1265,7 +1265,7 @@ router.get('/applications/:id', async (req, res, next) => {
     const verification = require('../services/vehicleVerification.service');
     const data = await verification.getApplication(pool, {
       applicationId: Number(req.params.id),
-      viewer: { role: 'driver', schoolId: null },
+      viewer: { role: 'driver', schoolId: null, userId: req.user.id },
     });
     return res.json({ success: true, data });
   } catch (error) { next(error); }

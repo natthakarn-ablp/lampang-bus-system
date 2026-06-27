@@ -419,11 +419,22 @@ async function getApplication(pool, { applicationId, viewer } = {}) {
     throw appError('ข้อมูลผู้ดูหรือคำขอไม่ครบถ้วน', 400, 'INVALID_VIEWER');
   }
   const isSchool = viewer.role === 'school';
+  const isDriver = viewer.role === 'driver';
   if (isSchool && !viewer.schoolId) throw appError('ไม่พบขอบเขตโรงเรียน', 403, 'SCHOOL_SCOPE_REQUIRED');
+  // A driver may only read an application they themselves submitted — mirror the
+  // scope of listDriverApplications (WHERE a.requested_by = ?). Without this the
+  // detail getter ran `WHERE a.id = ?` with no ownership filter, so any
+  // authenticated driver could read every application by sequential id (IDOR).
+  if (isDriver && !viewer.userId) throw appError('ไม่พบขอบเขตผู้ใช้', 403, 'DRIVER_SCOPE_REQUIRED');
   const accessJoin = isSchool
     ? 'JOIN inspection_application_schools access_school ON access_school.application_id = a.id AND access_school.school_id = ?'
     : '';
-  const params = isSchool ? [viewer.schoolId, applicationId] : [applicationId];
+  const driverScopeSql = isDriver ? ' AND a.requested_by = ?' : '';
+  const params = isSchool
+    ? [viewer.schoolId, applicationId]
+    : isDriver
+      ? [applicationId, viewer.userId]
+      : [applicationId];
   const [rows] = await pool.query(
     `SELECT a.*, v.plate_no, v.vehicle_type, v.verification_status,
             sc.name AS issuing_school_name
@@ -431,7 +442,7 @@ async function getApplication(pool, { applicationId, viewer } = {}) {
        JOIN vehicles v ON v.id = a.vehicle_id
        JOIN schools sc ON sc.id = a.issuing_school_id
        ${accessJoin}
-      WHERE a.id = ?
+      WHERE a.id = ?${driverScopeSql}
       LIMIT 1`,
     params
   );

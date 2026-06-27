@@ -226,11 +226,13 @@ router.get('/students', async (req, res, next) => {
     const { search, grade, vehicle_id, morning_enabled, evening_enabled, sort, order } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
+    const include_deleted = req.query.include_deleted === '1' || req.query.include_deleted === 'true';
+    const only_deleted = req.query.only_deleted === '1' || req.query.only_deleted === 'true';
 
     const gradeFilter = resolveGradeScope(req);
     const result = await schoolSvc.getStudents(schoolId, {
       search, grade, vehicle_id, morning_enabled, evening_enabled,
-      page, per_page, sort, order, gradeFilter,
+      page, per_page, sort, order, gradeFilter, include_deleted, only_deleted,
     });
 
     return sendSuccess(res, result.students, 'OK', result.meta);
@@ -954,6 +956,25 @@ router.delete('/students/:id', requireFullSchoolScope, async (req, res, next) =>
     });
 
     return sendSuccess(res, { student_id: studentId }, 'ลบนักเรียนออกจากระบบเรียบร้อยแล้ว');
+  } catch (err) { next(err); }
+});
+
+// ─── POST /students/:id/restore — กู้คืนนักเรียนที่ถูกลบ (ในขอบเขตโรงเรียน) ─────
+// Reverses DELETE /students/:id (withdraw). Operators previously had to hand-run
+// UPDATE students SET is_deleted=FALSE for a mis-deleted student.
+router.post('/students/:id/restore', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const studentId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const result = await schoolSvc.restoreStudent(pool, {
+      schoolId, studentId, actorId: req.user.id,
+      ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, result, result.status === 'RESTORED' ? 'กู้คืนนักเรียนสำเร็จ' : 'นักเรียนรายนี้ใช้งานอยู่แล้ว');
   } catch (err) { next(err); }
 });
 
@@ -1995,6 +2016,44 @@ router.delete('/teacher-accounts/:id', requireFullSchoolScope, async (req, res, 
     });
 
     return sendSuccess(res, null, 'ลบบัญชีครูประจำสายชั้นสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/school/checkin/:logId/void ────────────────────────────────────
+// School reverses a wrong check-in / check-out for a student in its OWN school
+// (mirror of /checkin-override). Writes a CANCELLED compensating checkin_logs
+// row + resets daily_status, in one transaction. Reason required; original log
+// kept. Grade-scoped teachers are blocked (requireFullSchoolScope). The service
+// asserts the log's student belongs to that school.
+router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) {
+      return sendError(
+        res,
+        req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียนที่ผูกกับบัญชีนี้',
+        [],
+        req.user.role === 'admin' ? 400 : 403
+      );
+    }
+
+    const reason = (req.body || {}).reason;
+    if (!String(reason || '').trim()) {
+      return sendError(res, 'กรุณาระบุเหตุผล', [{ field: 'reason', message: 'จำเป็นต้องระบุเหตุผล' }], 400);
+    }
+
+    const result = await checkinSvc.voidCheckin(pool, {
+      userId:          req.user.id,
+      userRole:        req.user.role,
+      userDisplayName: req.user.displayName || req.user.username || null,
+      ipAddress:       req.ip,
+      userAgent:       req.headers['user-agent'],
+      logId:           req.params.logId,
+      reason,
+      scope:           { kind: 'school', schoolId },
+    });
+
+    return sendSuccess(res, result, 'ยกเลิกรายการเช็กอินสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
 

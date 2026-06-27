@@ -1276,5 +1276,33 @@ router.get('/applications/:id', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+// ─── POST /api/driver/checkin/:logId/void ────────────────────────────────────
+// Driver reverses a wrong check-in / check-out on THEIR OWN active vehicle.
+// Vehicle is resolved from the JWT via getDriverVehicle (never the body); the
+// service re-asserts the log's vehicle_id matches inside the locked transaction.
+router.post('/checkin/:logId/void', async (req, res, next) => {
+  try {
+    const reason = (req.body || {}).reason;
+    if (!String(reason || '').trim()) {
+      return sendError(res, 'กรุณาระบุเหตุผล', [{ field: 'reason', message: 'จำเป็นต้องระบุเหตุผล' }], 400);
+    }
+
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+
+    const result = await checkinSvc.voidCheckin(pool, {
+      userId:          req.user.id,
+      userRole:        req.user.role,
+      userDisplayName: req.user.displayName || req.user.username || null,
+      ipAddress:       req.ip,
+      userAgent:       req.headers['user-agent'],
+      logId:           req.params.logId,
+      reason,
+      scope:           { kind: 'driver', vehicleId: vehicle.vehicle_id },
+    });
+
+    return sendSuccess(res, result, 'ยกเลิกรายการเช็กอินสำเร็จ', null, 201);
+  } catch (err) { return next(err); }
+});
+
 
 module.exports = router;

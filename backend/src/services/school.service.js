@@ -2,6 +2,7 @@
 
 const { pool } = require('../config/database');
 const { gradeEquivalents } = require('../utils/gradeScope');
+const { logAudit } = require('../utils/audit');
 
 /**
  * Phase 7.11.3 — every school.service read accepts an optional
@@ -172,12 +173,19 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
 /**
  * Search/list students for a school with optional filters.
  */
-async function getStudents(schoolId, { search, grade, vehicle_id, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null }) {
+async function getStudents(schoolId, { search, grade, vehicle_id, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
   const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'vehicle_id'];
   const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
   const sortDir = order === 'desc' ? 'DESC' : 'ASC';
 
-  let where = 's.school_id = ? AND s.is_deleted = FALSE';
+  // Soft-delete visibility. Default (both flags false) keeps the historical
+  // contract: active students only. only_deleted powers the "restorable
+  // students" view; include_deleted shows both (active + withdrawn).
+  let deletedClause = ' AND s.is_deleted = FALSE';
+  if (only_deleted) deletedClause = ' AND s.is_deleted = TRUE';
+  else if (include_deleted) deletedClause = '';
+
+  let where = `s.school_id = ?${deletedClause}`;
   const params = [schoolId];
 
   if (search) {
@@ -222,7 +230,7 @@ async function getStudents(schoolId, { search, grade, vehicle_id, morning_enable
   const [students] = await pool.query(
     `SELECT s.id, s.student_code, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled,
-            s.dropoff_address,
+            s.dropoff_address, s.is_deleted, s.deleted_at,
             p.name AS parent_name, p.phone AS parent_phone
      FROM students s
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
@@ -403,10 +411,58 @@ async function getEmergencies(schoolId, { page = 1, per_page = 20, gradeFilter =
   };
 }
 
+/**
+ * Restore a soft-deleted ("withdrawn") student back into the active roster.
+ * Reverses the DELETE /students/:id soft-delete. School-scoped: the caller's
+ * schoolId is part of the WHERE so a school can only restore its own rows.
+ * Vehicle is intentionally NOT re-attached — the student returns unassigned.
+ */
+async function restoreStudent(db, { schoolId, studentId, actorId, ip = null, userAgent = null }) {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[st]] = await conn.query(
+      `SELECT s.id, s.student_code, s.prefix, s.first_name, s.last_name,
+              s.grade, s.classroom, s.is_deleted
+       FROM students s
+       WHERE s.id = ? AND s.school_id = ?
+       FOR UPDATE`,
+      [studentId, schoolId]
+    );
+    if (!st) { const e = new Error('ไม่พบนักเรียนในโรงเรียนนี้'); e.statusCode = 404; throw e; }
+    if (!st.is_deleted) { await conn.commit(); return { status: 'ALREADY_ACTIVE', student_id: st.id }; }
+
+    await conn.query(
+      `UPDATE students SET is_deleted = FALSE, deleted_at = NULL WHERE id = ?`,
+      [studentId]
+    );
+
+    await logAudit({
+      userId: actorId, action: 'UPDATE', entityType: 'student', entityId: studentId, conn,
+      oldValue: { is_deleted: true },
+      newValue: {
+        action: 'restore', is_deleted: false,
+        student_name: `${st.prefix || ''}${st.first_name} ${st.last_name}`,
+        grade: st.grade, classroom: st.classroom,
+      },
+      ipAddress: ip, userAgent,
+    });
+
+    await conn.commit();
+    return { status: 'RESTORED', student_id: studentId };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 module.exports = {
   getDashboard,
   getStudents,
   getVehicles,
   getStatusToday,
   getEmergencies,
+  restoreStudent,
 };

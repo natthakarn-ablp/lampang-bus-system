@@ -37,7 +37,12 @@ router.get('/users', async (req, res, next) => {
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 50));
     const offset = (page - 1) * per_page;
 
-    let where = 'u.is_deleted = FALSE';
+    // Soft-delete visibility (default: active accounts only — unchanged contract).
+    // only_deleted powers the "restore a deleted account" picker; include_deleted shows both.
+    const includeDeleted = req.query.include_deleted === '1' || req.query.include_deleted === 'true';
+    const onlyDeleted = req.query.only_deleted === '1' || req.query.only_deleted === 'true';
+
+    let where = onlyDeleted ? 'u.is_deleted = TRUE' : (includeDeleted ? '1=1' : 'u.is_deleted = FALSE');
     const params = [];
     if (role) { where += ' AND u.role = ?'; params.push(role); }
     if (is_active !== undefined) { where += ' AND u.is_active = ?'; params.push(is_active === 'true' ? 1 : 0); }
@@ -45,7 +50,7 @@ router.get('/users', async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT u.id, u.username, u.role, u.scope_type, u.scope_id, u.grade_scope, u.display_name,
-              u.is_active, u.must_change_password, u.last_login, u.created_at,
+              u.is_active, u.is_deleted, u.deleted_at, u.must_change_password, u.last_login, u.created_at,
               CASE WHEN u.scope_type = 'SCHOOL' THEN (SELECT name FROM schools WHERE id = u.scope_id)
                    WHEN u.scope_type = 'AFFILIATION' THEN (SELECT name FROM affiliations WHERE id = u.scope_id)
                    ELSE NULL END AS scope_name
@@ -262,6 +267,35 @@ router.delete('/users/:id', async (req, res, next) => {
     });
 
     return sendSuccess(res, null, 'ลบผู้ใช้สำเร็จ');
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/admin/users/:id/restore ──────────────────────────────────────
+// Reverses DELETE /users/:id (soft-delete). Restores generic accounts DEACTIVATED
+// (admin re-enables login via PUT). Driver accounts are delegated to the
+// 23C-guarded driver lifecycle restore (duplicate-reactivation guard).
+router.post('/users/:id/restore', async (req, res, next) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+
+    const [[u]] = await pool.query('SELECT id, role FROM users WHERE id = ?', [userId]);
+    if (!u) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
+
+    if (u.role === 'driver') {
+      const dl = require('../services/driverLifecycle.service');
+      const reason = (req.body || {}).reason;
+      if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
+      const out = await dl.restoreDriver(pool, { userId, reason, actorId: req.user.id });
+      return sendSuccess(res, out, out.status === 'RESTORED' ? 'กู้คืนบัญชีคนขับสำเร็จ' : 'บัญชีนี้ใช้งานอยู่แล้ว');
+    }
+
+    const out = await adminSvc.restoreUser(pool, {
+      userId, actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, out.status === 'RESTORED'
+      ? 'กู้คืนบัญชีผู้ใช้สำเร็จ (สถานะปิดใช้งาน — เปิดใช้งานได้ภายหลัง)'
+      : 'บัญชีนี้ใช้งานอยู่แล้ว');
   } catch (err) { next(err); }
 });
 
@@ -1381,6 +1415,159 @@ router.post('/verification/applications/:id/cancel', async (req, res, next) => {
       isAdmin: true,
     });
     return sendSuccess(res, data, 'ยกเลิกคำขอ (สิทธิ์ผู้ดูแลระบบ) แล้ว');
+  } catch (err) { next(err); }
+});
+
+// ─── Admin vehicle lifecycle: soft-delete / plate-correct / merge-duplicate ──
+// Operators previously had to hand-edit the DB to delete a bad vehicle, fix a
+// mistyped plate, or collapse a duplicate. All three are transactional, dedup-
+// guarded (canonical/normalized plate uniqueness), and fully audited. Admin-only
+// via the file-level requireRole('admin'); vehicles are province-shared.
+router.delete('/vehicles/:id', async (req, res, next) => {
+  try {
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const b = req.body || {};
+    const out = await vehicleAdmin.softDeleteVehicle(pool, {
+      vehicleId: req.params.id,
+      actorId: req.user.id,
+      force: b.force === true,
+      reason: b.reason || null,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    const msg = out.status === 'ALREADY_DELETED' ? 'รถคันนี้ถูกลบไปแล้ว'
+      : out.forced ? 'ลบรถ (ยืนยันการลบทั้งที่ยังมีการใช้งาน) แล้ว' : 'ลบรถเรียบร้อย';
+    return sendSuccess(res, out, msg);
+  } catch (err) { next(err); }
+});
+
+router.put('/vehicles/:id', async (req, res, next) => {
+  try {
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const b = req.body || {};
+    const patch = {};
+    for (const f of ['plate_no', 'vehicle_type', 'owner_name', 'owner_phone',
+                     'insurance_status', 'insurance_type', 'insurance_expiry',
+                     'registration_expiry', 'compulsory_insurance_expiry', 'tax_expiry']) {
+      if (Object.prototype.hasOwnProperty.call(b, f)) patch[f] = b[f];
+    }
+    const data = await vehicleAdmin.correctVehicle(pool, {
+      vehicleId: req.params.id,
+      actorId: req.user.id,
+      patch,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, data, 'แก้ไขข้อมูลรถเรียบร้อย');
+  } catch (err) { next(err); }
+});
+
+router.post('/vehicles/:id/merge', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.into_vehicle_id) return sendError(res, 'กรุณาระบุรถปลายทาง (into_vehicle_id)', [], 400);
+    if (!String(b.reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผลในการรวมรถ', [], 400);
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const data = await vehicleAdmin.mergeVehicles(pool, {
+      vehicleId: req.params.id,
+      intoVehicleId: b.into_vehicle_id,
+      actorId: req.user.id,
+      reason: b.reason,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, data, 'รวมรถซ้ำเรียบร้อย');
+  } catch (err) { next(err); }
+});
+
+// ─── POST /api/admin/checkin/:logId/void ─────────────────────────────────────
+// Admin override: reverse a wrong check-in / check-out. Writes a CANCELLED
+// compensating checkin_logs row + resets daily_status for that student/session/
+// date, in one transaction. Reason required; never hard-deletes the original log.
+router.post('/checkin/:logId/void', async (req, res, next) => {
+  try {
+    const checkinSvc = require('../services/checkin.service');
+    const reason = (req.body || {}).reason;
+    if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
+
+    const result = await checkinSvc.voidCheckin(pool, {
+      userId:          req.user.id,
+      userRole:        req.user.role,
+      userDisplayName: req.user.displayName || req.user.username || null,
+      ipAddress:       req.ip,
+      userAgent:       req.headers['user-agent'],
+      logId:           req.params.logId,
+      reason,
+      scope:           { kind: 'admin' },
+    });
+
+    return sendSuccess(res, result, 'ยกเลิกรายการเช็กอินสำเร็จ', null, 201);
+  } catch (err) { next(err); }
+});
+
+// ─── Emergency alert triage (admin: list / resolve / soft-delete) ────────────
+// emergency_logs has no status/closed column (only result, note, is_deleted).
+// "Resolve/close" writes a structured result + note; reads across the system
+// already filter is_deleted=FALSE so a soft-deleted alert disappears. No migration.
+const VALID_EMERGENCY_RESULTS = ['ACKNOWLEDGED', 'RESOLVED', 'FALSE_ALARM', 'CLOSED'];
+
+router.get('/emergencies', async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
+    const includeDeleted = req.query.include_deleted === '1' || req.query.include_deleted === 'true';
+    const where = includeDeleted ? '1=1' : 'el.is_deleted = FALSE';
+    const offset = (page - 1) * per_page;
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM emergency_logs el WHERE ${where}`
+    );
+    const [rows] = await pool.query(
+      `SELECT el.id, el.vehicle_id, el.plate_no, el.detail, el.note, el.result,
+              el.channel, el.reported_at, el.is_deleted, el.deleted_at,
+              u.display_name AS reported_by_name
+       FROM emergency_logs el
+       LEFT JOIN users u ON u.id = el.reported_by
+       WHERE ${where}
+       ORDER BY el.reported_at DESC
+       LIMIT ? OFFSET ?`,
+      [per_page, offset]
+    );
+    return sendSuccess(res, rows, 'OK', { page, per_page, total });
+  } catch (err) { next(err); }
+});
+
+router.patch('/emergencies/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const { result, note } = req.body || {};
+    if (result !== undefined && result !== null && !VALID_EMERGENCY_RESULTS.includes(result)) {
+      return sendError(res, `result ต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_EMERGENCY_RESULTS.join(', ')}`, [], 400);
+    }
+    if (result === undefined && note === undefined) {
+      return sendError(res, 'ต้องระบุ result หรือ note อย่างน้อยหนึ่งอย่าง', [], 400);
+    }
+
+    const emSvc = require('../services/emergencyAdmin.service');
+    const out = await emSvc.resolveEmergency(pool, {
+      id, result: result ?? null, note: note ?? null,
+      actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, 'อัปเดตสถานะเหตุฉุกเฉินสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+router.delete('/emergencies/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const emSvc = require('../services/emergencyAdmin.service');
+    const out = await emSvc.softDeleteEmergency(pool, {
+      id, reason: (req.body || {}).reason || null,
+      actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, out.status === 'DELETED' ? 'ลบเหตุฉุกเฉิน (ซ่อนจากรายงาน) แล้ว' : 'เหตุฉุกเฉินนี้ถูกลบไปแล้ว');
   } catch (err) { next(err); }
 });
 

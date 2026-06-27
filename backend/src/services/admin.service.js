@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { logAudit } = require('../utils/audit');
 
 /**
  * getUsersNeedingAction — top N users in a state that needs admin
@@ -78,7 +79,55 @@ async function getPendingRosterRequestsSystemWide({ limit = 10 } = {}) {
   return { total, rows };
 }
 
+/**
+ * Restore a soft-deleted user account.
+ * Safety: a generic (non-driver) account is restored DEACTIVATED
+ * (is_active = FALSE) — an accidental restore must not silently re-grant login;
+ * an admin re-enables it explicitly via PUT /users/:id. Driver accounts are NOT
+ * handled here (the route delegates them to the 23C-guarded restoreDriver).
+ * db-injectable (pool as 1st arg) for DB-free unit tests.
+ */
+async function restoreUser(db, { userId, actorId, ip = null, userAgent = null }) {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[u]] = await conn.query(
+      'SELECT id, username, role, is_active, is_deleted FROM users WHERE id = ? FOR UPDATE',
+      [userId]
+    );
+    if (!u) { const e = new Error('ไม่พบผู้ใช้'); e.statusCode = 404; throw e; }
+    if (u.role === 'driver') {
+      const e = new Error('บัญชีคนขับต้องกู้คืนผ่านระบบจัดการคนขับ (driver lifecycle)');
+      e.statusCode = 409;
+      throw e;
+    }
+    if (!u.is_deleted) { await conn.commit(); return { status: 'ALREADY_ACTIVE', user_id: u.id }; }
+
+    // Restore as INACTIVE — admin must re-enable login deliberately.
+    await conn.query(
+      'UPDATE users SET is_deleted = FALSE, deleted_at = NULL, is_active = FALSE WHERE id = ?',
+      [userId]
+    );
+
+    await logAudit({
+      userId: actorId, action: 'UPDATE', entityType: 'user', entityId: userId, conn,
+      oldValue: { is_deleted: true },
+      newValue: { action: 'restore', is_deleted: false, is_active: false, username: u.username },
+      ipAddress: ip, userAgent,
+    });
+
+    await conn.commit();
+    return { status: 'RESTORED', user_id: userId, is_active: false };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 module.exports = {
   getUsersNeedingAction,
   getPendingRosterRequestsSystemWide,
+  restoreUser,
 };

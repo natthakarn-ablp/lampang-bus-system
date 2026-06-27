@@ -897,6 +897,175 @@ async function getNoShowStudents(pool, { schoolId, session, date = null }) {
   return rows;
 }
 
+// ─── voidCheckin (GOAL #6 — reverse a wrong check-in / check-out) ─────────────
+//
+// Writes a COMPENSATING checkin_logs row (status='CANCELLED') for the SAME
+// student/session/check_date/vehicle as an existing log, then resets that
+// session's daily_status flag (morning_done/evening_done → FALSE, *_ts → NULL).
+// The original log is NEVER hard-deleted — history is preserved; the CANCELLED
+// row is the audit-grade reversal record. Fully atomic (one transaction), the
+// original row is locked FOR UPDATE, and ownership is enforced INSIDE the txn
+// after the lock so concurrent callers can't race a stale scope check.
+//
+// scope:
+//   { kind: 'admin' }              — no ownership constraint
+//   { kind: 'driver', vehicleId }  — log.vehicle_id must equal vehicleId
+//   { kind: 'school', schoolId }   — student.school_id must equal schoolId
+async function voidCheckin(pool, {
+  userId,
+  userRole = null,
+  userDisplayName = null,
+  ipAddress = null,
+  userAgent = null,
+  logId,
+  reason,
+  scope = { kind: 'admin' },
+}) {
+  const id = Number.parseInt(logId, 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw makeError('logId ไม่ถูกต้อง', 400);
+  }
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+  if (!trimmedReason) {
+    throw makeError('กรุณาระบุเหตุผลการยกเลิกรายการ', 400);
+  }
+  if (trimmedReason.length > 500) {
+    throw makeError('เหตุผลต้องไม่เกิน 500 ตัวอักษร', 400);
+  }
+
+  const conn = await pool.getConnection();
+  await conn.beginTransaction();
+  try {
+    // 1. Lock the target log row FOR UPDATE.
+    const [logs] = await conn.query(
+      `SELECT id, term_id, vehicle_id, plate_no, student_id, cid_hash,
+              student_name, session, status, check_date
+         FROM checkin_logs
+        WHERE id = ?
+        FOR UPDATE`,
+      [id]
+    );
+    if (!logs.length) {
+      throw makeError('ไม่พบรายการเช็กอินที่ต้องการยกเลิก', 404);
+    }
+    const log = logs[0];
+
+    // 1b. A CANCELLED row cannot itself be voided.
+    if (log.status === 'CANCELLED') {
+      throw makeError('รายการนี้เป็นรายการยกเลิกอยู่แล้ว', 409, 'ALREADY_CANCELLED');
+    }
+    if (!['CHECKED_IN', 'CHECKED_OUT'].includes(log.status)) {
+      throw makeError('สถานะรายการนี้ไม่สามารถยกเลิกได้', 409);
+    }
+
+    // 2. Scope enforcement (inside the lock — authoritative).
+    if (scope.kind === 'driver') {
+      if (!scope.vehicleId || String(log.vehicle_id) !== String(scope.vehicleId)) {
+        throw makeError('รายการนี้ไม่ใช่ของรถคุณ', 403);
+      }
+    } else if (scope.kind === 'school') {
+      const [[stu]] = await conn.query(
+        `SELECT school_id FROM students WHERE id = ? AND is_deleted = FALSE LIMIT 1`,
+        [log.student_id]
+      );
+      if (!stu || String(stu.school_id) !== String(scope.schoolId)) {
+        throw makeError('ไม่พบนักเรียนในโรงเรียนนี้', 404);
+      }
+    }
+
+    // 3. Idempotency: reject if a CANCELLED compensating row for this
+    //    student/session/date was already written AFTER the target log.
+    const [dupVoid] = await conn.query(
+      `SELECT id FROM checkin_logs
+        WHERE student_id = ? AND session = ? AND check_date = ?
+          AND status = 'CANCELLED' AND id > ?
+        LIMIT 1`,
+      [log.student_id, log.session, log.check_date, log.id]
+    );
+    if (dupVoid.length) {
+      throw makeError('รายการนี้ถูกยกเลิกไปแล้ว', 409, 'ALREADY_VOIDED');
+    }
+
+    // 4. Snapshot daily_status BEFORE reset (old_value for audit).
+    const [[priorDs]] = await conn.query(
+      `SELECT morning_done, morning_ts, evening_done, evening_ts
+         FROM daily_status
+        WHERE check_date = ? AND student_id = ?
+        LIMIT 1`,
+      [log.check_date, log.student_id]
+    );
+
+    // 5. Write the COMPENSATING checkin_logs row (status='CANCELLED').
+    const [voidResult] = await conn.query(
+      `INSERT INTO checkin_logs
+         (term_id, vehicle_id, plate_no, student_id, cid_hash,
+          student_name, session, status, check_date, checked_by, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'CANCELLED', ?, ?, ?)`,
+      [log.term_id, log.vehicle_id, log.plate_no, log.student_id, log.cid_hash,
+       log.student_name, log.session, log.check_date, userId, 'web']
+    );
+
+    // 6. Reset the matching daily_status session flag (only the row's session).
+    const doneCol = log.session === 'morning' ? 'morning_done' : 'evening_done';
+    const tsCol   = log.session === 'morning' ? 'morning_ts'   : 'evening_ts';
+    await conn.query(
+      `UPDATE daily_status
+          SET ${doneCol} = FALSE, ${tsCol} = NULL
+        WHERE check_date = ? AND student_id = ?`,
+      [log.check_date, log.student_id]
+    );
+
+    // 7. Audit (DELETE = the business reversal). conn-scoped so it commits atomically.
+    await logAudit({
+      conn,
+      userId,
+      action:     'DELETE',
+      entityType: 'checkin',
+      entityId:   String(log.id),
+      oldValue: {
+        original_log_id: log.id,
+        student_id:      log.student_id,
+        student_name:    log.student_name,
+        session:         log.session,
+        status:          log.status,
+        vehicle_id:      log.vehicle_id,
+        check_date:      log.check_date,
+        daily_status: priorDs
+          ? { morning_done: !!priorDs.morning_done, evening_done: !!priorDs.evening_done }
+          : null,
+      },
+      newValue: {
+        action:               'void_checkin',
+        compensating_log_id:  voidResult.insertId,
+        status:               'CANCELLED',
+        reason:               trimmedReason,
+        voided_by_user_id:    userId,
+        voided_by_role:       userRole,
+        voided_by_display_name: userDisplayName,
+        scope:                scope.kind,
+      },
+      ipAddress,
+      userAgent,
+    });
+
+    await conn.commit();
+    return {
+      original_log_id:     log.id,
+      compensating_log_id: voidResult.insertId,
+      student_id:          log.student_id,
+      student_name:        log.student_name,
+      session:             log.session,
+      voided_status:       log.status,
+      status:              'CANCELLED',
+    };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 module.exports = {
   getDriverVehicle,
   resolveVehicleForEmergency,
@@ -908,4 +1077,5 @@ module.exports = {
   getStatusToday,
   getNoShowStudents,
   processSchoolOverride,
+  voidCheckin,
 };

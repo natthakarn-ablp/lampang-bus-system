@@ -10,6 +10,7 @@ const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const adminSvc = require('../services/admin.service');
 const termSvc = require('../services/term.service');
+const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ExcelJS = require('exceljs');
@@ -538,7 +539,7 @@ router.put('/pickup-points/:id/students', async (req, res, next) => {
 });
 
 // ─── GET /api/admin/audit-logs ──────────────────────────────────────────────
-router.get('/audit-logs', async (req, res, next) => {
+router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 30));
@@ -893,7 +894,7 @@ router.get('/evaluation-summary', async (req, res, next) => {
 // ─── GET /api/admin/research-export ─────────────────────────────────────────
 // Returns a JSON research dataset package with snapshots + audit logs + summary.
 // Privacy: excludes ip_address, user_agent, old_value; includes user_id (admin-only access).
-router.get('/research-export', async (req, res, next) => {
+router.get('/research-export', importExportLimiter, async (req, res, next) => {
   try {
     const from = req.query.from || '2020-01-01';
     const to = req.query.to || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });

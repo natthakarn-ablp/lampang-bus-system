@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
+const { exportFormatLimiter } = require('../middleware/rateLimiters');
 const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const provSvc = require('../services/province.service');
@@ -183,7 +184,7 @@ router.get('/emergencies', async (req, res, next) => {
 
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 
-router.get('/audit-logs', async (req, res, next) => {
+router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 30));

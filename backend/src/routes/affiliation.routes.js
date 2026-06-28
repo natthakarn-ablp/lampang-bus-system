@@ -8,6 +8,7 @@ const multer = require('multer');
 const ExcelJS = require('exceljs');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
+const { importExportLimiter } = require('../middleware/rateLimiters');
 const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
@@ -412,7 +413,7 @@ router.put('/school-accounts/:id', async (req, res, next) => {
  * sample row and an "instructions" sheet. No DB read; safe to call any
  * time.
  */
-router.get('/school-accounts/import-template', async (_req, res, next) => {
+router.get('/school-accounts/import-template', importExportLimiter, async (_req, res, next) => {
   try {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Lampang Bus System';
@@ -475,7 +476,7 @@ router.get('/school-accounts/import-template', async (_req, res, next) => {
  * Multipart upload, field name "file". Returns validation results without
  * touching the DB. Frontend uses this to populate the preview table.
  */
-router.post('/school-accounts/import/preview', importUpload.single('file'), async (req, res, next) => {
+router.post('/school-accounts/import/preview', importExportLimiter, importUpload.single('file'), async (req, res, next) => {
   let filePath = null;
   try {
     const affId = resolveAffiliationId(req);
@@ -509,7 +510,7 @@ router.post('/school-accounts/import/preview', importUpload.single('file'), asyn
  * are reported and skipped, not rolled-back. Returns row-by-row status.
  * NEVER returns plaintext passwords.
  */
-router.post('/school-accounts/import/commit', importUpload.single('file'), async (req, res, next) => {
+router.post('/school-accounts/import/commit', importExportLimiter, importUpload.single('file'), async (req, res, next) => {
   let filePath = null;
   try {
     const affId = resolveAffiliationId(req);

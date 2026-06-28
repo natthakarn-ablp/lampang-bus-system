@@ -13,6 +13,7 @@ const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const env     = require('../config/env');
 const { getCurrentTermCachedSync } = require('../services/term.service');
+const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
 const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
 const { classifyStudentImport } = require('../utils/studentImport');
@@ -1222,7 +1223,7 @@ router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 // Audit trail for school actions
 
-router.get('/audit-logs', requireFullSchoolScope, async (req, res, next) => {
+router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -1294,7 +1295,7 @@ router.get('/audit-logs', requireFullSchoolScope, async (req, res, next) => {
 // ─── GET /students/template ──────────────────────────────────────────────────
 // Download Excel template for student import
 
-router.get('/students/template', async (req, res, next) => {
+router.get('/students/template', importExportLimiter, async (req, res, next) => {
   try {
     const wb = new ExcelJS.Workbook();
 
@@ -1373,7 +1374,7 @@ router.get('/students/template', async (req, res, next) => {
 // ─── POST /students/import ──────────────────────────────────────────────────
 // Import students from Excel file
 
-router.post('/students/import', requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
+router.post('/students/import', importExportLimiter, requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);

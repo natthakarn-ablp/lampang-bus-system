@@ -77,6 +77,17 @@ router.get('/summary', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /api/reports/policy — province-wide policy report (province/admin only;
+ * enforced in the service). Totals + today's completion + per-affiliation rows.
+ */
+router.get('/policy', async (req, res, next) => {
+  try {
+    const data = await reportSvc.getPolicyReport(req.user, req.filters);
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
 // ─── Export endpoints ───────────────────────────────────────────────────────
 
 const CSV_HEADERS = [

@@ -429,9 +429,74 @@ async function getExportRows(user, filters) {
   return { date, rows };
 }
 
+/**
+ * Province-wide policy report (province/admin only): headline totals, today's
+ * check-in completion, recent emergencies, and a per-affiliation breakdown.
+ */
+async function getPolicyReport(user, filters) {
+  if (!['province', 'admin'].includes(user.role)) {
+    const err = new Error('เฉพาะส่วนกลาง/ผู้ดูแลระบบเท่านั้น');
+    err.statusCode = 403;
+    err.errors = [{ code: 'FORBIDDEN' }];
+    throw err;
+  }
+  const date = filters.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+
+  const [[totals]] = await pool.query(
+    `SELECT
+       (SELECT COUNT(*) FROM affiliations WHERE is_deleted = FALSE) AS affiliations,
+       (SELECT COUNT(*) FROM schools     WHERE is_deleted = FALSE) AS schools,
+       (SELECT COUNT(*) FROM students    WHERE is_deleted = FALSE) AS students,
+       (SELECT COUNT(*) FROM vehicles    WHERE is_deleted = FALSE) AS vehicles,
+       (SELECT COUNT(*) FROM drivers     WHERE is_deleted = FALSE) AS drivers`
+  );
+
+  const [[today]] = await pool.query(
+    `SELECT COUNT(*) AS tracked,
+            COALESCE(SUM(morning_done), 0) AS morning_done,
+            COALESCE(SUM(evening_done), 0) AS evening_done
+       FROM daily_status WHERE check_date = ?`,
+    [date]
+  );
+
+  const [[{ emergencies_30d }]] = await pool.query(
+    `SELECT COUNT(*) AS emergencies_30d FROM emergency_logs
+      WHERE is_deleted = FALSE AND reported_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)`
+  );
+
+  const [affiliations] = await pool.query(
+    `SELECT a.id AS affiliation_id, a.name AS affiliation_name,
+            COUNT(DISTINCT sc.id) AS schools,
+            COUNT(DISTINCT s.id)  AS students,
+            COUNT(DISTINCT s.vehicle_id) AS vehicles
+       FROM affiliations a
+       LEFT JOIN schools  sc ON sc.affiliation_id = a.id AND sc.is_deleted = FALSE
+       LEFT JOIN students s  ON s.school_id = sc.id      AND s.is_deleted = FALSE
+      WHERE a.is_deleted = FALSE
+      GROUP BY a.id, a.name
+      ORDER BY a.id`
+  );
+
+  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
+  return {
+    date,
+    province_totals: totals,
+    today: {
+      tracked: today.tracked,
+      morning_done: Number(today.morning_done),
+      evening_done: Number(today.evening_done),
+      morning_pct: pct(Number(today.morning_done), today.tracked),
+      evening_pct: pct(Number(today.evening_done), today.tracked),
+    },
+    emergencies_30d,
+    affiliations,
+  };
+}
+
 module.exports = {
   getDailyReport,
   getMonthlyReport,
   getSummaryReport,
   getExportRows,
+  getPolicyReport,
 };

@@ -22,6 +22,10 @@ const { logAudit } = require('../utils/audit');
 
 const VEHICLE_DOC_TYPES = ['VEHICLE_REGISTRATION', 'COMPULSORY_INSURANCE', 'TAX', 'INSURANCE', 'OTHER'];
 const DRIVER_DOC_TYPES = ['DRIVER_LICENCE', 'OTHER'];
+const DOC_TYPE_TH = {
+  VEHICLE_REGISTRATION: 'เล่มทะเบียนรถ', COMPULSORY_INSURANCE: 'พ.ร.บ.', TAX: 'ป้ายภาษีรถ',
+  INSURANCE: 'ประกันภัยรถ', DRIVER_LICENCE: 'ใบขับขี่', OTHER: 'เอกสารอื่น ๆ',
+};
 const REVIEW_DECISIONS = ['APPROVED', 'REJECTED'];
 
 // Fixed base dir — files live flat under uploads/documents/. The write side
@@ -211,6 +215,31 @@ async function getDocument(pool, { kind, id }) {
 
 // ─── Review (human reviewer: school that owns / transport / admin) ─────────────
 
+// Best-effort LINE nudge to the driver who UPLOADED a now-REJECTED document, so
+// they learn the result without opening the app. Resolves the uploader's verified
+// LINE id (line_users source of truth, drivers shortcut fallback) and sends a plain
+// text message. NEVER throws — a notification failure must not affect the review.
+// LINE Messaging API free tier; no added cost.
+async function notifyUploaderRejected(pool, { uploadedBy, docType, note }) {
+  try {
+    if (!uploadedBy) return;
+    const [[row]] = await pool.query(
+      `SELECT COALESCE(lu.line_user_id, d.line_user_id) AS line_user_id
+         FROM users u
+         LEFT JOIN drivers d ON d.id = u.driver_id
+         LEFT JOIN line_users lu ON lu.driver_id = u.driver_id
+              AND lu.user_type = 'driver' AND lu.verified = TRUE AND lu.line_user_id IS NOT NULL
+        WHERE u.id = ?`,
+      [uploadedBy]
+    );
+    const lineUserId = row && row.line_user_id;
+    if (!lineUserId) return;
+    const label = DOC_TYPE_TH[docType] || 'เอกสาร';
+    const text = `เอกสาร "${label}" ของคุณไม่ผ่านการตรวจ\nเหตุผล: ${note || '-'}\nกรุณาแนบเอกสารใหม่ในระบบ`;
+    await require('./line.service').sendTextMessage(lineUserId, text);
+  } catch { /* best-effort — never affects the review */ }
+}
+
 async function reviewDocument(pool, { kind, id, decision, note, reviewerUserId }) {
   if (!REVIEW_DECISIONS.includes(decision)) throw appError('ผลการตรวจไม่ถูกต้อง', 400, 'BAD_DECISION');
   const trimmedNote = note != null ? String(note).trim().slice(0, 500) : null;
@@ -222,7 +251,7 @@ async function reviewDocument(pool, { kind, id, decision, note, reviewerUserId }
   try {
     await conn.beginTransaction();
     const [[doc]] = await conn.query(
-      `SELECT id, review_status FROM ${table} WHERE id = ? AND is_deleted = FALSE FOR UPDATE`, [id]);
+      `SELECT id, review_status, doc_type, uploaded_by FROM ${table} WHERE id = ? AND is_deleted = FALSE FOR UPDATE`, [id]);
     if (!doc) throw appError('ไม่พบเอกสาร', 404, 'DOC_NOT_FOUND');
 
     await conn.query(
@@ -235,6 +264,9 @@ async function reviewDocument(pool, { kind, id, decision, note, reviewerUserId }
       oldValue: { review_status: doc.review_status },
       newValue: { review_status: decision, review_note: trimmedNote }, conn });
     await conn.commit();
+    if (decision === 'REJECTED') {
+      await notifyUploaderRejected(pool, { uploadedBy: doc.uploaded_by, docType: doc.doc_type, note: trimmedNote });
+    }
     return { id: Number(id), review_status: decision, review_note: trimmedNote };
   } catch (error) { await conn.rollback(); throw error; } finally { conn.release(); }
 }

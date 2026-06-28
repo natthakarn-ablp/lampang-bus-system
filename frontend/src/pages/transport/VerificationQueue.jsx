@@ -21,6 +21,7 @@ import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { CommandHero, StatusStepRail, AlertBanner } from '../../components/ui';
+import DocumentReviewPanel from '../../components/DocumentReviewPanel';
 
 const STATUS = {
   DRAFT: ['ฉบับร่าง', 'neutral'],
@@ -876,6 +877,18 @@ export default function VerificationQueue() {
                 onAssign={assignDriver}
                 onQualify={qualifyDriver}
               />
+            )}
+            {detail.vehicle_id && (
+              <AppCard>
+                <DocumentReviewPanel
+                  apiBase="/verification/transport/documents"
+                  vehicleId={detail.vehicle_id}
+                  driverId={(detail.drivers || []).find((d) => d.assignment_role !== 'BACKUP')?.driver_id
+                    || (detail.drivers || [])[0]?.driver_id || null}
+                  canReview
+                  title="เอกสารรถและคนขับ (หลักฐานประกอบ)"
+                />
+              </AppCard>
             )}
           </div>
         )}

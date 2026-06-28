@@ -27,6 +27,16 @@ CHROME="$(find "$HOME/.cache/ms-playwright" -maxdepth 3 -type f -name chrome 2>/
 [ -n "$CHROME" ] && [ -x "$CHROME" ] || { echo "ERROR: chromium not found under ~/.cache/ms-playwright"; exit 1; }
 [ -d "$MANUAL" ] || { echo "ERROR: manual dir not found: $MANUAL"; exit 1; }
 
+# This host lacks chromium's libcairo/libpango. Rather than a root apt-get, the
+# closure was extracted (no sudo) to ~/.cache/manual-pdf-libs via:
+#   apt-get download libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpangoft2-1.0-0 \
+#     libpixman-1-0 libharfbuzz0b libthai0 libdatrie1 libfribidi0 libgraphite2-3 \
+#     libxcb-render0 libxcb-shm0
+#   for d in *.deb; do dpkg-deb -x "$d" ~/.cache/manual-pdf-libs/root; done
+# Prepend it if present (harmless on a host that already has the system libs).
+EXTRA_LIBS="$HOME/.cache/manual-pdf-libs/root/usr/lib/x86_64-linux-gnu"
+[ -d "$EXTRA_LIBS" ] && export LD_LIBRARY_PATH="$EXTRA_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
 # role -> Thai distribution filename (same content, the name people were given)
 declare -A TH=(
   [driver]="คู่มือ-คนขับ" [school]="คู่มือ-โรงเรียน" [transport]="คู่มือ-ขนส่ง"
@@ -40,12 +50,14 @@ render() { # <html-basename> <out.pdf>
 }
 
 cd "$MANUAL"
+# The english-named PDFs (driver.pdf …) are SYMLINKS to the Thai distribution
+# files (คู่มือ-คนขับ.pdf …) — render straight to the real Thai file; the symlink
+# (and the HTML href="pdf/driver.pdf") then points at the fresh content.
 for r in driver school transport affiliation province admin parent; do
-  echo "==> $r.pdf"
-  render "user-guide-$r.html" "$r.pdf"
-  cp -f "$PDF_DIR/$r.pdf" "$PDF_DIR/${TH[$r]}.pdf"   # Thai-named distributed copy
+  echo "==> ${TH[$r]}.pdf  (= $r.pdf)"
+  render "user-guide-$r.html" "${TH[$r]}.pdf"
 done
-echo "==> index (สารบัญหลัก)"
+echo "==> คู่มือ-สารบัญหลัก.pdf  (index)"
 render "index.html" "คู่มือ-สารบัญหลัก.pdf"
 
 echo "done — PDFs regenerated in $PDF_DIR (same filenames = same links)."

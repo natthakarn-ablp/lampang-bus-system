@@ -109,6 +109,7 @@ const EvaluationDashboard  = lazy(() => import('./pages/admin/EvaluationDashboar
 const ExecutiveSummary     = lazy(() => import('./pages/admin/ExecutiveSummary'));
 const ExecutivePrint       = lazy(() => import('./pages/admin/ExecutivePrint'));
 const SystemHealth         = lazy(() => import('./pages/admin/SystemHealth'));
+const TermSettings         = lazy(() => import('./pages/admin/TermSettings'));
 const AdminLiveVehicles    = lazy(() => import('./pages/admin/AdminLiveVehicles'));
 
 export const ROLE_HOME = {
@@ -401,6 +402,11 @@ export default function App() {
           <Route path="/admin/system-health" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><SystemHealth /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/term-settings" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><TermSettings /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/readiness" element={

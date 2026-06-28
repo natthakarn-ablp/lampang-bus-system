@@ -18,6 +18,7 @@
  */
 
 const env = require('../config/env');
+const { getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
 
@@ -468,7 +469,7 @@ async function _buildCheckinTransaction(conn, {
  */
 async function processCheckin(pool, { userId, vehicleId, plateNo, studentId, session, source = 'web' }) {
   assertSession(session);
-  const termId = env.app.currentTerm;
+  const termId = await getCurrentTerm(pool);
 
   const conn = await pool.getConnection();
   await conn.beginTransaction();
@@ -495,7 +496,7 @@ async function processCheckin(pool, { userId, vehicleId, plateNo, studentId, ses
  */
 async function processCheckout(pool, { userId, vehicleId, plateNo, studentId, session, source = 'web' }) {
   assertSession(session);
-  const termId = env.app.currentTerm;
+  const termId = await getCurrentTerm(pool);
 
   const conn = await pool.getConnection();
   await conn.beginTransaction();
@@ -523,7 +524,7 @@ async function processCheckout(pool, { userId, vehicleId, plateNo, studentId, se
  */
 async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, source = 'web' }) {
   assertSession(session);
-  const termId = env.app.currentTerm;
+  const termId = await getCurrentTerm(pool);
 
   // Fetch all eligible students (not yet checked in for this session today)
   const sessionFilter = session === 'morning'
@@ -601,7 +602,7 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
  */
 async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, source = 'web' }) {
   assertSession(session);
-  const termId = env.app.currentTerm;
+  const termId = await getCurrentTerm(pool);
 
   const [students] = await pool.query(
     `SELECT DISTINCT ci.student_id AS id
@@ -820,7 +821,7 @@ async function processSchoolOverride(pool, {
       studentId: student.id,
       session,
       status,
-      termId:    env.app.currentTerm,
+      termId:    await getCurrentTerm(pool),
       source:    'web',
     });
 

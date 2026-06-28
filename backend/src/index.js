@@ -123,6 +123,10 @@ async function start() {
   await testConnection();
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();
+  // Warm the current-term cache so getCurrentTermCachedSync() returns the live
+  // DB value (terms.is_current) from the first request. Best-effort — falls back
+  // to env.app.currentTerm if the table/row isn't present yet (pre-migration-046).
+  try { await require('./services/term.service').getCurrentTerm(pool); } catch { /* env fallback */ }
   server = app.listen(env.app.port, HOST, () => {
     console.log(`[app] Lampang Bus System API running on ${HOST}:${env.app.port}`);
     console.log(`[app] Environment: ${env.app.nodeEnv}`);

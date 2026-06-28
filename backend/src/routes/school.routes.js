@@ -12,6 +12,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const env     = require('../config/env');
+const { getCurrentTermCachedSync } = require('../services/term.service');
 const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
 const { classifyStudentImport } = require('../utils/studentImport');
@@ -1563,7 +1564,7 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
                WHERE id = ?`,
               [cidHash, r.prefix || null, r.first_name, r.last_name,
                r.grade || null, r.classroom || null, vehicleId,
-               morningEnabled, eveningEnabled, env.app.currentTerm, existing.id]
+               morningEnabled, eveningEnabled, getCurrentTermCachedSync(), existing.id]
             );
             effectiveStudentId = existing.id;
           } else {
@@ -1580,7 +1581,7 @@ router.post('/students/import', requireFullSchoolScope, importUpload.single('fil
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [newStudentId, studentCode, cidHash, r.prefix || null, r.first_name, r.last_name,
                r.grade || null, r.classroom || null, schoolId, vehicleId,
-               morningEnabled, eveningEnabled, env.app.currentTerm]
+               morningEnabled, eveningEnabled, getCurrentTermCachedSync()]
             );
             effectiveStudentId = newStudentId;
           }

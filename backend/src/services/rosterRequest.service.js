@@ -312,7 +312,7 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
           .update(`placeholder-${newStudentId}-${Date.now()}-${requestId}`)
           .digest('hex');
 
-        const env = require('../config/env');
+        const { getCurrentTermCachedSync } = require('./term.service');
 
         // INSERT student — no ON DUPLICATE KEY UPDATE for active students
         // (we already checked for duplicates above)
@@ -326,7 +326,7 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
               data.first_name, data.last_name,
               data.grade || null, data.classroom || null,
               req.school_id, req.vehicle_id,
-              env.app.currentTerm,
+              getCurrentTermCachedSync(),
             ]
           );
         } catch (insertErr) {

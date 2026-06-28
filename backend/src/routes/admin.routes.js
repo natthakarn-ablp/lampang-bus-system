@@ -9,6 +9,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const adminSvc = require('../services/admin.service');
+const termSvc = require('../services/term.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ExcelJS = require('exceljs');
@@ -1568,6 +1569,34 @@ router.delete('/emergencies/:id', async (req, res, next) => {
       actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
     });
     return sendSuccess(res, out, out.status === 'DELETED' ? 'ลบเหตุฉุกเฉิน (ซ่อนจากรายงาน) แล้ว' : 'เหตุฉุกเฉินนี้ถูกลบไปแล้ว');
+  } catch (err) { next(err); }
+});
+
+// ─── Terms (academic semester) — dynamic current term, no restart ────────────
+// Roll the current term over from the UI (terms.is_current) instead of editing
+// .env + pm2 restart every semester. Admin-only (router-level guard above).
+router.get('/terms', async (_req, res, next) => {
+  try {
+    return sendSuccess(res, await termSvc.listTerms(pool));
+  } catch (err) { next(err); }
+});
+
+router.post('/terms', async (req, res, next) => {
+  try {
+    const actor = { userId: req.user.id, ip: req.ip, ua: req.headers['user-agent'] };
+    const out = await termSvc.createTerm(pool, {
+      id: req.body.id, name: req.body.name,
+      startDate: req.body.start_date, endDate: req.body.end_date,
+    }, actor);
+    return sendSuccess(res, out, 'เพิ่มภาคเรียนแล้ว', null, 201);
+  } catch (err) { next(err); }
+});
+
+router.post('/terms/:id/current', async (req, res, next) => {
+  try {
+    const actor = { userId: req.user.id, ip: req.ip, ua: req.headers['user-agent'] };
+    const out = await termSvc.setCurrentTerm(pool, req.params.id, actor);
+    return sendSuccess(res, out, 'ตั้งเป็นภาคเรียนปัจจุบันแล้ว');
   } catch (err) { next(err); }
 });
 

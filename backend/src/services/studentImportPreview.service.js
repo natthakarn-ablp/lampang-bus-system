@@ -7,13 +7,13 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const ExcelJS = require('exceljs');
-const env = require('../config/env');
 const { classifyImportRow, maskPhone } = require('../utils/studentImportClassifier');
 const plateId = require('../utils/plateIdentity');
 const { classifyStudentImport } = require('../utils/studentImport');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
 const { allocateStudentId } = require('./idAllocator.service');
 const { logAudit } = require('../utils/audit');
+const { getCurrentTerm } = require('./term.service');
 
 /**
  * Minimal RFC 4180 CSV parser — handles quoted fields with embedded commas
@@ -44,7 +44,6 @@ function parseCsvRow(text) {
   return rows.filter((r) => r.some((c) => c.trim() !== ''));
 }
 
-const TERM = env.app.currentTerm;
 // Upper bound on rows a single import file may contain — mirrors the legacy
 // POST /students/import cap (school.routes.js). Rejected before any per-row DB
 // work so a (possibly decompression-bombed) file can't amplify into the DB.
@@ -320,6 +319,7 @@ async function linkParent(conn, studentId, name, phone, userId) {
 
 // ── insert_ready row (INSERT_NEW / CROSS_SCHOOL) — atomic id, idempotent. ────
 async function applyInsertRow(pool, { row, schoolId, userId, r }) {
+  const TERM = await getCurrentTerm(pool);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -398,6 +398,7 @@ async function applyGuardianRow(pool, { row, schoolId, userId, batchId, r }) {
 
 // ── reactivate_student_confirmed row — restores the SAME-school soft-deleted student.
 async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
+  const TERM = await getCurrentTerm(pool);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();

@@ -20,6 +20,7 @@
 
 const crypto = require('crypto');
 const env = require('../config/env');
+const { getCurrentTermCachedSync } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { suggestMatch, evaluateEligibility, normalizePickup } = require('../utils/registrationMatch');
 
@@ -108,7 +109,7 @@ async function upsertSchoolCounts(conn, applicationId, schoolId, driverUserId) {
 
 async function addRosterStudent(pool, {
   vehicleId, driverUserId, raw_student_name, raw_grade, raw_student_code,
-  school_id, pickup_type, currentTerm = env.app.currentTerm,
+  school_id, pickup_type, currentTerm = getCurrentTermCachedSync(),
 }) {
   if (!vehicleId) throw appError('ไม่พบรถที่ผูกกับบัญชีคนขับ', 400, 'VEHICLE_REQUIRED');
   if (!raw_student_name || !String(raw_student_name).trim()) {

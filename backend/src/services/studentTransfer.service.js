@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 const { logAudit } = require('../utils/audit');
 const { allocateStudentId } = require('./idAllocator.service');
-const env = require('../config/env');
+const { getCurrentTermCachedSync } = require('./term.service');
 
 const REQUEST_TYPES = ['TRANSFER_TO_SCHOOL', 'WRONG_SCHOOL_CORRECTION'];
 
@@ -128,7 +128,7 @@ async function approveAndApply(pool, { requestId, adminUserId, adminNote }) {
     await conn.query(
       `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, 1, ?)`,
-      [newId, st.student_code, cid, st.prefix || null, st.first_name || '-', st.last_name || '-', st.grade || null, st.classroom || null, req.destination_school_id, env.app.currentTerm]
+      [newId, st.student_code, cid, st.prefix || null, st.first_name || '-', st.last_name || '-', st.grade || null, st.classroom || null, req.destination_school_id, getCurrentTermCachedSync()]
     );
     // Copy the parent link (if any) to the destination student.
     const [[ps]] = await conn.query('SELECT parent_id FROM parent_student WHERE student_id = ? LIMIT 1', [st.id]);

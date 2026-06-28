@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const env = require('../config/env');
+const { getCurrentTermCachedSync } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 
 const ACTIVE_APPLICATION_STATUSES = [
@@ -128,7 +128,7 @@ function buildTransportSnapshot({ vehicle = {}, schools = [], drivers = [], rout
 }
 
 async function refreshVehicleEligibility(executor, vehicleId, {
-  today = new Date().toISOString().slice(0, 10), currentTerm = env.app.currentTerm,
+  today = new Date().toISOString().slice(0, 10), currentTerm = getCurrentTermCachedSync(),
 } = {}) {
   const [[vehicle]] = await executor.query(
     `SELECT id, certified_capacity, insurance_expiry, registration_expiry,
@@ -235,7 +235,7 @@ async function createApplication(pool, {
   vehicleId,
   issuingSchoolId,
   userId,
-  currentTerm = env.app.currentTerm,
+  currentTerm = getCurrentTermCachedSync(),
 }) {
   if (!vehicleId || !issuingSchoolId || !userId) {
     throw appError('vehicleId, issuingSchoolId และ userId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
@@ -982,7 +982,7 @@ async function abortInspectionAttempt(pool, {
 async function createDriverApplication(pool, {
   vehicleId,
   driverUserId,
-  currentTerm = env.app.currentTerm,
+  currentTerm = getCurrentTermCachedSync(),
 }) {
   if (!vehicleId || !driverUserId) {
     throw appError('vehicleId และ driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');

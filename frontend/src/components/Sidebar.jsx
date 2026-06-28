@@ -4,7 +4,7 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert, ShieldCheck, MapPin, Route, Clock,
+  ShieldAlert, ShieldCheck, MapPin, Route, Clock, Calendar,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
@@ -136,6 +136,7 @@ const ADMIN_NAV = [
   { to: '/admin/route-deviations', icon: Route,      label: 'การเบี่ยงเส้นทาง' },
   { to: '/admin/audit-logs',      icon: FileText,    label: 'ประวัติการใช้งาน' },
   { to: '/admin/system-health',   icon: Activity,    label: 'สุขภาพระบบ' },
+  { to: '/admin/term-settings',   icon: Calendar,    label: 'ภาคเรียนปัจจุบัน' },
   { section: 'มุมมองจังหวัด' },
   { to: '/province',              icon: Map,         label: 'ภาพรวมจังหวัด' },
   { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },

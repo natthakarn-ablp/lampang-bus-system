@@ -7,13 +7,14 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const ExcelJS = require('exceljs');
-const env = require('../config/env');
 const { classifyImportRow, maskPhone } = require('../utils/studentImportClassifier');
 const plateId = require('../utils/plateIdentity');
 const { classifyStudentImport } = require('../utils/studentImport');
+const { isOle2, isAllowedImport } = require('../utils/fileType');
+const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
 const { allocateStudentId } = require('./idAllocator.service');
 const { logAudit } = require('../utils/audit');
-const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
+const { getCurrentTerm } = require('./term.service');
 const { generateVehicleId } = require('../utils/hash');
 const { validatePlateNo } = require('../utils/vehiclePlate');
 
@@ -46,13 +47,34 @@ function parseCsvRow(text) {
   return rows.filter((r) => r.some((c) => c.trim() !== ''));
 }
 
-const TERM = env.app.currentTerm;
+// Upper bound on rows a single import file may contain — mirrors the legacy
+// POST /students/import cap (school.routes.js). Rejected before any per-row DB
+// work so a (possibly decompression-bombed) file can't amplify into the DB.
+const MAX_IMPORT_ROWS = 5000;
 const canonOf = (plate) => { const p = plateId.parseLegacyPlateText(plate); return p ? plateId.buildCanonicalPlate(p) : ''; };
 const normalizePhone = (p) => String(p == null ? '' : p).replace(/\D/g, '');
 
 // ── Parse a CSV/XLS(X) import file into normalized rows. ─────────────────────
 async function parseImportFile(filePath, originalName) {
   const rows = [];
+
+  // Sniff the real first bytes before parsing so a renamed .xls (OLE2) or
+  // spoofed/corrupt binary can't reach ExcelJS and trigger an unhandled 500.
+  // The legacy POST /students/import already does this; the preview path
+  // (/students/import/preview) reaches here and needs the same guard.
+  let head;
+  try { head = fs.readFileSync(filePath).subarray(0, 16); } catch { head = Buffer.alloc(0); }
+  if (isOle2(head)) {
+    const e = new Error('ไฟล์ .xls (รุ่นเก่า) ไม่รองรับ กรุณาบันทึกเป็น .xlsx หรือ .csv');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (!isAllowedImport(head)) {
+    const e = new Error('ไฟล์ไม่ถูกต้อง รองรับเฉพาะ .xlsx หรือ .csv');
+    e.statusCode = 400;
+    throw e;
+  }
+
   const isExcel = /\.xlsx?$/i.test(originalName || filePath);
   const pick = (cells, map, key) => (map[key] != null ? String(cells[map[key]] ?? '').trim() : '');
   const buildMap = (headers) => {
@@ -66,12 +88,6 @@ async function parseImportFile(filePath, originalName) {
       else if (hh === 'ชั้น' || hh.includes('ระดับ')) m.grade = i;
       else if (hh === 'ห้อง') m.classroom = i;
       else if (hh.includes('ทะเบียนรถ')) m.plate_no = i;
-      // Phase 10.14 — new optional columns. guardian_phone_alt ('เบอร์โทรสำรอง...')
-      // MUST be matched before the generic 'เบอร์' rule below, or it would be
-      // mis-captured as the primary parent_phone.
-      else if (hh.includes('สุขภาพ')) m.health_note = i;
-      else if (hh.includes('ที่อยู่')) m.home_address = i;
-      else if (hh.includes('สำรอง')) m.guardian_phone_alt = i;
       else if (hh.includes('ผู้ปกครอง') && !hh.includes('เบอร์')) m.parent_name = i;
       else if (hh.includes('เบอร์')) m.parent_phone = i;
     });
@@ -88,15 +104,6 @@ async function parseImportFile(filePath, originalName) {
     plate_no: pick(cells, map, 'plate_no'),
     parent_name: pick(cells, map, 'parent_name'),
     parent_phone: normalizePhone(pick(cells, map, 'parent_phone')),
-    // Phase 10.14 — optional fields (length-bounded to the DB column widths).
-    // guardian_phone_alt follows the primary phone rule (9–10 digits); an invalid
-    // value is dropped rather than blocking the import (the field is optional).
-    health_note: pick(cells, map, 'health_note').slice(0, 500) || '',
-    guardian_phone_alt: (() => {
-      const d = normalizePhone(pick(cells, map, 'guardian_phone_alt'));
-      return /^\d{9,10}$/.test(d) ? d : '';
-    })(),
-    home_address: pick(cells, map, 'home_address').slice(0, 300) || '',
   });
 
   if (isExcel) {
@@ -137,6 +144,42 @@ async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
       const hp = plateId.parseLegacyPlateText(hit.plate_no);
       const alias = ip && hp && plateId.normalizeThaiText(ip.province).toLowerCase() !== plateId.normalizeThaiText(hp.province).toLowerCase();
       return { matched: true, code: alias ? 'VEHICLE_PROVINCE_ALIAS_MATCH' : 'VEHICLE_MATCHED_CANONICAL', vehicle_id: hit.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
+    }
+    // Fallback: import file omitted province but exactly one active vehicle matches the base.
+    // We only auto-resolve when the match is unambiguous (one active vehicle, with province).
+    const parsed = plateId.parseLegacyPlateText(plate_no);
+    if (parsed && !plateId.normalizeProvince(parsed.province)) {
+      const inputBase = plateId.normalizePlatePrefix(parsed.plate_prefix) + plateId.normalizePlateNumber(parsed.plate_number);
+      const candidates = allVehicles.filter((v) => {
+        if (v.is_deleted) return false;
+        const vp = plateId.parseLegacyPlateText(v.plate_no);
+        if (!vp) return false;
+        const base = plateId.normalizePlatePrefix(vp.plate_prefix) + plateId.normalizePlateNumber(vp.plate_number);
+        return base === inputBase && plateId.normalizeProvince(vp.province);
+      });
+      if (candidates.length === 1) {
+        const v = candidates[0];
+        const hp = plateId.parseLegacyPlateText(v.plate_no);
+        return { matched: true, code: 'VEHICLE_PROVINCE_ALIAS_MATCH', vehicle_id: v.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
+      }
+    }
+    // Final fallback: fuzzy normalized match. If the input is close enough to
+    // exactly one active vehicle, normalize it to the system plate format.
+    // "Close enough" means the normalized input appears at the start of the
+    // normalized vehicle plate, or vice versa. We only accept when there is a
+    // single unambiguous candidate to avoid accidental wrong matches.
+    const normalizedInput = plateId.normalizeThaiText(plate_no).toLowerCase();
+    if (normalizedInput && normalizedInput.length >= 4) {
+      const candidates = allVehicles.filter((v) => {
+        if (v.is_deleted) return false;
+        const normalizedVehicle = plateId.normalizeThaiText(v.plate_no).toLowerCase();
+        return normalizedVehicle.startsWith(normalizedInput) || normalizedInput.startsWith(normalizedVehicle);
+      });
+      if (candidates.length === 1) {
+        const v = candidates[0];
+        const hp = plateId.parseLegacyPlateText(v.plate_no);
+        return { matched: true, code: 'VEHICLE_NORMALIZED_MATCH', vehicle_id: v.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
+      }
     }
     const c = plateId.classifyVehiclePlateConflict(plate_no, allVehicles);
     return { matched: false, code: c.code, vehicle_id: c.vehicle_id, display_plate: c.display_plate };
@@ -212,6 +255,11 @@ function publicRow(r) {
 // ── Preview: persist batch + rows. No student/vehicle/parent writes. ─────────
 async function runPreview(pool, { schoolId, importedBy, filePath, originalName, autoCreateVehicle = false }) {
   const rows = await parseImportFile(filePath, originalName);
+  if (rows.length > MAX_IMPORT_ROWS) {
+    const e = new Error('ไฟล์มีจำนวนแถวมากเกินไป (เกิน 5000 แถว) กรุณาแบ่งไฟล์');
+    e.statusCode = 400;
+    throw e;
+  }
   const results = await analyzeRows(pool, schoolId, rows, autoCreateVehicle);
   const summary = summarize(results);
   const sha = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
@@ -234,7 +282,7 @@ async function runPreview(pool, { schoolId, importedBy, filePath, originalName, 
          VALUES (?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?)`,
         [batchId, r.row_number,
          JSON.stringify({ student_name: r.student_name, grade: r.grade, classroom: r.classroom, plate: r.input_vehicle_plate, guardian: r.guardian_input || null }),
-         JSON.stringify({ prefix: norm.prefix || null, first_name: norm.first_name, last_name: norm.last_name, grade: norm.grade || null, classroom: norm.classroom || null, parent_name: norm.parent_name || null, parent_phone: norm.parent_phone || null, health_note: norm.health_note || null, guardian_phone_alt: norm.guardian_phone_alt || null, home_address: norm.home_address || null }),
+         JSON.stringify({ prefix: norm.prefix || null, first_name: norm.first_name, last_name: norm.last_name, grade: norm.grade || null, classroom: norm.classroom || null, parent_name: norm.parent_name || null, parent_phone: norm.parent_phone || null }),
          r.classification, r.status, r.message_th, r.student_code, r.existing_student_id || null,
          r.matched_vehicle_id, r.matched_display_plate,
          JSON.stringify(r.guardian_mismatch ? { current: r.guardian_current, input: r.guardian_input } : null),
@@ -314,6 +362,7 @@ async function createVehicleForImport(conn, plateNo, userId) {
 
 // ── insert_ready row (INSERT_NEW / CROSS_SCHOOL) — atomic id, idempotent. ────
 async function applyInsertRow(pool, { row, schoolId, userId, r, autoCreateVehicle = false }) {
+  const TERM = await getCurrentTerm(pool);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -333,13 +382,13 @@ async function applyInsertRow(pool, { row, schoolId, userId, r, autoCreateVehicl
       vehicleId = await createVehicleForImport(conn, row.input_vehicle_plate, userId);
     }
     await conn.query(
-      `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id, health_note, guardian_phone_alt, home_address)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?)`,
-      [newId, row.student_code, cid, n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, schoolId, vehicleId, TERM, n.health_note || null, n.guardian_phone_alt || null, n.home_address || null]
+      `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
+      [newId, row.student_code, cid, n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, schoolId, vehicleId, TERM]
     );
     await linkParent(conn, newId, n.parent_name, n.parent_phone, userId);
     // Audit 2026-06-18 (limitations): the import-apply INSERT path created a
-    // student without a per-row CREATE audit (other branches audit). Record it.
+    // student without a per-row CREATE audit (other apply branches audit). Record it.
     await logAudit({
       userId, action: 'CREATE', entityType: 'student', entityId: String(newId), conn,
       newValue: {
@@ -398,6 +447,7 @@ async function applyGuardianRow(pool, { row, schoolId, userId, batchId, r }) {
 
 // ── reactivate_student_confirmed row — restores the SAME-school soft-deleted student.
 async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
+  const TERM = await getCurrentTerm(pool);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -421,9 +471,9 @@ async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
     }
     const n = normOf(row);
     await conn.query(
-      `UPDATE students SET is_deleted = FALSE, deleted_at = NULL, prefix = ?, first_name = ?, last_name = ?, grade = ?, classroom = ?, vehicle_id = ?, term_id = ?, health_note = ?, guardian_phone_alt = ?, home_address = ?
+      `UPDATE students SET is_deleted = FALSE, deleted_at = NULL, prefix = ?, first_name = ?, last_name = ?, grade = ?, classroom = ?, vehicle_id = ?, term_id = ?
        WHERE id = ?`,
-      [n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, vehicleId, TERM, n.health_note || null, n.guardian_phone_alt || null, n.home_address || null, st.id]
+      [n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, vehicleId, TERM, st.id]
     );
     await linkParent(conn, st.id, n.parent_name, n.parent_phone, userId);
     await logAudit({

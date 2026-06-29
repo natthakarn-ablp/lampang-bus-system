@@ -236,11 +236,19 @@
 - รถที่สร้างอัตโนมัติ: นก 5080 ลำปาง, นข 6016 ลำปาง, นข 5917 เชียงราย, ฮน 8353 ลำปาง, ผข 561 ลำปาง ฯลฯ
 - Unit tests: 5/5 ผ่าน
 
+### ข้อจำกัดเพิ่มเติม (Phase 10.15A-1)
+
+- ทะเบียนรถที่ **ไม่มีจังหวัด** (เช่น `นข 2210` หรือ `นข2210`) จะไม่ถูกสร้างอัตโนมัติ
+- เหตุผล: ป้องกันการลงทะเบียนซ้ำซ้อน เพราะทะเบียนที่ไม่ระบุจังหวัดอาจไปชนกับรถที่มีจังหวัดอื่น
+- แถวดังกล่าวจะยังคงเป็น `VEHICLE_NOT_FOUND` และให้โรงเรียนแก้ไขไฟล์ก่อน
+- **Commit:** `49b480a`
+
 ### การใช้งาน
 
 - โรงเรียนส่ง `auto_create_vehicle=true` ใน form data ตอน preview
 - ระบบจะแสดงข้อความ "พร้อมนำเข้า (ระบบจะสร้างรถอัตโนมัติตอนนำเข้า)" แทน error
 - ตอน apply ส่ง `auto_create_vehicle: true` ใน JSON body ด้วย
+- ต้องใส่ทะเบียนรถพร้อมจังหวัด เช่น `นข 2210 ลำปาง`
 
 ---
 
@@ -497,6 +505,7 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 ## 11. Git Log
 
 ```
+49b480a feat: reject auto-create vehicle for plates without province (Phase 10.15A-1)
 f0a7fc8 docs: add Phase 10.15A and 10.15B sections to Doc.md
 19a9122 ops: adopt PM2 ecosystem config and add safe backend deploy script
 8f4d096 feat: auto-create missing vehicles during student import (Phase 10.15A)

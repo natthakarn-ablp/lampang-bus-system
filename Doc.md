@@ -505,6 +505,7 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 ## 11. Git Log
 
 ```
+fb29553 docs: document Phase 10.15A-1 province requirement for auto-create vehicle
 49b480a feat: reject auto-create vehicle for plates without province (Phase 10.15A-1)
 f0a7fc8 docs: add Phase 10.15A and 10.15B sections to Doc.md
 19a9122 ops: adopt PM2 ecosystem config and add safe backend deploy script

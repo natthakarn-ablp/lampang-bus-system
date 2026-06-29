@@ -247,6 +247,17 @@
 - **วิธีแก้:** สร้าง `backend/src/utils/readCsvWithEncoding.js` ใช้ `iconv-lite` ตรวจหา encoding: ลอง UTF-8 ก่อน ถ้ามี replacement character หรือไม่มี Thai จะ fallback เป็น TIS-620 แล้ว Windows-874 นำไปใช้ใน `studentImportPreview.service.js`, `school.routes.js` (POST `/students/import`), และ `affiliation.routes.js` (import โรงเรียน)
 - **ผลลัพธ์:** ไฟล์ CSV ของโรงเรียนอนุบาลวังเหนือ (150 แถว) ถูก parse ได้ถูกต้อง รหัสนักเรียน `65001`, `65002`, ... อ่านได้ครบ ไม่มีแถวว่าง
 
+#### แก้ไขเพิ่ม (29 มิ.ย. 2569) — เบอร์โทรผู้ปกครอง 9 หลัก (Excel ตัดเลข 0 ข้างหน้า)
+
+- **ปัญหา:** หลัง encoding ถูกต้อง ระบบพบว่าเบอร์โทรผู้ปกครองในไฟล์เป็น 9 หลัก เช่น `909755785` แทนที่จะเป็น `0909755785` เพราะ Excel ตีคอลัมน์เป็นตัวเลขและตัดเลข 0 นำ ทำให้ทุกแถว error `เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 10 หลัก`
+- **วิธีแก้:** ปรับ `studentImportClassifier.js` ให้ถ้าเบอร์โทรมี 9 หลักและไม่ขึ้นต้นด้วย 0 ระบบจะ auto-prepend `0` ให้ (กลายเป็น 10 หลัก) ก่อนตรวจสอบความยาว
+- **ผลลัพธ์:** นำเข้าข้อมูลโรงเรียนอนุบาลวังเหนือ (`school_id=52030081`) สำเร็จ 124 คน จาก 150 แถว ที่เหลือ 26 แถวติด `VEHICLE_NOT_FOUND` เพราะทะเบียนรถยังไม่มีในระบบ ต้องให้โรงเรียนเพิ่มรถก่อน
+
+##### ทะเบียนรถที่ยังไม่มีในระบบ (26 แถว)
+
+- `นก 5080 ลำปาง` (2 แถว), `นข 6016 ลำปาง` (2 แถว), `นข 5917 เชียงราย` (3 แถว), `ฮน 8353 ลำปาง` (2 แถว), `ผข 561 ลำปาง` (1 แถว) และอื่น ๆ
+- ให้โรงเรียนเพิ่มรถเหล่านี้ในระบบก่อน แล้ว import ไฟล์ซ้ำอีกครั้ง
+
 ### 4.3 แก้ไขปัญหา /manual ติดหน้า login หลัง Deploy
 
 **Commit:** `22f33b3`
@@ -413,6 +424,7 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 ## 9. Git Log
 
 ```
+f0cb341 fix: auto-prepend 0 to 9-digit guardian phones in student imports (Excel drops leading zero)
 2258c84 fix: auto-detect Thai CSV encodings (TIS-620/Windows-874) in student imports
 0f76944 fix: harden school scope for registration review + lock APPROVED document deletion
 3ff12c7 docs: restructure Doc.md, add Phase 10.14 section and update git log

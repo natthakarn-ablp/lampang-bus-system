@@ -2,7 +2,7 @@
 
 **Branch:** `security/audit-fixes-2026-06-18`
 **เซิร์ฟเวอร์:** `ssh.schoolbus.lp-pao.go.th` → `/home/schoolbus/apps/lampang-bus-system/`
-**Production:** ทำงานปกติ, PM2 online, build ผ่าน, ฐานข้อมูล 245 คัน, Phase 10.14 deploy แล้ว (27 มิ.ย. 2569)
+**Production:** ทำงานปกติ, PM2 online, build ผ่าน, ฐานข้อมูล 245 คัน, Phase 10.15A deploy แล้ว (29 มิ.ย. 2569)
 
 ---
 
@@ -11,11 +11,12 @@
 1. [Role Inversion — กลับทิศบทบาทการขึ้นทะเบียนรถ](#1-role-inversion)
 2. [Tier 3 — กระจายงานแอดมินไปสังกัด](#2-tier-3)
 3. [Phase 10.14 — แนบเอกสารหลักฐาน + ขึ้นทะเบียนรถแบบคนขับเริ่มเอง](#3-phase-1014)
-4. [อัปเดตคู่มือและเอกสาร](#4-อัปเดตคู่มือ)
-5. [รายการไฟล์ที่เปลี่ยนแปลงทั้งหมด](#5-ไฟล์ที่เปลี่ยนแปลง)
-6. [สถาปัตยกรรมและ State Machine](#6-สถาปัตยกรรม)
-7. [API Endpoints ใหม่ทั้งหมด](#7-api-endpoints)
-8. [งานที่เหลือ](#8-งานที่เหลือ)
+4. [Phase 10.15A — สร้างรถอัตโนมัติตอนนำเข้านักเรียน](#4-phase-1015a)
+5. [อัปเดตคู่มือและเอกสาร](#5-อัปเดตคู่มือ)
+6. [รายการไฟล์ที่เปลี่ยนแปลงทั้งหมด](#6-ไฟล์ที่เปลี่ยนแปลง)
+7. [สถาปัตยกรรมและ State Machine](#7-สถาปัตยกรรม)
+8. [API Endpoints ใหม่ทั้งหมด](#8-api-endpoints)
+9. [งานที่เหลือ](#9-งานที่เหลือ)
 
 ---
 
@@ -207,7 +208,42 @@
 
 ---
 
-## 4. อัปเดตคู่มือ
+## 4. Phase 10.15A — สร้างรถอัตโนมัติตอนนำเข้านักเรียน
+
+**Commit:** `8f4d096` — 2 files changed (29 มิ.ย. 2569)
+
+### วัตถุประสงค์
+
+เมื่อโรงเรียนนำเข้าไฟล์นักเรียน และพบทะเบียนรถที่ยังไม่มีในระบบ ให้ระบบ **สร้างรถให้โดยอัตโนมัติ** แทนการส่ง error ว่า "ไม่พบทะเบียนรถ" โรงเรียนไม่ต้องไปเพิ่มรถเองก่อนนำเข้าไฟล์
+
+### การเปลี่ยนแปลง
+
+- **`studentImportPreview.service.js`**:
+  - `analyzeRows()`: เพิ่มพารามิเตอร์ `autoCreateVehicle` — เมื่อเปิดใช้งาน แถวที่เคยเป็น `VEHICLE_NOT_FOUND` จะกลายเป็น `INSERT_NEW_AUTO_VEHICLE` (status=READY, can_apply=true)
+  - `createVehicleForImport()`: ฟังก์ชันใหม่ — ตรวจสอบว่าทะเบียนมีอยู่แล้วหรือไม่ ถ้าไม่มีจะสร้างรถใหม่พร้อม `verification_status='UNVERIFIED'` และ audit log
+  - `applyInsertRow()`: ใช้ `autoCreateVehicle` เพื่อเรียก `createVehicleForImport()` เมื่อไม่มี `matched_vehicle_id`
+  - `applyBatch()`: ส่ง `autoCreateVehicle` ผ่านไปยัง `applyInsertRow()` และรวม `INSERT_NEW_AUTO_VEHICLE` ใน query
+  - `runPreview()`: รับ `autoCreateVehicle` และส่งต่อไปยัง `analyzeRows()`
+- **`school.routes.js`**:
+  - `POST /students/import/preview`: รับ `auto_create_vehicle` จาก form body
+  - `POST /students/import/:batchId/apply`: รับ `auto_create_vehicle` จาก JSON body
+
+### ผลลัพธ์การทดสอบ (โรงเรียนอนุบาลวังเหนือ, school_id=52030081)
+
+- ไฟล์ 150 แถว: 26 แถวพร้อมนำเข้า (สร้างรถอัตโนมัติ), 122 แถวซ้ำ (skip), 2 แถว guardian mismatch
+- Apply สำเร็จ: 26 นักเรียนใหม่, 0 ล้มเหลว
+- รถที่สร้างอัตโนมัติ: นก 5080 ลำปาง, นข 6016 ลำปาง, นข 5917 เชียงราย, ฮน 8353 ลำปาง, ผข 561 ลำปาง ฯลฯ
+- Unit tests: 5/5 ผ่าน
+
+### การใช้งาน
+
+- โรงเรียนส่ง `auto_create_vehicle=true` ใน form data ตอน preview
+- ระบบจะแสดงข้อความ "พร้อมนำเข้า (ระบบจะสร้างรถอัตโนมัติตอนนำเข้า)" แทน error
+- ตอน apply ส่ง `auto_create_vehicle: true` ใน JSON body ด้วย
+
+---
+
+## 5. อัปเดตคู่มือ
 
 **Commit:** `a1ba2e6` — 4 files changed, +100 -1
 
@@ -279,7 +315,7 @@
 
 ---
 
-## 5. ไฟล์ที่เปลี่ยนแปลง
+## 6. ไฟล์ที่เปลี่ยนแปลง
 
 ### Backend
 
@@ -315,7 +351,7 @@
 
 ---
 
-## 6. สถาปัตยกรรม
+## 7. สถาปัตยกรรม
 
 ### State Machine: การขึ้นทะเบียนรถ (Role Inversion)
 
@@ -349,7 +385,7 @@ PENDING_SCHOOL_REVIEW    (คนขับยื่นคำขอ)
 
 ---
 
-## 7. API Endpoints
+## 8. API Endpoints
 
 ### ใหม่ทั้งหมด (13 endpoints)
 
@@ -412,7 +448,7 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 
 ---
 
-## 8. งานที่เหลือ
+## 9. งานที่เหลือ
 
 - [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals, driver documents, school registration review)
 - [ ] UAT เชิงผู้ใช้กับ Phase 10.14 (driver-initiated registration + document review)
@@ -421,9 +457,10 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 
 ---
 
-## 9. Git Log
+## 10. Git Log
 
 ```
+8f4d096 feat: auto-create missing vehicles during student import (Phase 10.15A)
 f0cb341 fix: auto-prepend 0 to 9-digit guardian phones in student imports (Excel drops leading zero)
 2258c84 fix: auto-detect Thai CSV encodings (TIS-620/Windows-874) in student imports
 0f76944 fix: harden school scope for registration review + lock APPROVED document deletion

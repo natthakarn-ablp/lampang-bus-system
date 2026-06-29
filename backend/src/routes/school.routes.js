@@ -12,13 +12,10 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const env     = require('../config/env');
-const { getCurrentTermCachedSync } = require('../services/term.service');
-const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
 const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
 const { classifyStudentImport } = require('../utils/studentImport');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
-const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
 const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
@@ -229,13 +226,11 @@ router.get('/students', async (req, res, next) => {
     const { search, grade, vehicle_id, morning_enabled, evening_enabled, sort, order } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
-    const include_deleted = req.query.include_deleted === '1' || req.query.include_deleted === 'true';
-    const only_deleted = req.query.only_deleted === '1' || req.query.only_deleted === 'true';
 
     const gradeFilter = resolveGradeScope(req);
     const result = await schoolSvc.getStudents(schoolId, {
       search, grade, vehicle_id, morning_enabled, evening_enabled,
-      page, per_page, sort, order, gradeFilter, include_deleted, only_deleted,
+      page, per_page, sort, order, gradeFilter,
     });
 
     return sendSuccess(res, result.students, 'OK', result.meta);
@@ -415,31 +410,6 @@ router.post('/pickup-points', requireFullSchoolScope, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-// ─── DELETE /pickup-points/:id — ลบจุดรับส่งของรถที่ให้บริการโรงเรียนนี้ ──────────
-// School self-service cleanup of an obsolete pickup point (soft-delete).
-router.delete('/pickup-points/:id', requireFullSchoolScope, async (req, res, next) => {
-  try {
-    const schoolId = resolveSchoolId(req);
-    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
-
-    const point = await ppSvc.getPickupPointById(id);
-    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
-    // Scope: the point's vehicle must serve this school
-    const serves = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
-    if (!serves) return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในขอบเขตโรงเรียนของท่าน', [], 403);
-
-    await ppSvc.softDeletePickupPoint(id);
-    await logAudit({
-      userId: req.user.id, action: 'DELETE', entityType: 'pickup_point', entityId: id,
-      oldValue: { vehicle_id: point.vehicle_id, label: point.label, latitude: point.latitude, longitude: point.longitude },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-    return sendSuccess(res, null, 'ลบจุดรับส่งสำเร็จ');
-  } catch (err) { next(err); }
-});
-
 /**
  * GET /api/school/pickup-points/:id/assignable-students
  * Phase 6.1 hotfix-7: edit-students modal feed. Returns the school's
@@ -616,18 +586,6 @@ router.post('/leave', requireFullSchoolScope, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ─── DELETE /leaves/:id — ยกเลิกการลาที่บันทึกผิด (ในขอบเขตโรงเรียน) ─────────────
-router.delete('/leaves/:id', requireFullSchoolScope, async (req, res, next) => {
-  try {
-    const schoolId = resolveSchoolId(req);
-    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
-    const result = await leaveSvc.cancelLeaveBySchool(id, req.user.id, schoolId);
-    return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
-  } catch (err) { next(err); }
-});
-
 // ─── POST /checkin-override ──────────────────────────────────────────────────
 // Phase 10.8B — school confirms attendance on behalf of the driver.
 // Reuses driver checkin transaction + appends an extra audit row
@@ -729,6 +687,7 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
     const [[st]] = await pool.query(
       `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
               s.morning_enabled, s.evening_enabled, s.dropoff_address,
+              s.health_note, s.guardian_phone_alt, s.home_address,
               p.name AS parent_name, p.phone AS parent_phone
        FROM students s
        LEFT JOIN parent_student ps ON ps.student_id = s.id
@@ -739,7 +698,7 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
     );
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
 
-    const { prefix, first_name, last_name, grade, classroom, morning_enabled, evening_enabled, dropoff_address, parent_name, parent_phone } = req.body;
+    const { prefix, first_name, last_name, grade, classroom, morning_enabled, evening_enabled, dropoff_address, parent_name, parent_phone, health_note, guardian_phone_alt, home_address } = req.body;
 
     // Validate required fields
     if (first_name !== undefined && !first_name.trim()) return sendError(res, 'กรุณากรอกชื่อนักเรียน', [], 400);
@@ -749,9 +708,14 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
     if (normalizedParentPhone && !/^\d{9,10}$/.test(normalizedParentPhone)) {
       return sendError(res, 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก (รองรับรูปแบบ 0XX-XXXXXXX)', [], 400);
     }
+    // Phase 10.14 — guardian alternate phone follows the same rule as the primary.
+    const normalizedGuardianAlt = guardian_phone_alt !== undefined ? normalizePhone(guardian_phone_alt) : undefined;
+    if (normalizedGuardianAlt && !/^\d{9,10}$/.test(normalizedGuardianAlt)) {
+      return sendError(res, 'เบอร์โทรสำรองผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก (รองรับรูปแบบ 0XX-XXXXXXX)', [], 400);
+    }
     // Audit 2026-06-18 (limitations): reject over-length values with a clean 400
     // instead of letting MySQL raise a 500 on column overflow.
-    const LEN_LIMITS = { prefix: 20, first_name: 100, last_name: 100, grade: 20, classroom: 20 };
+    const LEN_LIMITS = { prefix: 20, first_name: 100, last_name: 100, grade: 20, classroom: 20, health_note: 500, home_address: 300 };
     for (const [field, max] of Object.entries(LEN_LIMITS)) {
       const v = req.body[field];
       if (v != null && String(v).length > max) {
@@ -774,6 +738,10 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
       if (morning_enabled !== undefined) { updates.push('morning_enabled = ?'); params.push(morning_enabled ? 1 : 0); }
       if (evening_enabled !== undefined) { updates.push('evening_enabled = ?'); params.push(evening_enabled ? 1 : 0); }
       if (dropoff_address !== undefined) { updates.push('dropoff_address = ?'); params.push(dropoff_address || null); }
+      // Phase 10.14 — missing student fields (health_note is PDPA-sensitive).
+      if (health_note !== undefined) { updates.push('health_note = ?'); params.push(health_note ? String(health_note).trim() : null); }
+      if (guardian_phone_alt !== undefined) { updates.push('guardian_phone_alt = ?'); params.push(normalizedGuardianAlt || null); }
+      if (home_address !== undefined) { updates.push('home_address = ?'); params.push(home_address ? String(home_address).trim() : null); }
 
       if (updates.length > 0) {
         params.push(studentId);
@@ -846,12 +814,13 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
       }
 
       // 3. Build changed-fields audit (only log fields that actually changed)
-      const auditFields = { prefix, first_name, last_name, grade, classroom, morning_enabled, evening_enabled, parent_name, parent_phone: normalizedParentPhone };
+      const auditFields = { prefix, first_name, last_name, grade, classroom, morning_enabled, evening_enabled, parent_name, parent_phone: normalizedParentPhone, home_address, guardian_phone_alt: normalizedGuardianAlt };
       const oldMap = {
         prefix: st.prefix, first_name: st.first_name, last_name: st.last_name,
         grade: st.grade, classroom: st.classroom,
         morning_enabled: !!st.morning_enabled, evening_enabled: !!st.evening_enabled,
         parent_name: st.parent_name, parent_phone: st.parent_phone,
+        home_address: st.home_address, guardian_phone_alt: st.guardian_phone_alt,
       };
       const oldValue = {};
       const newValue = {};
@@ -863,6 +832,12 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
           oldValue[k] = oldV ?? null;
           newValue[k] = newV;
         }
+      }
+      // health_note is sensitive (PDPA): record only that it changed, never the
+      // value — redaction is also enforced at export, this is defense-in-depth.
+      if (health_note !== undefined && String(st.health_note ?? '') !== String((health_note || null) ?? '')) {
+        oldValue.health_note = st.health_note ? '[redacted]' : null;
+        newValue.health_note = health_note ? '[redacted]' : null;
       }
 
       if (Object.keys(newValue).length > 0) {
@@ -959,25 +934,6 @@ router.delete('/students/:id', requireFullSchoolScope, async (req, res, next) =>
     });
 
     return sendSuccess(res, { student_id: studentId }, 'ลบนักเรียนออกจากระบบเรียบร้อยแล้ว');
-  } catch (err) { next(err); }
-});
-
-// ─── POST /students/:id/restore — กู้คืนนักเรียนที่ถูกลบ (ในขอบเขตโรงเรียน) ─────
-// Reverses DELETE /students/:id (withdraw). Operators previously had to hand-run
-// UPDATE students SET is_deleted=FALSE for a mis-deleted student.
-router.post('/students/:id/restore', requireFullSchoolScope, async (req, res, next) => {
-  try {
-    const schoolId = resolveSchoolId(req);
-    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const studentId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid id', [], 400);
-
-    const result = await schoolSvc.restoreStudent(pool, {
-      schoolId, studentId, actorId: req.user.id,
-      ip: req.ip, userAgent: req.headers['user-agent'],
-    });
-
-    return sendSuccess(res, result, result.status === 'RESTORED' ? 'กู้คืนนักเรียนสำเร็จ' : 'นักเรียนรายนี้ใช้งานอยู่แล้ว');
   } catch (err) { next(err); }
 });
 
@@ -1167,64 +1123,10 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ─── PUT /vehicles/:id — แก้ไขข้อมูลรถในขอบเขตโรงเรียน (ลดการพึ่งแอดมิน) ─────────
-// School self-service: edit vehicle type / owner / insurance for a vehicle that
-// serves this school. Does NOT touch plate identity or driver assignment (Tier 3).
-router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
-  try {
-    const schoolId = resolveSchoolId(req);
-    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const vehicleId = req.params.id;
-
-    // Scope: the vehicle must serve this school
-    const serves = await ppSvc.validateVehicleServesSchool(vehicleId, schoolId);
-    if (!serves) return sendError(res, 'ไม่พบรถคันนี้ในโรงเรียนของท่าน', [], 404);
-
-    const [[old]] = await pool.query(
-      `SELECT id, vehicle_type, owner_name, owner_phone, insurance_status, insurance_type, insurance_expiry
-         FROM vehicles WHERE id = ? AND is_deleted = FALSE`,
-      [vehicleId]
-    );
-    if (!old) return sendError(res, 'ไม่พบรถในระบบ', [], 404);
-
-    const b = req.body || {};
-    const sets = [], params = [], newVal = {};
-    // whitelist of editable columns (column names are hardcoded → safe to interpolate)
-    const strField = (key, max) => {
-      if (b[key] === undefined) return;
-      const v = (b[key] === null || String(b[key]).trim() === '') ? null : String(b[key]).trim().slice(0, max);
-      sets.push(`${key} = ?`); params.push(v); newVal[key] = v;
-    };
-    strField('vehicle_type', 50);
-    strField('owner_name', 100);
-    strField('owner_phone', 20);
-    strField('insurance_status', 50);
-    strField('insurance_type', 50);
-    if (b.insurance_expiry !== undefined) {
-      const v = b.insurance_expiry || null;
-      sets.push('insurance_expiry = ?'); params.push(v); newVal.insurance_expiry = v;
-    }
-    if (!sets.length) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
-
-    params.push(vehicleId);
-    await pool.query(`UPDATE vehicles SET ${sets.join(', ')} WHERE id = ?`, params);
-
-    await logAudit({
-      userId: req.user.id, action: 'UPDATE', entityType: 'vehicle', entityId: vehicleId,
-      oldValue: {
-        vehicle_type: old.vehicle_type, owner_name: old.owner_name, owner_phone: old.owner_phone,
-        insurance_status: old.insurance_status, insurance_type: old.insurance_type, insurance_expiry: old.insurance_expiry,
-      },
-      newValue: newVal, ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-    return sendSuccess(res, { vehicle_id: vehicleId }, 'แก้ไขข้อมูลรถสำเร็จ');
-  } catch (err) { next(err); }
-});
-
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 // Audit trail for school actions
 
-router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (req, res, next) => {
+router.get('/audit-logs', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -1235,19 +1137,11 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
     const { action, date_from, date_to } = req.query;
     const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 
-    // Match each entity_type against its OWN id space: 'student' ids live in
-    // students, 'roster_request' ids live in roster_change_requests (a separate
-    // BIGINT sequence). A merged IN(...) leaked another school's roster_request
-    // audit row whenever its rcr.id numerically collided with one of this
-    // school's student ids.
     let scopeWhere = `((u.scope_id = ? AND u.scope_type = 'SCHOOL')
-       OR (al.entity_type = 'student' AND al.entity_id IN (
+       OR (al.entity_type IN ('student','roster_request') AND al.entity_id IN (
          SELECT CAST(s.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci FROM students s WHERE s.school_id = ?
-       ))
-       OR (al.entity_type = 'roster_request' AND al.entity_id IN (
-         SELECT CAST(rcr.id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_unicode_ci FROM roster_change_requests rcr WHERE rcr.school_id = ?
        )))`;
-    const params = [schoolId, schoolId, schoolId];
+    const params = [schoolId, schoolId];
 
     if (action) { scopeWhere += ' AND al.action = ?'; params.push(action); }
     if (date_from && isValidDate(date_from)) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
@@ -1296,7 +1190,7 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
 // ─── GET /students/template ──────────────────────────────────────────────────
 // Download Excel template for student import
 
-router.get('/students/template', importExportLimiter, async (req, res, next) => {
+router.get('/students/template', async (req, res, next) => {
   try {
     const wb = new ExcelJS.Workbook();
 
@@ -1314,6 +1208,9 @@ router.get('/students/template', importExportLimiter, async (req, res, next) => 
       { header: 'ใช้บริการเย็น', key: 'evening', width: 14 },
       { header: 'ชื่อผู้ปกครอง', key: 'parent_name', width: 20 },
       { header: 'เบอร์โทรผู้ปกครอง', key: 'parent_phone', width: 18 },
+      { header: 'หมายเหตุสุขภาพ', key: 'health_note', width: 24 },
+      { header: 'เบอร์โทรสำรองผู้ปกครอง', key: 'guardian_phone_alt', width: 20 },
+      { header: 'ที่อยู่บ้าน', key: 'home_address', width: 30 },
     ];
 
     // Style header row
@@ -1328,6 +1225,7 @@ router.get('/students/template', importExportLimiter, async (req, res, next) => 
       id: 22001, prefix: 'เด็กชาย', first_name: 'สมชาย', last_name: 'ใจดี',
       grade: 'ป.3', classroom: '1', plate_no: 'นข 2210 ลำปาง',
       morning: 'Y', evening: 'Y', parent_name: 'นายสมศักดิ์ ใจดี', parent_phone: '0812345678',
+      health_note: 'แพ้นมวัว', guardian_phone_alt: '0898765432', home_address: '123 ถ.ลำปาง',
     });
 
     // Sheet 2: Instructions
@@ -1375,7 +1273,7 @@ router.get('/students/template', importExportLimiter, async (req, res, next) => 
 // ─── POST /students/import ──────────────────────────────────────────────────
 // Import students from Excel file
 
-router.post('/students/import', importExportLimiter, requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
+router.post('/students/import', requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -1402,7 +1300,7 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
       // Medium fix: use a proper RFC 4180 CSV parser that handles quoted
       // fields (e.g. parent names containing commas like "สมชาย, สมหญิง")
       // instead of split(',') which would shift columns silently.
-      const raw = decodeCsvBuffer(fs.readFileSync(req.file.path)).replace(/^\uFEFF/, '');
+      const raw = fs.readFileSync(req.file.path, 'utf-8').replace(/^\uFEFF/, '');
       const csvRows = parseCsv(raw);
       if (csvRows.length < 2) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
 
@@ -1566,7 +1464,7 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
                WHERE id = ?`,
               [cidHash, r.prefix || null, r.first_name, r.last_name,
                r.grade || null, r.classroom || null, vehicleId,
-               morningEnabled, eveningEnabled, getCurrentTermCachedSync(), existing.id]
+               morningEnabled, eveningEnabled, env.app.currentTerm, existing.id]
             );
             effectiveStudentId = existing.id;
           } else {
@@ -1583,7 +1481,7 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
               [newStudentId, studentCode, cidHash, r.prefix || null, r.first_name, r.last_name,
                r.grade || null, r.classroom || null, schoolId, vehicleId,
-               morningEnabled, eveningEnabled, getCurrentTermCachedSync()]
+               morningEnabled, eveningEnabled, env.app.currentTerm]
             );
             effectiveStudentId = newStudentId;
           }
@@ -1682,8 +1580,11 @@ router.post('/students/import/preview', requireFullSchoolScope, importUpload.sin
     try { fs.chmodSync(req.file.path, 0o600); } catch { /* best-effort */ }
     const schoolId = resolveSchoolId(req);
     const importPreview = require('../services/studentImportPreview.service');
+    // Phase 10.15A — schools can opt in to auto-create missing vehicles during import.
+    const autoCreateVehicle = req.body && (req.body.auto_create_vehicle === 'true' || req.body.auto_create_vehicle === true);
     const out = await importPreview.runPreview(pool, {
       schoolId, importedBy: req.user.id, filePath: req.file.path, originalName: decodeUploadFilename(req.file.originalname),
+      autoCreateVehicle,
     });
     await logAudit({
       userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(out.batch_id),
@@ -1700,7 +1601,10 @@ router.post('/students/import/:batchId/apply', requireFullSchoolScope, async (re
     const schoolId = resolveSchoolId(req);
     const batchId = parseInt(req.params.batchId, 10);
     // Phase 10.13B-4 — explicit apply modes; risky modes act only on selected rows.
-    const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate } = req.body || {};
+    // Phase 10.15A — auto_create_vehicle lets the school opt in to creating missing
+    // vehicles during import, so the file does not need to be re-uploaded after
+    // vehicles are added manually.
+    const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate, auto_create_vehicle } = req.body || {};
     const VALID_MODES = ['insert_ready', 'update_guardian_confirmed', 'reactivate_student_confirmed', 'mixed_confirmed'];
     if (!VALID_MODES.includes(mode)) return sendError(res, 'โหมดการนำเข้าไม่ถูกต้อง', [], 400);
     const importPreview = require('../services/studentImportPreview.service');
@@ -1709,6 +1613,7 @@ router.post('/students/import/:batchId/apply', requireFullSchoolScope, async (re
       selectedRowIds: Array.isArray(selected_row_ids) ? selected_row_ids : [],
       confirmGuardianUpdate: !!confirm_guardian_update,
       confirmReactivate: !!confirm_reactivate,
+      autoCreateVehicle: !!auto_create_vehicle,
     });
     await logAudit({
       userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(batchId),
@@ -1869,7 +1774,6 @@ router.get('/live-vehicles', async (req, res, next) => {
 
 const bcrypt = require('bcrypt');
 const BCRYPT_COST_TEACHER = 12;
-const { validatePassword } = require('../utils/passwordPolicy');
 
 router.get('/teacher-accounts', requireFullSchoolScope, async (req, res, next) => {
   try {
@@ -1901,10 +1805,7 @@ router.post('/teacher-accounts', requireFullSchoolScope, async (req, res, next) 
     const errors = [];
     if (!username || !String(username).trim()) errors.push({ field: 'username', message: 'จำเป็นต้องระบุชื่อผู้ใช้' });
     if (!password) errors.push({ field: 'password', message: 'จำเป็นต้องระบุรหัสผ่าน' });
-    else {
-      const pwCheck = validatePassword(password, { username: String(username || '').trim() });
-      if (!pwCheck.ok) errors.push({ field: 'password', message: pwCheck.message });
-    }
+    else if (String(password).length < 6) errors.push({ field: 'password', message: 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร' });
     if (!isValidGradeScope(grade_scope)) {
       errors.push({ field: 'grade_scope', message: `ระดับชั้นต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_GRADE_SCOPES.join(', ')}` });
     }
@@ -1948,8 +1849,8 @@ router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, asyn
     if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
 
     const { password } = req.body || {};
-    if (!password) {
-      return sendError(res, 'จำเป็นต้องระบุรหัสผ่าน', [], 400);
+    if (!password || String(password).length < 6) {
+      return sendError(res, 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', [], 400);
     }
 
     // Verify the target is a teacher of THIS school
@@ -1961,13 +1862,6 @@ router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, asyn
       [userId, schoolId]
     );
     if (!target) return sendError(res, 'ไม่พบบัญชีครูในโรงเรียนนี้', [], 404);
-
-    // Strength check after the lookup so the username-equality rule sees the
-    // target teacher's username.
-    const pwCheck = validatePassword(password, { username: target.username });
-    if (!pwCheck.ok) {
-      return sendError(res, pwCheck.message, [], 400);
-    }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST_TEACHER);
     await pool.query(
@@ -2019,44 +1913,6 @@ router.delete('/teacher-accounts/:id', requireFullSchoolScope, async (req, res, 
     });
 
     return sendSuccess(res, null, 'ลบบัญชีครูประจำสายชั้นสำเร็จ');
-  } catch (err) { next(err); }
-});
-
-// ─── POST /api/school/checkin/:logId/void ────────────────────────────────────
-// School reverses a wrong check-in / check-out for a student in its OWN school
-// (mirror of /checkin-override). Writes a CANCELLED compensating checkin_logs
-// row + resets daily_status, in one transaction. Reason required; original log
-// kept. Grade-scoped teachers are blocked (requireFullSchoolScope). The service
-// asserts the log's student belongs to that school.
-router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, next) => {
-  try {
-    const schoolId = resolveSchoolId(req);
-    if (!schoolId) {
-      return sendError(
-        res,
-        req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียนที่ผูกกับบัญชีนี้',
-        [],
-        req.user.role === 'admin' ? 400 : 403
-      );
-    }
-
-    const reason = (req.body || {}).reason;
-    if (!String(reason || '').trim()) {
-      return sendError(res, 'กรุณาระบุเหตุผล', [{ field: 'reason', message: 'จำเป็นต้องระบุเหตุผล' }], 400);
-    }
-
-    const result = await checkinSvc.voidCheckin(pool, {
-      userId:          req.user.id,
-      userRole:        req.user.role,
-      userDisplayName: req.user.displayName || req.user.username || null,
-      ipAddress:       req.ip,
-      userAgent:       req.headers['user-agent'],
-      logId:           req.params.logId,
-      reason,
-      scope:           { kind: 'school', schoolId },
-    });
-
-    return sendSuccess(res, result, 'ยกเลิกรายการเช็กอินสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
 

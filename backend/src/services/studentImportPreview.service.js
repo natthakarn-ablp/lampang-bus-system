@@ -207,7 +207,9 @@ async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
     // Phase 10.15A — if the caller opts in to auto-create vehicles, rows that are
     // only blocked by a missing vehicle become READY. The vehicle will be created
     // at apply time, so the school does not need to pre-register every plate.
-    if (autoCreateVehicle && r.classification === 'VEHICLE_NOT_FOUND') {
+    // Phase 10.15A-1: only plates with a province are auto-created; province-less
+    // plates remain blocked to avoid ambiguous duplicate registrations.
+    if (autoCreateVehicle && r.classification === 'VEHICLE_NOT_FOUND' && hasPlateProvince(row.plate_no)) {
       r.classification = 'INSERT_NEW_AUTO_VEHICLE';
       r.status = 'READY';
       r.can_apply = true;
@@ -330,12 +332,22 @@ async function linkParent(conn, studentId, name, phone, userId) {
   await conn.query('INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW()) ON DUPLICATE KEY UPDATE approved = TRUE', [parentId, studentId, userId]);
 }
 
+// Helper: a plate is only eligible for auto-create if it includes a province.
+// Province-less plates ('นข2210') are ambiguous and would create duplicates.
+function hasPlateProvince(plateNo) {
+  if (!plateNo) return false;
+  const p = plateId.parseLegacyPlateText(String(plateNo));
+  return !!(p && plateId.normalizeProvince(p.province));
+}
+
 // ── Auto-create a missing vehicle during student import (Phase 10.15A). ───────
 // Returns the existing vehicle id if it already exists, otherwise creates a new
 // UNVERIFIED vehicle with a generated id. Creation is audited. Only used when
 // the school explicitly opts in via auto_create_vehicle on the apply endpoint.
+// Phase 10.15A-1: province-less plates are NOT auto-created to avoid duplicates.
 async function createVehicleForImport(conn, plateNo, userId) {
   if (!plateNo || !String(plateNo).trim()) return null;
+  if (!hasPlateProvince(plateNo)) return null;
   const validation = validatePlateNo(plateNo);
   if (!validation.valid) return null;
 

@@ -497,8 +497,8 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 ## 11. Git Log
 
 ```
+f0a7fc8 docs: add Phase 10.15A and 10.15B sections to Doc.md
 19a9122 ops: adopt PM2 ecosystem config and add safe backend deploy script
-1924cf3 docs: add Phase 10.15A auto-create vehicle section to Doc.md
 8f4d096 feat: auto-create missing vehicles during student import (Phase 10.15A)
 f0cb341 fix: auto-prepend 0 to 9-digit guardian phones in student imports (Excel drops leading zero)
 2258c84 fix: auto-detect Thai CSV encodings (TIS-620/Windows-874) in student imports

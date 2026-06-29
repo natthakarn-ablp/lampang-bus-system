@@ -17,6 +17,7 @@ const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { logAudit } = require('../utils/audit');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
+const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
 
 // ─── Bulk-import upload (Phase 10.2A) ────────────────────────────────────────
 // Disk-backed multer config mirroring backend/src/routes/school.routes.js.
@@ -76,7 +77,7 @@ async function parseSchoolImportFile(filePath) {
   }
 
   if (ext === '.csv') {
-    const raw = fs.readFileSync(filePath, 'utf-8').replace(/^﻿/, '');
+    const raw = decodeCsvBuffer(fs.readFileSync(filePath)).replace(/^﻿/, '');
     const lines = raw.split(/\r?\n/).filter(l => l.trim().length);
     if (lines.length < 2) return [];
     const header = lines[0].split(',').map(c => c.trim());

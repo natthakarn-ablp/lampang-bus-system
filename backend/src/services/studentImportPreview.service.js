@@ -11,6 +11,7 @@ const { classifyImportRow, maskPhone } = require('../utils/studentImportClassifi
 const plateId = require('../utils/plateIdentity');
 const { classifyStudentImport } = require('../utils/studentImport');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
+const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
 const { allocateStudentId } = require('./idAllocator.service');
 const { logAudit } = require('../utils/audit');
 const { getCurrentTerm } = require('./term.service');
@@ -115,7 +116,7 @@ async function parseImportFile(filePath, originalName) {
       rows.push(toRow(cells, map, i));
     }
   } else {
-    const raw = fs.readFileSync(filePath, 'utf-8').replace(/^﻿/, '');
+    const raw = decodeCsvBuffer(fs.readFileSync(filePath)).replace(/^﻿/, '');
     const csvRows = parseCsvRow(raw);
     const headers = (csvRows[0] || []).map((h) => h.trim());
     const map = buildMap(headers);

@@ -18,6 +18,7 @@ const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
 const { classifyStudentImport } = require('../utils/studentImport');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
+const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
 const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
@@ -1401,7 +1402,7 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
       // Medium fix: use a proper RFC 4180 CSV parser that handles quoted
       // fields (e.g. parent names containing commas like "สมชาย, สมหญิง")
       // instead of split(',') which would shift columns silently.
-      const raw = fs.readFileSync(req.file.path, 'utf-8').replace(/^\uFEFF/, '');
+      const raw = decodeCsvBuffer(fs.readFileSync(req.file.path)).replace(/^\uFEFF/, '');
       const csvRows = parseCsv(raw);
       if (csvRows.length < 2) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
 

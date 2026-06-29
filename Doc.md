@@ -2,7 +2,7 @@
 
 **Branch:** `security/audit-fixes-2026-06-18`
 **เซิร์ฟเวอร์:** `ssh.schoolbus.lp-pao.go.th` → `/home/schoolbus/apps/lampang-bus-system/`
-**Production:** ทำงานปกติ, PM2 online, build ผ่าน, ฐานข้อมูล 245 คัน, Phase 10.15A deploy แล้ว (29 มิ.ย. 2569)
+**Production:** ทำงานปกติ, PM2 online, build ผ่าน, ฐานข้อมูล 245 คัน, Phase 10.15A+10.15B deploy แล้ว (29 มิ.ย. 2569)
 
 ---
 
@@ -12,11 +12,12 @@
 2. [Tier 3 — กระจายงานแอดมินไปสังกัด](#2-tier-3)
 3. [Phase 10.14 — แนบเอกสารหลักฐาน + ขึ้นทะเบียนรถแบบคนขับเริ่มเอง](#3-phase-1014)
 4. [Phase 10.15A — สร้างรถอัตโนมัติตอนนำเข้านักเรียน](#4-phase-1015a)
-5. [อัปเดตคู่มือและเอกสาร](#5-อัปเดตคู่มือ)
-6. [รายการไฟล์ที่เปลี่ยนแปลงทั้งหมด](#6-ไฟล์ที่เปลี่ยนแปลง)
-7. [สถาปัตยกรรมและ State Machine](#7-สถาปัตยกรรม)
-8. [API Endpoints ใหม่ทั้งหมด](#8-api-endpoints)
-9. [งานที่เหลือ](#9-งานที่เหลือ)
+5. [Phase 10.15B — ป้องกันระบบพังเวลาแก้ไขงานอื่น](#5-phase-1015b)
+6. [อัปเดตคู่มือและเอกสาร](#6-อัปเดตคู่มือ)
+7. [รายการไฟล์ที่เปลี่ยนแปลงทั้งหมด](#7-ไฟล์ที่เปลี่ยนแปลง)
+8. [สถาปัตยกรรมและ State Machine](#8-สถาปัตยกรรม)
+9. [API Endpoints ใหม่ทั้งหมด](#9-api-endpoints)
+10. [งานที่เหลือ](#10-งานที่เหลือ)
 
 ---
 
@@ -243,7 +244,43 @@
 
 ---
 
-## 5. อัปเดตคู่มือ
+## 5. Phase 10.15B — ป้องกันระบบพังเวลาแก้ไขงานอื่น
+
+**Commit:** `19a9122` — 2 files changed (29 มิ.ย. 2569)
+
+### ปัญหา
+
+- Backend รันด้วย `pm2 start npm -- start` (ผ่าน `npm`) ไม่มี crash-loop protection
+- ถ้าแก้โค้ดแล้วมี syntax error หรือ runtime error ระบบจะ restart วนเร็วเกินไป อาจทำให้ service ล่ม
+- มี backup directory `frontend/dist.bak-*` เก่าสะสมใน project root
+
+### การแก้ไข
+
+- **Adopt `ecosystem.config.js`**:
+  - `max_restarts: 10`
+  - `restart_delay: 5000`
+  - `exp_backoff_restart_delay: 1000`
+  - `max_memory_restart: '500M'`
+  - บังคับใช้ `pm2 reload /home/schoolbus/apps/lampang-bus-system/ecosystem.config.js`
+- **สร้าง `scripts/deploy-backend.sh`**: deploy ปลอดภัยที่ทำ syntax check + unit tests ก่อน reload ถ้า fail จะไม่ reload
+- **ลบ `frontend/dist.bak-*` เก่า** 3 รายการ (เก่าสุด 21–27 มิ.ย.) ที่ไม่จำเป็นแล้ว
+
+### สถานะ
+
+- ✅ Backend รันด้วย ecosystem config แล้ว
+- ✅ Health check `/health` OK
+- ✅ 0 unstable restarts
+- ✅ Deploy script สามารถใช้งานได้
+
+### วิธีใช้ Deploy Script
+
+```bash
+/home/schoolbus/apps/lampang-bus-system/scripts/deploy-backend.sh
+```
+
+---
+
+## 6. อัปเดตคู่มือ
 
 **Commit:** `a1ba2e6` — 4 files changed, +100 -1
 
@@ -315,7 +352,7 @@
 
 ---
 
-## 6. ไฟล์ที่เปลี่ยนแปลง
+## 7. ไฟล์ที่เปลี่ยนแปลง
 
 ### Backend
 
@@ -351,7 +388,7 @@
 
 ---
 
-## 7. สถาปัตยกรรม
+## 8. สถาปัตยกรรม
 
 ### State Machine: การขึ้นทะเบียนรถ (Role Inversion)
 
@@ -385,7 +422,7 @@ PENDING_SCHOOL_REVIEW    (คนขับยื่นคำขอ)
 
 ---
 
-## 8. API Endpoints
+## 9. API Endpoints
 
 ### ใหม่ทั้งหมด (13 endpoints)
 
@@ -448,7 +485,7 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 
 ---
 
-## 9. งานที่เหลือ
+## 10. งานที่เหลือ
 
 - [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals, driver documents, school registration review)
 - [ ] UAT เชิงผู้ใช้กับ Phase 10.14 (driver-initiated registration + document review)
@@ -457,9 +494,11 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 
 ---
 
-## 10. Git Log
+## 11. Git Log
 
 ```
+19a9122 ops: adopt PM2 ecosystem config and add safe backend deploy script
+1924cf3 docs: add Phase 10.15A auto-create vehicle section to Doc.md
 8f4d096 feat: auto-create missing vehicles during student import (Phase 10.15A)
 f0cb341 fix: auto-prepend 0 to 9-digit guardian phones in student imports (Excel drops leading zero)
 2258c84 fix: auto-detect Thai CSV encodings (TIS-620/Windows-874) in student imports

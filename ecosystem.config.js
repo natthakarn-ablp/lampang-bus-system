@@ -1,14 +1,15 @@
-// Phase 10.13B-9 — PM2 ecosystem config (crash-loop hardening).
+// Phase 10.13B-9 + 10.15B — PM2 ecosystem config (crash-loop hardening).
 //
-// NOT yet adopted. The running process is currently started via `npm start`
-// (pm_exec_path=/usr/bin/npm). This file documents a hardened start with
-// backoff so a crash loop can't hammer the host. Env continues to come from
-// backend/.env (loaded by the app via dotenv) — nothing secret is hardcoded.
+// Adopted on 2026-06-29. Provides crash-loop hardening, memory cap, and
+// exponential backoff. Env continues to come from backend/.env (loaded by the
+// app via dotenv) — nothing secret is hardcoded.
 //
-// Adopt later, during a planned window, with:
-//   pm2 delete schoolbus-backend
+// To start after a server reboot:
 //   pm2 start ecosystem.config.js
 //   pm2 save
+//
+// To reload after code changes:
+//   pm2 reload ecosystem.config.js
 // Then verify /health is GREEN and `pm2 logs schoolbus-backend` is clean.
 
 module.exports = {

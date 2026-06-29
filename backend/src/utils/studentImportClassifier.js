@@ -22,7 +22,11 @@ function classifyImportRow({ row, schoolId, existing = null, crossSchool = false
   const firstName = String(row.first_name || '').trim();
   const lastName = String(row.last_name || '').trim();
   const guardianInput = String(row.parent_name || '').trim();
-  const phoneDigits = String(row.parent_phone || '').replace(/\D/g, '');
+  let phoneDigits = String(row.parent_phone || '').replace(/\D/g, '');
+  // Thai mobile numbers exported from Excel often lose the leading zero and
+  // become 9 digits (e.g. 909755785). Prepend 0 when exactly 9 digits so the
+  // import can proceed without forcing every school to re-format the file.
+  if (phoneDigits.length === 9 && !phoneDigits.startsWith('0')) phoneDigits = '0' + phoneDigits;
 
   const base = {
     row_number: row.rowNum,

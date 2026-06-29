@@ -241,6 +241,12 @@
   - `studentImportPreview.service.js`: fuzzy normalized match — ถ้าข้อความทะเบียนป้อนเข้ามาใกล้เคียงกับรถในระบบพอดีคันเดียว ระบบจะจับคู่และแปลงเป็นทะเบียนรถตามข้อมูลในระบบ
 - **ผลลัพธ์:** ทดสอบ `analyzeRows` กับรถ 2 คันของโรงเรียน จับคู่ได้ถูกต้องทั้ง `ลป-2204`, `ลป 2204`, `ลป2204`, `ลป 2204 ลำ` และ `นข-3402 ลำปาง` สถานะ `READY` พร้อมนำเข้า
 
+#### แก้ไขเพิ่ม (29 มิ.ย. 2569) — CSV ที่บันทึกเป็น TIS-620/Windows-874 ทำให้รหัสนักเรียนผิด
+
+- **ปัญหา:** โรงเรียนอนุบาลวังเหนือ (และอีกหลายโรงเรียน) export ไฟล์ CSV จาก Excel ใน encoding TIS-620 แทน UTF-8 ระบบอ่าน header เป็นมัยก์เบก (mojibake) ทำให้ column `รหัสนักเรียน` ไม่ถูก map ทุกแถวจึง error `รหัสนักเรียนไม่ถูกต้อง`
+- **วิธีแก้:** สร้าง `backend/src/utils/readCsvWithEncoding.js` ใช้ `iconv-lite` ตรวจหา encoding: ลอง UTF-8 ก่อน ถ้ามี replacement character หรือไม่มี Thai จะ fallback เป็น TIS-620 แล้ว Windows-874 นำไปใช้ใน `studentImportPreview.service.js`, `school.routes.js` (POST `/students/import`), และ `affiliation.routes.js` (import โรงเรียน)
+- **ผลลัพธ์:** ไฟล์ CSV ของโรงเรียนอนุบาลวังเหนือ (150 แถว) ถูก parse ได้ถูกต้อง รหัสนักเรียน `65001`, `65002`, ... อ่านได้ครบ ไม่มีแถวว่าง
+
 ### 4.3 แก้ไขปัญหา /manual ติดหน้า login หลัง Deploy
 
 **Commit:** `22f33b3`
@@ -407,6 +413,7 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 ## 9. Git Log
 
 ```
+2258c84 fix: auto-detect Thai CSV encodings (TIS-620/Windows-874) in student imports
 0f76944 fix: harden school scope for registration review + lock APPROVED document deletion
 3ff12c7 docs: restructure Doc.md, add Phase 10.14 section and update git log
 db26fce docs: mark driver documents + registration roster as deployed and fix file list

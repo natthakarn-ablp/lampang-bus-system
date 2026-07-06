@@ -1,7 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const { getCurrentTermCachedSync } = require('./term.service');
+const { getCurrentTermCachedSync, getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 
 const ACTIVE_APPLICATION_STATUSES = [
@@ -235,11 +235,16 @@ async function createApplication(pool, {
   vehicleId,
   issuingSchoolId,
   userId,
-  currentTerm = getCurrentTermCachedSync(),
 }) {
   if (!vehicleId || !issuingSchoolId || !userId) {
     throw appError('vehicleId, issuingSchoolId และ userId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
   }
+
+  // Term is SERVER-authoritative — derived from today's Bangkok date, never taken
+  // from the client — and frozen onto the application (current_term +
+  // active_request_key) at INSERT, so the dedup key is stable for the whole
+  // lifecycle even across a term boundary.
+  const currentTerm = await getCurrentTerm(pool);
 
   const conn = await pool.getConnection();
   try {
@@ -982,11 +987,14 @@ async function abortInspectionAttempt(pool, {
 async function createDriverApplication(pool, {
   vehicleId,
   driverUserId,
-  currentTerm = getCurrentTermCachedSync(),
 }) {
   if (!vehicleId || !driverUserId) {
     throw appError('vehicleId และ driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
   }
+
+  // Term is SERVER-authoritative (see createApplication) — derived here, never from
+  // the driver client, and frozen onto the application at INSERT.
+  const currentTerm = await getCurrentTerm(pool);
 
   const conn = await pool.getConnection();
   try {

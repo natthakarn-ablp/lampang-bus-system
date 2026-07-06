@@ -148,6 +148,7 @@ app.use('/api/line',      require('./routes/line.routes'));
 app.use('/api/admin',     require('./routes/admin.routes'));
 app.use('/api/visits',    require('./routes/visits.routes'));
 app.use('/api/readiness', require('./routes/readiness.routes'));
+app.use('/api/terms',     require('./routes/terms.routes'));
 
 // ─── Vehicle QR + consent (feature-flagged; dark by default) ─────────────────
 // Mounted ONLY when FEATURE_VEHICLE_QR=true. When off, these paths 404 and the

@@ -1,6 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+
+const THAI_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function fmtThaiDate(isoYmd) {
+  if (!isoYmd) return '';
+  const [y, m, d] = String(isoYmd).slice(0, 10).split('-').map(Number);
+  return `${d} ${THAI_MON[m - 1]} ${y + 543}`;
+}
 
 // Phase 10.13A-26B — student import preview / confirm-apply workflow UI.
 // Preview NEVER writes student data; apply requires an explicit click and only
@@ -11,6 +18,7 @@ import { useToast } from '../../components/Toast';
 // blocker, blue=already-applied/info.
 const CLASS_META = {
   INSERT_NEW: { label: 'พร้อมนำเข้า', tone: 'emerald' },
+  INSERT_NEW_AUTO_VEHICLE: { label: 'พร้อมนำเข้า + สร้างรถ', tone: 'emerald' },
   CROSS_SCHOOL_SAME_CODE_ALLOWED: { label: 'รหัสซ้ำต่างโรงเรียน แต่นำเข้าได้', tone: 'emerald' },
   SKIP_DUPLICATE_SAME_SCHOOL: { label: 'มีอยู่แล้วในโรงเรียนนี้', tone: 'slate' },
   GUARDIAN_MISMATCH: { label: 'ผู้ปกครองไม่ตรง', tone: 'amber' },
@@ -84,9 +92,23 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   const [selGuardian, setSelGuardian] = useState(() => new Set());
   const [selReactivate, setSelReactivate] = useState(() => new Set());
   const [requestedVehicle, setRequestedVehicle] = useState(() => new Set());   // 10.13B-7 restore-requested rows
+  const [autoCreateVehicle, setAutoCreateVehicle] = useState(false);
+  const [term, setTerm] = useState(null);          // current academic term (date-derived)
+
+  // Tell schools which term today's rows will be tagged as — the term is derived
+  // server-side from the entry date, so this banner is the only place they see it.
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    api.get('/terms/current')
+      .then((res) => { if (alive) setTerm(res.data.data); })
+      .catch(() => { if (alive) setTerm(null); });
+    return () => { alive = false; };
+  }, [open]);
 
   const TERMINAL = ['APPLIED', 'ALREADY_APPLIED', 'GUARDIAN_UPDATED', 'REACTIVATED'];
   const canApplyCount = useMemo(() => (rows || []).filter((r) => r.can_apply && !TERMINAL.includes(r.status)).length, [rows]);
+  const autoVehicleRows = useMemo(() => (rows || []).filter((r) => r.classification === 'INSERT_NEW_AUTO_VEHICLE' && !TERMINAL.includes(r.status)).length, [rows]);
   const errorCount = useMemo(() => (rows || []).filter((r) => r.status === 'ERROR' || r.classification === 'APPLY_FAILED').length, [rows]);
   const vehicleIssues = useMemo(() => (rows || []).filter((r) => String(r.classification).startsWith('VEHICLE_')).length, [rows]);
   const guardianRows = useMemo(() => (rows || []).filter((r) => r.can_confirm_guardian_update && !TERMINAL.includes(r.status)), [rows]);
@@ -102,7 +124,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   function reset() {
     setFile(null); setBusy(false); setError(''); setBatchId(null);
     setSummary(null); setRows(null); setFilter('all'); setConfirming(false); setApplyResult(null);
-    setSelGuardian(new Set()); setSelReactivate(new Set()); setRequestedVehicle(new Set());
+    setSelGuardian(new Set()); setSelReactivate(new Set()); setRequestedVehicle(new Set()); setAutoCreateVehicle(false);
   }
   function close() { reset(); onClose(); }
 
@@ -118,6 +140,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
     try {
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('auto_create_vehicle', autoCreateVehicle ? 'true' : 'false');
       const res = await api.post('/school/students/import/preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       const d = res.data.data;
       if (!d.rows || d.rows.length === 0) { setError('ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)'); setBusy(false); return; }
@@ -135,11 +158,13 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
     try {
       const confirmG = selGuardian.size > 0, confirmR = selReactivate.size > 0;
       const mode = (confirmG || confirmR) ? 'mixed_confirmed' : 'insert_ready';
+      const shouldAutoCreateVehicle = autoCreateVehicle || autoVehicleRows > 0;
       const res = await api.post(`/school/students/import/${batchId}/apply`, {
         mode,
         selected_row_ids: [...selGuardian, ...selReactivate],
         confirm_guardian_update: confirmG,
         confirm_reactivate: confirmR,
+        auto_create_vehicle: shouldAutoCreateVehicle,
       });
       setApplyResult(res.data.data);
       // Refresh row statuses from the persisted report.
@@ -207,6 +232,22 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4">
+          {/* Current academic term (date-derived) — info, not a warning. */}
+          {term && (
+            <div className="mb-4 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-800">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M6 2a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1V3a1 1 0 1 0-2 0v1H7V3a1 1 0 0 0-1-1Zm10 6H4v7h12V8Z" clipRule="evenodd" />
+              </svg>
+              <div>
+                <span>กำลังกรอกข้อมูลของ </span>
+                <span className="font-semibold">{term.name || `ภาคเรียน ${term.term_id}`}</span>
+                {term.start_date && term.end_date && (
+                  <span className="text-blue-600"> · ช่วง {fmtThaiDate(term.start_date)} – {fmtThaiDate(term.end_date)}</span>
+                )}
+                <span className="block text-xs text-blue-600 mt-0.5">ระบบกำหนดภาคเรียนจากวันที่นำเข้าโดยอัตโนมัติ</span>
+              </div>
+            </div>
+          )}
           {/* ── Upload step ── */}
           {!rows && (
             <div className="space-y-4 max-w-md mx-auto">
@@ -216,6 +257,10 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
                   className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-200 file:text-sm file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100" />
                 {file && <p className="text-sm text-emerald-600 mt-2">{file.name}</p>}
               </div>
+              <label className="flex items-start gap-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg p-3">
+                <input type="checkbox" checked={autoCreateVehicle} onChange={(e) => setAutoCreateVehicle(e.target.checked)} className="mt-1 accent-blue-600" />
+                <span>สร้างรถอัตโนมัติสำหรับทะเบียนใหม่ที่มีจังหวัดครบถ้วน โดยบันทึกเป็นรถรอตรวจสอบ</span>
+              </label>
               {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
               <button onClick={runPreview} disabled={busy || !file}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-medium py-3 rounded-lg transition">
@@ -255,6 +300,12 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
                   </button>
                 ))}
               </div>
+
+              {autoVehicleRows > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2.5 text-xs text-emerald-800">
+                  ระบบจะสร้างรถสถานะรอตรวจสอบสำหรับทะเบียนใหม่ {autoVehicleRows} รายการตอนยืนยันนำเข้า
+                </div>
+              )}
 
               {/* Confirm-action guidance (10.13B-4) */}
               {!applied && (guardianRows.length > 0 || reactivateRows.length > 0) && (
@@ -357,6 +408,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
               <div className="text-sm text-gray-600 space-y-1 mb-3">
                 <div className="flex justify-between"><span>ชุดนำเข้า</span><span className="text-gray-400">#{batchId}</span></div>
                 <div className="flex justify-between"><span>พร้อมเพิ่มใหม่</span><span className="font-semibold text-emerald-600">{canApplyCount}</span></div>
+                {autoVehicleRows > 0 && <div className="flex justify-between"><span>สร้างรถรอตรวจสอบ</span><span className="font-semibold text-emerald-600">{autoVehicleRows}</span></div>}
                 {selGuardian.size > 0 && <div className="flex justify-between"><span>ยืนยันอัปเดตผู้ปกครอง</span><span className="font-semibold text-amber-600">{selGuardian.size}</span></div>}
                 {selReactivate.size > 0 && <div className="flex justify-between"><span>ยืนยันกู้คืนนักเรียน</span><span className="font-semibold text-amber-600">{selReactivate.size}</span></div>}
                 <div className="flex justify-between"><span>ข้ามรายการซ้ำ</span><span className="text-slate-500">{summary.skip}</span></div>

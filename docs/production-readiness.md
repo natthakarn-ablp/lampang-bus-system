@@ -136,7 +136,7 @@
 |---|---|
 | Transport role does NOT see student names or counts | ✅ enforced in dashboard + pickup map (Phase 10.8UX) |
 | Grade-scoped teacher cannot trigger school override | ✅ `requireFullSchoolScope` middleware on `POST /api/school/checkin-override` |
-| CID stored as SHA256 hash, never plain | ✅ schema enforces `cid_hash VARCHAR(64)` |
+| CID field stores either real CID hashes (where source CID exists) or documented synthetic markers for import/roster-created students; raw CID is never stored | ✅ schema enforces `cid_hash VARCHAR(64)` and import paths do not collect raw CID |
 | `backend/.env` never committed | ✅ `.gitignore` `.env` rule; `scripts/offhost-backup-sync.env` also gitignored |
 | `scripts/backup.sh` legacy credential leak | ✅ hardened in Phase 10.10E to use `--defaults-extra-file` |
 | `LINE_CHANNEL_*` secrets never in logs | ✅ verified in 10.9D audit; no token printed |

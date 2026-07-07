@@ -2,15 +2,14 @@
 
 /**
  * Regression — bulk school-account import must enforce the shared password
- * policy on an OPERATOR-TYPED initial_password, while leaving the school_code
- * default exempt.
+ * policy on initial_password and reject blank passwords instead of using
+ * school_code as a default.
  *
  * Security audit 2026-06-27 (MEDIUM#4 follow-up, found by adversarial review):
  * validateImportRow checked only `length < 4`, so an operator could bulk-create
  * accounts with passwords like "password" / "12345678". The single-account reset
  * path was already policy-checked — this closes the bulk-import inconsistency.
- * The school_code default (file omits the column) must stay exempt or every
- * 6-digit OBEC code would be rejected and bulk import would break.
+ * Blank passwords used to default to school_code, which is predictable.
  *
  * DB-free: _validateImportRow / _normalizeRow are pure and exported.
  */
@@ -50,11 +49,10 @@ describe('school-account import password policy (MEDIUM#4 follow-up)', () => {
     expect(r.errors).not.toContain('WEAK_PASSWORD');
   });
 
-  test('REGRESSION: school_code default (no typed password) stays policy-exempt and valid', () => {
-    const r = validate({ ...base }); // no initial_password column → defaults to school_code "123456"
-    expect(r.valid).toBe(true);
-    expect(r.errors).not.toContain('POLICY_PASSWORD');
-    expect(r.errors).not.toContain('WEAK_PASSWORD');
+  test('REGRESSION: blank password is rejected instead of defaulting to school_code', () => {
+    const r = validate({ ...base });
+    expect(r.valid).toBe(false);
+    expect(r.errors).toContain('MISSING_PASSWORD');
   });
 
   test('operator-typed too-short value still trips the minimal length check (WEAK_PASSWORD)', () => {

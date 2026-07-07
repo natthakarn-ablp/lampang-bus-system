@@ -27,7 +27,7 @@ describe('findPlateMatches — duplicate preflight', () => {
   });
 
   test('2. EXACT candidate (plate_no identical)', async () => {
-    pool.query.mockResolvedValue([[row('นข4337 ลำปาง', 'นข4337ลำปาง')]]);
+    pool.query.mockResolvedValue([[row('นข 4337 ลำปาง', 'นข4337ลำปาง')]]);
     const res = await findPlateMatches('นข4337 ลำปาง');
     expect(res.status).toBe('DUPLICATE_OR_SIMILAR');
     expect(res.candidates[0].duplicate_type).toBe('EXACT');
@@ -39,15 +39,14 @@ describe('findPlateMatches — duplicate preflight', () => {
     expect(res.candidates[0].duplicate_type).toBe('NORMALIZED');
   });
 
-  test('4. PROVINCE_VARIANT candidate (province omitted vs present)', async () => {
+  test('4. province omitted is rejected before duplicate matching', async () => {
     pool.query.mockResolvedValue([[row('นข4337 ลำปาง', 'นข4337ลำปาง')]]);
-    const res = await findPlateMatches('นข4337'); // no province
-    expect(res.candidates[0].duplicate_type).toBe('PROVINCE_VARIANT');
+    await expect(findPlateMatches('นข4337')).rejects.toMatchObject({ statusCode: 400 });
   });
 
   test('5. different plate NUMBER is NOT flagged', async () => {
     pool.query.mockResolvedValue([[row('นข4338 ลำปาง', 'นข4338ลำปาง')]]);
-    const res = await findPlateMatches('นข4337');
+    const res = await findPlateMatches('นข4337 ลำปาง');
     expect(res.status).toBe('CLEAR');
     expect(res.candidates).toEqual([]);
   });
@@ -59,16 +58,16 @@ describe('findPlateMatches — duplicate preflight', () => {
 
   test('7. candidate objects expose no sensitive fields (no phone/cid/hash)', async () => {
     pool.query.mockResolvedValue([[row('นข4337 ลำปาง', 'นข4337ลำปาง')]]);
-    const res = await findPlateMatches('นข4337');
+    const res = await findPlateMatches('นข4337 ลำปาง');
     const keys = Object.keys(res.candidates[0]).sort();
     expect(keys).toEqual(['duplicate_type', 'normalized_plate', 'plate_no', 'vehicle_id', 'vehicle_type']);
     expect(JSON.stringify(res.candidates)).not.toMatch(/phone|cid|hash|password|token/i);
   });
 
-  test('8. EXACT is ordered before PROVINCE_VARIANT', async () => {
+  test('8. EXACT is ordered before any province-variant candidate returned by the DB filter', async () => {
     pool.query.mockResolvedValue([[
       row('นข4337', 'นข4337', 'รถตู้', 'V-a'),            // PROVINCE_VARIANT vs input
-      row('นข4337 ลำปาง', 'นข4337ลำปาง', 'รถตู้', 'V-b'),  // EXACT vs input
+      row('นข 4337 ลำปาง', 'นข4337ลำปาง', 'รถตู้', 'V-b'),  // EXACT vs input
     ]]);
     const res = await findPlateMatches('นข4337 ลำปาง');
     expect(res.candidates[0].duplicate_type).toBe('EXACT');

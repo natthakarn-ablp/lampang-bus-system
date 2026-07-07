@@ -6,10 +6,9 @@ const { getTestConnection } = require('./dbHelper');
 const app     = require('../src/app');
 const { normalizePlate, validatePlateNo } = require('../src/utils/vehiclePlate');
 
-// All bulk-test plates share this synthetic prefix so afterAll can clean them
-// up safely without touching real production rows. 'ZZTEST' can never collide
-// with a real Thai plate (real plates start with Thai characters, not ASCII).
-const TEST_PLATE_PREFIX = 'ZZTEST';
+// All bulk-test plates share this synthetic Thai prefix so afterAll can clean
+// them up safely in the guarded test DB.
+const TEST_PLATE_PREFIX = 'ทด';
 
 const SCHOOL = { username: '__test_school', password: 'testpass123' };
 let schoolToken = '';
@@ -91,17 +90,23 @@ describe('validatePlateNo helper', () => {
   });
 
   test('rejects empty string', () => {
-    expect(validatePlateNo('')).toEqual({ valid: false, error: 'กรุณาระบุทะเบียนรถ' });
+    expect(validatePlateNo('')).toMatchObject({ valid: false, error: 'กรุณาระบุทะเบียนรถ' });
   });
 
   test('rejects whitespace-only string', () => {
-    expect(validatePlateNo('   ')).toEqual({ valid: false, error: 'กรุณาระบุทะเบียนรถ' });
+    expect(validatePlateNo('   ')).toMatchObject({ valid: false, error: 'กรุณาระบุทะเบียนรถ' });
   });
 
   test('rejects non-string input', () => {
     expect(validatePlateNo(null).valid).toBe(false);
     expect(validatePlateNo(undefined).valid).toBe(false);
     expect(validatePlateNo(123).valid).toBe(false);
+  });
+
+  test('rejects a plate without province', () => {
+    const r = validatePlateNo('นข1178');
+    expect(r.valid).toBe(false);
+    expect(r.error).toContain('จังหวัด');
   });
 });
 

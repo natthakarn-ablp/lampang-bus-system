@@ -22,6 +22,11 @@ describe('canonicalPlateForStorage (10.13B-3)', () => {
     expect(canonicalPlateForStorage('นข-4031-ลำปาง')).toBe(canonicalPlateForStorage('นข 4031 ลำปาง'));
   });
 
+  test('Lampang abbreviation stores the same canonical', () => {
+    expect(canonicalPlateForStorage('นข 8276 ลป.')).toBe(canonicalPlateForStorage('นข 8276 ลำปาง'));
+    expect(canonicalPlateForStorage('นข 8276 ลป.')).toBe('นข8276ลำปาง');
+  });
+
   test('different province → different canonical (not enforced together)', () => {
     expect(canonicalPlateForStorage('นข 4031 ลำปาง')).not.toBe(canonicalPlateForStorage('นข 4031 ลำพูน'));
   });

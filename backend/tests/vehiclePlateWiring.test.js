@@ -25,7 +25,7 @@ describe('classifyPlateAgainstDb — live wiring (10.13A-25B)', () => {
     const r = await classifyPlateAgainstDb(makeDb(VEHS), { plate_prefix: 'ออ', plate_number: '7332', province: 'กรุงเทพมหานคร' });
     expect(r.code).toBe('PROVINCE_ALIAS_DUPLICATE');
     expect(r.vehicle_id).toBe('V-bkk');
-    expect(r.display_plate).toBe('ออ 7332 กทม');
+    expect(r.display_plate).toBe('ออ 7332 กรุงเทพมหานคร');
   });
 
   test('นข 800 ลำปาง @ไหล่หิน → SAME_ACTIVE_VEHICLE_SAME_SCHOOL', async () => {

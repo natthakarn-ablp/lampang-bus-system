@@ -25,26 +25,50 @@ function normalizePlate(plateNo) {
     .toLowerCase();
 }
 
+function plateIdentity() {
+  return require('./plateIdentity');
+}
+
+function invalidPlate(error, code = 'PLATE_FORMAT_INVALID') {
+  return { valid: false, code, error };
+}
+
+function canonicalizePlateNo(plateNo) {
+  if (typeof plateNo !== 'string') {
+    return invalidPlate('กรุณาระบุทะเบียนรถ', 'PLATE_REQUIRED');
+  }
+  const trimmed = plateNo.trim();
+  if (!trimmed) {
+    return invalidPlate('กรุณาระบุทะเบียนรถ', 'PLATE_REQUIRED');
+  }
+  const PI = plateIdentity();
+  const parsed = PI.parseLegacyPlateText(trimmed);
+  if (!parsed || !PI.normalizePlatePrefix(parsed.plate_prefix) || !PI.normalizePlateNumber(parsed.plate_number)) {
+    return invalidPlate('รูปแบบทะเบียนรถไม่ถูกต้อง กรุณากรอกหมวดอักษร เลขทะเบียน และจังหวัด');
+  }
+  if (!PI.normalizeProvince(parsed.province)) {
+    return invalidPlate('กรุณาระบุจังหวัดของทะเบียนรถให้ชัดเจน', 'PLATE_PROVINCE_REQUIRED');
+  }
+  if (!PI.isKnownProvince(parsed.province)) {
+    return invalidPlate('จังหวัดของทะเบียนรถไม่ถูกต้อง กรุณาเลือกหรือกรอกชื่อจังหวัดที่ถูกต้อง', 'PLATE_PROVINCE_INVALID');
+  }
+  const display = PI.buildDisplayPlate({
+    plate_prefix: PI.normalizePlatePrefix(parsed.plate_prefix),
+    plate_number: PI.normalizePlateNumber(parsed.plate_number),
+    province: parsed.province,
+  });
+  return { valid: true, trimmed: display, normalized: normalizePlate(display) };
+}
+
 /**
  * Validate + normalize in one step. Returns either:
- *   { valid: true,  trimmed: '<plate after .trim()>', normalized: '<normalized>' }
- *   { valid: false, error: '<thai user-facing message>' }
+ *   { valid: true,  trimmed: '<canonical display>', normalized: '<normalized>' }
+ *   { valid: false, code: '<machine code>', error: '<thai user-facing message>' }
  *
  * Routes should call validatePlateNo() and surface `error` via sendError().
  */
 function validatePlateNo(plateNo) {
-  if (typeof plateNo !== 'string') {
-    return { valid: false, error: 'กรุณาระบุทะเบียนรถ' };
-  }
-  const trimmed = plateNo.trim();
-  if (!trimmed) {
-    return { valid: false, error: 'กรุณาระบุทะเบียนรถ' };
-  }
-  const normalized = normalizePlate(trimmed);
-  if (!normalized) {
-    return { valid: false, error: 'ทะเบียนรถไม่ถูกต้อง' };
-  }
-  return { valid: true, trimmed, normalized };
+  return canonicalizePlateNo(plateNo);
 }
 
 // Phase 10.13A-13 — detect province-omitted duplicates at onboarding.
@@ -52,7 +76,7 @@ function validatePlateNo(plateNo) {
 // e.g. 'นข4337' vs 'นข4337ลำปาง'. One must be a strict prefix of the other and
 // the differing suffix must be all Thai letters (a province) — so genuinely
 // different plate numbers ('นข433' vs 'นข4337', suffix '7') are NOT flagged.
-const THAI_LETTERS_RE = /^[฀-๿]+$/; // Thai Unicode block (letters/vowels)
+const THAI_LETTERS_RE = /^[\u0E00-\u0E7F]+$/; // Thai Unicode block (letters/vowels)
 
 function isProvinceVariant(normA, normB) {
   if (!normA || !normB || normA === normB) return false;
@@ -67,19 +91,24 @@ function isProvinceVariant(normA, normB) {
 // = non-empty (chosen from a dropdown). Returns the human display plate
 // (`นข 4337 ลำปาง`) plus its normalized key; the route still re-normalizes and
 // runs the duplicate guard — backend stays the source of truth.
-const PLATE_PREFIX_RE = /^[0-9]?[฀-๿]{1,3}$/;
+const PLATE_PREFIX_RE = /^[0-9]?[\u0E00-\u0E7F]{1,3}$/;
 const PLATE_NUMBER_RE = /^[0-9]{1,4}$/;
 
 function buildStructuredPlate({ prefix, number, province } = {}) {
   const p = String(prefix == null ? '' : prefix).trim();
   const n = String(number == null ? '' : number).trim();
-  const prov = String(province == null ? '' : province).trim();
-  if (!p || !n || !prov) {
+  const rawProvince = String(province == null ? '' : province).trim();
+  if (!p || !n || !rawProvince) {
     return { valid: false, code: 'PLATE_FIELDS_REQUIRED', error: 'กรุณากรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน' };
   }
   if (!PLATE_PREFIX_RE.test(p) || !PLATE_NUMBER_RE.test(n)) {
     return { valid: false, code: 'PLATE_FORMAT_INVALID', error: 'รูปแบบทะเบียนรถไม่ถูกต้อง กรุณาตรวจสอบหมวดอักษรและเลขทะเบียน' };
   }
+  const PI = plateIdentity();
+  if (!PI.isKnownProvince(rawProvince)) {
+    return { valid: false, code: 'PLATE_PROVINCE_INVALID', error: 'จังหวัดของทะเบียนรถไม่ถูกต้อง กรุณาเลือกหรือกรอกชื่อจังหวัดที่ถูกต้อง' };
+  }
+  const prov = PI.normalizeProvince(rawProvince);
   const plateNo = `${p} ${n} ${prov}`;
   return { valid: true, plateNo, normalized: normalizePlate(plateNo) };
 }
@@ -91,12 +120,13 @@ function buildStructuredPlate({ prefix, number, province } = {}) {
 function formatPlateDisplay(plateNo) {
   const s = String(plateNo == null ? '' : plateNo).trim();
   if (!s) return s;
-  const m = s.match(/^([0-9]?[฀-๿]{1,3})\s*([0-9]{1,4})\s*([฀-๿].*)?$/);
-  if (!m) return s;
-  const prefix = m[1];
-  const number = m[2];
-  const province = (m[3] || '').trim();
+  const PI = plateIdentity();
+  const parsed = PI.parseLegacyPlateText(s);
+  if (!parsed) return s;
+  const prefix = PI.normalizePlatePrefix(parsed.plate_prefix);
+  const number = PI.normalizePlateNumber(parsed.plate_number);
+  const province = PI.normalizeProvince(parsed.province);
   return province ? `${prefix} ${number} ${province}` : `${prefix} ${number}`;
 }
 
-module.exports = { normalizePlate, validatePlateNo, isProvinceVariant, buildStructuredPlate, formatPlateDisplay };
+module.exports = { normalizePlate, validatePlateNo, canonicalizePlateNo, isProvinceVariant, buildStructuredPlate, formatPlateDisplay };

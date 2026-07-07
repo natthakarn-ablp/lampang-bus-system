@@ -69,7 +69,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
       const confirmG = selG.size > 0, confirmR = selR.size > 0;
       const mode = (confirmG || confirmR) ? 'mixed_confirmed' : 'insert_ready';
       const res = await api.post(`/school/students/import/${detail.batch.id}/apply`, {
-        mode, selected_row_ids: [...selG, ...selR], confirm_guardian_update: confirmG, confirm_reactivate: confirmR,
+        mode, selected_row_ids: [...selG, ...selR], confirm_guardian_update: confirmG, confirm_reactivate: confirmR, auto_create_vehicle: needsAutoCreateVehicle,
       });
       toast.success(res.data.message || 'ดำเนินการสำเร็จ');
       onChanged?.(); await openDetail(detail.batch.id);
@@ -101,6 +101,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
   }
 
   const rollbackable = useMemo(() => (detail?.rows || []).filter((r) => r.can_rollback), [detail]);
+  const needsAutoCreateVehicle = useMemo(() => (detail?.rows || []).some((r) => r.classification === 'INSERT_NEW_AUTO_VEHICLE' && r.can_apply), [detail]);
   const guardianRows = useMemo(() => (detail?.rows || []).filter((r) => r.can_confirm_guardian_update), [detail]);
   const reactRows = useMemo(() => (detail?.rows || []).filter((r) => r.can_confirm_reactivate), [detail]);
   const pendingReady = useMemo(() => (detail?.rows || []).filter((r) => r.can_apply).length, [detail]);

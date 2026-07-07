@@ -15,7 +15,7 @@ function maskPhone(p) {
 
 // vehicle: null (no plate on the row) OR { matched, code, vehicle_id, display_plate }
 //   matched=true  → resolved (exact/canonical/alias); code may be VEHICLE_PROVINCE_ALIAS_MATCH
-//   matched=false → blocking; code ∈ VEHICLE_NOT_FOUND | VEHICLE_MISSING_PROVINCE | VEHICLE_SOFT_DELETED
+//   matched=false → blocking; code ∈ VEHICLE_NOT_FOUND | VEHICLE_MISSING_PROVINCE | VEHICLE_SOFT_DELETED | PLATE_FORMAT_INVALID
 // existing: null OR { id, is_deleted, parent_name }
 function classifyImportRow({ row, schoolId, existing = null, crossSchool = false, vehicle = null }) {
   const code = String(row.student_code == null ? (row.id == null ? '' : row.id) : row.student_code).trim();
@@ -60,6 +60,8 @@ function classifyImportRow({ row, schoolId, existing = null, crossSchool = false
   if (row.plate_no && vehicle && !vehicle.matched) {
     if (vehicle.code === 'AMBIGUOUS_PLATE_NEEDS_PROVINCE')
       return out('VEHICLE_MISSING_PROVINCE', 'ERROR', 'ทะเบียนรถขาดจังหวัด กรุณาระบุจังหวัดให้ชัดเจน', false, 'ระบุจังหวัดของทะเบียนรถ');
+    if (vehicle.code === 'PLATE_FORMAT_INVALID')
+      return out('VEHICLE_PLATE_INVALID', 'ERROR', 'รูปแบบทะเบียนรถไม่ถูกต้อง กรุณากรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน', false, 'แก้ไขทะเบียนรถในไฟล์');
     if (vehicle.code === 'SOFT_DELETED_VEHICLE_EXISTS')
       return out('VEHICLE_SOFT_DELETED', 'ERROR', `รถทะเบียนนี้ถูกปิดใช้งาน (${vehicle.display_plate || ''}) กรุณากู้คืนรถก่อนใช้งาน`, false, 'กู้คืนรถก่อนนำเข้า');
     return out('VEHICLE_NOT_FOUND', 'ERROR', `ไม่พบทะเบียนรถ "${row.plate_no}" ในระบบ กรุณาเพิ่มรถก่อนนำเข้านักเรียน`, false, 'เพิ่มรถก่อนนำเข้า');

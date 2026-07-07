@@ -235,6 +235,7 @@ const ERR = Object.freeze({
   MISSING_SCHOOL_NAME:         'MISSING_SCHOOL_NAME',         // empty after trim
   USERNAME_REQUIRED:           'USERNAME_REQUIRED',           // can't auto-derive
   INVALID_USERNAME:            'INVALID_USERNAME',            // provided but not 6 digits
+  MISSING_PASSWORD:            'MISSING_PASSWORD',            // initial_password omitted
   WEAK_PASSWORD:               'WEAK_PASSWORD',               // < 4 chars after defaulting
   POLICY_PASSWORD:             'POLICY_PASSWORD',             // operator-typed pw fails shared policy
   SCHOOL_CODE_EXISTS:          'SCHOOL_CODE_EXISTS',          // present in DB
@@ -248,6 +249,7 @@ const ERR_MSG_TH = {
   MISSING_SCHOOL_NAME:         'กรุณากรอกชื่อโรงเรียน',
   USERNAME_REQUIRED:           'ต้องระบุชื่อผู้ใช้ (รหัสโรงเรียนไม่ใช่ 6 หลัก จึงไม่สามารถใช้เป็นค่าเริ่มต้นได้)',
   INVALID_USERNAME:            'ชื่อผู้ใช้ต้องเป็นรหัส OBEC 6 หลัก (ตัวเลขเท่านั้น)',
+  MISSING_PASSWORD:            'กรุณาระบุรหัสผ่านเริ่มต้น',
   WEAK_PASSWORD:               'รหัสผ่านเริ่มต้นต้องมีอย่างน้อย 4 ตัวอักษร',
   POLICY_PASSWORD:             'รหัสผ่านที่ระบุไม่ผ่านเกณฑ์ (อย่างน้อย 8 ตัว ไม่อยู่ในรายการคาดเดาง่าย ไม่ซ้ำตัวเดียว)',
   SCHOOL_CODE_EXISTS:          'รหัสโรงเรียนนี้มีอยู่ในระบบแล้ว',
@@ -258,7 +260,7 @@ const ERR_MSG_TH = {
 
 /**
  * Normalize one raw parsed Excel/CSV row into the canonical shape used by
- * preview + commit. Trims whitespace, defaults username and initial_password.
+ * preview + commit. Trims whitespace and defaults username only.
  * Returns { rowNum, school_code, school_name, username, has_password }.
  *
  * Note: the password VALUE is intentionally NOT placed on the returned object
@@ -280,13 +282,12 @@ function normalizeRow(raw) {
 }
 
 /**
- * Return the effective password for a normalized row WITHOUT exposing it.
- * The raw `initial_password` if provided, else the school_code as a default.
+ * Return the typed password for a normalized row WITHOUT exposing it.
+ * Blank passwords are invalid; validateImportRow reports MISSING_PASSWORD.
  * Used at commit time only.
  */
 function resolveRowPassword(raw, normalized) {
-  const provided = String(raw.initial_password || '').trim();
-  return provided || normalized.school_code;
+  return String(raw.initial_password || '').trim();
 }
 
 /**
@@ -305,12 +306,12 @@ function validateImportRow(row, rawPassword, existingSchoolCodes, existingUserna
   if (!row.school_name)                               errors.push(ERR.MISSING_SCHOOL_NAME);
   if (!row.username)                                  errors.push(ERR.USERNAME_REQUIRED);
   else if (!/^\d{6}$/.test(row.username))             errors.push(ERR.INVALID_USERNAME);
-  // A blank/short value fails the minimal check. When the operator TYPED an
-  // initial_password in the file (has_password), it must also clear the shared
-  // policy; the school_code default (has_password false) stays policy-exempt so
-  // bulk creation with the numeric code as a temp credential keeps working.
-  if (!rawPassword || rawPassword.length < 4) errors.push(ERR.WEAK_PASSWORD);
-  else if (row.has_password && !validatePassword(rawPassword, { username: row.username }).ok) {
+  // initial_password is mandatory for bulk import. The old school_code
+  // default was predictable and let every imported account start with a public
+  // identifier as its password.
+  if (!row.has_password) errors.push(ERR.MISSING_PASSWORD);
+  else if (!rawPassword || rawPassword.length < 4) errors.push(ERR.WEAK_PASSWORD);
+  else if (!validatePassword(rawPassword, { username: row.username }).ok) {
     errors.push(ERR.POLICY_PASSWORD);
   }
   if (row.school_code && existingSchoolCodes.has(row.school_code)) errors.push(ERR.SCHOOL_CODE_EXISTS);

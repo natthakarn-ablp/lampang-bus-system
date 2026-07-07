@@ -12,6 +12,8 @@ const plateId = require('../utils/plateIdentity');
 const { classifyStudentImport } = require('../utils/studentImport');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
 const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
+const { parseCsvRecords } = require('../utils/csv');
+const { readWorkbookSafely } = require('../utils/xlsxPreflight');
 const { allocateStudentId } = require('./idAllocator.service');
 const { logAudit } = require('../utils/audit');
 const { getCurrentTerm } = require('./term.service');
@@ -108,7 +110,7 @@ async function parseImportFile(filePath, originalName) {
 
   if (isExcel) {
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.readFile(filePath);
+    await readWorkbookSafely(wb, filePath);
     const ws = wb.worksheets[0];
     const headers = (ws.getRow(1).values || []).slice(1).map((v) => (v == null ? '' : String(v)));
     const map = buildMap(headers);
@@ -119,7 +121,7 @@ async function parseImportFile(filePath, originalName) {
     }
   } else {
     const raw = decodeCsvBuffer(fs.readFileSync(filePath)).replace(/^﻿/, '');
-    const csvRows = parseCsvRow(raw);
+    const csvRows = parseCsvRecords(raw);
     const headers = (csvRows[0] || []).map((h) => h.trim());
     const map = buildMap(headers);
     for (let i = 1; i < csvRows.length; i++) {
@@ -138,48 +140,22 @@ async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
 
   const matchVehicle = (plate_no) => {
     if (!plate_no || !String(plate_no).trim()) return null;
+    const plateValidation = validatePlateNo(plate_no);
+    if (!plateValidation.valid) {
+      return {
+        matched: false,
+        code: plateValidation.code === 'PLATE_PROVINCE_REQUIRED' ? 'AMBIGUOUS_PLATE_NEEDS_PROVINCE' : 'PLATE_FORMAT_INVALID',
+        vehicle_id: null,
+        display_plate: null,
+      };
+    }
+    plate_no = plateValidation.trimmed;
     const hit = canonicalMap[canonOf(plate_no)];
     if (hit) {
       const ip = plateId.parseLegacyPlateText(plate_no);
       const hp = plateId.parseLegacyPlateText(hit.plate_no);
       const alias = ip && hp && plateId.normalizeThaiText(ip.province).toLowerCase() !== plateId.normalizeThaiText(hp.province).toLowerCase();
       return { matched: true, code: alias ? 'VEHICLE_PROVINCE_ALIAS_MATCH' : 'VEHICLE_MATCHED_CANONICAL', vehicle_id: hit.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
-    }
-    // Fallback: import file omitted province but exactly one active vehicle matches the base.
-    // We only auto-resolve when the match is unambiguous (one active vehicle, with province).
-    const parsed = plateId.parseLegacyPlateText(plate_no);
-    if (parsed && !plateId.normalizeProvince(parsed.province)) {
-      const inputBase = plateId.normalizePlatePrefix(parsed.plate_prefix) + plateId.normalizePlateNumber(parsed.plate_number);
-      const candidates = allVehicles.filter((v) => {
-        if (v.is_deleted) return false;
-        const vp = plateId.parseLegacyPlateText(v.plate_no);
-        if (!vp) return false;
-        const base = plateId.normalizePlatePrefix(vp.plate_prefix) + plateId.normalizePlateNumber(vp.plate_number);
-        return base === inputBase && plateId.normalizeProvince(vp.province);
-      });
-      if (candidates.length === 1) {
-        const v = candidates[0];
-        const hp = plateId.parseLegacyPlateText(v.plate_no);
-        return { matched: true, code: 'VEHICLE_PROVINCE_ALIAS_MATCH', vehicle_id: v.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
-      }
-    }
-    // Final fallback: fuzzy normalized match. If the input is close enough to
-    // exactly one active vehicle, normalize it to the system plate format.
-    // "Close enough" means the normalized input appears at the start of the
-    // normalized vehicle plate, or vice versa. We only accept when there is a
-    // single unambiguous candidate to avoid accidental wrong matches.
-    const normalizedInput = plateId.normalizeThaiText(plate_no).toLowerCase();
-    if (normalizedInput && normalizedInput.length >= 4) {
-      const candidates = allVehicles.filter((v) => {
-        if (v.is_deleted) return false;
-        const normalizedVehicle = plateId.normalizeThaiText(v.plate_no).toLowerCase();
-        return normalizedVehicle.startsWith(normalizedInput) || normalizedInput.startsWith(normalizedVehicle);
-      });
-      if (candidates.length === 1) {
-        const v = candidates[0];
-        const hp = plateId.parseLegacyPlateText(v.plate_no);
-        return { matched: true, code: 'VEHICLE_NORMALIZED_MATCH', vehicle_id: v.id, display_plate: plateId.buildDisplayPlate(hp || {}) };
-      }
     }
     const c = plateId.classifyVehiclePlateConflict(plate_no, allVehicles);
     return { matched: false, code: c.code, vehicle_id: c.vehicle_id, display_plate: c.display_plate };
@@ -193,7 +169,7 @@ async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
     let crossSchool = false;
     if (code) {
       const [[ex]] = await db.query(
-        `SELECT st.id, st.is_deleted, (SELECT p.name FROM parent_student ps JOIN parents p ON p.id = ps.parent_id WHERE ps.student_id = st.id LIMIT 1) AS parent_name
+        `SELECT st.id, st.is_deleted, (SELECT p.name FROM parent_student ps JOIN parents p ON p.id = ps.parent_id WHERE ps.student_id = st.id AND ps.approved = TRUE LIMIT 1) AS parent_name
          FROM students st WHERE st.school_id = ? AND st.student_code = ? LIMIT 1`, [schoolId, code]);
       existing = ex || null;
       if (!existing) {
@@ -284,7 +260,7 @@ async function runPreview(pool, { schoolId, importedBy, filePath, originalName, 
          VALUES (?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?)`,
         [batchId, r.row_number,
          JSON.stringify({ student_name: r.student_name, grade: r.grade, classroom: r.classroom, plate: r.input_vehicle_plate, guardian: r.guardian_input || null }),
-         JSON.stringify({ prefix: norm.prefix || null, first_name: norm.first_name, last_name: norm.last_name, grade: norm.grade || null, classroom: norm.classroom || null, parent_name: norm.parent_name || null, parent_phone: norm.parent_phone || null }),
+         JSON.stringify({ prefix: norm.prefix || null, first_name: norm.first_name, last_name: norm.last_name, grade: norm.grade || null, classroom: norm.classroom || null, plate_no: norm.plate_no || null, parent_name: norm.parent_name || null, parent_phone: norm.parent_phone || null }),
          r.classification, r.status, r.message_th, r.student_code, r.existing_student_id || null,
          r.matched_vehicle_id, r.matched_display_plate,
          JSON.stringify(r.guardian_mismatch ? { current: r.guardian_current, input: r.guardian_input } : null),
@@ -296,7 +272,20 @@ async function runPreview(pool, { schoolId, importedBy, filePath, originalName, 
   } catch (e) { await conn.rollback(); throw e; } finally { conn.release(); }
 }
 
-const normOf = (row) => (typeof row.normalized_json === 'string' ? JSON.parse(row.normalized_json) : (row.normalized_json || {}));
+function jsonOf(value) {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) || {}; } catch { return {}; }
+  }
+  return typeof value === 'object' ? value : {};
+}
+const normOf = (row) => jsonOf(row.normalized_json);
+const rawOf = (row) => jsonOf(row.raw_json);
+function inputVehiclePlateOf(row) {
+  const raw = rawOf(row);
+  const norm = normOf(row);
+  return row.input_vehicle_plate || raw.plate || raw.input_vehicle_plate || norm.plate_no || norm.vehicle_plate || null;
+}
 
 // Dedupe-or-create a parent by phone, then link to the student (idempotent).
 async function linkParent(conn, studentId, name, phone, userId) {
@@ -352,18 +341,28 @@ async function createVehicleForImport(conn, plateNo, userId) {
   if (!validation.valid) return null;
 
   const { trimmed, normalized } = validation;
+  const canonical = plateId.canonicalPlateForStorage(trimmed);
   const [[existing]] = await conn.query(
-    'SELECT id FROM vehicles WHERE is_deleted = FALSE AND (plate_no = ? OR normalized_plate = ?) LIMIT 1',
-    [trimmed, normalized]
+    `SELECT id, is_deleted FROM vehicles
+     WHERE plate_no = ? OR normalized_plate = ? OR canonical_plate = ?
+     ORDER BY is_deleted ASC LIMIT 1 FOR UPDATE`,
+    [trimmed, normalized, canonical]
   );
-  if (existing) return existing.id;
+  if (existing) {
+    if (existing.is_deleted) {
+      const e = new Error('รถทะเบียนนี้ถูกปิดใช้งาน กรุณากู้คืนรถก่อนนำเข้า');
+      e.code = 'VEHICLE_BLOCKED';
+      e.statusCode = 409;
+      throw e;
+    }
+    return existing.id;
+  }
 
-  const { canonicalPlateForStorage } = require('../utils/plateIdentity');
   const id = generateVehicleId(trimmed);
   await conn.query(
     `INSERT INTO vehicles (id, plate_no, normalized_plate, canonical_plate, vehicle_type, verification_status)
      VALUES (?, ?, ?, ?, ?, 'UNVERIFIED')`,
-    [id, trimmed, normalized, canonicalPlateForStorage(trimmed), 'รถตู้']
+    [id, trimmed, normalized, canonical, 'รถตู้']
   );
   await logAudit({
     userId, action: 'CREATE', entityType: 'vehicle', entityId: id, conn,
@@ -372,41 +371,87 @@ async function createVehicleForImport(conn, plateNo, userId) {
   return id;
 }
 
+async function lockPendingImportRow(conn, row, r) {
+  const [[locked]] = await conn.query('SELECT * FROM import_batch_rows WHERE id = ? FOR UPDATE', [row.id]);
+  if (!locked) {
+    r.stale++;
+    r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REPREVIEW' });
+    return null;
+  }
+  if (locked.applied_at) {
+    r.already_applied++;
+    r.details.push({ row: locked.row_no || row.row_no, status: 'ALREADY_APPLIED' });
+    return null;
+  }
+  return { ...row, ...locked };
+}
+
+async function markVehicleBlocked(conn, row, r) {
+  await conn.query("UPDATE import_batch_rows SET status='VEHICLE_BLOCKED' WHERE id=?", [row.id]);
+  r.vehicle_blocked++;
+  r.details.push({ row: row.row_no, status: 'VEHICLE_BLOCKED' });
+}
+
 // ── insert_ready row (INSERT_NEW / CROSS_SCHOOL) — atomic id, idempotent. ────
 async function applyInsertRow(pool, { row, schoolId, userId, r, autoCreateVehicle = false }) {
-  const TERM = await getCurrentTerm(pool);
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[exist]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1', [schoolId, row.student_code]);
+    row = await lockPendingImportRow(conn, row, r);
+    if (!row) { await conn.commit(); return; }
+
+    const [[exist]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1 FOR UPDATE', [schoolId, row.student_code]);
     if (classifyStudentImport(exist) !== 'INSERT') {
       await conn.query("UPDATE import_batch_rows SET status='ALREADY_APPLIED', applied_at=NOW() WHERE id=?", [row.id]);
       await conn.commit(); r.already_applied++; r.details.push({ row: row.row_no, status: 'ALREADY_APPLIED' }); return;
     }
+
+    let vehicleId = row.matched_vehicle_id || null;
+    if (vehicleId) {
+      const [[v]] = await conn.query('SELECT id FROM vehicles WHERE id = ? AND is_deleted = FALSE LIMIT 1 FOR UPDATE', [vehicleId]);
+      if (!v) {
+        await markVehicleBlocked(conn, row, r);
+        await conn.commit();
+        return;
+      }
+    }
+
+    const inputPlate = inputVehiclePlateOf(row);
+    if (autoCreateVehicle && !vehicleId && inputPlate) {
+      try {
+        vehicleId = await createVehicleForImport(conn, inputPlate, userId);
+      } catch (vehicleErr) {
+        if (vehicleErr.code === 'VEHICLE_BLOCKED') {
+          await markVehicleBlocked(conn, row, r);
+          await conn.commit();
+          return;
+        }
+        throw vehicleErr;
+      }
+    }
+    if (row.classification === 'INSERT_NEW_AUTO_VEHICLE' && !vehicleId) {
+      await markVehicleBlocked(conn, row, r);
+      await conn.commit();
+      return;
+    }
+
+    const TERM = await getCurrentTerm(pool);
     const n = normOf(row);
+    // Synthetic marker for import-created students. This is not a hash of a Thai national ID.
     const cid = crypto.createHash('sha256').update(`import-${schoolId}-${row.student_code}`).digest('hex');
     const newId = await allocateStudentId(conn);
-    // Phase 10.15A — if the school opts in, auto-create a missing vehicle so the
-    // import can proceed without manual pre-registration. The vehicle is created
-    // as UNVERIFIED and audited separately.
-    let vehicleId = row.matched_vehicle_id || null;
-    if (autoCreateVehicle && !vehicleId && row.input_vehicle_plate) {
-      vehicleId = await createVehicleForImport(conn, row.input_vehicle_plate, userId);
-    }
     await conn.query(
-      `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
-      [newId, row.student_code, cid, n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, schoolId, vehicleId, TERM]
+      `INSERT INTO students (id, student_code, cid_hash, prefix, first_name, last_name, grade, classroom, school_id, vehicle_id, morning_enabled, evening_enabled, term_id, import_batch_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)`,
+      [newId, row.student_code, cid, n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, schoolId, vehicleId, TERM, row.batch_id]
     );
     await linkParent(conn, newId, n.parent_name, n.parent_phone, userId);
-    // Audit 2026-06-18 (limitations): the import-apply INSERT path created a
-    // student without a per-row CREATE audit (other apply branches audit). Record it.
     await logAudit({
       userId, action: 'CREATE', entityType: 'student', entityId: String(newId), conn,
       newValue: {
         student_code: row.student_code, first_name: n.first_name, last_name: n.last_name,
         school_id: schoolId, vehicle_id: vehicleId,
-        source: 'import_apply', row_no: row.row_no, auto_created_vehicle: autoCreateVehicle && !row.matched_vehicle_id,
+        source: 'import_apply', row_no: row.row_no, auto_created_vehicle: autoCreateVehicle && !row.matched_vehicle_id && !!vehicleId,
       },
     });
     await conn.query("UPDATE import_batch_rows SET status='APPLIED', new_student_id=?, applied_at=NOW() WHERE id=?", [newId, row.id]);
@@ -423,24 +468,36 @@ async function applyGuardianRow(pool, { row, schoolId, userId, batchId, r }) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[st]] = await conn.query('SELECT id FROM students WHERE school_id = ? AND student_code = ? AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1', [schoolId, row.student_code]);
+    row = await lockPendingImportRow(conn, row, r);
+    if (!row) { await conn.commit(); return; }
+    const [[st]] = await conn.query('SELECT id FROM students WHERE school_id = ? AND student_code = ? AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1 FOR UPDATE', [schoolId, row.student_code]);
     if (!st) {  // student gone / deleted / code reassigned since preview
       await conn.query("UPDATE import_batch_rows SET status='STALE_NEEDS_REPREVIEW' WHERE id=?", [row.id]);
       await conn.commit(); r.stale++; r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REPREVIEW' }); return;
     }
     const n = normOf(row);
     const newName = n.parent_name || null, newPhone = n.parent_phone || null;
-    const [[cur]] = await conn.query('SELECT p.id, p.name AS old_name, p.phone AS old_phone FROM parent_student ps JOIN parents p ON p.id = ps.parent_id WHERE ps.student_id = ? LIMIT 1', [st.id]);
+    const [[cur]] = await conn.query('SELECT p.id, p.name AS old_name, p.phone AS old_phone FROM parent_student ps JOIN parents p ON p.id = ps.parent_id WHERE ps.student_id = ? AND ps.approved = TRUE LIMIT 1', [st.id]);
     let parentId;
-    if (newPhone) { const [[ep]] = await conn.query('SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1', [newPhone]); parentId = ep && ep.id; }
-    if (parentId) {                                   // reuse the parent that already owns this phone (no dup)
-      await conn.query('UPDATE parents SET name = ? WHERE id = ?', [newName, parentId]);
-      await conn.query('INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW()) ON DUPLICATE KEY UPDATE approved = TRUE', [parentId, st.id, userId]);
-      if (cur && String(cur.id) !== String(parentId)) await conn.query('DELETE FROM parent_student WHERE student_id = ? AND parent_id = ?', [st.id, cur.id]);
-    } else if (cur) {                                 // update the student's current parent in place
+    const curPhone = cur && cur.old_phone ? String(cur.old_phone).replace(/\D/g, '') : '';
+    const phoneChanged = !!newPhone && newPhone !== curPhone;
+    if (phoneChanged) {
+      const [[ep]] = await conn.query('SELECT id FROM parents WHERE phone = ? AND is_deleted = FALSE LIMIT 1', [newPhone]);
+      parentId = ep && ep.id;
+      if (parentId) {
+        if (newName) await conn.query('UPDATE parents SET name = ? WHERE id = ?', [newName, parentId]);
+      } else {
+        const [pr] = await conn.query('INSERT INTO parents (name, phone) VALUES (?, ?)', [newName, newPhone]);
+        parentId = pr.insertId;
+      }
+      await conn.query('INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW()) ON DUPLICATE KEY UPDATE approved = TRUE, approved_by = VALUES(approved_by), approved_at = VALUES(approved_at)', [parentId, st.id, userId]);
+      if (cur && String(cur.id) !== String(parentId)) {
+        await conn.query('UPDATE parent_student SET approved = FALSE WHERE student_id = ? AND parent_id = ?', [st.id, cur.id]);
+      }
+    } else if (cur) {
       parentId = cur.id;
-      await conn.query('UPDATE parents SET name = ?, phone = ? WHERE id = ?', [newName, newPhone, cur.id]);
-    } else {                                          // no parent yet → create + link
+      if (newName) await conn.query('UPDATE parents SET name = ? WHERE id = ?', [newName, cur.id]);
+    } else {
       await linkParent(conn, st.id, newName, newPhone, userId);
     }
     await logAudit({
@@ -463,7 +520,9 @@ async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[st]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1', [schoolId, row.student_code]);
+    row = await lockPendingImportRow(conn, row, r);
+    if (!row) { await conn.commit(); return; }
+    const [[st]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1 FOR UPDATE', [schoolId, row.student_code]);
     if (!st) {
       await conn.query("UPDATE import_batch_rows SET status='STALE_NEEDS_REPREVIEW' WHERE id=?", [row.id]);
       await conn.commit(); r.stale++; r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REPREVIEW' }); return;
@@ -534,8 +593,12 @@ async function applyBatch(pool, { batchId, schoolId, userId, mode = 'insert_read
   }
 
   const status = r.failed > 0 ? 'APPLIED_PARTIAL' : 'APPLIED';
-  await pool.query('UPDATE import_batches SET status = ?, applied_at = NOW() WHERE id = ?', [status, batchId]);
-  return r;
+  const successRows = r.applied + r.guardian_updated + r.reactivated + r.already_applied;
+  await pool.query(
+    'UPDATE import_batches SET status = ?, applied_at = NOW(), success_rows = ?, completed_at = NOW() WHERE id = ?',
+    [status, successRows, batchId]
+  );
+  return { ...r, success_rows: successRows };
 }
 
 // ── Report: row-level results (phones never included; PII-safe). ─────────────

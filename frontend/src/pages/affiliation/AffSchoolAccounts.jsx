@@ -4,6 +4,8 @@ import { useToast } from '../../components/Toast';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 
+const ACCOUNTS_PAGE_SIZE = 10;
+
 /**
  * เพิ่มโรงเรียนใหม่ — Phase 10.2A
  *
@@ -17,6 +19,7 @@ import EmptyState from '../../components/EmptyState';
  */
 export default function AffSchoolAccounts() {
   const [accounts, setAccounts] = useState([]);
+  const [accountsPage, setAccountsPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
 
@@ -204,7 +207,15 @@ export default function AffSchoolAccounts() {
   }
 
   // ─── Render helpers ───────────────────────────────────────────────────
-  const recentAccounts = accounts.slice(0, 10);
+  const totalAccountPages = Math.max(1, Math.ceil(accounts.length / ACCOUNTS_PAGE_SIZE));
+  useEffect(() => {
+    setAccountsPage(page => Math.min(page, totalAccountPages));
+  }, [totalAccountPages]);
+  const accountStartIndex = (accountsPage - 1) * ACCOUNTS_PAGE_SIZE;
+  const visibleAccounts = accounts.slice(accountStartIndex, accountStartIndex + ACCOUNTS_PAGE_SIZE);
+  const accountRangeStart = accounts.length === 0 ? 0 : accountStartIndex + 1;
+  const accountRangeEnd = Math.min(accountStartIndex + visibleAccounts.length, accounts.length);
+  const accountPageNumbers = Array.from({ length: totalAccountPages }, (_, index) => index + 1);
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
@@ -449,7 +460,7 @@ export default function AffSchoolAccounts() {
         <h2 className="text-base font-semibold text-gray-700 mb-3">บัญชีที่สร้างล่าสุด</h2>
         {loading ? (
           <LoadingState compact />
-        ) : recentAccounts.length === 0 ? (
+        ) : visibleAccounts.length === 0 ? (
           <EmptyState title="ยังไม่มีบัญชีโรงเรียน" compact />
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -463,7 +474,7 @@ export default function AffSchoolAccounts() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {recentAccounts.map(a => (
+                {visibleAccounts.map(a => (
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-3 py-2 text-gray-800">{a.school_name}</td>
                     <td className="px-3 py-2 text-gray-600 font-mono text-xs">{a.username}</td>
@@ -501,8 +512,45 @@ export default function AffSchoolAccounts() {
             </table>
           </div>
         )}
-        {accounts.length > recentAccounts.length && (
-          <p className="text-xs text-gray-400 mt-2 text-right">แสดง {recentAccounts.length} จากทั้งหมด {accounts.length} บัญชี</p>
+        {accounts.length > ACCOUNTS_PAGE_SIZE && (
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-gray-500">
+              แสดง {accountRangeStart}-{accountRangeEnd} จากทั้งหมด {accounts.length} บัญชี
+            </p>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <button
+                type="button"
+                disabled={accountsPage === 1}
+                onClick={() => setAccountsPage(page => Math.max(1, page - 1))}
+                className="min-h-[32px] rounded-lg border border-gray-300 px-3 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ก่อนหน้า
+              </button>
+              {accountPageNumbers.map(page => (
+                <button
+                  key={page}
+                  type="button"
+                  aria-current={page === accountsPage ? 'page' : undefined}
+                  onClick={() => setAccountsPage(page)}
+                  className={`min-h-[32px] min-w-[34px] rounded-lg border px-2.5 text-xs font-medium transition ${
+                    page === accountsPage
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={accountsPage === totalAccountPages}
+                onClick={() => setAccountsPage(page => Math.min(totalAccountPages, page + 1))}
+                className="min-h-[32px] rounded-lg border border-gray-300 px-3 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                ถัดไป
+              </button>
+            </div>
+          </div>
         )}
       </section>
 

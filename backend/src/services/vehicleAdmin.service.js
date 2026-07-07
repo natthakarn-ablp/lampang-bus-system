@@ -96,6 +96,22 @@ async function softDeleteVehicle(pool, { vehicleId, actorId, force = false, reas
       throw err('การลบรถที่ยังมีการใช้งานต้องระบุเหตุผล', 400);
     }
 
+    // Bug fix (2026-07-07): when force-deleting a vehicle that still has active
+    // driver_vehicle_assignments, close them now — BEFORE soft-deleting the
+    // vehicle. Otherwise the assignment stays is_active=1 pointing at a row
+    // whose is_deleted=1, which the integrity monitor flags as
+    // orphan_assignment and can break driver vehicle resolution (the driver
+    // would see a vehicle that no longer exists). End-date is set to today when
+    // still open so the historical trail stays coherent.
+    if (att.active_assignments > 0) {
+      await conn.query(
+        `UPDATE driver_vehicle_assignments
+            SET is_active = FALSE, end_date = COALESCE(end_date, CURDATE())
+          WHERE vehicle_id = ? AND is_active = TRUE`,
+        [vehicleId]
+      );
+    }
+
     // Soft-delete only. is_deleted=TRUE auto-NULLs active_canonical_plate
     // (generated col) so the canonical frees for a future active vehicle — same
     // semantics the RESTORE flow relies on.

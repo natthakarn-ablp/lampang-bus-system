@@ -2052,3 +2052,9 @@ router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, nex
 });
 
 module.exports = router;
+
+// Exposed for unit testing only. These are PURE request-scope resolvers and the
+// linchpin of cross-school / grade isolation; attaching them to the router
+// object does not affect `app.use('/api/school', router)`.
+module.exports.resolveSchoolId = resolveSchoolId;
+module.exports.resolveGradeScope = resolveGradeScope;

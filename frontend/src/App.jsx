@@ -83,6 +83,7 @@ const ReportsLayout        = lazy(() => import('./pages/reports/ReportsLayout'))
 const DailyReport          = lazy(() => import('./pages/reports/DailyReport'));
 const MonthlyReport        = lazy(() => import('./pages/reports/MonthlyReport'));
 const SummaryReport        = lazy(() => import('./pages/reports/SummaryReport'));
+const PolicyReport         = lazy(() => import('./pages/reports/PolicyReport'));
 
 // Transport
 const TransportLayout      = lazy(() => import('./pages/transport/TransportLayout'));
@@ -295,6 +296,7 @@ export default function App() {
             <Route path="daily"   element={<DailyReport />} />
             <Route path="monthly" element={<MonthlyReport />} />
             <Route path="summary" element={<SummaryReport />} />
+            <Route path="policy"  element={<PolicyReport />} />
           </Route>
 
           {/* Transport module */}

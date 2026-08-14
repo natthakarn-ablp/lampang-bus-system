@@ -1,19 +1,24 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import Layout from '../../components/Layout';
+import { useAuth } from '../../hooks/useAuth';
 
 const TABS = [
   { to: '/reports/daily',   label: 'รายวัน' },
   { to: '/reports/monthly', label: 'รายเดือน' },
   { to: '/reports/summary', label: 'สรุปภาพรวม' },
+  // Policy report is province/admin-only (getPolicyReport 403s other roles).
+  { to: '/reports/policy',  label: 'เชิงนโยบาย', roles: ['province', 'admin'] },
 ];
 
 export default function ReportsLayout() {
+  const { user } = useAuth();
+  const tabs = TABS.filter((t) => !t.roles || t.roles.includes(user?.role));
   return (
     <Layout>
       {/* Report sub-navigation tabs */}
       <div className="border-b border-gray-200 bg-white px-6 pt-4">
         <nav className="flex gap-1">
-          {TABS.map(({ to, label }) => (
+          {tabs.map(({ to, label }) => (
             <NavLink
               key={to}
               to={to}

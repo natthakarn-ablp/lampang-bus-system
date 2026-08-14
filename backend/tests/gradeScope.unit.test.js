@@ -123,26 +123,24 @@ describe('gradeEquivalents (canonical → all stored variants of the SAME grade)
 });
 
 /**
- * DIVERGENCE GUARD — documents the tolerant-vs-exact inconsistency found in
- * the audit. getStudents() uses gradeEquivalents() (tolerant) so a student
- * stored as 'ประถมศึกษาปีที่ 4' IS returned for a ป.4 teacher; but
- * getDashboard/getVehicles/getStatusToday/pickupPoint compare `s.grade = 'ป.4'`
- * (exact) and therefore MISS that same student. This test locks in the two
- * facts that make those two code paths disagree. If a future change unifies
- * them (e.g. everyone uses gradeEquivalents, or grades are normalised at
- * write time), update this test accordingly.
+ * GRADE-MATCH UNIFORMITY — this pair of facts is WHY every grade-scoped query
+ * must use gradeEquivalents() (tolerant), not exact `= ?`. A student stored as
+ * a variant ('ประถมศึกษาปีที่ 4') would be counted by getStudents (tolerant)
+ * but MISSED by any exact `s.grade = 'ป.4'` comparison. As of the grade-filter
+ * fix, getDashboard/getVehicles/getStatusToday/getEmergencies + pickupPoint.*
+ * all use `s.grade IN (gradeEquivalents(...))`, so list and counts agree. The
+ * end-to-end count parity is asserted in gradeScopeCounts.test.js (CI/DB).
  */
-describe('tolerant-vs-exact divergence (documents the current bug)', () => {
+describe('grade-match uniformity (why every query uses gradeEquivalents)', () => {
   const stored = 'ประถมศึกษาปีที่ 4'; // a real variant form seen in students.grade
   const canonical = 'ป.4';
 
-  test('tolerant filter (gradeEquivalents → WHERE s.grade IN (...)) DOES match it → getStudents returns the row', () => {
+  test('the tolerant filter matches the variant (so both list AND counts include it)', () => {
     expect(gradeEquivalents(canonical)).toContain(stored);
     expect(normalizeGrade(stored)).toBe(canonical);
   });
 
-  test('exact filter (WHERE s.grade = ?) does NOT match it → getDashboard/getVehicles/getStatusToday count it as ZERO', () => {
-    // These endpoints compare the raw canonical string against the stored value.
+  test('an exact `= canonical` compare would MISS the variant — which is the trap this fix avoids', () => {
     expect(stored).not.toBe(canonical);
   });
 });

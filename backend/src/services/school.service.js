@@ -7,13 +7,16 @@ const { logAudit } = require('../utils/audit');
 /**
  * Phase 7.11.3 — every school.service read accepts an optional
  * `gradeFilter` (Thai canonical, e.g. 'ป.4'). When set, every
- * student-backed query gets an extra `AND s.grade = ?` clause so a
+ * student-backed query gets an extra `AND s.grade IN (?)` clause
+ * (matched TOLERANTLY via gradeEquivalents, same as getStudents, so
+ * variant-form grades like 'ประถมศึกษาปีที่ 4' are counted too) so a
  * teacher account sees only its own grade. When null (full school
  * account / admin without ?grade=), behaviour is unchanged.
  *
- * Convention: the gradeFilter is appended in a tiny helper inline
- * rather than abstracted, because each query has a different `s.`
- * alias and we want the SQL to stay readable.
+ * Convention: the gradeFilter clause is appended inline per query;
+ * `const eq = gradeEquivalents(gradeFilter)` is bound to the single
+ * `IN (?)` placeholder (mysql2 expands the array) at the same param
+ * position the old exact `= ?` used.
  */
 
 /**
@@ -21,12 +24,17 @@ const { logAudit } = require('../utils/audit');
  */
 async function getDashboard(schoolId, { gradeFilter = null } = {}) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
-  // When gradeFilter is set the SQL adds `AND s.grade = ?` to every
+  // When gradeFilter is set the SQL adds `AND s.grade IN (?)` to every
   // student-backed subquery. The `s` alias is used inside the
   // subqueries below; `students` (no alias) requires its own clause.
-  const gradeAnd  = gradeFilter ? ' AND s.grade = ?'        : '';
-  const gradeAndNoAlias = gradeFilter ? ' AND grade = ?'    : '';
-  const ga = (...base) => gradeFilter ? [...base, gradeFilter] : base;
+  // Tolerant grade match: students.grade is stored inconsistently ('ป.5' vs
+  // 'ประถมศึกษาปีที่ 5'). Use gradeEquivalents + `IN (?)` (mysql2 expands the
+  // array) so these counts agree with getStudents' listing — previously they
+  // used exact `= ?` and under-counted variant-form grades.
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const gradeAnd  = gradeFilter ? ' AND s.grade IN (?)'     : '';
+  const gradeAndNoAlias = gradeFilter ? ' AND grade IN (?)'  : '';
+  const ga = (...base) => gradeFilter ? [...base, eq] : base;
 
   // Total students (active)
   const [[{ total_students }]] = await pool.query(
@@ -68,7 +76,7 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
      FROM students
      WHERE school_id = ? AND is_deleted = FALSE AND morning_enabled = TRUE${gradeAndNoAlias}`,
     gradeFilter
-      ? [schoolId, gradeFilter, today, schoolId, gradeFilter]
+      ? [schoolId, eq, today, schoolId, eq]
       : [schoolId, today, schoolId]
   );
 
@@ -87,7 +95,7 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
      FROM students
      WHERE school_id = ? AND is_deleted = FALSE AND evening_enabled = TRUE${gradeAndNoAlias}`,
     gradeFilter
-      ? [schoolId, gradeFilter, today, schoolId, gradeFilter]
+      ? [schoolId, eq, today, schoolId, eq]
       : [schoolId, today, schoolId]
   );
 
@@ -119,10 +127,10 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
        SUM(vehicle_id IS NOT NULL) AS has_vehicle,
        SUM(vehicle_id IS NULL) AS no_vehicle,
        (SELECT COUNT(DISTINCT ps.student_id) FROM parent_student ps
-        JOIN students st ON st.id = ps.student_id AND st.school_id = ? AND st.is_deleted = FALSE${gradeFilter ? ' AND st.grade = ?' : ''}
+        JOIN students st ON st.id = ps.student_id AND st.school_id = ? AND st.is_deleted = FALSE${gradeFilter ? ' AND st.grade IN (?)' : ''}
         WHERE ps.approved = TRUE) AS has_parent
      FROM students WHERE school_id = ? AND is_deleted = FALSE${gradeAndNoAlias}`,
-    gradeFilter ? [schoolId, gradeFilter, schoolId, gradeFilter] : [schoolId, schoolId]
+    gradeFilter ? [schoolId, eq, schoolId, eq] : [schoolId, schoolId]
   );
 
   const [[vehicleCompleteness]] = await pool.query(
@@ -133,14 +141,14 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
        (SELECT COUNT(DISTINCT vi.vehicle_id) FROM vehicle_inspections vi
         WHERE vi.vehicle_id IN (
           SELECT DISTINCT s2.vehicle_id FROM students s2
-          WHERE s2.school_id = ? AND s2.is_deleted = FALSE AND s2.vehicle_id IS NOT NULL${gradeFilter ? ' AND s2.grade = ?' : ''}
+          WHERE s2.school_id = ? AND s2.is_deleted = FALSE AND s2.vehicle_id IS NOT NULL${gradeFilter ? ' AND s2.grade IN (?)' : ''}
         )) AS inspected
      FROM vehicles v
      WHERE v.is_deleted = FALSE AND v.id IN (
        SELECT DISTINCT s3.vehicle_id FROM students s3
-       WHERE s3.school_id = ? AND s3.is_deleted = FALSE AND s3.vehicle_id IS NOT NULL${gradeFilter ? ' AND s3.grade = ?' : ''}
+       WHERE s3.school_id = ? AND s3.is_deleted = FALSE AND s3.vehicle_id IS NOT NULL${gradeFilter ? ' AND s3.grade IN (?)' : ''}
      )`,
-    gradeFilter ? [schoolId, gradeFilter, schoolId, gradeFilter] : [schoolId, schoolId]
+    gradeFilter ? [schoolId, eq, schoolId, eq] : [schoolId, schoolId]
   );
 
   return {
@@ -263,13 +271,14 @@ async function getVehicles(schoolId, { gradeFilter = null } = {}) {
   // student_count is "students of this school on this vehicle"; if a
   // teacher is asking, narrow further to their own grade so the count
   // matches the perspective of the listing.
-  const studentCountGrade = gradeFilter ? ' AND s.grade = ?' : '';
-  const subqueryGrade     = gradeFilter ? ' AND s.grade = ?' : '';
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const studentCountGrade = gradeFilter ? ' AND s.grade IN (?)' : '';
+  const subqueryGrade     = gradeFilter ? ' AND s.grade IN (?)' : '';
   const params = [];
   params.push(schoolId);
-  if (gradeFilter) params.push(gradeFilter);
+  if (gradeFilter) params.push(eq);
   params.push(schoolId);
-  if (gradeFilter) params.push(gradeFilter);
+  if (gradeFilter) params.push(eq);
 
   const [vehicles] = await pool.query(
     `SELECT v.id, v.plate_no, v.vehicle_type,
@@ -315,8 +324,9 @@ async function getVehicles(schoolId, { gradeFilter = null } = {}) {
  */
 async function getStatusToday(schoolId, { gradeFilter = null } = {}) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
-  const gradeAnd = gradeFilter ? ' AND s.grade = ?' : '';
-  const params   = gradeFilter ? [today, today, schoolId, gradeFilter]
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const gradeAnd = gradeFilter ? ' AND s.grade IN (?)' : '';
+  const params   = gradeFilter ? [today, today, schoolId, eq]
                                : [today, today, schoolId];
 
   const [rows] = await pool.query(
@@ -378,7 +388,8 @@ async function getStatusToday(schoolId, { gradeFilter = null } = {}) {
  * Get emergency logs related to vehicles serving this school.
  */
 async function getEmergencies(schoolId, { page = 1, per_page = 20, gradeFilter = null } = {}) {
-  const gradeAnd = gradeFilter ? ' AND s.grade = ?' : '';
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const gradeAnd = gradeFilter ? ' AND s.grade IN (?)' : '';
   // Count
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(DISTINCT el.id) AS total
@@ -386,7 +397,7 @@ async function getEmergencies(schoolId, { page = 1, per_page = 20, gradeFilter =
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}
      WHERE el.is_deleted = FALSE`,
-    gradeFilter ? [schoolId, gradeFilter] : [schoolId]
+    gradeFilter ? [schoolId, eq] : [schoolId]
   );
 
   const offset = (page - 1) * per_page;
@@ -402,7 +413,7 @@ async function getEmergencies(schoolId, { page = 1, per_page = 20, gradeFilter =
      WHERE el.is_deleted = FALSE
      ORDER BY el.reported_at DESC
      LIMIT ? OFFSET ?`,
-    gradeFilter ? [schoolId, gradeFilter, per_page, offset] : [schoolId, per_page, offset]
+    gradeFilter ? [schoolId, eq, per_page, offset] : [schoolId, per_page, offset]
   );
 
   return {

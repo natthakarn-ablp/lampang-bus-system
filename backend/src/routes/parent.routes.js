@@ -11,6 +11,20 @@ const lineSvc = require('../services/line.service');
 const idTokenSvc = require('../services/lineIdToken.service');
 const tpl = require('../services/lineFlexTemplates.service');
 const bindGuard = require('../services/lineBindGuard');
+const parentConsent = require('../services/parentConsentGate');
+
+// Consent gate for a child-detail endpoint. Dark by default (guardParentView
+// short-circuits with no DB hit), so live behaviour is unchanged until
+// FEATURE_PARENT_CONSENT_REQUIRED is turned on. Returns true when the request
+// may proceed; otherwise it has already sent a 403 and the caller must return.
+async function ensureParentConsent(req, res) {
+  const gate = await parentConsent.guardParentView(req.lineUserId);
+  if (!gate.allowed) {
+    sendError(res, 'กรุณายินยอมการเข้าถึงข้อมูลการเดินทางของบุตรหลานก่อนใช้งาน', [{ code: 'PARENT_CONSENT_REQUIRED' }], 403);
+    return false;
+  }
+  return true;
+}
 
 // Rate limit: 60 requests per minute per IP (parents querying status)
 const parentLimiter = rateLimit({
@@ -97,6 +111,7 @@ router.get('/children/:id/status', requireParentLineAuth, async (req, res, next)
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
     const child = children.find(c => c.id === parseInt(req.params.id));
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
+    if (!(await ensureParentConsent(req, res))) return;
 
     const status = await lineSvc.getChildStatusToday(parseInt(req.params.id));
     sendSuccess(res, { ...child, ...status });
@@ -111,6 +126,7 @@ router.get('/children/:id/history', requireParentLineAuth, async (req, res, next
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
     const child = children.find(c => c.id === parseInt(req.params.id));
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
+    if (!(await ensureParentConsent(req, res))) return;
 
     // Audit 2026-06-18 (limitations): clamp the window so a huge ?days can't scan
     // unbounded history.
@@ -139,6 +155,7 @@ router.get('/children/:id/eta', requireParentLineAuth, async (req, res, next) =>
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
     const child = children.find(c => c.id === parseInt(req.params.id));
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
+    if (!(await ensureParentConsent(req, res))) return;
 
     const etaSvc = require('../services/eta.service');
     const eta = await etaSvc.getForStudent(parseInt(req.params.id));

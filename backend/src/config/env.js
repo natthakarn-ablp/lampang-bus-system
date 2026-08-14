@@ -190,6 +190,14 @@ const env = {
     // approval. Dark by default: when false the /api/{driver,school}/registrations
     // routers are not mounted, so the existing system is byte-for-byte unchanged.
     driverRegistration: process.env.FEATURE_DRIVER_REGISTRATION === 'true',
+    // PDPA parent-consent gate on the always-on LIFF tracking view. Dark by
+    // default: when false the /api/parent status/history/eta endpoints behave
+    // EXACTLY as before (linked + parent_student.approved is enough). When true,
+    // a linked parent must ALSO hold a granted tracking consent (consent_records)
+    // to see a child's detailed status — closing the "linked ≠ consented" gap
+    // without breaking the live parent experience until consent text + DPO are
+    // signed off. Turn on only together with FEATURE_VEHICLE_QR's consent flow.
+    parentConsentRequired: process.env.FEATURE_PARENT_CONSENT_REQUIRED === 'true',
   },
   // Phase 11A — tunable thresholds for the intelligent tracking layer.
   // Exposed via env so operators can adjust without code changes.

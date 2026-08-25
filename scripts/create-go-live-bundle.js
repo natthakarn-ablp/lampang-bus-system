@@ -69,6 +69,16 @@ const uatSafetyValidation = selectedUatEvidence
   ])
   : missingCheck('uat-evidence-safety', 'no UAT evidence pack found');
 
+const signoffDraftValidation = selectedUatEvidence
+  ? runNode('go-live-signoff-draft', 'scripts/create-go-live-signoff-draft.js', [
+    selectedUatEvidence,
+    '--out-dir',
+    path.join(bundleDir, 'signoff-draft'),
+    '--run-id',
+    'bundle',
+  ])
+  : missingCheck('go-live-signoff-draft', 'no UAT evidence pack found');
+
 const uatValidation = selectedUatEvidence
   ? runNode('uat-evidence', 'scripts/validate-uat-evidence-pack.js', [
     selectedUatEvidence,
@@ -90,6 +100,7 @@ const readinessValidation = runNode('readiness-100', 'scripts/verify-100-readine
 const readinessSummary = parseReadySummary(readinessValidation.output);
 const readinessReport = parseReadyReport(readinessValidation.output);
 const uatSafetyReport = parseToolOutputPath(uatSafetyValidation.output, '[uat-safety] output:');
+const signoffDraftReport = parseToolOutputPath(signoffDraftValidation.output, '[signoff-draft] output:');
 
 const docs = [
   '.gitignore',
@@ -112,6 +123,7 @@ const scripts = [
   'scripts/validate-uat-evidence-pack.js',
   'scripts/summarize-uat-evidence.js',
   'scripts/scan-uat-evidence-safety.js',
+  'scripts/create-go-live-signoff-draft.js',
   'scripts/validate-go-live-signoff.js',
   'scripts/verify-100-readiness.js',
   'scripts/create-go-live-bundle.js',
@@ -126,11 +138,14 @@ const referencedFiles = [
   selectedUatEvidence ? path.join(rel(selectedUatEvidence), 'manifest.json') : null,
   uatSafetyReport ? path.join(rel(uatSafetyReport), 'summary.md') : null,
   uatSafetyReport ? path.join(rel(uatSafetyReport), 'manifest.json') : null,
+  signoffDraftReport ? path.join(rel(signoffDraftReport), 'summary.md') : null,
+  signoffDraftReport ? path.join(rel(signoffDraftReport), 'UAT_SIGNOFF_DRAFT.md') : null,
+  signoffDraftReport ? path.join(rel(signoffDraftReport), 'manifest.json') : null,
   readinessReport ? rel(readinessReport) : null,
 ].filter(Boolean);
 
 const fileHashes = referencedFiles.map((file) => fileRecord(file));
-const checks = [gitStatus, phase9Validation, uatSafetyValidation, uatValidation, signoffValidation, readinessValidation];
+const checks = [gitStatus, phase9Validation, uatSafetyValidation, signoffDraftValidation, uatValidation, signoffValidation, readinessValidation];
 const totals = checks.reduce((acc, check) => {
   acc[check.status.toLowerCase()] = (acc[check.status.toLowerCase()] || 0) + 1;
   return acc;
@@ -443,6 +458,7 @@ tail -n 100 /home/schoolbus/logs/offhost-sync.log
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
+node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/verify-100-readiness.js
 node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
@@ -464,6 +480,8 @@ function signoffIndex() {
 
 - Phase 9 evidence: ${selectedEvidence ? `\`${rel(selectedEvidence)}\`` : 'not found'}
 - UAT evidence: ${selectedUatEvidence ? `\`${rel(selectedUatEvidence)}\`` : 'not found'}
+- UAT safety report: ${uatSafetyReport ? `\`${rel(uatSafetyReport)}\`` : 'not generated'}
+- Sign-off draft: ${signoffDraftReport ? `\`${rel(signoffDraftReport)}\`` : 'not generated'}
 - Readiness report: ${readinessReport ? `\`${rel(readinessReport)}\`` : 'not generated'}
 
 ## Safety
@@ -573,7 +591,7 @@ function actionPlan() {
 ## Close These Before 100%
 
 1. Finish all role UAT evidence files in the selected UAT evidence pack.
-2. Transfer PASS results and evidence links into \`docs/UAT_SIGNOFF_2026-08.md\`.
+2. Generate and review the sign-off draft, then transfer approved PASS results and evidence links into \`docs/UAT_SIGNOFF_2026-08.md\`.
 3. Fill owner/operator/DPO approval fields in \`docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md\`.
 4. Commit or otherwise approve the exact source state that will be deployed.
 5. Run the approved production read-only gate, restore drill, deploy, postdeploy gate, and 30-60 minute monitor.
@@ -605,6 +623,7 @@ ${readinessBullets}
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
+node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp>
 node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>

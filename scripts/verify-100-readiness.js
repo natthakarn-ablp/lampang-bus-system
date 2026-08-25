@@ -143,6 +143,7 @@ function checkRequiredFiles() {
     'scripts/validate-uat-evidence-pack.js',
     'scripts/summarize-uat-evidence.js',
     'scripts/scan-uat-evidence-safety.js',
+    'scripts/create-go-live-signoff-draft.js',
     'scripts/create-go-live-bundle.js',
     'scripts/validate-go-live-bundle.js',
     'scripts/verify-100-readiness.js',

@@ -10,6 +10,7 @@
 | Public external gate | PASS: `pass=5 warn=0 fail=0` against `https://schoolbuslampang.com` |
 | Evidence pack | `outputs/phase9-evidence/20260825-201200/summary.md` |
 | Evidence validator | PASS via `scripts/validate-phase9-evidence.js` |
+| UAT evidence safety scan | ต้อง PASS ผ่าน `scripts/scan-uat-evidence-safety.js` ก่อนแนบหลักฐาน UAT |
 | Go-live bundle | สร้างด้วย `node scripts/create-go-live-bundle.js --allow-pending` และตรวจด้วย `validate-go-live-bundle.js` ก่อน review; เปิด `SOURCE_STATE.md`, `ACTION_PLAN.md`, และ `ACTION_ITEMS.csv` เพื่อปิดงานค้าง; รอบสุดท้ายต้องไม่มี pending |
 | Production data | Real data; do not write during gate checks |
 
@@ -40,6 +41,7 @@
 BASE_URL=https://schoolbuslampang.com bash scripts/production-readiness-gate.sh public
 BASE_URL=https://schoolbuslampang.com bash scripts/collect-phase9-evidence.sh public
 node scripts/validate-phase9-evidence.js outputs/phase9-evidence/<timestamp> --require-mode public
+node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/create-go-live-bundle.js --allow-pending --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
 node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --allow-pending
 ```

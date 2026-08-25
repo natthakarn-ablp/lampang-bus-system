@@ -113,6 +113,18 @@ function parseUatEvidenceSummary(output) {
   };
 }
 
+function parseUatSafetySummary(output) {
+  const match = output.match(/\[uat-safety\] summary scanned=(\d+) fail=(\d+) warn=(\d+) manual_review=(\d+) status=([A-Z]+)/);
+  if (!match) return null;
+  return {
+    scanned: Number(match[1]),
+    fail: Number(match[2]),
+    warn: Number(match[3]),
+    manualReview: Number(match[4]),
+    status: match[5],
+  };
+}
+
 function checkRequiredFiles() {
   const required = [
     'docs/READINESS_SCORECARD_2026-08.md',
@@ -130,6 +142,7 @@ function checkRequiredFiles() {
     'scripts/create-uat-evidence-pack.js',
     'scripts/validate-uat-evidence-pack.js',
     'scripts/summarize-uat-evidence.js',
+    'scripts/scan-uat-evidence-safety.js',
     'scripts/create-go-live-bundle.js',
     'scripts/validate-go-live-bundle.js',
     'scripts/verify-100-readiness.js',
@@ -183,6 +196,26 @@ function checkUatEvidencePack() {
   }
   addCheck('uat-evidence-pack', 'FAIL', 'UAT evidence validator failed', output.split(/\r?\n/).filter(Boolean).slice(-5).join(' | '));
   return packDir;
+}
+
+function checkUatEvidenceSafety(packDir) {
+  if (!packDir) {
+    addCheck('uat-evidence-safety', 'PENDING', 'no UAT evidence pack found for safety scan');
+    return;
+  }
+
+  const result = runNodeScript('scripts/scan-uat-evidence-safety.js', [packDir, '--no-report']);
+  const output = `${result.stdout}${result.stderr}`;
+  const summary = parseUatSafetySummary(output);
+  if (result.status === 0 && summary && summary.status === 'PASS') {
+    addCheck('uat-evidence-safety', 'PASS', `no text leaks found; scanned ${summary.scanned} text files`, relPath(packDir));
+    return;
+  }
+  if (summary && summary.fail === 0 && summary.warn > 0) {
+    addCheck('uat-evidence-safety', 'PENDING', `${summary.warn} UAT evidence safety warnings need review`, relPath(packDir));
+    return;
+  }
+  addCheck('uat-evidence-safety', 'FAIL', 'UAT evidence safety scan failed', output.split(/\r?\n/).filter(Boolean).slice(-5).join(' | '));
 }
 
 function checkSignoff() {
@@ -300,6 +333,7 @@ function createReport(evidenceResolved, uatEvidenceResolved) {
 checkRequiredFiles();
 const evidenceResolved = checkPhase9Evidence(evidencePath || latestEvidencePath());
 const uatEvidenceResolved = checkUatEvidencePack();
+checkUatEvidenceSafety(uatEvidenceResolved);
 checkSignoff();
 checkScorecardOverall();
 checkSafetyLanguage();

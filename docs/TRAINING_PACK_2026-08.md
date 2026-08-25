@@ -186,9 +186,12 @@ node scripts/create-uat-evidence-pack.js --mode sandbox --base-url https://schoo
 หลังกรอกหลักฐานครบ ให้ตรวจด้วย:
 
 ```bash
+node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 ```
+
+ไฟล์ `outputs/uat-safety/<timestamp>/summary.md` ใช้ตรวจว่า evidence ไม่มี secret/CID/phone/LINE user id ในข้อความก่อนส่งลงนาม
 
 ไฟล์ `outputs/uat-status/<timestamp>/missing-items.csv` ใช้แบ่งงานติดตามผู้ทดสอบแต่ละบทบาทได้ โดยไม่ต้องเปิดหลักฐานที่อาจมีข้อมูลอ่อนไหวทั้งหมด
 

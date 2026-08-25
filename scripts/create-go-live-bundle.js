@@ -59,6 +59,16 @@ const phase9Validation = selectedEvidence
   ? runNode('phase9-evidence', 'scripts/validate-phase9-evidence.js', [selectedEvidence, '--require-mode', 'public'])
   : missingCheck('phase9-evidence', 'no Phase 9 evidence pack found');
 
+const uatSafetyValidation = selectedUatEvidence
+  ? runNode('uat-evidence-safety', 'scripts/scan-uat-evidence-safety.js', [
+    selectedUatEvidence,
+    '--out-dir',
+    path.join(bundleDir, 'uat-safety'),
+    '--run-id',
+    'bundle',
+  ])
+  : missingCheck('uat-evidence-safety', 'no UAT evidence pack found');
+
 const uatValidation = selectedUatEvidence
   ? runNode('uat-evidence', 'scripts/validate-uat-evidence-pack.js', [
     selectedUatEvidence,
@@ -79,6 +89,7 @@ const readinessArgs = [
 const readinessValidation = runNode('readiness-100', 'scripts/verify-100-readiness.js', readinessArgs);
 const readinessSummary = parseReadySummary(readinessValidation.output);
 const readinessReport = parseReadyReport(readinessValidation.output);
+const uatSafetyReport = parseToolOutputPath(uatSafetyValidation.output, '[uat-safety] output:');
 
 const docs = [
   '.gitignore',
@@ -100,6 +111,7 @@ const scripts = [
   'scripts/create-uat-evidence-pack.js',
   'scripts/validate-uat-evidence-pack.js',
   'scripts/summarize-uat-evidence.js',
+  'scripts/scan-uat-evidence-safety.js',
   'scripts/validate-go-live-signoff.js',
   'scripts/verify-100-readiness.js',
   'scripts/create-go-live-bundle.js',
@@ -112,11 +124,13 @@ const referencedFiles = [
   selectedEvidence ? path.join(rel(selectedEvidence), 'manifest.json') : null,
   selectedUatEvidence ? path.join(rel(selectedUatEvidence), 'README.md') : null,
   selectedUatEvidence ? path.join(rel(selectedUatEvidence), 'manifest.json') : null,
+  uatSafetyReport ? path.join(rel(uatSafetyReport), 'summary.md') : null,
+  uatSafetyReport ? path.join(rel(uatSafetyReport), 'manifest.json') : null,
   readinessReport ? rel(readinessReport) : null,
 ].filter(Boolean);
 
 const fileHashes = referencedFiles.map((file) => fileRecord(file));
-const checks = [gitStatus, phase9Validation, uatValidation, signoffValidation, readinessValidation];
+const checks = [gitStatus, phase9Validation, uatSafetyValidation, uatValidation, signoffValidation, readinessValidation];
 const totals = checks.reduce((acc, check) => {
   acc[check.status.toLowerCase()] = (acc[check.status.toLowerCase()] || 0) + 1;
   return acc;
@@ -315,6 +329,11 @@ function parseReadyReport(output) {
   return match ? match[1].trim() : null;
 }
 
+function parseToolOutputPath(output, prefix) {
+  const line = String(output || '').split(/\r?\n/).find((candidate) => candidate.startsWith(prefix));
+  return line ? line.slice(prefix.length).trim() : null;
+}
+
 function decisionFromReadiness(ready, checkStatus) {
   if (ready.fail > 0 || checkStatus === 'FAIL') return 'FAIL';
   if (ready.pending > 0 || checkStatus === 'PENDING') return 'PENDING';
@@ -423,6 +442,7 @@ tail -n 100 /home/schoolbus/logs/offhost-sync.log
 \`\`\`bash
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
+node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/verify-100-readiness.js
 node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
@@ -584,12 +604,13 @@ ${readinessBullets}
 \`\`\`bash
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
+node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp>
 node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
 \`\`\`
 
-All four commands must pass without \`--allow-pending\` before the system can be called 100%.
+All final commands must pass without \`--allow-pending\` before the system can be called 100%.
 `;
 }
 

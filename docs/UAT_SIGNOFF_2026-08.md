@@ -20,11 +20,12 @@ node scripts/create-uat-evidence-pack.js --mode sandbox --base-url https://schoo
 ตรวจชุดหลักฐาน UAT ก่อนย้ายผลเข้า sign-off:
 
 ```bash
+node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 ```
 
-ใช้ `outputs/uat-status/<timestamp>/summary.md`, `role-status.csv`, และ `missing-items.csv` เพื่อติดตามว่าบทบาทใดยังกรอกหลักฐานไม่ครบก่อนส่งลงนาม
+ใช้ `outputs/uat-safety/<timestamp>/summary.md` เพื่อตรวจว่าไม่มี secret/CID/phone/LINE user id ในหลักฐานข้อความ และใช้ `outputs/uat-status/<timestamp>/summary.md`, `role-status.csv`, และ `missing-items.csv` เพื่อติดตามว่าบทบาทใดยังกรอกหลักฐานไม่ครบก่อนส่งลงนาม
 
 ## 1. Common Checks
 
@@ -108,5 +109,6 @@ node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 - Owner/operator approval ต้องครบตาม `docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md`
 - ก่อนประกาศ 100% ให้รัน `node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>` และต้อง PASS
 - ก่อนประกาศ 100% ให้รัน `node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>` และสถานะต้องเป็น PASS
+- ก่อนประกาศ 100% ให้รัน `node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>` และต้องไม่มี FAIL/WARN ที่ยังไม่ถูก redacted หรืออนุมัติโดย UAT lead/DPO
 - ก่อนประกาศ 100% ให้รัน `node scripts/validate-go-live-signoff.js` และต้อง PASS
 - ก่อนประกาศ 100% ให้รัน `node scripts/verify-100-readiness.js` และต้อง PASS

@@ -23,10 +23,11 @@ node scripts/create-uat-evidence-pack.js --mode sandbox --base-url https://schoo
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
+node scripts/create-ops-signoff-draft.js --phase9-evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 ```
 
-ใช้ `outputs/uat-safety/<timestamp>/summary.md` เพื่อตรวจว่าไม่มี secret/CID/phone/LINE user id ในหลักฐานข้อความ, ใช้ `outputs/uat-status/<timestamp>/summary.md`, `role-status.csv`, และ `missing-items.csv` เพื่อติดตามว่าบทบาทใดยังกรอกหลักฐานไม่ครบ, และใช้ `outputs/signoff-draft/<timestamp>/UAT_SIGNOFF_DRAFT.md`/`role-transfer.csv` เป็นร่างก่อนย้ายผลเข้าเอกสารนี้
+ใช้ `outputs/uat-safety/<timestamp>/summary.md` เพื่อตรวจว่าไม่มี secret/CID/phone/LINE user id ในหลักฐานข้อความ, ใช้ `outputs/uat-status/<timestamp>/summary.md`, `role-status.csv`, และ `missing-items.csv` เพื่อติดตามว่าบทบาทใดยังกรอกหลักฐานไม่ครบ, ใช้ `outputs/signoff-draft/<timestamp>/UAT_SIGNOFF_DRAFT.md`/`role-transfer.csv` เป็นร่างก่อนย้ายผลบทบาทเข้าเอกสารนี้, และใช้ `outputs/ops-signoff-draft/<timestamp>/OPS_SIGNOFF_DRAFT.md`/`ops-transfer.csv` เป็นร่างก่อนย้ายผล O1-O8 เข้า Ops Checks
 
 ## 1. Common Checks
 
@@ -112,5 +113,6 @@ node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 - ก่อนประกาศ 100% ให้รัน `node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>` และสถานะต้องเป็น PASS
 - ก่อนประกาศ 100% ให้รัน `node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>` และต้องไม่มี FAIL/WARN ที่ยังไม่ถูก redacted หรืออนุมัติโดย UAT lead/DPO
 - ก่อนประกาศ 100% ให้รัน `node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>` และใช้ร่างที่สร้างเพื่อย้ายผลเข้าเอกสารนี้หลัง UAT lead ตรวจหลักฐานครบ
+- ก่อนประกาศ 100% ให้รัน `node scripts/create-ops-signoff-draft.js --phase9-evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>` และใช้ร่างที่สร้างเพื่อย้ายผล O1-O8 เข้า Ops Checks หลัง operator ตรวจหลักฐานครบ
 - ก่อนประกาศ 100% ให้รัน `node scripts/validate-go-live-signoff.js` และต้อง PASS
 - ก่อนประกาศ 100% ให้รัน `node scripts/verify-100-readiness.js` และต้อง PASS

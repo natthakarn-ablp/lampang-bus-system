@@ -41,6 +41,7 @@
 - `scripts/validate-restore-drill-evidence.js` now validates restore target, approval evidence, backup sha256/gzip result, restore log patterns, row-count review, production-unchanged proof, and operator sign-off before the restore drill gate can count as PASS.
 - `scripts/create-operator-gate-evidence-pack.js` now creates a non-mutating production/postdeploy/monitor evidence template so operator logs can be captured without running gates or touching production data.
 - `scripts/validate-operator-gate-evidence.js` now validates production gate mode/fail=0, postdeploy gate mode/fail=0, runtime commit match, monitor log review, no high-signal operational errors, and operator sign-off before production/postdeploy/monitor gates can count as PASS.
+- `scripts/create-ops-signoff-draft.js` now creates `OPS_SIGNOFF_DRAFT.md` and `ops-transfer.csv` from phase9/restore/operator evidence so O1-O8 can be reviewed before updating the official UAT sign-off.
 
 ## Local Verification Evidence
 
@@ -69,6 +70,7 @@
 | `node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp> --allow-pending` | PASS/PENDING allowed until operator fills real restore drill evidence |
 | `node scripts/create-operator-gate-evidence-pack.js` | PASS: creates `outputs/operator-gates/<timestamp>/` template only; no DB/API/deploy/gate actions |
 | `node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp> --allow-pending` | PASS/PENDING allowed until operator fills production/postdeploy/monitor evidence |
+| `node scripts/create-ops-signoff-draft.js --phase9-evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>` | PASS/PENDING allowed: creates Ops sign-off draft without editing official sign-off |
 | `node scripts/verify-100-readiness.js --allow-pending` | PASS/PENDING allowed; restore drill and operator gate evidence remain PENDING until operator validators pass |
 | `node scripts/verify-100-readiness.js` | EXPECTED FAIL until sign-off and scorecard are final 100% |
 | `node scripts/create-go-live-bundle.js --allow-pending` | PASS/PENDING allowed: creates `summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, and `ACTION_ITEMS.csv/json` without production writes |
@@ -98,6 +100,7 @@
 - Restore drill must run against `lampang_bus_restore_drill` and prove production aggregate counts unchanged.
 - `node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>` must PASS without `--allow-pending`.
 - `node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>` must PASS without `--allow-pending`.
+- `node scripts/create-ops-signoff-draft.js ...` must be reviewed before transferring O1-O8 PASS/evidence rows into `docs/UAT_SIGNOFF_2026-08.md`.
 - DPO/legal must sign off consent/QR/LINE policy before enabling gated privacy features.
 - Owner must approve deployment and any feature flag change explicitly.
 - Post-deploy smoke must prove `/health.data.commit` equals deployed git HEAD.

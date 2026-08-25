@@ -168,6 +168,7 @@ node scripts/create-uat-evidence-pack.js --mode sandbox --base-url https://schoo
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
 node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
+node scripts/create-ops-signoff-draft.js --phase9-evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 ```
@@ -200,6 +201,7 @@ node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --all
 - restore drill PASS
 - restore drill evidence validator PASS
 - operator production/postdeploy/monitor evidence validator PASS
+- ops sign-off draft ถูกสร้างและ review ก่อนย้ายผล O1-O8 เข้า UAT sign-off
 - UAT sign-off ครบทุกบทบาท
 - `node scripts/validate-go-live-signoff.js` PASS
 - `node scripts/verify-100-readiness.js` PASS

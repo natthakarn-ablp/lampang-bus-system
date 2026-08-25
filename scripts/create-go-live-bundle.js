@@ -91,6 +91,16 @@ const signoffDraftValidation = selectedUatEvidence
   ])
   : missingCheck('go-live-signoff-draft', 'no UAT evidence pack found');
 
+const opsSignoffDraftValidation = runNode('ops-signoff-draft', 'scripts/create-ops-signoff-draft.js', [
+  ...(selectedEvidence ? ['--phase9-evidence', selectedEvidence] : []),
+  ...(selectedRestoreDrillEvidence ? ['--restore-drill', selectedRestoreDrillEvidence] : []),
+  ...(selectedOperatorGateEvidence ? ['--operator-gates', selectedOperatorGateEvidence] : []),
+  '--out-dir',
+  path.join(bundleDir, 'ops-signoff-draft'),
+  '--run-id',
+  'bundle',
+]);
+
 const restoreDrillValidation = selectedRestoreDrillEvidence
   ? runNode('restore-drill-evidence', 'scripts/validate-restore-drill-evidence.js', [
     selectedRestoreDrillEvidence,
@@ -129,6 +139,7 @@ const readinessSummary = parseReadySummary(readinessValidation.output);
 const readinessReport = parseReadyReport(readinessValidation.output);
 const uatSafetyReport = parseToolOutputPath(uatSafetyValidation.output, '[uat-safety] output:');
 const signoffDraftReport = parseToolOutputPath(signoffDraftValidation.output, '[signoff-draft] output:');
+const opsSignoffDraftReport = parseToolOutputPath(opsSignoffDraftValidation.output, '[ops-signoff-draft] output:');
 
 const docs = [
   '.gitignore',
@@ -152,6 +163,7 @@ const scripts = [
   'scripts/summarize-uat-evidence.js',
   'scripts/scan-uat-evidence-safety.js',
   'scripts/create-go-live-signoff-draft.js',
+  'scripts/create-ops-signoff-draft.js',
   'scripts/create-restore-drill-evidence-pack.js',
   'scripts/validate-restore-drill-evidence.js',
   'scripts/create-operator-gate-evidence-pack.js',
@@ -184,11 +196,15 @@ const referencedFiles = [
   signoffDraftReport ? path.join(rel(signoffDraftReport), 'summary.md') : null,
   signoffDraftReport ? path.join(rel(signoffDraftReport), 'UAT_SIGNOFF_DRAFT.md') : null,
   signoffDraftReport ? path.join(rel(signoffDraftReport), 'manifest.json') : null,
+  opsSignoffDraftReport ? path.join(rel(opsSignoffDraftReport), 'summary.md') : null,
+  opsSignoffDraftReport ? path.join(rel(opsSignoffDraftReport), 'OPS_SIGNOFF_DRAFT.md') : null,
+  opsSignoffDraftReport ? path.join(rel(opsSignoffDraftReport), 'ops-transfer.csv') : null,
+  opsSignoffDraftReport ? path.join(rel(opsSignoffDraftReport), 'manifest.json') : null,
   readinessReport ? rel(readinessReport) : null,
 ].filter(Boolean);
 
 const fileHashes = referencedFiles.map((file) => fileRecord(file));
-const checks = [gitStatus, phase9Validation, uatSafetyValidation, signoffDraftValidation, restoreDrillValidation, operatorGateValidation, uatValidation, signoffValidation, readinessValidation];
+const checks = [gitStatus, phase9Validation, uatSafetyValidation, signoffDraftValidation, opsSignoffDraftValidation, restoreDrillValidation, operatorGateValidation, uatValidation, signoffValidation, readinessValidation];
 const totals = checks.reduce((acc, check) => {
   acc[check.status.toLowerCase()] = (acc[check.status.toLowerCase()] || 0) + 1;
   return acc;
@@ -511,6 +527,7 @@ node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
+node scripts/create-ops-signoff-draft.js --phase9-evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
 node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 node scripts/validate-go-live-signoff.js
@@ -538,6 +555,7 @@ function signoffIndex() {
 - Operator gate evidence: ${selectedOperatorGateEvidence ? `\`${rel(selectedOperatorGateEvidence)}\`` : 'not found'}
 - UAT safety report: ${uatSafetyReport ? `\`${rel(uatSafetyReport)}\`` : 'not generated'}
 - Sign-off draft: ${signoffDraftReport ? `\`${rel(signoffDraftReport)}\`` : 'not generated'}
+- Ops sign-off draft: ${opsSignoffDraftReport ? `\`${rel(opsSignoffDraftReport)}\`` : 'not generated'}
 - Readiness report: ${readinessReport ? `\`${rel(readinessReport)}\`` : 'not generated'}
 
 ## Safety
@@ -649,7 +667,7 @@ function actionPlan() {
 ## Close These Before 100%
 
 1. Finish all role UAT evidence files in the selected UAT evidence pack.
-2. Generate and review the sign-off draft, then transfer approved PASS results and evidence links into \`docs/UAT_SIGNOFF_2026-08.md\`.
+2. Generate and review the UAT and Ops sign-off drafts, then transfer approved PASS results and evidence links into \`docs/UAT_SIGNOFF_2026-08.md\`.
 3. Fill owner/operator/DPO approval fields in \`docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md\`.
 4. Commit or otherwise approve the exact source state that will be deployed.
 5. Run the approved production read-only gate, restore drill, restore evidence validator, deploy, postdeploy gate, 30-60 minute monitor, and operator gate evidence validator.
@@ -682,6 +700,7 @@ node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
+node scripts/create-ops-signoff-draft.js --phase9-evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
 node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
@@ -819,6 +838,7 @@ function summary(decision, ready, checksForSummary, fileHashRecords) {
 - UAT evidence: ${selectedUatEvidence ? `\`${rel(selectedUatEvidence)}\`` : 'not found'}
 - Restore drill evidence: ${selectedRestoreDrillEvidence ? `\`${rel(selectedRestoreDrillEvidence)}\`` : 'not found'}
 - Operator gate evidence: ${selectedOperatorGateEvidence ? `\`${rel(selectedOperatorGateEvidence)}\`` : 'not found'}
+- Ops sign-off draft: ${opsSignoffDraftReport ? `\`${rel(opsSignoffDraftReport)}\`` : 'not generated'}
 - Readiness report: ${readinessReport ? `\`${rel(readinessReport)}\`` : 'not generated'}
 - Source state: \`SOURCE_STATE.md\`
 - Action plan: \`ACTION_PLAN.md\`

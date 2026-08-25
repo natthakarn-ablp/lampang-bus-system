@@ -200,6 +200,7 @@ function checkRequiredFiles() {
     'scripts/summarize-uat-evidence.js',
     'scripts/scan-uat-evidence-safety.js',
     'scripts/create-go-live-signoff-draft.js',
+    'scripts/create-ops-signoff-draft.js',
     'scripts/create-restore-drill-evidence-pack.js',
     'scripts/validate-restore-drill-evidence.js',
     'scripts/create-operator-gate-evidence-pack.js',

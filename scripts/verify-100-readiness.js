@@ -207,6 +207,7 @@ function checkRequiredFiles() {
     'scripts/validate-operator-gate-evidence.js',
     'scripts/create-go-live-bundle.js',
     'scripts/validate-go-live-bundle.js',
+    'scripts/summarize-go-live-closure.js',
     'scripts/verify-100-readiness.js',
   ];
 

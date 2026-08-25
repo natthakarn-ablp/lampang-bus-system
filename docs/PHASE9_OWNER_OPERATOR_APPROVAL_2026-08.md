@@ -14,7 +14,7 @@
 | UAT sign-off draft | สร้างด้วย `scripts/create-go-live-signoff-draft.js` เพื่อช่วยย้ายผลจาก evidence pack เข้า sign-off โดยไม่เขียนทับเอกสารหลัก |
 | Restore drill evidence | ต้องสร้างด้วย `scripts/create-restore-drill-evidence-pack.js`, กรอกผลจาก operator, และ PASS ผ่าน `scripts/validate-restore-drill-evidence.js` |
 | Operator gate evidence | ต้องสร้างด้วย `scripts/create-operator-gate-evidence-pack.js`, กรอกผล production/postdeploy/monitor, และ PASS ผ่าน `scripts/validate-operator-gate-evidence.js` |
-| Go-live bundle | สร้างด้วย `node scripts/create-go-live-bundle.js --allow-pending` และตรวจด้วย `validate-go-live-bundle.js` ก่อน review; เปิด `SOURCE_STATE.md`, `ACTION_PLAN.md`, `ACTION_ITEMS.csv`, และรายงานจาก `scripts/summarize-go-live-closure.js` เพื่อปิดงานค้าง; ตรวจรายงาน closure ด้วย `scripts/validate-go-live-closure-status.js`; รอบสุดท้ายต้องไม่มี pending |
+| Go-live bundle | สร้างด้วย `node scripts/create-go-live-bundle.js --allow-pending` และตรวจด้วย `validate-go-live-bundle.js` ก่อน review; เปิด `SOURCE_STATE.md`, `ACTION_PLAN.md`, `ACTION_ITEMS.csv`, รายงานจาก `scripts/summarize-go-live-closure.js`, และ `outputs/automated-readiness/<timestamp>/summary.md` เพื่อปิดงานค้าง; ตรวจรายงาน closure ด้วย `scripts/validate-go-live-closure-status.js`; รอบสุดท้ายต้องไม่มี pending |
 | Production data | Real data; do not write during gate checks |
 
 ## สิ่งที่ขออนุมัติ
@@ -51,6 +51,7 @@ node scripts/create-go-live-bundle.js --allow-pending --evidence outputs/phase9-
 node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --allow-pending
 node scripts/summarize-go-live-closure.js --bundle outputs/go-live-bundle/<timestamp> --allow-pending
 node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp> --allow-pending
+node scripts/collect-automated-readiness-evidence.js --bundle outputs/go-live-bundle/<timestamp> --closure outputs/go-live-closure-status/<timestamp>
 ```
 
 ### 2. Production read-only gate บน server
@@ -101,4 +102,4 @@ node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestam
 
 ระบบเรียก 100% ได้เมื่อทุก gate ในเอกสารนี้ผ่าน, restore drill evidence validator PASS, operator gate evidence validator PASS, `docs/UAT_SIGNOFF_2026-08.md` ผ่านครบทุกบทบาท, `node scripts/validate-go-live-signoff.js` PASS, `node scripts/verify-100-readiness.js` PASS, และ postdeploy monitor ไม่มี error pattern ใหม่
 
-ก่อนลงนามรอบสุดท้าย ให้สร้างและตรวจ go-live bundle โดยไม่ใส่ `--allow-pending`, รัน `node scripts/summarize-go-live-closure.js --bundle outputs/go-live-bundle/<timestamp>` และ `node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp>` ให้ผ่าน, แล้วแนบ `outputs/go-live-bundle/<timestamp>/summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, `ACTION_ITEMS.csv`, และ `outputs/go-live-closure-status/<timestamp>/summary.md` กับเอกสารนี้
+ก่อนลงนามรอบสุดท้าย ให้สร้างและตรวจ go-live bundle โดยไม่ใส่ `--allow-pending`, รัน `node scripts/summarize-go-live-closure.js --bundle outputs/go-live-bundle/<timestamp>`, `node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp>`, และ `node scripts/collect-automated-readiness-evidence.js --bundle outputs/go-live-bundle/<timestamp> --closure outputs/go-live-closure-status/<timestamp>` ให้ผ่าน, แล้วแนบ `outputs/go-live-bundle/<timestamp>/summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, `ACTION_ITEMS.csv`, `outputs/go-live-closure-status/<timestamp>/summary.md`, และ `outputs/automated-readiness/<timestamp>/summary.md` กับเอกสารนี้

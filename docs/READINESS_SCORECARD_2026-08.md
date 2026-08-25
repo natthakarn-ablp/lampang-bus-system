@@ -38,6 +38,7 @@
 - `scripts/create-go-live-bundle.js` now creates a non-mutating owner/operator bundle with executive brief, operator commands, sign-off index, source-state approval list, action plan by role/section, CSV/JSON action items for assignment, validator logs, file hashes, and readiness report references.
 - `scripts/validate-go-live-bundle.js` now validates the generated bundle files, safety flags, action items, logs, and pending/fail state before attaching it to sign-off.
 - `scripts/summarize-go-live-closure.js` now creates an owner-board closure report from the latest go-live bundle, and `scripts/validate-go-live-closure-status.js` validates that report before final sign-off.
+- `scripts/collect-automated-readiness-evidence.js` now runs safe workstation automation (secret scan, local full gate, public gate, evidence validators, bundle/closure/readiness validators) and writes a human-action evidence package for anything requiring credentials, server access, restore/deploy approval, monitoring, or legal sign-off.
 - `scripts/create-restore-drill-evidence-pack.js` now creates a non-mutating restore drill evidence template so operator results can be captured without touching production data.
 - `scripts/validate-restore-drill-evidence.js` now validates restore target, approval evidence, backup sha256/gzip result, restore log patterns, row-count review, production-unchanged proof, and operator sign-off before the restore drill gate can count as PASS.
 - `scripts/create-operator-gate-evidence-pack.js` now creates a non-mutating production/postdeploy/monitor evidence template so operator logs can be captured without running gates or touching production data.
@@ -78,6 +79,7 @@
 | `node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --allow-pending` | PASS/PENDING allowed: validates bundle structure, action items, logs, and safety flags |
 | `node scripts/summarize-go-live-closure.js --bundle outputs/go-live-bundle/<timestamp> --allow-pending` | PASS/PENDING allowed: creates owner-board closure report without production writes |
 | `node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp> --allow-pending` | PASS/PENDING allowed: validates closure report structure, owner totals, safety flags, and pending state |
+| `node scripts/collect-automated-readiness-evidence.js --bundle outputs/go-live-bundle/<timestamp> --closure outputs/go-live-closure-status/<timestamp>` | PASS/PENDING allowed: runs safe automation and creates `outputs/automated-readiness/<timestamp>/` |
 
 ## Production Evidence Already Collected Read-only
 
@@ -105,6 +107,7 @@
 - `node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>` must PASS without `--allow-pending`.
 - `node scripts/create-ops-signoff-draft.js ...` must be reviewed before transferring O1-O8 PASS/evidence rows into `docs/UAT_SIGNOFF_2026-08.md`.
 - `node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp>` must PASS without `--allow-pending` after the final go-live bundle is generated.
+- `outputs/automated-readiness/<timestamp>/summary.md` must be attached to show exactly which checks were automated and which human/external actions remained.
 - DPO/legal must sign off consent/QR/LINE policy before enabling gated privacy features.
 - Owner must approve deployment and any feature flag change explicitly.
 - Post-deploy smoke must prove `/health.data.commit` equals deployed git HEAD.
@@ -124,4 +127,4 @@
 11. Run production read-only gate with log captured into `outputs/operator-gates/<timestamp>/`, then the approved restore drill with log captured into `outputs/restore-drill/<timestamp>/`.
 12. After approved deployment, run postdeploy gate, role/LINE LIFF smoke, and 30-60 minute monitor with logs captured into `outputs/operator-gates/<timestamp>/`.
 13. Run `node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>` and `node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>`.
-14. Run `node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>`, run `node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp>`, then run `node scripts/summarize-go-live-closure.js --bundle outputs/go-live-bundle/<timestamp>` and `node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp>`. Attach `summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, `ACTION_ITEMS.csv`, and the closure status `summary.md`.
+14. Run `node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>`, run `node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp>`, then run `node scripts/summarize-go-live-closure.js --bundle outputs/go-live-bundle/<timestamp>`, `node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp>`, and `node scripts/collect-automated-readiness-evidence.js --bundle outputs/go-live-bundle/<timestamp> --closure outputs/go-live-closure-status/<timestamp>`. Attach `summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, `ACTION_ITEMS.csv`, the closure status `summary.md`, and the automated readiness `summary.md`.

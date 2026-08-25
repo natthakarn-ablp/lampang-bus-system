@@ -178,11 +178,14 @@ node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timesta
 ```bash
 node scripts/create-go-live-bundle.js --allow-pending --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --allow-pending
+node scripts/summarize-go-live-closure.js --bundle outputs/go-live-bundle/<timestamp> --allow-pending
+node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp> --allow-pending
+node scripts/collect-automated-readiness-evidence.js --bundle outputs/go-live-bundle/<timestamp> --closure outputs/go-live-closure-status/<timestamp>
 ```
 
 ใช้ `--allow-pending` เฉพาะช่วงเตรียมเอกสารก่อน UAT/sign-off ครบเท่านั้น รอบสุดท้ายก่อนเรียก 100% ต้องรันโดยไม่ใส่ `--allow-pending`
 
-ให้เปิด `outputs/go-live-bundle/<timestamp>/SOURCE_STATE.md` ก่อนอนุมัติ commit/deploy และเปิด `outputs/go-live-bundle/<timestamp>/ACTION_PLAN.md` เพื่อดูจำนวนงานค้างแยกตาม role, sign-off section, approval scope, และ readiness pending ก่อนมอบหมายทีมปิดงาน ถ้าต้องแจกงานใน spreadsheet ให้ใช้ `outputs/go-live-bundle/<timestamp>/ACTION_ITEMS.csv`
+ให้เปิด `outputs/go-live-bundle/<timestamp>/SOURCE_STATE.md` ก่อนอนุมัติ commit/deploy, เปิด `outputs/go-live-bundle/<timestamp>/ACTION_PLAN.md` เพื่อดูจำนวนงานค้างแยกตาม role, sign-off section, approval scope, และ readiness pending, และเปิด `outputs/automated-readiness/<timestamp>/summary.md` เพื่อแยกงานที่ automation ทำแล้วออกจากงานที่ต้องใช้คน/ระบบภายนอกจริง ถ้าต้องแจกงานใน spreadsheet ให้ใช้ `outputs/go-live-bundle/<timestamp>/ACTION_ITEMS.csv` และ `outputs/automated-readiness/<timestamp>/human-actions.csv`
 
 ## 5. Final Sign-off Rule
 
@@ -197,6 +200,7 @@ node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --all
 - UAT evidence pack validator PASS
 - go-live bundle ถูกสร้างจาก evidence ล่าสุดและไม่มี failed check
 - go-live bundle validator PASS
+- automated readiness evidence ถูกสร้างและแนบ โดยไม่มี FAIL และเหลือเฉพาะ human/external actions ที่ลงนามหรือดำเนินการจริงแล้ว
 - owner/operator approval packet PASS
 - restore drill PASS
 - restore drill evidence validator PASS

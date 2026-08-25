@@ -173,6 +173,7 @@ const scripts = [
   'scripts/create-go-live-bundle.js',
   'scripts/summarize-go-live-closure.js',
   'scripts/validate-go-live-closure-status.js',
+  'scripts/collect-automated-readiness-evidence.js',
 ];
 
 const referencedFiles = [
@@ -710,6 +711,7 @@ node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timesta
 node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 node scripts/summarize-go-live-closure.js --bundle outputs/go-live-bundle/<timestamp>
 node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<timestamp>
+node scripts/collect-automated-readiness-evidence.js --bundle outputs/go-live-bundle/<timestamp> --closure outputs/go-live-closure-status/<timestamp>
 \`\`\`
 
 All final commands must pass without \`--allow-pending\` before the system can be called 100%.

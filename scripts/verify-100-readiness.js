@@ -209,6 +209,7 @@ function checkRequiredFiles() {
     'scripts/validate-go-live-bundle.js',
     'scripts/summarize-go-live-closure.js',
     'scripts/validate-go-live-closure-status.js',
+    'scripts/collect-automated-readiness-evidence.js',
     'scripts/verify-100-readiness.js',
   ];
 

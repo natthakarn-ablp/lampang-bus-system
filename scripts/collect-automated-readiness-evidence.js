@@ -66,7 +66,7 @@ fs.mkdirSync(logsDir, { recursive: true });
 const generatedAt = new Date().toISOString();
 const automated = [];
 const humanActions = [];
-const gitHead = git(['rev-parse', '--short', 'HEAD']);
+const gitHead = git(['rev-parse', '--short', 'HEAD']).trim();
 const gitStatus = git(['status', '--short']);
 
 recordInline('git-status', 'source-state', gitStatus.trim() ? 'PENDING' : 'PASS', gitStatus.trim() ? 'worktree has source changes' : 'worktree clean', gitStatus || '(clean)');

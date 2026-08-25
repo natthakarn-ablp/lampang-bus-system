@@ -9,16 +9,18 @@ const ROOT = path.resolve(__dirname, '..');
 const DEFAULT_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'phase9-evidence');
 const DEFAULT_UAT_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'uat-evidence');
 const DEFAULT_RESTORE_DRILL_ROOT = path.join(ROOT, 'outputs', 'restore-drill');
+const DEFAULT_OPERATOR_GATE_ROOT = path.join(ROOT, 'outputs', 'operator-gates');
 const DEFAULT_REPORT_ROOT = path.join(ROOT, 'outputs', 'go-live-readiness');
 
 let allowPending = false;
 let evidencePath = null;
 let restoreDrillEvidencePath = null;
+let operatorGateEvidencePath = null;
 let writeReport = true;
 let reportRoot = DEFAULT_REPORT_ROOT;
 
 function usage() {
-  console.error('Usage: node scripts/verify-100-readiness.js [--allow-pending] [--evidence <dir|manifest.json>] [--restore-drill <dir|manifest.json>] [--no-report] [--report-dir <dir>]');
+  console.error('Usage: node scripts/verify-100-readiness.js [--allow-pending] [--evidence <dir|manifest.json>] [--restore-drill <dir|manifest.json>] [--operator-gates <dir|manifest.json>] [--no-report] [--report-dir <dir>]');
 }
 
 const args = process.argv.slice(2);
@@ -31,6 +33,9 @@ for (let i = 0; i < args.length; i += 1) {
     i += 1;
   } else if (arg === '--restore-drill' && args[i + 1]) {
     restoreDrillEvidencePath = path.resolve(args[i + 1]);
+    i += 1;
+  } else if (arg === '--operator-gates' && args[i + 1]) {
+    operatorGateEvidencePath = path.resolve(args[i + 1]);
     i += 1;
   } else if (arg === '--no-report') {
     writeReport = false;
@@ -99,6 +104,19 @@ function latestRestoreDrillEvidencePath() {
   return dirs.length > 0 ? dirs[0].path : null;
 }
 
+function latestOperatorGateEvidencePath() {
+  if (!fs.existsSync(DEFAULT_OPERATOR_GATE_ROOT)) return null;
+  const dirs = fs.readdirSync(DEFAULT_OPERATOR_GATE_ROOT)
+    .map((name) => path.join(DEFAULT_OPERATOR_GATE_ROOT, name))
+    .filter((candidate) => fs.existsSync(path.join(candidate, 'manifest.json')))
+    .map((candidate) => ({
+      path: candidate,
+      mtimeMs: fs.statSync(path.join(candidate, 'manifest.json')).mtimeMs,
+    }))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return dirs.length > 0 ? dirs[0].path : null;
+}
+
 function runNodeScript(script, argsForScript) {
   const result = spawnSync(process.execPath, [path.join(ROOT, script), ...argsForScript], {
     cwd: ROOT,
@@ -153,6 +171,16 @@ function parseRestoreDrillSummary(output) {
   };
 }
 
+function parseOperatorGateSummary(output) {
+  const match = output.match(/\[operator-gate-evidence\] summary ok=(\d+) pending=(\d+) fail=(\d+)/);
+  if (!match) return null;
+  return {
+    ok: Number(match[1]),
+    pending: Number(match[2]),
+    fail: Number(match[3]),
+  };
+}
+
 function checkRequiredFiles() {
   const required = [
     'docs/READINESS_SCORECARD_2026-08.md',
@@ -174,6 +202,8 @@ function checkRequiredFiles() {
     'scripts/create-go-live-signoff-draft.js',
     'scripts/create-restore-drill-evidence-pack.js',
     'scripts/validate-restore-drill-evidence.js',
+    'scripts/create-operator-gate-evidence-pack.js',
+    'scripts/validate-operator-gate-evidence.js',
     'scripts/create-go-live-bundle.js',
     'scripts/validate-go-live-bundle.js',
     'scripts/verify-100-readiness.js',
@@ -251,6 +281,28 @@ function checkRestoreDrillEvidence() {
   return packDir;
 }
 
+function checkOperatorGateEvidence() {
+  const packDir = operatorGateEvidencePath || latestOperatorGateEvidencePath();
+  if (!packDir) {
+    addCheck('operator-gate-evidence', 'PENDING', 'no operator production/postdeploy/monitor evidence pack found');
+    return null;
+  }
+
+  const result = runNodeScript('scripts/validate-operator-gate-evidence.js', [packDir]);
+  const output = `${result.stdout}${result.stderr}`;
+  const summary = parseOperatorGateSummary(output);
+  if (result.status === 0) {
+    addCheck('operator-gate-evidence', 'PASS', 'operator gate evidence is complete', relPath(packDir));
+    return packDir;
+  }
+  if (summary && summary.fail === 0 && summary.pending > 0) {
+    addCheck('operator-gate-evidence', 'PENDING', `${summary.pending} operator gate evidence fields still pending`, relPath(packDir));
+    return packDir;
+  }
+  addCheck('operator-gate-evidence', 'FAIL', 'operator gate evidence validator failed', output.split(/\r?\n/).filter(Boolean).slice(-5).join(' | '));
+  return packDir;
+}
+
 function checkUatEvidenceSafety(packDir) {
   if (!packDir) {
     addCheck('uat-evidence-safety', 'PENDING', 'no UAT evidence pack found for safety scan');
@@ -323,7 +375,7 @@ function checkSafetyLanguage() {
   addCheck('production-safety-language', 'PASS', 'gate docs explicitly protect production data');
 }
 
-function createReport(evidenceResolved, restoreDrillEvidenceResolved, uatEvidenceResolved) {
+function createReport(evidenceResolved, restoreDrillEvidenceResolved, operatorGateEvidenceResolved, uatEvidenceResolved) {
   if (!writeReport) return null;
   const ts = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '').replace('T', '-');
   const outDir = path.join(reportRoot, ts);
@@ -339,6 +391,7 @@ function createReport(evidenceResolved, restoreDrillEvidenceResolved, uatEvidenc
     `- Generated: ${generatedAt}`,
     `- Evidence: ${evidenceResolved ? `\`${path.relative(ROOT, evidenceResolved)}\`` : 'not found'}`,
     `- Restore drill evidence: ${restoreDrillEvidenceResolved ? `\`${path.relative(ROOT, restoreDrillEvidenceResolved)}\`` : 'not found'}`,
+    `- Operator gate evidence: ${operatorGateEvidenceResolved ? `\`${path.relative(ROOT, operatorGateEvidenceResolved)}\`` : 'not found'}`,
     `- UAT evidence: ${uatEvidenceResolved ? `\`${path.relative(ROOT, uatEvidenceResolved)}\`` : 'not found'}`,
     `- Allow pending: ${allowPending}`,
     '',
@@ -364,6 +417,7 @@ function createReport(evidenceResolved, restoreDrillEvidenceResolved, uatEvidenc
     root: ROOT,
     evidence: evidenceResolved ? path.relative(ROOT, evidenceResolved) : null,
     restore_drill_evidence: restoreDrillEvidenceResolved ? path.relative(ROOT, restoreDrillEvidenceResolved) : null,
+    operator_gate_evidence: operatorGateEvidenceResolved ? path.relative(ROOT, operatorGateEvidenceResolved) : null,
     uat_evidence: uatEvidenceResolved ? path.relative(ROOT, uatEvidenceResolved) : null,
     allow_pending: allowPending,
     safety: {
@@ -388,12 +442,13 @@ function createReport(evidenceResolved, restoreDrillEvidenceResolved, uatEvidenc
 checkRequiredFiles();
 const evidenceResolved = checkPhase9Evidence(evidencePath || latestEvidencePath());
 const restoreDrillEvidenceResolved = checkRestoreDrillEvidence();
+const operatorGateEvidenceResolved = checkOperatorGateEvidence();
 const uatEvidenceResolved = checkUatEvidencePack();
 checkUatEvidenceSafety(uatEvidenceResolved);
 checkSignoff();
 checkScorecardOverall();
 checkSafetyLanguage();
-createReport(evidenceResolved, restoreDrillEvidenceResolved, uatEvidenceResolved);
+createReport(evidenceResolved, restoreDrillEvidenceResolved, operatorGateEvidenceResolved, uatEvidenceResolved);
 
 console.log(`[ready-100] summary pass=${state.pass} pending=${state.pending} fail=${state.fail} allow_pending=${allowPending}`);
 

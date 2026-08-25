@@ -15,6 +15,8 @@ URL: **https://schoolbuslampang.com**
 - ▢ เปิด `https://schoolbuslampang.com` ในเบราว์เซอร์ แสดงหน้า login ได้ปกติ
 - ▢ `curl -s http://127.0.0.1:3000/health` → `success: true`, `database.connected: true`
 - ▢ `./scripts/health-check.sh` → exit 0, ไม่มี fail, และ health commit ตรง git HEAD
+- ▢ สร้าง `outputs/operator-gates/<timestamp>/` ด้วย `node scripts/create-operator-gate-evidence-pack.js --base-url http://127.0.0.1:3000`
+- ▢ รัน production read-only gate แล้วเก็บ log ลง `outputs/operator-gates/<timestamp>/production-gate.redacted.log`
 - ▢ `systemctl is-active pm2-schoolbus` → `active`
 - ▢ `systemctl is-enabled pm2-schoolbus` → `enabled`
 
@@ -26,6 +28,7 @@ URL: **https://schoolbuslampang.com**
 - ▢ Backup ใหม่กว่า 24 ชั่วโมง (ถ้าเก่ากว่านี้ ให้รัน `./scripts/backup-db.sh` ก่อน)
 - ▢ sha256 + gzip ตรวจผ่าน (ดูใน output ของ health-check.sh)
 - ▢ Restore drill ผ่าน (อย่างน้อย 1 ครั้งก่อน go-live)
+- ▢ `node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>` → PASS
 
 ### 1.3 LINE
 - ▢ LINE Developers Console — Webhook URL ตั้งเป็น
@@ -77,6 +80,8 @@ URL: **https://schoolbuslampang.com**
 - ▢ `pm2 logs schoolbus-backend --lines 100 --nostream` → ไม่มี 500, TypeError, UnhandledPromiseRejection
 - ▢ `tail -30 /home/schoolbus/backups/lampang-bus/health-check.log` → ทุก entry `exit=0`
 - ▢ ดู `pm2 logs schoolbus-backend --lines 50 --nostream | grep -E "LINE|webhook|LIFF"` → ไม่มี fetch failed หรือ signature error
+- ▢ เก็บ postdeploy/PM2/health/off-host logs ลง `outputs/operator-gates/<timestamp>/`
+- ▢ `node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>` → PASS
 - ▢ บันทึก feedback จากผู้ใช้แต่ละ role (1 form ต่อ role)
 
 ---
@@ -125,4 +130,4 @@ URL: **https://schoolbuslampang.com**
 
 ---
 
-🟢 **เมื่อเช็คครบทุกข้อในส่วน Pre-go-live + Role smoke test แล้ว ระบบพร้อมเปิดใช้งานจริงได้**
+🟢 **เรียก 100% ได้เมื่อ Pre-go-live + Role smoke test + UAT/sign-off + restore/operator evidence validators + postdeploy monitor ผ่านครบ และ `node scripts/verify-100-readiness.js ...` ผ่านแบบไม่ใช้ `--allow-pending`**

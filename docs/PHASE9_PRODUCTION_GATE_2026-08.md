@@ -59,7 +59,9 @@ BASE_URL=https://schoolbuslampang.com bash scripts/production-readiness-gate.sh 
 
 ```bash
 cd /home/schoolbus/apps/lampang-bus-system
-BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh production
+node scripts/create-operator-gate-evidence-pack.js --base-url http://127.0.0.1:3000
+set -o pipefail
+BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh production 2>&1 | tee outputs/operator-gates/<timestamp>/production-gate.redacted.log
 ```
 
 รายการที่ตรวจ:
@@ -77,6 +79,8 @@ BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh product
 - restore-test readiness แบบ forced read-only
 
 ผลที่ต้องได้ก่อนประกาศพร้อมใช้: `fail=0` และต้อง review warning ทั้งหมด
+
+หลังกรอก `outputs/operator-gates/<timestamp>/operator-gate-result.md` บางส่วนของ production gate แล้ว ให้เก็บ pack เดียวกันไว้ใช้ต่อหลัง deploy/postdeploy
 
 ## 3. Restore Drill Gate
 
@@ -112,7 +116,8 @@ validator นี้ไม่รัน restore drill เองและไม่�
 
 ```bash
 cd /home/schoolbus/apps/lampang-bus-system
-BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh postdeploy
+set -o pipefail
+BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh postdeploy 2>&1 | tee outputs/operator-gates/<timestamp>/postdeploy-gate.redacted.log
 ```
 
 postdeploy mode ต้องพิสูจน์เพิ่มว่า:
@@ -124,10 +129,13 @@ postdeploy mode ต้องพิสูจน์เพิ่มว่า:
 หลัง gate ผ่าน ให้ monitor:
 
 ```bash
-pm2 logs schoolbus-backend --lines 100
-tail -n 100 /home/schoolbus/backups/lampang-bus/health-check.log
-tail -n 100 /home/schoolbus/logs/offhost-sync.log
+pm2 logs schoolbus-backend --lines 100 --nostream > outputs/operator-gates/<timestamp>/monitor-pm2.redacted.log 2>&1
+tail -n 100 /home/schoolbus/backups/lampang-bus/health-check.log > outputs/operator-gates/<timestamp>/monitor-health-check.redacted.log 2>&1
+tail -n 100 /home/schoolbus/logs/offhost-sync.log > outputs/operator-gates/<timestamp>/monitor-offhost-sync.redacted.log 2>&1
+node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 ```
+
+validator นี้ไม่รัน production/postdeploy gate เองและไม่เชื่อมต่อฐานข้อมูล ใช้ตรวจเฉพาะหลักฐาน/log ที่ operator แนบไว้เท่านั้น
 
 ## 4A. Evidence Pack
 
@@ -159,14 +167,15 @@ node scripts/validate-phase9-evidence.js outputs/phase9-evidence/<timestamp> --r
 node scripts/create-uat-evidence-pack.js --mode sandbox --base-url https://schoolbuslampang.com
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
+node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 node scripts/validate-go-live-signoff.js
-node scripts/verify-100-readiness.js
+node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 ```
 
 สร้างชุดส่งมอบ go-live สำหรับแนบให้ owner/operator review:
 
 ```bash
-node scripts/create-go-live-bundle.js --allow-pending --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
+node scripts/create-go-live-bundle.js --allow-pending --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --allow-pending
 ```
 
@@ -190,6 +199,7 @@ node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --all
 - owner/operator approval packet PASS
 - restore drill PASS
 - restore drill evidence validator PASS
+- operator production/postdeploy/monitor evidence validator PASS
 - UAT sign-off ครบทุกบทบาท
 - `node scripts/validate-go-live-signoff.js` PASS
 - `node scripts/verify-100-readiness.js` PASS

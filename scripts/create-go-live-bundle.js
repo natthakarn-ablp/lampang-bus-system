@@ -11,16 +11,18 @@ const DEFAULT_BUNDLE_ROOT = path.join(ROOT, 'outputs', 'go-live-bundle');
 const PHASE9_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'phase9-evidence');
 const UAT_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'uat-evidence');
 const RESTORE_DRILL_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'restore-drill');
+const OPERATOR_GATE_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'operator-gates');
 
 let allowPending = false;
 let evidencePath = null;
 let uatEvidencePath = null;
 let restoreDrillEvidencePath = null;
+let operatorGateEvidencePath = null;
 let bundleRoot = DEFAULT_BUNDLE_ROOT;
 let runId = timestampBangkok();
 
 function usage() {
-  console.error('Usage: node scripts/create-go-live-bundle.js [--allow-pending] [--evidence <dir|manifest.json>] [--uat-evidence <dir|manifest.json>] [--restore-drill <dir|manifest.json>] [--out-dir <dir>] [--run-id <id>]');
+  console.error('Usage: node scripts/create-go-live-bundle.js [--allow-pending] [--evidence <dir|manifest.json>] [--uat-evidence <dir|manifest.json>] [--restore-drill <dir|manifest.json>] [--operator-gates <dir|manifest.json>] [--out-dir <dir>] [--run-id <id>]');
 }
 
 const args = process.argv.slice(2);
@@ -36,6 +38,9 @@ for (let i = 0; i < args.length; i += 1) {
     i += 1;
   } else if (arg === '--restore-drill' && args[i + 1]) {
     restoreDrillEvidencePath = path.resolve(args[i + 1]);
+    i += 1;
+  } else if (arg === '--operator-gates' && args[i + 1]) {
+    operatorGateEvidencePath = path.resolve(args[i + 1]);
     i += 1;
   } else if (arg === '--out-dir' && args[i + 1]) {
     bundleRoot = path.resolve(args[i + 1]);
@@ -58,6 +63,7 @@ const generatedAt = new Date().toISOString();
 const selectedEvidence = normalizePackPath(evidencePath) || latestPack(PHASE9_EVIDENCE_ROOT);
 const selectedUatEvidence = normalizePackPath(uatEvidencePath) || latestPack(UAT_EVIDENCE_ROOT);
 const selectedRestoreDrillEvidence = normalizePackPath(restoreDrillEvidencePath) || latestPack(RESTORE_DRILL_EVIDENCE_ROOT);
+const selectedOperatorGateEvidence = normalizePackPath(operatorGateEvidencePath) || latestPack(OPERATOR_GATE_EVIDENCE_ROOT);
 const gitHead = git(['rev-parse', '--short', 'HEAD']);
 const gitStatus = runGitStatus();
 
@@ -92,6 +98,13 @@ const restoreDrillValidation = selectedRestoreDrillEvidence
   ])
   : missingCheck('restore-drill-evidence', 'no restore drill evidence pack found');
 
+const operatorGateValidation = selectedOperatorGateEvidence
+  ? runNode('operator-gate-evidence', 'scripts/validate-operator-gate-evidence.js', [
+    selectedOperatorGateEvidence,
+    ...(allowPending ? ['--allow-pending'] : []),
+  ])
+  : missingCheck('operator-gate-evidence', 'no operator production/postdeploy/monitor evidence pack found');
+
 const uatValidation = selectedUatEvidence
   ? runNode('uat-evidence', 'scripts/validate-uat-evidence-pack.js', [
     selectedUatEvidence,
@@ -107,6 +120,7 @@ const readinessArgs = [
   ...(allowPending ? ['--allow-pending'] : []),
   ...(selectedEvidence ? ['--evidence', selectedEvidence] : []),
   ...(selectedRestoreDrillEvidence ? ['--restore-drill', selectedRestoreDrillEvidence] : []),
+  ...(selectedOperatorGateEvidence ? ['--operator-gates', selectedOperatorGateEvidence] : []),
   '--report-dir',
   readinessReportDir,
 ];
@@ -140,6 +154,8 @@ const scripts = [
   'scripts/create-go-live-signoff-draft.js',
   'scripts/create-restore-drill-evidence-pack.js',
   'scripts/validate-restore-drill-evidence.js',
+  'scripts/create-operator-gate-evidence-pack.js',
+  'scripts/validate-operator-gate-evidence.js',
   'scripts/validate-go-live-signoff.js',
   'scripts/verify-100-readiness.js',
   'scripts/create-go-live-bundle.js',
@@ -155,6 +171,14 @@ const referencedFiles = [
   selectedRestoreDrillEvidence ? path.join(rel(selectedRestoreDrillEvidence), 'README.md') : null,
   selectedRestoreDrillEvidence ? path.join(rel(selectedRestoreDrillEvidence), 'restore-drill-result.md') : null,
   selectedRestoreDrillEvidence ? path.join(rel(selectedRestoreDrillEvidence), 'manifest.json') : null,
+  selectedOperatorGateEvidence ? path.join(rel(selectedOperatorGateEvidence), 'README.md') : null,
+  selectedOperatorGateEvidence ? path.join(rel(selectedOperatorGateEvidence), 'operator-gate-result.md') : null,
+  selectedOperatorGateEvidence ? path.join(rel(selectedOperatorGateEvidence), 'production-gate.redacted.log') : null,
+  selectedOperatorGateEvidence ? path.join(rel(selectedOperatorGateEvidence), 'postdeploy-gate.redacted.log') : null,
+  selectedOperatorGateEvidence ? path.join(rel(selectedOperatorGateEvidence), 'monitor-pm2.redacted.log') : null,
+  selectedOperatorGateEvidence ? path.join(rel(selectedOperatorGateEvidence), 'monitor-health-check.redacted.log') : null,
+  selectedOperatorGateEvidence ? path.join(rel(selectedOperatorGateEvidence), 'monitor-offhost-sync.redacted.log') : null,
+  selectedOperatorGateEvidence ? path.join(rel(selectedOperatorGateEvidence), 'manifest.json') : null,
   uatSafetyReport ? path.join(rel(uatSafetyReport), 'summary.md') : null,
   uatSafetyReport ? path.join(rel(uatSafetyReport), 'manifest.json') : null,
   signoffDraftReport ? path.join(rel(signoffDraftReport), 'summary.md') : null,
@@ -164,7 +188,7 @@ const referencedFiles = [
 ].filter(Boolean);
 
 const fileHashes = referencedFiles.map((file) => fileRecord(file));
-const checks = [gitStatus, phase9Validation, uatSafetyValidation, signoffDraftValidation, restoreDrillValidation, uatValidation, signoffValidation, readinessValidation];
+const checks = [gitStatus, phase9Validation, uatSafetyValidation, signoffDraftValidation, restoreDrillValidation, operatorGateValidation, uatValidation, signoffValidation, readinessValidation];
 const totals = checks.reduce((acc, check) => {
   acc[check.status.toLowerCase()] = (acc[check.status.toLowerCase()] || 0) + 1;
   return acc;
@@ -201,6 +225,7 @@ writeFile('manifest.json', `${JSON.stringify({
   selected_evidence: selectedEvidence ? rel(selectedEvidence) : null,
   selected_uat_evidence: selectedUatEvidence ? rel(selectedUatEvidence) : null,
   selected_restore_drill_evidence: selectedRestoreDrillEvidence ? rel(selectedRestoreDrillEvidence) : null,
+  selected_operator_gate_evidence: selectedOperatorGateEvidence ? rel(selectedOperatorGateEvidence) : null,
   readiness_report: readinessReport ? rel(readinessReport) : null,
   safety,
   bundle_files: [
@@ -420,14 +445,14 @@ function executiveBrief(decision, ready) {
 
 - Local and public evidence can be reviewed from existing evidence packs.
 - UAT role templates and sign-off documents are prepared.
-- Operator commands for production read-only gate, restore drill, deploy, postdeploy gate, and monitor are indexed in this bundle.
+- Operator commands for production read-only gate, restore drill, deploy, postdeploy gate, monitor, and evidence validation are indexed in this bundle.
 - The bundle does not copy raw UAT screenshots or sensitive evidence; it references paths and hashes files.
 
 ## Still Required Before 100%
 
 - Complete role UAT and fill \`docs/UAT_SIGNOFF_2026-08.md\`.
 - Complete owner/operator/DPO approval in \`docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md\`.
-- Run approved production read-only gate, restore drill to \`lampang_bus_restore_drill\`, deployment, postdeploy gate, and monitor.
+- Run approved production read-only gate, restore drill to \`lampang_bus_restore_drill\`, deployment, postdeploy gate, monitor, and both operator evidence validators.
 - Run \`node scripts/verify-100-readiness.js\` without \`--allow-pending\` and get PASS.
 `;
 }
@@ -449,7 +474,9 @@ node scripts/validate-phase9-evidence.js outputs/phase9-evidence/<timestamp> --r
 
 \`\`\`bash
 cd /home/schoolbus/apps/lampang-bus-system
-BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh production
+node scripts/create-operator-gate-evidence-pack.js --base-url http://127.0.0.1:3000
+set -o pipefail
+BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh production 2>&1 | tee outputs/operator-gates/<timestamp>/production-gate.redacted.log
 \`\`\`
 
 ## Restore Drill
@@ -469,10 +496,12 @@ Confirm backup checksum/gzip PASS, restore target is \`lampang_bus_restore_drill
 
 \`\`\`bash
 cd /home/schoolbus/apps/lampang-bus-system
-BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh postdeploy
-pm2 logs schoolbus-backend --lines 100 --nostream
-tail -n 100 /home/schoolbus/backups/lampang-bus/health-check.log
-tail -n 100 /home/schoolbus/logs/offhost-sync.log
+set -o pipefail
+BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh postdeploy 2>&1 | tee outputs/operator-gates/<timestamp>/postdeploy-gate.redacted.log
+pm2 logs schoolbus-backend --lines 100 --nostream > outputs/operator-gates/<timestamp>/monitor-pm2.redacted.log 2>&1
+tail -n 100 /home/schoolbus/backups/lampang-bus/health-check.log > outputs/operator-gates/<timestamp>/monitor-health-check.redacted.log 2>&1
+tail -n 100 /home/schoolbus/logs/offhost-sync.log > outputs/operator-gates/<timestamp>/monitor-offhost-sync.redacted.log 2>&1
+node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 \`\`\`
 
 ## Final Verification
@@ -483,9 +512,10 @@ node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
 node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
+node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 node scripts/validate-go-live-signoff.js
-node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp>
-node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp>
+node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
+node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 \`\`\`
 `;
 }
@@ -505,6 +535,7 @@ function signoffIndex() {
 - Phase 9 evidence: ${selectedEvidence ? `\`${rel(selectedEvidence)}\`` : 'not found'}
 - UAT evidence: ${selectedUatEvidence ? `\`${rel(selectedUatEvidence)}\`` : 'not found'}
 - Restore drill evidence: ${selectedRestoreDrillEvidence ? `\`${rel(selectedRestoreDrillEvidence)}\`` : 'not found'}
+- Operator gate evidence: ${selectedOperatorGateEvidence ? `\`${rel(selectedOperatorGateEvidence)}\`` : 'not found'}
 - UAT safety report: ${uatSafetyReport ? `\`${rel(uatSafetyReport)}\`` : 'not generated'}
 - Sign-off draft: ${signoffDraftReport ? `\`${rel(signoffDraftReport)}\`` : 'not generated'}
 - Readiness report: ${readinessReport ? `\`${rel(readinessReport)}\`` : 'not generated'}
@@ -610,6 +641,7 @@ function actionPlan() {
 - Phase 9 evidence: ${selectedEvidence ? `\`${rel(selectedEvidence)}\`` : 'not found'}
 - UAT evidence: ${selectedUatEvidence ? `\`${rel(selectedUatEvidence)}\`` : 'not found'}
 - Restore drill evidence: ${selectedRestoreDrillEvidence ? `\`${rel(selectedRestoreDrillEvidence)}\`` : 'not found'}
+- Operator gate evidence: ${selectedOperatorGateEvidence ? `\`${rel(selectedOperatorGateEvidence)}\`` : 'not found'}
 - Source state file: \`SOURCE_STATE.md\`
 - Action items: \`ACTION_ITEMS.csv\`, \`ACTION_ITEMS.json\`
 - Action item rows: ${pendingActionItems.length}
@@ -620,7 +652,7 @@ function actionPlan() {
 2. Generate and review the sign-off draft, then transfer approved PASS results and evidence links into \`docs/UAT_SIGNOFF_2026-08.md\`.
 3. Fill owner/operator/DPO approval fields in \`docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md\`.
 4. Commit or otherwise approve the exact source state that will be deployed.
-5. Run the approved production read-only gate, restore drill, restore evidence validator, deploy, postdeploy gate, and 30-60 minute monitor.
+5. Run the approved production read-only gate, restore drill, restore evidence validator, deploy, postdeploy gate, 30-60 minute monitor, and operator gate evidence validator.
 6. Update the scorecard to Overall 100% only after every strict validator passes.
 
 ## UAT Evidence Pending By Role
@@ -651,8 +683,10 @@ node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
 node scripts/validate-go-live-signoff.js
-node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp>
-node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
+node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
+node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
+node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
+node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 \`\`\`
 
 All final commands must pass without \`--allow-pending\` before the system can be called 100%.
@@ -753,6 +787,7 @@ function approvalOwner(scope) {
 function readinessOwner(pending) {
   if (/uat-evidence/i.test(pending)) return 'uat-lead';
   if (/restore-drill/i.test(pending)) return 'operator';
+  if (/operator-gate|production\/postdeploy|monitor/i.test(pending)) return 'operator';
   if (/signoff|approval/i.test(pending)) return 'project-owner';
   if (/scorecard/i.test(pending)) return 'technical-owner';
   return 'operator';
@@ -783,6 +818,7 @@ function summary(decision, ready, checksForSummary, fileHashRecords) {
 - Phase 9 evidence: ${selectedEvidence ? `\`${rel(selectedEvidence)}\`` : 'not found'}
 - UAT evidence: ${selectedUatEvidence ? `\`${rel(selectedUatEvidence)}\`` : 'not found'}
 - Restore drill evidence: ${selectedRestoreDrillEvidence ? `\`${rel(selectedRestoreDrillEvidence)}\`` : 'not found'}
+- Operator gate evidence: ${selectedOperatorGateEvidence ? `\`${rel(selectedOperatorGateEvidence)}\`` : 'not found'}
 - Readiness report: ${readinessReport ? `\`${rel(readinessReport)}\`` : 'not generated'}
 - Source state: \`SOURCE_STATE.md\`
 - Action plan: \`ACTION_PLAN.md\`

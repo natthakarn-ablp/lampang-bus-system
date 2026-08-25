@@ -6,13 +6,14 @@
 
 | Evidence | สถานะ |
 |---|---|
-| Local gate | PASS: `pass=12 warn=0 fail=0` |
+| Local gate | PASS: `pass=13 warn=0 fail=0` |
 | Public external gate | PASS: `pass=5 warn=0 fail=0` against `https://schoolbuslampang.com` |
 | Evidence pack | `outputs/phase9-evidence/20260825-201200/summary.md` |
 | Evidence validator | PASS via `scripts/validate-phase9-evidence.js` |
 | UAT evidence safety scan | ต้อง PASS ผ่าน `scripts/scan-uat-evidence-safety.js` ก่อนแนบหลักฐาน UAT |
 | UAT sign-off draft | สร้างด้วย `scripts/create-go-live-signoff-draft.js` เพื่อช่วยย้ายผลจาก evidence pack เข้า sign-off โดยไม่เขียนทับเอกสารหลัก |
 | Restore drill evidence | ต้องสร้างด้วย `scripts/create-restore-drill-evidence-pack.js`, กรอกผลจาก operator, และ PASS ผ่าน `scripts/validate-restore-drill-evidence.js` |
+| Operator gate evidence | ต้องสร้างด้วย `scripts/create-operator-gate-evidence-pack.js`, กรอกผล production/postdeploy/monitor, และ PASS ผ่าน `scripts/validate-operator-gate-evidence.js` |
 | Go-live bundle | สร้างด้วย `node scripts/create-go-live-bundle.js --allow-pending` และตรวจด้วย `validate-go-live-bundle.js` ก่อน review; เปิด `SOURCE_STATE.md`, `ACTION_PLAN.md`, และ `ACTION_ITEMS.csv` เพื่อปิดงานค้าง; รอบสุดท้ายต้องไม่มี pending |
 | Production data | Real data; do not write during gate checks |
 
@@ -45,7 +46,8 @@ BASE_URL=https://schoolbuslampang.com bash scripts/collect-phase9-evidence.sh pu
 node scripts/validate-phase9-evidence.js outputs/phase9-evidence/<timestamp> --require-mode public
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
-node scripts/create-go-live-bundle.js --allow-pending --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
+node scripts/create-operator-gate-evidence-pack.js --base-url http://127.0.0.1:3000
+node scripts/create-go-live-bundle.js --allow-pending --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --operator-gates outputs/operator-gates/<timestamp>
 node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --allow-pending
 ```
 
@@ -53,7 +55,8 @@ node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --all
 
 ```bash
 cd /home/schoolbus/apps/lampang-bus-system
-BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh production
+set -o pipefail
+BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh production 2>&1 | tee outputs/operator-gates/<timestamp>/production-gate.redacted.log
 ```
 
 ### 3. Restore drill หลัง operator ยืนยัน target แล้ว
@@ -77,10 +80,12 @@ node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp
 
 ```bash
 cd /home/schoolbus/apps/lampang-bus-system
-BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh postdeploy
-pm2 logs schoolbus-backend --lines 100 --nostream
-tail -n 100 /home/schoolbus/backups/lampang-bus/health-check.log
-tail -n 100 /home/schoolbus/logs/offhost-sync.log
+set -o pipefail
+BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh postdeploy 2>&1 | tee outputs/operator-gates/<timestamp>/postdeploy-gate.redacted.log
+pm2 logs schoolbus-backend --lines 100 --nostream > outputs/operator-gates/<timestamp>/monitor-pm2.redacted.log 2>&1
+tail -n 100 /home/schoolbus/backups/lampang-bus/health-check.log > outputs/operator-gates/<timestamp>/monitor-health-check.redacted.log 2>&1
+tail -n 100 /home/schoolbus/logs/offhost-sync.log > outputs/operator-gates/<timestamp>/monitor-offhost-sync.redacted.log 2>&1
+node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 ```
 
 ## Sign-off
@@ -92,6 +97,6 @@ tail -n 100 /home/schoolbus/logs/offhost-sync.log
 | | Operator | PASS / PASS WITH CONDITIONS / FAIL | | | |
 | | DPO/Legal | PASS / PASS WITH CONDITIONS / FAIL | | | เฉพาะ consent/QR/LINE policy |
 
-ระบบเรียก 100% ได้เมื่อทุก gate ในเอกสารนี้ผ่าน, restore drill evidence validator PASS, `docs/UAT_SIGNOFF_2026-08.md` ผ่านครบทุกบทบาท, `node scripts/validate-go-live-signoff.js` PASS, `node scripts/verify-100-readiness.js` PASS, และ postdeploy monitor ไม่มี error pattern ใหม่
+ระบบเรียก 100% ได้เมื่อทุก gate ในเอกสารนี้ผ่าน, restore drill evidence validator PASS, operator gate evidence validator PASS, `docs/UAT_SIGNOFF_2026-08.md` ผ่านครบทุกบทบาท, `node scripts/validate-go-live-signoff.js` PASS, `node scripts/verify-100-readiness.js` PASS, และ postdeploy monitor ไม่มี error pattern ใหม่
 
 ก่อนลงนามรอบสุดท้าย ให้สร้างและตรวจ go-live bundle โดยไม่ใส่ `--allow-pending` แล้วแนบ `outputs/go-live-bundle/<timestamp>/summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, และ `ACTION_ITEMS.csv` กับเอกสารนี้

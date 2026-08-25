@@ -214,9 +214,16 @@ function recordSecretScan(id, category, text) {
 function secretMatches(text) {
   const pattern = /(DB_PASSWORD|PASSWORD=|SECRET=|TOKEN=|Bearer |LINE_CHANNEL_SECRET|CHANNEL_ACCESS_TOKEN|mysql:\/\/|JWT_SECRET|[A-Za-z0-9_]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})/;
   return String(text || '').split(/\r?\n/).filter((line) => {
-    if (/const pattern = \/\(DB_PASSWORD/.test(line)) return false;
+    if (isScannerPatternSourceLine(line)) return false;
     return pattern.test(line);
   });
+}
+
+function isScannerPatternSourceLine(line) {
+  return line.includes('DB_PASSWORD') && (
+    line.includes('const pattern') ||
+    line.includes('isScannerPatternSourceLine')
+  );
 }
 
 function capabilityAudit() {

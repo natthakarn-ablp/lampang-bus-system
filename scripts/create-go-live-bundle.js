@@ -99,6 +99,7 @@ const scripts = [
   'scripts/validate-phase9-evidence.js',
   'scripts/create-uat-evidence-pack.js',
   'scripts/validate-uat-evidence-pack.js',
+  'scripts/summarize-uat-evidence.js',
   'scripts/validate-go-live-signoff.js',
   'scripts/verify-100-readiness.js',
   'scripts/create-go-live-bundle.js',
@@ -421,6 +422,7 @@ tail -n 100 /home/schoolbus/logs/offhost-sync.log
 
 \`\`\`bash
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
+node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/verify-100-readiness.js
 node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
@@ -581,6 +583,7 @@ ${readinessBullets}
 
 \`\`\`bash
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
+node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp>
 node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>

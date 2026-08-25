@@ -18,6 +18,22 @@ const reportRoutes      = require('./routes/report.routes');
 
 const app = express();
 
+const GLOBAL_API_LIMITED_PREFIXES = [
+  '/api/driver',
+  '/api/school',
+  '/api/affiliation',
+  '/api/province',
+  '/api/transport',
+  '/api/verification',
+  '/api/documents',
+  '/api/admin',
+  '/api/readiness',
+  '/api/terms',
+  '/api/eta',
+  '/api/geofences',
+  '/api/route-deviations',
+];
+
 // ─── Proxy trust ────────────────────────────────────────────────────────────
 // Production chain: client → Cloudflare → nginx (127.0.0.1) → backend.
 // nginx appends `$remote_addr` (= Cloudflare edge IP) via
@@ -89,6 +105,26 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+// ─── Global rate-limit floor (Medium fix) ───────────────────────────────────
+// A single authenticated token should not be able to hammer any API endpoint
+// unchecked. The per-route limiters (login/refresh/export/webhook) stay in
+// place; this is a catch-all floor for /api/{school,affiliation,province,
+// transport,admin}/* and related authenticated operator routes. Generous enough
+// for normal UI usage, tight enough to prevent pool exhaustion (pool=10).
+const globalApiLimiter = rateLimit({
+  windowMs: 60 * 1000,       // 1 minute
+  max: 120,                  // 120 requests/min per IP — ~2/sec, plenty for UI
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { success: false, message: 'คำขอถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+});
+
+// Mount BEFORE the protected routers below. Keep it scoped so login, LINE
+// webhook/LIFF parent endpoints, and report exports continue to use their own
+// tighter/specialized limiters instead of sharing this generic UI floor.
+app.use(GLOBAL_API_LIMITED_PREFIXES, globalApiLimiter);
+
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth',   authRoutes);
 
@@ -123,22 +159,6 @@ const exportLimiter = rateLimit({
   message: { success: false, message: 'ขอรายงานถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
 });
 app.use('/api/reports',     exportLimiter, reportRoutes);
-
-// ─── Global rate-limit floor (Medium fix) ───────────────────────────────────
-// A single authenticated token should not be able to hammer any API endpoint
-// unchecked. The per-route limiters (login/refresh/export/webhook) stay in
-// place; this is a catch-all floor for /api/{school,affiliation,province,
-// transport,admin}/* which had no limiter at all. Generous enough for normal
-// UI usage, tight enough to prevent pool exhaustion (pool=10).
-const globalApiLimiter = rateLimit({
-  windowMs: 60 * 1000,       // 1 minute
-  max: 120,                  // 120 requests/min per IP — ~2/sec, plenty for UI
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
-  message: { success: false, message: 'คำขอถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
-});
-app.use('/api/', globalApiLimiter);
 
 // ─── Phase 7+ routes ────────────────────────────────────────────────────────
 app.use('/api/transport', require('./routes/transport.routes'));
@@ -195,3 +215,4 @@ app.use(errorHandler);
 module.exports = app;
 // Exposed for unit testing the CORS allow-list.
 module.exports.isOriginAllowed = isOriginAllowed;
+module.exports.GLOBAL_API_LIMITED_PREFIXES = GLOBAL_API_LIMITED_PREFIXES;

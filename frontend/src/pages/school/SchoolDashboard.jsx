@@ -308,7 +308,7 @@ export default function SchoolDashboard() {
           {/* Leave list with cancel — school can cancel leaves recorded in error */}
           {leaves.length > 0 && !isTeacher && (
             <CollapsibleSection
-              title="นักเรียนลาวันนี้"
+              title="นักเรียนลา"
               subtitle={`${leaves.length} รายการ`}
               defaultOpen={false}
             >

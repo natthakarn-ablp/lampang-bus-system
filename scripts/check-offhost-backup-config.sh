@@ -7,10 +7,15 @@
 # backup safely deferred until the config exists and a dry-run passes.
 #
 # Exit: 0 = config valid + dry-run OK, 1 = config missing, 2 = unsafe/invalid.
+#
+# Env:
+#   OFFHOST_CHECK_READ_ONLY=true  # validate config/commands only; skip dry-run
 # ─────────────────────────────────────────────────────────────
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CFG="$ROOT/scripts/offhost-backup-sync.env"
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+: "${OFFHOST_CHECK_READ_ONLY:=false}"
 note() { echo "[offhost-check] $*"; }
 
 if [ ! -f "$CFG" ]; then
@@ -58,6 +63,11 @@ case "$OFFHOST_BACKUP_METHOD" in
   *)
     note "UNSAFE: OFFHOST_BACKUP_METHOD must be 'rclone' or 'rsync' (found '${OFFHOST_BACKUP_METHOD}')"; exit 2 ;;
 esac
+
+if [ "$OFFHOST_CHECK_READ_ONLY" = "true" ]; then
+  note "READ_ONLY: config and required commands validated; dry-run skipped"
+  exit 0
+fi
 
 # Safe dry-run (never uploads).
 note "running DRY_RUN sync…"

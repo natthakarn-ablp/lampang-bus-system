@@ -12,6 +12,9 @@
 #   RESTORE_TEST_DB=lampang_bus_restoretest
 #   RESTORE_TEST_MYSQL_DEFAULTS_FILE=/home/schoolbus/.restore-test.cnf
 #   RESTORE_TEST_ALLOW_CREATE_DATABASE=false
+#
+# Env:
+#   RESTORE_TEST_FORCE_READ_ONLY=true  # never create the test DB even if config allows it
 # ─────────────────────────────────────────────────────────────
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,6 +44,11 @@ fi
 : "${RESTORE_TEST_DB:=}"
 : "${RESTORE_TEST_MYSQL_DEFAULTS_FILE:=}"
 : "${RESTORE_TEST_ALLOW_CREATE_DATABASE:=false}"
+: "${RESTORE_TEST_FORCE_READ_ONLY:=false}"
+
+if [ "$RESTORE_TEST_FORCE_READ_ONLY" = "true" ]; then
+  RESTORE_TEST_ALLOW_CREATE_DATABASE=false
+fi
 
 # 4. Guard: test DB must never be production.
 if [ -n "$RESTORE_TEST_DB" ] && [ "$RESTORE_TEST_DB" = "$PROD_DB" ]; then

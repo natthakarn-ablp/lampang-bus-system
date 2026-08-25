@@ -34,14 +34,15 @@ try {
 
 /**
  * Resolve the short git commit ONCE at module load. Order of preference:
- *   1. process.env.GIT_COMMIT  (set by CI / Docker build at deploy time)
- *   2. `git rev-parse --short HEAD`  (works in dev + on-server checkouts)
+ *   1. `git rev-parse --short HEAD`  (authoritative on on-server checkouts)
+ *   2. process.env.GIT_COMMIT  (CI / Docker fallback when .git is absent)
  *   3. null  (graceful — /health stays usable in non-repo environments)
+ *
+ * Production deploys run from a git checkout, and the smoke test compares
+ * /health.data.commit with `git rev-parse --short HEAD`. Prefer the checkout's
+ * HEAD so a stale PM2/CI `GIT_COMMIT` env var cannot mask a runtime mismatch.
  */
 function resolveCommit() {
-  if (process.env.GIT_COMMIT) {
-    return String(process.env.GIT_COMMIT).trim().slice(0, 12);
-  }
   try {
     const repoRoot = path.resolve(__dirname, '..', '..', '..');
     const sha = execSync('git rev-parse --short HEAD', {
@@ -49,10 +50,14 @@ function resolveCommit() {
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 1000,
     }).toString().trim();
-    return sha || null;
+    if (sha) return sha.slice(0, 12);
   } catch {
-    return null;
+    // Fall through to env fallback.
   }
+  if (process.env.GIT_COMMIT) {
+    return String(process.env.GIT_COMMIT).trim().slice(0, 12);
+  }
+  return null;
 }
 
 const BUILD_INFO = Object.freeze({

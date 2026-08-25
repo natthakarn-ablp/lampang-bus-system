@@ -3,6 +3,11 @@
 > ระบบรถรับส่งนักเรียนจังหวัดลำปาง — เอกสารส่งมอบขั้นสุดท้าย
 > Phase 10.11D • Closeout snapshot: 2026-06-02
 
+> **Historical snapshot:** เอกสารนี้เป็นสถานะเดือน 2026-06 เท่านั้น สำหรับรอบเปิดใช้งาน/ตรวจความพร้อมล่าสุดให้ใช้
+> `docs/PRODUCTION_GOVERNANCE_CHECKLIST_2026-08.md`,
+> `docs/UAT_SIGNOFF_2026-08.md`, `docs/TRAINING_PACK_2026-08.md`,
+> และ `docs/OPERATOR_RUNBOOK.md`
+
 ---
 
 ## 1. Executive Summary
@@ -12,12 +17,12 @@
 | Project | **Lampang Bus System** (ระบบรถรับส่งนักเรียนจังหวัดลำปาง) |
 | Public URL | **https://schoolbuslampang.com** |
 | Backend health | `/health` (loopback) + `/api/health` (public) |
-| Current readiness | 🟢 **READY FOR CONTROLLED GO-LIVE WITH OFF-HOST BACKUP PENDING** |
+| Historical readiness (2026-06) | 🟢 **READY FOR CONTROLLED GO-LIVE WITH OFF-HOST BACKUP PENDING** |
 | Closeout date | 2026-06-02 |
 | Latest documentation commit | `67e5966` (`docs: add final UAT and handoff documentation`) |
 | Latest application commit serving production | `cdc0ec0` (`feat(line): switch notification resolver to phone-based binding`) |
 | Latest frontend bundle | built from `2a802b2` (`fix(parent): make LIFF bind route tolerant of endpoint config`) — subsequent commits are scripts/docs only |
-| Main caveat | 🟡 Off-host backup destination not yet configured (Phase 10.10F-2 pending operator decision) |
+| Main caveat (historical 2026-06) | 🟡 Off-host backup destination not yet configured (Phase 10.10F-2 pending operator decision) |
 
 > **One-line status**: ระบบพร้อมเปิดใช้งานจริงในระดับ controlled production
 > มีคำเตือน 1 ข้อ คือยังต้องตั้งค่า off-host backup destination ก่อนถึงจะเป็น
@@ -268,7 +273,7 @@ modifies live data and requires a maintenance window.
 
 ---
 
-## 10. Final Recommendation
+## 10. Final Recommendation (Historical 2026-06)
 
 🟢 **พร้อมเปิดใช้งานจริงแบบควบคุม** (controlled go-live)
 **โดยมีข้อแม้ให้เร่งตั้งค่า off-host backup เป็นงานลำดับถัดไป**

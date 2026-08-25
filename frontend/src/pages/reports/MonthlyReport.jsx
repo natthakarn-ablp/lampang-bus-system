@@ -331,7 +331,11 @@ export default function MonthlyReport() {
 
           {/* ── FOOTER ── */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 mt-6">
-            <ExportButtons queryParams={`date=${month}-01`} filenamePrefix={`report-${month}`} />
+            <ExportButtons
+              basePath="/api/reports/export/monthly"
+              queryParams={`month=${month}`}
+              filenamePrefix={`monthly-report-${month}`}
+            />
             <p className="text-xs text-gray-400">
               สร้างจากระบบรถรับส่งนักเรียนจังหวัดลำปาง · {new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
             </p>

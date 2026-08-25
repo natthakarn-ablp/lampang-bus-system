@@ -15,6 +15,27 @@ router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin
 
 const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_RE = /^\d{4}-\d{2}$/;
+const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+function isLeapYear(year) {
+  return (year % 400 === 0) || (year % 4 === 0 && year % 100 !== 0);
+}
+
+function isValidMonth(value) {
+  if (!MONTH_RE.test(value)) return false;
+  const month = Number(value.slice(5, 7));
+  return month >= 1 && month <= 12;
+}
+
+function isValidDate(value) {
+  if (!DATE_RE.test(value)) return false;
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  if (month < 1 || month > 12) return false;
+  const maxDay = month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
+  return day >= 1 && day <= maxDay;
+}
 
 /**
  * Extract and validate common filter params from query string.
@@ -22,11 +43,11 @@ const MONTH_RE = /^\d{4}-\d{2}$/;
 function extractFilters(query) {
   const filters = {};
   if (query.date) {
-    if (!DATE_RE.test(query.date)) return { _error: 'date ต้องเป็นรูปแบบ YYYY-MM-DD' };
+    if (!isValidDate(query.date)) return { _error: 'date ต้องเป็นวันที่จริงรูปแบบ YYYY-MM-DD' };
     filters.date = query.date;
   }
   if (query.month) {
-    if (!MONTH_RE.test(query.month)) return { _error: 'month ต้องเป็นรูปแบบ YYYY-MM' };
+    if (!isValidMonth(query.month)) return { _error: 'month ต้องเป็นเดือนจริงรูปแบบ YYYY-MM' };
     filters.month = query.month;
   }
   if (query.school_id)      filters.school_id = query.school_id;
@@ -96,6 +117,97 @@ const CSV_HEADERS = [
   'บริการเช้า', 'บริการเย็น',
   'สถานะเช้า', 'เวลาเช้า', 'สถานะเย็น', 'เวลาเย็น',
 ];
+
+const MONTHLY_HEADERS = [
+  'ส่วน', 'รายการ', 'นักเรียน',
+  'ส่งเช้าแล้ว', 'ส่งเช้าคาดหวัง', 'KPI เช้า',
+  'รับเย็นแล้ว', 'รับเย็นคาดหวัง', 'KPI เย็น',
+  'วันที่มีข้อมูล', 'วันส่งเช้าครบ 100%', 'วันรับเย็นครบ 100%',
+];
+
+function toNumber(value) {
+  return Number(value || 0);
+}
+
+function percentCell(value) {
+  return `${toNumber(value).toFixed(2)}%`;
+}
+
+function monthlyExpected(perDay, days) {
+  return toNumber(perDay) * toNumber(days);
+}
+
+function buildMonthlyExportRows(report) {
+  const rows = [
+    {
+      section: 'ภาพรวม',
+      name: report.month,
+      student_count: report.total_students,
+      morning_done: report.total_morning_done,
+      morning_expected: report.total_morning_expected,
+      morning_kpi: report.morning_kpi,
+      evening_done: report.total_evening_done,
+      evening_expected: report.total_evening_expected,
+      evening_kpi: report.evening_kpi,
+      days_with_data: report.days_with_data,
+      days_morning_100: report.days_morning_100,
+      days_evening_100: report.days_evening_100,
+    },
+  ];
+
+  for (const s of report.schools || []) {
+    rows.push({
+      section: 'โรงเรียน',
+      name: s.school_name,
+      student_count: s.student_count,
+      morning_done: s.total_morning_done,
+      morning_expected: monthlyExpected(s.morning_expected, s.days_with_data),
+      morning_kpi: s.morning_kpi,
+      evening_done: s.total_evening_done,
+      evening_expected: monthlyExpected(s.evening_expected, s.days_with_data),
+      evening_kpi: s.evening_kpi,
+      days_with_data: s.days_with_data,
+      days_morning_100: s.days_morning_100,
+      days_evening_100: s.days_evening_100,
+    });
+  }
+
+  for (const v of report.vehicles || []) {
+    rows.push({
+      section: 'รถรับส่ง',
+      name: v.plate_no || '-',
+      student_count: v.student_count,
+      morning_done: v.total_morning_done,
+      morning_expected: monthlyExpected(v.student_count, v.days_with_data),
+      morning_kpi: v.morning_kpi,
+      evening_done: v.total_evening_done,
+      evening_expected: monthlyExpected(v.student_count, v.days_with_data),
+      evening_kpi: v.evening_kpi,
+      days_with_data: v.days_with_data,
+      days_morning_100: '',
+      days_evening_100: '',
+    });
+  }
+
+  return rows;
+}
+
+function monthlyRowValues(row) {
+  return [
+    row.section,
+    row.name,
+    row.student_count,
+    row.morning_done,
+    row.morning_expected,
+    percentCell(row.morning_kpi),
+    row.evening_done,
+    row.evening_expected,
+    percentCell(row.evening_kpi),
+    row.days_with_data,
+    row.days_morning_100,
+    row.days_evening_100,
+  ];
+}
 
 /**
  * GET /api/reports/export/csv
@@ -346,6 +458,190 @@ router.get('/export/pdf', async (req, res, next) => {
 
     logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_pdf', entityId: report.date,
       newValue: { format: 'pdf', role: req.user.role, scope: req.user.scopeId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
+    doc.end();
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/reports/export/monthly/csv
+ * Aggregate monthly export. Does not include student-level PII.
+ */
+router.get('/export/monthly/csv', async (req, res, next) => {
+  try {
+    const report = await reportSvc.getMonthlyReport(req.user, req.filters);
+    const rows = buildMonthlyExportRows(report);
+    const filename = `monthly-report-${report.month}.csv`;
+
+    const BOM = '\uFEFF';
+    let csv = BOM + MONTHLY_HEADERS.map(csvCell).join(',') + '\n';
+    for (const row of rows) {
+      csv += monthlyRowValues(row).map(csvCell).join(',') + '\n';
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_monthly_csv', entityId: report.month,
+      newValue: { format: 'csv', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
+    return res.send(csv);
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/reports/export/monthly/excel
+ * Aggregate monthly export. Does not include student-level PII.
+ */
+router.get('/export/monthly/excel', async (req, res, next) => {
+  try {
+    const report = await reportSvc.getMonthlyReport(req.user, req.filters);
+    const rows = buildMonthlyExportRows(report);
+    const filename = `monthly-report-${report.month}.xlsx`;
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'ระบบรถรับส่งนักเรียนจังหวัดลำปาง';
+    const sheet = workbook.addWorksheet('รายงานรายเดือน');
+    sheet.columns = MONTHLY_HEADERS.map((h, i) => ({
+      header: h,
+      key: `col${i}`,
+      width: i <= 1 ? 28 : 16,
+    }));
+
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+
+    for (const row of rows) {
+      const values = monthlyRowValues(row).map(neutralizeSpreadsheetCell);
+      sheet.addRow(Object.fromEntries(values.map((v, i) => [`col${i}`, v])));
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_monthly_excel', entityId: report.month,
+      newValue: { format: 'excel', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/reports/export/monthly/pdf
+ * Executive PDF summary for the selected month.
+ */
+router.get('/export/monthly/pdf', async (req, res, next) => {
+  try {
+    const report = await reportSvc.getMonthlyReport(req.user, req.filters);
+    const rows = buildMonthlyExportRows(report);
+    const monthLabel = new Date(`${report.month}-01`).toLocaleDateString('th-TH', {
+      year: 'numeric', month: 'long', timeZone: 'Asia/Bangkok',
+    });
+    const filename = `monthly-report-${report.month}.pdf`;
+
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    doc.pipe(res);
+
+    const env = require('../config/env');
+    const fs = require('fs');
+    let fontName = 'Helvetica';
+    let fontBold = 'Helvetica-Bold';
+    const fontPath = env.export.pdfFontPath;
+    const boldPath = fontPath ? fontPath.replace('-Regular', '-Bold') : null;
+    if (fontPath && fs.existsSync(fontPath)) {
+      doc.registerFont('Thai', fontPath);
+      fontName = 'Thai';
+      fontBold = 'Thai';
+      if (boldPath && fs.existsSync(boldPath)) {
+        doc.registerFont('ThaiBold', boldPath);
+        fontBold = 'ThaiBold';
+      }
+    }
+
+    doc.font(fontBold).fontSize(16).text('รายงานรายเดือนรถรับส่งนักเรียน', { align: 'center' });
+    doc.font(fontName).fontSize(11).text('ระบบรถรับส่งนักเรียนจังหวัดลำปาง', { align: 'center' });
+    doc.fontSize(11).text(`เดือน ${monthLabel}`, { align: 'center' });
+    doc.moveDown(1.2);
+
+    doc.font(fontBold).fontSize(13).text('สรุปภาพรวม');
+    doc.moveDown(0.3);
+    doc.font(fontName).fontSize(11);
+    const summaryRows = [
+      ['นักเรียนทั้งหมด', `${report.total_students} คน`],
+      ['ข้อมูลที่มีในเดือน', `${report.days_with_data} วัน`],
+      ['KPI ส่งเช้า', `${percentCell(report.morning_kpi)} (${report.total_morning_done}/${report.total_morning_expected})`],
+      ['KPI รับเย็น', `${percentCell(report.evening_kpi)} (${report.total_evening_done}/${report.total_evening_expected})`],
+      ['วันส่งเช้าครบ 100%', `${report.days_morning_100} วัน`],
+      ['วันรับเย็นครบ 100%', `${report.days_evening_100} วัน`],
+      ['เหตุฉุกเฉิน', `${report.emergency_count} รายการ`],
+    ];
+    for (const [label, value] of summaryRows) {
+      const y = doc.y;
+      doc.font(fontName).text(label, 60, y, { width: 180 });
+      doc.font(fontBold).text(value, 240, y, { width: 260 });
+      doc.y = y + 18;
+    }
+    doc.moveDown(0.8);
+
+    const tableRows = rows.filter((row) => row.section === 'โรงเรียน').slice(0, 30);
+    if (tableRows.length > 0) {
+      doc.font(fontBold).fontSize(13).text('สรุปรายโรงเรียน');
+      doc.moveDown(0.3);
+
+      const cols = [
+        { l: 'โรงเรียน', w: 220, a: 'left' },
+        { l: 'นักเรียน', w: 55, a: 'center' },
+        { l: 'KPI เช้า', w: 70, a: 'center' },
+        { l: 'KPI เย็น', w: 70, a: 'center' },
+        { l: 'วันข้อมูล', w: 65, a: 'center' },
+      ];
+      const pageW = doc.page.width - 80;
+      let tx = 45;
+      const hy = doc.y;
+      doc.rect(40, hy - 2, pageW, 18).fill('#2563eb');
+      doc.fill('#ffffff').font(fontBold).fontSize(9);
+      for (const c of cols) { doc.text(c.l, tx, hy + 2, { width: c.w, align: c.a }); tx += c.w; }
+      doc.y = hy + 20;
+      doc.fill('#000000').font(fontName).fontSize(9);
+
+      let alt = false;
+      for (const row of tableRows) {
+        if (doc.y > 750) doc.addPage();
+        const rowY = doc.y;
+        if (alt) doc.rect(40, rowY - 1, pageW, 16).fill('#f3f4f6').fill('#000000');
+        alt = !alt;
+        tx = 45;
+        const vals = [
+          { v: row.name || '-', a: 'left' },
+          { v: `${row.student_count}`, a: 'center' },
+          { v: percentCell(row.morning_kpi), a: 'center' },
+          { v: percentCell(row.evening_kpi), a: 'center' },
+          { v: `${row.days_with_data}`, a: 'center' },
+        ];
+        for (let i = 0; i < cols.length; i++) {
+          doc.text(vals[i].v, tx, rowY + 1, { width: cols[i].w, align: vals[i].a });
+          tx += cols[i].w;
+        }
+        doc.y = rowY + 17;
+      }
+      if (rows.filter((row) => row.section === 'โรงเรียน').length > tableRows.length) {
+        doc.moveDown(0.3);
+        doc.font(fontName).fontSize(8).fillColor('#666666')
+          .text('หมายเหตุ: PDF แสดง 30 โรงเรียนแรก ดาวน์โหลด CSV/Excel เพื่อดูรายการทั้งหมด');
+        doc.fillColor('#000000');
+      }
+    }
+
+    doc.moveDown(1);
+    doc.font(fontName).fontSize(8).fillColor('#999999')
+      .text(`พิมพ์จากระบบรถรับส่งนักเรียนจังหวัดลำปาง — ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`, { align: 'center' });
+
+    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_monthly_pdf', entityId: report.month,
+      newValue: { format: 'pdf', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
       ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
     doc.end();
   } catch (err) { next(err); }

@@ -22,11 +22,12 @@
 | ข้อมูลบุตร | ดูข้อมูลนักเรียนที่ผูกไว้ |
 | ช่วยเหลือ | แสดงเมนูคำสั่ง |
 
-## การแจ้งเตือนอัตโนมัติ
+## การแจ้งเตือนและการดูสถานะ
 
-- เมื่อคนขับเช็กอินนักเรียน → ผู้ปกครองได้รับข้อความ
-- เมื่อคนขับเช็กเอาต์นักเรียน → ผู้ปกครองได้รับข้อความ
-- เมื่อมีเหตุฉุกเฉิน → ผู้ปกครองได้รับข้อความ (ถ้าเกี่ยวข้อง)
+- ผู้ปกครองดูสถานะรับ-ส่งประจำวันผ่าน LIFF (`/parent`) หลังผูกบัญชีสำเร็จ
+- ระบบบันทึกสถานะจาก check-in/check-out ลง `daily_status` เพื่อให้ผู้ปกครองเปิดดูได้
+- การ push ผ่าน LINE ควรใช้กับเหตุสำคัญ/ข้อยกเว้น เช่น เหตุฉุกเฉิน เพื่อลดความเสี่ยงโควตา LINE OA
+- หากหน่วยงานมี LINE plan ที่รองรับปริมาณข้อความสูง และต้องการ push check-in/check-out ทุกครั้ง ให้ปรับ `backend/scripts/dispatch-notifications.js` และทดสอบภาระข้อความก่อนเปิดจริง
 
 ## การตั้งค่า LINE OA
 
@@ -55,4 +56,6 @@
   - `frontend/src/pages/parent/ParentLink.jsx` — หน้าผูกบัญชี LINE
   - route: `/parent` และ `/parent/link` ใน `frontend/src/App.jsx`
   - LIFF Endpoint URL ตั้งที่ `https://schoolbuslampang.com/parent/link` ใน LINE Console
-- Notification processing ต้องเรียก POST /api/line/process-notifications เป็น cron (ตั้งไว้ทุก 5 นาทีใน crontab)
+- Notification processing มี 2 แนวทาง:
+  - endpoint ภายใน `POST /api/line/process-notifications` ต้องเรียกด้วย `x-api-key`
+  - script `backend/scripts/dispatch-notifications.js --apply` เป็นแนวทาง cron สำหรับส่งเฉพาะ push types ที่อนุญาต โดยค่าเริ่มต้นเน้น `emergency`

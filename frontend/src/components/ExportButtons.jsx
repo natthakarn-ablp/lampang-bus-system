@@ -7,7 +7,13 @@ const FORMATS = [
   { key: 'pdf',   label: 'PDF',   ext: 'pdf',  style: 'bg-danger-soft hover:bg-danger-soft/80 text-danger border-danger/20' },
 ];
 
-export default function ExportButtons({ queryParams = '', filenamePrefix = 'report', onPdf, onBeforeExport }) {
+export default function ExportButtons({
+  queryParams = '',
+  filenamePrefix = 'report',
+  onPdf,
+  onBeforeExport,
+  basePath = '/api/reports/export',
+}) {
   const [downloading, setDownloading] = useState(null);
   const toast = useToast();
 
@@ -31,7 +37,7 @@ export default function ExportButtons({ queryParams = '', filenamePrefix = 'repo
     try {
       const token = localStorage.getItem('access_token');
       const sep = queryParams ? '?' : '';
-      const url = `/api/reports/export/${fmt.key}${sep}${queryParams}`;
+      const url = `${basePath}/${fmt.key}${sep}${queryParams}`;
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 
       if (!res.ok) throw new Error('Export failed');

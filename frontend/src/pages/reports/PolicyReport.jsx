@@ -57,7 +57,7 @@ export default function PolicyReport() {
         <>
           {/* Province totals */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-            <DashboardCard label="เขตพื้นที่" value={t.affiliations ?? 0} color="blue" />
+            <DashboardCard label="สังกัด" value={t.affiliations ?? 0} color="blue" />
             <DashboardCard label="โรงเรียน" value={t.schools ?? 0} color="blue" />
             <DashboardCard label="นักเรียน" value={t.students ?? 0} color="blue" />
             <DashboardCard label="รถรับส่ง" value={t.vehicles ?? 0} color="blue" />
@@ -79,7 +79,7 @@ export default function PolicyReport() {
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
             <h2 className="text-sm font-semibold text-blue-800 mb-3">สรุปผู้บริหาร</h2>
             <ul className="text-sm text-blue-700 space-y-1.5 leading-relaxed">
-              <li>• ครอบคลุม {t.affiliations ?? 0} เขตพื้นที่ · {t.schools ?? 0} โรงเรียน · นักเรียน {(t.students ?? 0).toLocaleString('th-TH')} คน · รถ {t.vehicles ?? 0} คัน</li>
+              <li>• ครอบคลุม {t.affiliations ?? 0} สังกัด · {t.schools ?? 0} โรงเรียน · นักเรียน {(t.students ?? 0).toLocaleString('th-TH')} คน · รถ {t.vehicles ?? 0} คัน</li>
               <li>• วันนี้ติดตามการเดินทาง {today.tracked ?? 0} คน — ส่งเช้า <strong>{today.morning_pct ?? 0}%</strong> · รับเย็น <strong>{today.evening_pct ?? 0}%</strong></li>
               {data.emergencies_30d > 0
                 ? <li>• มีเหตุฉุกเฉิน {data.emergencies_30d} ครั้งใน 30 วันที่ผ่านมา — ควรติดตาม</li>

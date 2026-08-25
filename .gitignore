@@ -25,3 +25,9 @@ scripts/restore-test.env
 # Deployment-transfer and in-repo backup artifacts
 /backups/
 *.bundle
+
+# Local Codex planning and generated evidence bundles; never deploy or commit
+# raw UAT screenshots, local validator logs, or machine-specific handoff output.
+/outputs/
+/task_plan.md
+/notes.md

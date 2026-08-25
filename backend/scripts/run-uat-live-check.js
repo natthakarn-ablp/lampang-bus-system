@@ -112,7 +112,7 @@ async function requestJson(url, options = {}) {
 function accessTokenFrom(body) {
   return body.token ||
     body.accessToken ||
-    (body.data && (body.data.token || body.data.accessToken)) ||
+    (body.data && (body.data.token || body.data.accessToken || body.data.access_token)) ||
     (body.data && body.data.tokens && body.data.tokens.accessToken) ||
     '';
 }

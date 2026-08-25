@@ -39,6 +39,7 @@ BACKUP_DIR="${BACKUP_DIR:-/home/schoolbus/backups/lampang-bus}"
 CONFIG_FILE="${OFFHOST_BACKUP_CONFIG:-$APP_DIR/scripts/offhost-backup-sync.env}"
 MARKER_FILE="$BACKUP_DIR/.last_offhost_sync"
 DRY_RUN="${DRY_RUN:-0}"
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 # 1. Load optional config file if present (must be chmod 600, not in git)
 if [ -f "$CONFIG_FILE" ]; then

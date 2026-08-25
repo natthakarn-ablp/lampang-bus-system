@@ -305,6 +305,7 @@ ${nextRows}
 \`\`\`bash
 node scripts/validate-go-live-bundle.js ${bundle}
 node scripts/summarize-go-live-closure.js --bundle ${bundle}
+node scripts/validate-go-live-closure-status.js ${rel(outDir)}
 node scripts/verify-100-readiness.js
 \`\`\`
 

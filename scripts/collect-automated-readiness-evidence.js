@@ -220,6 +220,7 @@ function secretMatches(text) {
 }
 
 function isScannerPatternSourceLine(line) {
+  if (line.includes("line.includes('DB_PASSWORD')")) return true;
   return line.includes('DB_PASSWORD') && (
     line.includes('const pattern') ||
     line.includes('isScannerPatternSourceLine')

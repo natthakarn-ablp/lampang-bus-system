@@ -166,6 +166,7 @@ run_local_mode() {
   run_check "shell syntax: restore readiness" bash -n "$ROOT/scripts/restore-test-readiness.sh"
   run_check "shell syntax: restore drill" bash -n "$ROOT/scripts/restore-drill-db.sh"
   run_check "shell syntax: readiness gate" bash -n "$ROOT/scripts/production-readiness-gate.sh"
+  run_check "node syntax: production UAT seed" bash -c "cd '$ROOT/backend' && node --check scripts/seed-production-uat-users.js >/dev/null"
   run_check "node syntax: readiness helpers" bash -c "cd '$ROOT' && for file in scripts/create-uat-evidence-pack.js scripts/validate-uat-evidence-pack.js scripts/summarize-uat-evidence.js scripts/scan-uat-evidence-safety.js scripts/create-go-live-signoff-draft.js scripts/create-ops-signoff-draft.js scripts/create-restore-drill-evidence-pack.js scripts/validate-restore-drill-evidence.js scripts/create-operator-gate-evidence-pack.js scripts/validate-operator-gate-evidence.js scripts/validate-go-live-signoff.js scripts/verify-100-readiness.js scripts/create-go-live-bundle.js scripts/validate-go-live-bundle.js scripts/summarize-go-live-closure.js scripts/validate-go-live-closure-status.js scripts/collect-automated-readiness-evidence.js; do node --check \"\$file\" >/dev/null || exit 1; done"
 }
 

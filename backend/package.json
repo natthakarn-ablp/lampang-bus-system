@@ -16,7 +16,8 @@
     "test:ci": "npm run test:prepare && jest --testEnvironment=node --runInBand --forceExit",
     "check:migrations": "node scripts/validate-migration-baseline.js",
     "migrate": "node scripts/migrate-from-excel.js",
-    "create:admin": "node scripts/create-admin.js"
+    "create:admin": "node scripts/create-admin.js",
+    "seed:uat:prod": "node scripts/seed-production-uat-users.js"
   },
   "dependencies": {
     "@line/bot-sdk": "^10.6.0",

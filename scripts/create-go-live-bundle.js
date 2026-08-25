@@ -10,15 +10,17 @@ const ROOT = path.resolve(__dirname, '..');
 const DEFAULT_BUNDLE_ROOT = path.join(ROOT, 'outputs', 'go-live-bundle');
 const PHASE9_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'phase9-evidence');
 const UAT_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'uat-evidence');
+const RESTORE_DRILL_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'restore-drill');
 
 let allowPending = false;
 let evidencePath = null;
 let uatEvidencePath = null;
+let restoreDrillEvidencePath = null;
 let bundleRoot = DEFAULT_BUNDLE_ROOT;
 let runId = timestampBangkok();
 
 function usage() {
-  console.error('Usage: node scripts/create-go-live-bundle.js [--allow-pending] [--evidence <dir|manifest.json>] [--uat-evidence <dir|manifest.json>] [--out-dir <dir>] [--run-id <id>]');
+  console.error('Usage: node scripts/create-go-live-bundle.js [--allow-pending] [--evidence <dir|manifest.json>] [--uat-evidence <dir|manifest.json>] [--restore-drill <dir|manifest.json>] [--out-dir <dir>] [--run-id <id>]');
 }
 
 const args = process.argv.slice(2);
@@ -31,6 +33,9 @@ for (let i = 0; i < args.length; i += 1) {
     i += 1;
   } else if (arg === '--uat-evidence' && args[i + 1]) {
     uatEvidencePath = path.resolve(args[i + 1]);
+    i += 1;
+  } else if (arg === '--restore-drill' && args[i + 1]) {
+    restoreDrillEvidencePath = path.resolve(args[i + 1]);
     i += 1;
   } else if (arg === '--out-dir' && args[i + 1]) {
     bundleRoot = path.resolve(args[i + 1]);
@@ -52,6 +57,7 @@ fs.mkdirSync(logsDir, { recursive: true });
 const generatedAt = new Date().toISOString();
 const selectedEvidence = normalizePackPath(evidencePath) || latestPack(PHASE9_EVIDENCE_ROOT);
 const selectedUatEvidence = normalizePackPath(uatEvidencePath) || latestPack(UAT_EVIDENCE_ROOT);
+const selectedRestoreDrillEvidence = normalizePackPath(restoreDrillEvidencePath) || latestPack(RESTORE_DRILL_EVIDENCE_ROOT);
 const gitHead = git(['rev-parse', '--short', 'HEAD']);
 const gitStatus = runGitStatus();
 
@@ -79,6 +85,13 @@ const signoffDraftValidation = selectedUatEvidence
   ])
   : missingCheck('go-live-signoff-draft', 'no UAT evidence pack found');
 
+const restoreDrillValidation = selectedRestoreDrillEvidence
+  ? runNode('restore-drill-evidence', 'scripts/validate-restore-drill-evidence.js', [
+    selectedRestoreDrillEvidence,
+    ...(allowPending ? ['--allow-pending'] : []),
+  ])
+  : missingCheck('restore-drill-evidence', 'no restore drill evidence pack found');
+
 const uatValidation = selectedUatEvidence
   ? runNode('uat-evidence', 'scripts/validate-uat-evidence-pack.js', [
     selectedUatEvidence,
@@ -93,6 +106,7 @@ const signoffValidation = runNode('go-live-signoff', 'scripts/validate-go-live-s
 const readinessArgs = [
   ...(allowPending ? ['--allow-pending'] : []),
   ...(selectedEvidence ? ['--evidence', selectedEvidence] : []),
+  ...(selectedRestoreDrillEvidence ? ['--restore-drill', selectedRestoreDrillEvidence] : []),
   '--report-dir',
   readinessReportDir,
 ];
@@ -124,6 +138,8 @@ const scripts = [
   'scripts/summarize-uat-evidence.js',
   'scripts/scan-uat-evidence-safety.js',
   'scripts/create-go-live-signoff-draft.js',
+  'scripts/create-restore-drill-evidence-pack.js',
+  'scripts/validate-restore-drill-evidence.js',
   'scripts/validate-go-live-signoff.js',
   'scripts/verify-100-readiness.js',
   'scripts/create-go-live-bundle.js',
@@ -136,6 +152,9 @@ const referencedFiles = [
   selectedEvidence ? path.join(rel(selectedEvidence), 'manifest.json') : null,
   selectedUatEvidence ? path.join(rel(selectedUatEvidence), 'README.md') : null,
   selectedUatEvidence ? path.join(rel(selectedUatEvidence), 'manifest.json') : null,
+  selectedRestoreDrillEvidence ? path.join(rel(selectedRestoreDrillEvidence), 'README.md') : null,
+  selectedRestoreDrillEvidence ? path.join(rel(selectedRestoreDrillEvidence), 'restore-drill-result.md') : null,
+  selectedRestoreDrillEvidence ? path.join(rel(selectedRestoreDrillEvidence), 'manifest.json') : null,
   uatSafetyReport ? path.join(rel(uatSafetyReport), 'summary.md') : null,
   uatSafetyReport ? path.join(rel(uatSafetyReport), 'manifest.json') : null,
   signoffDraftReport ? path.join(rel(signoffDraftReport), 'summary.md') : null,
@@ -145,7 +164,7 @@ const referencedFiles = [
 ].filter(Boolean);
 
 const fileHashes = referencedFiles.map((file) => fileRecord(file));
-const checks = [gitStatus, phase9Validation, uatSafetyValidation, signoffDraftValidation, uatValidation, signoffValidation, readinessValidation];
+const checks = [gitStatus, phase9Validation, uatSafetyValidation, signoffDraftValidation, restoreDrillValidation, uatValidation, signoffValidation, readinessValidation];
 const totals = checks.reduce((acc, check) => {
   acc[check.status.toLowerCase()] = (acc[check.status.toLowerCase()] || 0) + 1;
   return acc;
@@ -181,6 +200,7 @@ writeFile('manifest.json', `${JSON.stringify({
   bundle_dir: rel(bundleDir),
   selected_evidence: selectedEvidence ? rel(selectedEvidence) : null,
   selected_uat_evidence: selectedUatEvidence ? rel(selectedUatEvidence) : null,
+  selected_restore_drill_evidence: selectedRestoreDrillEvidence ? rel(selectedRestoreDrillEvidence) : null,
   readiness_report: readinessReport ? rel(readinessReport) : null,
   safety,
   bundle_files: [
@@ -436,11 +456,14 @@ BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh product
 
 \`\`\`bash
 cd /home/schoolbus/apps/lampang-bus-system
+node scripts/create-restore-drill-evidence-pack.js
 mysql -e "CREATE DATABASE IF NOT EXISTS lampang_bus_restore_drill CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-RESTORE_DB=lampang_bus_restore_drill bash scripts/restore-drill-db.sh
+set -o pipefail
+RESTORE_DB=lampang_bus_restore_drill bash scripts/restore-drill-db.sh 2>&1 | tee outputs/restore-drill/<timestamp>/restore-drill-output.redacted.log
+node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
 \`\`\`
 
-Confirm backup checksum/gzip PASS, restore target is \`lampang_bus_restore_drill\`, key row counts are correct or explained, and production aggregate counts are unchanged.
+Confirm backup checksum/gzip PASS, restore target is \`lampang_bus_restore_drill\`, key row counts are correct or explained, production aggregate counts are unchanged, and the restore drill evidence validator passes.
 
 ## Postdeploy Gate And Monitor
 
@@ -459,9 +482,10 @@ node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
 node scripts/summarize-uat-evidence.js outputs/uat-evidence/<timestamp>
 node scripts/scan-uat-evidence-safety.js outputs/uat-evidence/<timestamp>
 node scripts/create-go-live-signoff-draft.js outputs/uat-evidence/<timestamp>
+node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
 node scripts/validate-go-live-signoff.js
-node scripts/verify-100-readiness.js
-node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>
+node scripts/verify-100-readiness.js --evidence outputs/phase9-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp>
+node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp>
 \`\`\`
 `;
 }
@@ -480,6 +504,7 @@ function signoffIndex() {
 
 - Phase 9 evidence: ${selectedEvidence ? `\`${rel(selectedEvidence)}\`` : 'not found'}
 - UAT evidence: ${selectedUatEvidence ? `\`${rel(selectedUatEvidence)}\`` : 'not found'}
+- Restore drill evidence: ${selectedRestoreDrillEvidence ? `\`${rel(selectedRestoreDrillEvidence)}\`` : 'not found'}
 - UAT safety report: ${uatSafetyReport ? `\`${rel(uatSafetyReport)}\`` : 'not generated'}
 - Sign-off draft: ${signoffDraftReport ? `\`${rel(signoffDraftReport)}\`` : 'not generated'}
 - Readiness report: ${readinessReport ? `\`${rel(readinessReport)}\`` : 'not generated'}
@@ -584,6 +609,7 @@ function actionPlan() {
 - Source state: ${gitStatus.detail}
 - Phase 9 evidence: ${selectedEvidence ? `\`${rel(selectedEvidence)}\`` : 'not found'}
 - UAT evidence: ${selectedUatEvidence ? `\`${rel(selectedUatEvidence)}\`` : 'not found'}
+- Restore drill evidence: ${selectedRestoreDrillEvidence ? `\`${rel(selectedRestoreDrillEvidence)}\`` : 'not found'}
 - Source state file: \`SOURCE_STATE.md\`
 - Action items: \`ACTION_ITEMS.csv\`, \`ACTION_ITEMS.json\`
 - Action item rows: ${pendingActionItems.length}
@@ -594,7 +620,7 @@ function actionPlan() {
 2. Generate and review the sign-off draft, then transfer approved PASS results and evidence links into \`docs/UAT_SIGNOFF_2026-08.md\`.
 3. Fill owner/operator/DPO approval fields in \`docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md\`.
 4. Commit or otherwise approve the exact source state that will be deployed.
-5. Run the approved production read-only gate, restore drill, deploy, postdeploy gate, and 30-60 minute monitor.
+5. Run the approved production read-only gate, restore drill, restore evidence validator, deploy, postdeploy gate, and 30-60 minute monitor.
 6. Update the scorecard to Overall 100% only after every strict validator passes.
 
 ## UAT Evidence Pending By Role
@@ -726,6 +752,7 @@ function approvalOwner(scope) {
 
 function readinessOwner(pending) {
   if (/uat-evidence/i.test(pending)) return 'uat-lead';
+  if (/restore-drill/i.test(pending)) return 'operator';
   if (/signoff|approval/i.test(pending)) return 'project-owner';
   if (/scorecard/i.test(pending)) return 'technical-owner';
   return 'operator';
@@ -755,6 +782,7 @@ function summary(decision, ready, checksForSummary, fileHashRecords) {
 - Git HEAD: \`${gitHead || 'unknown'}\`
 - Phase 9 evidence: ${selectedEvidence ? `\`${rel(selectedEvidence)}\`` : 'not found'}
 - UAT evidence: ${selectedUatEvidence ? `\`${rel(selectedUatEvidence)}\`` : 'not found'}
+- Restore drill evidence: ${selectedRestoreDrillEvidence ? `\`${rel(selectedRestoreDrillEvidence)}\`` : 'not found'}
 - Readiness report: ${readinessReport ? `\`${rel(readinessReport)}\`` : 'not generated'}
 - Source state: \`SOURCE_STATE.md\`
 - Action plan: \`ACTION_PLAN.md\`

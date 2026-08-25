@@ -12,6 +12,7 @@
 | Evidence validator | PASS via `scripts/validate-phase9-evidence.js` |
 | UAT evidence safety scan | ต้อง PASS ผ่าน `scripts/scan-uat-evidence-safety.js` ก่อนแนบหลักฐาน UAT |
 | UAT sign-off draft | สร้างด้วย `scripts/create-go-live-signoff-draft.js` เพื่อช่วยย้ายผลจาก evidence pack เข้า sign-off โดยไม่เขียนทับเอกสารหลัก |
+| Restore drill evidence | ต้องสร้างด้วย `scripts/create-restore-drill-evidence-pack.js`, กรอกผลจาก operator, และ PASS ผ่าน `scripts/validate-restore-drill-evidence.js` |
 | Go-live bundle | สร้างด้วย `node scripts/create-go-live-bundle.js --allow-pending` และตรวจด้วย `validate-go-live-bundle.js` ก่อน review; เปิด `SOURCE_STATE.md`, `ACTION_PLAN.md`, และ `ACTION_ITEMS.csv` เพื่อปิดงานค้าง; รอบสุดท้ายต้องไม่มี pending |
 | Production data | Real data; do not write during gate checks |
 
@@ -59,11 +60,14 @@ BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh product
 
 ```bash
 cd /home/schoolbus/apps/lampang-bus-system
+node scripts/create-restore-drill-evidence-pack.js
 mysql -e "CREATE DATABASE IF NOT EXISTS lampang_bus_restore_drill CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-RESTORE_DB=lampang_bus_restore_drill bash scripts/restore-drill-db.sh
+set -o pipefail
+RESTORE_DB=lampang_bus_restore_drill bash scripts/restore-drill-db.sh 2>&1 | tee outputs/restore-drill/<timestamp>/restore-drill-output.redacted.log
+node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
 ```
 
-ก่อนปิดข้อนี้ ต้องยืนยันจาก output ว่า backup checksum/gzip ผ่าน, restore ลง `lampang_bus_restore_drill`, table/row counts สำคัญตรงหรืออธิบายได้ และ production aggregate counts ไม่เปลี่ยน
+ก่อนปิดข้อนี้ ต้องยืนยันจาก output ว่า backup checksum/gzip ผ่าน, restore ลง `lampang_bus_restore_drill`, table/row counts สำคัญตรงหรืออธิบายได้, production aggregate counts ไม่เปลี่ยน และ restore drill evidence validator PASS
 
 ### 4. Deploy approved commit/worktree
 
@@ -88,6 +92,6 @@ tail -n 100 /home/schoolbus/logs/offhost-sync.log
 | | Operator | PASS / PASS WITH CONDITIONS / FAIL | | | |
 | | DPO/Legal | PASS / PASS WITH CONDITIONS / FAIL | | | เฉพาะ consent/QR/LINE policy |
 
-ระบบเรียก 100% ได้เมื่อทุก gate ในเอกสารนี้ผ่าน, `docs/UAT_SIGNOFF_2026-08.md` ผ่านครบทุกบทบาท, `node scripts/validate-go-live-signoff.js` PASS, `node scripts/verify-100-readiness.js` PASS, และ postdeploy monitor ไม่มี error pattern ใหม่
+ระบบเรียก 100% ได้เมื่อทุก gate ในเอกสารนี้ผ่าน, restore drill evidence validator PASS, `docs/UAT_SIGNOFF_2026-08.md` ผ่านครบทุกบทบาท, `node scripts/validate-go-live-signoff.js` PASS, `node scripts/verify-100-readiness.js` PASS, และ postdeploy monitor ไม่มี error pattern ใหม่
 
 ก่อนลงนามรอบสุดท้าย ให้สร้างและตรวจ go-live bundle โดยไม่ใส่ `--allow-pending` แล้วแนบ `outputs/go-live-bundle/<timestamp>/summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, และ `ACTION_ITEMS.csv` กับเอกสารนี้

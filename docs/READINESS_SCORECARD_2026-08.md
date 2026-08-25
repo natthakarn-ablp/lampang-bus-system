@@ -37,6 +37,8 @@
 - `scripts/validate-uat-evidence-pack.js` now validates the UAT evidence pack itself before results are transferred into the final sign-off document.
 - `scripts/create-go-live-bundle.js` now creates a non-mutating owner/operator bundle with executive brief, operator commands, sign-off index, source-state approval list, action plan by role/section, CSV/JSON action items for assignment, validator logs, file hashes, and readiness report references.
 - `scripts/validate-go-live-bundle.js` now validates the generated bundle files, safety flags, action items, logs, and pending/fail state before attaching it to sign-off.
+- `scripts/create-restore-drill-evidence-pack.js` now creates a non-mutating restore drill evidence template so operator results can be captured without touching production data.
+- `scripts/validate-restore-drill-evidence.js` now validates restore target, approval evidence, backup sha256/gzip result, restore log patterns, row-count review, production-unchanged proof, and operator sign-off before the restore drill gate can count as PASS.
 
 ## Local Verification Evidence
 
@@ -61,7 +63,9 @@
 | `node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/20260825-200054` | EXPECTED FAIL until role evidence/sign-off fields are completed |
 | `node scripts/validate-go-live-signoff.js --allow-pending` | PASS: template structure valid, pending sign-offs detected |
 | `node scripts/validate-go-live-signoff.js` | EXPECTED FAIL until UAT/approval/evidence fields are completed |
-| `node scripts/verify-100-readiness.js --allow-pending` | PASS: pass=3, pending=3, fail=0; report `outputs/go-live-readiness/20260825-130158/summary.md` |
+| `node scripts/create-restore-drill-evidence-pack.js` | PASS: creates `outputs/restore-drill/<timestamp>/` template only; no DB/API/deploy actions |
+| `node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp> --allow-pending` | PASS/PENDING allowed until operator fills real restore drill evidence |
+| `node scripts/verify-100-readiness.js --allow-pending` | PASS/PENDING allowed; restore drill evidence remains PENDING until operator evidence validator passes |
 | `node scripts/verify-100-readiness.js` | EXPECTED FAIL until sign-off and scorecard are final 100% |
 | `node scripts/create-go-live-bundle.js --allow-pending` | PASS/PENDING allowed: creates `summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, and `ACTION_ITEMS.csv/json` without production writes |
 | `node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --allow-pending` | PASS/PENDING allowed: validates bundle structure, action items, logs, and safety flags |
@@ -88,6 +92,7 @@
 - `node scripts/validate-go-live-signoff.js` must PASS without `--allow-pending`.
 - `node scripts/verify-100-readiness.js` must PASS without `--allow-pending`.
 - Restore drill must run against `lampang_bus_restore_drill` and prove production aggregate counts unchanged.
+- `node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>` must PASS without `--allow-pending`.
 - DPO/legal must sign off consent/QR/LINE policy before enabling gated privacy features.
 - Owner must approve deployment and any feature flag change explicitly.
 - Post-deploy smoke must prove `/health.data.commit` equals deployed git HEAD.
@@ -102,7 +107,8 @@
 6. Generate Phase 9 evidence pack and attach it to owner/operator sign-off.
 7. Fill UAT evidence pack and run `node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>`.
 8. Transfer final PASS/evidence links into sign-off docs and run `node scripts/validate-go-live-signoff.js`.
-9. Run `node scripts/verify-100-readiness.js` and attach the generated `outputs/go-live-readiness/<timestamp>/summary.md`.
-10. Run `node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp>`, run `node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp>`, and attach `summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, and `ACTION_ITEMS.csv`.
-11. Run `bash scripts/production-readiness-gate.sh production`, then approved restore drill, then `bash scripts/production-readiness-gate.sh postdeploy` after deployment.
-12. After deploy, run role/LINE LIFF smoke and monitor logs for 30-60 minutes.
+9. Run `node scripts/verify-100-readiness.js --allow-pending` and attach the preliminary `outputs/go-live-readiness/<timestamp>/summary.md`.
+10. Run `node scripts/create-restore-drill-evidence-pack.js` before the approved restore drill to reserve the evidence folder.
+11. Run `bash scripts/production-readiness-gate.sh production`, then the approved restore drill with log captured into `outputs/restore-drill/<timestamp>/`, then `node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>`.
+12. After approved deployment, run `bash scripts/production-readiness-gate.sh postdeploy`, role/LINE LIFF smoke, and 30-60 minute monitor.
+13. Run `node scripts/create-go-live-bundle.js --evidence outputs/phase9-evidence/<timestamp> --uat-evidence outputs/uat-evidence/<timestamp> --restore-drill outputs/restore-drill/<timestamp>`, run `node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp>`, and attach `summary.md`, `SOURCE_STATE.md`, `ACTION_PLAN.md`, and `ACTION_ITEMS.csv`.

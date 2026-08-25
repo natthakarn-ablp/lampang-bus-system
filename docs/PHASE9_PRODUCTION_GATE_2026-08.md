@@ -84,8 +84,10 @@ BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh product
 
 ```bash
 cd /home/schoolbus/apps/lampang-bus-system
+node scripts/create-restore-drill-evidence-pack.js
 mysql -e "CREATE DATABASE IF NOT EXISTS lampang_bus_restore_drill CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-RESTORE_DB=lampang_bus_restore_drill bash scripts/restore-drill-db.sh
+set -o pipefail
+RESTORE_DB=lampang_bus_restore_drill bash scripts/restore-drill-db.sh 2>&1 | tee outputs/restore-drill/<timestamp>/restore-drill-output.redacted.log
 ```
 
 หลักฐานที่ต้องเก็บ:
@@ -95,6 +97,14 @@ RESTORE_DB=lampang_bus_restore_drill bash scripts/restore-drill-db.sh
 - จำนวน table restored เทียบ production
 - row counts ของ key tables
 - ยืนยันว่า production aggregate counts ไม่เปลี่ยนหลัง drill
+
+หลังกรอก `outputs/restore-drill/<timestamp>/restore-drill-result.md` และแนบ log ที่ redact แล้ว ให้ตรวจด้วย:
+
+```bash
+node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
+```
+
+validator นี้ไม่รัน restore drill เองและไม่เชื่อมต่อฐานข้อมูล ใช้ตรวจเฉพาะหลักฐานที่ operator แนบไว้เท่านั้น
 
 ## 4. Post-deploy Gate
 
@@ -148,6 +158,7 @@ node scripts/validate-phase9-evidence.js outputs/phase9-evidence/<timestamp> --r
 ```bash
 node scripts/create-uat-evidence-pack.js --mode sandbox --base-url https://schoolbuslampang.com
 node scripts/validate-uat-evidence-pack.js outputs/uat-evidence/<timestamp>
+node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>
 node scripts/validate-go-live-signoff.js
 node scripts/verify-100-readiness.js
 ```
@@ -178,6 +189,7 @@ node scripts/validate-go-live-bundle.js outputs/go-live-bundle/<timestamp> --all
 - go-live bundle validator PASS
 - owner/operator approval packet PASS
 - restore drill PASS
+- restore drill evidence validator PASS
 - UAT sign-off ครบทุกบทบาท
 - `node scripts/validate-go-live-signoff.js` PASS
 - `node scripts/verify-100-readiness.js` PASS

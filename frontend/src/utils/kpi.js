@@ -16,11 +16,15 @@
  */
 
 /** KPI text color class by threshold. Neutral when value is missing. */
+// KPI percentages render as text on white cards and table cells, so they use
+// the `-ink` tones. The vivid DEFAULT tones measured 2.54 / 2.15 / 3.76 : 1 on
+// white — all under the WCAG AA 4.5:1 floor. The ink tones are 5.48 / 7.09 /
+// 6.47 and keep the same hue.
 export function kpiColor(v) {
   if (v == null || !isFinite(v)) return 'text-ink-muted';
-  if (v >= 95) return 'text-success';
-  if (v >= 85) return 'text-warn';
-  return 'text-danger';
+  if (v >= 95) return 'text-success-ink';
+  if (v >= 85) return 'text-warn-ink';
+  return 'text-danger-ink';
 }
 
 /** Safe percentage display — returns "-" for null/NaN/Infinity/zero-denom. */
@@ -41,11 +45,13 @@ export function kpiVariant(v) {
 export function levelBadge(morningKpi, eveningKpi) {
   const mMissing = morningKpi == null || !isFinite(morningKpi);
   const eMissing = eveningKpi == null || !isFinite(eveningKpi);
-  if (mMissing && eMissing) return { label: 'ยังไม่เริ่ม', cls: 'bg-surface text-ink-muted' };
+  // `variant` feeds StatusBadge; `cls` is kept for the print view, which does
+  // not use components. Both now carry the AA-passing text tone.
+  if (mMissing && eMissing) return { label: 'ยังไม่เริ่ม', variant: 'neutral', cls: 'bg-surface text-ink-muted' };
   const avg = ((morningKpi ?? 0) + (eveningKpi ?? 0)) / 2;
-  if (avg >= 95) return { label: 'ดีมาก',     cls: 'bg-success-soft text-success' };
-  if (avg >= 85) return { label: 'ดี',        cls: 'bg-warn-soft text-warn' };
-  return            { label: 'เฝ้าระวัง',  cls: 'bg-danger-soft text-danger' };
+  if (avg >= 95) return { label: 'ดีมาก',     variant: 'success', cls: 'bg-success-soft text-success-ink' };
+  if (avg >= 85) return { label: 'ดี',        variant: 'warn',    cls: 'bg-warn-soft text-warn-ink' };
+  return            { label: 'เฝ้าระวัง',  variant: 'danger',  cls: 'bg-danger-soft text-danger-ink' };
 }
 
 /** Top N items sorted descending by key. */

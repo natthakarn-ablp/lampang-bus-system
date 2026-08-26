@@ -72,6 +72,24 @@ const USER_ROWS = [
   { id: 6, username: 'transport1', display_name: 'ขนส่งจังหวัด (ตัวอย่าง)',                        role: 'transport',   scope_name: null,                            grade_scope: null,  is_active: true,  must_change_password: false },
 ];
 
+const SCHOOL_ROWS = [
+  { id: 'SCH0001', name: 'โรงเรียนตัวอย่างที่มีชื่อยาวมากเพื่อทดสอบการตัดข้อความในคอลัมน์', affiliation_name: 'สังกัดตัวอย่าง เขต 1', student_count: 1284, vehicle_count: 42 },
+  { id: 'SCH0002', name: 'โรงเรียนตัวอย่าง ข',  affiliation_name: 'สังกัดตัวอย่าง เขต 2', student_count: 96,   vehicle_count: 4 },
+  { id: 'SCH0003', name: 'โรงเรียนตัวอย่าง ค',  affiliation_name: 'สังกัดตัวอย่าง เขต 1', student_count: 0,    vehicle_count: 0 },
+];
+
+const AFFILIATION_ROWS = [
+  { id: 'AFF001', name: 'สังกัดตัวอย่าง เขต 1', school_count: 128, student_count: 12840, vehicle_count: 421, morning_kpi: 98.4, evening_kpi: 97.9, morning_done: 12640, morning_expected: 12840, evening_done: 12570, evening_expected: 12840, emergency_count: 0 },
+  { id: 'AFF002', name: 'สังกัดตัวอย่าง เขต 2', school_count: 96,  student_count: 8420,  vehicle_count: 260, morning_kpi: 88.1, evening_kpi: 86.5, morning_done: 7418,  morning_expected: 8420,  evening_done: 7283,  evening_expected: 8420,  emergency_count: 2 },
+  { id: 'AFF003', name: 'สังกัดตัวอย่าง เขต 3', school_count: 44,  student_count: 3120,  vehicle_count: 98,  morning_kpi: 62.0, evening_kpi: 60.4, morning_done: 1934,  morning_expected: 3120,  evening_done: 1885,  evening_expected: 3120,  emergency_count: 5 },
+];
+
+const VEHICLE_ROWS = [
+  { id: 1, plate_no: 'กข-1111 ลำปาง', vehicle_type: 'รถตู้',        school_names: 'โรงเรียนตัวอย่าง ก', student_count: 18, driver_name: 'คนขับ ตัวอย่าง ก', attendant_name: 'ผู้ดูแล ตัวอย่าง', owner_name: 'เจ้าของ ตัวอย่าง', latest_inspection_result: 'PASSED',    insurance_expiry: '2027-03-01' },
+  { id: 2, plate_no: 'กข-2222 ลำปาง', vehicle_type: 'รถสองแถว',     school_names: 'โรงเรียนตัวอย่าง ข', student_count: 24, driver_name: 'คนขับ ตัวอย่าง ข', attendant_name: '-',              owner_name: 'เจ้าของ ตัวอย่าง', latest_inspection_result: 'NEEDS_FIX', insurance_expiry: '2026-09-01' },
+  { id: 3, plate_no: 'กข-3333 ลำปาง', vehicle_type: 'รถบัสขนาดเล็ก', school_names: 'โรงเรียนตัวอย่าง ค', student_count: 0,  driver_name: '-',               attendant_name: '-',              owner_name: '-',                latest_inspection_result: null,       insurance_expiry: null },
+];
+
 const SCENARIOS = {
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
@@ -85,6 +103,12 @@ const SCENARIOS = {
     ] } },
     '/api/admin/roster-requests-pending': { data: { total: 0, rows: [] } },
     '/api/admin/audit-logs': { data: [], meta: { total: 0 } },
+    '/api/province/schools':      { data: SCHOOL_ROWS, meta: { page: 1, per_page: 50, total: 317 } },
+    '/api/province/affiliations': { data: AFFILIATION_ROWS },
+    '/api/province/vehicles':     { data: VEHICLE_ROWS },
+    '/api/affiliation/vehicles':  { data: VEHICLE_ROWS, meta: { page: 1, per_page: 50, total: 3 } },
+    '/api/school/vehicles':       { data: VEHICLE_ROWS, meta: { page: 1, per_page: 50, total: 3 } },
+    '/api/transport/vehicles':    { data: VEHICLE_ROWS, meta: { page: 1, per_page: 50, total: 3 } },
   },
   // everything quiet — verifies empty cards collapse instead of standing tall
   zero: {
@@ -198,6 +222,13 @@ const SHOTS = [
   { id: '11-driver',       url: '/driver',      user: 'driver',      vps: ['mobile', 'tablet'] },
   { id: '12-reports',      url: '/reports/daily', user: 'admin',     vps: ['desktop'] },
   { id: '13-audit',        url: '/admin/audit-logs', user: 'admin',  vps: ['desktop'] },
+  // List pages migrated onto DataTable / FilterBar
+  { id: '20-prov-schools',      url: '/province/schools',      user: 'province', vps: ['mobile', 'desktop'] },
+  { id: '21-prov-vehicles',     url: '/province/vehicles',     user: 'province', vps: ['mobile', 'desktop'] },
+  { id: '22-prov-affiliations', url: '/province/affiliations', user: 'province', vps: ['desktop'] },
+  { id: '23-aff-vehicles',      url: '/affiliation/vehicles',  user: 'affiliation', vps: ['mobile', 'desktop'] },
+  { id: '24-school-vehicles',   url: '/school/vehicles',       user: 'school',   vps: ['mobile', 'desktop'] },
+  { id: '25-transport-vehicles', url: '/transport/vehicles',   user: 'transport', vps: ['mobile', 'desktop'] },
 ];
 
 (async () => {

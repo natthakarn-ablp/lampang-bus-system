@@ -16,6 +16,7 @@ import { Search, X } from 'lucide-react';
 export default function FilterBar({
   search,
   filters = [],
+  chips,
   count,
   countLabel = 'รายการ',
   onClear,
@@ -26,6 +27,38 @@ export default function FilterBar({
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
+      {/* A small, fixed set of mutually exclusive states reads better as chips
+          than a select. Rendered as a radiogroup so arrow keys and screen
+          readers treat it as the single choice it is. */}
+      {chips && chips.options.length > 0 && (
+        <div
+          role="radiogroup"
+          aria-label={chips.label}
+          className="flex flex-wrap gap-1.5"
+        >
+          {chips.options.map(([value, label]) => {
+            const active = chips.value === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => chips.onChange(value)}
+                className={`focus-ring inline-flex items-center min-h-[44px] px-3.5 rounded-full border text-sm font-medium transition ${
+                  active
+                    ? 'bg-navy-700 text-white border-navy-700'
+                    : 'bg-surface-raised text-ink-muted border-surface-border hover:bg-surface hover:text-ink active:bg-surface-border'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {(search || filters.length > 0 || actions) && (
       <div className="flex flex-col sm:flex-row gap-2.5">
         {search && (
           <div className="relative flex-1 min-w-0">
@@ -65,6 +98,7 @@ export default function FilterBar({
 
         {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
       </div>
+      )}
 
       {(count !== undefined || hasActiveFilter) && (
         <div className="flex items-center justify-between gap-3 flex-wrap">

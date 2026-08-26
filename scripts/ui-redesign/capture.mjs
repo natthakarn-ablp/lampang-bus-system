@@ -90,6 +90,11 @@ const VEHICLE_ROWS = [
   { id: 3, plate_no: 'กข-3333 ลำปาง', vehicle_type: 'รถบัสขนาดเล็ก', school_names: 'โรงเรียนตัวอย่าง ค', student_count: 0,  driver_name: '-',               attendant_name: '-',              owner_name: '-',                latest_inspection_result: null,       insurance_expiry: null },
 ];
 
+const TRANSFER_ROWS = [
+  { id: 101, created_at: '2026-08-25T02:10:00Z', student_name: 'นักเรียน ตัวอย่าง ก', student_code: 'STU00001', source_school_name: 'โรงเรียนตัวอย่าง ก', destination_school_name: 'โรงเรียนตัวอย่าง ข', reason: 'ย้ายตามที่อยู่ผู้ปกครอง', status: 'PENDING' },
+  { id: 102, created_at: '2026-08-24T07:40:00Z', student_name: 'นักเรียน ตัวอย่าง ข', student_code: 'STU00002', source_school_name: 'โรงเรียนตัวอย่าง ค', destination_school_name: 'โรงเรียนตัวอย่าง ก', reason: 'เหตุผลที่ยาวมากเพื่อทดสอบการตัดข้อความในคอลัมน์เหตุผลของตาราง', status: 'PENDING' },
+];
+
 const SCENARIOS = {
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
@@ -109,6 +114,7 @@ const SCENARIOS = {
     '/api/affiliation/vehicles':  { data: VEHICLE_ROWS, meta: { page: 1, per_page: 50, total: 3 } },
     '/api/school/vehicles':       { data: VEHICLE_ROWS, meta: { page: 1, per_page: 50, total: 3 } },
     '/api/transport/vehicles':    { data: VEHICLE_ROWS, meta: { page: 1, per_page: 50, total: 3 } },
+    '/api/admin/student-transfer-requests': { data: TRANSFER_ROWS },
   },
   // everything quiet — verifies empty cards collapse instead of standing tall
   zero: {
@@ -229,6 +235,7 @@ const SHOTS = [
   { id: '23-aff-vehicles',      url: '/affiliation/vehicles',  user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '24-school-vehicles',   url: '/school/vehicles',       user: 'school',   vps: ['mobile', 'desktop'] },
   { id: '25-transport-vehicles', url: '/transport/vehicles',   user: 'transport', vps: ['mobile', 'desktop'] },
+  { id: '26-transfer-requests', url: '/admin/transfer-requests', user: 'admin', vps: ['mobile', 'desktop'] },
 ];
 
 (async () => {

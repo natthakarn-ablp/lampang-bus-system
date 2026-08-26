@@ -16,5 +16,6 @@ export { default as DataTable, TableAction } from './DataTable';
 export { default as FilterBar }        from './FilterBar';
 export { default as ConfirmDialog }    from './ConfirmDialog';
 export { default as FormField }        from './FormField';
+export { default as Modal }            from './Modal';
 export { default as CommandHero }      from './CommandHero';
 export { default as StatusStepRail }   from './StatusStepRail';

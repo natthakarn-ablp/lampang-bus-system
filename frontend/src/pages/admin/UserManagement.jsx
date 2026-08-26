@@ -5,7 +5,8 @@ import { useToast } from '../../components/Toast';
 import PageHeader from '../../components/PageHeader';
 import Pagination from '../../components/Pagination';
 import {
-  DataTable, TableAction, FilterBar, ConfirmDialog, FormField, StatusBadge as Badge,
+  DataTable, TableAction, FilterBar, ConfirmDialog, FormField,
+  Modal as UiModal, StatusBadge as Badge,
 } from '../../components/ui';
 
 const ROLE_LABELS = {
@@ -329,15 +330,20 @@ export default function UserManagement() {
 }
 
 // ── Sub-components ──
+// Delegates to the shared Modal so this page gets the same dialog semantics,
+// Escape handling, focus trap and scroll lock as the rest of the app. The local
+// wrapper stays so the three call sites below read unchanged.
 function Modal({ title, children, onClose }) {
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-navy-950/60 p-4" onClick={onClose}>
-      <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-overlay w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
-        <h2 className="text-lg font-bold text-ink mb-4">{title}</h2>
-        {children}
-        <button onClick={onClose} className="focus-ring w-full text-ink-muted hover:text-ink hover:bg-surface text-sm min-h-[44px] rounded-lg mt-2 transition">ยกเลิก</button>
-      </div>
-    </div>
+    <UiModal title={title} onClose={onClose}>
+      {children}
+      <button
+        onClick={onClose}
+        className="focus-ring w-full text-ink-muted hover:text-ink hover:bg-surface text-sm min-h-[44px] rounded-lg mt-2 transition"
+      >
+        ยกเลิก
+      </button>
+    </UiModal>
   );
 }
 

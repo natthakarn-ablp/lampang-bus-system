@@ -302,6 +302,9 @@ const SHOTS = [
   { id: '38-driver-emergency',  url: '/driver/emergency',     user: 'driver', vps: ['mobile'] },
   { id: '39-driver-profile',    url: '/driver/profile',       user: 'driver', vps: ['mobile'] },
   { id: '40-change-password',   url: '/change-password',      user: 'school', vps: ['mobile', 'desktop'] },
+  { id: '41-prov-pickup-map',   url: '/province/pickup-map',  user: 'province',    vps: ['mobile', 'desktop'] },
+  { id: '42-transport-pickup',  url: '/transport/pickup-map', user: 'transport',   vps: ['desktop'] },
+  { id: '43-aff-pickup-map',    url: '/affiliation/pickup-map', user: 'affiliation', vps: ['desktop'] },
 ];
 
 (async () => {

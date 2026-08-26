@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, RefreshCw, GraduationCap, Bus, Building2, Users } from 'lucide-react';
 import api from '../../api/axios';
-import { AlertBanner, KPIGrid, KPIStat, SearchableSelect } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
+import { AlertBanner, KPIGrid, KPIStat, SearchableSelect, FormField} from '../../components/ui';
 import ReadOnlyPickupPointMap from '../../components/ReadOnlyPickupPointMap';
 
 const GRADE_OPTIONS = [
@@ -87,15 +88,11 @@ export default function AffiliationPickupMap() {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-          <MapIcon className="w-6 h-6 text-brand" strokeWidth={2} />
-          แผนที่จุดรับส่ง
-        </h1>
-        <p className="text-sm text-ink-muted mt-1">
-          แสดงจุดรับส่งของโรงเรียนในสังกัดของคุณ
-        </p>
-      </header>
+      <PageHeader
+        title="แผนที่จุดรับส่ง"
+        subtitle="แสดงจุดรับส่งของโรงเรียนในสังกัดของคุณ"
+        icon={MapIcon}
+      />
 
       {permError && (
         <AlertBanner variant="warn" title="ไม่มีสิทธิ์เข้าถึงข้อมูลนี้">

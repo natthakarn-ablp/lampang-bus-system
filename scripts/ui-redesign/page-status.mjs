@@ -86,7 +86,16 @@ const PATTERNS = [
     // shows its progress on the submit button, and a full-page spinner there
     // would be wrong.
     has: s => /api\.get\(/.test(s),
-    uses: s => /(LoadingState|Skeleton|DataTable)/.test(s) && /(EmptyState|ErrorState|DataTable|AlertBanner)/.test(s),
+    // A page may render the states itself, or delegate them to a component
+    // that owns them. DataTable and ReadOnlyPickupPointMap each take
+    // `loading` / `error` / `empty` props and render LoadingState, AlertBanner
+    // and an empty message internally — checked in both. Requiring the page to
+    // ALSO render them would push it to duplicate states that already exist.
+    //
+    // PickupMap is deliberately NOT on this list: it is a pure map renderer
+    // with no state branches, so a page using it still owes its own.
+    uses: s => /(LoadingState|Skeleton|DataTable|ReadOnlyPickupPointMap)/.test(s)
+            && /(EmptyState|ErrorState|DataTable|AlertBanner|ReadOnlyPickupPointMap)/.test(s),
   },
 ];
 

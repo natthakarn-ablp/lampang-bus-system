@@ -7,6 +7,24 @@ export default {
         sans: ['Sarabun', 'sans-serif'],
       },
       colors: {
+        // Civic Navy — the structural / brand colour of the app shell
+        // (sidebar, rail, brand surfaces). Deliberately separate from
+        // `brand`, which stays the *action* colour (buttons, selected
+        // state, links). Structure vs action must not share one token.
+        navy: {
+          DEFAULT: '#123B6D',
+          50:  '#F1F5FA',
+          100: '#DDE7F2',
+          200: '#BCCDE4',
+          300: '#8FA9CC',
+          400: '#5C7FAE',
+          500: '#2E5B92',
+          600: '#1B4A7E',
+          700: '#123B6D',
+          800: '#0E2F58',
+          900: '#0A2342',
+          950: '#06172D',
+        },
         brand: {
           DEFAULT: '#1D4ED8',
           50:  '#EFF6FF',
@@ -37,6 +55,30 @@ export default {
       boxShadow: {
         soft:    '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)',
         elevate: '0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.04)',
+        // Drawer / modal surfaces sit above the page, so they carry the only
+        // heavier shadow in the system. Still soft — no dramatic elevation.
+        overlay: '0 16px 40px -12px rgb(10 35 66 / 0.28), 0 4px 12px -4px rgb(10 35 66 / 0.16)',
+      },
+      // Named z-index scale. Ad-hoc z-40/z-50 across files made drawer vs
+      // modal vs toast ordering guesswork; these are the only layers.
+      zIndex: {
+        sticky:  '20',
+        rail:    '30',
+        drawer:  '40',
+        modal:   '50',
+        toast:   '60',
+      },
+      // Shell metrics referenced by Layout/Sidebar/TopNavbar so the numbers
+      // live in one place instead of being re-typed per component.
+      spacing: {
+        sidebar:          '15rem',  // 240px — expanded sidebar
+        'sidebar-rail':   '4.5rem', // 72px  — collapsed icon rail
+        topbar:           '3.75rem',// 60px  — top navbar height
+      },
+      fontSize: {
+        // Smallest size allowed on meaningful content (12px). Anything below
+        // is decorative only.
+        caption: ['0.75rem', { lineHeight: '1rem' }],
       },
       keyframes: {
         'slide-in': {

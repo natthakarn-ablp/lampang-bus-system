@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Lock, Bus } from 'lucide-react';
 import { AuthProvider, useAuth } from './hooks/useAuth';
@@ -169,6 +169,13 @@ function VisitTracker() {
   return null;
 }
 
+function ManualRedirect() {
+  useEffect(() => {
+    window.location.replace('/manual/index.html');
+  }, []);
+  return <RouteFallback />;
+}
+
 // ── Role-based redirect after login ─────────────────────────────────────────
 function RootRedirect() {
   const { user, loading } = useAuth();
@@ -190,7 +197,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/change-password" element={<ChangePassword />} />
-          <Route path="/manual/*" element={<Navigate to="/manual/index.html" replace />} />
+          <Route path="/manual/*" element={<ManualRedirect />} />
 
           {/* Driver module */}
           <Route

@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Clock, CheckCircle2, XCircle, MinusCircle, AlertOctagon } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
-import { AppCard, StatusBadge, SectionTitle, AlertBanner } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
+import {
+  StatusBadge, AlertBanner, DataTable, TableAction, FilterBar, FormField, Modal,
+} from '../../components/ui';
 
 // Phase 10.13B-7 — admin approval queue for vehicle restore / shared-fleet-use
 // requests. Approving a RESTORE un-deletes the vehicle (canonical-guarded);
@@ -16,6 +19,12 @@ const STATUS = {
   FAILED:    { label: 'ไม่สำเร็จ',  variant: 'danger',  icon: AlertOctagon },
 };
 const TYPE = { RESTORE_SOFT_DELETED_VEHICLE: 'ขอกู้คืนรถ', USE_EXISTING_SHARED_VEHICLE: 'ขอใช้รถที่มีอยู่', ADD_MISSING_VEHICLE: 'ขอเพิ่มรถ', REVIEW_VEHICLE_CONFLICT: 'ขอตรวจสอบ' };
+const FILTER_OPTIONS = [
+  ['PENDING', 'รออนุมัติ'],
+  ['APPLIED', 'สำเร็จแล้ว'],
+  ['REJECTED', 'ไม่อนุมัติ'],
+  ['ALL', 'ทั้งหมด'],
+];
 const fmt = (d) => (d ? new Date(d).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
 export default function VehicleRequests() {
@@ -46,105 +55,129 @@ export default function VehicleRequests() {
   const pendingCount = useMemo(() => rows.filter((r) => r.status === 'PENDING').length, [rows]);
 
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto motion-safe:animate-fade-in-up motion-reduce:animate-none">
-      <SectionTitle
-        className="mb-4"
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto motion-safe:animate-fade-in-up motion-reduce:animate-none">
+      <PageHeader
         title="คำขอเกี่ยวกับรถ"
-        action={(
-          <div className="flex gap-1.5">
-            {['PENDING', 'APPLIED', 'REJECTED', 'ALL'].map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`min-h-[44px] text-xs px-3 py-1.5 rounded-full border transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 ${filter === f ? 'bg-brand-800 text-white border-brand-800' : 'bg-surface-raised text-ink-muted border-surface-border hover:bg-surface'}`}
-              >
-                {f === 'PENDING' ? 'รออนุมัติ' : f === 'APPLIED' ? 'สำเร็จแล้ว' : f === 'REJECTED' ? 'ไม่อนุมัติ' : 'ทั้งหมด'}
-              </button>
-            ))}
-          </div>
-        )}
+        subtitle="คำขอกู้คืนรถ ขอใช้รถร่วม และคำขอตรวจสอบจากโรงเรียน"
+        actions={
+          filter === 'PENDING' && pendingCount > 0
+            ? <StatusBadge variant="warn" size="lg" icon={Clock}>{pendingCount} รออนุมัติ</StatusBadge>
+            : undefined
+        }
       />
-      {filter === 'PENDING' && pendingCount > 0 && (
-        <div className="mb-4">
-          <StatusBadge variant="warn" icon={Clock}>{pendingCount} รออนุมัติ</StatusBadge>
-        </div>
-      )}
 
-      <AppCard padding="none" className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-surface text-ink-muted text-xs">
-              <tr>
-                <th className="text-left font-medium px-3 py-2">วันที่</th>
-                <th className="text-left font-medium px-3 py-2">ประเภท</th>
-                <th className="text-left font-medium px-3 py-2">โรงเรียน</th>
-                <th className="text-left font-medium px-3 py-2">ทะเบียน</th>
-                <th className="text-left font-medium px-3 py-2">จากนำเข้า</th>
-                <th className="text-left font-medium px-3 py-2">สถานะ</th>
-                <th className="text-left font-medium px-3 py-2"> </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-border">
-              {rows.map((r) => {
-                const s = STATUS[r.status] || { label: r.status, variant: 'neutral' };
-                return (
-                  <tr key={r.id} className="hover:bg-surface">
-                    <td className="px-3 py-2 text-ink-muted whitespace-nowrap">{fmt(r.created_at)}</td>
-                    <td className="px-3 py-2 text-ink">{TYPE[r.request_type] || r.request_type}</td>
-                    <td className="px-3 py-2 text-ink-muted">{r.school_name || r.school_id}</td>
-                    <td className="px-3 py-2 text-ink-muted">{r.input_plate || '—'}</td>
-                    <td className="px-3 py-2 text-ink-muted text-xs">{r.import_batch_id ? `#${r.import_batch_id}` : '—'}</td>
-                    <td className="px-3 py-2"><StatusBadge variant={s.variant} icon={s.icon}>{s.label}</StatusBadge></td>
-                    <td className="px-3 py-2"><button onClick={() => openDetail(r.id)} className="text-sm text-brand-700 hover:text-brand-800 font-medium">เปิดดู</button></td>
-                  </tr>
-                );
-              })}
-              {rows.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-ink-muted text-sm">{busy ? 'กำลังโหลด…' : 'ไม่มีคำขอ'}</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </AppCard>
+      <FilterBar
+        className="mb-5"
+        chips={{ label: 'กรองตามสถานะคำขอ', value: filter, onChange: setFilter, options: FILTER_OPTIONS }}
+        count={rows.length}
+        countLabel="คำขอ"
+      />
+
+      <DataTable
+        caption="รายการคำขอเกี่ยวกับรถ"
+        loading={busy && rows.length === 0}
+        rows={rows}
+        rowKey={r => r.id}
+        columns={[
+          { key: 'type', header: 'ประเภท', primary: true,
+            cell: r => TYPE[r.request_type] || r.request_type },
+          { key: 'created', header: 'วันที่', secondary: true, cell: r => fmt(r.created_at) },
+          { key: 'school', header: 'โรงเรียน', cell: r => r.school_name || r.school_id },
+          { key: 'plate', header: 'ทะเบียน', cell: r => r.input_plate || '—' },
+          { key: 'batch', header: 'จากนำเข้า', cell: r => (r.import_batch_id ? `#${r.import_batch_id}` : '—') },
+          { key: 'status', header: 'สถานะ', badge: true,
+            cell: r => {
+              const st = STATUS[r.status] || { label: r.status, variant: 'neutral' };
+              return <StatusBadge variant={st.variant} icon={st.icon}>{st.label}</StatusBadge>;
+            } },
+        ]}
+        actions={r => <TableAction tone="brand" onClick={() => openDetail(r.id)}>เปิดดู</TableAction>}
+        empty={{
+          icon: Clock,
+          title: 'ไม่มีคำขอ',
+          description: filter === 'PENDING' ? 'ไม่มีคำขอรออนุมัติในขณะนี้' : 'ลองเลือกสถานะอื่น',
+        }}
+      />
 
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 motion-safe:animate-fade-in motion-reduce:animate-none" onClick={() => setDetail(null)}>
-          <div className="bg-surface-raised rounded-2xl shadow-elevate w-full max-w-md p-5 sm:p-6 motion-safe:animate-scale-in motion-reduce:animate-none" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-ink mb-3">{TYPE[detail.request_type] || detail.request_type} #{detail.id}</h2>
-            <div className="text-sm text-ink-muted space-y-1.5 mb-3">
-              <Row k="โรงเรียน" v={detail.school_name || detail.school_id} />
-              <Row k="ทะเบียน" v={detail.input_plate || '—'} />
-              <Row k="รถในระบบ" v={detail.current_vehicle ? `${detail.current_vehicle.plate_no} (${detail.current_vehicle.is_deleted ? 'ถูกปิดใช้งาน' : 'ใช้งานอยู่'})` : '—'} />
-              <Row k="เหตุผล" v={detail.reason || '—'} />
-              {detail.import_batch_id && <Row k="จากนำเข้า" v={`ชุด #${detail.import_batch_id}${detail.import_row_id ? ` แถว ${detail.import_row_id}` : ''}`} />}
-            </div>
-            {detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' && detail.active_canonical_conflict && (
-              <AlertBanner variant="danger" className="mb-3">มีรถทะเบียนเดียวกันที่ใช้งานอยู่แล้ว — ไม่สามารถกู้คืนได้</AlertBanner>
-            )}
-            {detail.can_approve && action && (
-              <div className="mb-3">
-                <label className="block text-xs text-ink-muted mb-1">หมายเหตุผู้ดูแล <span className="text-danger">*</span></label>
-                <input value={note} onChange={(e) => setNote(e.target.value)} className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30" />
-              </div>
-            )}
-            {detail.admin_note && !detail.can_approve && <div className="text-xs text-ink-muted mb-3">หมายเหตุ: {detail.admin_note}</div>}
-            <div className="flex gap-2 justify-end">
-              {detail.can_approve ? (action ? (
+        <Modal
+          title={`${TYPE[detail.request_type] || detail.request_type} #${detail.id}`}
+          onClose={() => setDetail(null)}
+          footer={
+            detail.can_approve ? (
+              action ? (
                 <>
-                  <button onClick={submit} disabled={busy || !note.trim()} className={`min-h-[44px] text-sm text-white font-medium px-4 py-2 rounded-lg transition disabled:opacity-40 ${action === 'approve' ? 'bg-success hover:bg-success/90' : 'bg-danger hover:bg-danger/90'}`}>
-                    {action === 'approve' ? (detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' ? 'ยืนยันกู้คืนรถ' : 'ยืนยันอนุมัติ') : 'ยืนยันไม่อนุมัติ'}
+                  <button onClick={() => setAction(null)}
+                    className="focus-ring min-h-[44px] px-4 rounded-lg border border-surface-border bg-surface-raised text-sm font-medium text-ink hover:bg-surface active:bg-surface-border transition">
+                    กลับ
                   </button>
-                  <button onClick={() => setAction(null)} className="min-h-[44px] px-4 text-ink-muted hover:text-ink text-sm">กลับ</button>
+                  <button onClick={submit} disabled={busy || !note.trim()}
+                    className={`focus-ring min-h-[44px] text-sm text-white font-semibold px-4 rounded-lg transition disabled:opacity-40 disabled:pointer-events-none ${action === 'approve' ? 'bg-success hover:bg-success/90' : 'bg-danger hover:bg-danger/90'}`}>
+                    {action === 'approve'
+                      ? (detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' ? 'ยืนยันกู้คืนรถ' : 'ยืนยันอนุมัติ')
+                      : 'ยืนยันไม่อนุมัติ'}
+                  </button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => setAction('approve')} disabled={detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' && detail.active_canonical_conflict} className="min-h-[44px] text-sm bg-success hover:bg-success/90 disabled:opacity-40 text-white font-medium px-4 py-2 rounded-lg transition">{detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' ? 'อนุมัติและกู้คืนรถ' : 'อนุมัติคำขอ'}</button>
-                  <button onClick={() => setAction('reject')} className="min-h-[44px] text-sm bg-danger hover:bg-danger/90 text-white font-medium px-4 py-2 rounded-lg transition">ไม่อนุมัติ</button>
+                  <button onClick={() => setAction('reject')}
+                    className="focus-ring min-h-[44px] text-sm bg-danger hover:bg-danger/90 text-white font-semibold px-4 rounded-lg transition">
+                    ไม่อนุมัติ
+                  </button>
+                  <button onClick={() => setAction('approve')}
+                    disabled={detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' && detail.active_canonical_conflict}
+                    className="focus-ring min-h-[44px] text-sm bg-success hover:bg-success/90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 rounded-lg transition">
+                    {detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' ? 'อนุมัติและกู้คืนรถ' : 'อนุมัติคำขอ'}
+                  </button>
                 </>
-              )) : <button onClick={() => setDetail(null)} className="min-h-[44px] text-sm bg-surface hover:bg-surface-border text-ink px-4 py-2 rounded-lg transition">ปิด</button>}
-            </div>
-          </div>
-        </div>
+              )
+            ) : (
+              <button onClick={() => setDetail(null)}
+                className="focus-ring min-h-[44px] text-sm bg-surface hover:bg-surface-border text-ink px-4 rounded-lg transition">
+                ปิด
+              </button>
+            )
+          }
+        >
+          <dl className="text-sm space-y-1.5 mb-3">
+            <Row k="โรงเรียน" v={detail.school_name || detail.school_id} />
+            <Row k="ทะเบียน" v={detail.input_plate || '—'} />
+            <Row k="รถในระบบ" v={detail.current_vehicle ? `${detail.current_vehicle.plate_no} (${detail.current_vehicle.is_deleted ? 'ถูกปิดใช้งาน' : 'ใช้งานอยู่'})` : '—'} />
+            <Row k="เหตุผล" v={detail.reason || '—'} />
+            {detail.import_batch_id && (
+              <Row k="จากนำเข้า" v={`ชุด #${detail.import_batch_id}${detail.import_row_id ? ` แถว ${detail.import_row_id}` : ''}`} />
+            )}
+          </dl>
+
+          {detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' && detail.active_canonical_conflict && (
+            <AlertBanner variant="danger" className="mb-3">
+              มีรถทะเบียนเดียวกันที่ใช้งานอยู่แล้ว — ไม่สามารถกู้คืนได้
+            </AlertBanner>
+          )}
+
+          {detail.can_approve && action && (
+            <FormField
+              label="หมายเหตุผู้ดูแล"
+              required
+              value={note}
+              onChange={setNote}
+              placeholder={action === 'approve' ? 'เช่น ตรวจสอบเอกสารแล้ว' : 'เหตุผลที่ไม่อนุมัติ'}
+              helper="หมายเหตุนี้จะถูกบันทึกไว้กับคำขอและใน audit log"
+            />
+          )}
+          {detail.admin_note && !detail.can_approve && (
+            <p className="text-caption text-ink-muted">หมายเหตุ: {detail.admin_note}</p>
+          )}
+        </Modal>
       )}
     </div>
   );
 }
-function Row({ k, v }) { return <div className="flex justify-between gap-3"><span className="text-ink-muted">{k}</span><span className="text-right text-ink">{v}</span></div>; }
+function Row({ k, v }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-ink-muted shrink-0">{k}</dt>
+      <dd className="text-right text-ink min-w-0">{v}</dd>
+    </div>
+  );
+}

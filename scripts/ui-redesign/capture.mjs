@@ -95,6 +95,16 @@ const TRANSFER_ROWS = [
   { id: 102, created_at: '2026-08-24T07:40:00Z', student_name: 'นักเรียน ตัวอย่าง ข', student_code: 'STU00002', source_school_name: 'โรงเรียนตัวอย่าง ค', destination_school_name: 'โรงเรียนตัวอย่าง ก', reason: 'เหตุผลที่ยาวมากเพื่อทดสอบการตัดข้อความในคอลัมน์เหตุผลของตาราง', status: 'PENDING' },
 ];
 
+const VEH_REQ_ROWS = [
+  { id: 201, created_at: '2026-08-25T03:00:00Z', request_type: 'RESTORE_SOFT_DELETED_VEHICLE', school_name: 'โรงเรียนตัวอย่าง ก', input_plate: 'กข-1111 ลำปาง', import_batch_id: 42, status: 'PENDING' },
+  { id: 202, created_at: '2026-08-24T05:00:00Z', request_type: 'USE_EXISTING_SHARED_VEHICLE',  school_name: 'โรงเรียนตัวอย่างที่มีชื่อยาวมาก', input_plate: 'กข-2222 ลำปาง', import_batch_id: null, status: 'PENDING' },
+];
+
+const AFF_TRANSFER_ROWS = [
+  { id: 301, created_at: '2026-08-25T01:00:00Z', student_name_snapshot: 'นักเรียน ตัวอย่าง ก', student_code: 'STU00001', source_school_name: 'โรงเรียนตัวอย่าง ก', destination_school_name: 'โรงเรียนตัวอย่าง ข', status: 'PENDING' },
+  { id: 302, created_at: '2026-08-23T01:00:00Z', student_name_snapshot: 'นักเรียน ตัวอย่าง ข', student_code: 'STU00002', source_school_name: 'โรงเรียนตัวอย่าง ค', destination_school_name: 'โรงเรียนตัวอย่าง ก', status: 'APPLIED' },
+];
+
 const SCENARIOS = {
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
@@ -115,6 +125,9 @@ const SCENARIOS = {
     '/api/school/vehicles':       { data: VEHICLE_ROWS, meta: { page: 1, per_page: 50, total: 3 } },
     '/api/transport/vehicles':    { data: VEHICLE_ROWS, meta: { page: 1, per_page: 50, total: 3 } },
     '/api/admin/student-transfer-requests': { data: TRANSFER_ROWS },
+    '/api/admin/vehicle-requests': { data: VEH_REQ_ROWS },
+    '/api/affiliation/transfer-requests': { data: AFF_TRANSFER_ROWS },
+    '/api/affiliation/vehicle-requests':  { data: VEH_REQ_ROWS },
   },
   // everything quiet — verifies empty cards collapse instead of standing tall
   zero: {
@@ -236,6 +249,9 @@ const SHOTS = [
   { id: '24-school-vehicles',   url: '/school/vehicles',       user: 'school',   vps: ['mobile', 'desktop'] },
   { id: '25-transport-vehicles', url: '/transport/vehicles',   user: 'transport', vps: ['mobile', 'desktop'] },
   { id: '26-transfer-requests', url: '/admin/transfer-requests', user: 'admin', vps: ['mobile', 'desktop'] },
+  { id: '27-vehicle-requests',  url: '/admin/vehicle-requests',  user: 'admin', vps: ['mobile', 'desktop'] },
+  { id: '28-aff-transfers',     url: '/affiliation/transfer-requests', user: 'affiliation', vps: ['mobile', 'desktop'] },
+  { id: '29-aff-veh-requests',  url: '/affiliation/vehicle-requests',  user: 'affiliation', vps: ['mobile', 'desktop'] },
 ];
 
 (async () => {

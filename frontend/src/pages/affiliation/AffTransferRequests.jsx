@@ -7,8 +7,10 @@ import { useToast } from '../../components/Toast';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
-import AppCard from '../../components/ui/AppCard';
-import StatusBadge from '../../components/ui/StatusBadge';
+import PageHeader from '../../components/PageHeader';
+import {
+  StatusBadge, DataTable, TableAction, FilterBar, FormField, Modal,
+} from '../../components/ui';
 import { PageTransition } from '../../lib/motion';
 
 const FILTERS = [
@@ -88,157 +90,158 @@ export default function AffTransferRequests() {
   return (
     <PageTransition>
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-ink flex items-center gap-2">
-              <Users className="w-6 h-6 text-brand-700" />
-              คำขอโอนย้ายนักเรียน
+        <PageHeader
+          title="คำขอโอนย้ายนักเรียน"
+          subtitle="อนุมัติคำขอโอนย้ายนักเรียนระหว่างโรงเรียนในสังกัด"
+          actions={
+            <div className="flex items-center gap-2">
               {filter === 'PENDING' && pendingCount > 0 && (
-                <StatusBadge variant="warn" size="sm">{pendingCount} รออนุมัติ</StatusBadge>
+                <StatusBadge variant="warn" size="lg">{pendingCount} รออนุมัติ</StatusBadge>
               )}
-            </h1>
-            <p className="text-sm text-ink-muted mt-0.5">อนุมัติคำขอโอนย้ายนักเรียนระหว่างโรงเรียนในสังกัด</p>
-          </div>
-          <button onClick={load} className="inline-flex items-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3 py-2 rounded-lg border border-surface-border transition min-h-[44px]">
-            <RefreshCw className="w-4 h-4" /> รีเฟรช
-          </button>
-        </div>
-
-        <div className="flex gap-1.5">
-          {FILTERS.map(f => (
-            <button key={f.key} onClick={() => setFilter(f.key)}
-              className={`min-h-[36px] text-xs px-3 py-1.5 rounded-full border transition ${filter === f.key ? 'bg-brand-800 text-white border-brand-800' : 'bg-surface-raised text-ink-muted border-surface-border hover:bg-surface'}`}>
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        {rows.length === 0 ? (
-          <EmptyState icon={Users} title="ไม่มีคำขอ" description="ยังไม่มีคำขอโอนย้ายนักเรียนในสังกัดของคุณ" />
-        ) : (
-          <AppCard padding="none" className="overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-surface text-ink-muted text-xs">
-                  <tr>
-                    <th className="text-left font-medium px-3 py-2">วันที่</th>
-                    <th className="text-left font-medium px-3 py-2">นักเรียน</th>
-                    <th className="text-left font-medium px-3 py-2">จาก → ไป</th>
-                    <th className="text-left font-medium px-3 py-2">สถานะ</th>
-                    <th className="text-left font-medium px-3 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(r => {
-                    const [label, variant] = STATUS_BADGE[r.status] || [r.status, 'neutral'];
-                    return (
-                      <tr key={r.id} className="border-t border-surface-border hover:bg-surface transition">
-                        <td className="px-3 py-2.5 text-xs text-ink-muted">
-                          {new Date(r.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <p className="font-medium text-ink">{r.student_name_snapshot}</p>
-                          <p className="text-xs text-ink-muted">{r.student_code}</p>
-                        </td>
-                        <td className="px-3 py-2.5 text-xs">
-                          <span className="text-ink">{r.source_school_name}</span>
-                          <ArrowRight className="inline w-3 h-3 mx-1 text-ink-muted" />
-                          <span className="text-ink">{r.destination_school_name}</span>
-                        </td>
-                        <td className="px-3 py-2.5"><StatusBadge variant={variant} size="sm">{label}</StatusBadge></td>
-                        <td className="px-3 py-2.5">
-                          <button onClick={() => openDetail(r.id)}
-                            className="text-xs font-medium text-brand-700 hover:text-brand-800 px-2 py-1 rounded">
-                            รายละเอียด
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <button onClick={load}
+                className="focus-ring inline-flex items-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3 min-h-[44px] rounded-lg border border-surface-border transition">
+                <RefreshCw className="w-4 h-4" aria-hidden="true" /> รีเฟรช
+              </button>
             </div>
-          </AppCard>
-        )}
+          }
+        />
+
+        <FilterBar
+          chips={{
+            label: 'กรองตามสถานะคำขอ',
+            value: filter,
+            onChange: setFilter,
+            options: FILTERS.map(f => [f.key, f.label]),
+          }}
+          count={rows.length}
+          countLabel="คำขอ"
+        />
+
+        <DataTable
+          caption="รายการคำขอโอนย้ายนักเรียนในสังกัด"
+          rows={rows}
+          rowKey={r => r.id}
+          columns={[
+            { key: 'student', header: 'นักเรียน', primary: true,
+              cell: r => <span className="font-medium text-ink">{r.student_name_snapshot}</span> },
+            { key: 'code', header: 'รหัสนักเรียน', secondary: true,
+              cell: r => <span className="tabular-nums">{r.student_code}</span> },
+            { key: 'created', header: 'วันที่',
+              cell: r => new Date(r.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }) },
+            { key: 'route', header: 'จาก → ไป',
+              cell: r => (
+                <span className="inline-flex items-center gap-1">
+                  <span className="text-ink">{r.source_school_name}</span>
+                  <ArrowRight className="w-3 h-3 text-ink-muted shrink-0" aria-label="ไป" />
+                  <span className="text-ink">{r.destination_school_name}</span>
+                </span>
+              ) },
+            { key: 'status', header: 'สถานะ', badge: true,
+              cell: r => {
+                const [label, variant] = STATUS_BADGE[r.status] || [r.status, 'neutral'];
+                return <StatusBadge variant={variant}>{label}</StatusBadge>;
+              } },
+          ]}
+          actions={r => <TableAction tone="brand" onClick={() => openDetail(r.id)}>รายละเอียด</TableAction>}
+          empty={{
+            icon: Users,
+            title: 'ไม่มีคำขอ',
+            description: 'ยังไม่มีคำขอโอนย้ายนักเรียนในสังกัดของคุณ',
+          }}
+        />
 
         {/* Detail modal */}
         {detail && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDetail(null)}>
-            <AppCard padding="lg" className="max-w-lg w-full" onClick={e => e.stopPropagation()}>
-              <h2 className="text-lg font-bold text-ink mb-3">รายละเอียดคำขอโอนย้าย</h2>
-              <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-ink-muted">นักเรียน</p>
-                    <p className="font-medium text-ink">{detail.student_name_snapshot}</p>
-                    <p className="text-xs text-ink-muted">{detail.student_code}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-ink-muted">ประเภทคำขอ</p>
-                    <p className="font-medium text-ink">{detail.request_type === 'TRANSFER_OUT' ? 'โอนออก' : detail.request_type === 'TRANSFER_IN' ? 'โอนเข้า' : detail.request_type}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-ink-muted">จากโรงเรียน</p>
-                    <p className="font-medium text-ink">{detail.source_school_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-ink-muted">ไปโรงเรียน</p>
-                    <p className="font-medium text-ink">{detail.destination_school_name}</p>
-                  </div>
-                </div>
-                {detail.reason && (
-                  <div>
-                    <p className="text-xs text-ink-muted">เหตุผล</p>
-                    <p className="text-ink">{detail.reason}</p>
-                  </div>
-                )}
-                {detail.evidence_note && (
-                  <div>
-                    <p className="text-xs text-ink-muted">หลักฐานเพิ่มเติม</p>
-                    <p className="text-ink">{detail.evidence_note}</p>
-                  </div>
-                )}
-                {detail.admin_note && (
-                  <div>
-                    <p className="text-xs text-ink-muted">หมายเหตุผู้อนุมัติ</p>
-                    <p className="text-ink">{detail.admin_note}</p>
-                  </div>
-                )}
+          <Modal
+            size="lg"
+            title="รายละเอียดคำขอโอนย้าย"
+            onClose={() => setDetail(null)}
+            footer={
+              detail.status === 'PENDING' ? (
+                <>
+                  <button onClick={() => setAction('reject')} disabled={busy}
+                    className="focus-ring inline-flex items-center justify-center gap-1.5 border border-danger/30 bg-danger-soft hover:bg-danger/10 disabled:opacity-50 text-danger-ink text-sm font-semibold px-4 min-h-[44px] rounded-lg transition">
+                    <XCircle className="w-4 h-4" aria-hidden="true" /> ไม่อนุมัติ
+                  </button>
+                  <button onClick={() => setAction('approve')} disabled={busy}
+                    className="focus-ring inline-flex items-center justify-center gap-1.5 bg-success hover:opacity-90 disabled:opacity-50 text-white text-sm font-semibold px-4 min-h-[44px] rounded-lg transition">
+                    <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> อนุมัติ
+                  </button>
+                  {action && (
+                    <button onClick={doAction} disabled={busy}
+                      className="focus-ring inline-flex items-center justify-center bg-brand-700 hover:bg-brand-800 disabled:opacity-50 text-white text-sm font-semibold px-4 min-h-[44px] rounded-lg transition">
+                      {busy ? 'กำลังดำเนินการ…' : `ยืนยัน${action === 'approve' ? 'อนุมัติ' : 'ไม่อนุมัติ'}`}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button onClick={() => setDetail(null)}
+                  className="focus-ring min-h-[44px] text-sm bg-surface hover:bg-surface-border text-ink px-4 rounded-lg transition">
+                  ปิด
+                </button>
+              )
+            }
+          >
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-caption text-ink-muted">นักเรียน</dt>
+                <dd className="font-medium text-ink">{detail.student_name_snapshot}</dd>
+                <dd className="text-caption text-ink-muted tabular-nums">{detail.student_code}</dd>
               </div>
-
-              {detail.status === 'PENDING' && (
-                <div className="mt-4 space-y-3">
-                  <textarea
-                    value={note}
-                    onChange={e => setNote(e.target.value)}
-                    placeholder="หมายเหตุ (ไม่บังคับ)"
-                    className="w-full min-h-[60px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink focus:ring-2 focus:ring-brand-400 outline-none"
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={() => setAction('approve')} disabled={busy}
-                      className="inline-flex items-center gap-1.5 bg-success hover:opacity-90 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition min-h-[44px]">
-                      <CheckCircle2 className="w-4 h-4" /> อนุมัติ
-                    </button>
-                    <button onClick={() => setAction('reject')} disabled={busy}
-                      className="inline-flex items-center gap-1.5 border border-danger/30 bg-danger-soft hover:bg-danger/10 disabled:opacity-50 text-danger-ink text-sm font-medium px-4 py-2 rounded-lg transition min-h-[44px]">
-                      <XCircle className="w-4 h-4" /> ไม่อนุมัติ
-                    </button>
-                    {action && (
-                      <button onClick={doAction} disabled={busy}
-                        className="inline-flex items-center bg-brand-700 hover:bg-brand-800 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition min-h-[44px]">
-                        {busy ? 'กำลัง...' : 'ยืนยัน'}
-                      </button>
-                    )}
-                  </div>
+              <div>
+                <dt className="text-caption text-ink-muted">ประเภทคำขอ</dt>
+                <dd className="font-medium text-ink">
+                  {detail.request_type === 'TRANSFER_OUT' ? 'โอนออก'
+                    : detail.request_type === 'TRANSFER_IN' ? 'โอนเข้า'
+                    : detail.request_type}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-caption text-ink-muted">จากโรงเรียน</dt>
+                <dd className="font-medium text-ink">{detail.source_school_name}</dd>
+              </div>
+              <div>
+                <dt className="text-caption text-ink-muted">ไปโรงเรียน</dt>
+                <dd className="font-medium text-ink">{detail.destination_school_name}</dd>
+              </div>
+              {detail.reason && (
+                <div className="sm:col-span-2">
+                  <dt className="text-caption text-ink-muted">เหตุผล</dt>
+                  <dd className="text-ink">{detail.reason}</dd>
                 </div>
               )}
+              {detail.evidence_note && (
+                <div className="sm:col-span-2">
+                  <dt className="text-caption text-ink-muted">หลักฐานเพิ่มเติม</dt>
+                  <dd className="text-ink">{detail.evidence_note}</dd>
+                </div>
+              )}
+              {detail.admin_note && (
+                <div className="sm:col-span-2">
+                  <dt className="text-caption text-ink-muted">หมายเหตุผู้อนุมัติ</dt>
+                  <dd className="text-ink">{detail.admin_note}</dd>
+                </div>
+              )}
+            </dl>
 
-              <button onClick={() => setDetail(null)}
-                className="mt-4 w-full text-sm text-ink-muted hover:text-ink py-2">
-                ปิด
-              </button>
-            </AppCard>
-          </div>
+            {detail.status === 'PENDING' && (
+              <FormField
+                className="mt-4"
+                label="หมายเหตุ"
+                helper="ไม่บังคับ — จะถูกบันทึกไว้กับคำขอ"
+              >
+                {ctl => (
+                  <textarea
+                    {...ctl}
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    rows={3}
+                    className="focus-ring w-full min-h-[72px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-base sm:text-sm text-ink transition"
+                  />
+                )}
+              </FormField>
+            )}
+          </Modal>
         )}
       </div>
     </PageTransition>

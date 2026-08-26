@@ -48,7 +48,7 @@ export default function AffSchoolAccounts() {
   const fetchAccounts = useCallback(async () => {
     try {
       const res = await api.get('/affiliation/school-accounts');
-      setAccounts(res.data.data || []);
+      setAccounts(Array.isArray(res.data?.data) ? res.data.data : []);
     } catch {
       /* keep page usable even if list fails */
     } finally {
@@ -59,7 +59,7 @@ export default function AffSchoolAccounts() {
   const fetchSchools = useCallback(async () => {
     try {
       const res = await api.get('/affiliation/schools');
-      setSchools(res.data.data || []);
+      setSchools(Array.isArray(res.data?.data) ? res.data.data : []);
     } catch { /* dropdown optional */ }
   }, []);
 

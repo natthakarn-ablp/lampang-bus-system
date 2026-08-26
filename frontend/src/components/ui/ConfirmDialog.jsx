@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 /**
@@ -16,6 +16,11 @@ import { AlertTriangle } from 'lucide-react';
  * `itemName` renders the affected record so the user can confirm they are
  * acting on the right row. Pass only what is safe to display — for a person,
  * a username or display name, never an identifier like a national ID.
+ *
+ * `children` is for the rare confirmation that needs an input before it can
+ * proceed — an import rollback has to record why. Pair it with
+ * `confirmDisabled` so the destructive button stays unavailable until that
+ * input is filled in.
  */
 export default function ConfirmDialog({
   open,
@@ -26,9 +31,14 @@ export default function ConfirmDialog({
   cancelLabel = 'ยกเลิก',
   tone = 'danger',
   loading = false,
+  confirmDisabled = false,
+  children,
   onConfirm,
   onCancel,
 }) {
+  // Ids were hard-coded, so two dialogs mounted at once pointed both panels'
+  // aria-labelledby at the first one's heading.
+  const uid = useId();
   const panelRef = useRef(null);
   const cancelRef = useRef(null);
   const restoreRef = useRef(null);
@@ -48,8 +58,12 @@ export default function ConfirmDialog({
     function onKeyDown(e) {
       if (e.key === 'Escape') { e.stopPropagation(); onCancel?.(); return; }
       if (e.key !== 'Tab') return;
+      // Not just buttons: a dialog with a required reason field has to keep
+      // that field inside the trap, or Tab walks straight past it.
       const items = Array.from(
-        panelRef.current?.querySelectorAll('button:not([disabled])') ?? []
+        panelRef.current?.querySelectorAll(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])'
+        ) ?? []
       );
       if (!items.length) return;
       const first = items[0];
@@ -80,8 +94,8 @@ export default function ConfirmDialog({
         ref={panelRef}
         role="alertdialog"
         aria-modal="true"
-        aria-labelledby="confirm-title"
-        aria-describedby="confirm-desc"
+        aria-labelledby={`${uid}-title`}
+        aria-describedby={`${uid}-desc`}
         className="relative w-full max-w-md bg-surface-raised rounded-2xl shadow-overlay p-5 motion-safe:animate-scale-in"
       >
         <div className="flex items-start gap-3">
@@ -89,8 +103,8 @@ export default function ConfirmDialog({
             <AlertTriangle className={`w-5 h-5 ${tone === 'danger' ? 'text-danger' : 'text-brand-700'}`} strokeWidth={2.2} aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 id="confirm-title" className="text-base font-semibold text-ink leading-tight">{title}</h2>
-            <div id="confirm-desc" className="mt-1.5 text-sm text-ink-muted space-y-1.5">
+            <h2 id={`${uid}-title`} className="text-base font-semibold text-ink leading-tight">{title}</h2>
+            <div id={`${uid}-desc`} className="mt-1.5 text-sm text-ink-muted space-y-1.5">
               {itemName && (
                 <p className="font-medium text-ink break-words">{itemName}</p>
               )}
@@ -98,6 +112,8 @@ export default function ConfirmDialog({
             </div>
           </div>
         </div>
+
+        {children && <div className="mt-4">{children}</div>}
 
         <div className="mt-5 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <button
@@ -112,7 +128,7 @@ export default function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || confirmDisabled}
             className={`focus-ring inline-flex items-center justify-center px-4 min-h-[44px] rounded-lg text-sm font-semibold transition disabled:opacity-60 disabled:pointer-events-none ${confirmTone}`}
           >
             {loading ? 'กำลังดำเนินการ…' : confirmLabel}

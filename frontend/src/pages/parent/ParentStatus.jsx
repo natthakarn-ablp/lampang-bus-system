@@ -41,7 +41,7 @@ export default function ParentStatus() {
         const res = await axios.get('/api/parent/children', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!cancelled) setChildren(res.data.data || []);
+        if (!cancelled) setChildren(Array.isArray(res.data?.data) ? res.data.data : []);
       } catch (err) {
         if (!cancelled) {
           const code = err.response?.status;

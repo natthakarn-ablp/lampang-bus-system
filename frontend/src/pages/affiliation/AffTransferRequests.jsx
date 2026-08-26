@@ -46,7 +46,7 @@ export default function AffTransferRequests() {
       const res = await api.get('/affiliation/transfer-requests', {
         params: filter === 'ALL' ? {} : { status: filter },
       });
-      setRows(res.data.data || []);
+      setRows(Array.isArray(res.data?.data) ? res.data.data : []);
     } catch (err) {
       setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
     } finally {

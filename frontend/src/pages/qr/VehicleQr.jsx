@@ -136,7 +136,7 @@ export default function VehicleQr() {
     setIdToken(t);
     try {
       const me = await axios.get('/api/consent/me/parent', { headers: { Authorization: `Bearer ${t}` } });
-      const optedIn = (me.data.data || []).some((c) => c.type === 'qr_parent_optin' && c.status === 'granted');
+      const optedIn = (Array.isArray(me.data?.data) ? me.data.data : []).some((c) => c.type === 'qr_parent_optin' && c.status === 'granted');
       if (optedIn) loadParent(t);
       else setShowParentConsent(true);
     } catch { /* not a linkable parent — stay at Level-1 */ }

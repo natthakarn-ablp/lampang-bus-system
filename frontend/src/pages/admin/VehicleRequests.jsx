@@ -39,7 +39,7 @@ export default function VehicleRequests() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
   async function load() {
     setBusy(true);
-    try { const res = await api.get('/admin/vehicle-requests', { params: filter === 'ALL' ? {} : { status: filter } }); setRows(res.data.data || []); }
+    try { const res = await api.get('/admin/vehicle-requests', { params: filter === 'ALL' ? {} : { status: filter } }); setRows(Array.isArray(res.data?.data) ? res.data.data : []); }
     catch { toast.error('โหลดคำขอไม่สำเร็จ'); } finally { setBusy(false); }
   }
   async function openDetail(id) {

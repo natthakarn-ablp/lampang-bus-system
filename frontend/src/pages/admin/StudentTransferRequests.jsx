@@ -44,7 +44,7 @@ export default function StudentTransferRequests() {
     setBusy(true);
     try {
       const res = await api.get('/admin/student-transfer-requests', { params: filter === 'ALL' ? {} : { status: filter } });
-      setRows(res.data.data || []);
+      setRows(Array.isArray(res.data?.data) ? res.data.data : []);
     } catch { toast.error('โหลดคำขอไม่สำเร็จ'); }
     finally { setBusy(false); }
   }

@@ -36,8 +36,8 @@ export default function UserManagement() {
   const [affiliations, setAffiliations] = useState([]);
 
   useEffect(() => {
-    api.get('/province/schools?per_page=200').then(r => setSchools(r.data.data || [])).catch(() => {});
-    api.get('/province/affiliations').then(r => setAffiliations(r.data.data || [])).catch(() => {});
+    api.get('/province/schools?per_page=200').then(r => setSchools(Array.isArray(r.data?.data) ? r.data.data : [])).catch(() => {});
+    api.get('/province/affiliations').then(r => setAffiliations(Array.isArray(r.data?.data) ? r.data.data : [])).catch(() => {});
   }, []);
 
   useEffect(() => {

@@ -120,6 +120,21 @@ const AUDIT_ROWS = [
   { id: 5, created_at: '2026-08-25T07:50:00Z', actor_name: 'driver042',  action: 'LOGIN',   entity_type: 'user',    entity_id: null,      new_value: {} },
 ];
 
+// One import batch's detail, covering every branch the modal renders: a plain
+// applied row, a guardian mismatch awaiting confirmation, a soft-deleted pupil
+// awaiting reactivation, a hard error, and a rolled-back row.
+const IMPORT_DETAIL = { data: {
+  batch: { id: 'B-2', filename: 'students-aug.csv' },
+  summary: { total: 5, applied: 2, warning: 2, error: 1, rolled_back: 1, ready: 1 },
+  rows: [
+    { row_number: 1, student_code: '52020001', student_name: 'ด.ช. นักเรียน ทดสอบหนึ่ง', classification: 'INSERT_NEW',        status: 'APPLIED',  message_th: 'นำเข้าสำเร็จ',            can_rollback: true,  can_apply: false, can_confirm_guardian_update: false, can_confirm_reactivate: false, rollback_status: null, input_vehicle_plate: 'กข-1111 ลำปาง', matched_display_plate: 'กข-1111 ลำปาง' },
+    { row_number: 2, student_code: '52020002', student_name: 'ด.ญ. นักเรียน ทดสอบสอง', classification: 'GUARDIAN_MISMATCH',  status: 'WARNING',  message_th: 'ข้อมูลผู้ปกครองไม่ตรงกับในระบบ', can_rollback: false, can_apply: false, can_confirm_guardian_update: true,  can_confirm_reactivate: false, rollback_status: null, guardian_mismatch: true, guardian_current: 'ผู้ปกครอง เดิม', guardian_input: 'ผู้ปกครอง ใหม่', input_vehicle_plate: 'กข-1111 ลำปาง', matched_display_plate: 'กข-1111 ลำปาง' },
+    { row_number: 3, student_code: '52020003', student_name: 'ด.ช. นักเรียน ทดสอบสาม', classification: 'SOFT_DELETED_SAME_SCHOOL_REACTIVATE', status: 'WARNING', message_th: 'เคยถูกลบ ต้องยืนยันกู้คืน', can_rollback: false, can_apply: false, can_confirm_guardian_update: false, can_confirm_reactivate: true, rollback_status: null, action_required: 'ยืนยันกู้คืนนักเรียน', input_vehicle_plate: 'กข-2222 ลำปาง', matched_display_plate: 'กข-2222 ลำปาง' },
+    { row_number: 4, student_code: 'BAD',      student_name: null,                        classification: 'VEHICLE_SOFT_DELETED', status: 'ERROR', message_th: 'รถถูกปิดใช้งาน',      can_rollback: false, can_apply: false, can_confirm_guardian_update: false, can_confirm_reactivate: false, rollback_status: null, input_vehicle_plate: 'กข-9999 ลำปาง', matched_display_plate: null },
+    { row_number: 5, student_code: '52020005', student_name: 'ด.ญ. นักเรียน ทดสอบห้า',  classification: 'INSERT_NEW',        status: 'APPLIED',  message_th: 'ย้อนกลับแล้ว',           can_rollback: false, can_apply: false, can_confirm_guardian_update: false, can_confirm_reactivate: false, rollback_status: 'ROLLED_BACK', input_vehicle_plate: 'กข-1111 ลำปาง', matched_display_plate: 'กข-1111 ลำปาง' },
+  ],
+} };
+
 // Synthetic pickup fixtures. Names and plates are invented for this harness;
 // no production record is used.
 const PICKUP_POINTS = [
@@ -263,6 +278,18 @@ const COMMON = {
   ] },
   '/api/admin/pickup-points': { data: PICKUP_POINTS, meta: { total: 3, page: 1, limit: 20 } },
   '/api/province/vehicles': { data: PICKUP_VEHICLES },
+  '/api/school/students': { data: [
+    { id: 'S-1', student_code: '52020001', prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ทดสอบหนึ่ง', grade: 'ป.4', classroom: '1', vehicle_id: 'V-1', plate_no: 'กข-1111 ลำปาง', guardian_name: 'ผู้ปกครอง ทดสอบ', guardian_phone: '0800000001' },
+    { id: 'S-2', student_code: '52020002', prefix: 'ด.ญ.', first_name: 'นักเรียน', last_name: 'ทดสอบสอง', grade: 'ป.4', classroom: '2', vehicle_id: null, plate_no: null, guardian_name: null, guardian_phone: null },
+  ], meta: { total: 2, page: 1, limit: 20 } },
+  '/api/terms/current': { data: { term_id: '2569-1', name: 'ภาคเรียนที่ 1/2569', start_date: '2026-05-16', end_date: '2026-10-10' } },
+  '/api/school/students/transfer-requests': { data: [
+    { id: 'TR-1', student_id: 'S-1', destination_school_id: '52020082', destination_school_name: 'โรงเรียนตัวอย่างปลายทาง', status: 'PENDING', admin_note: null },
+  ] },
+  '/api/school/students/import/batches': { data: [
+    { batch_id: 'B-2', created_at: '2026-08-25T03:00:00Z', filename: 'students-aug.csv', status: 'APPLIED',         rollback_status: null, total_rows: 42, insert_count: 40, error_count: 2, expires_at: '2026-09-25T03:00:00Z' },
+    { batch_id: 'B-1', created_at: '2026-07-02T03:00:00Z', filename: 'students-jul.csv', status: 'APPLIED_PARTIAL', rollback_status: null, total_rows: 30, insert_count: 24, error_count: 6, expires_at: '2026-08-02T03:00:00Z' },
+  ] },
   '/api/admin/live-vehicles': { data: {
     generated_at: '2026-08-26T01:45:00Z',
     vehicles: [
@@ -285,7 +312,11 @@ function mockFor(url, scenario) {
     if (u.pathname === '/api/admin/users' && u.searchParams.get('is_active') === 'false') {
       return set['/api/admin/users?is_active=false'] ?? null;
     }
-    return set[u.pathname] ?? COMMON[u.pathname] ?? null;
+    const exact = set[u.pathname] ?? COMMON[u.pathname];
+    if (exact) return exact;
+    // A few endpoints carry an id in the path.
+    if (/^\/api\/school\/students\/import\/[^/]+$/.test(u.pathname)) return IMPORT_DETAIL;
+    return null;
   } catch { return null; }
 }
 
@@ -366,7 +397,12 @@ const MEASURE = `(() => {
   // focus. 14px on a desktop form is a deliberate density choice, not a defect.
   // A hidden input (a file picker behind a styled label) has no layout box and
   // never receives a keyboard, so it cannot trigger the zoom this measures.
+  // Only controls that raise a text keyboard can trigger the zoom. A checkbox,
+  // radio or file picker has no text to zoom into, so its font-size is a
+  // styling choice rather than a defect.
+  const TYPING = /^(text|search|email|url|tel|number|password|date|datetime-local|month|week|time|)$/;
   const tinyInputs = innerWidth >= 768 ? [] : [...document.querySelectorAll('input,select,textarea')]
+    .filter(e => e.tagName !== 'INPUT' || TYPING.test(e.type || ''))
     .filter(e => e.getBoundingClientRect().height > 0)
     .map(e => ({ type: e.type || e.tagName, size: parseFloat(getComputedStyle(e).fontSize) }))
     .filter(e => e.size && e.size < 16);
@@ -433,6 +469,34 @@ const SHOTS = [
     expect: ['[aria-expanded="true"]', 'text=หลักฐานที่มี', 'text=Baseline vs Current'] },
   { id: '71-executive-print',  url: '/admin/executive-print', user: 'admin', vps: ['desktop'],
     expect: ['table', 'text=สรุปสำหรับผู้บริหาร', 'button:has-text("พิมพ์")'] },
+  // These three are components, not routes, so the harness reaches them the
+  // way a user does — by clicking the control on StudentSearch that opens
+  // them. A build passes with an undefined identifier inside a modal body;
+  // only rendering it catches that.
+  { id: '79-import-preview', url: '/school/students', user: 'school', vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: 'นำเข้าข้อมูล' }).first().click(); },
+    expect: ['[role=dialog]', 'input[type=file]', 'text=ตรวจสอบไฟล์ก่อนนำเข้า', 'text=ภาคเรียนที่จะบันทึก'] },
+  { id: '80-import-history', url: '/school/students', user: 'school', vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: 'ประวัติการนำเข้า' }).first().click(); },
+    expect: ['[role=dialog]', 'text=ประวัติการนำเข้า', 'text=students-aug.csv'] },
+  { id: '81-import-history-detail', url: '/school/students', user: 'school', vps: ['desktop'],
+    act: async page => {
+      await page.getByRole('button', { name: 'ประวัติการนำเข้า' }).first().click();
+      await page.waitForTimeout(400);
+      await page.getByRole('button', { name: 'เปิดดู' }).first().click();
+    },
+    // the detail view is where the three per-row confirmations and the
+    // rollback path live
+    expect: ['[role=dialog]', 'text=ย้อนกลับ', 'text=อัปเดตผู้ปกครอง', 'text=กู้คืนนักเรียน',
+             'button:has-text("ดาวน์โหลดรายงาน (CSV)")'] },
+  { id: '82-student-transfer', url: '/school/students', user: 'school', vps: ['mobile', 'desktop'],
+    act: async page => {
+      await page.getByRole('button', { name: 'แก้ไข' }).first().click();
+      await page.waitForTimeout(400);
+      await page.getByRole('button', { name: 'ขอโอนย้ายนักเรียน' }).first().click();
+    },
+    expect: ['[role=dialog]', 'text=รหัสโรงเรียนปลายทาง', 'text=คำขอนี้ยังไม่ย้ายข้อมูล',
+             'text=คำขอของนักเรียนคนนี้'] },
   { id: '72-term-settings',    url: '/admin/term-settings',   user: 'admin', vps: ['mobile', 'desktop'],
     // the add-term form only exists once opened
     act: async page => { await page.getByRole('button', { name: /เพิ่มภาคเรียน/ }).first().click(); },

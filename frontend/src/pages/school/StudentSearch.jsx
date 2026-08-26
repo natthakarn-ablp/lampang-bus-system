@@ -102,7 +102,9 @@ export default function StudentSearch() {
     });
     setSelectedVehicle(student.vehicle_id || '');
     api.get('/school/vehicles/all')
-      .then(r => setVehicles(r.data.data || []))
+      // A non-array payload used to reach vehicles.some() below and crash the
+      // whole page into the error boundary the moment the edit panel opened.
+      .then(r => setVehicles(Array.isArray(r.data?.data) ? r.data.data : []))
       .catch(() => setVehicles([]));
   }
 
@@ -323,6 +325,18 @@ export default function StudentSearch() {
 
       {/* ── Import History & Correction Center (Phase 10.13B-5) ── */}
       <ImportHistoryModal open={showHistory} onClose={() => setShowHistory(false)} onChanged={() => fetchStudents(1)} />
+
+      {/* ── Transfer request (Phase 10.13B-6) ──
+          The import existed and the "ขอโอนย้ายนักเรียน" button set
+          transferStudent, but nothing ever rendered the modal — the button
+          was inert. Caught by the runtime smoke on this page. */}
+      {transferStudent && (
+        <StudentTransferModal
+          student={transferStudent}
+          onClose={() => setTransferStudent(null)}
+          onChanged={() => fetchStudents(1)}
+        />
+      )}
 
       {/* ── Import Modal (legacy fallback) ── */}
       {showImport && (

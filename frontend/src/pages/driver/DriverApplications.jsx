@@ -66,8 +66,8 @@ export default function DriverApplications() {
         api.get('/driver/applications'),
         api.get('/driver/authorized-vehicles'),
       ]);
-      setApplications(appsRes.data.data || []);
-      setVehicles(vehiclesRes.data.data || []);
+      setApplications(Array.isArray(appsRes.data?.data) ? appsRes.data.data : []);
+      setVehicles(Array.isArray(vehiclesRes.data?.data) ? vehiclesRes.data.data : []);
     } catch (err) {
       setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
     } finally {
@@ -100,7 +100,7 @@ export default function DriverApplications() {
     if (!timeline[appId]) {
       try {
         const res = await api.get(`/verification/applications/${appId}/timeline`);
-        setTimeline(prev => ({ ...prev, [appId]: res.data.data || [] }));
+        setTimeline(prev => ({ ...prev, [appId]: Array.isArray(res.data?.data) ? res.data.data : [] }));
       } catch { /* ignore */ }
     }
   }

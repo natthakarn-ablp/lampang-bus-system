@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User } from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
@@ -206,7 +207,7 @@ export default function DriverProfile() {
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-4">
-      <h1 className="text-xl font-bold text-gray-800">ข้อมูลคนขับและรถ</h1>
+      <PageHeader title="ข้อมูลคนขับและรถ" subtitle="ข้อมูลประจำตัวคนขับและรถที่รับผิดชอบ" />
 
       {/* Photo */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col items-center gap-3">

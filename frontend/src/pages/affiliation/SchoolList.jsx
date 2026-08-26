@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import DashboardCard from '../../components/DashboardCard';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
@@ -19,7 +20,7 @@ export default function SchoolList() {
 
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">โรงเรียนในสังกัด</h1>
+      <PageHeader title="โรงเรียนในสังกัด" subtitle="โรงเรียนที่อยู่ในความดูแลของสังกัดนี้" />
 
       {error && <ErrorState message={error} className="mb-4" />}
 

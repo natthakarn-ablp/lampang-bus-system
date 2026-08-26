@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
@@ -34,7 +35,7 @@ export default function AffEmergencyList() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">เหตุฉุกเฉิน</h1>
+      <PageHeader title="เหตุฉุกเฉิน" subtitle="เหตุฉุกเฉินที่รายงานจากโรงเรียนในสังกัด" />
 
       {error && <ErrorState message={error} className="mb-4" />}
 

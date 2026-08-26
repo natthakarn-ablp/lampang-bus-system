@@ -18,14 +18,14 @@ export default function MeasurementFramework() {
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto pb-10">
       {/* Header */}
-      <div className="bg-blue-800 text-white rounded-xl px-5 py-5 mb-5">
+      <div className="bg-navy-700 text-white rounded-xl px-5 py-5 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <p className="text-xs text-blue-200 uppercase tracking-wider">Measurement & Evaluation</p>
+            <p className="text-caption text-navy-200 uppercase tracking-wider">Measurement & Evaluation</p>
             <h1 className="text-lg font-semibold">คู่มือวัดผลระบบ — แยกตามสิทธิ์ผู้ใช้</h1>
-            <p className="text-sm text-blue-200 mt-1">ตัวชี้วัด • เกณฑ์ • การปรับระบบ • ข้อพึงระวัง</p>
+            <p className="text-sm text-navy-200 mt-1">ตัวชี้วัด • เกณฑ์ • การปรับระบบ • ข้อพึงระวัง</p>
           </div>
-          <span className="bg-blue-600 text-blue-100 text-sm font-medium px-4 py-2 rounded-full shrink-0">
+          <span className="bg-white/15 text-white text-sm font-medium px-4 py-2 rounded-full shrink-0">
             {ROLES.length} สิทธิ์ • กดเปิดแต่ละบทบาท
           </span>
         </div>

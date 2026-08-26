@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
-import EmptyState from '../../components/EmptyState';
-import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
-import AppCard from '../../components/ui/AppCard';
+import PageHeader from '../../components/PageHeader';
+import {
+  DataTable, TableAction, FilterBar, FormField, Modal, ConfirmDialog, StatusBadge,
+} from '../../components/ui';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 import StudentTransferModal from './StudentTransferModal';
@@ -163,9 +164,13 @@ export default function StudentSearch() {
     } finally { setSaving(false); }
   }
 
+  // Replaces window.confirm, which could not show the pupil being withdrawn in
+  // any readable form and put the destructive default under Enter.
+  const [confirmWithdraw, setConfirmWithdraw] = useState(false);
+
   async function handleWithdraw() {
     if (!editStudent) return;
-    if (!window.confirm(`ยืนยันลบ "${editStudent.prefix}${editStudent.first_name} ${editStudent.last_name}" ออกจากระบบ?\n\nนักเรียนจะถูกซ่อนจากรายการทั้งหมด ข้อมูลประวัติยังคงอยู่`)) return;
+    setConfirmWithdraw(false);
     setSaving(true);
     try {
       await api.delete(`/school/students/${editStudent.id}`);
@@ -207,170 +212,110 @@ export default function StudentSearch() {
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
+  const hasFilter = Boolean(debouncedSearch || grade);
+
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      {/* Header + actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 className="text-xl font-semibold text-gray-800">ข้อมูลนักเรียน</h1>
-        {!isTeacher && (
-          <div className="flex gap-2">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <PageHeader
+        title="ข้อมูลนักเรียน"
+        subtitle="นักเรียนที่ใช้บริการรถรับส่งของโรงเรียน"
+        actions={!isTeacher ? (
+          <div className="flex flex-wrap gap-2">
             <button onClick={handleDownloadTemplate}
-              className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">
+              className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition">
               ดาวน์โหลดตัวอย่าง
             </button>
             <button onClick={() => setShowPreview(true)}
-              className="text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-3 py-2 rounded-lg transition">
+              className="focus-ring text-sm bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-medium px-4 min-h-[44px] rounded-lg transition">
               นำเข้าข้อมูล
             </button>
             <button onClick={() => setShowHistory(true)}
-              className="text-sm bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200 px-3 py-2 rounded-lg transition">
+              className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition">
               ประวัติการนำเข้า
             </button>
             <button onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }}
-              className="text-xs text-gray-400 hover:text-gray-600 px-2 py-2 transition" title="นำเข้าแบบเดิม (สำรอง)">
+              title="นำเข้าแบบเดิม (สำรอง)"
+              className="focus-ring text-sm text-ink-muted hover:text-ink hover:bg-surface px-3 min-h-[44px] rounded-lg transition">
               แบบเดิม
             </button>
           </div>
-        )}
-      </div>
+        ) : undefined}
+      />
 
-      {/* Search + filter */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <input
-          type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="ค้นหาชื่อ นามสกุล หรือรหัส…"
-          className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
+      <FilterBar
+        className="mb-5"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: 'ค้นหาชื่อ นามสกุล หรือรหัส…',
+          label: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส',
+        }}
+        filters={[{
+          key: 'grade', label: 'กรองตามระดับชั้น', value: grade, onChange: setGrade,
+          options: [['', 'ทุกระดับชั้น'], ...['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => [g, g])],
+        }]}
+        count={meta.total}
+        countLabel="คน"
+        onClear={() => { setSearch(''); setGrade(''); }}
+      />
+
+      {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}
+
+      <DataTable
+        caption="รายชื่อนักเรียนของโรงเรียน"
+        loading={loading}
+        rows={students}
+        rowKey={s2 => s2.id}
+        columns={[
+          { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
+            cell: s2 => <span className="font-medium text-ink">{s2.prefix}{s2.first_name} {s2.last_name}</span> },
+          { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
+            cell: s2 => (s2.grade && s2.classroom ? `${s2.grade}/${s2.classroom}` : s2.grade || s2.classroom || '-') },
+          { key: 'code', header: 'รหัส', cell: s2 => <span className="tabular-nums">{s2.student_code ?? s2.id}</span> },
+          { key: 'plate', header: 'ทะเบียนรถ', align: 'center',
+            cell: s2 => (s2.plate_no
+              ? (
+                <button
+                  onClick={() => navigate(`/school/vehicles?plate=${encodeURIComponent(s2.plate_no)}`)}
+                  className="focus-ring inline-flex items-center min-h-[44px] px-2 -mx-2 rounded-lg whitespace-nowrap text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition"
+                >
+                  {s2.plate_no}
+                </button>
+              )
+              : <span className="text-ink-muted">ไม่มีรถ</span>) },
+          { key: 'sessions', header: 'รอบที่ใช้', badge: true,
+            /* Was a bare ✅ / — pair, which carries the state by symbol alone. */
+            cell: s2 => {
+              const used = [s2.morning_enabled && 'เช้า', s2.evening_enabled && 'เย็น'].filter(Boolean);
+              return used.length
+                ? <StatusBadge variant="success">{used.join(' · ')}</StatusBadge>
+                : <StatusBadge variant="neutral">ไม่ใช้บริการ</StatusBadge>;
+            } },
+          { key: 'parent', header: 'ผู้ปกครอง',
+            /* Phone stays masked in list view (PDPA); the edit form shows it in
+               full because the school needs it to make changes. */
+            cell: s2 => (s2.parent_name
+              ? <span>{s2.parent_name}{s2.parent_phone && <span className="text-ink-muted tabular-nums"> {maskPhone(s2.parent_phone)}</span>}</span>
+              : <span className="text-ink-muted">-</span>) },
+        ]}
+        actions={!isTeacher ? (s2 => (
+          <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ไข</TableAction>
+        )) : undefined}
+        empty={{
+          icon: GraduationCap,
+          title: hasFilter ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้',
+          description: hasFilter ? 'ลองเปลี่ยนคำค้นหรือตัวกรอง' : undefined,
+        }}
+      />
+
+      {students.length > 0 && (
+        <Pagination
+          page={meta.page}
+          totalPages={totalPages}
+          total={meta.total}
+          shown={students.length}
+          onPage={(p) => fetchStudents(p)}
         />
-        <select value={grade} onChange={(e) => setGrade(e.target.value)}
-          className="border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400 sm:w-40">
-          <option value="">ทุกระดับชั้น</option>
-          {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map((g) => (
-            <option key={g} value={g}>{g}</option>
-          ))}
-        </select>
-      </div>
-
-      {error && <ErrorState message={error} className="mb-4" />}
-
-      {loading ? (
-        <LoadingState />
-      ) : students.length === 0 ? (
-        <EmptyState
-          icon={GraduationCap}
-          title={debouncedSearch || grade ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้'}
-          description={debouncedSearch || grade ? 'ลองเปลี่ยนคำค้นหรือตัวกรอง' : undefined}
-        />
-      ) : (
-        <>
-          {/* ── Desktop table (hidden on mobile) ── */}
-          <AppCard padding="none" className="hidden md:block overflow-hidden">
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                <tr className="text-left">
-                  <th className="px-4 py-3">รหัส</th>
-                  <th className="px-4 py-3">ชื่อ-นามสกุล</th>
-                  <th className="px-4 py-3">ชั้น/ห้อง</th>
-                  <th className="px-4 py-3 whitespace-nowrap text-center">ทะเบียนรถ</th>
-                  <th className="px-4 py-3">เช้า</th>
-                  <th className="px-4 py-3">เย็น</th>
-                  <th className="px-4 py-3">ผู้ปกครอง</th>
-                  {!isTeacher && <th className="px-4 py-3 text-center">จัดการ</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-border">
-                {students.map((s) => (
-                  <tr key={s.id} className="hover:bg-surface transition">
-                    <td className="px-4 py-3 text-gray-600">{s.student_code ?? s.id}</td>
-                    <td className="px-4 py-3 text-gray-800">{s.prefix}{s.first_name} {s.last_name}</td>
-                    <td className="px-4 py-3 text-gray-600">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center">
-                      {s.plate_no ? (
-                        <button onClick={() => navigate(`/school/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
-                          className="text-blue-600 hover:text-blue-800 hover:underline text-sm whitespace-nowrap">{s.plate_no}</button>
-                      ) : <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.morning_enabled ? <span className="text-green-600 text-xs font-medium">ใช้</span> : <span className="text-gray-400 text-xs">-</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.evening_enabled ? <span className="text-green-600 text-xs font-medium">ใช้</span> : <span className="text-gray-400 text-xs">-</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
-                      {s.parent_name ? <span>{s.parent_name}{s.parent_phone && <span className="text-gray-400"> {maskPhone(s.parent_phone)}</span>}</span> : <span className="text-gray-400">-</span>}
-                    </td>
-                    {!isTeacher && (
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => openEdit(s)}
-                          className="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1 rounded-lg transition">
-                          แก้ไข
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </AppCard>
-
-          {/* ── Mobile card view (hidden on desktop) ── */}
-          <div className="md:hidden space-y-3">
-            {students.map((s) => (
-              <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="min-w-0">
-                    <p className="text-base font-semibold text-gray-900 leading-snug">
-                      {s.first_name} {s.last_name}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
-                      <span className="text-gray-300"> · </span>
-                      <span className="text-gray-400">รหัส {s.student_code ?? s.id}</span>
-                    </p>
-                  </div>
-                  {!isTeacher && (
-                    <button onClick={() => openEdit(s)}
-                      className="text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition shrink-0">
-                      แก้ไข
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mt-2">
-                  {s.plate_no ? (
-                    <span className="text-blue-600">
-                      🚌 <button onClick={() => navigate(`/school/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
-                        className="hover:underline">{s.plate_no}</button>
-                    </span>
-                  ) : (
-                    <span className="text-gray-400">🚌 ไม่มีรถ</span>
-                  )}
-                  <span className="text-gray-500">
-                    เช้า {s.morning_enabled ? '✅' : '—'}
-                    {' '}เย็น {s.evening_enabled ? '✅' : '—'}
-                  </span>
-                </div>
-
-                {s.parent_name && (
-                  <p className="text-sm text-gray-500 mt-1.5">
-                    👤 {s.parent_name}
-                    {s.parent_phone && <span className="text-gray-400 ml-1">{maskPhone(s.parent_phone)}</span>}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Pagination — jump-to-page input so reaching p.15 of 28 is one step */}
-          <Pagination
-            page={meta.page}
-            totalPages={totalPages}
-            total={meta.total}
-            shown={students.length}
-            onPage={(p) => fetchStudents(p)}
-          />
-        </>
       )}
 
       {/* ── Import Preview (primary, Phase 10.13A-26B) ── */}
@@ -379,23 +324,18 @@ export default function StudentSearch() {
       {/* ── Import History & Correction Center (Phase 10.13B-5) ── */}
       <ImportHistoryModal open={showHistory} onClose={() => setShowHistory(false)} onChanged={() => fetchStudents(1)} />
 
-      {/* ── Student Transfer request (Phase 10.13B-6) ── */}
-      {transferStudent && <StudentTransferModal student={transferStudent} onClose={() => setTransferStudent(null)} onChanged={() => fetchStudents(meta.page)} />}
-
       {/* ── Import Modal (legacy fallback) ── */}
       {showImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowImport(false)}>
-          <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-md max-h-[85vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">นำเข้าข้อมูลนักเรียน</h2>
-            <p className="text-sm text-gray-400 mb-5">อัปโหลดไฟล์ CSV หรือ Excel (.xlsx)</p>
+        <Modal title="นำเข้าข้อมูลนักเรียน" onClose={() => setShowImport(false)}>
+            <p className="text-sm text-ink-muted mb-5">อัปโหลดไฟล์ CSV หรือ Excel (.xlsx)</p>
 
             {!importResult ? (
               <div className="space-y-4">
-                <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
+                <div className="border-2 border-dashed border-surface-border rounded-lg p-6 text-center">
                   <input type="file" accept=".xlsx,.xls,.csv"
                     onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                    className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-200 file:text-sm file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100" />
-                  {importFile && <p className="text-sm text-green-600 mt-2">{importFile.name}</p>}
+                    className="focus-ring block w-full text-sm text-ink-muted file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border file:border-surface-border file:text-sm file:bg-surface file:text-ink hover:file:bg-surface-border" />
+                  {importFile && <p className="text-sm text-success-ink mt-2">{importFile.name}</p>}
                 </div>
                 <div className="flex gap-2">
                   <button onClick={handleImport} disabled={importing || !importFile}
@@ -419,84 +359,70 @@ export default function StudentSearch() {
                   </p>
                 </div>
                 {importResult.errors?.length > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-red-700 font-medium text-sm mb-2">ไม่สำเร็จ {importResult.errors.length} รายการ</p>
+                  <div className="bg-danger-soft border border-danger/30 rounded-lg p-4">
+                    <p className="text-danger-ink font-medium text-sm mb-2">ไม่สำเร็จ {importResult.errors.length} รายการ</p>
                     <div className="max-h-40 overflow-y-auto space-y-1">
                       {importResult.errors.map((e, i) => (
-                        <p key={i} className="text-xs text-red-600">แถวที่ {e.row}: {e.message}</p>
+                        <p key={i} className="text-caption text-danger-ink">แถวที่ {e.row}: {e.message}</p>
                       ))}
                     </div>
                   </div>
                 )}
                 <button onClick={() => { setShowImport(false); setImportResult(null); }}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-3 rounded-lg transition">ปิด</button>
+                  className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white text-sm font-medium min-h-[48px] rounded-lg transition">
+                  ปิด
+                </button>
               </div>
             )}
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* ── Edit Modal ── */}
       {editStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeEdit}>
-          <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">แก้ไขข้อมูลนักเรียน</h2>
-            <p className="text-sm text-gray-400 mb-5">รหัส: {editStudent.student_code ?? editStudent.id}</p>
+        <Modal size="lg" title="แก้ไขข้อมูลนักเรียน" onClose={closeEdit}>
+            <p className="text-sm text-ink-muted mb-5 tabular-nums">รหัส: {editStudent.student_code ?? editStudent.id}</p>
 
             {/* Section 1: ข้อมูลนักเรียน */}
             <fieldset className="space-y-3 mb-6">
-              <legend className="text-sm font-semibold text-gray-600 mb-2">ข้อมูลนักเรียน</legend>
+              <legend className="text-sm font-semibold text-ink mb-2">ข้อมูลนักเรียน</legend>
 
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">คำนำหน้า</label>
-                <select value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
-                  <option value="">-</option>
-                  {PREFIX_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-500 mb-1">ชื่อ <span className="text-red-500">*</span></label>
-                  <input type="text" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-500 mb-1">นามสกุล <span className="text-red-500">*</span></label>
-                  <input type="text" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-500 mb-1">ระดับชั้น</label>
-                  <select value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
+              <FormField label="คำนำหน้า">
+                {ctl => (
+                  <select {...ctl} value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value })} className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
                     <option value="">-</option>
-                    {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
+                    {PREFIX_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-500 mb-1">ห้อง</label>
-                  <input type="text" value={form.classroom} onChange={(e) => setForm({ ...form, classroom: e.target.value })}
-                    placeholder="เช่น 1, 2/1"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
+                )}
+              </FormField>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="ชื่อ" required value={form.first_name} onChange={v => setForm({ ...form, first_name: v })} />
+                <FormField label="นามสกุล" required value={form.last_name} onChange={v => setForm({ ...form, last_name: v })} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="ระดับชั้น">
+                  {ctl => (
+                    <select {...ctl} value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                      <option value="">-</option>
+                      {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  )}
+                </FormField>
+                <FormField label="ห้อง" value={form.classroom} onChange={v => setForm({ ...form, classroom: v })} placeholder="เช่น 1, 2/1" />
               </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <label className="flex items-center gap-2 text-base text-gray-700">
+                <label className="focus-within:outline-none inline-flex items-center gap-2 min-h-[44px] text-base text-ink cursor-pointer">
                   <input type="checkbox" checked={form.morning_enabled} onChange={(e) => setForm({ ...form, morning_enabled: e.target.checked })}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                    className="focus-ring w-5 h-5 rounded border-surface-border text-brand-600" />
                   ใช้บริการรอบเช้า
                 </label>
-                <label className="flex items-center gap-2 text-base text-gray-700">
+                <label className="focus-within:outline-none inline-flex items-center gap-2 min-h-[44px] text-base text-ink cursor-pointer">
                   <input type="checkbox" checked={form.evening_enabled} onChange={(e) => setForm({ ...form, evening_enabled: e.target.checked })}
-                    className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-400" />
+                    className="focus-ring w-5 h-5 rounded border-surface-border text-brand-600" />
                   ใช้บริการรอบเย็น
                 </label>
               </div>
@@ -508,41 +434,39 @@ export default function StudentSearch() {
                 workflow — the standard "บันทึกข้อมูลนักเรียน" button below
                 handles save + reassign atomically. */}
             <fieldset className="space-y-3 mb-6">
-              <legend className="text-sm font-semibold text-gray-600 mb-2">ผู้ปกครอง</legend>
-              <div className="bg-blue-50 border border-blue-200 text-blue-900 rounded-lg px-3 py-2 text-xs leading-snug">
+              <legend className="text-sm font-semibold text-ink mb-2">ผู้ปกครอง</legend>
+              <div className="bg-brand-50 border border-brand-200 text-brand-800 rounded-lg px-3 py-2 text-caption leading-snug">
                 ℹ️ หากเปลี่ยนเบอร์โทรหรือชื่อผู้ปกครอง ระบบจะถือว่าเป็นการ
                 <span className="font-semibold"> เปลี่ยนผู้ปกครองของนักเรียนคนนี้เท่านั้น </span>
                 — จะไม่กระทบนักเรียนคนอื่นที่เคยใช้ข้อมูลผู้ปกครองเดิมร่วมกัน
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-500 mb-1">ชื่อผู้ปกครอง</label>
-                  <input type="text" value={form.parent_name} onChange={(e) => setForm({ ...form, parent_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-500 mb-1">เบอร์โทรผู้ปกครอง</label>
-                  <input type="tel" value={form.parent_phone} maxLength={10}
-                    onChange={(e) => setForm({ ...form, parent_phone: e.target.value.replace(/\D/g, '') })}
-                    placeholder="0812345678"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
+                <FormField label="ชื่อผู้ปกครอง" value={form.parent_name} onChange={v => setForm({ ...form, parent_name: v })} />
+                <FormField
+                  label="เบอร์โทรผู้ปกครอง"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={form.parent_phone}
+                  onChange={v => setForm({ ...form, parent_phone: v.replace(/\D/g, '') })}
+                  placeholder="0812345678"
+                />
               </div>
             </fieldset>
 
             {/* Section 3: รถรับส่ง */}
             <fieldset className="space-y-3 mb-6">
-              <legend className="text-sm font-semibold text-gray-600 mb-2">รถรับส่ง</legend>
+              <legend className="text-sm font-semibold text-ink mb-2">รถรับส่ง</legend>
               <div>
-                <label className="block text-sm text-gray-500 mb-1">
-                  รถปัจจุบัน: <span className="text-gray-700 font-medium">{editStudent.plate_no || 'ยังไม่มีรถ'}</span>
+                <label className="block text-sm font-medium text-ink mb-1">
+                  รถปัจจุบัน: <span className="text-ink font-semibold">{editStudent.plate_no || 'ยังไม่มีรถ'}</span>
                 </label>
                 {/* Phase 10.13C — searchable combobox (type to filter 100+ vehicles);
                     canonical display_plate; hides province-variant duplicates but keeps
                     the currently-assigned vehicle visible. value '' = ไม่มีรถ. */}
                 <VehicleSelect vehicles={vehicles} value={selectedVehicle} onChange={setSelectedVehicle} />
                 {vehicles.some(v => v.duplicate_candidate && v.id !== selectedVehicle) && (
-                  <p className="mt-1 text-xs text-gray-400">แสดงเฉพาะรถที่ใช้งานจริง ไม่รวมรายการซ้ำที่รอจัดเก็บ</p>
+                  <p className="mt-1 text-caption text-ink-muted">แสดงเฉพาะรถที่ใช้งานจริง ไม่รวมรายการซ้ำที่รอจัดเก็บ</p>
                 )}
               </div>
             </fieldset>
@@ -550,28 +474,41 @@ export default function StudentSearch() {
             {/* Actions */}
             <div className="flex flex-col gap-2">
               <button onClick={handleSaveProfile} disabled={saving}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-medium py-3 rounded-lg transition">
+                className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-40 disabled:pointer-events-none text-white font-medium min-h-[48px] rounded-lg transition">
                 {saving ? 'กำลังบันทึก…' : 'บันทึกข้อมูลนักเรียน'}
               </button>
               {selectedVehicle !== (editStudent.vehicle_id || '') && (
                 <button onClick={handleSaveVehicle} disabled={saving}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white font-medium py-3 rounded-lg transition">
+                  className="focus-ring w-full bg-success hover:bg-success/90 disabled:opacity-40 disabled:pointer-events-none text-white font-medium min-h-[48px] rounded-lg transition">
                   {saving ? 'กำลังบันทึก…' : selectedVehicle ? (editStudent.vehicle_id ? 'เปลี่ยนรถ' : 'เพิ่มเข้ารถ') : 'ลบออกจากรถ'}
                 </button>
               )}
               <button onClick={() => setTransferStudent(editStudent)} disabled={saving}
-                className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 py-2.5 rounded-lg transition disabled:opacity-40">
+                className="focus-ring w-full bg-warn-soft hover:bg-warn-soft/70 text-warn-ink border border-warn/30 min-h-[44px] rounded-lg transition disabled:opacity-40 disabled:pointer-events-none">
                 ขอโอนย้ายนักเรียน
               </button>
-              <button onClick={handleWithdraw} disabled={saving}
-                className="w-full bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 py-2.5 rounded-lg transition disabled:opacity-40">
+              <button onClick={() => setConfirmWithdraw(true)} disabled={saving}
+                className="focus-ring w-full bg-danger-soft hover:bg-danger-soft/70 text-danger-ink border border-danger/30 min-h-[44px] rounded-lg transition disabled:opacity-40 disabled:pointer-events-none">
                 ลาออก / ลบออกจากระบบ
               </button>
-              <button onClick={closeEdit} className="w-full text-gray-500 hover:text-gray-700 py-2 transition">ยกเลิก</button>
+              <button onClick={closeEdit}
+                className="focus-ring w-full text-ink-muted hover:text-ink hover:bg-surface min-h-[44px] rounded-lg transition">
+                ยกเลิก
+              </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
+
+      <ConfirmDialog
+        open={confirmWithdraw}
+        title="นำนักเรียนออกจากระบบ?"
+        itemName={editStudent ? `${editStudent.prefix || ''}${editStudent.first_name} ${editStudent.last_name}` : ''}
+        description="นักเรียนจะถูกซ่อนจากรายการทั้งหมด ข้อมูลประวัติยังคงอยู่ และการกระทำนี้ถูกบันทึกใน audit log"
+        confirmLabel="นำออกจากระบบ"
+        loading={saving}
+        onConfirm={handleWithdraw}
+        onCancel={() => setConfirmWithdraw(false)}
+      />
     </div>
   );
 }

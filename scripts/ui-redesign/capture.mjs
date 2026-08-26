@@ -145,6 +145,8 @@ const SCENARIOS = {
     '/api/affiliation/vehicle-requests':  { data: VEH_REQ_ROWS },
     '/api/province/students':    { data: STUDENT_ROWS, meta: { page: 1, per_page: 50, total: 4696 } },
     '/api/affiliation/schools':  { data: SCHOOL_ROWS },
+    '/api/school/students':      { data: STUDENT_ROWS, meta: { page: 1, per_page: 20, total: 1284 } },
+    '/api/school/vehicles/all':  { data: VEHICLE_ROWS },
     '/api/affiliation/students': { data: STUDENT_ROWS, meta: { page: 1, per_page: 50, total: 1284 } },
   },
   // everything quiet — verifies empty cards collapse instead of standing tall
@@ -278,6 +280,7 @@ const SHOTS = [
   { id: '29-aff-veh-requests',  url: '/affiliation/vehicle-requests',  user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '30-prov-students',     url: '/province/students',    user: 'province',    vps: ['mobile', 'desktop'] },
   { id: '31-aff-students',      url: '/affiliation/students', user: 'affiliation', vps: ['mobile', 'desktop'] },
+  { id: '32-school-students',   url: '/school/students',      user: 'school', vps: ['mobile', 'desktop'] },
 ];
 
 (async () => {

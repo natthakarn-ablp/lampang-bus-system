@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 
@@ -25,16 +26,16 @@ export default function SystemHealth() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto pb-10">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-800">สุขภาพระบบ</h1>
-          <p className="text-sm text-gray-500">ข้อมูล 30 วันย้อนหลัง</p>
-        </div>
-        <button onClick={refresh}
-          className="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg transition">
-          รีเฟรช
-        </button>
-      </div>
+      <PageHeader
+        title="สุขภาพระบบ"
+        subtitle="สรุปการใช้งานและความพร้อมของระบบ ข้อมูล 30 วันย้อนหลัง"
+        actions={
+          <button onClick={refresh}
+            className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-4 min-h-[44px] rounded-lg transition">
+            รีเฟรช
+          </button>
+        }
+      />
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">

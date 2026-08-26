@@ -40,7 +40,11 @@ function walk(dir, out = []) {
 
 // Files that are components consumed by pages, not routed pages themselves,
 // but which own a page's whole body — treated as pages for status purposes.
-const PAGE_LIKE = new Set(['AuditLogTable.jsx', 'VehicleRosterCard.jsx', 'DriverConsentForm.jsx']);
+const PAGE_LIKE = new Set([
+  'AuditLogTable.jsx', 'VehicleRosterCard.jsx', 'DriverConsentForm.jsx',
+  // the shared body of the driver + school pickup-point editors
+  'PickupPointFields.jsx',
+]);
 
 const PATTERNS = [
   {
@@ -66,8 +70,13 @@ const PATTERNS = [
     // Likewise: a fully migrated form has no raw control tags left, only
     // FormField. Counting that as "no form" would report a finished page as
     // N/A rather than as done.
-    has: s => /<(input|textarea)[\s\n]/.test(s) || /<select[\s\n]/.test(s) || /FormField/.test(s),
-    uses: s => /FormField|FilterBar/.test(s),
+    // PickupPointFields is the shared body of the two pickup-point editors.
+    // A page that mounts it still HAS a form — it has delegated the fields,
+    // not dropped them — so it counts on both sides. The component itself is
+    // in PAGE_LIKE above, so the fields are still checked somewhere.
+    has: s => /<(input|textarea)[\s\n]/.test(s) || /<select[\s\n]/.test(s)
+           || /FormField|PickupPointFields/.test(s),
+    uses: s => /FormField|FilterBar|PickupPointFields/.test(s),
   },
   {
     key: 'destructive',

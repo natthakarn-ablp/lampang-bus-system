@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Search, X } from 'lucide-react';
 
 /**
@@ -23,6 +24,10 @@ export default function FilterBar({
   actions,
   className = '',
 }) {
+  // Ids were hard-coded, so a second FilterBar on the same page (a list filter
+  // plus one inside an open editor) produced duplicate ids and pointed both
+  // labels at the first input.
+  const uid = useId();
   const hasActiveFilter = Boolean(search?.value) || filters.some(f => f.value);
 
   return (
@@ -62,7 +67,7 @@ export default function FilterBar({
       <div className="flex flex-col sm:flex-row gap-2.5">
         {search && (
           <div className="relative flex-1 min-w-0">
-            <label htmlFor="filterbar-search" className="sr-only">
+            <label htmlFor={`${uid}-search`} className="sr-only">
               {search.label || 'ค้นหา'}
             </label>
             <Search
@@ -71,7 +76,7 @@ export default function FilterBar({
               aria-hidden="true"
             />
             <input
-              id="filterbar-search"
+              id={`${uid}-search`}
               type="search"
               value={search.value}
               onChange={e => search.onChange(e.target.value)}
@@ -88,14 +93,14 @@ export default function FilterBar({
                 self-evident from an empty date box the way a select's current
                 option is. */}
             <label
-              htmlFor={`filterbar-${f.key}`}
+              htmlFor={`${uid}-${f.key}`}
               className={f.type === 'date' ? 'block text-caption text-ink-muted mb-1' : 'sr-only'}
             >
               {f.label}
             </label>
             {f.type === 'date' ? (
               <input
-                id={`filterbar-${f.key}`}
+                id={`${uid}-${f.key}`}
                 type="date"
                 value={f.value}
                 onChange={e => f.onChange(e.target.value)}
@@ -103,7 +108,7 @@ export default function FilterBar({
               />
             ) : (
               <select
-                id={`filterbar-${f.key}`}
+                id={`${uid}-${f.key}`}
                 value={f.value}
                 onChange={e => f.onChange(e.target.value)}
                 className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base sm:text-sm text-ink transition"

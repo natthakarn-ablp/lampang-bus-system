@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Map as MapIcon, Bus, Users, Sunrise, Sunset, Plus, X, Pencil, Trash2 } from 'lucide-react';
+import { Map as MapIcon, Bus, Users, Plus, Pencil, Trash2 } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
-import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
+import {
+  AppCard, AlertBanner, StatusBadge, DashboardSection,
+  ConfirmDialog, FilterBar, FormField, Modal,
+} from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
 import PickupMap from '../../components/PickupMap';
-import PickupCoordPicker from '../../components/PickupCoordPicker';
+import PickupPointFields from '../../components/PickupPointFields';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
@@ -27,6 +31,8 @@ export default function SchoolPickupMap() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);  // null | { ...point }
   const [deletingId, setDeletingId] = useState(null);
+  // window.confirm named nothing and could not say what survives the delete.
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const fetchPoints = useCallback(async (sf) => {
     setLoading(true);
@@ -47,12 +53,12 @@ export default function SchoolPickupMap() {
   useEffect(() => { fetchPoints(sessionFilter); }, [fetchPoints, sessionFilter]);
 
   const handleDelete = useCallback(async (point) => {
-    if (!window.confirm(`ลบจุดรับส่ง "${point.label}" ?\nนักเรียนในจุดนี้จะไม่ถูกลบ แต่จุดนี้จะหายไป`)) return;
     setDeletingId(point.id);
     try {
       await api.delete(`/school/pickup-points/${point.id}`);
       toast.success('ลบจุดรับส่งสำเร็จ');
       if (selectedId === point.id) setSelectedId(null);
+      setConfirmDelete(null);
       fetchPoints(sessionFilter);
     } catch (err) {
       toast.error(err?.response?.data?.message || 'ลบจุดรับส่งไม่สำเร็จ');
@@ -78,42 +84,40 @@ export default function SchoolPickupMap() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-          <MapIcon className="w-6 h-6 text-brand" strokeWidth={2} />
-          แผนที่จุดรับส่ง
-        </h1>
-        <p className="text-sm text-ink-muted mt-1">
-          จุดรับส่งของนักเรียนในโรงเรียน · {filteredPoints.length} จุด
-        </p>
-      </header>
-
-      {/* Filter strip — session pills, vehicle dropdown, add button */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-        <SessionFilter value={sessionFilter} onChange={setSessionFilter} />
-        {vehicleOptions.length > 0 && (
-          <select
-            value={vehicleFilter}
-            onChange={e => setVehicleFilter(e.target.value)}
-            className="text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink min-h-[40px] flex-1 sm:flex-none min-w-0"
-          >
-            <option value="all">รถทุกคัน</option>
-            {vehicleOptions.map(v => (
-              <option key={v.id} value={v.id}>{v.plate}</option>
-            ))}
-          </select>
-        )}
-        {!isTeacher && (
+      <PageHeader
+        icon={MapIcon}
+        title="แผนที่จุดรับส่ง"
+        subtitle="จุดรับส่งของนักเรียนในโรงเรียน"
+        actions={!isTeacher && (
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="w-full sm:w-auto sm:ml-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-2.5 rounded-lg transition min-h-[40px]"
+            className="focus-ring w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white text-sm font-medium px-3 min-h-[44px] rounded-lg transition"
           >
-            <Plus className="w-4 h-4" strokeWidth={2.5} />
+            <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
             เพิ่มจุดรับส่ง
           </button>
         )}
-      </div>
+      />
+
+      <FilterBar
+        chips={{
+          label: 'กรองตามรอบการเดินรถ',
+          value: sessionFilter,
+          onChange: setSessionFilter,
+          options: [['all', 'ทั้งหมด'], ['morning', 'รอบเช้า'], ['evening', 'รอบเย็น']],
+        }}
+        filters={vehicleOptions.length > 0 ? [{
+          key: 'vehicle',
+          label: 'รถ',
+          value: vehicleFilter === 'all' ? '' : vehicleFilter,
+          onChange: v => setVehicleFilter(v || 'all'),
+          options: [['', 'รถทุกคัน'], ...vehicleOptions.map(v => [v.id, v.plate])],
+        }] : []}
+        count={filteredPoints.length}
+        countLabel="จุดรับส่ง"
+        onClear={() => { setSessionFilter('all'); setVehicleFilter('all'); }}
+      />
 
       {error ? (
         <ErrorState message={error} />
@@ -137,7 +141,7 @@ export default function SchoolPickupMap() {
                   selected={selectedId === p.id}
                   onClick={() => setSelectedId(p.id)}
                   onEdit={isTeacher ? undefined : () => setEditing(p)}
-                  onDelete={isTeacher ? undefined : () => handleDelete(p)}
+                  onDelete={isTeacher ? undefined : () => setConfirmDelete(p)}
                   deleting={deletingId === p.id}
                 />
               ))}
@@ -163,6 +167,17 @@ export default function SchoolPickupMap() {
           onCreated={() => { setCreating(false); fetchPoints(sessionFilter); }}
         />
       )}
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="ลบจุดรับส่งนี้?"
+        itemName={confirmDelete?.label}
+        description="นักเรียนในจุดนี้จะไม่ถูกลบออกจากรถ แต่จะไม่มีจุดรับส่งจนกว่าจะกำหนดใหม่"
+        confirmLabel="ลบจุดรับส่ง"
+        loading={deletingId === confirmDelete?.id}
+        onConfirm={() => handleDelete(confirmDelete)}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
       {editing && (
         <PickupStudentsModal
           apiBase="/school"
@@ -194,10 +209,10 @@ function CreatePickupModal({ onClose, onCreated }) {
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [studentsError, setStudentsError] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [filter, setFilter] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState([]);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   // Pre-load the vehicle dropdown on mount.
   useEffect(() => {
@@ -253,14 +268,6 @@ function CreatePickupModal({ onClose, onCreated }) {
     return () => { cancelled = true; };
   }, [form.vehicle_id, form.session]);
 
-  const visibleStudents = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (!q) return students;
-    return students.filter(s =>
-      `${s.first_name} ${s.last_name} ${s.classroom || ''}`.toLowerCase().includes(q)
-    );
-  }, [students, filter]);
-
   const toggleStudent = (id) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -268,29 +275,17 @@ function CreatePickupModal({ onClose, onCreated }) {
       return next;
     });
   };
-  const allVisibleSelected = visibleStudents.length > 0
-    && visibleStudents.every(s => selectedIds.has(s.id));
-  const toggleAllVisible = () => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        visibleStudents.forEach(s => next.delete(s.id));
-      } else {
-        visibleStudents.forEach(s => next.add(s.id));
-      }
-      return next;
-    });
-  };
 
   const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const coords = useMemo(() => {
-    const lat = parseFloat(form.latitude), lng = parseFloat(form.longitude);
-    return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
-  }, [form.latitude, form.longitude]);
+  // A half-filled form is worth a confirmation before it is thrown away; an
+  // untouched one is not.
+  const dirty = Boolean(form.vehicle_id || form.label || form.latitude || form.longitude || form.notes)
+    || selectedIds.size > 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return; // guard the double-tap
     setSaving(true); setErrors([]);
     try {
       await api.post('/school/pickup-points', {
@@ -308,242 +303,107 @@ function CreatePickupModal({ onClose, onCreated }) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[9999] isolate flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="relative z-[10000] bg-surface w-full max-w-lg rounded-2xl shadow-elevate max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        <header className="flex items-center justify-between p-4 border-b border-surface-border sticky top-0 bg-surface">
-          <h2 className="font-semibold text-ink">เพิ่มจุดรับส่ง</h2>
-          <button type="button" onClick={onClose} className="p-1 rounded-full hover:bg-surface-border" aria-label="ปิด">
-            <X className="w-4 h-4 text-ink-muted" />
-          </button>
-        </header>
+  const requestClose = () => {
+    if (saving) return;
+    if (dirty) { setConfirmDiscard(true); return; }
+    onClose();
+  };
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-3">
-          {/* Vehicle dropdown — drives the student-checklist fetch */}
-          <div>
-            <label className="block text-xs font-medium text-ink-muted mb-1">รถ</label>
-            {vehiclesLoading ? (
-              <p className="text-sm text-ink-muted">กำลังโหลดรายชื่อรถ…</p>
-            ) : vehiclesError ? (
-              <AlertBanner variant="danger" title="โหลดรายชื่อรถไม่สำเร็จ">{vehiclesError}</AlertBanner>
-            ) : (
-              <select
-                value={form.vehicle_id}
-                onChange={e => update('vehicle_id', e.target.value)}
-                required
-                className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink"
-              >
-                <option value="">เลือกรถ…</option>
-                {vehicles.map(v => (
-                  <option key={v.id} value={v.id}>
-                    {v.plate_no} {v.student_count != null && `(${v.student_count} คน)`}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-ink-muted mb-1">ป้ายชื่อจุด</label>
-            <input
-              type="text" required maxLength={100}
-              value={form.label}
-              onChange={e => update('label', e.target.value)}
-              placeholder="เช่น หน้าโรงเรียน, ปาก ซ.5"
-              className="w-full text-sm border border-surface-border rounded-lg px-3 py-2"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-ink-muted mb-1">Latitude</label>
-              <input
-                type="number" step="any" required min={-90} max={90}
-                value={form.latitude}
-                onChange={e => update('latitude', e.target.value)}
-                className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 tabular-nums"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-ink-muted mb-1">Longitude</label>
-              <input
-                type="number" step="any" required min={-180} max={180}
-                value={form.longitude}
-                onChange={e => update('longitude', e.target.value)}
-                className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 tabular-nums"
-              />
-            </div>
-          </div>
-
-          <p className="text-xs text-ink-muted">คลิกบนแผนที่เพื่อกำหนดพิกัด</p>
-          <PickupCoordPicker
-            value={coords}
-            onChange={([lat, lng]) => {
-              update('latitude', lat.toFixed(6));
-              update('longitude', lng.toFixed(6));
-            }}
-          />
-
-          <div>
-            <label className="block text-xs font-medium text-ink-muted mb-1">รอบ</label>
-            <div className="flex gap-1.5">
-              {['morning', 'evening', 'both'].map(s => (
-                <button
-                  type="button"
-                  key={s}
-                  onClick={() => update('session', s)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
-                    form.session === s
-                      ? 'bg-brand text-white border-brand'
-                      : 'bg-surface text-ink-muted border-surface-border'
-                  }`}
-                >
-                  {SESSION_LABEL[s]}
-                </button>
+  // A school runs several buses, so the point belongs to one of them and the
+  // choice drives which pupils are offered. The driver editor has no such
+  // choice, so it stays at this call site rather than inside the shared block.
+  const vehicleField = (
+    <div>
+      {vehiclesLoading ? (
+        <>
+          <p className="block text-sm font-medium text-ink mb-1">รถ</p>
+          <p className="text-sm text-ink-muted">กำลังโหลดรายชื่อรถ…</p>
+        </>
+      ) : vehiclesError ? (
+        <AlertBanner variant="danger" title="โหลดรายชื่อรถไม่สำเร็จ">{vehiclesError}</AlertBanner>
+      ) : (
+        <FormField label="รถ" required helper="เลือกรถก่อนจึงจะแสดงรายชื่อนักเรียนที่เพิ่มได้">
+          {ctl => (
+            <select
+              {...ctl}
+              value={form.vehicle_id}
+              onChange={e => update('vehicle_id', e.target.value)}
+              required
+              className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition"
+            >
+              <option value="">เลือกรถ…</option>
+              {vehicles.map(v => (
+                <option key={v.id} value={v.id}>
+                  {v.plate_no} {v.student_count != null && `(${v.student_count} คน)`}
+                </option>
               ))}
-            </div>
-          </div>
-
-          {/* Student checklist — appears AFTER vehicle is picked */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-medium text-ink-muted">
-                เลือกนักเรียนที่ยังไม่มีจุดรับส่งในรอบนี้
-                {students.length > 0 && (
-                  <span className="ml-1 tabular-nums">
-                    ({selectedIds.size}/{students.length})
-                  </span>
-                )}
-              </label>
-              {visibleStudents.length > 0 && (
-                <button
-                  type="button"
-                  onClick={toggleAllVisible}
-                  className="text-xs text-brand font-medium hover:underline"
-                >
-                  {allVisibleSelected ? 'ยกเลิกทั้งหมด' : 'เลือกทั้งหมด'}
-                </button>
-              )}
-            </div>
-
-            {!form.vehicle_id ? (
-              <p className="text-sm text-ink-muted py-3 text-center">เลือกรถก่อน เพื่อดูรายชื่อนักเรียน</p>
-            ) : studentsLoading ? (
-              <p className="text-sm text-ink-muted py-3 text-center">กำลังโหลดรายชื่อ…</p>
-            ) : studentsError ? (
-              <AlertBanner variant="danger" title="โหลดรายชื่อไม่สำเร็จ">{studentsError}</AlertBanner>
-            ) : students.length === 0 ? (
-              <p className="text-sm text-ink-muted py-3 text-center">นักเรียนของโรงเรียนในรถคันนี้มีจุดรับส่งครบแล้ว</p>
-            ) : (
-              <>
-                <input
-                  type="text"
-                  value={filter}
-                  onChange={e => setFilter(e.target.value)}
-                  placeholder="กรองตามชื่อ / ห้อง…"
-                  className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 mb-2"
-                />
-                <div className="border border-surface-border rounded-lg divide-y divide-surface-border max-h-56 overflow-y-auto">
-                  {visibleStudents.map(s => {
-                    const checked = selectedIds.has(s.id);
-                    const cls = classroomLabel(s);
-                    return (
-                      <label
-                        key={s.id}
-                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-surface-border/50"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleStudent(s.id)}
-                          className="w-4 h-4 accent-brand"
-                        />
-                        <span className="flex-1 min-w-0 text-sm">
-                          <span className="font-medium text-ink">
-                            {s.prefix || ''}{s.first_name} {s.last_name}
-                          </span>
-                          {cls && (
-                            <span className="text-xs text-ink-muted ml-2">· {cls}</span>
-                          )}
-                        </span>
-                      </label>
-                    );
-                  })}
-                  {visibleStudents.length === 0 && filter && (
-                    <p className="text-xs text-ink-muted py-3 text-center">ไม่พบนักเรียนตามที่กรอง</p>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-ink-muted mb-1">หมายเหตุ (ไม่บังคับ)</label>
-            <input
-              type="text" maxLength={255}
-              value={form.notes}
-              onChange={e => update('notes', e.target.value)}
-              className="w-full text-sm border border-surface-border rounded-lg px-3 py-2"
-            />
-          </div>
-
-          {errors.length > 0 && (
-            <AlertBanner variant="danger" title="บันทึกไม่สำเร็จ">
-              <ul className="list-disc pl-4 text-xs">
-                {errors.map((e, i) => <li key={i}>{e.field ? `${e.field}: ` : ''}{e.message}</li>)}
-              </ul>
-            </AlertBanner>
+            </select>
           )}
+        </FormField>
+      )}
+    </div>
+  );
 
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border min-h-[40px]">
+  return (
+    <>
+      <Modal
+        title="เพิ่มจุดรับส่ง"
+        size="lg"
+        onClose={requestClose}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={requestClose}
+              className="focus-ring px-4 min-h-[44px] text-sm font-medium rounded-lg border border-surface-border text-ink hover:bg-surface transition"
+            >
               ยกเลิก
             </button>
-            <button type="submit" disabled={saving || !form.vehicle_id} className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-brand hover:bg-brand-700 text-white disabled:opacity-60 min-h-[40px]">
+            <button
+              type="submit"
+              form="school-pickup-form"
+              disabled={saving || !form.vehicle_id}
+              className="focus-ring px-4 min-h-[44px] text-sm font-semibold rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white transition disabled:opacity-60 disabled:pointer-events-none"
+            >
               {saving ? 'กำลังบันทึก…' : 'บันทึก'}
             </button>
-          </div>
+          </>
+        }
+      >
+        <form id="school-pickup-form" onSubmit={handleSubmit}>
+          <PickupPointFields
+            form={form}
+            onChange={update}
+            sessionLabels={SESSION_LABEL}
+            leadingFields={vehicleField}
+            students={students}
+            studentsLoading={studentsLoading}
+            studentsError={studentsError}
+            studentsEmptyText={form.vehicle_id
+              ? 'นักเรียนของรถคันนี้มีจุดรับส่งครบแล้วในรอบที่เลือก'
+              : 'เลือกรถก่อนเพื่อดูรายชื่อนักเรียน'}
+            selectedIds={selectedIds}
+            onToggleStudent={toggleStudent}
+            onSetSelected={setSelectedIds}
+            errors={errors}
+          />
         </form>
-      </div>
-    </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmDiscard}
+        tone="warn"
+        title="ละทิ้งจุดรับส่งที่กรอกไว้?"
+        description="ข้อมูลที่กรอกและนักเรียนที่เลือกไว้จะหายไป"
+        confirmLabel="ละทิ้ง"
+        cancelLabel="กรอกต่อ"
+        onConfirm={() => { setConfirmDiscard(false); onClose(); }}
+        onCancel={() => setConfirmDiscard(false)}
+      />
+    </>
   );
 }
 
-/* ── Session filter pill row (shared shape with DriverPickupMap) ── */
-function SessionFilter({ value, onChange }) {
-  const options = [
-    { key: 'all',     label: 'ทั้งหมด',  icon: null },
-    { key: 'morning', label: 'รอบเช้า',  icon: Sunrise },
-    { key: 'evening', label: 'รอบเย็น',  icon: Sunset  },
-  ];
-  return (
-    <div className="flex gap-1.5">
-      {options.map(opt => {
-        const active = value === opt.key;
-        return (
-          <button
-            key={opt.key}
-            type="button"
-            onClick={() => onChange(opt.key)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition border ${
-              active
-                ? 'bg-brand text-white border-brand'
-                : 'bg-surface text-ink-muted border-surface-border hover:bg-surface-border'
-            }`}
-          >
-            {opt.icon && <opt.icon className="w-3.5 h-3.5" strokeWidth={2} />}
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ── Pickup-point row (clickable; highlight = selected on map) ── */
 function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }) {
   const studentCount = Array.isArray(point.students) ? point.students.length : 0;
   const previewNames = (point.students || []).slice(0, 3)
@@ -585,15 +445,17 @@ function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }
             {previewNames}{studentCount > 3 && ` …`}
           </p>
         )}
-        <div className="flex items-center justify-between gap-2 mt-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 mt-1">
           <a
             href={`https://www.google.com/maps/search/?api=1&query=${point.latitude},${point.longitude}`}
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
-            className="text-xs text-brand font-medium hover:underline"
+            className="focus-ring inline-flex items-center text-sm text-brand-700 font-medium px-1 min-h-[44px] rounded-lg hover:underline"
           >
-            เปิดใน Google Maps →
+            เปิดใน Google Maps
+            <span aria-hidden="true">&nbsp;→</span>
+            <span className="sr-only"> (เปิดในแท็บใหม่)</span>
           </a>
           <div className="flex items-center gap-2">
             {onDelete && (
@@ -601,9 +463,9 @@ function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }
                 type="button"
                 onClick={e => { e.stopPropagation(); onDelete(); }}
                 disabled={deleting}
-                className="inline-flex items-center gap-1 text-xs font-medium text-danger-ink bg-danger-soft hover:opacity-90 rounded-md px-2 py-1 transition disabled:opacity-50"
+                className="focus-ring inline-flex items-center gap-1 text-sm font-medium text-danger-ink bg-danger-soft hover:opacity-90 rounded-lg px-2.5 min-h-[44px] transition disabled:opacity-50 disabled:pointer-events-none"
               >
-                <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
+                <Trash2 className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
                 {deleting ? 'กำลังลบ…' : 'ลบ'}
               </button>
             )}
@@ -611,9 +473,9 @@ function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }
               <button
                 type="button"
                 onClick={e => { e.stopPropagation(); onEdit(); }}
-                className="inline-flex items-center gap-1 text-xs font-medium text-brand bg-brand-50 hover:bg-brand-100 rounded-md px-2 py-1 transition"
+                className="focus-ring inline-flex items-center gap-1 text-sm font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 active:bg-brand-100 rounded-lg px-2.5 min-h-[44px] transition"
               >
-                <Pencil className="w-3.5 h-3.5" strokeWidth={2} />
+                <Pencil className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
                 แก้ไขรายชื่อนักเรียน
               </button>
             )}

@@ -120,6 +120,23 @@ const AUDIT_ROWS = [
   { id: 5, created_at: '2026-08-25T07:50:00Z', actor_name: 'driver042',  action: 'LOGIN',   entity_type: 'user',    entity_id: null,      new_value: {} },
 ];
 
+// Synthetic pickup fixtures. Names and plates are invented for this harness;
+// no production record is used.
+const PICKUP_POINTS = [
+  { id: 'PP-1', label: 'หน้าโรงเรียนบ้านตัวอย่าง', latitude: 18.2888, longitude: 99.4908, session: 'both',    notes: 'จอดฝั่งซ้าย',  vehicle_id: 'V-1', plate_no: 'กข-1111 ลำปาง', student_count: 6 },
+  { id: 'PP-2', label: 'ปาก ซ.5 ถนนตัวอย่าง',      latitude: 18.2931, longitude: 99.4972, session: 'morning', notes: '',              vehicle_id: 'V-1', plate_no: 'กข-1111 ลำปาง', student_count: 3 },
+  { id: 'PP-3', label: 'ตลาดสดตัวอย่าง',            latitude: 18.2802, longitude: 99.4855, session: 'evening', notes: '',              vehicle_id: 'V-2', plate_no: 'กข-2222 ลำปาง', student_count: 4 },
+];
+const PICKUP_STUDENTS = [
+  { id: 'S-1', prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ทดสอบหนึ่ง', grade: 'ป.4', classroom: '1' },
+  { id: 'S-2', prefix: 'ด.ญ.', first_name: 'นักเรียน', last_name: 'ทดสอบสอง',  grade: 'ป.4', classroom: '2' },
+  { id: 'S-3', prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ทดสอบสาม',  grade: 'ป.5', classroom: '1' },
+];
+const PICKUP_VEHICLES = [
+  { id: 'V-1', plate_no: 'กข-1111 ลำปาง', student_count: 9 },
+  { id: 'V-2', plate_no: 'กข-2222 ลำปาง', student_count: 4 },
+];
+
 const SCENARIOS = {
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
@@ -182,6 +199,17 @@ const SCENARIOS = {
   error: { __ALL_FAIL__: true },
 };
 
+// Endpoints shared by every scenario. The pickup editors are the same form on
+// two roles; both need points, pupils and (for the school) vehicles before the
+// editor can be opened at all.
+const COMMON = {
+  '/api/driver/pickup-points':   { data: { vehicle: PICKUP_VEHICLES[0], points: PICKUP_POINTS.filter(p => p.vehicle_id === 'V-1') } },
+  '/api/driver/pickup-students': { data: PICKUP_STUDENTS },
+  '/api/school/pickup-points':   { data: PICKUP_POINTS },
+  '/api/school/pickup-students': { data: PICKUP_STUDENTS },
+  '/api/school/pickup-vehicles': { data: PICKUP_VEHICLES },
+};
+
 function mockFor(url, scenario) {
   const set = SCENARIOS[scenario] || SCENARIOS.normal;
   try {
@@ -189,7 +217,7 @@ function mockFor(url, scenario) {
     if (u.pathname === '/api/admin/users' && u.searchParams.get('is_active') === 'false') {
       return set['/api/admin/users?is_active=false'] ?? null;
     }
-    return set[u.pathname] ?? null;
+    return set[u.pathname] ?? COMMON[u.pathname] ?? null;
   } catch { return null; }
 }
 
@@ -239,15 +267,39 @@ const MEASURE = `(() => {
   // The .tap-target utility extends the hit box to 44px with a centred
   // ::after, which getBoundingClientRect cannot see. Exclude those rather
   // than report a target that is actually compliant.
+  //
+  // A checkbox or radio wrapped in a <label> is tapped anywhere on that label,
+  // so the label is the target 2.5.8 measures — a 20px box inside a 44px row
+  // is compliant. Measure the clickable region, not the painted control.
+  const hitBox = e => {
+    const own = e.getBoundingClientRect();
+    if (!/^(checkbox|radio)$/.test(e.type || '')) return own;
+    const lab = e.closest('label')
+      || (e.id && document.querySelector('label[for="' + CSS.escape(e.id) + '"]'));
+    if (!lab) return own;
+    const b = lab.getBoundingClientRect();
+    return (b.width >= own.width && b.height >= own.height) ? b : own;
+  };
+  // Leaflet's own marker pins and attribution links are third-party map chrome
+  // covered by the 2.5.8 "essential" exception — a pin's size is its position.
+  // Its zoom buttons are NOT exempt and are restyled to 44px in index.css, so
+  // they stay measured here.
+  const exemptMapChrome = e =>
+    e.closest('.leaflet-marker-icon, .leaflet-control-attribution') !== null
+    || e.classList.contains('leaflet-marker-icon');
   const small = [...document.querySelectorAll('button,a,input,select,[role=button]')]
     .filter(e => !e.classList.contains('tap-target'))
-    .map(e => { const b = e.getBoundingClientRect();
+    .filter(e => !exemptMapChrome(e))
+    .map(e => { const b = hitBox(e);
       return { label: (e.getAttribute('aria-label') || e.textContent || e.placeholder || '').trim().slice(0, 32),
                w: Math.round(b.width), h: Math.round(b.height) }; })
     .filter(e => e.h > 0 && (e.h < 44 || e.w < 44));
   // Sub-16px input text only matters on mobile, where iOS zooms the viewport on
   // focus. 14px on a desktop form is a deliberate density choice, not a defect.
+  // A hidden input (a file picker behind a styled label) has no layout box and
+  // never receives a keyboard, so it cannot trigger the zoom this measures.
   const tinyInputs = innerWidth >= 768 ? [] : [...document.querySelectorAll('input,select,textarea')]
+    .filter(e => e.getBoundingClientRect().height > 0)
     .map(e => ({ type: e.type || e.tagName, size: parseFloat(getComputedStyle(e).fontSize) }))
     .filter(e => e.size && e.size < 16);
   const offscreen = [...document.querySelectorAll('*')]
@@ -303,6 +355,18 @@ const SHOTS = [
   { id: '39-driver-profile',    url: '/driver/profile',       user: 'driver', vps: ['mobile'] },
   { id: '40-change-password',   url: '/change-password',      user: 'school', vps: ['mobile', 'desktop'] },
   { id: '41-prov-pickup-map',   url: '/province/pickup-map',  user: 'province',    vps: ['mobile', 'desktop'] },
+  { id: '64-driver-pickup',     url: '/driver/pickup-map',   user: 'driver',      vps: ['mobile', 'desktop'] },
+  { id: '65-school-pickup',     url: '/school/pickup-map',   user: 'school',      vps: ['mobile', 'desktop'] },
+  // The editor is a modal: capture it OPEN, so its body is actually rendered.
+  { id: '66-driver-pickup-edit', url: '/driver/pickup-map',  user: 'driver',      vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: /เพิ่ม/ }).first().click(); },
+    expect: ['[role=dialog]', 'input[type=checkbox]', '[role=radiogroup]',
+             'text=ป้ายชื่อจุด', 'text=หมายเหตุ', 'button:has-text("บันทึก")'] },
+  { id: '67-school-pickup-edit', url: '/school/pickup-map',  user: 'school',      vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: /เพิ่มจุดรับส่ง/ }).first().click(); },
+    // the school editor additionally picks the vehicle that scopes the pupils
+    expect: ['[role=dialog]', 'select', '[role=radiogroup]',
+             'text=ป้ายชื่อจุด', 'text=หมายเหตุ', 'button:has-text("บันทึก")'] },
   { id: '42-transport-pickup',  url: '/transport/pickup-map', user: 'transport',   vps: ['desktop'] },
   { id: '43-aff-pickup-map',    url: '/affiliation/pickup-map', user: 'affiliation', vps: ['desktop'] },
 ];
@@ -321,6 +385,23 @@ const SHOTS = [
       try {
         await page.goto(BASE + shot.url, { waitUntil: 'networkidle', timeout: 25000 });
         await page.waitForTimeout(600);
+        // A modal only exists once something opens it, so a page-load capture
+        // cannot prove its body renders. `act` opens it first — this is how the
+        // ChangePassword "FormField is not defined" class of bug (which the
+        // build did not catch) gets caught.
+        if (shot.act) {
+          await shot.act(page);
+          await page.waitForTimeout(500);
+        }
+        // A screenshot proves nothing on its own — a modal that failed to open
+        // just looks like the page behind it. These selectors must be present,
+        // so a missing runtime identifier fails the capture instead of quietly
+        // producing a pretty picture of the wrong thing.
+        for (const sel of shot.expect || []) {
+          if (await page.locator(sel).count() === 0) {
+            throw new Error(`expected on page but missing: ${sel}`);
+          }
+        }
         await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });
         metrics = await page.evaluate(MEASURE);
       } catch (e) { failed = e.message.split('\n')[0]; }

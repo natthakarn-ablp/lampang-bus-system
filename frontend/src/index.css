@@ -102,3 +102,30 @@
     transition-duration: 1ms !important;
   }
 }
+
+/* ── Leaflet map chrome ──
+   Leaflet ships 30x30 zoom buttons, which fail WCAG 2.5.8 (44x44) on the
+   phone screens the drivers actually use. Restyling them here keeps every map
+   page consistent instead of each one patching its own container.
+
+   Not raised: the marker pins (25x41) and the attribution links. A pin's size
+   IS its position — enlarging it moves the point it claims to mark — and the
+   attribution is required link text, both covered by the 2.5.8 "essential"
+   exception. Panning and the point list give keyboard and touch users a route
+   to the same information. */
+/* Leaflet's own rules are injected after this stylesheet, so the override
+   needs the extra class to win rather than relying on order. */
+.leaflet-container .leaflet-bar a.leaflet-control-zoom-in,
+.leaflet-container .leaflet-bar a.leaflet-control-zoom-out,
+.leaflet-touch .leaflet-bar a.leaflet-control-zoom-in,
+.leaflet-touch .leaflet-bar a.leaflet-control-zoom-out {
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+  font-size: 1.25rem;
+}
+
+.leaflet-container .leaflet-bar a:focus-visible {
+  outline: 2px solid #1D4ED8;
+  outline-offset: 2px;
+}

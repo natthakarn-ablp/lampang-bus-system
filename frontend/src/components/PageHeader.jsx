@@ -34,11 +34,16 @@ export default function PageHeader({
   iconColor = 'blue',
   actions,
   breadcrumb,
+  // Full-bleed map pages put the header in a fixed strip above a flex-1 map.
+  // The default bottom margin and title size would eat map space there, so
+  // those pages opt into a tighter variant rather than rolling their own
+  // header and drifting from this one.
+  compact = false,
 }) {
   const toneClass = ICON_TONES[iconColor] || ICON_TONES.blue;
 
   return (
-    <div className="mb-6 animate-fade-in-up">
+    <div className={compact ? 'animate-fade-in-up' : 'mb-6 animate-fade-in-up'}>
       {breadcrumb && breadcrumb.length > 0 && (
         <nav aria-label="breadcrumb" className="mb-2 flex items-center gap-1.5 text-caption text-ink-muted">
           {breadcrumb.map((crumb, i) => (
@@ -62,7 +67,7 @@ export default function PageHeader({
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-semibold text-ink leading-tight truncate">{title}</h1>
+            <h1 className={`font-semibold text-ink leading-tight truncate ${compact ? 'text-lg' : 'text-xl sm:text-2xl'}`}>{title}</h1>
             {subtitle && (
               <p className="text-sm text-ink-muted mt-0.5 text-pretty">{subtitle}</p>
             )}

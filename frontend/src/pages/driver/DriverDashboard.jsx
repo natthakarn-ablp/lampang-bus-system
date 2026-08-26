@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
-import { AppCard, StatusBadge } from '../../components/ui';
+import { AppCard, StatusBadge, ConfirmDialog, FormField, Modal} from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
@@ -60,6 +60,8 @@ export default function DriverDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [bulkLoading, setBulkLoading] = useState(false);
+  // Cancelling a leave puts the pupil back on today's run — worth naming who.
+  const [confirmCancelLeave, setConfirmCancelLeave] = useState(null);
   const [bulkMsg, setBulkMsg] = useState('');
   // End-of-route drop-off confirmation (records CHECKED_OUT for everyone boarded —
   // the step that was missing, leaving checkout recorded only ~11% of the time).
@@ -164,6 +166,7 @@ export default function DriverDashboard() {
     try {
       await api.delete(`/driver/leave/${leaveId}`);
       toast.success('ยกเลิกการลาสำเร็จ');
+      setConfirmCancelLeave(null);
       await fetchData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถยกเลิกได้');
@@ -456,7 +459,7 @@ export default function DriverDashboard() {
               <div className="space-y-2">
                 {onLeave.map((st) => (
                   <StudentCard key={st.id} student={st} session={session} state="leave"
-                    onCancelLeave={() => handleCancelLeave(st.leave_id)} />
+                    onCancelLeave={() => setConfirmCancelLeave(st)} />
                 ))}
               </div>
             </section>
@@ -472,6 +475,19 @@ export default function DriverDashboard() {
           </p>
         </>
       )}
+      <ConfirmDialog
+        open={Boolean(confirmCancelLeave)}
+        title="ยกเลิกการลาของนักเรียนคนนี้?"
+        itemName={confirmCancelLeave
+          ? `${confirmCancelLeave.prefix || ''}${confirmCancelLeave.first_name} ${confirmCancelLeave.last_name}`
+          : undefined}
+        description="นักเรียนจะกลับมาอยู่ในรายชื่อที่ต้องรับ-ส่งวันนี้"
+        confirmLabel="ยกเลิกการลา"
+        cancelLabel="คงการลาไว้"
+        onConfirm={() => handleCancelLeave(confirmCancelLeave.leave_id)}
+        onCancel={() => setConfirmCancelLeave(null)}
+      />
+
     </div>
     </PageTransition>
   );
@@ -674,17 +690,22 @@ function PretripModal({ onComplete }) {
     }
   }
 
+  // A gate, not a dialog the driver can dismiss: no close button, no Escape,
+  // no backdrop click — but it now carries dialog semantics, a focus trap and
+  // a scroll lock, none of which the hand-rolled overlay had.
   return (
-    <div className="fixed inset-0 bg-ink/60 z-50 flex items-center justify-center p-3 motion-safe:animate-fade-in">
-      <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-elevate max-w-md w-full max-h-[90vh] overflow-y-auto motion-safe:animate-scale-in">
+    <Modal
+      title={mode === 'summary' ? 'ตรวจรถก่อนออก' : 'ระบุรายการผิดปกติ'}
+      dismissible={false}
+    >
+      <div>
 
         {/* ── Mode: Summary (default) ── */}
         {mode === 'summary' && (
-          <div className="p-6 text-center">
+          <div className="text-center">
             <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-brand-50 inline-flex items-center justify-center">
               <Bus className="w-8 h-8 text-brand-700" strokeWidth={2} aria-hidden="true" />
             </div>
-            <h2 className="text-xl font-semibold text-ink mb-1">ตรวจรถก่อนออก</h2>
             <p className="text-base text-ink-muted mb-5">เพื่อความปลอดภัยของนักเรียน</p>
 
             {/* Checklist preview */}
@@ -720,14 +741,14 @@ function PretripModal({ onComplete }) {
 
         {/* ── Mode: Detail (toggle items) ── */}
         {mode === 'detail' && (
-          <div className="p-5">
-            <h2 className="text-lg font-semibold text-ink mb-1">ระบุรายการผิดปกติ</h2>
+          <div>
             <p className="text-sm text-ink-muted mb-4">กดรายการที่ <strong>ผิดปกติ</strong></p>
 
             <div className="space-y-2 mb-4">
               {items.map(item => (
-                <button key={item.id} onClick={() => toggleItem(item.id)}
-                  className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left text-base font-medium transition ${
+                <button key={item.id} type="button" onClick={() => toggleItem(item.id)}
+                  aria-pressed={!item.ok}
+                  className={`focus-ring w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left text-base font-medium transition ${
                     item.ok
                       ? 'bg-success-soft border-success/40 text-success-ink'
                       : 'bg-danger-soft border-danger/50 text-danger-ink'
@@ -741,14 +762,18 @@ function PretripModal({ onComplete }) {
             </div>
 
             {failedItems.length > 0 && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-ink mb-1">
-                  รายละเอียด (ถ้ามี)
-                </label>
-                <textarea value={note} onChange={e => setNote(e.target.value)}
-                  rows={2} placeholder="เช่น ยางหลังขวาลมอ่อน…"
-                  className="w-full border border-surface-border rounded-xl px-4 py-3 text-base text-ink bg-surface-raised focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/25" />
-              </div>
+              <FormField label="รายละเอียด" helper="ถ้ามี" className="mb-4">
+                {ctl => (
+                  <textarea
+                    {...ctl}
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    rows={2}
+                    placeholder="เช่น ยางหลังขวาลมอ่อน…"
+                    className="focus-ring w-full border border-surface-border rounded-xl px-4 py-3 text-base text-ink bg-surface-raised transition"
+                  />
+                )}
+              </FormField>
             )}
 
             {failedItems.length > 0 ? (
@@ -773,13 +798,16 @@ function PretripModal({ onComplete }) {
               </button>
             )}
 
-            <button onClick={() => { setMode('summary'); setItems(PRETRIP_ITEMS.map(c => ({ ...c, ok: true }))); setNote(''); }}
-              className="w-full text-ink-muted hover:text-ink text-base py-3 transition">
-              ← กลับ
+            <button
+              type="button"
+              onClick={() => { setMode('summary'); setItems(PRETRIP_ITEMS.map(c => ({ ...c, ok: true }))); setNote(''); }}
+              className="focus-ring w-full text-ink-muted hover:text-ink text-base min-h-[44px] rounded-lg transition"
+            >
+              <span aria-hidden="true">←</span> กลับ
             </button>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

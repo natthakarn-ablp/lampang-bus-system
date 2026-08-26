@@ -13,6 +13,11 @@ import { X } from 'lucide-react';
  * puts initial focus on Cancel so a stray Enter cannot confirm.
  *
  * `size`: 'sm' | 'md' | 'lg'
+ *
+ * `dismissible={false}` removes every exit that is not an explicit choice in
+ * the body: no close button, no Escape, no backdrop click. For a gate the user
+ * must answer — the driver's pre-trip safety check — the dialog semantics,
+ * focus trap and scroll lock are wanted, and a way to skip it is not.
  */
 const SIZES = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl' };
 
@@ -22,6 +27,7 @@ export default function Modal({
   onClose,
   size = 'md',
   footer,
+  dismissible = true,
   children,
 }) {
   const panelRef = useRef(null);
@@ -45,7 +51,11 @@ export default function Modal({
     (focusables()[0] || panelRef.current)?.focus?.();
 
     function onKeyDown(e) {
-      if (e.key === 'Escape') { e.stopPropagation(); onClose?.(); return; }
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        if (dismissible) onClose?.();
+        return;
+      }
       if (e.key !== 'Tab') return;
       const items = focusables();
       if (!items.length) { e.preventDefault(); return; }
@@ -62,7 +72,7 @@ export default function Modal({
       const el = restoreRef.current;
       if (el && typeof el.focus === 'function' && document.contains(el)) el.focus();
     };
-  }, [open, onClose]);
+  }, [open, onClose, dismissible]);
 
   if (!open) return null;
 
@@ -70,7 +80,7 @@ export default function Modal({
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-navy-950/60 motion-safe:animate-fade-in"
-        onClick={onClose}
+        onClick={dismissible ? onClose : undefined}
         aria-hidden="true"
       />
       <div
@@ -83,14 +93,16 @@ export default function Modal({
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 shrink-0">
           <h2 className="text-lg font-semibold text-ink leading-tight">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="ปิด"
-            className="focus-ring shrink-0 -mr-1.5 -mt-1.5 inline-flex items-center justify-center w-11 h-11 rounded-lg text-ink-muted hover:bg-surface hover:text-ink active:bg-surface-border transition"
-          >
-            <X className="w-5 h-5" strokeWidth={2} />
-          </button>
+          {dismissible && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="ปิด"
+              className="focus-ring shrink-0 -mr-1.5 -mt-1.5 inline-flex items-center justify-center w-11 h-11 rounded-lg text-ink-muted hover:bg-surface hover:text-ink active:bg-surface-border transition"
+            >
+              <X className="w-5 h-5" strokeWidth={2} />
+            </button>
+          )}
         </div>
 
         <div className="px-5 pb-5 overflow-y-auto overscroll-contain">{children}</div>

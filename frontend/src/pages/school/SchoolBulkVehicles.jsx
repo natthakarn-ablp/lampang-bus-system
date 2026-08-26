@@ -2,6 +2,8 @@ import { useState, useRef } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
+import LoadingState from '../../components/LoadingState';
+import { AlertBanner, FormField } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { AppCard } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
@@ -33,11 +35,17 @@ function TeacherDeniedCard() {
   );
 }
 
+// Shared by the selects here; FormField supplies the label wiring.
+const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition';
+
 export default function SchoolBulkVehicles() {
   const { user } = useAuth();
   const [rows, setRows] = useState([{ ...EMPTY_ROW }]);
   const [saving, setSaving] = useState(false);
   const [existingVehicles, setExistingVehicles] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [searched, setSearched] = useState(false);
   const [searchPlate, setSearchPlate] = useState('');
   // Per-row plate duplicate preflight: { [rowIndex]: { status, candidates } }
   const [warnings, setWarnings] = useState({});
@@ -100,11 +108,23 @@ export default function SchoolBulkVehicles() {
 
   async function searchExisting() {
     if (!searchPlate.trim()) return;
+    setSearching(true);
+    setSearchError('');
+    setSearched(true);
     try {
       const res = await api.get(`/school/vehicles`);
-      const found = res.data.data.filter((v) => v.plate_no.toLowerCase().includes(searchPlate.toLowerCase()));
-      setExistingVehicles(found);
-    } catch { setExistingVehicles([]); }
+      // res.data.data was indexed straight into .filter — a non-array payload
+      // crashed the page, and a failed search silently produced "no results",
+      // which reads as "this plate is free to add".
+      const list = Array.isArray(res.data?.data) ? res.data.data : [];
+      const q = searchPlate.toLowerCase();
+      setExistingVehicles(list.filter((v) => String(v.plate_no || '').toLowerCase().includes(q)));
+    } catch (err) {
+      setSearchError(err.response?.data?.message || 'ค้นหารถไม่สำเร็จ');
+      setExistingVehicles([]);
+    } finally {
+      setSearching(false);
+    }
   }
 
   function selectExisting(v) {
@@ -202,8 +222,6 @@ export default function SchoolBulkVehicles() {
   }
 
   const completeCount = rows.filter((r) => rowPlate(r)).length;
-  const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
-
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       <PageHeader
@@ -212,25 +230,50 @@ export default function SchoolBulkVehicles() {
       />
 
       {/* Search existing vehicle */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-        <p className="text-sm font-medium text-gray-600 mb-2">ค้นหารถที่มีอยู่แล้วในระบบ</p>
-        <div className="flex gap-2">
-          <input type="text" value={searchPlate} onChange={(e) => setSearchPlate(e.target.value)}
-            placeholder="พิมพ์ทะเบียนรถ…" className={`flex-1 ${inputCls}`} />
-          <button onClick={searchExisting}
-            className="bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm px-4 py-2 rounded-lg border border-blue-200 transition">ค้นหา</button>
-        </div>
-        {existingVehicles.length > 0 && (
-          <div className="mt-2 space-y-1">
+      <AppCard padding="md" className="mb-4">
+        <form
+          onSubmit={(e) => { e.preventDefault(); searchExisting(); }}
+          className="flex flex-col sm:flex-row sm:items-end gap-2"
+        >
+          <FormField
+            className="flex-1 min-w-0"
+            label="ค้นหารถที่มีอยู่แล้วในระบบ"
+            value={searchPlate}
+            onChange={(v) => { setSearchPlate(v); setSearched(false); }}
+            placeholder="พิมพ์ทะเบียนรถ…"
+            helper="เพื่อเพิ่มรถที่บันทึกไว้แล้วเข้ารายการด้านล่าง"
+          />
+          <button
+            type="submit"
+            disabled={searching || !searchPlate.trim()}
+            className="focus-ring shrink-0 bg-brand-50 hover:bg-brand-100 active:bg-brand-200 text-brand-700 text-sm font-medium px-4 min-h-[44px] rounded-lg border border-brand-200 transition disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {searching ? 'กำลังค้นหา…' : 'ค้นหา'}
+          </button>
+        </form>
+
+        {searching ? (
+          <LoadingState compact message="กำลังค้นหารถ…" />
+        ) : searchError ? (
+          <AlertBanner variant="danger" title="ค้นหาไม่สำเร็จ" className="mt-2">{searchError}</AlertBanner>
+        ) : existingVehicles.length > 0 ? (
+          <ul className="mt-2 space-y-1">
             {existingVehicles.map((v) => (
-              <button key={v.id} onClick={() => selectExisting(v)}
-                className="w-full text-left text-sm px-3 py-2 bg-gray-50 hover:bg-blue-50 rounded-lg border border-gray-100 transition">
-                {v.plate_no} — {v.driver_name || 'ไม่ระบุคนขับ'} ({v.student_count} คน)
-              </button>
+              <li key={v.id}>
+                <button
+                  type="button"
+                  onClick={() => selectExisting(v)}
+                  className="focus-ring w-full text-left text-sm px-3 min-h-[44px] bg-surface hover:bg-brand-50 rounded-lg border border-surface-border transition"
+                >
+                  {v.plate_no} — {v.driver_name || 'ไม่ระบุคนขับ'} ({v.student_count} คน)
+                </button>
+              </li>
             ))}
-          </div>
-        )}
-      </div>
+          </ul>
+        ) : searched ? (
+          <p className="mt-2 text-sm text-ink-muted">ไม่พบรถที่ตรงกับคำค้นนี้ — กรอกข้อมูลรถใหม่ด้านล่างได้เลย</p>
+        ) : null}
+      </AppCard>
 
       {/* Vehicle rows */}
       <div className="space-y-3 mb-4">
@@ -238,63 +281,107 @@ export default function SchoolBulkVehicles() {
           const plate = rowPlate(r);
           const restoreInfo = restorePrompt[i] || softDeletedConflict(i);
           return (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 p-4">
+            <AppCard key={i} padding="md">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-600">คันที่ {i + 1}</span>
+                <span className="text-sm font-medium text-ink">คันที่ {i + 1}</span>
                 {rows.length > 1 && (
-                  <button onClick={() => removeRow(i)} className="text-xs text-red-500 hover:text-red-700">ลบ</button>
+                  <button
+                    type="button"
+                    onClick={() => removeRow(i)}
+                    aria-label={`ลบรถคันที่ ${i + 1} ออกจากรายการ`}
+                    className="focus-ring text-sm font-medium text-danger-ink px-2 min-h-[44px] rounded-lg hover:bg-danger-soft transition"
+                  >
+                    ลบ
+                  </button>
                 )}
               </div>
 
               {/* Structured plate input */}
-              <label className="block text-xs text-gray-500 mb-0.5">ทะเบียนรถ *</label>
-              <div className="grid grid-cols-3 gap-2">
-                <input type="text" value={r.plate_prefix} maxLength={4}
-                  onChange={(e) => updateRow(i, 'plate_prefix', e.target.value)}
-                  placeholder="หมวดอักษร เช่น นข" className={inputCls} aria-label="หมวดอักษร" />
-                <input type="text" inputMode="numeric" value={r.plate_number} maxLength={4}
-                  onChange={(e) => updateRow(i, 'plate_number', e.target.value.replace(/[^0-9]/g, ''))}
-                  placeholder="เลขทะเบียน เช่น 4337" className={inputCls} aria-label="เลขทะเบียน" />
-                <select value={r.plate_province} onChange={(e) => updateRow(i, 'plate_province', e.target.value)}
-                  className={inputCls} aria-label="จังหวัด">
-                  {THAI_PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
+              <fieldset>
+                <legend className="block text-sm font-medium text-ink mb-1">
+                  ทะเบียนรถ
+                  <span className="text-danger ml-0.5" aria-hidden="true">*</span>
+                  <span className="sr-only"> (จำเป็น)</span>
+                </legend>
+                <div className="grid grid-cols-3 gap-2">
+                  <FormField
+                    label="หมวดอักษร"
+                    value={r.plate_prefix}
+                    maxLength={4}
+                    onChange={(v) => updateRow(i, 'plate_prefix', v)}
+                    placeholder="เช่น นข"
+                  />
+                  <FormField
+                    label="เลขทะเบียน"
+                    value={r.plate_number}
+                    maxLength={4}
+                    inputMode="numeric"
+                    onChange={(v) => updateRow(i, 'plate_number', v.replace(/[^0-9]/g, ''))}
+                    placeholder="เช่น 4337"
+                  />
+                  <FormField label="จังหวัด">
+                    {ctl => (
+                      <select
+                        {...ctl}
+                        value={r.plate_province}
+                        onChange={(e) => updateRow(i, 'plate_province', e.target.value)}
+                        className={CONTROL_CLS}
+                      >
+                        {THAI_PROVINCES.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    )}
+                  </FormField>
+                </div>
+              </fieldset>
               {plate
                 ? <p className="mt-1 text-xs text-gray-500">ทะเบียนที่จะบันทึก: <span className="font-medium text-gray-700">{plate}</span> · ชื่อเข้าระบบ: <span className="font-mono text-gray-600">{normalizedLoginPlate(plate)}</span></p>
                 : <p className="mt-1 text-xs text-gray-400">กรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน</p>}
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">ประเภทรถ</label>
-                  <select value={r.vehicle_type} onChange={(e) => updateRow(i, 'vehicle_type', e.target.value)} className={inputCls}>
-                    <option value="รถตู้">รถตู้</option>
-                    <option value="รถสองแถว">รถสองแถว</option>
-                    <option value="รถบัส">รถบัส</option>
-                    <option value="อื่นๆ">อื่นๆ</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">ชื่อคนขับ</label>
-                  <input type="text" value={r.driver_name} onChange={(e) => updateRow(i, 'driver_name', e.target.value)} className={inputCls} />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-0.5">เบอร์โทรคนขับ</label>
-                  <input type="text" value={r.driver_phone} onChange={(e) => updateRow(i, 'driver_phone', e.target.value)} className={inputCls} />
-                </div>
+                <FormField label="ประเภทรถ">
+                  {ctl => (
+                    <select
+                      {...ctl}
+                      value={r.vehicle_type}
+                      onChange={(e) => updateRow(i, 'vehicle_type', e.target.value)}
+                      className={CONTROL_CLS}
+                    >
+                      <option value="รถตู้">รถตู้</option>
+                      <option value="รถสองแถว">รถสองแถว</option>
+                      <option value="รถบัส">รถบัส</option>
+                      <option value="อื่นๆ">อื่นๆ</option>
+                    </select>
+                  )}
+                </FormField>
+                <FormField
+                  label="ชื่อคนขับ"
+                  value={r.driver_name}
+                  onChange={(v) => updateRow(i, 'driver_name', v)}
+                />
+                <FormField
+                  label="เบอร์โทรคนขับ"
+                  type="tel"
+                  inputMode="numeric"
+                  value={r.driver_phone}
+                  onChange={(v) => updateRow(i, 'driver_phone', v)}
+                />
               </div>
 
-              <div className="mt-3">
-                <label className="block text-xs text-gray-500 mb-0.5">ชื่อผู้ครอบครองรถ (เจ้าของรถ)</label>
-                <input type="text" value={r.owner_name} maxLength={100} onChange={(e) => updateRow(i, 'owner_name', e.target.value)} className={inputCls} placeholder="เว้นว่างได้ หากเป็นคนเดียวกับคนขับ" />
-              </div>
+              <FormField
+                className="mt-3"
+                label="ชื่อผู้ครอบครองรถ (เจ้าของรถ)"
+                value={r.owner_name}
+                maxLength={100}
+                onChange={(v) => updateRow(i, 'owner_name', v)}
+                placeholder="เว้นว่างได้ หากเป็นคนเดียวกับคนขับ"
+              />
 
               {restoreInfo ? (
                 <div className="mt-2 text-xs bg-blue-50 border border-blue-300 text-blue-800 rounded-lg px-3 py-2">
                   <div className="font-medium">รถทะเบียนนี้ถูกปิดใช้งานอยู่ ({restoreInfo.existing_plate})</div>
                   <div className="mt-0.5">ต้องการใช้งานต่อ ส่งคำขอให้ผู้ดูแลระบบกู้คืนรถคันนี้ (ไม่กู้คืนทันที)</div>
                   {requestedRestore.has(i) ? (
-                    <div className="mt-1.5 font-medium text-emerald-700">✓ ส่งคำขอแล้ว · รอผู้ดูแลระบบอนุมัติ</div>
+                    <div className="mt-1.5 font-medium text-success-ink">ส่งคำขอแล้ว · รอผู้ดูแลระบบอนุมัติ</div>
                   ) : (
                     <button type="button" onClick={() => requestRestore(i, restoreInfo)}
                       className="mt-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-lg transition">
@@ -313,20 +400,27 @@ export default function SchoolBulkVehicles() {
               {rowErrors[i] && !restoreInfo && (
                 <div className="mt-2 text-xs bg-red-50 border border-red-300 text-red-700 rounded-lg px-3 py-2">{rowErrors[i]}</div>
               )}
-            </div>
+            </AppCard>
           );
         })}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
         {rows.length < 10 && (
-          <button onClick={addRow}
-            className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-5 py-2 rounded-lg transition">
-            + เพิ่มอีกคัน
+          <button
+            type="button"
+            onClick={addRow}
+            className="focus-ring bg-surface hover:bg-surface-border text-ink text-sm font-medium px-5 min-h-[44px] rounded-lg border border-surface-border transition"
+          >
+            <span aria-hidden="true">+</span> เพิ่มอีกคัน
           </button>
         )}
-        <button onClick={handleSave} disabled={saving}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-5 py-2 rounded-lg transition">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="focus-ring bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white text-sm font-semibold px-5 min-h-[44px] rounded-lg transition"
+        >
           {saving ? 'กำลังบันทึก…' : `บันทึก ${completeCount} คัน`}
         </button>
       </div>

@@ -151,3 +151,32 @@ node scripts/ui-redesign/nav-snapshot.mjs --compare outputs/ui-redesign/nav-befo
 - ไม่ลบ/เปลี่ยน path เดิม — เปลี่ยนได้แค่การจัดกลุ่มและการนำเสนอ
 - ไม่แตะ worktree เดิมทั้งสาม
 - ไม่ push, ไม่ deploy
+
+---
+
+## 9. Outcome (updated at the end of the redesign work)
+
+| metric | before | after |
+|---|---|---|
+| Captures | 23 | 46 |
+| Sub-44×44px tap targets | **370** | **0** |
+| Horizontal overflow at 390/768/1280/1920 | 0 | 0 |
+| Sub-16px inputs on mobile | — | 0 |
+| Console errors (excluding the deliberate failure scenario) | 8 | 0 |
+| Routes | 89 | 89 — none lost |
+| Menu entries across 6 roles | 74 | 74 — none lost |
+| Menu entries outside a role's `allowedRoles` | 0 | 0 |
+
+**Bugs found and fixed** (all frontend-only; no backend, schema, auth or API
+contract was touched):
+
+1. Admin KPI "ผู้ใช้งาน" reported the count of *suspended* accounts
+2. `TransportDashboard` blanked the page on a non-array vehicles response —
+   plus the same latent crash in 12 more files (16 assignments)
+3. The attention queue reported "เรียบร้อย" when the request had failed
+4. Semantic text on `-soft` backgrounds failed WCAG AA in four tones
+   (warn at 1.93:1); `kpiColor` failed on white in three
+5. The audit log described an EXPORT as "แก้ไข: format, rows"
+
+See `docs/ui-redesign-uat.md` for the UAT plan, the per-page migration status
+and the known limitations.

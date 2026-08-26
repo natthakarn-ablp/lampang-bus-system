@@ -40,7 +40,7 @@ function walk(dir, out = []) {
 
 // Files that are components consumed by pages, not routed pages themselves,
 // but which own a page's whole body — treated as pages for status purposes.
-const PAGE_LIKE = new Set(['AuditLogTable.jsx', 'VehicleRosterCard.jsx']);
+const PAGE_LIKE = new Set(['AuditLogTable.jsx', 'VehicleRosterCard.jsx', 'DriverConsentForm.jsx']);
 
 const PATTERNS = [
   {

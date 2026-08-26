@@ -19,6 +19,7 @@ import {
   AppCard, AlertBanner, KPIGrid,
   RiskCard, DashboardSection, StatusBadge, AttentionCard,
 } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
 import { PageTransition } from '../../lib/motion';
 
 export default function ProvinceDashboard() {
@@ -98,19 +99,20 @@ export default function ProvinceDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <header className="flex items-start justify-between gap-3 motion-safe:animate-fade-in-up">
-        <div className="min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">{PAGE_TITLES.PROVINCE_DASHBOARD}</h1>
-          {dateLabel && <p className="text-sm text-ink-muted mt-1">ข้อมูล ณ {dateLabel}</p>}
-        </div>
-        <FreshnessPill
-          lastSyncedAt={lastSyncedAt}
-          now={now}
-          refreshing={refreshing}
-          onRefresh={fetchAll}
-        />
-      </header>
+      {/* Header — shared PageHeader so every role opens on the same shape */}
+      <PageHeader
+        title={PAGE_TITLES.PROVINCE_DASHBOARD}
+        subtitle="ภาพรวมการเดินรถและงานที่ต้องติดตามทั้งจังหวัด"
+        meta={dateLabel ? `ข้อมูล ณ ${dateLabel}` : undefined}
+        actions={
+          <FreshnessPill
+            lastSyncedAt={lastSyncedAt}
+            now={now}
+            refreshing={refreshing}
+            onRefresh={fetchAll}
+          />
+        }
+      />
 
       {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern
           (flex-1 sm:flex-none + min-h 40px) so mobile users get fast tap-

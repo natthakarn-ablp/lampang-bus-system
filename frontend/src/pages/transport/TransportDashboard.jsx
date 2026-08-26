@@ -16,6 +16,7 @@ import {
 } from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import PageHeader from '../../components/PageHeader';
 import { PageTransition } from '../../lib/motion';
 
 // SLA configuration — days allowed to resolve a risk item
@@ -170,7 +171,11 @@ export default function TransportDashboard() {
       api.get('/transport/dashboard').then(r => r.data.data),
       api.get('/transport/vehicles?per_page=200').then(r => r.data.data).catch(() => []),
     ])
-      .then(([dash, vList]) => { setData(dash); setVehicles(vList || []); })
+      // `vList || []` let a non-array response through (an error envelope or an
+      // object body is truthy), and every downstream vehicles.filter(...) then
+      // threw, blanking the whole dashboard. Guard on the shape, not on
+      // truthiness.
+      .then(([dash, vList]) => { setData(dash); setVehicles(Array.isArray(vList) ? vList : []); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -211,10 +216,10 @@ export default function TransportDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
-      <header className="motion-safe:animate-fade-in-up">
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">ภาพรวมตรวจสภาพรถ</h1>
-        <p className="text-sm text-ink-muted mt-1">สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด</p>
-      </header>
+      <PageHeader
+        title="ภาพรวมตรวจสภาพรถ"
+        subtitle="สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด"
+      />
 
       {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern
           (flex-1 sm:flex-none + min-h 40px) so transport operators can tap

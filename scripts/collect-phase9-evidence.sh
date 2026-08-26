@@ -91,7 +91,7 @@ run_mode() {
   append_summary "- Log: \`$(basename "$log_file")\`"
 
   echo "[evidence] running mode=$mode base=$url"
-  if BASE_URL="$url" "$ROOT/scripts/production-readiness-gate.sh" "$mode" >"$log_file" 2>&1; then
+  if BASE_URL="$url" bash "$ROOT/scripts/production-readiness-gate.sh" "$mode" >"$log_file" 2>&1; then
     result="PASS"
     append_summary "- Result: PASS"
     gate_summary="$(grep -E '^\[gate\] summary ' "$log_file" | tail -1 || true)"

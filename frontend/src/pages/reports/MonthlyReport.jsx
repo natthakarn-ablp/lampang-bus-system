@@ -63,7 +63,7 @@ export default function MonthlyReport() {
               )}
             </FormField>
             <button onClick={resetMonth}
-              className="text-sm text-navy-200 hover:text-white px-3 py-2 border border-blue-600 rounded-lg hover:bg-blue-700 transition">
+              className="focus-ring-inverse self-end text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
               ปัจจุบัน
             </button>
           </div>

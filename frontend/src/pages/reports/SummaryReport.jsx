@@ -89,7 +89,7 @@ export default function SummaryReport() {
             </span>
           )}
           <button onClick={() => window.location.reload()}
-            className="text-sm text-gray-500 hover:text-blue-600 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+            className="focus-ring-inverse text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
             รีเฟรชข้อมูล
           </button>
           {data && (

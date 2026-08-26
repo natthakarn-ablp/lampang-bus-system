@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bus, ChevronDown } from 'lucide-react';
+import { Bus, ChevronDown, User } from 'lucide-react';
 import api from '../api/axios';
 import { VehicleSafetySection } from './VehicleSafety';
 import { AppCard, StatusBadge, DataTable } from './ui';
@@ -7,19 +7,28 @@ import { AppCard, StatusBadge, DataTable } from './ui';
 /**
  * VehicleRosterCard — one vehicle, with an expandable pupil roster.
  *
- * The province and affiliation vehicle lists carried this card as two separate
- * near-identical copies (same layout, same expand-on-demand fetch, same inline
- * student table), which meant a fix to one silently left the other behind.
- * `studentsPath` is the only thing that differed.
+ * The province, affiliation and school vehicle lists each carried their own
+ * copy of this card: same layout, same expand-on-demand fetch, same inline
+ * student table. Only the students endpoint and a few scope-specific extras
+ * differed, so a fix to one silently left the others behind.
  *
- * `showContactPhones` controls whether staff phone numbers are rendered.
- * Province scope does not currently show them; affiliation scope does. Kept as
- * a prop rather than hardcoded so the choice stays visible at the call site.
+ * The scope differences are props, so each call site states its own choice:
+ *   showContactPhones  staff phone numbers (affiliation shows them, province does not)
+ *   phoneLinks         render the driver's number as a tel: link (school, on mobile)
+ *   showDriverPhoto    the school list shows the driver's photo for recognition
+ *   rosterColumns      which roster columns this scope shows
+ *   actions            extra controls beside the pupil count (school: edit vehicle)
  */
+const DEFAULT_ROSTER = ['name', 'grade', 'school', 'parent', 'phone'];
+
 export default function VehicleRosterCard({
   vehicle: v,
   studentsPath,
   showContactPhones = false,
+  showDriverPhoto = false,
+  phoneLinks = false,
+  rosterColumns = DEFAULT_ROSTER,
+  actions,
 }) {
   const [open, setOpen] = useState(false);
   const [students, setStudents] = useState(null);
@@ -38,14 +47,28 @@ export default function VehicleRosterCard({
     }
   }
 
-  const person = (name, phone) => (
-    <>
-      <dd className="text-ink">{name || '-'}</dd>
-      {showContactPhones && phone && (
-        <dd className="text-caption text-ink-muted tabular-nums">{phone}</dd>
-      )}
-    </>
-  );
+  const phone = (num) => {
+    if (!num || !showContactPhones) return null;
+    return phoneLinks
+      ? (
+        <dd>
+          <a href={`tel:${num}`} className="focus-ring rounded text-caption text-brand-700 hover:underline tabular-nums">
+            {num}
+          </a>
+        </dd>
+      )
+      : <dd className="text-caption text-ink-muted tabular-nums">{num}</dd>;
+  };
+
+  const ALL_COLUMNS = {
+    name:   { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
+              cell: s => `${s.prefix || ''}${s.first_name} ${s.last_name}` },
+    grade:  { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
+              cell: s => (s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-') },
+    school: { key: 'school', header: 'โรงเรียน', cell: s => s.school_name || '-' },
+    parent: { key: 'parent', header: 'ผู้ปกครอง', cell: s => s.parent_name || '-' },
+    phone:  { key: 'phone', header: 'เบอร์โทร', cell: s => s.parent_phone || '-' },
+  };
 
   return (
     <AppCard padding="md">
@@ -57,23 +80,39 @@ export default function VehicleRosterCard({
             <p className="text-caption text-brand-700 mt-0.5">{v.school_names}</p>
           )}
         </div>
-        <StatusBadge variant="brand" size="lg">
-          <span className="tabular-nums">{v.student_count ?? 0}</span> คน
-        </StatusBadge>
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusBadge variant="brand" size="lg">
+            <span className="tabular-nums">{v.student_count ?? 0}</span> คน
+          </StatusBadge>
+          {actions}
+        </div>
       </div>
 
       <dl className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
-        <div>
-          <dt className="text-caption text-ink-muted mb-0.5">คนขับ</dt>
-          {person(v.driver_name, v.driver_phone)}
+        <div className={showDriverPhoto ? 'flex items-start gap-2' : undefined}>
+          {showDriverPhoto && (
+            v.driver_photo
+              ? <img src={`/uploads/drivers/${v.driver_photo}`} alt="" aria-hidden="true"
+                     className="w-10 h-10 rounded-full object-cover shrink-0 border border-surface-border" />
+              : <span className="w-10 h-10 rounded-full bg-surface border border-surface-border inline-flex items-center justify-center shrink-0">
+                  <User className="w-5 h-5 text-ink-muted" strokeWidth={2} aria-hidden="true" />
+                </span>
+          )}
+          <div className="min-w-0">
+            <dt className="text-caption text-ink-muted mb-0.5">คนขับ</dt>
+            <dd className="text-ink font-medium">{v.driver_name || '-'}</dd>
+            {phone(v.driver_phone)}
+          </div>
         </div>
         <div>
           <dt className="text-caption text-ink-muted mb-0.5">ผู้ดูแลรถ</dt>
-          {person(v.attendant_name, v.attendant_phone)}
+          <dd className="text-ink">{v.attendant_name || '-'}</dd>
+          {phone(v.attendant_phone)}
         </div>
         <div>
           <dt className="text-caption text-ink-muted mb-0.5">เจ้าของรถ</dt>
-          {person(v.owner_name, v.owner_phone)}
+          <dd className="text-ink">{v.owner_name || '-'}</dd>
+          {phone(v.owner_phone)}
         </div>
       </dl>
 
@@ -98,25 +137,17 @@ export default function VehicleRosterCard({
         <div id={`roster-${v.id}`} className="mt-2 border-t border-surface-border pt-3">
           {/* TODO: ตรวจสอบกับผู้เชี่ยวชาญ — the roster pairs a pupil's name with
               their guardian's name and phone number. The backend already
-              authorises this for both scopes and existing workflows may depend
-              on it, so it is rendered as before; whether every scope needs the
-              guardian phone column is a data-minimisation decision for the data
-              controller, not one to make silently in the UI. */}
+              authorises this for every scope that renders it and existing
+              workflows may depend on it, so it is shown as before; whether each
+              scope needs the guardian phone column is a data-minimisation
+              decision for the data controller, not one to make silently here. */}
           <DataTable
             caption={`รายชื่อนักเรียนในรถ ${v.plate_no}`}
             rows={students || []}
             rowKey={s => s.id}
             error={failed ? 'ไม่สามารถโหลดรายชื่อนักเรียนได้' : null}
             onRetry={failed ? () => { setFailed(false); setStudents(null); setOpen(false); } : undefined}
-            columns={[
-              { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
-                cell: s => `${s.prefix || ''}${s.first_name} ${s.last_name}` },
-              { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
-                cell: s => (s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-') },
-              { key: 'school', header: 'โรงเรียน', cell: s => s.school_name || '-' },
-              { key: 'parent', header: 'ผู้ปกครอง', cell: s => s.parent_name || '-' },
-              { key: 'phone', header: 'เบอร์โทร', cell: s => s.parent_phone || '-' },
-            ]}
+            columns={rosterColumns.map(k => ALL_COLUMNS[k]).filter(Boolean)}
             empty={{
               icon: Bus,
               title: students ? 'ไม่มีนักเรียนในรถคันนี้' : 'กำลังโหลด…',

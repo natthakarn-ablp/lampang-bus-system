@@ -9,6 +9,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import api from '../../api/axios';
+import StudentStatusTable from '../../components/StudentStatusTable';
 import { useToast } from '../../components/Toast';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import { DonutChart, HBarChart } from '../../components/MiniCharts';
@@ -17,8 +18,7 @@ import { SkeletonKpiGrid } from '../../components/Skeleton';
 import SchoolOverrideModal from '../../components/SchoolOverrideModal';
 import {
   AppCard, AlertBanner, KPIGrid, KPIStat,
-  StatusBadge, DashboardSection, SectionTitle,
-} from '../../components/ui';
+  StatusBadge, DashboardSection, SectionTitle, ConfirmDialog} from '../../components/ui';
 import {
   PAGE_TITLES, CARD_LABELS, CHART_TITLES, SECTION_TITLES,
   STATUS, UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS,
@@ -66,9 +66,13 @@ export default function SchoolDashboard() {
     refetchDashboard().finally(() => setLoading(false));
   }, []);
 
+  // Cancelling a leave is destructive and was behind a bare confirm(), which
+  // could not name the pupil or the date being cancelled.
+  const [confirmLeave, setConfirmLeave] = useState(null);
+
   async function handleCancelLeave(leaveId) {
     if (!leaveId) return;
-    if (!confirm('ยืนยันยกเลิกการลานี้?')) return;
+    setConfirmLeave(null);
     setLeaveLoading(prev => ({ ...prev, [leaveId]: true }));
     try {
       await api.delete(`/school/leaves/${leaveId}`);
@@ -325,7 +329,7 @@ export default function SchoolDashboard() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleCancelLeave(lv.id)}
+                      onClick={() => setConfirmLeave(lv.id)}
                       disabled={!!leaveLoading[lv.id]}
                       className="shrink-0 text-xs font-medium text-danger-ink hover:text-danger-ink/80 disabled:opacity-50 px-2.5 py-1 rounded border border-danger/30 hover:bg-danger-soft transition min-h-[36px]"
                     >
@@ -415,6 +419,16 @@ export default function SchoolDashboard() {
         </>
       )}
     </div>
+      <ConfirmDialog
+        open={Boolean(confirmLeave)}
+        title="ยกเลิกการลานี้?"
+        itemName={confirmLeave?.student_name || confirmLeave?.name || ''}
+        description="นักเรียนจะกลับมาอยู่ในรายการรับ-ส่งตามปกติ และการกระทำนี้ถูกบันทึกใน audit log"
+        confirmLabel="ยกเลิกการลา"
+        loading={Boolean(confirmLeave && leaveLoading[confirmLeave.id ?? confirmLeave])}
+        onConfirm={() => handleCancelLeave(confirmLeave?.id ?? confirmLeave)}
+        onCancel={() => setConfirmLeave(null)}
+      />
     </PageTransition>
   );
 }
@@ -595,33 +609,17 @@ function VehicleRow({ vehicle, isExpanded, onToggle }) {
       </button>
 
       {isExpanded && (
-        <div className="border-t border-surface-border overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-surface text-ink-muted text-xs">
-                <th className="px-4 py-2 text-left font-medium">ชื่อนักเรียน</th>
-                <th className="px-4 py-2 text-left font-medium">ชั้น/ห้อง</th>
-                <th className="px-4 py-2 text-center font-medium">ส่งเช้า</th>
-                <th className="px-4 py-2 text-center font-medium">รับเย็น</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-border">
-              {vehicle.students.map(s => (
-                <tr key={s.id} className={`${s.leave_session ? 'bg-warn-soft/40' : ''} hover:bg-surface`}>
-                  <td className="px-4 py-2 text-ink text-sm">{s.name}</td>
-                  <td className="px-4 py-2 text-ink-muted text-xs">
-                    {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <StudentStatus enabled={s.morning_enabled} done={s.morning_done} ts={s.morning_ts} leave={isMorningLeave(s)} />
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <StudentStatus enabled={s.evening_enabled} done={s.evening_done} ts={s.evening_ts} leave={isEveningLeave(s)} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="border-t border-surface-border p-4">
+          <StudentStatusTable
+            students={vehicle.students}
+            caption={`สถานะนักเรียนในรถ ${vehicle.plate_no || ''}`}
+            rowClassName={s => (s.leave_session ? 'bg-warn-soft/40' : '')}
+            renderStatus={(s, session) => (
+              session === 'morning'
+                ? <StudentStatus enabled={s.morning_enabled} done={s.morning_done} ts={s.morning_ts} leave={isMorningLeave(s)} />
+                : <StudentStatus enabled={s.evening_enabled} done={s.evening_done} ts={s.evening_ts} leave={isEveningLeave(s)} />
+            )}
+          />
         </div>
       )}
     </AppCard>

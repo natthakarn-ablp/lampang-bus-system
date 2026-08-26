@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
+import StudentStatusTable from '../../components/StudentStatusTable';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
@@ -44,17 +46,14 @@ export default function AffDailyStatus() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 className="text-xl font-bold text-gray-800">สถานะวันนี้</h1>
-        <div className="flex items-center gap-3">
-          <PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicleSuggestions} />
-          {data?.date && (
-            <span className="text-sm text-gray-500 whitespace-nowrap">
-              {new Date(data.date).toLocaleDateString('th-TH', { month: 'short', day: 'numeric' })}
-            </span>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="สถานะวันนี้"
+        subtitle="ความคืบหน้าการรับ-ส่งนักเรียนรายคันในสังกัด"
+        meta={data?.date
+          ? `ข้อมูล ณ ${new Date(data.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}`
+          : undefined}
+        actions={<PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicleSuggestions} />}
+      />
 
       {error && <ErrorState message={error} className="mb-4" />}
 
@@ -130,49 +129,11 @@ export default function AffDailyStatus() {
                           </button>
 
                           {isVehicleExpanded && (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="bg-gray-50 text-gray-500 text-left">
-                                  <th className="px-7 py-2 font-medium">ชื่อ</th>
-                                  <th className="px-5 py-2 font-medium">ชั้น/ห้อง</th>
-                                  <th className="px-5 py-2 font-medium text-center">ส่งเช้า</th>
-                                  <th className="px-5 py-2 font-medium text-center">รับเย็น</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-50">
-                                {vehicle.students.map((s) => (
-                                  <tr key={s.id} className="hover:bg-gray-50">
-                                    <td className="px-7 py-2 text-gray-700">{s.name}</td>
-                                    <td className="px-5 py-2 text-gray-500">
-                                      {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || s.classroom || '-'}
-                                    </td>
-                                    <td className="px-5 py-2 text-center">
-                                      {!s.morning_enabled ? (
-                                        <span className="text-gray-300 text-xs">-</span>
-                                      ) : s.morning_done ? (
-                                        <span className="text-green-600 text-xs font-medium">
-                                          ✓ {s.morning_ts && new Date(s.morning_ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                      ) : (
-                                        <span className="text-orange-500 text-xs">รอ</span>
-                                      )}
-                                    </td>
-                                    <td className="px-5 py-2 text-center">
-                                      {!s.evening_enabled ? (
-                                        <span className="text-gray-300 text-xs">-</span>
-                                      ) : s.evening_done ? (
-                                        <span className="text-green-600 text-xs font-medium">
-                                          ✓ {s.evening_ts && new Date(s.evening_ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                      ) : (
-                                        <span className="text-indigo-500 text-xs">รอ</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                          <div className="px-4 pb-3">
+                            <StudentStatusTable
+                              students={vehicle.students}
+                              caption={`สถานะนักเรียนในรถ ${vehicle.plate_no || ''}`}
+                            />
                           </div>
                           )}
                         </div>

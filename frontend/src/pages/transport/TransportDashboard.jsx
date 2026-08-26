@@ -494,7 +494,7 @@ function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
         <button
           type="button"
           onClick={onRecord}
-          className="inline-flex items-center gap-1.5 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2.5 py-1 rounded-lg transition"
+          className="focus-ring inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 active:bg-brand-200 border border-brand-200 px-3 min-h-[44px] rounded-lg transition"
         >
           <FileText className="w-3.5 h-3.5" strokeWidth={2} />
           บันทึกตรวจ

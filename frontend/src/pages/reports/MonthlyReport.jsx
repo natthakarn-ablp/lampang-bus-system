@@ -45,20 +45,21 @@ export default function MonthlyReport() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
 
       {/* ── HEADER ── */}
-      <div className="bg-blue-800 text-white rounded-xl px-5 py-4 mb-5">
+      <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <p className="text-xs text-blue-200 uppercase tracking-wider">รายงานรายเดือน</p>
+            <p className="text-caption text-navy-200 uppercase tracking-wider">รายงานรายเดือน</p>
             <h1 className="text-lg font-bold">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
-            <p className="text-sm text-blue-200 mt-0.5">
+            <p className="text-sm text-navy-200 mt-0.5">
               {month ? new Date(month + '-01').toLocaleDateString('th-TH', { year: 'numeric', month: 'long' }) : ''}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-              className="border border-blue-600 bg-blue-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+              aria-label="เลือกเดือนของรายงาน"
+              className="focus-ring-inverse border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
             <button onClick={resetMonth}
-              className="text-sm text-blue-200 hover:text-white px-3 py-2 border border-blue-600 rounded-lg hover:bg-blue-700 transition">
+              className="text-sm text-navy-200 hover:text-white px-3 py-2 border border-blue-600 rounded-lg hover:bg-blue-700 transition">
               ปัจจุบัน
             </button>
           </div>

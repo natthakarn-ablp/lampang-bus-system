@@ -52,7 +52,7 @@ export function TableAction({ tone = 'neutral', onClick, disabled, className = '
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`focus-ring inline-flex items-center justify-center gap-1 whitespace-nowrap px-3 min-h-[44px] rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:pointer-events-none ${ACTION_TONE[tone] || ACTION_TONE.neutral} ${className}`}
+      className={`focus-ring inline-flex items-center justify-center gap-1 whitespace-nowrap px-3 min-w-[44px] min-h-[44px] rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:pointer-events-none ${ACTION_TONE[tone] || ACTION_TONE.neutral} ${className}`}
       {...rest}
     >
       {children}

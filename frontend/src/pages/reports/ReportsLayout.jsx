@@ -16,17 +16,17 @@ export default function ReportsLayout() {
   return (
     <Layout>
       {/* Report sub-navigation tabs */}
-      <div className="border-b border-gray-200 bg-white px-6 pt-4">
-        <nav className="flex gap-1">
+      <div className="border-b border-surface-border bg-surface-raised px-4 sm:px-6 pt-3">
+        <nav className="flex gap-1 overflow-x-auto" aria-label="หมวดรายงาน">
           {tabs.map(({ to, label }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
-                `px-4 py-2 text-sm rounded-t-lg transition ${
+                `focus-ring inline-flex items-center whitespace-nowrap px-4 min-h-[44px] text-sm rounded-t-lg transition ${
                   isActive
-                    ? 'bg-blue-50 text-blue-700 font-semibold border-b-2 border-blue-600'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    ? 'bg-brand-50 text-brand-700 font-semibold border-b-2 border-brand-600'
+                    : 'text-ink-muted hover:text-ink hover:bg-surface active:bg-surface-border'
                 }`
               }
             >

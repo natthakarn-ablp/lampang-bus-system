@@ -57,14 +57,14 @@ export default function ExportButtons({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-200">
-      <span className="text-sm text-gray-500">ดาวน์โหลด:</span>
+    <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-surface-border">
+      <span className="text-sm text-ink-muted">ดาวน์โหลด:</span>
       {FORMATS.map((fmt) => (
         <button
           key={fmt.key}
           onClick={() => handleExport(fmt)}
           disabled={downloading !== null}
-          className={`px-4 py-2 text-sm border rounded-lg transition disabled:opacity-50 ${fmt.style}`}
+          className={`focus-ring inline-flex items-center justify-center px-4 min-h-[44px] text-sm border rounded-lg transition disabled:opacity-50 disabled:pointer-events-none ${fmt.style}`}
         >
           {downloading === fmt.key ? 'กำลังดาวน์โหลด…' : fmt.label}
         </button>

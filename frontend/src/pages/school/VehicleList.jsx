@@ -93,7 +93,7 @@ export default function VehicleList() {
                   <button
                     type="button"
                     onClick={() => openEdit(v)}
-                    className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
+                    className="focus-ring inline-flex items-center gap-1.5 text-sm font-medium px-3 min-h-[44px] rounded-lg border border-surface-border bg-surface-raised text-ink hover:bg-surface active:bg-surface-border transition"
                   >
                     <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
                     แก้ไขข้อมูลรถ
@@ -153,9 +153,9 @@ export default function VehicleList() {
                     } catch {}
                   }
                 }}
-                className="mt-3 text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                className="focus-ring mt-3 inline-flex items-center gap-1.5 min-h-[44px] px-2 -ml-2 rounded-lg text-sm font-medium text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition"
               >
-                {expandedVehicle === v.id ? '▲ ซ่อนรายชื่อนักเรียน' : '▼ แสดงรายชื่อนักเรียน'}
+                {expandedVehicle === v.id ? 'ซ่อนรายชื่อนักเรียน' : 'แสดงรายชื่อนักเรียน'}
               </button>
 
               {expandedVehicle === v.id && studentCache[v.id] && (

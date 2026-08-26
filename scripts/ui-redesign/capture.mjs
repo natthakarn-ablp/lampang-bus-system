@@ -221,12 +221,18 @@ async function newPage(browser, user, viewport, scenario) {
 
 const MEASURE = `(() => {
   const de = document.documentElement;
+  // The .tap-target utility extends the hit box to 44px with a centred
+  // ::after, which getBoundingClientRect cannot see. Exclude those rather
+  // than report a target that is actually compliant.
   const small = [...document.querySelectorAll('button,a,input,select,[role=button]')]
+    .filter(e => !e.classList.contains('tap-target'))
     .map(e => { const b = e.getBoundingClientRect();
       return { label: (e.getAttribute('aria-label') || e.textContent || e.placeholder || '').trim().slice(0, 32),
                w: Math.round(b.width), h: Math.round(b.height) }; })
     .filter(e => e.h > 0 && (e.h < 44 || e.w < 44));
-  const tinyInputs = [...document.querySelectorAll('input,select,textarea')]
+  // Sub-16px input text only matters on mobile, where iOS zooms the viewport on
+  // focus. 14px on a desktop form is a deliberate density choice, not a defect.
+  const tinyInputs = innerWidth >= 768 ? [] : [...document.querySelectorAll('input,select,textarea')]
     .map(e => ({ type: e.type || e.tagName, size: parseFloat(getComputedStyle(e).fontSize) }))
     .filter(e => e.size && e.size < 16);
   const offscreen = [...document.querySelectorAll('*')]

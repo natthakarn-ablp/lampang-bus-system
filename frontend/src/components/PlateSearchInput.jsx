@@ -146,7 +146,7 @@ export default function PlateSearchInput({
 
   const wrapperCls = className || 'w-full sm:w-64';
   const inputCls = inputClassName ||
-    'w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
+    'focus-ring w-full border border-surface-border bg-surface-raised rounded-lg px-4 min-h-[44px] text-base sm:text-sm text-ink transition';
 
   return (
     <div ref={wrapRef} className={`relative ${wrapperCls}`}>

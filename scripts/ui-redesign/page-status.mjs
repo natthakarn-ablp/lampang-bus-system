@@ -104,6 +104,14 @@ const EXEMPT = {
   'pages/admin/MeasurementFramework.jsx': {
     header: 'branded print-oriented header band, matching the reports pages',
   },
+  // The four report pages open on a navy branded band that already carries the
+  // report name, the system name and the reporting period — everything
+  // PageHeader would provide, in the form the printed report uses. Swapping it
+  // for the shell header would make the screen and the print output disagree.
+  'pages/reports/DailyReport.jsx':   { header: 'branded report band carrying title + period; matches the printed output' },
+  'pages/reports/MonthlyReport.jsx': { header: 'branded report band carrying title + period; matches the printed output' },
+  'pages/reports/SummaryReport.jsx': { header: 'branded report band carrying title + period; matches the printed output' },
+  'pages/reports/PolicyReport.jsx':  { header: 'branded report band carrying title + period; matches the printed output' },
   'pages/Login.jsx': {
     header: 'production-approved login page (commit d9485ec); deliberately branded and outside the shell',
     form: 'the login form is the page; its fields carry autocomplete and wired labels already, verified in the baseline audit',

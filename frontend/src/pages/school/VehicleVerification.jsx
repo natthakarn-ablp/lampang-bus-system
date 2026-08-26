@@ -20,7 +20,7 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { AlertBanner, CommandHero, StatusStepRail } from '../../components/ui';
+import { AlertBanner, CommandHero, StatusStepRail, DataTable} from '../../components/ui';
 
 const STATUS = {
   PENDING_SCHOOL_REVIEW: ['รอตรวจสอบ', 'warn'],
@@ -222,28 +222,21 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
               <h3 className="font-semibold text-ink">จำนวนผู้โดยสารแยกโรงเรียน</h3>
             </div>
             <p className="mt-1 text-sm text-ink-muted">แสดงเฉพาะจำนวน ไม่มีรายชื่อนักเรียน</p>
-            <div className="mt-3 overflow-x-auto rounded-xl border border-surface-border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-surface text-left text-ink-muted">
-                    <th className="p-3 font-semibold">โรงเรียน</th>
-                    <th className="p-3 font-semibold">เช้า</th>
-                    <th className="p-3 font-semibold">เย็น</th>
-                    <th className="p-3 font-semibold">สูงสุด</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(selected.schools || []).map(school => (
-                    <tr key={school.school_id} className="border-t border-surface-border">
-                      <td className="p-3 text-ink">{school.school_name}</td>
-                      <td className="p-3 text-ink-muted">{school.morning_rider_count}</td>
-                      <td className="p-3 text-ink-muted">{school.evening_rider_count}</td>
-                      <td className="p-3 font-semibold text-ink">{school.peak_rider_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              className="mt-3"
+              caption="จำนวนผู้โดยสารแยกตามโรงเรียน"
+              rows={selected.schools || []}
+              rowKey={school => school.school_id}
+              columns={[
+                { key: 'school', header: 'โรงเรียน', primary: true,
+                  cell: school => <span className="text-ink">{school.school_name}</span> },
+                { key: 'morning', header: 'เช้า', numeric: true, cell: school => school.morning_rider_count },
+                { key: 'evening', header: 'เย็น', numeric: true, cell: school => school.evening_rider_count },
+                { key: 'peak', header: 'สูงสุด', numeric: true,
+                  cell: school => <span className="font-semibold text-ink">{school.peak_rider_count}</span> },
+              ]}
+              empty={{ icon: Users, title: 'ยังไม่มีข้อมูลผู้โดยสารแยกโรงเรียน' }}
+            />
             <p className="mt-3 text-sm font-semibold text-ink">
               จำนวนสูงสุดรวมต่อรอบ: {selected.peak_rider_count} คน
             </p>

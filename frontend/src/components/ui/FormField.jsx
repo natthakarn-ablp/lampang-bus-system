@@ -30,6 +30,9 @@ export default function FormField({
   inputMode,
   children,
   className = '',
+  // For fields that sit on a dark branded surface, where the default ink label
+  // would be unreadable.
+  labelClassName = 'text-ink',
   ...rest
 }) {
   const id = useId();
@@ -48,7 +51,7 @@ export default function FormField({
 
   return (
     <div className={className}>
-      <label htmlFor={id} className="block text-sm font-medium text-ink mb-1">
+      <label htmlFor={id} className={`block text-sm font-medium mb-1 ${labelClassName}`}>
         {label}
         {required && <span className="text-danger ml-0.5" aria-hidden="true">*</span>}
         {required && <span className="sr-only"> (จำเป็น)</span>}

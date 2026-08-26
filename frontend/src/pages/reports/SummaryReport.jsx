@@ -10,8 +10,7 @@ import SummaryPrintView from '../../components/SummaryPrintView';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
-import AppCard from '../../components/ui/AppCard';
-import StatusBadge from '../../components/ui/StatusBadge';
+import { AppCard, StatusBadge, DataTable } from '../../components/ui';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
 
 export default function SummaryReport() {
@@ -142,7 +141,7 @@ export default function SummaryReport() {
           {/* ── SECTION 4 — School Rankings ─────────────────── */}
           {data.schools?.length > 1 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">จัดอันดับโรงเรียน</h2>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">จัดอันดับโรงเรียน</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RankingTable title="โรงเรียนผลงานดีที่สุด" items={topN(data.schools, 'morning_kpi')} nameKey="school_name" />
                 <RankingTable title="โรงเรียนที่ควรเฝ้าระวัง" items={bottomN(data.schools, 'morning_kpi')} nameKey="school_name" />
@@ -153,7 +152,7 @@ export default function SummaryReport() {
           {/* ── SECTION 5 — Vehicle Rankings ────────────────── */}
           {data.vehicles?.length > 1 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">จัดอันดับรถรับส่ง</h2>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">จัดอันดับรถรับส่ง</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RankingTable title="รถผลงานดีที่สุด" items={topN(data.vehicles, 'morning_kpi')} nameKey="plate_no" showSchool />
                 <RankingTable title="รถที่ควรเฝ้าระวัง" items={bottomN(data.vehicles, 'morning_kpi')} nameKey="plate_no" showSchool />
@@ -164,143 +163,119 @@ export default function SummaryReport() {
           {/* ── SECTION 6 — สรุปตามสังกัด (hidden for affiliation — they see only their own) ── */}
           {data.affiliations?.length > 0 && user?.role !== 'affiliation' && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามสังกัด</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[700px]">
-                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                    <tr className="text-left">
-                      <th className="px-4 py-3">สังกัด</th>
-                      <th className="px-4 py-3 text-center">นักเรียน</th>
-                      <th className="px-4 py-3 text-center">KPI ส่งเช้า</th>
-                      <th className="px-4 py-3 text-center">KPI รับเย็น</th>
-                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
-                      <th className="px-4 py-3 text-center">ระดับ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {sortByKpi(data.affiliations).map((a, i) => {
-                      const badge = levelBadge(a.morning_kpi, a.evening_kpi);
-                      return (
-                        <tr key={a.affiliation_id ?? a.id ?? a.affiliation_name ?? i} className="hover:bg-surface transition">
-                          <td className="px-4 py-3 text-gray-800">{a.affiliation_name}</td>
-                          <td className="px-4 py-3 text-center text-gray-600">{a.student_count}</td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(a.morning_kpi)}`}>
-                            {safePct(a.morning_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{a.morning_done}/{a.student_count}</p>
-                          </td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(a.evening_kpi)}`}>
-                            {safePct(a.evening_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{a.evening_done}/{a.student_count}</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-500">-</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามสังกัด</h2>
+              <DataTable
+                caption="สรุป KPI รายสังกัด"
+                rows={sortByKpi(data.affiliations)}
+                rowKey={(a, i) => a.affiliation_id ?? a.id ?? a.affiliation_name ?? i}
+                columns={[
+                  { key: 'name', header: 'สังกัด', primary: true,
+                    cell: r => <span className="text-ink font-medium">{r.affiliation_name}</span> },
+                  { key: 'students', header: 'นักเรียน', numeric: true, cell: r => r.student_count },
+                  { key: 'm_pct', header: 'KPI ส่งเช้า', align: 'center',
+                    cell: r => (
+                      <div className={`font-medium ${kpiColor(r.morning_kpi)}`}>
+                        <span className="tabular-nums">{safePct(r.morning_kpi)}</span>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.student_count}</p>
+                      </div>
+                    ) },
+                  { key: 'e_pct', header: 'KPI รับเย็น', align: 'center',
+                    cell: r => (
+                      <div className={`font-medium ${kpiColor(r.evening_kpi)}`}>
+                        <span className="tabular-nums">{safePct(r.evening_kpi)}</span>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.student_count}</p>
+                      </div>
+                    ) },
+                  { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
+                  { key: 'level', header: 'ระดับ', align: 'center', badge: true,
+                    cell: r => {
+                      const b = levelBadge(r.morning_kpi, r.evening_kpi);
+                      return <StatusBadge variant={b.variant || 'neutral'}>{b.label}</StatusBadge>;
+                    } },
+                ]}
+                empty={{ title: 'ไม่มีข้อมูลสังกัด' }}
+              />
             </section>
           )}
 
           {/* ── SECTION 7 — สรุปตามโรงเรียน ─────────────────── */}
           {data.schools?.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามโรงเรียน</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[750px]">
-                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                    <tr className="text-left">
-                      <th className="px-4 py-3">โรงเรียน</th>
-                      <th className="px-4 py-3 text-center">นักเรียน</th>
-                      <th className="px-4 py-3 text-center">KPI ส่งเช้า</th>
-                      <th className="px-4 py-3 text-center">KPI รับเย็น</th>
-                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
-                      <th className="px-4 py-3 text-center">ระดับ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {sortByKpi(data.schools).map((s, i) => {
-                      const badge = levelBadge(s.morning_kpi, s.evening_kpi);
-                      return (
-                        <tr key={s.school_id ?? s.id ?? s.school_name ?? i} className="hover:bg-surface transition">
-                          <td className="px-4 py-3">
-                            <p className="text-gray-800 font-medium">{s.school_name}</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-600">{s.student_count}</td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(s.morning_kpi)}`}>
-                            {safePct(s.morning_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{s.morning_done}/{s.student_count}</p>
-                          </td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(s.evening_kpi)}`}>
-                            {safePct(s.evening_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{s.evening_done}/{s.student_count}</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-500">-</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามโรงเรียน</h2>
+              <DataTable
+                caption="สรุป KPI รายโรงเรียน"
+                rows={sortByKpi(data.schools)}
+                rowKey={(x, i) => x.school_id ?? x.id ?? x.school_name ?? i}
+                columns={[
+                  { key: 'name', header: 'โรงเรียน', primary: true,
+                    cell: r => <span className="text-ink font-medium">{r.school_name}</span> },
+                  { key: 'students', header: 'นักเรียน', numeric: true, cell: r => r.student_count },
+                  { key: 'm_pct', header: 'KPI ส่งเช้า', align: 'center',
+                    cell: r => (
+                      <div className={`font-medium ${kpiColor(r.morning_kpi)}`}>
+                        <span className="tabular-nums">{safePct(r.morning_kpi)}</span>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.student_count}</p>
+                      </div>
+                    ) },
+                  { key: 'e_pct', header: 'KPI รับเย็น', align: 'center',
+                    cell: r => (
+                      <div className={`font-medium ${kpiColor(r.evening_kpi)}`}>
+                        <span className="tabular-nums">{safePct(r.evening_kpi)}</span>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.student_count}</p>
+                      </div>
+                    ) },
+                  { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
+                  { key: 'level', header: 'ระดับ', align: 'center', badge: true,
+                    cell: r => {
+                      const b = levelBadge(r.morning_kpi, r.evening_kpi);
+                      return <StatusBadge variant={b.variant || 'neutral'}>{b.label}</StatusBadge>;
+                    } },
+                ]}
+                empty={{ title: 'ไม่มีข้อมูลโรงเรียน' }}
+              />
             </section>
           )}
 
           {/* ── SECTION 8 — สรุปตามรถ ───────────────────────── */}
           {data.vehicles?.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามรถ</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[750px]">
-                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                    <tr className="text-left">
-                      <th className="px-4 py-3">ทะเบียนรถ</th>
-                      <th className="px-4 py-3 text-center">นักเรียน</th>
-                      <th className="px-4 py-3 text-center">KPI ส่งเช้า</th>
-                      <th className="px-4 py-3 text-center">KPI รับเย็น</th>
-                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
-                      <th className="px-4 py-3 text-center">ระดับ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {sortByKpi(data.vehicles).map((v, i) => {
-                      const badge = levelBadge(v.morning_kpi, v.evening_kpi);
-                      return (
-                        <tr key={v.vehicle_id ?? v.id ?? v.plate_no ?? i} className="hover:bg-surface transition">
-                          <td className="px-4 py-3">
-                            <p className="text-gray-800 font-medium">{v.plate_no}</p>
-                            <p className="text-xs text-gray-400">{v.student_count} คน</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-600">{v.student_count}</td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(v.morning_kpi)}`}>
-                            {safePct(v.morning_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{v.morning_done}/{v.student_count}</p>
-                          </td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(v.evening_kpi)}`}>
-                            {safePct(v.evening_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{v.evening_done}/{v.student_count}</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-500">-</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามรถ</h2>
+              <DataTable
+                caption="สรุป KPI รายรถ"
+                rows={sortByKpi(data.vehicles)}
+                rowKey={(x, i) => x.vehicle_id ?? x.id ?? x.plate_no ?? i}
+                columns={[
+                  { key: 'plate', header: 'ทะเบียนรถ', primary: true,
+                    cell: r => (
+                      <>
+                        <p className="text-ink font-medium">{r.plate_no}</p>
+                        <p className="text-caption text-ink-muted tabular-nums">{r.student_count} คน</p>
+                      </>
+                    ) },
+                  { key: 'students', header: 'นักเรียน', numeric: true, cell: r => r.student_count },
+                  { key: 'm_pct', header: 'KPI ส่งเช้า', align: 'center',
+                    cell: r => (
+                      <div className={`font-medium ${kpiColor(r.morning_kpi)}`}>
+                        <span className="tabular-nums">{safePct(r.morning_kpi)}</span>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.student_count}</p>
+                      </div>
+                    ) },
+                  { key: 'e_pct', header: 'KPI รับเย็น', align: 'center',
+                    cell: r => (
+                      <div className={`font-medium ${kpiColor(r.evening_kpi)}`}>
+                        <span className="tabular-nums">{safePct(r.evening_kpi)}</span>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.student_count}</p>
+                      </div>
+                    ) },
+                  { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
+                  { key: 'level', header: 'ระดับ', align: 'center', badge: true,
+                    cell: r => {
+                      const b = levelBadge(r.morning_kpi, r.evening_kpi);
+                      return <StatusBadge variant={b.variant || 'neutral'}>{b.label}</StatusBadge>;
+                    } },
+                ]}
+                empty={{ title: 'ไม่มีข้อมูลรถ' }}
+              />
             </section>
           )}
 

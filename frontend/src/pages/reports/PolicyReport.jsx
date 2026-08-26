@@ -3,7 +3,7 @@ import { Landmark } from 'lucide-react';
 import api from '../../api/axios';
 import DashboardCard from '../../components/DashboardCard';
 import KpiCard from '../../components/KpiCard';
-import AppCard from '../../components/ui/AppCard';
+import { DataTable } from '../../components/ui';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
@@ -90,31 +90,21 @@ export default function PolicyReport() {
           {/* Per-affiliation breakdown */}
           {data.affiliations?.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามสังกัด</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm min-w-[560px]">
-                    <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                      <tr className="text-left">
-                        <th className="px-4 py-3">สังกัด</th>
-                        <th className="px-4 py-3 text-center">โรงเรียน</th>
-                        <th className="px-4 py-3 text-center">นักเรียน</th>
-                        <th className="px-4 py-3 text-center">รถรับส่ง</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-surface-border">
-                      {data.affiliations.map((a, i) => (
-                        <tr key={a.affiliation_id ?? a.affiliation_name ?? i} className="hover:bg-surface transition">
-                          <td className="px-4 py-3 text-gray-800">{a.affiliation_name}</td>
-                          <td className="px-4 py-3 text-center text-gray-600">{a.schools}</td>
-                          <td className="px-4 py-3 text-center text-gray-600">{(a.students ?? 0).toLocaleString('th-TH')}</td>
-                          <td className="px-4 py-3 text-center text-gray-600">{a.vehicles}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามสังกัด</h2>
+              <DataTable
+                caption="สรุปจำนวนโรงเรียน นักเรียนและรถ แยกตามสังกัด"
+                rows={data.affiliations}
+                rowKey={(a, i) => a.affiliation_id ?? a.affiliation_name ?? i}
+                columns={[
+                  { key: 'name', header: 'สังกัด', primary: true,
+                    cell: a => <span className="text-ink font-medium">{a.affiliation_name}</span> },
+                  { key: 'schools', header: 'โรงเรียน', numeric: true, cell: a => a.schools },
+                  { key: 'students', header: 'นักเรียน', numeric: true,
+                    cell: a => (a.students ?? 0).toLocaleString('th-TH') },
+                  { key: 'vehicles', header: 'รถรับส่ง', numeric: true, cell: a => a.vehicles },
+                ]}
+                empty={{ title: 'ไม่มีข้อมูลสังกัด' }}
+              />
             </section>
           )}
         </>

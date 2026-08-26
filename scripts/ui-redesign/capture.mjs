@@ -281,6 +281,9 @@ const SHOTS = [
   { id: '30-prov-students',     url: '/province/students',    user: 'province',    vps: ['mobile', 'desktop'] },
   { id: '31-aff-students',      url: '/affiliation/students', user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '32-school-students',   url: '/school/students',      user: 'school', vps: ['mobile', 'desktop'] },
+  { id: '33-teacher-accounts',  url: '/school/teacher-accounts', user: 'school', vps: ['mobile', 'desktop'] },
+  { id: '34-reports-monthly',   url: '/reports/monthly',      user: 'admin',  vps: ['mobile', 'desktop'] },
+  { id: '35-reports-summary',   url: '/reports/summary',      user: 'admin',  vps: ['desktop'] },
 ];
 
 (async () => {

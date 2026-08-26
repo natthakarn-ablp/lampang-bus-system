@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ClipboardList } from 'lucide-react';
 import api from '../../api/axios';
+import { FormField } from '../../components/ui';
 import PageHeader from '../../components/PageHeader';
 import ApprovalBadge from '../../components/ApprovalBadge';
 import { useToast } from '../../components/Toast';
@@ -131,103 +132,99 @@ export default function DriverRosterRequests() {
       {/* Create form */}
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-5 mb-6 space-y-5">
-          <h2 className="text-sm font-semibold text-gray-700">สร้างคำขอใหม่</h2>
+          <h2 className="text-sm font-semibold text-ink">สร้างคำขอใหม่</h2>
 
           {/* Type selector */}
           <div>
-            <label className="block text-sm text-gray-600 mb-1.5">ประเภทคำขอ</label>
-            <div className="flex gap-2">
+            <p id="request-type-label" className="block text-sm font-medium text-ink mb-1.5">ประเภทคำขอ</p>
+            <div role="radiogroup" aria-labelledby="request-type-label" className="flex gap-2">
               {[
-                { val: 'remove', label: 'ถอนนักเรียนออกจากรถ', color: 'red' },
-                { val: 'add', label: 'เพิ่มนักเรียนเข้ารถ', color: 'green' },
-              ].map(opt => (
-                <button key={opt.val} type="button"
-                  onClick={() => setRequestType(opt.val)}
-                  className={`flex-1 text-sm px-3 py-2 rounded-lg border transition ${requestType === opt.val
-                    ? opt.color === 'red'
-                      ? 'bg-red-50 border-red-300 text-red-700'
-                      : 'bg-green-50 border-green-300 text-green-700'
-                    : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}>
-                  {opt.label}
-                </button>
-              ))}
+                { val: 'remove', label: 'ถอนนักเรียนออกจากรถ', tone: 'danger' },
+                { val: 'add', label: 'เพิ่มนักเรียนเข้ารถ', tone: 'success' },
+              ].map(opt => {
+                const on = requestType === opt.val;
+                return (
+                  <button key={opt.val} type="button" role="radio" aria-checked={on}
+                    onClick={() => setRequestType(opt.val)}
+                    className={`focus-ring flex-1 text-sm px-3 min-h-[44px] rounded-lg border font-medium transition ${
+                      on
+                        ? (opt.tone === 'danger'
+                            ? 'bg-danger-soft border-danger/40 text-danger-ink'
+                            : 'bg-success-soft border-success/40 text-success-ink')
+                        : 'bg-surface border-surface-border text-ink-muted hover:bg-surface-border hover:text-ink'
+                    }`}>
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Remove: pick from roster */}
           {requestType === 'remove' && (
-            <div>
-              <label className="block text-sm text-gray-600 mb-1.5">เลือกนักเรียนในรถ</label>
-              <select value={removeStudentId} onChange={(e) => setRemoveStudentId(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" required>
-                <option value="">— เลือกนักเรียน —</option>
-                {students.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.prefix}{s.first_name} {s.last_name} ({s.grade}/{s.classroom})
-                  </option>
-                ))}
-              </select>
-            </div>
+            <FormField label="เลือกนักเรียนในรถ" required>
+              {ctl => (
+                <select {...ctl} value={removeStudentId} onChange={(e) => setRemoveStudentId(e.target.value)}
+                  className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition" required>
+                  <option value="">— เลือกนักเรียน —</option>
+                  {students.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.prefix}{s.first_name} {s.last_name} ({s.grade}/{s.classroom})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </FormField>
           )}
 
           {/* Add: new student form */}
           {requestType === 'add' && (
             <div className="space-y-4">
-              <p className="text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+              <p className="text-caption text-ink-muted bg-surface rounded-lg px-3 py-2">
                 กรอกข้อมูลนักเรียนที่ต้องการเพิ่มเข้ารถ โรงเรียนจะตรวจสอบและอนุมัติ
               </p>
 
               {/* Student ID (optional) */}
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">รหัสนักเรียน <span className="text-gray-400">(ถ้ามี)</span></label>
-                <input type="text" value={newStudent.student_id}
-                  onChange={(e) => setNewStudent({ ...newStudent, student_id: e.target.value.replace(/\D/g, '') })}
-                  placeholder="เช่น 22121"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-              </div>
+              <FormField
+                label="รหัสนักเรียน"
+                helper="ไม่บังคับ"
+                inputMode="numeric"
+                value={newStudent.student_id}
+                onChange={v => setNewStudent({ ...newStudent, student_id: v.replace(/\D/g, '') })}
+                placeholder="เช่น 22121"
+              />
 
               {/* Prefix + Name row */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">คำนำหน้า</label>
-                  <select value={newStudent.prefix} onChange={(e) => setNewStudent({ ...newStudent, prefix: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-                    {PREFIX_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">ชื่อ <span className="text-red-500">*</span></label>
-                  <input type="text" value={newStudent.first_name} required
-                    onChange={(e) => setNewStudent({ ...newStudent, first_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">นามสกุล <span className="text-red-500">*</span></label>
-                  <input type="text" value={newStudent.last_name} required
-                    onChange={(e) => setNewStudent({ ...newStudent, last_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
+                <FormField label="คำนำหน้า">
+                  {ctl => (
+                    <select {...ctl} value={newStudent.prefix} onChange={(e) => setNewStudent({ ...newStudent, prefix: e.target.value })}
+                      className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                      {PREFIX_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  )}
+                </FormField>
+                <FormField label="ชื่อ" required value={newStudent.first_name}
+                  onChange={v => setNewStudent({ ...newStudent, first_name: v })} />
+                <FormField label="นามสกุล" required value={newStudent.last_name}
+                  onChange={v => setNewStudent({ ...newStudent, last_name: v })} />
               </div>
 
               {/* School */}
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">โรงเรียน <span className="text-red-500">*</span></label>
-                <select value={newStudent.school_id} onChange={(e) => setNewStudent({ ...newStudent, school_id: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" required>
-                  <option value="">— เลือกโรงเรียน —</option>
-                  {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
+              <FormField label="โรงเรียน" required>
+                {ctl => (
+                  <select {...ctl} value={newStudent.school_id} onChange={(e) => setNewStudent({ ...newStudent, school_id: e.target.value })}
+                    className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition" required>
+                    <option value="">— เลือกโรงเรียน —</option>
+                    {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                )}
+              </FormField>
 
               {/* Grade + Classroom */}
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">ระดับชั้น</label>
-                  <input type="text" value={newStudent.grade}
-                    onChange={(e) => setNewStudent({ ...newStudent, grade: e.target.value })}
-                    placeholder="เช่น ป.1, ม.3"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                </div>
+                <FormField label="ระดับชั้น" value={newStudent.grade}
+                  onChange={v => setNewStudent({ ...newStudent, grade: v })} placeholder="เช่น ป.1, ม.3" />
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">ห้อง</label>
                   <input type="text" value={newStudent.classroom}

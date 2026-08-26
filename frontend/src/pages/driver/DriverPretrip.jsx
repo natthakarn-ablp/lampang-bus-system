@@ -1,8 +1,11 @@
+import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { FormField } from '../../components/ui';
 import PageHeader from '../../components/PageHeader';
+import LoadingState from '../../components/LoadingState';
+import EmptyState from '../../components/EmptyState';
 import { useToast } from '../../components/Toast';
 
 const CHECKLIST = [
@@ -20,17 +23,20 @@ export default function DriverPretrip() {
   const [items, setItems] = useState(() => CHECKLIST.map(c => ({ ...c, ok: true })));
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [alreadyDone, setAlreadyDone] = useState(false);
 
   // If today's pretrip is already done, redirect back
   useEffect(() => {
+    setLoading(true);
     api.get('/driver/pretrip-status')
       .then(r => {
         if (r.data?.data?.done) { setAlreadyDone(true); }
       })
-      .catch(() => {});
+      .catch(() => { /* the checklist still works if the status probe fails */ })
+      .finally(() => setLoading(false));
   }, []);
 
   const allPass = items.every(i => i.ok);
@@ -65,14 +71,18 @@ export default function DriverPretrip() {
   // Already done today — show brief confirmation then redirect
   if (alreadyDone && !done) {
     return (
-      <div className="p-5 max-w-lg mx-auto text-center py-20">
-        <p className="text-5xl mb-4">✅</p>
-        <h2 className="text-xl font-semibold text-gray-800 mb-2">ตรวจรถแล้ววันนี้</h2>
-        <p className="text-sm text-gray-500 mb-6">สามารถใช้งานระบบได้ทันที</p>
-        <button onClick={() => navigate('/driver')}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg px-8 py-4 rounded-2xl transition">
-          กลับหน้าหลัก
-        </button>
+      <div className="p-5 max-w-lg mx-auto py-16">
+        <EmptyState
+          icon={CheckCircle2}
+          variant="success"
+          title="ตรวจรถแล้ววันนี้"
+          description="สามารถใช้งานระบบได้ทันที"
+          action={
+            <button onClick={() => navigate('/driver')} className="focus-ring bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold text-lg px-8 min-h-[56px] rounded-2xl transition">
+              กลับหน้าหลัก
+            </button>
+          }
+        />
       </div>
     );
   }
@@ -80,23 +90,27 @@ export default function DriverPretrip() {
   // Done state — navigate back
   if (done) {
     return (
-      <div className="p-5 max-w-lg mx-auto text-center py-20">
-        <p className="text-5xl mb-4">{allPass ? '✅' : '⚠️'}</p>
-        <h2 className="text-xl font-semibold text-gray-800 mb-2">
-          {allPass ? 'ตรวจรถเรียบร้อย — ออกเดินทางได้' : 'บันทึกรายการผิดปกติแล้ว'}
-        </h2>
-        <p className="text-sm text-gray-500 mb-6">
-          {allPass
+      <div className="p-5 max-w-lg mx-auto py-16">
+        <EmptyState
+          icon={allPass ? CheckCircle2 : AlertTriangle}
+          variant={allPass ? 'success' : 'warn'}
+          title={allPass ? 'ตรวจรถเรียบร้อย — ออกเดินทางได้' : 'บันทึกรายการผิดปกติแล้ว'}
+          description={allPass
             ? 'ผลตรวจถูกบันทึกในระบบแล้ว'
             : 'ระบบได้แจ้งรายการผิดปกติแล้ว กรุณาดำเนินการแก้ไขก่อนออกเดินทาง'}
-        </p>
-        <button onClick={() => navigate('/driver')}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg px-8 py-4 rounded-2xl transition">
-          กลับหน้าหลัก
-        </button>
+          action={
+            <button onClick={() => navigate('/driver')} className="focus-ring bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold text-lg px-8 min-h-[56px] rounded-2xl transition">
+              กลับหน้าหลัก
+            </button>
+          }
+        />
       </div>
     );
   }
+
+  // The status probe decides whether this driver has already completed today's
+  // pre-trip, so the checklist must not flash before it answers.
+  if (loading) return <LoadingState />;
 
   // Default: Quick "all pass" mode
   if (!showDetail) {

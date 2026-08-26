@@ -1,3 +1,4 @@
+import { Building2 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
 import ErrorState from '../../components/ErrorState';
@@ -147,7 +148,7 @@ export default function StudentList() {
           {groupBySchool(pending).map(([school, sts]) => (
             <div key={school} className="mb-4">
               <p className="text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5 mb-2">
-                🏫 {school}
+                <Building2 className="w-4 h-4 shrink-0 inline align-[-2px] mr-1" strokeWidth={2} aria-hidden="true" />{school}
               </p>
               <div className="space-y-3">
                 {sts.map((st) => (

@@ -197,6 +197,7 @@ async function newPage(browser, user, viewport, scenario) {
   const ctx = await browser.newContext({ viewport, locale: 'th-TH', timezoneId: 'Asia/Bangkok' });
   const page = await ctx.newPage();
   const errors = [];
+  const renderLoops = [];
   await page.addInitScript(`
     localStorage.setItem('access_token',  ${JSON.stringify(FAKE_TOKEN)});
     localStorage.setItem('refresh_token', ${JSON.stringify(FAKE_TOKEN)});
@@ -204,6 +205,18 @@ async function newPage(browser, user, viewport, scenario) {
   `);
   page.on('console',   m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
   page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
+
+  // Render-loop guard. A component that writes state during render (rather
+  // than from an effect or a handler) makes React throw
+  // "Maximum update depth exceeded" / "Too many re-renders". Those surface as
+  // console errors, which every capture already asserts to be zero — this
+  // records them separately so a loop is named rather than buried in the count.
+  page.on('console', m => {
+    const t = m.text();
+    if (/Maximum update depth exceeded|Too many re-renders|Cannot update a component .* while rendering/i.test(t)) {
+      renderLoops.push(t.slice(0, 200));
+    }
+  });
 
   // Anchor at the origin root: a bare `**/api/**` also matches Vite's own
   // module URLs (e.g. /src/api/axios.js), which breaks the app boot.
@@ -218,7 +231,7 @@ async function newPage(browser, user, viewport, scenario) {
       body: JSON.stringify(m ? { success: true, message: 'OK', ...m } : { success: true, message: 'OK', data: {} }),
     });
   });
-  return { ctx, page, errors };
+  return { ctx, page, errors, renderLoops };
 }
 
 const MEASURE = `(() => {
@@ -284,6 +297,11 @@ const SHOTS = [
   { id: '33-teacher-accounts',  url: '/school/teacher-accounts', user: 'school', vps: ['mobile', 'desktop'] },
   { id: '34-reports-monthly',   url: '/reports/monthly',      user: 'admin',  vps: ['mobile', 'desktop'] },
   { id: '35-reports-summary',   url: '/reports/summary',      user: 'admin',  vps: ['desktop'] },
+  { id: '36-driver-pretrip',    url: '/driver/pretrip',       user: 'driver', vps: ['mobile'] },
+  { id: '37-driver-roster-req', url: '/driver/requests',      user: 'driver', vps: ['mobile'] },
+  { id: '38-driver-emergency',  url: '/driver/emergency',     user: 'driver', vps: ['mobile'] },
+  { id: '39-driver-profile',    url: '/driver/profile',       user: 'driver', vps: ['mobile'] },
+  { id: '40-change-password',   url: '/change-password',      user: 'school', vps: ['mobile', 'desktop'] },
 ];
 
 (async () => {
@@ -295,7 +313,7 @@ const SHOTS = [
     for (const vname of shot.vps) {
       const name = `${shot.id}-${vname}`;
       const user = shot.user ? USERS[shot.user] : { role: 'none' };
-      const { ctx, page, errors } = await newPage(browser, user, VIEWPORTS[vname], shot.scenario || 'normal');
+      const { ctx, page, errors, renderLoops } = await newPage(browser, user, VIEWPORTS[vname], shot.scenario || 'normal');
       let metrics = null, failed = null;
       try {
         await page.goto(BASE + shot.url, { waitUntil: 'networkidle', timeout: 25000 });
@@ -306,7 +324,7 @@ const SHOTS = [
       await ctx.close();
 
       const rec = { name, url: shot.url, role: shot.user || 'public',
-                    scenario: shot.scenario || 'normal', metrics, errors, failed };
+                    scenario: shot.scenario || 'normal', metrics, errors, renderLoops, failed };
       report.push(rec);
       const flag = failed ? '✗' : (metrics?.overflowPx > 0 ? '⚠ overflow' : '✓');
       console.log(`${flag} ${name}${failed ? '  ' + failed : ''}` +
@@ -332,10 +350,12 @@ const SHOTS = [
   const overflow = report.filter(r => r.metrics?.overflowPx > 0);
   const withErr  = report.filter(r => r.errors.length);
   const failed   = report.filter(r => r.failed);
+  const looping  = report.filter(r => r.renderLoops?.length);
   console.log(`\n── ${TAG} summary ──`);
   console.log(`  captures: ${report.length}`);
   console.log(`  horizontal overflow: ${overflow.length}${overflow.length ? ' → ' + overflow.map(r => r.name).join(', ') : ''}`);
   console.log(`  console errors:      ${withErr.length}${withErr.length ? ' → ' + withErr.map(r => r.name).join(', ') : ''}`);
   console.log(`  failed captures:     ${failed.length}${failed.length ? ' → ' + failed.map(r => r.name).join(', ') : ''}`);
+  console.log(`  render loops:        ${looping.length}${looping.length ? ' → ' + looping.map(r => r.name).join(', ') : ''}`);
   console.log(`  → ${OUT}`);
 })();

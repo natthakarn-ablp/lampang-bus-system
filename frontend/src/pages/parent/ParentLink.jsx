@@ -1,3 +1,4 @@
+import { Link2 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
 import { resolveLineUserId, getLiffIdToken, isInLiffClient } from '../../utils/liff';
@@ -162,13 +163,13 @@ export default function ParentLink() {
       <div className="min-h-screen bg-surface p-4 sm:p-6">
         <div className="max-w-lg mx-auto">
           <div className="mb-5">
-            <h1 className="text-xl font-bold text-blue-700">ตรวจสอบข้อมูล</h1>
+            <h1 className="text-xl font-bold text-ink">ตรวจสอบข้อมูล</h1>
             <p className="text-sm text-gray-500 mt-1">กรุณายืนยันก่อนผูกบัญชี</p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
             <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
               <div className="text-xs text-blue-700 font-semibold mb-1">นักเรียน</div>
-              <div className="text-lg font-bold text-gray-800">👦 {fullName || '-'}</div>
+              <div className="text-lg font-bold text-ink">{fullName || '-'}</div>
               {gradeRoom && <div className="text-sm text-gray-600 mt-1">ระดับชั้น: {gradeRoom}</div>}
               {s.school_name && <div className="text-sm text-gray-600">โรงเรียน: {s.school_name}</div>}
             </div>
@@ -210,7 +211,7 @@ export default function ParentLink() {
     <div className="min-h-screen bg-surface p-4 sm:p-6">
       <div className="max-w-lg mx-auto">
         <div className="mb-5">
-          <h1 className="text-xl font-bold text-blue-700">🔗 ผูกบัญชีผู้ปกครอง</h1>
+          <h1 className="text-xl font-bold text-ink inline-flex items-center gap-2"><Link2 className="w-5 h-5 text-brand-700" strokeWidth={2.2} aria-hidden="true" />ผูกบัญชีผู้ปกครอง</h1>
           <p className="text-sm text-gray-500 mt-1">เชื่อมต่อบัญชี LINE กับข้อมูลบุตรหลาน</p>
         </div>
 

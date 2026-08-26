@@ -197,7 +197,7 @@ export default function InspectionForm() {
         const pv = vehicles.find(v => v.id === prefillVehicleId);
         return pv ? (
           <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 mb-3 text-sm text-blue-700">
-            📝 กำลังบันทึกผลตรวจสำหรับรถ: <strong>{pv.plate_no}</strong>
+            กำลังบันทึกผลตรวจสำหรับรถ: <strong>{pv.plate_no}</strong>
           </div>
         ) : null;
       })()}

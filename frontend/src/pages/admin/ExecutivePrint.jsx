@@ -76,7 +76,7 @@ export default function ExecutivePrint() {
       <div className="print:hidden fixed top-4 right-4 z-50 flex gap-2">
         <button onClick={() => window.print()}
           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg transition">
-          🖨️ พิมพ์ / Save PDF
+          พิมพ์ / Save PDF
         </button>
         <button onClick={() => window.history.back()}
           className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium px-4 py-3 rounded-xl shadow transition">
@@ -92,9 +92,9 @@ export default function ExecutivePrint() {
           <h1 className="text-xl font-semibold text-blue-800">สรุปผลการประเมินระบบรถรับส่งนักเรียน</h1>
           <p className="text-sm text-gray-500">ระบบรถรับส่งนักเรียนจังหวัดลำปาง — สำหรับการประชุมผู้บริหาร</p>
           <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-xs text-gray-500">
-            <span>📌 Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
-            <span>📊 Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
-            <span>🗓️ จัดทำเมื่อ: {fmtNow()}</span>
+            <span>Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
+            <span>Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
+            <span>จัดทำเมื่อ: {fmtNow()}</span>
           </div>
         </div>
 
@@ -197,7 +197,7 @@ export default function ExecutivePrint() {
 
         {/* 8. Recommended actions */}
         <div className="border border-blue-300 bg-blue-50 rounded-lg p-3 mb-4">
-          <p className="font-semibold text-sm text-blue-800 mb-1">📋 ข้อเสนอเพื่อการสั่งการ</p>
+          <p className="font-semibold text-sm text-blue-800 mb-1">ข้อเสนอเพื่อการสั่งการ</p>
           <ul className="text-xs text-blue-700 space-y-0.5">
             {(6 - readyCount - partialCount) > 0 && <li>• เพิ่มการเก็บ evidence สำหรับ {6 - readyCount - partialCount} สิทธิ์ที่ยังมีข้อมูลไม่เพียงพอ</li>}
             {lowCoverage.length > 0 && <li>• เร่งเพิ่ม coverage ใน: {lowCoverage.map(m => m.label).join(', ')}</li>}

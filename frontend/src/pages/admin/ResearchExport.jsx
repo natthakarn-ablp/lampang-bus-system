@@ -131,15 +131,15 @@ export default function ResearchExport() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
           <button onClick={() => handleExport('json')} disabled={exporting !== null}
             className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
-            {exporting === 'json' ? 'กำลังสร้าง…' : '📦 JSON'}
+            {exporting === 'json' ? 'กำลังสร้าง…' : 'JSON'}
           </button>
           <button onClick={() => handleExport('csv')} disabled={exporting !== null}
             className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
-            {exporting === 'csv' ? 'กำลังสร้าง…' : '📄 CSV'}
+            {exporting === 'csv' ? 'กำลังสร้าง…' : 'CSV'}
           </button>
           <button onClick={() => handleExport('excel')} disabled={exporting !== null}
             className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
-            {exporting === 'excel' ? 'กำลังสร้าง…' : '📊 Excel'}
+            {exporting === 'excel' ? 'กำลังสร้าง…' : 'Excel'}
           </button>
         </div>
         <p className="text-xs text-gray-500 text-center">ไฟล์จะถูกบันทึกลงโฟลเดอร์ดาวน์โหลดของเบราว์เซอร์โดยอัตโนมัติ</p>
@@ -152,7 +152,7 @@ export default function ResearchExport() {
 
       {/* Data dictionary */}
       <details className="bg-gray-50 rounded-xl border border-gray-200">
-        <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-600">📖 คำอธิบายชุดข้อมูล (Data Dictionary)</summary>
+        <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-600">คำอธิบายชุดข้อมูล (Data Dictionary)</summary>
         <div className="border-t border-gray-200 px-4 py-3 text-xs text-gray-600 space-y-3">
           <div>
             <p className="font-semibold text-gray-700">snapshots[]</p>

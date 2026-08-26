@@ -97,9 +97,9 @@ export default function ExecutiveSummary() {
           </button>
         </div>
         <div className="flex flex-wrap gap-4 mt-3 text-xs text-blue-200">
-          <span>📌 Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
-          <span>📊 Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
-          <span>📝 Actions ทั้งหมด: {totalActions}</span>
+          <span>Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
+          <span>Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
+          <span>Actions ทั้งหมด: {totalActions}</span>
         </div>
       </div>
 
@@ -173,7 +173,7 @@ export default function ExecutiveSummary() {
 
       {/* Recommended actions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
-        <h2 className="text-sm font-semibold text-blue-800 mb-2">📋 สิ่งที่ควรดำเนินการต่อ</h2>
+        <h2 className="text-sm font-semibold text-blue-800 mb-2">สิ่งที่ควรดำเนินการต่อ</h2>
         <ul className="space-y-1.5 text-sm text-blue-700">
           {missingCount > 0 && (
             <li>• เพิ่มการเก็บ evidence สำหรับ <strong>{missingCount} role</strong> ที่ยังมีข้อมูลไม่เพียงพอ</li>

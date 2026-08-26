@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Satellite, MapPin, MapPinOff} from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
@@ -133,7 +133,7 @@ export default function EmergencyPage() {
       case 'requesting':
         return {
           tone: 'border-info bg-info-soft text-info',
-          icon: '📡',
+          icon: Satellite,
           title: 'กำลังขอตำแหน่ง GPS…',
           body: 'กรุณาอนุญาตการเข้าถึงตำแหน่งเมื่อเบราว์เซอร์ถาม',
           pulse: true,
@@ -142,7 +142,7 @@ export default function EmergencyPage() {
       case 'granted':
         return {
           tone: 'border-success bg-success-soft text-success',
-          icon: '📍',
+          icon: MapPin,
           title: 'ระบุตำแหน่งได้แล้ว',
           body: `ความแม่นยำ ±${Math.round(position?.accuracy ?? 0)} เมตร`,
           pulse: false,
@@ -151,7 +151,7 @@ export default function EmergencyPage() {
       case 'denied':
         return {
           tone: 'border-warn bg-warn-soft text-warn',
-          icon: '⚠️',
+          icon: MapPinOff,
           title: 'ปฏิเสธการเข้าถึงตำแหน่ง',
           body: 'เปิดสิทธิ์ตำแหน่งใน Safari → Settings → Privacy แล้วกดลองอีกครั้ง',
           pulse: false,
@@ -160,7 +160,7 @@ export default function EmergencyPage() {
       case 'timeout':
         return {
           tone: 'border-warn bg-warn-soft text-warn',
-          icon: '⚠️',
+          icon: MapPinOff,
           title: 'ระบุตำแหน่งไม่สำเร็จ',
           body: 'ลองออกไปนอกอาคารแล้วกดลองอีกครั้ง หรือส่งโดยไม่มี GPS ก็ได้',
           pulse: false,
@@ -170,7 +170,7 @@ export default function EmergencyPage() {
       default:
         return {
           tone: 'border-warn bg-warn-soft text-warn',
-          icon: '⚠️',
+          icon: MapPinOff,
           title: 'อุปกรณ์ไม่รองรับ GPS',
           body: 'จะส่งโดยไม่มีตำแหน่ง',
           pulse: false,
@@ -216,7 +216,7 @@ export default function EmergencyPage() {
           data-testid="gps-status-card"
           className={`rounded-xl border px-4 py-3.5 flex items-start gap-3 ${gpsCard.tone} ${gpsCard.pulse ? 'animate-pulse' : ''}`}
         >
-          <span className="text-2xl leading-none mt-0.5" aria-hidden>{gpsCard.icon}</span>
+          {gpsCard.icon && <gpsCard.icon className="w-6 h-6 shrink-0 mt-0.5" strokeWidth={2} aria-hidden="true" />}
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm leading-tight">{gpsCard.title}</div>
             <div className="text-xs mt-1 opacity-90 leading-snug">{gpsCard.body}</div>

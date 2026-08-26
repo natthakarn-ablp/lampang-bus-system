@@ -121,9 +121,18 @@ export default function DataTable({
 
   return (
     <div className={className}>
-      {/* Desktop — the horizontal scroll lives here, never on <body> */}
+      {/* Desktop — the horizontal scroll lives here, never on <body>.
+          A scrollable region has to be reachable and operable by keyboard
+          (WCAG 2.1.1), and it needs a name so a screen reader can say what is
+          being scrolled — hence role/aria-label/tabIndex on the container
+          rather than a bare overflow div. */}
       <AppCard padding="none" className="hidden md:block overflow-hidden">
-        <div className="overflow-x-auto">
+        <div
+          className="focus-ring overflow-x-auto"
+          role="region"
+          aria-label={caption || 'ตารางข้อมูล'}
+          tabIndex={0}
+        >
           <table className="w-full text-sm">
             {caption && <caption className="sr-only">{caption}</caption>}
             <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">

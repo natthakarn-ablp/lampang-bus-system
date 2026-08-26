@@ -1,3 +1,4 @@
+import { Building2, Bus } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
@@ -123,7 +124,7 @@ export default function ProvDailyStatus() {
                           <button onClick={() => toggleSchool(sKey)}
                             className="w-full flex items-center justify-between px-7 py-3 text-left hover:bg-gray-50 transition">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm">🏫</span>
+                              <Building2 className="w-4 h-4 text-ink-muted shrink-0" strokeWidth={2} aria-hidden="true" />
                               <span className="text-sm font-medium text-gray-700">{school.school_name}</span>
                               <span className="text-xs text-gray-400">({sStudents.length} คน)</span>
                             </div>
@@ -150,7 +151,7 @@ export default function ProvDailyStatus() {
                                     <button onClick={() => toggleVehicle(vKey)}
                                       className="w-full flex items-center justify-between px-7 py-2.5 text-left hover:bg-gray-50 transition">
                                       <div className="flex items-center gap-2">
-                                        <span className="text-xs">🚐</span>
+                                        <Bus className="w-4 h-4 text-ink-muted shrink-0" strokeWidth={2} aria-hidden="true" />
                                         <span className="text-sm text-gray-600">{vehicle.plate_no}</span>
                                         <span className="text-xs text-gray-400">({vehicle.students.length})</span>
                                       </div>

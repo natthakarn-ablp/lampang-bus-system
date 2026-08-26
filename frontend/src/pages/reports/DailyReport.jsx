@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FileBarChart } from 'lucide-react';
+import { FileBarChart, Bus, GraduationCap, Sunrise, Sunset} from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
 import ExportButtons from '../../components/ExportButtons';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
-import { StatusBadge, DataTable, FormField} from '../../components/ui';
+import { StatusBadge, DataTable, FormField, AlertBanner} from '../../components/ui';
 
 export default function DailyReport() {
   const { user } = useAuth();
@@ -71,27 +71,28 @@ export default function DailyReport() {
         <>
           {/* ── KPI 4 CARDS ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            <KpiBox icon="🚌" label="รถรับส่ง" value={data.total_vehicles} sub="คัน" color="blue" />
-            <KpiBox icon="👨‍🎓" label="นักเรียน" value={data.total_students} sub="คน" color="blue" />
-            <KpiBox icon="🌅" label="ส่งเช้าสำเร็จ" value={`${mPct}%`}
+            <KpiBox icon={Bus} label="รถรับส่ง" value={data.total_vehicles} sub="คัน" tone="brand" />
+            <KpiBox icon={GraduationCap} label="นักเรียน" value={data.total_students} sub="คน" tone="brand" />
+            <KpiBox icon={Sunrise} label="ส่งเช้าสำเร็จ" value={`${mPct}%`}
               sub={`${data.morning_done}/${data.morning_total} คน`}
-              color={mPct === 100 ? 'green' : mPct >= 80 ? 'yellow' : 'red'} />
-            <KpiBox icon="🌆" label="รับเย็นสำเร็จ" value={`${ePct}%`}
+              tone={mPct === 100 ? 'success' : mPct >= 80 ? 'warn' : 'danger'} />
+            <KpiBox icon={Sunset} label="รับเย็นสำเร็จ" value={`${ePct}%`}
               sub={`${data.evening_done}/${data.evening_total} คน`}
-              color={ePct === 100 ? 'green' : ePct >= 80 ? 'yellow' : 'red'} />
+              tone={ePct === 100 ? 'success' : ePct >= 80 ? 'warn' : 'danger'} />
           </div>
 
           {/* ── ALERT: จุดที่ต้องติดตาม ── */}
           {(() => {
             const alerts = [];
-            if (data.morning_pending > 0) alerts.push(`🌅 รอส่งเช้า ${data.morning_pending} คน`);
-            if (data.evening_pending > 0) alerts.push(`🌆 รอรับเย็น ${data.evening_pending} คน`);
-            if (data.emergency_count > 0) alerts.push(`🚨 เหตุฉุกเฉิน ${data.emergency_count} รายการ`);
+            if (data.morning_pending > 0) alerts.push(`รอส่งเช้า ${data.morning_pending} คน`);
+            if (data.evening_pending > 0) alerts.push(`รอรับเย็น ${data.evening_pending} คน`);
+            if (data.emergency_count > 0) alerts.push(`เหตุฉุกเฉิน ${data.emergency_count} รายการ`);
             return alerts.length > 0 ? (
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 mb-5">
-                <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ จุดที่ต้องติดตาม</p>
-                {alerts.map((a, i) => <p key={i} className="text-sm text-amber-700">{a}</p>)}
-              </div>
+              <AlertBanner variant="warn" title="จุดที่ต้องติดตาม" className="mb-5">
+                <ul className="space-y-0.5 mt-1">
+                  {alerts.map((a, i) => <li key={i}>{a}</li>)}
+                </ul>
+              </AlertBanner>
             ) : (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-5 text-center">
                 <p className="text-sm font-semibold text-green-700">✅ ดำเนินการครบทุกรายการ</p>
@@ -202,15 +203,29 @@ function DecisionLogModal({ onSubmit, onSkip, onCancel }) {
   );
 }
 
-function KpiBox({ icon, label, value, sub, color }) {
-  const bg = { blue: 'bg-blue-50 border-blue-200', green: 'bg-green-50 border-green-200', red: 'bg-red-50 border-red-200', yellow: 'bg-amber-50 border-amber-200' };
-  const text = { blue: 'text-blue-700', green: 'text-green-700', red: 'text-red-700', yellow: 'text-amber-700' };
+/**
+ * The four report KPI tiles used an emoji as the icon (🚌 👨‍🎓 🌅 🌆) and a
+ * hardcoded blue/green/red/amber palette. The emoji announced nothing useful
+ * and did not print reliably; the tones now come from the semantic tokens and
+ * the icons from Lucide, marked aria-hidden since the label says what the tile
+ * is.
+ */
+function KpiBox({ icon: Icon, label, value, sub, tone = 'brand' }) {
+  const TONES = {
+    brand:   'bg-brand-50     border-brand-200  text-brand-700',
+    success: 'bg-success-soft border-success/30 text-success-ink',
+    warn:    'bg-warn-soft    border-warn/30    text-warn-ink',
+    danger:  'bg-danger-soft  border-danger/30  text-danger-ink',
+  };
+  const cls = TONES[tone] || TONES.brand;
   return (
-    <div className={`rounded-xl border-2 p-3 text-center ${bg[color] || bg.blue}`}>
-      <p className="text-xl mb-0.5">{icon}</p>
-      <p className={`text-2xl font-bold ${text[color] || text.blue}`}>{value}</p>
-      <p className="text-xs text-gray-600">{label}</p>
-      {sub && <p className="text-xs text-gray-400">{sub}</p>}
+    <div className={`rounded-xl border p-3 text-center ${cls.replace(/text-[\w-]+$/, '')}`}>
+      {Icon && (
+        <Icon className={`w-5 h-5 mx-auto mb-1 ${cls.split(' ').pop()}`} strokeWidth={2} aria-hidden="true" />
+      )}
+      <p className={`text-2xl font-bold tabular-nums ${cls.split(' ').pop()}`}>{value}</p>
+      <p className="text-caption text-ink-muted">{label}</p>
+      {sub && <p className="text-caption text-ink-muted tabular-nums">{sub}</p>}
     </div>
   );
 }

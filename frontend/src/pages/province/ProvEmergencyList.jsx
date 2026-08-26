@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, ShieldAlert} from 'lucide-react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
@@ -55,7 +55,8 @@ export default function ProvEmergencyList() {
               <div key={em.id} className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-red-500 font-medium text-sm">🚨</span>
+                    <ShieldAlert className="w-4 h-4 text-danger-ink shrink-0" strokeWidth={2.2} aria-hidden="true" />
+                    <span className="sr-only">เหตุฉุกเฉิน</span>
                     <span className="font-semibold text-gray-800">{em.plate_no}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       em.channel === 'line' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'

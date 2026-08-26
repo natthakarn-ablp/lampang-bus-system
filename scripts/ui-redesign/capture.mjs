@@ -112,6 +112,14 @@ const STUDENT_ROWS = [
   { id: 90003, prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ตัวอย่าง ค', grade: 'อ.2', classroom: null, school_name: 'โรงเรียนตัวอย่าง ค', affiliation_name: 'สังกัดตัวอย่าง เขต 1', plate_no: null, morning_enabled: false, evening_enabled: false },
 ];
 
+const AUDIT_ROWS = [
+  { id: 1, created_at: '2026-08-26T02:30:00Z', actor_name: 'admin01',    action: 'UPDATE',  entity_type: 'vehicle', entity_id: 'V-002',   old_value: { plate_no: 'กข-2210 ลำปาง' }, new_value: { plate_no: 'กข-2211 ลำปาง' } },
+  { id: 2, created_at: '2026-08-26T01:15:00Z', actor_name: 'school0001', action: 'IMPORT',  entity_type: 'student', entity_id: null,      new_value: { success: 28, errors: 2 } },
+  { id: 3, created_at: '2026-08-25T09:42:00Z', actor_name: 'admin01',    action: 'DELETE',  entity_type: 'student', entity_id: 'STU-099', old_value: { first_name: 'นักเรียน', last_name: 'ตัวอย่าง' } },
+  { id: 4, created_at: '2026-08-25T08:05:00Z', actor_name: 'province01', action: 'EXPORT',  entity_type: 'checkin', entity_id: null,      new_value: { format: 'csv', rows: 1240 } },
+  { id: 5, created_at: '2026-08-25T07:50:00Z', actor_name: 'driver042',  action: 'LOGIN',   entity_type: 'user',    entity_id: null,      new_value: {} },
+];
+
 const SCENARIOS = {
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
@@ -124,7 +132,7 @@ const SCENARIOS = {
       { id: 103, username: 'user-c', display_name: 'ผู้ใช้ตัวอย่าง ค', is_active: false, must_change_password: false },
     ] } },
     '/api/admin/roster-requests-pending': { data: { total: 0, rows: [] } },
-    '/api/admin/audit-logs': { data: [], meta: { total: 0 } },
+    '/api/admin/audit-logs': { data: AUDIT_ROWS, meta: { page: 1, per_page: 30, total: 1284 } },
     '/api/province/schools':      { data: SCHOOL_ROWS, meta: { page: 1, per_page: 50, total: 317 } },
     '/api/province/affiliations': { data: AFFILIATION_ROWS },
     '/api/province/vehicles':     { data: VEHICLE_ROWS },

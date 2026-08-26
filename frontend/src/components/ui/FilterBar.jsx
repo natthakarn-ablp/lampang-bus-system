@@ -84,15 +84,33 @@ export default function FilterBar({
 
         {filters.map(f => (
           <div key={f.key} className="sm:w-48">
-            <label htmlFor={`filterbar-${f.key}`} className="sr-only">{f.label}</label>
-            <select
-              id={`filterbar-${f.key}`}
-              value={f.value}
-              onChange={e => f.onChange(e.target.value)}
-              className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base sm:text-sm text-ink transition"
+            {/* Date filters keep a visible label — "ตั้งแต่" and "ถึง" are not
+                self-evident from an empty date box the way a select's current
+                option is. */}
+            <label
+              htmlFor={`filterbar-${f.key}`}
+              className={f.type === 'date' ? 'block text-caption text-ink-muted mb-1' : 'sr-only'}
             >
-              {f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+              {f.label}
+            </label>
+            {f.type === 'date' ? (
+              <input
+                id={`filterbar-${f.key}`}
+                type="date"
+                value={f.value}
+                onChange={e => f.onChange(e.target.value)}
+                className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base sm:text-sm text-ink transition"
+              />
+            ) : (
+              <select
+                id={`filterbar-${f.key}`}
+                value={f.value}
+                onChange={e => f.onChange(e.target.value)}
+                className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base sm:text-sm text-ink transition"
+              >
+                {f.options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            )}
           </div>
         ))}
 

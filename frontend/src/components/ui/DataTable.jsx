@@ -60,6 +60,28 @@ export function TableAction({ tone = 'neutral', onClick, disabled, className = '
   );
 }
 
+/**
+ * `selection` turns on a leading checkbox column and the matching control on
+ * each mobile card:
+ *   { selected:Set, onToggle(row), onToggleAll(), isSelectable(row),
+ *     allSelected:boolean, selectAllLabel, rowLabel(row), disabledHint }
+ */
+function SelectBox({ checked, disabled, onChange, label, title, inputRef }) {
+  return (
+    <input
+      ref={inputRef}
+      type="checkbox"
+      aria-label={label}
+      title={title}
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      onClick={e => e.stopPropagation()}
+      className="focus-ring w-5 h-5 rounded border-surface-border text-brand-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+    />
+  );
+}
+
 export default function DataTable({
   columns = [],
   rows = [],
@@ -72,6 +94,7 @@ export default function DataTable({
   empty = {},
   caption,
   rowClassName,
+  selection,
   className = '',
 }) {
   if (loading) return <LoadingState />;
@@ -105,6 +128,17 @@ export default function DataTable({
             {caption && <caption className="sr-only">{caption}</caption>}
             <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
               <tr>
+                {selection && (
+                  <th scope="col" className="px-3 py-3 w-10">
+                    <SelectBox
+                      inputRef={selection.headerRef}
+                      checked={Boolean(selection.allSelected)}
+                      disabled={Boolean(selection.selectAllDisabled)}
+                      onChange={selection.onToggleAll}
+                      label={selection.selectAllLabel || 'เลือกทั้งหมดในหน้านี้'}
+                    />
+                  </th>
+                )}
                 {columns.map(c => (
                   <th key={c.key} scope="col" className={`px-4 py-3 ${cellAlign(c)}`}>{c.header}</th>
                 ))}
@@ -114,6 +148,17 @@ export default function DataTable({
             <tbody className="divide-y divide-surface-border">
               {rows.map((row, i) => (
                 <tr key={rowKey(row, i)} className={`hover:bg-surface transition ${rowClassName ? rowClassName(row) : ''}`}>
+                  {selection && (
+                    <td className="px-3 py-3">
+                      <SelectBox
+                        checked={selection.selected?.has(rowKey(row, i))}
+                        disabled={selection.isSelectable ? !selection.isSelectable(row) : false}
+                        title={selection.isSelectable && !selection.isSelectable(row) ? selection.disabledHint : undefined}
+                        onChange={() => selection.onToggle(row)}
+                        label={selection.rowLabel ? selection.rowLabel(row) : 'เลือกรายการนี้'}
+                      />
+                    </td>
+                  )}
                   {columns.map(c => (
                     <td key={c.key} className={`px-4 py-3 text-ink ${cellAlign(c)}`}>{c.cell(row)}</td>
                   ))}
@@ -135,6 +180,17 @@ export default function DataTable({
           <li key={rowKey(row, i)}>
             <AppCard padding="md">
               <div className="flex items-start justify-between gap-2">
+                {selection && (
+                  <div className="pt-0.5 shrink-0">
+                    <SelectBox
+                      checked={selection.selected?.has(rowKey(row, i))}
+                      disabled={selection.isSelectable ? !selection.isSelectable(row) : false}
+                      title={selection.isSelectable && !selection.isSelectable(row) ? selection.disabledHint : undefined}
+                      onChange={() => selection.onToggle(row)}
+                      label={selection.rowLabel ? selection.rowLabel(row) : 'เลือกรายการนี้'}
+                    />
+                  </div>
+                )}
                 <div className="min-w-0">
                   {primary && <p className="font-semibold text-ink truncate">{primary.cell(row)}</p>}
                   {secondary && <p className="text-sm text-ink-muted truncate">{secondary.cell(row)}</p>}

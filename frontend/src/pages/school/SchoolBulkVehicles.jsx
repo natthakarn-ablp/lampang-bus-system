@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
 import { AppCard } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
@@ -205,8 +206,10 @@ export default function SchoolBulkVehicles() {
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-1">เพิ่มรถรับส่ง</h1>
-      <p className="text-sm text-gray-500 mb-4">เพิ่มได้สูงสุด 10 คันต่อครั้ง · เฉพาะโรงเรียนของตนเอง</p>
+      <PageHeader
+        title="เพิ่มรถรับส่ง"
+        subtitle="เพิ่มได้สูงสุด 10 คันต่อครั้ง · เฉพาะโรงเรียนของตนเอง"
+      />
 
       {/* Search existing vehicle */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">

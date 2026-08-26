@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, KeyRound, Trash2, ShieldAlert, Users } from 'lucide-react';
 import api from '../../api/axios';
-import { AppCard, AlertBanner, StatusBadge } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
+import { AppCard, AlertBanner, StatusBadge, DataTable, TableAction, FormField, Modal as UiModal, ConfirmDialog} from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import { useToast } from '../../components/Toast';
@@ -224,25 +225,20 @@ export default function SchoolTeacherAccounts() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
-      <header className="flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-            <Users className="w-6 h-6 text-brand shrink-0" strokeWidth={2} />
-            บัญชีครูประจำสายชั้น
-          </h1>
-          <p className="text-sm text-ink-muted mt-1">
-            สร้างและจัดการบัญชีครูที่ใช้ตรวจสอบข้อมูลเฉพาะระดับชั้นของโรงเรียน
-          </p>
-        </div>
-        <button
+      <PageHeader
+        title="บัญชีครูประจำสายชั้น"
+        subtitle="สร้างและจัดการบัญชีครูที่ใช้ตรวจสอบข้อมูลเฉพาะระดับชั้นของโรงเรียน"
+        actions={
+          <button
           type="button"
           onClick={openCreate}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-3 py-2.5 sm:py-2 rounded-lg transition min-h-[40px]"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-4 rounded-lg transition min-h-[44px] focus-ring"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} />
           เพิ่มบัญชีครู
         </button>
-      </header>
+        }
+      />
 
       {error && <ErrorState message={error} />}
 
@@ -279,88 +275,49 @@ export default function SchoolTeacherAccounts() {
           กดปุ่ม "+ เพิ่มบัญชีครู" ด้านบนเพื่อสร้างบัญชีแรก
         </AlertBanner>
       ) : (
-        <AppCard padding="none" className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                <tr className="text-left">
-                  <th className="px-3 py-3 w-10">
-                    <input
-                      ref={headerCheckboxRef}
-                      type="checkbox"
-                      aria-label={isAllVisibleSelected ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมดในหน้านี้'}
-                      checked={isAllVisibleSelected}
-                      disabled={deletableVisibleIds.length === 0}
-                      onChange={toggleSelectAllVisible}
-                      className="w-4 h-4 rounded border-surface-border text-brand focus:ring-brand cursor-pointer disabled:cursor-not-allowed"
-                    />
-                  </th>
-                  <th className="px-4 py-3">ชื่อผู้ใช้</th>
-                  <th className="px-4 py-3">ชื่อแสดง</th>
-                  <th className="px-4 py-3">ระดับชั้น</th>
-                  <th className="px-4 py-3 text-center">สถานะ</th>
-                  <th className="px-4 py-3">เข้าใช้ล่าสุด</th>
-                  <th className="px-4 py-3">วันที่สร้าง</th>
-                  <th className="px-4 py-3 text-center">การจัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-border">
-                {accounts.map(a => {
-                  const deletable = isDeletable(a);
-                  const checked = selectedIds.has(a.id);
-                  return (
-                    <tr
-                      key={a.id}
-                      className={`transition ${checked ? 'bg-brand/5' : 'hover:bg-surface'}`}
-                    >
-                      <td className="px-3 py-3">
-                        <input
-                          type="checkbox"
-                          aria-label={`เลือกบัญชี ${a.username}`}
-                          checked={checked}
-                          disabled={!deletable}
-                          title={deletable ? undefined : 'ไม่สามารถลบบัญชีตัวเองได้'}
-                          onChange={() => toggleSelect(a.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-4 h-4 rounded border-surface-border text-brand focus:ring-brand cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                        />
-                      </td>
-                      <td className="px-4 py-3 font-medium text-ink">{a.username}</td>
-                      <td className="px-4 py-3 text-ink-muted">{a.display_name || '-'}</td>
-                      <td className="px-4 py-3 text-ink">{a.grade_scope}</td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <StatusBadge variant={a.is_active ? 'success' : 'neutral'} size="sm">
-                            {a.is_active ? 'ใช้งาน' : 'ปิด'}
-                          </StatusBadge>
-                          {a.must_change_password ? (
-                            <StatusBadge variant="warn" size="sm">ต้องเปลี่ยนรหัส</StatusBadge>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-ink-muted tabular-nums">{formatDateTime(a.last_login)}</td>
-                      <td className="px-4 py-3 text-xs text-ink-muted tabular-nums">{formatDateTime(a.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center gap-1 flex-wrap">
-                          <button onClick={() => openReset(a)}
-                            className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1.5 rounded whitespace-nowrap">
-                            <KeyRound className="w-3.5 h-3.5" strokeWidth={2} />
-                            รีเซ็ตรหัส
-                          </button>
-                          <button onClick={() => openDelete(a)}
-                            className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1.5 rounded whitespace-nowrap">
-                            <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
-                            ลบ
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </AppCard>
+        <DataTable
+          caption="รายการบัญชีครูประจำสายชั้น"
+          rows={accounts}
+          rowKey={a => a.id}
+          rowClassName={a => (selectedIds.has(a.id) ? 'bg-brand-50' : '')}
+          selection={{
+            selected: selectedIds,
+            headerRef: headerCheckboxRef,
+            allSelected: isAllVisibleSelected,
+            selectAllDisabled: deletableVisibleIds.length === 0,
+            selectAllLabel: isAllVisibleSelected ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมดในหน้านี้',
+            onToggleAll: toggleSelectAllVisible,
+            onToggle: a => toggleSelect(a.id),
+            isSelectable: a => isDeletable(a),
+            rowLabel: a => `เลือกบัญชี ${a.username}`,
+            disabledHint: 'ไม่สามารถลบบัญชีตัวเองได้',
+          }}
+          columns={[
+            { key: 'username', header: 'ชื่อผู้ใช้', primary: true,
+              cell: a => <span className="font-medium text-ink">{a.username}</span> },
+            { key: 'display', header: 'ชื่อแสดง', secondary: true, cell: a => a.display_name || '-' },
+            { key: 'grade', header: 'ระดับชั้น', cell: a => a.grade_scope },
+            { key: 'status', header: 'สถานะ', align: 'center', badge: true,
+              cell: a => (
+                <div className="flex flex-col items-center gap-0.5">
+                  <StatusBadge variant={a.is_active ? 'success' : 'neutral'}>
+                    {a.is_active ? 'ใช้งาน' : 'ปิด'}
+                  </StatusBadge>
+                  {a.must_change_password ? <StatusBadge variant="warn">ต้องเปลี่ยนรหัส</StatusBadge> : null}
+                </div>
+              ) },
+            { key: 'last_login', header: 'เข้าใช้ล่าสุด', cell: a => <span className="text-ink-muted tabular-nums">{formatDateTime(a.last_login)}</span> },
+            { key: 'created', header: 'วันที่สร้าง', cell: a => <span className="text-ink-muted tabular-nums">{formatDateTime(a.created_at)}</span> },
+          ]}
+          actions={a => (
+            <>
+              <TableAction tone="brand" onClick={() => openEdit(a)}>แก้ไข</TableAction>
+              <TableAction tone="neutral" onClick={() => openReset(a)}>รีเซ็ตรหัส</TableAction>
+              <TableAction tone="danger" disabled={!isDeletable(a)} onClick={() => openDelete(a)}>ลบ</TableAction>
+            </>
+          )}
+          empty={{ icon: Users, title: 'ยังไม่มีบัญชีครูประจำสายชั้น' }}
+        />
       )}
 
       {modal === 'create' && (
@@ -371,8 +328,8 @@ export default function SchoolTeacherAccounts() {
             <TextField label="ชื่อแสดง (ไม่บังคับ)" value={form.display_name}
               onChange={v => setForm({...form, display_name: v})} />
             <div>
-              <label className="block text-xs font-medium text-ink-muted mb-1">ระดับชั้น *</label>
-              <select value={form.grade_scope || ''}
+              <label className="sr-only">ระดับชั้น</label>
+              <select aria-label="ระดับชั้น (จำเป็น)" value={form.grade_scope || ''}
                 onChange={e => setForm({...form, grade_scope: e.target.value})}
                 className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm bg-surface">
                 <option value="">— เลือกระดับชั้น —</option>
@@ -428,27 +385,16 @@ export default function SchoolTeacherAccounts() {
         </Modal>
       )}
 
-      {modal === 'delete' && selected && (
-        <Modal title="ยืนยันการลบบัญชี"
-          onClose={() => { setModal(null); setSelected(null); }}>
-          <p className="text-sm mb-3">
-            ต้องการลบบัญชี <strong>{selected.username}</strong> (ระดับชั้น {selected.grade_scope}) ใช่หรือไม่?
-          </p>
-          <p className="text-xs text-ink-muted mb-3">
-            การลบเป็นแบบ soft-delete — บัญชีจะใช้งานไม่ได้ทันที แต่ประวัติการดำเนินการยังถูกเก็บไว้
-          </p>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
-            <button type="button" onClick={() => { setModal(null); setSelected(null); }}
-              className="px-4 py-2.5 sm:py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border min-h-[40px]">
-              ยกเลิก
-            </button>
-            <button type="button" onClick={handleDelete} disabled={saving}
-              className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60 min-h-[40px]">
-              {saving ? 'กำลังลบ…' : 'ลบบัญชี'}
-            </button>
-          </div>
-        </Modal>
-      )}
+      <ConfirmDialog
+        open={modal === 'delete' && Boolean(selected)}
+        title="ลบบัญชีครูประจำสายชั้น?"
+        itemName={selected ? `${selected.username} · ระดับชั้น ${selected.grade_scope}` : ''}
+        description="เป็นการลบแบบ soft-delete — บัญชีจะใช้งานไม่ได้ทันที แต่ประวัติการดำเนินการยังถูกเก็บไว้"
+        confirmLabel="ลบบัญชี"
+        loading={saving}
+        onConfirm={handleDelete}
+        onCancel={() => { setModal(null); setSelected(null); }}
+      />
 
       {modal === 'bulkDelete' && (
         <BulkDeleteConfirmModal
@@ -568,32 +514,13 @@ function BulkDeleteConfirmModal({ items, totalSelected, onClose, onDone, toast }
 
 /* ── small UI primitives (local) ─────────────────────────────────────── */
 
+// Delegates to the shared Modal so this page gets dialog semantics, Escape, a
+// focus trap and scroll lock. The local name stays so the call sites are
+// unchanged.
 function Modal({ title, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-[9999] isolate flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="relative z-[10000] bg-surface w-full max-w-md rounded-2xl shadow-elevate max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}>
-        <header className="flex items-center justify-between p-4 border-b border-surface-border sticky top-0 bg-surface">
-          <h2 className="font-semibold text-ink">{title}</h2>
-          <button type="button" onClick={onClose} className="p-1 rounded-full hover:bg-surface-border text-ink-muted">×</button>
-        </header>
-        <div className="p-4">{children}</div>
-      </div>
-    </div>
-  );
+  return <UiModal title={title} onClose={onClose}>{children}</UiModal>;
 }
 
 function TextField({ label, value, onChange, type = 'text', hint }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-ink-muted mb-1">{label}</label>
-      <input
-        type={type}
-        value={value || ''}
-        onChange={e => onChange(e.target.value)}
-        className="w-full border border-surface-border rounded-lg px-3 py-2 text-sm bg-surface text-ink"
-      />
-      {hint && <p className="text-[11px] text-ink-muted mt-1">{hint}</p>}
-    </div>
-  );
+  return <FormField label={label} value={value} onChange={onChange} type={type} helper={hint} />;
 }

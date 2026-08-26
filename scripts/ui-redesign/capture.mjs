@@ -19,7 +19,7 @@
  *   node scripts/ui-redesign/capture.mjs --tag after
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -218,7 +218,19 @@ const SHOTS = [
   }
 
   await browser.close();
-  writeFileSync(`${OUT}/report.json`, JSON.stringify(report, null, 2));
+
+  // A --only run must not clobber the rest of the report, or the before/after
+  // comparison silently narrows to whatever was captured last.
+  let merged = report;
+  if (ONLY) {
+    try {
+      const prev = JSON.parse(readFileSync(`${OUT}/report.json`, 'utf8'));
+      const fresh = new Set(report.map(r => r.name));
+      merged = [...prev.filter(r => !fresh.has(r.name)), ...report]
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch { /* no previous report — write just this run */ }
+  }
+  writeFileSync(`${OUT}/report.json`, JSON.stringify(merged, null, 2));
 
   const overflow = report.filter(r => r.metrics?.overflowPx > 0);
   const withErr  = report.filter(r => r.errors.length);

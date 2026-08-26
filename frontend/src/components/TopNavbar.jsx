@@ -98,7 +98,7 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
         {onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
-            className="focus-ring hidden md:inline-flex items-center justify-center w-10 h-10 -ml-1 rounded-lg text-ink-muted hover:bg-surface hover:text-ink active:bg-surface-border transition"
+            className="focus-ring hidden md:inline-flex items-center justify-center w-11 h-11 -ml-1 rounded-lg text-ink-muted hover:bg-surface hover:text-ink active:bg-surface-border transition"
             aria-label={sidebarCollapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
             aria-pressed={sidebarCollapsed}
           >

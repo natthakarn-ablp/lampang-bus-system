@@ -646,7 +646,7 @@ function FreshnessPill({ lastSyncedAt, now, refreshing, onRefresh }) {
         type="button"
         onClick={onRefresh}
         disabled={refreshing}
-        className="ml-1 p-1 rounded-full hover:bg-surface-border transition disabled:opacity-50"
+        className="focus-ring tap-target ml-1 p-1 rounded-full hover:bg-surface-border active:bg-surface-border transition disabled:opacity-50"
         aria-label="รีเฟรชข้อมูล"
       >
         <RotateCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2.2} />

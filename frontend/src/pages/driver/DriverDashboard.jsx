@@ -241,7 +241,7 @@ export default function DriverDashboard() {
           <button
             type="button"
             onClick={() => navigate('/driver/emergency')}
-            className="inline-flex items-center gap-1.5 bg-danger hover:bg-danger/90 text-white font-semibold text-sm px-4 py-2 rounded-xl transition"
+            className="focus-ring inline-flex items-center justify-center gap-1.5 bg-danger hover:bg-danger/90 active:bg-danger text-white font-semibold text-sm px-4 min-h-[44px] rounded-xl transition"
           >
             <AlertTriangle className="w-4 h-4" strokeWidth={2.2} />
             ฉุกเฉิน

@@ -391,7 +391,7 @@ export default function SchoolBulkVehicles() {
                 </div>
               ) : warnings[i]?.status === 'DUPLICATE_OR_SIMILAR' ? (
                 <div className="mt-2 text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-3 py-2">
-                  ⚠️ พบรถทะเบียนใกล้เคียงในระบบแล้ว กรุณาตรวจสอบก่อนบันทึก
+                  พบรถทะเบียนใกล้เคียงในระบบแล้ว กรุณาตรวจสอบก่อนบันทึก
                   <div className="mt-0.5 font-medium">มีอยู่แล้ว: {warnings[i].candidates.map((c) => c.plate_no).join(', ')}</div>
                 </div>
               ) : warnings[i]?.status === 'CLEAR' && plate && !rowErrors[i] ? (

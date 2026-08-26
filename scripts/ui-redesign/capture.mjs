@@ -278,6 +278,18 @@ const COMMON = {
   ] },
   '/api/admin/pickup-points': { data: PICKUP_POINTS, meta: { total: 3, page: 1, limit: 20 } },
   '/api/province/vehicles': { data: PICKUP_VEHICLES },
+  '/api/reports/daily': { data: {
+    date: '2026-08-26',
+    morning_total: 186, morning_done: 174, evening_total: 186, evening_done: 168,
+    schools: [
+      { school_id: 'SC-1', school_name: 'โรงเรียนบ้านตัวอย่าง', morning_total: 96, morning_done: 92, evening_total: 96, evening_done: 90 },
+      { school_id: 'SC-2', school_name: 'โรงเรียนตัวอย่างสอง',  morning_total: 90, morning_done: 82, evening_total: 90, evening_done: 78 },
+    ],
+    vehicles: [
+      { vehicle_id: 'V-1', plate_no: 'กข-1111 ลำปาง', driver_name: 'คนขับ ทดสอบหนึ่ง', morning_total: 9, morning_done: 9, evening_total: 9, evening_done: 8 },
+      { vehicle_id: 'V-2', plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ทดสอบสอง',  morning_total: 4, morning_done: 3, evening_total: 4, evening_done: 4 },
+    ],
+  } },
   '/api/school/students': { data: [
     { id: 'S-1', student_code: '52020001', prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ทดสอบหนึ่ง', grade: 'ป.4', classroom: '1', vehicle_id: 'V-1', plate_no: 'กข-1111 ลำปาง', guardian_name: 'ผู้ปกครอง ทดสอบ', guardian_phone: '0800000001' },
     { id: 'S-2', student_code: '52020002', prefix: 'ด.ญ.', first_name: 'นักเรียน', last_name: 'ทดสอบสอง', grade: 'ป.4', classroom: '2', vehicle_id: null, plate_no: null, guardian_name: null, guardian_phone: null },
@@ -448,6 +460,27 @@ const MEASURE = `(() => {
     overflowPx: Math.max(0, de.scrollWidth - innerWidth),
     offscreen, smallTapTargets: small, tinyInputs, verticalScrollers: scrollers,
     h1: [...document.querySelectorAll('h1')].map(h => h.textContent.trim().slice(0, 40)),
+    // A horizontally scrollable table must be reachable and operable by
+    // keyboard (WCAG 2.1.1) and needs a name. Recorded so a regression that
+    // drops the role/tabIndex from DataTable shows up as a number, not a
+    // silent loss.
+    keyboardScrollRegions: [...document.querySelectorAll('[role=region][tabindex="0"]')].length,
+    unnamedScrollRegions: [...document.querySelectorAll('[role=region][tabindex="0"]')]
+      .filter(e => !e.getAttribute('aria-label') && !e.getAttribute('aria-labelledby')).length,
+  };
+})()`;
+
+const PRINT_MEASURE = `(() => {
+  // getComputedStyle on the element alone misses an ancestor that is
+  // display:none — which is exactly how the md: breakpoint hides one of the
+  // two renderings. getClientRects() sees the whole chain.
+  const vis = el => el.getClientRects().length > 0;
+  return {
+    // the md: breakpoint is width-based, so record the width the rule sees
+    width: innerWidth,
+    tables: [...document.querySelectorAll('table')].filter(vis).length,
+    mobileCardLists: [...document.querySelectorAll('ul')]
+      .filter(el => String(el.className).includes('md:hidden')).filter(vis).length,
   };
 })()`;
 
@@ -458,13 +491,15 @@ const SHOTS = [
   { id: '03-admin-zero',   url: '/admin',       user: 'admin',       vps: ['desktop'], scenario: 'zero' },
   { id: '04-admin-large',  url: '/admin',       user: 'admin',       vps: ['desktop'], scenario: 'large' },
   { id: '05-admin-error',  url: '/admin',       user: 'admin',       vps: ['desktop'], scenario: 'error' },
-  { id: '06-admin-users',  url: '/admin/users', user: 'admin',       vps: ['mobile', 'desktop'] },
+  { id: '06-admin-users',  url: '/admin/users', user: 'admin',       vps: ['mobile', 'desktop'], print: true },
   { id: '07-province',     url: '/province',    user: 'province',    vps: ['mobile', 'desktop'] },
   { id: '08-affiliation',  url: '/affiliation', user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '09-school',       url: '/school',      user: 'school',      vps: ['mobile', 'desktop'] },
   { id: '10-transport',    url: '/transport',   user: 'transport',   vps: ['mobile', 'desktop'] },
   { id: '11-driver',       url: '/driver',      user: 'driver',      vps: ['mobile', 'tablet'] },
-  { id: '12-reports',      url: '/reports/daily', user: 'admin',     vps: ['desktop'] },
+  { id: '12-reports',      url: '/reports/daily', user: 'admin',     vps: ['desktop'], print: true },
+  // AuditLogTable renders a card timeline by design, not a table, so it is
+  // not part of the print check.
   { id: '13-audit',        url: '/admin/audit-logs', user: 'admin',  vps: ['desktop'] },
   // List pages migrated onto DataTable / FilterBar
   { id: '20-prov-schools',      url: '/province/schools',      user: 'province', vps: ['mobile', 'desktop'] },
@@ -614,6 +649,16 @@ const SHOTS = [
         }
         await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });
         metrics = await page.evaluate(MEASURE);
+        // Reports are printed. DataTable renders a desktop <table> and a
+        // mobile card list from one definition; the printed page must get the
+        // table, not the cards. Assert that rather than assume the print
+        // viewport lands above the md breakpoint.
+        if (shot.print) {
+          metrics.screenTables = await page.evaluate(PRINT_MEASURE);
+          await page.emulateMedia({ media: 'print' });
+          metrics.print = await page.evaluate(PRINT_MEASURE);
+          await page.emulateMedia({ media: 'screen' });
+        }
       } catch (e) { failed = e.message.split('\n')[0]; }
       await ctx.close();
 

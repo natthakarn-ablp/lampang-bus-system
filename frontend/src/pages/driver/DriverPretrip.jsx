@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Check, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
@@ -127,7 +127,7 @@ export default function DriverPretrip() {
           <ul className="space-y-2 text-base text-gray-700 mb-4">
             {CHECKLIST.map(c => (
               <li key={c.id} className="flex items-center gap-2">
-                <span className="text-green-500 text-lg">✓</span>
+                <Check className="w-4 h-4 text-success" strokeWidth={2.4} aria-hidden="true" />
                 <span>{c.label}</span>
               </li>
             ))}
@@ -137,13 +137,13 @@ export default function DriverPretrip() {
         {/* Big "All OK" button */}
         <button onClick={() => handleSubmit(true)} disabled={submitting}
           className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold text-xl py-5 rounded-2xl shadow-lg transition disabled:opacity-50 mb-4">
-          {submitting ? 'กำลังบันทึก...' : '✅ ทุกรายการปกติ — ออกได้'}
+          {submitting ? 'กำลังบันทึก...' : 'ทุกรายการปกติ — ออกได้'}
         </button>
 
         {/* Secondary "has issues" button */}
         <button onClick={() => setShowDetail(true)}
           className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold text-lg py-4 rounded-2xl border-2 border-amber-300 transition">
-          ⚠️ มีรายการผิดปกติ
+          มีรายการผิดปกติ
         </button>
       </div>
     );
@@ -157,14 +157,20 @@ export default function DriverPretrip() {
 
       <div className="space-y-2 mb-5">
         {items.map(item => (
-          <button key={item.id} onClick={() => toggleItem(item.id)}
+          <button key={item.id} type="button" onClick={() => toggleItem(item.id)} aria-pressed={!item.ok}
             className={`w-full flex items-center gap-3 p-4 rounded-2xl border-2 text-left text-lg font-medium transition ${
               item.ok
                 ? 'bg-green-50 border-green-300 text-green-800'
                 : 'bg-red-50 border-red-400 text-red-800'
             }`}>
-            <span className="text-2xl shrink-0">{item.ok ? '✅' : '❌'}</span>
+            {/* The emoji was the whole state: a screen reader announced
+                 "white heavy check mark" and a colour-blind reader had only
+                 the green/red fill to go on. */}
+            {item.ok
+              ? <CheckCircle2 className="w-7 h-7 shrink-0 text-success" strokeWidth={2.2} aria-hidden="true" />
+              : <XCircle className="w-7 h-7 shrink-0 text-danger" strokeWidth={2.2} aria-hidden="true" />}
             <span>{item.label}</span>
+            <span className="sr-only">{item.ok ? '— ปกติ' : '— ผิดปกติ'}</span>
           </button>
         ))}
       </div>
@@ -184,12 +190,12 @@ export default function DriverPretrip() {
       {failedItems.length > 0 ? (
         <button onClick={() => handleSubmit(false)} disabled={submitting}
           className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
-          {submitting ? 'กำลังบันทึก...' : `⚠️ บันทึกรายการผิดปกติ (${failedItems.length} รายการ)`}
+          {submitting ? 'กำลังบันทึก...' : `บันทึกรายการผิดปกติ (${failedItems.length} รายการ)`}
         </button>
       ) : (
         <button onClick={() => handleSubmit(true)} disabled={submitting}
           className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
-          {submitting ? 'กำลังบันทึก...' : '✅ ทุกรายการปกติ — ออกได้'}
+          {submitting ? 'กำลังบันทึก...' : 'ทุกรายการปกติ — ออกได้'}
         </button>
       )}
 

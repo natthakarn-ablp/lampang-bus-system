@@ -1,3 +1,4 @@
+import { ChevronDown, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { ROLES, TAB_IDS, READINESS, SOURCE_TAGS } from '../../config/measurementFramework';
 
@@ -35,7 +36,7 @@ export default function MeasurementFramework() {
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 text-sm text-gray-600 space-y-1.5">
         <p><strong>Efficiency</strong> = ใช้ระบบได้เร็ว ถูกต้อง ครบ ภาระงานลดลง</p>
         <p><strong>Effectiveness</strong> = การใช้ระบบส่งผลต่อความปลอดภัยนักเรียนจริง</p>
-        <p className="text-amber-700 font-medium">⚠️ การ login ไม่ใช่ meaningful use — ต้องวัดจาก action จริง และต้องมี baseline เปรียบเทียบ</p>
+        <p className="text-amber-700 font-medium">การ login ไม่ใช่ meaningful use — ต้องวัดจาก action จริง และต้องมี baseline เปรียบเทียบ</p>
       </div>
 
       {/* Role Accordions */}
@@ -92,7 +93,11 @@ function RoleAccordion({ role, isOpen, onToggle }) {
           <p className="font-semibold text-gray-800">{role.name}</p>
           <p className="text-xs text-gray-500">{role.subtitle}</p>
         </div>
-        <span className="text-gray-400 text-lg shrink-0">{isOpen ? '▲' : '▼'}</span>
+        <ChevronDown
+          className={`w-5 h-5 text-ink-muted shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          strokeWidth={2}
+          aria-hidden="true"
+        />
       </button>
 
       {/* Content */}
@@ -145,7 +150,7 @@ function RoleAccordion({ role, isOpen, onToggle }) {
             <ul className="space-y-2">
               {role.cautions.map((c, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-                  <span className="mt-0.5">⚠️</span>
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={2.2} aria-hidden="true" />
                   <span>{c}</span>
                 </li>
               ))}

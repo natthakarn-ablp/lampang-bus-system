@@ -1,4 +1,4 @@
-import { AlertTriangle, Satellite, MapPin, MapPinOff} from 'lucide-react';
+import { AlertTriangle, Satellite, MapPin, MapPinOff, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
@@ -115,7 +115,7 @@ export default function EmergencyPage() {
   if (success) {
     return (
       <div className="p-3 sm:p-6 max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="text-6xl mb-5">✅</div>
+        <CheckCircle2 className="w-16 h-16 mx-auto mb-5 text-success" strokeWidth={2} aria-hidden="true" />
         <h2 className="text-xl font-bold text-gray-800 mb-2">แจ้งเหตุฉุกเฉินแล้ว</h2>
         <p className="text-gray-500 text-sm mb-8">ทีมงานจะดำเนินการโดยเร็ว</p>
         <button

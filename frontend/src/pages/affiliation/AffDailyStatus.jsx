@@ -1,4 +1,4 @@
-import { Building2, Bus } from 'lucide-react';
+import { Building2, Bus, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
@@ -92,7 +92,11 @@ export default function AffDailyStatus() {
                     <span className={eveningDone === eveningTotal && eveningTotal > 0 ? 'text-green-600' : 'text-indigo-600'}>
                       เย็น {eveningDone}/{eveningTotal}
                     </span>
-                    <span className="text-gray-400 text-xs">{isSchoolExpanded ? '▲' : '▼'}</span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-ink-muted shrink-0 transition-transform ${isSchoolExpanded ? 'rotate-180' : ''}`}
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    />
                   </div>
                 </button>
 
@@ -125,7 +129,11 @@ export default function AffDailyStatus() {
                               <span className={vEveningDone === vEveningTotal && vEveningTotal > 0 ? 'text-green-600' : 'text-indigo-500'}>
                                 เย็น {vEveningDone}/{vEveningTotal}
                               </span>
-                              <span className="text-gray-400">{isVehicleExpanded ? '▲' : '▼'}</span>
+                              <ChevronDown
+                        className={`w-4 h-4 text-ink-muted shrink-0 transition-transform ${isVehicleExpanded ? 'rotate-180' : ''}`}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      />
                             </div>
                           </button>
 

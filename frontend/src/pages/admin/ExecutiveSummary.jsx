@@ -134,12 +134,12 @@ export default function ExecutiveSummary() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         {/* Improvements */}
         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-green-800 mb-2">✅ สิ่งที่ดีขึ้นจาก Baseline</h2>
+          <h2 className="text-sm font-semibold text-green-800 mb-2">สิ่งที่ดีขึ้นจาก Baseline</h2>
           {improvements.length > 0 ? (
             <ul className="space-y-1">
               {improvements.map(m => (
                 <li key={m.key} className="text-sm text-green-700">
-                  <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold">▲ +{m.delta}%</span>
+                  <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold"><span aria-hidden="true">▲</span> +{m.delta}%</span>
                 </li>
               ))}
             </ul>
@@ -151,12 +151,12 @@ export default function ExecutiveSummary() {
         {/* Risks */}
         <div className={`border rounded-xl p-4 ${risks.length > 0 || lowCoverage.length > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
           <h2 className={`text-sm font-semibold mb-2 ${risks.length > 0 ? 'text-red-800' : 'text-gray-700'}`}>
-            {risks.length > 0 ? '⚠️ จุดเสี่ยง / ต้องติดตาม' : '✅ ไม่มีจุดเสี่ยงจากข้อมูลปัจจุบัน'}
+            {risks.length > 0 ? 'จุดเสี่ยง / ต้องติดตาม' : 'ไม่มีจุดเสี่ยงจากข้อมูลปัจจุบัน'}
           </h2>
           <ul className="space-y-1">
             {risks.map(m => (
               <li key={m.key} className="text-sm text-red-700">
-                <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold">▼ {m.delta}%</span>
+                <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold"><span aria-hidden="true">▼</span> {m.delta}%</span>
               </li>
             ))}
             {lowCoverage.map(m => (

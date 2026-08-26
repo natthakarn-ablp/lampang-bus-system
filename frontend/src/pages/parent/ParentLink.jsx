@@ -1,4 +1,4 @@
-import { Link2, ShieldAlert } from 'lucide-react';
+import { Link2, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
 import { resolveLineUserId, getLiffIdToken, isInLiffClient } from '../../utils/liff';
@@ -144,8 +144,8 @@ export default function ParentLink() {
   if (step === STEP.SUCCESS) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6">
-        <div className="text-6xl mb-5">✅</div>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">ผูกบัญชีสำเร็จ</h2>
+        <CheckCircle2 className="w-16 h-16 mb-5 text-success" strokeWidth={2} aria-hidden="true" />
+        <h2 className="text-xl font-bold text-ink mb-2">ผูกบัญชีสำเร็จ</h2>
         <p className="text-gray-500 text-sm text-center max-w-xs mb-8">
           ระบบได้เชื่อมต่อบัญชี LINE ของคุณกับข้อมูลบุตรหลานเรียบร้อยแล้ว
         </p>

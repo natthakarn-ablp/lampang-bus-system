@@ -119,7 +119,7 @@ export default function StudentList() {
       <div className="mb-5">
         {allDone ? (
           <div className="bg-green-100 border-2 border-green-300 text-green-800 rounded-xl px-4 py-3 text-center text-lg font-semibold">
-            ✅ {ALL_DONE_LABEL[session]}
+            {ALL_DONE_LABEL[session]}
           </div>
         ) : (
           <button
@@ -143,7 +143,7 @@ export default function StudentList() {
       {!loading && pending.length > 0 && (
         <section className="mb-6">
           <h2 className="text-base font-semibold text-gray-600 mb-3">
-            ⏳ รอดำเนินการ ({pending.length})
+            รอดำเนินการ ({pending.length})
           </h2>
           {groupBySchool(pending).map(([school, sts]) => (
             <div key={school} className="mb-4">
@@ -164,7 +164,7 @@ export default function StudentList() {
       {!loading && done.length > 0 && (
         <section className="mb-6">
           <h2 className="text-base font-semibold text-green-600 mb-3">
-            ✅ เสร็จแล้ว ({done.length})
+            เสร็จแล้ว ({done.length})
           </h2>
           <div className="space-y-2">
             {done.map((st) => (

@@ -44,7 +44,7 @@ export default function CheckinPanel({ student, session, onDone }) {
 
           {isDone && (
             <span className="text-green-700 bg-green-100 border border-green-300 text-sm font-bold px-3 py-1 rounded-full shrink-0">
-              ✓ {doneText}
+              {doneText}
             </span>
           )}
         </div>

@@ -348,7 +348,9 @@ export default function ParentStatus() {
                       </div>
                       <div className="text-right shrink-0">
                         <span className={`inline-block text-sm font-semibold px-3 py-1 rounded-full border ${st.cls}`}>
-                          {st.icon} {st.label}
+                          {/* The label carries the state; the emoji is
+                               decoration and should not be announced. */}
+                          <span aria-hidden="true">{st.icon}</span> {st.label}
                         </span>
                         <p className="text-sm text-ink-muted mt-0.5">{timeStr}</p>
                       </div>

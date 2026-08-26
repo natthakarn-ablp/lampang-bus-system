@@ -95,7 +95,7 @@ export default function DailyReport() {
               </AlertBanner>
             ) : (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-5 text-center">
-                <p className="text-sm font-semibold text-green-700">✅ ดำเนินการครบทุกรายการ</p>
+                <p className="text-sm font-semibold text-green-700">ดำเนินการครบทุกรายการ</p>
               </div>
             );
           })()}

@@ -229,7 +229,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                     </p>
                     <p className="text-caption text-ink-muted">{PICKUP_LABEL[r.pickup_type] || '-'}</p>
                   </div>
-                  {r.match_status === 'MATCHED' && <span className="text-xs text-green-600 shrink-0">จับคู่แล้ว ✓</span>}
+                  {r.match_status === 'MATCHED' && <span className="text-xs text-green-600 shrink-0">จับคู่แล้ว</span>}
                   {r.match_status === 'NOT_FOUND' && <span className="text-xs text-gray-400 shrink-0">ไม่ใช่เด็กที่นี่</span>}
                 </div>
 

@@ -517,7 +517,7 @@ function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
         {notStarted ? (
           <p className="text-2xl font-bold text-ink-muted tabular-nums">–</p>
         ) : allDone ? (
-          <p className="text-2xl font-bold text-success">{label}ครบแล้ว ✓</p>
+          <p className="text-2xl font-bold text-success">{label}ครบแล้ว</p>
         ) : (
           <p className="text-3xl font-bold text-ink tabular-nums leading-none">
             {done}
@@ -550,7 +550,7 @@ function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
               </span>
             )}
             {pending === 0 && leave === 0 && (
-              <span className="text-success font-medium">ทุกรายการ ✓</span>
+              <span className="text-success font-medium">ทุกรายการเรียบร้อย</span>
             )}
           </>
         )}
@@ -643,7 +643,9 @@ function StudentStatus({ enabled, done, ts, leave }) {
   if (done) return (
     <span className="inline-flex items-center gap-1 text-success text-xs font-medium">
       <span className="w-1.5 h-1.5 bg-success rounded-full" />
-      {ts ? new Date(ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '✓'}
+      {/* Without a timestamp the cell was a bare ✓ — the tick was the whole
+          answer, and a screen reader read "check mark" with no subject. */}
+      {ts ? new Date(ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : 'เรียบร้อย'}
     </span>
   );
   return (

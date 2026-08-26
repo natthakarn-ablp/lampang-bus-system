@@ -190,6 +190,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/change-password" element={<ChangePassword />} />
+          <Route path="/manual/*" element={<Navigate to="/manual/index.html" replace />} />
 
           {/* Driver module */}
           <Route

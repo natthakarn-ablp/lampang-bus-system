@@ -10,6 +10,8 @@ dist/
 .vscode/
 .claude/
 .DS_Store
+__pycache__/
+*.pyc
 coverage/
 backend/node_modules/
 frontend/node_modules/

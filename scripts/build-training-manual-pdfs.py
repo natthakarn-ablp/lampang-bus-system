@@ -37,21 +37,22 @@ from reportlab.platypus import (
 ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "docs" / "manual-training-2026-08"
 OUT_DIR = SRC_DIR / "pdf"
+WEB_OUT_DIR = ROOT / "docs" / "manual-pdf" / "training-2026-08"
 FONT_DIR = ROOT / "docs" / "manual-html" / "fonts"
 REGULAR_FONT = FONT_DIR / "Sarabun-Regular.ttf"
 BOLD_FONT = FONT_DIR / "Sarabun-Bold.ttf"
 
 FILES = [
-    ("README.md", "00-สารบัญชุดคู่มืออบรม.pdf"),
-    ("00-shared-login-and-security.md", "00-คู่มือร่วม-เข้าสู่ระบบและความปลอดภัย.pdf"),
-    ("01-admin.md", "01-คู่มือผู้ดูแลระบบ-Admin.pdf"),
-    ("02-province.md", "02-คู่มือจังหวัด-Province.pdf"),
-    ("03-affiliation.md", "03-คู่มือสังกัดเขต-Affiliation.pdf"),
-    ("04-school-full.md", "04-คู่มือโรงเรียนเต็มสิทธิ์-School-Full.pdf"),
-    ("05-school-teacher.md", "05-คู่มือครูประจำสายชั้น-School-Teacher.pdf"),
-    ("06-driver.md", "06-คู่มือคนขับ-Driver.pdf"),
-    ("07-transport.md", "07-คู่มือขนส่ง-Transport.pdf"),
-    ("08-parent-line.md", "08-คู่มือผู้ปกครอง-LINE-OA.pdf"),
+    ("README.md", "00-สารบัญชุดคู่มืออบรม.pdf", "00-index.pdf"),
+    ("00-shared-login-and-security.md", "00-คู่มือร่วม-เข้าสู่ระบบและความปลอดภัย.pdf", "00-login-security.pdf"),
+    ("01-admin.md", "01-คู่มือผู้ดูแลระบบ-Admin.pdf", "01-admin.pdf"),
+    ("02-province.md", "02-คู่มือจังหวัด-Province.pdf", "02-province.pdf"),
+    ("03-affiliation.md", "03-คู่มือสังกัดเขต-Affiliation.pdf", "03-affiliation.pdf"),
+    ("04-school-full.md", "04-คู่มือโรงเรียนเต็มสิทธิ์-School-Full.pdf", "04-school-full.pdf"),
+    ("05-school-teacher.md", "05-คู่มือครูประจำสายชั้น-School-Teacher.pdf", "05-school-teacher.pdf"),
+    ("06-driver.md", "06-คู่มือคนขับ-Driver.pdf", "06-driver.pdf"),
+    ("07-transport.md", "07-คู่มือขนส่ง-Transport.pdf", "07-transport.pdf"),
+    ("08-parent-line.md", "08-คู่มือผู้ปกครอง-LINE-OA.pdf", "08-parent-line.pdf"),
 ]
 
 
@@ -300,11 +301,22 @@ def build_one(src_name: str, out_name: str) -> Path:
     return out
 
 
+def publish_web_pdf(src_pdf: Path, web_name: str) -> Path:
+    web_path = WEB_OUT_DIR / web_name
+    relative_target = Path("..") / ".." / "manual-training-2026-08" / "pdf" / src_pdf.name
+    if web_path.exists() or web_path.is_symlink():
+        web_path.unlink()
+    web_path.symlink_to(relative_target)
+    return web_path
+
+
 def main() -> None:
     register_fonts()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for src, out in FILES:
+    WEB_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for src, out, web_out in FILES:
         result = build_one(src, out)
+        publish_web_pdf(result, web_out)
         print(result)
 
 

@@ -50,7 +50,9 @@ const PATTERNS = [
   },
   {
     key: 'table',
-    has: s => /<table[\s>]/.test(s),
+    // A page that already renders through DataTable has a table even though no
+    // <table> tag is left in its source.
+    has: s => /<table[\s>]/.test(s) || /DataTable/.test(s),
     uses: s => /DataTable/.test(s),
   },
   {
@@ -61,7 +63,10 @@ const PATTERNS = [
   },
   {
     key: 'form',
-    has: s => /<(input|textarea)[\s\n]/.test(s) || /<select[\s\n]/.test(s),
+    // Likewise: a fully migrated form has no raw control tags left, only
+    // FormField. Counting that as "no form" would report a finished page as
+    // N/A rather than as done.
+    has: s => /<(input|textarea)[\s\n]/.test(s) || /<select[\s\n]/.test(s) || /FormField/.test(s),
     uses: s => /FormField|FilterBar/.test(s),
   },
   {

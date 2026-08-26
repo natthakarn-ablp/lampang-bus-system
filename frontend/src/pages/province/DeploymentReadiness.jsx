@@ -4,7 +4,7 @@ import {
   Bus, UserRoundCheck, UsersRound, RefreshCw,
 } from 'lucide-react';
 import api from '../../api/axios';
-import { CommandHero, AlertBanner, AppCard, KPIGrid, StatusBadge } from '../../components/ui';
+import { CommandHero, AlertBanner, AppCard, KPIGrid, StatusBadge, DataTable} from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 
@@ -159,38 +159,26 @@ export default function DeploymentReadiness() {
               </AppCard>
             ) : (
               <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-surface-border text-left text-xs text-ink-muted">
-                        <th className="px-4 py-3 font-medium">รายการ</th>
-                        <th className="px-4 py-3 font-medium">ประเภท</th>
-                        <th className="px-4 py-3 font-medium">ผู้รับผิดชอบ</th>
-                        <th className="px-4 py-3 font-medium text-right">จำนวน</th>
-                        <th className="px-4 py-3 font-medium">การดำเนินการต่อไป</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-surface-border">
-                      {data.gaps.map((g) => (
-                        <tr key={g.key} className="transition-colors hover:bg-surface">
-                          <td className="px-4 py-3 font-medium text-ink">{g.label_th}</td>
-                          <td className="px-4 py-3">
-                            <StatusBadge
-                              variant={g.hard_gate ? 'danger' : 'warn'}
-                              size="sm"
-                              icon={AlertTriangle}
-                            >
-                              {g.hard_gate ? 'บังคับ' : 'คำเตือน'}
-                            </StatusBadge>
-                          </td>
-                          <td className="px-4 py-3 text-ink-muted">{OWNER_LABEL[g.owner_role] || g.owner_role}</td>
-                          <td className="px-4 py-3 text-right font-semibold tabular-nums text-ink">{th(g.count)}</td>
-                          <td className="px-4 py-3 text-ink-muted">{g.next_action_th}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  caption="รายการที่ยังไม่พร้อมเปิดใช้งาน"
+                  rows={data.gaps}
+                  rowKey={g => g.key}
+                  columns={[
+                    { key: 'label', header: 'รายการ', primary: true,
+                      cell: g => <span className="font-medium text-ink">{g.label_th}</span> },
+                    { key: 'kind', header: 'ประเภท', badge: true,
+                      cell: g => (
+                        <StatusBadge variant={g.hard_gate ? 'danger' : 'warn'} icon={AlertTriangle}>
+                          {g.hard_gate ? 'บังคับ' : 'คำเตือน'}
+                        </StatusBadge>
+                      ) },
+                    { key: 'owner', header: 'ผู้รับผิดชอบ', secondary: true,
+                      cell: g => OWNER_LABEL[g.owner_role] || g.owner_role },
+                    { key: 'count', header: 'จำนวน', numeric: true, cell: g => th(g.count) },
+                    { key: 'next', header: 'การดำเนินการต่อไป', cell: g => g.next_action_th },
+                  ]}
+                  empty={{ icon: ShieldCheck, title: 'ไม่มีรายการค้าง' }}
+                />
               </AppCard>
             )}
           </section>

@@ -55,42 +55,47 @@ export default function ChangePassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-blue-50">
-      <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-surface p-4">
+      <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-elevate p-8 sm:p-10 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-xl font-bold text-blue-700">เปลี่ยนรหัสผ่าน</h1>
-          <p className="text-sm text-gray-500 mt-1">กรุณาเปลี่ยนรหัสผ่านเริ่มต้นก่อนเข้าใช้งานระบบ</p>
+          <h1 className="text-xl font-bold text-ink">เปลี่ยนรหัสผ่าน</h1>
+          <p className="text-sm text-ink-muted mt-1">กรุณาเปลี่ยนรหัสผ่านเริ่มต้นก่อนเข้าใช้งานระบบ</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">รหัสผ่านปัจจุบัน</label>
-            <input type="password" value={form.current_password} required
-              onChange={(e) => setForm({ ...form, current_password: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">รหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)</label>
-            <input type="password" value={form.new_password} required minLength={8}
-              onChange={(e) => setForm({ ...form, new_password: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">ยืนยันรหัสผ่านใหม่</label>
-            <input type="password" value={form.confirm} required minLength={8}
-              onChange={(e) => setForm({ ...form, confirm: e.target.value })}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-            {form.confirm && form.new_password !== form.confirm && (
-              <p className="text-xs text-red-500 mt-1">รหัสผ่านไม่ตรงกัน</p>
-            )}
-          </div>
+          <FormField
+            label="รหัสผ่านปัจจุบัน"
+            type="password"
+            required
+            autoComplete="current-password"
+            value={form.current_password}
+            onChange={v => setForm({ ...form, current_password: v })}
+          />
+          <FormField
+            label="รหัสผ่านใหม่"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            helper="อย่างน้อย 8 ตัวอักษร"
+            value={form.new_password}
+            onChange={v => setForm({ ...form, new_password: v })}
+          />
+          <FormField
+            label="ยืนยันรหัสผ่านใหม่"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={form.confirm}
+            onChange={v => setForm({ ...form, confirm: v })}
+            error={form.confirm && form.new_password !== form.confirm ? 'รหัสผ่านไม่ตรงกัน' : undefined}
+          />
 
-          {error && (
-            <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-2">{error}</p>
-          )}
+          {error && <ErrorState message={error} />}
 
           <button type="submit" disabled={saving}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded-lg py-3 transition">
+            className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white font-semibold rounded-lg min-h-[48px] transition">
             {saving ? 'กำลังเปลี่ยน…' : 'เปลี่ยนรหัสผ่าน'}
           </button>
         </form>

@@ -2,12 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Bus } from 'lucide-react';
 import api from '../../api/axios';
-import EmptyState from '../../components/EmptyState';
-import LoadingState from '../../components/LoadingState';
-import AppCard from '../../components/ui/AppCard';
-import StatusBadge from '../../components/ui/StatusBadge';
 import PlateSearchInput from '../../components/PlateSearchInput';
+import PageHeader from '../../components/PageHeader';
 import Pagination from '../../components/Pagination';
+import { StatusBadge, DataTable, FilterBar } from '../../components/ui';
 
 const RESULT_BADGE = {
   PASSED:   { label: 'ผ่าน',      variant: 'success' },
@@ -86,86 +84,84 @@ export default function TransportVehicleList() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">รถรับส่งทั้งหมด</h1>
+      <PageHeader
+        title="รถรับส่งทั้งหมด"
+        subtitle="สถานะการตรวจสภาพและอายุเอกสารของรถทุกคันในจังหวัด"
+      />
 
-      <div className="flex flex-wrap gap-3 mb-5">
-        <PlateSearchInput value={search} onChange={setSearch} placeholder="ค้นหาทะเบียนรถ…" className="w-full sm:w-72" />
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-          <option value="">ทุกสถานะ</option>
-          <option value="expiring">ประกันใกล้หมด (30 วัน)</option>
-          <option value="expired">ประกันหมดแล้ว</option>
-          {/* Phase 10.7A — combined-document filters across 4 expiry fields */}
-          <option value="docs_expiring">เอกสารใกล้หมด (30 วัน)</option>
-          <option value="docs_expired">เอกสารหมดอายุ</option>
-        </select>
-      </div>
+      <FilterBar
+        className="mb-5"
+        filters={[{
+          key: 'status',
+          label: 'กรองตามสถานะเอกสาร',
+          value: statusFilter,
+          onChange: setStatusFilter,
+          options: [
+            ['', 'ทุกสถานะ'],
+            ['expiring', 'ประกันใกล้หมด (30 วัน)'],
+            ['expired', 'ประกันหมดแล้ว'],
+            // Phase 10.7A — combined-document filters across 4 expiry fields
+            ['docs_expiring', 'เอกสารใกล้หมด (30 วัน)'],
+            ['docs_expired', 'เอกสารหมดอายุ'],
+          ],
+        }]}
+        actions={
+          <PlateSearchInput value={search} onChange={setSearch} placeholder="ค้นหาทะเบียนรถ…" className="w-full sm:w-72" />
+        }
+        count={meta.total}
+        countLabel="คัน"
+        onClear={statusFilter || search ? () => { setStatusFilter(''); setSearch(''); } : undefined}
+      />
 
-      {loading ? (
-        <LoadingState />
-      ) : vehicles.length === 0 ? (
-        <EmptyState
-          icon={Bus}
-          title="ไม่พบรถในระบบ"
-          description={statusFilter ? 'ลองเปลี่ยนตัวกรองเพื่อดูผลอื่น' : 'ยังไม่มีรถในรายการให้ตรวจ'}
-        />
-      ) : (
-        <>
-          <AppCard padding="none" className="overflow-hidden">
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                <tr className="text-left">
-                  <th className="px-4 py-3">ทะเบียนรถ</th>
-                  <th className="px-4 py-3">ประเภท</th>
-                  <th className="px-4 py-3">คนขับ</th>
-                  <th className="px-4 py-3 text-center">ผลตรวจล่าสุด</th>
-                  <th className="px-4 py-3">วันตรวจ</th>
-                  <th className="px-4 py-3">ประกันหมดอายุ</th>
-                  <th className="px-4 py-3">เอกสาร</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-border">
-                {vehicles.map(v => {
-                  const badge = RESULT_BADGE[v.latest_inspection_result] || { label: 'ยังไม่ตรวจ', variant: 'neutral' };
-                  const insExpired = v.insurance_expiry && new Date(v.insurance_expiry) < new Date();
-                  const docs = docExpiryStatus(v);
-                  const docCellClass =
-                    docs.status === 'expired'  ? 'text-red-600 font-medium'  :
-                    docs.status === 'expiring' ? 'text-amber-600 font-medium' :
-                                                 'text-gray-500';
-                  const docLabel = docs.earliest
-                    ? (docs.status === 'expired'  ? `หมดอายุ · ${docs.earliest}` :
-                       docs.status === 'expiring' ? `ใกล้หมด · ${docs.earliest}` :
-                                                    docs.earliest)
-                    : '-';
-                  return (
-                    <tr key={v.id} className="hover:bg-surface transition">
-                      <td className="px-4 py-3 font-medium text-gray-800">{v.plate_no}</td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">{v.vehicle_type || '-'}</td>
-                      <td className="px-4 py-3 text-gray-600 text-xs">{v.driver_name || '-'}</td>
-                      <td className="px-4 py-3 text-center">
-                        <StatusBadge variant={badge.variant} size="sm">{badge.label}</StatusBadge>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{v.latest_inspection_date || '-'}</td>
-                      <td className={`px-4 py-3 text-xs ${insExpired ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                        {v.insurance_expiry || '-'}
-                      </td>
-                      <td className={`px-4 py-3 text-xs ${docCellClass}`}>
-                        {docLabel}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            </div>
-          </AppCard>
+      <DataTable
+        caption="รายการรถรับส่งและสถานะการตรวจสภาพ"
+        loading={loading}
+        rows={vehicles}
+        rowKey={v => v.id}
+        columns={[
+          { key: 'plate', header: 'ทะเบียนรถ', primary: true,
+            cell: v => <span className="font-medium text-ink">{v.plate_no}</span> },
+          { key: 'type', header: 'ประเภท', secondary: true, cell: v => v.vehicle_type || '-' },
+          { key: 'driver', header: 'คนขับ', cell: v => v.driver_name || '-' },
+          { key: 'result', header: 'ผลตรวจล่าสุด', align: 'center', badge: true,
+            cell: v => {
+              const badge = RESULT_BADGE[v.latest_inspection_result] || { label: 'ยังไม่ตรวจ', variant: 'neutral' };
+              return <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>;
+            } },
+          { key: 'inspected', header: 'วันตรวจ', cell: v => v.latest_inspection_date || '-' },
+          { key: 'insurance', header: 'ประกันหมดอายุ',
+            cell: v => {
+              const expired = v.insurance_expiry && new Date(v.insurance_expiry) < new Date();
+              // Expiry state carries a word as well as a colour — a red date
+              // alone does not say what is wrong with it.
+              return (
+                <span className={expired ? 'text-danger-ink font-medium' : 'text-ink-muted'}>
+                  {v.insurance_expiry || '-'}{expired ? ' · หมดอายุ' : ''}
+                </span>
+              );
+            } },
+          { key: 'docs', header: 'เอกสาร',
+            cell: v => {
+              const docs = docExpiryStatus(v);
+              if (!docs.earliest) return <span className="text-ink-muted">-</span>;
+              const cls = docs.status === 'expired'  ? 'text-danger-ink font-medium'
+                        : docs.status === 'expiring' ? 'text-warn-ink font-medium'
+                        :                              'text-ink-muted';
+              const label = docs.status === 'expired'  ? `หมดอายุ · ${docs.earliest}`
+                          : docs.status === 'expiring' ? `ใกล้หมด · ${docs.earliest}`
+                          :                              docs.earliest;
+              return <span className={cls}>{label}</span>;
+            } },
+        ]}
+        empty={{
+          icon: Bus,
+          title: 'ไม่พบรถในระบบ',
+          description: statusFilter ? 'ลองเปลี่ยนตัวกรองเพื่อดูผลอื่น' : 'ยังไม่มีรถในรายการให้ตรวจ',
+        }}
+      />
 
-          {totalPages > 1 && (
-            <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={vehicles.length} unit="คัน" onPage={(p) => fetchVehicles(p)} />
-          )}
-        </>
+      {totalPages > 1 && (
+        <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={vehicles.length} unit="คัน" onPage={(p) => fetchVehicles(p)} />
       )}
     </div>
   );

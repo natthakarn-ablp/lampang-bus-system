@@ -14,13 +14,14 @@ const DEFAULT_REPORT_ROOT = path.join(ROOT, 'outputs', 'go-live-readiness');
 
 let allowPending = false;
 let evidencePath = null;
+let uatEvidencePath = null;
 let restoreDrillEvidencePath = null;
 let operatorGateEvidencePath = null;
 let writeReport = true;
 let reportRoot = DEFAULT_REPORT_ROOT;
 
 function usage() {
-  console.error('Usage: node scripts/verify-100-readiness.js [--allow-pending] [--evidence <dir|manifest.json>] [--restore-drill <dir|manifest.json>] [--operator-gates <dir|manifest.json>] [--no-report] [--report-dir <dir>]');
+  console.error('Usage: node scripts/verify-100-readiness.js [--allow-pending] [--evidence <dir|manifest.json>] [--uat-evidence <dir|manifest.json>] [--restore-drill <dir|manifest.json>] [--operator-gates <dir|manifest.json>] [--no-report] [--report-dir <dir>]');
 }
 
 const args = process.argv.slice(2);
@@ -31,11 +32,14 @@ for (let i = 0; i < args.length; i += 1) {
   } else if (arg === '--evidence' && args[i + 1]) {
     evidencePath = path.resolve(args[i + 1]);
     i += 1;
+  } else if (arg === '--uat-evidence' && args[i + 1]) {
+    uatEvidencePath = normalizePackPath(path.resolve(args[i + 1]));
+    i += 1;
   } else if (arg === '--restore-drill' && args[i + 1]) {
-    restoreDrillEvidencePath = path.resolve(args[i + 1]);
+    restoreDrillEvidencePath = normalizePackPath(path.resolve(args[i + 1]));
     i += 1;
   } else if (arg === '--operator-gates' && args[i + 1]) {
-    operatorGateEvidencePath = path.resolve(args[i + 1]);
+    operatorGateEvidencePath = normalizePackPath(path.resolve(args[i + 1]));
     i += 1;
   } else if (arg === '--no-report') {
     writeReport = false;
@@ -115,6 +119,12 @@ function latestOperatorGateEvidencePath() {
     }))
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
   return dirs.length > 0 ? dirs[0].path : null;
+}
+
+function normalizePackPath(input) {
+  if (!input || !fs.existsSync(input)) return input;
+  const stat = fs.statSync(input);
+  return stat.isDirectory() ? input : path.dirname(input);
 }
 
 function runNodeScript(script, argsForScript) {
@@ -242,7 +252,7 @@ function relPath(filePath) {
 }
 
 function checkUatEvidencePack() {
-  const packDir = latestUatEvidencePath();
+  const packDir = uatEvidencePath || latestUatEvidencePath();
   if (!packDir) {
     addCheck('uat-evidence-pack', 'PENDING', 'no generated UAT evidence pack found');
     return null;

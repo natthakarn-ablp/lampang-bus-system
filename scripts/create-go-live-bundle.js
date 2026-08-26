@@ -129,6 +129,7 @@ const signoffValidation = runNode('go-live-signoff', 'scripts/validate-go-live-s
 const readinessArgs = [
   ...(allowPending ? ['--allow-pending'] : []),
   ...(selectedEvidence ? ['--evidence', selectedEvidence] : []),
+  ...(selectedUatEvidence ? ['--uat-evidence', selectedUatEvidence] : []),
   ...(selectedRestoreDrillEvidence ? ['--restore-drill', selectedRestoreDrillEvidence] : []),
   ...(selectedOperatorGateEvidence ? ['--operator-gates', selectedOperatorGateEvidence] : []),
   '--report-dir',

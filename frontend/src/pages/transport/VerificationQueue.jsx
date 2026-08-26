@@ -272,7 +272,7 @@ function InspectionChecklistPanel({
             type="button"
             disabled={busy}
             onClick={onAbort}
-            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-1.5 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50"
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-1.5 text-sm font-semibold text-danger-ink transition hover:bg-danger/10 disabled:opacity-50"
           >
             <XCircle className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
             ยกเลิกการตรวจ

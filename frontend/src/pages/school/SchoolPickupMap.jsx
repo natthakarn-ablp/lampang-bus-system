@@ -601,7 +601,7 @@ function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }
                 type="button"
                 onClick={e => { e.stopPropagation(); onDelete(); }}
                 disabled={deleting}
-                className="inline-flex items-center gap-1 text-xs font-medium text-danger bg-danger-soft hover:opacity-90 rounded-md px-2 py-1 transition disabled:opacity-50"
+                className="inline-flex items-center gap-1 text-xs font-medium text-danger-ink bg-danger-soft hover:opacity-90 rounded-md px-2 py-1 transition disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
                 {deleting ? 'กำลังลบ…' : 'ลบ'}

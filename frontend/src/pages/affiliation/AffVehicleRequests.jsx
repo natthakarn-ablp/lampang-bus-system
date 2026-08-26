@@ -216,7 +216,7 @@ export default function AffVehicleRequests() {
                       <CheckCircle2 className="w-4 h-4" /> อนุมัติ
                     </button>
                     <button onClick={() => setAction('reject')} disabled={busy}
-                      className="inline-flex items-center gap-1.5 border border-danger/30 bg-danger-soft hover:bg-danger/10 disabled:opacity-50 text-danger text-sm font-medium px-4 py-2 rounded-lg transition min-h-[44px]">
+                      className="inline-flex items-center gap-1.5 border border-danger/30 bg-danger-soft hover:bg-danger/10 disabled:opacity-50 text-danger-ink text-sm font-medium px-4 py-2 rounded-lg transition min-h-[44px]">
                       <XCircle className="w-4 h-4" /> ไม่อนุมัติ
                     </button>
                     {action && (

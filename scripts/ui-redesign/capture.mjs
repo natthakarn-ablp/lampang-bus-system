@@ -61,11 +61,22 @@ const dash = (o = {}) => ({
   recent_emergencies: 0, ...o,
 });
 
+// Synthetic accounts. Deliberately includes a very long Thai display name and
+// a long scope name so column truncation and Thai wrapping get exercised.
+const USER_ROWS = [
+  { id: 1, username: 'admin01',    display_name: 'ผู้ดูแลระบบ (ตัวอย่าง)',                       role: 'admin',       scope_name: null,                            grade_scope: null,  is_active: true,  must_change_password: false },
+  { id: 2, username: 'province01', display_name: 'ผู้ใช้ระดับจังหวัด',                            role: 'province',    scope_name: 'จังหวัดลำปาง',                    grade_scope: null,  is_active: true,  must_change_password: false },
+  { id: 3, username: 'aff001',     display_name: 'สังกัดตัวอย่าง เขต 1',                          role: 'affiliation', scope_name: 'สังกัดตัวอย่าง เขต 1',            grade_scope: null,  is_active: true,  must_change_password: true  },
+  { id: 4, username: 'school0001', display_name: 'โรงเรียนตัวอย่างที่มีชื่อยาวมากเพื่อทดสอบการตัดข้อความ', role: 'school', scope_name: 'โรงเรียนตัวอย่างชื่อยาวมาก', grade_scope: 'ป.4', is_active: true,  must_change_password: false },
+  { id: 5, username: 'driver042',  display_name: 'คนขับ ตัวอย่าง',                                role: 'driver',      scope_name: null,                            grade_scope: null,  is_active: false, must_change_password: false },
+  { id: 6, username: 'transport1', display_name: 'ขนส่งจังหวัด (ตัวอย่าง)',                        role: 'transport',   scope_name: null,                            grade_scope: null,  is_active: true,  must_change_password: false },
+];
+
 const SCENARIOS = {
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
     '/api/province/dashboard': { data: dash({ morning_done: 3980, morning_total: 4654, evening_total: 4651, morning_pending: 674 }) },
-    '/api/admin/users':                 { data: [], meta: { page: 1, per_page: 1, total: 276 } },
+    '/api/admin/users':                 { data: USER_ROWS, meta: { page: 1, per_page: 50, total: 276 } },
     '/api/admin/users?is_active=false': { data: [], meta: { page: 1, per_page: 5, total: 643 } },
     '/api/admin/users-needing-action': { data: { total: 643, rows: [
       { id: 101, username: 'user-a', display_name: 'ผู้ใช้ตัวอย่าง ก', is_active: true,  must_change_password: true },

@@ -486,7 +486,7 @@ function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
 
       <div className="flex flex-wrap items-center gap-2">
         {sug && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-warn bg-warn-soft border border-warn/30 px-2 py-1 rounded-lg">
+          <span className="inline-flex items-center gap-1.5 text-xs text-warn-ink bg-warn-soft border border-warn/30 px-2 py-1 rounded-lg">
             <Lightbulb className="w-3.5 h-3.5" strokeWidth={2} />
             {sug}
           </span>
@@ -502,7 +502,7 @@ function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
         {v.driver_phone && (
           <a
             href={`tel:${v.driver_phone}`}
-            className="inline-flex items-center gap-1.5 text-xs text-success bg-success-soft hover:bg-success/20 border border-success/30 px-2.5 py-1 rounded-lg transition"
+            className="inline-flex items-center gap-1.5 text-xs text-success-ink bg-success-soft hover:bg-success/20 border border-success/30 px-2.5 py-1 rounded-lg transition"
           >
             <Phone className="w-3.5 h-3.5" strokeWidth={2} />
             โทรคนขับ

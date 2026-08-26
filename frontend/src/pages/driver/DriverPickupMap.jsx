@@ -531,7 +531,7 @@ function SelectedPointCard({ point, onClose, onEdit, onDelete, deleting }) {
             type="button"
             onClick={onDelete}
             disabled={deleting}
-            className="inline-flex items-center justify-center gap-1.5 w-full text-sm font-medium text-danger bg-danger-soft hover:opacity-90 rounded-lg py-2 transition disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 w-full text-sm font-medium text-danger-ink bg-danger-soft hover:opacity-90 rounded-lg py-2 transition disabled:opacity-50"
           >
             <Trash2 className="w-4 h-4" strokeWidth={2} />
             {deleting ? 'กำลังลบ…' : 'ลบจุดรับส่ง'}

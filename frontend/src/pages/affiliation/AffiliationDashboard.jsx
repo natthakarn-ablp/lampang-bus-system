@@ -476,7 +476,7 @@ function SchoolRiskRow({ school: s, notifiedAt, onNotify }) {
           onClick={onNotify}
           className={`shrink-0 inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition border ${
             notifiedAt
-              ? 'bg-success-soft text-success border-success/30'
+              ? 'bg-success-soft text-success-ink border-success/30'
               : 'bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100'
           }`}
         >

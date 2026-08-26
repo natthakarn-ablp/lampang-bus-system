@@ -47,10 +47,18 @@ export default {
           DEFAULT: '#0F172A',
           muted:   '#64748B',
         },
-        success: { DEFAULT: '#10B981', soft: '#D1FAE5' },
-        warn:    { DEFAULT: '#F59E0B', soft: '#FEF3C7' },
-        danger:  { DEFAULT: '#EF4444', soft: '#FEE2E2' },
-        info:    { DEFAULT: '#0EA5E9', soft: '#E0F2FE' },
+        // DEFAULT = the fill (bars, dots, solid buttons — large shapes, where a
+        // vivid tone is legible). `ink` = the TEXT tone for use on the matching
+        // `soft` background.
+        //
+        // Measured: DEFAULT-on-soft was 2.24 / 1.93 / 3.08 / 2.42 : 1 — every
+        // one below the WCAG AA 4.5:1 floor for body text, and `warn` at 1.93
+        // was very close to unreadable. The `ink` tones are 4.84 / 6.37 / 5.30 /
+        // 5.17 on soft and 5.48 / 7.09 / 6.47 / 5.93 on white.
+        success: { DEFAULT: '#10B981', soft: '#D1FAE5', ink: '#047857' },
+        warn:    { DEFAULT: '#F59E0B', soft: '#FEF3C7', ink: '#92400E' },
+        danger:  { DEFAULT: '#EF4444', soft: '#FEE2E2', ink: '#B91C1C' },
+        info:    { DEFAULT: '#0EA5E9', soft: '#E0F2FE', ink: '#0369A1' },
       },
       boxShadow: {
         soft:    '0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06)',

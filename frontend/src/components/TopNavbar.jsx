@@ -212,7 +212,7 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
               <button
                 role="menuitem"
                 onClick={handleLogout}
-                className="focus-ring w-full flex items-center gap-2 px-4 py-2.5 min-h-[44px] text-sm text-danger hover:bg-danger-soft active:bg-danger-soft transition"
+                className="focus-ring w-full flex items-center gap-2 px-4 py-2.5 min-h-[44px] text-sm text-danger-ink hover:bg-danger-soft active:bg-danger-soft transition"
               >
                 <LogOut className="w-4 h-4" strokeWidth={2} />
                 ออกจากระบบ

@@ -328,13 +328,13 @@ export default function DriverDashboard() {
           <div className="mb-5">
             {allDone ? (
               checkedOut ? (
-                <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success rounded-xl px-4 py-3 text-center text-lg font-semibold">
+                <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success-ink rounded-xl px-4 py-3 text-center text-lg font-semibold">
                   <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />
                   จบรอบ — ส่งนักเรียนลงครบแล้ว
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success rounded-xl px-4 py-3 text-center text-lg font-semibold">
+                  <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success-ink rounded-xl px-4 py-3 text-center text-lg font-semibold">
                     <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />
                     {ALL_DONE_LABEL[session]}
                   </div>
@@ -368,7 +368,7 @@ export default function DriverDashboard() {
                 </button>
                 <button
                   onClick={() => setShowIndividual(true)}
-                  className="inline-flex w-full items-center justify-center gap-2 bg-warn-soft hover:bg-warn/15 text-warn font-semibold text-lg py-4 rounded-2xl border-2 border-warn/30 transition"
+                  className="inline-flex w-full items-center justify-center gap-2 bg-warn-soft hover:bg-warn/15 text-warn-ink font-semibold text-lg py-4 rounded-2xl border-2 border-warn/30 transition"
                 >
                   <AlertTriangle className="w-5 h-5" strokeWidth={2.2} />
                   มีข้อยกเว้น — เลือกทีละคน
@@ -568,7 +568,7 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
           <button
             onClick={() => setShowLeave(true)}
             disabled={leaveLoading}
-            className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-base px-4 py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
+            className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn-ink font-semibold text-base px-4 py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
           >
             ลา
           </button>
@@ -582,14 +582,14 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
             <button
               onClick={() => { onLeave('morning'); setShowLeave(false); }}
               disabled={leaveLoading}
-              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
+              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn-ink font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
             >
               ลาเช้า
             </button>
             <button
               onClick={() => { onLeave('evening'); setShowLeave(false); }}
               disabled={leaveLoading}
-              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
+              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn-ink font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
             >
               ลาเย็น
             </button>
@@ -711,7 +711,7 @@ function PretripModal({ onComplete }) {
             </button>
 
             <button onClick={() => setMode('detail')}
-              className="inline-flex w-full items-center justify-center gap-2 bg-warn-soft hover:bg-warn/15 text-warn font-semibold text-lg py-4 rounded-2xl border-2 border-warn/30 transition">
+              className="inline-flex w-full items-center justify-center gap-2 bg-warn-soft hover:bg-warn/15 text-warn-ink font-semibold text-lg py-4 rounded-2xl border-2 border-warn/30 transition">
               <AlertTriangle className="w-5 h-5" strokeWidth={2.2} />
               มีรายการผิดปกติ
             </button>
@@ -729,8 +729,8 @@ function PretripModal({ onComplete }) {
                 <button key={item.id} onClick={() => toggleItem(item.id)}
                   className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left text-base font-medium transition ${
                     item.ok
-                      ? 'bg-success-soft border-success/40 text-success'
-                      : 'bg-danger-soft border-danger/50 text-danger'
+                      ? 'bg-success-soft border-success/40 text-success-ink'
+                      : 'bg-danger-soft border-danger/50 text-danger-ink'
                   }`}>
                   {item.ok
                     ? <CheckCircle2 className="w-6 h-6 shrink-0 text-success" strokeWidth={2.2} />

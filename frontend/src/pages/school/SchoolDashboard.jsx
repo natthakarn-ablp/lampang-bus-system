@@ -327,7 +327,7 @@ export default function SchoolDashboard() {
                       type="button"
                       onClick={() => handleCancelLeave(lv.id)}
                       disabled={!!leaveLoading[lv.id]}
-                      className="shrink-0 text-xs font-medium text-danger hover:text-danger/80 disabled:opacity-50 px-2.5 py-1 rounded border border-danger/30 hover:bg-danger-soft transition min-h-[36px]"
+                      className="shrink-0 text-xs font-medium text-danger-ink hover:text-danger-ink/80 disabled:opacity-50 px-2.5 py-1 rounded border border-danger/30 hover:bg-danger-soft transition min-h-[36px]"
                     >
                       {leaveLoading[lv.id] ? 'กำลัง...' : 'ยกเลิก'}
                     </button>
@@ -526,12 +526,12 @@ function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
         ) : (
           <>
             {pending > 0 && (
-              <span className="inline-flex items-center gap-1 bg-danger-soft text-danger px-2 py-0.5 rounded-full border border-danger/30 font-medium tabular-nums">
+              <span className="inline-flex items-center gap-1 bg-danger-soft text-danger-ink px-2 py-0.5 rounded-full border border-danger/30 font-medium tabular-nums">
                 {STATUS.PENDING} {pending}
               </span>
             )}
             {leave > 0 && (
-              <span className="inline-flex items-center gap-1 bg-warn-soft text-warn px-2 py-0.5 rounded-full border border-warn/30 font-medium tabular-nums">
+              <span className="inline-flex items-center gap-1 bg-warn-soft text-warn-ink px-2 py-0.5 rounded-full border border-warn/30 font-medium tabular-nums">
                 {STATUS.LEAVE} {leave}
               </span>
             )}

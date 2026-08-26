@@ -64,7 +64,7 @@ export default function PageHeader({
           <div className="min-w-0">
             <h1 className="text-xl sm:text-2xl font-semibold text-ink leading-tight truncate">{title}</h1>
             {subtitle && (
-              <p className="text-sm text-ink-muted mt-0.5 truncate">{subtitle}</p>
+              <p className="text-sm text-ink-muted mt-0.5 text-pretty">{subtitle}</p>
             )}
             {meta && (
               <p className="text-caption text-ink-muted mt-1">{meta}</p>

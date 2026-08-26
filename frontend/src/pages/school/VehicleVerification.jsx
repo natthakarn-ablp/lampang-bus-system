@@ -286,7 +286,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
               type="button"
               disabled={busy}
               onClick={() => onReview(false)}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger-ink transition hover:bg-danger/10 disabled:opacity-50"
             >
               ปฏิเสธคำขอ
             </button>
@@ -318,7 +318,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
             type="button"
             disabled={busy}
             onClick={onCancel}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger-ink transition hover:bg-danger/10 disabled:opacity-50"
           >
             <XCircle className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
             ยกเลิกคำขอ

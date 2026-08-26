@@ -4,10 +4,10 @@ import { CountUp } from '../../lib/motion';
 
 const ICON_BG = {
   brand:   'bg-brand-50    text-brand-700',
-  success: 'bg-success-soft text-success',
-  warn:    'bg-warn-soft    text-warn',
-  danger:  'bg-danger-soft  text-danger',
-  info:    'bg-info-soft    text-info',
+  success: 'bg-success-soft text-success-ink',
+  warn:    'bg-warn-soft    text-warn-ink',
+  danger:  'bg-danger-soft  text-danger-ink',
+  info:    'bg-info-soft    text-info-ink',
   neutral: 'bg-surface      text-ink-muted',
 };
 

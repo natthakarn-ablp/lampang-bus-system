@@ -17,10 +17,16 @@ import { classroomLabel } from '../utils/student';
  * several. That is passed in as `leadingFields` rather than baked in, so the
  * difference stays visible at the call site.
  *
+ * The admin override editor has the same fields but assigns pupils through a
+ * separate dialog, so it omits `onToggleStudent` and the checklist disappears.
+ * The block is the shared part; who may board is the part that differs.
+ *
  * The parent owns `form` and `selectedIds` because it submits them; this owns
  * the presentation, the client-side pupil filter, and the select-all logic.
  * No API call happens here — the payload shape and endpoints are unchanged.
  */
+const EMPTY_SELECTION = new Set();
+
 const SESSIONS = [
   ['morning', 'รอบเช้า'],
   ['evening', 'รอบเย็น'],
@@ -36,11 +42,16 @@ export default function PickupPointFields({
   studentsLoading = false,
   studentsError = null,
   studentsEmptyText = 'ไม่มีนักเรียนที่เพิ่มได้ในรอบนี้',
-  selectedIds,
+  // Defaulted so the derived select-all state is safe for callers that
+  // never show the checklist.
+  selectedIds = EMPTY_SELECTION,
   onToggleStudent,
   onSetSelected,
+  trailingFields,
   errors = [],
 }) {
+  // Callers that assign pupils elsewhere pass no toggle handler.
+  const showStudents = typeof onToggleStudent === 'function';
   const [filter, setFilter] = useState('');
 
   const visible = useMemo(() => {
@@ -137,7 +148,8 @@ export default function PickupPointFields({
         </div>
       </div>
 
-      {/* Pupil checklist */}
+      {/* Pupil checklist — only for the editors that assign pupils inline */}
+      {showStudents && (
       <div>
         <div className="flex items-center justify-between gap-2 mb-1">
           <p className="text-sm font-medium text-ink" id="pickup-students-label">
@@ -206,6 +218,7 @@ export default function PickupPointFields({
           </>
         )}
       </div>
+      )}
 
       <FormField
         label="หมายเหตุ"
@@ -214,6 +227,8 @@ export default function PickupPointFields({
         value={form.notes}
         onChange={v => onChange('notes', v)}
       />
+
+      {trailingFields}
 
       {errors.length > 0 && (
         <AlertBanner variant="danger" title="บันทึกไม่สำเร็จ">

@@ -67,18 +67,28 @@ export function TableAction({ tone = 'neutral', onClick, disabled, className = '
  *     allSelected:boolean, selectAllLabel, rowLabel(row), disabledHint }
  */
 function SelectBox({ checked, disabled, onChange, label, title, inputRef }) {
+  // The box itself is 20px, which is the right size to look at and the wrong
+  // size to hit — every page with row selection failed 2.5.8 on it. Wrapping
+  // it in a 44px label makes the whole cell area the target without growing
+  // the checkbox, and keeps the accessible name on the input.
   return (
-    <input
-      ref={inputRef}
-      type="checkbox"
-      aria-label={label}
+    <label
+      className={`inline-flex items-center justify-center w-11 h-11 -m-3 ${
+        disabled ? 'cursor-not-allowed' : 'cursor-pointer'
+      }`}
       title={title}
-      checked={checked}
-      disabled={disabled}
-      onChange={onChange}
-      onClick={e => e.stopPropagation()}
-      className="focus-ring w-5 h-5 rounded border-surface-border text-brand-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-    />
+    >
+      <input
+        ref={inputRef}
+        type="checkbox"
+        aria-label={label}
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+        onClick={e => e.stopPropagation()}
+        className="focus-ring w-5 h-5 rounded border-surface-border text-brand-600 cursor-[inherit] disabled:opacity-40"
+      />
+    </label>
   );
 }
 

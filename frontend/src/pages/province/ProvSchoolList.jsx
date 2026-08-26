@@ -16,7 +16,7 @@ export default function ProvSchoolList() {
 
   useEffect(() => {
     api.get('/province/affiliations')
-      .then((res) => setAffiliations(res.data.data))
+      .then((res) => setAffiliations(Array.isArray(res.data.data) ? res.data.data : []))
       .catch(() => {});
   }, []);
 
@@ -30,7 +30,7 @@ export default function ProvSchoolList() {
       if (affFilter) params.set('affiliation_id', affFilter);
 
       const res = await api.get(`/province/schools?${params}`);
-      setSchools(res.data.data);
+      setSchools(Array.isArray(res.data.data) ? res.data.data : []);
       setMeta(res.data.meta);
     } catch (err) {
       setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');

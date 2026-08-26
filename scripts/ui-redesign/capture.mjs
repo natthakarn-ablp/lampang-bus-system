@@ -105,6 +105,13 @@ const AFF_TRANSFER_ROWS = [
   { id: 302, created_at: '2026-08-23T01:00:00Z', student_name_snapshot: 'นักเรียน ตัวอย่าง ข', student_code: 'STU00002', source_school_name: 'โรงเรียนตัวอย่าง ค', destination_school_name: 'โรงเรียนตัวอย่าง ก', status: 'APPLIED' },
 ];
 
+// Synthetic pupils. No real names, codes, schools or plates.
+const STUDENT_ROWS = [
+  { id: 90001, prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ตัวอย่าง ก', grade: 'ป.4', classroom: '2', school_name: 'โรงเรียนตัวอย่าง ก', affiliation_name: 'สังกัดตัวอย่าง เขต 1', plate_no: 'กข-1111 ลำปาง', morning_enabled: true,  evening_enabled: true  },
+  { id: 90002, prefix: 'ด.ญ.', first_name: 'นักเรียน', last_name: 'ตัวอย่าง ข', grade: 'ม.1', classroom: '1', school_name: 'โรงเรียนตัวอย่างที่มีชื่อยาวมากเพื่อทดสอบ', affiliation_name: 'สังกัดตัวอย่าง เขต 2', plate_no: 'กข-2222 ลำปาง', morning_enabled: true,  evening_enabled: false },
+  { id: 90003, prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ตัวอย่าง ค', grade: 'อ.2', classroom: null, school_name: 'โรงเรียนตัวอย่าง ค', affiliation_name: 'สังกัดตัวอย่าง เขต 1', plate_no: null, morning_enabled: false, evening_enabled: false },
+];
+
 const SCENARIOS = {
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
@@ -128,6 +135,9 @@ const SCENARIOS = {
     '/api/admin/vehicle-requests': { data: VEH_REQ_ROWS },
     '/api/affiliation/transfer-requests': { data: AFF_TRANSFER_ROWS },
     '/api/affiliation/vehicle-requests':  { data: VEH_REQ_ROWS },
+    '/api/province/students':    { data: STUDENT_ROWS, meta: { page: 1, per_page: 50, total: 4696 } },
+    '/api/affiliation/schools':  { data: SCHOOL_ROWS },
+    '/api/affiliation/students': { data: STUDENT_ROWS, meta: { page: 1, per_page: 50, total: 1284 } },
   },
   // everything quiet — verifies empty cards collapse instead of standing tall
   zero: {
@@ -252,6 +262,8 @@ const SHOTS = [
   { id: '27-vehicle-requests',  url: '/admin/vehicle-requests',  user: 'admin', vps: ['mobile', 'desktop'] },
   { id: '28-aff-transfers',     url: '/affiliation/transfer-requests', user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '29-aff-veh-requests',  url: '/affiliation/vehicle-requests',  user: 'affiliation', vps: ['mobile', 'desktop'] },
+  { id: '30-prov-students',     url: '/province/students',    user: 'province',    vps: ['mobile', 'desktop'] },
+  { id: '31-aff-students',      url: '/affiliation/students', user: 'affiliation', vps: ['mobile', 'desktop'] },
 ];
 
 (async () => {

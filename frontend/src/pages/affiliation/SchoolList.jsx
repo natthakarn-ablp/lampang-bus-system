@@ -12,7 +12,7 @@ export default function SchoolList() {
 
   useEffect(() => {
     api.get('/affiliation/schools')
-      .then((res) => setSchools(res.data.data))
+      .then((res) => setSchools(Array.isArray(res.data.data) ? res.data.data : []))
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
   }, []);

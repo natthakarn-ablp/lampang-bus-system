@@ -27,7 +27,7 @@ export default function VehicleList() {
   const load = useCallback(() => {
     setLoading(true);
     api.get('/school/vehicles')
-      .then((res) => setVehicles(res.data.data))
+      .then((res) => setVehicles(Array.isArray(res.data.data) ? res.data.data : []))
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
   }, []);

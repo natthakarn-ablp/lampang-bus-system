@@ -54,7 +54,7 @@ export default function UserManagement() {
       if (filterRole) params.set('role', filterRole);
       if (debouncedSearch) params.set('search', debouncedSearch);
       const res = await api.get(`/admin/users?${params}`);
-      setUsers(res.data.data);
+      setUsers(Array.isArray(res.data.data) ? res.data.data : []);
       setMeta(res.data.meta);
     } catch {} finally { setLoading(false); }
   }, [filterRole, debouncedSearch]);

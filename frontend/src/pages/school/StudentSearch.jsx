@@ -73,7 +73,7 @@ export default function StudentSearch() {
       if (grade) params.set('grade', grade);
 
       const res = await api.get(`/school/students?${params}`);
-      setStudents(res.data.data);
+      setStudents(Array.isArray(res.data.data) ? res.data.data : []);
       setMeta(res.data.meta);
     } catch (err) {
       setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');

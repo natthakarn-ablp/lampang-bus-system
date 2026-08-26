@@ -16,7 +16,7 @@ export default function ProvAffiliationList() {
 
   useEffect(() => {
     api.get('/province/affiliations')
-      .then((res) => setAffiliations(res.data.data))
+      .then((res) => setAffiliations(Array.isArray(res.data.data) ? res.data.data : []))
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
   }, []);

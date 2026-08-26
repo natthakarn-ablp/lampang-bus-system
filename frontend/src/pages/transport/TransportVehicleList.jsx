@@ -75,7 +75,7 @@ export default function TransportVehicleList() {
       if (statusFilter) params.set('status', statusFilter);
       if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       const res = await api.get(`/transport/vehicles?${params}`);
-      setVehicles(res.data.data);
+      setVehicles(Array.isArray(res.data.data) ? res.data.data : []);
       setMeta(res.data.meta);
     } catch {} finally { setLoading(false); }
   }, [statusFilter, debouncedSearch]);

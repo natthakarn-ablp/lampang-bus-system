@@ -31,7 +31,7 @@ export default function VehicleRosterCard({
     if (students || failed) return;
     try {
       const res = await api.get(`${studentsPath}?vehicle_id=${v.id}&per_page=100`);
-      setStudents(res.data.data);
+      setStudents(Array.isArray(res.data.data) ? res.data.data : []);
     } catch {
       // The roster failing must not take the vehicle card with it.
       setFailed(true);

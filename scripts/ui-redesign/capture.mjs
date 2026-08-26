@@ -278,6 +278,25 @@ const COMMON = {
   ] },
   '/api/admin/pickup-points': { data: PICKUP_POINTS, meta: { total: 3, page: 1, limit: 20 } },
   '/api/province/vehicles': { data: PICKUP_VEHICLES },
+  '/api/parent/children': { data: [
+    { student_id: 'S-1', prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ทดสอบหนึ่ง',
+      school_name: 'โรงเรียนบ้านตัวอย่าง', grade: 'ป.4', classroom: '1',
+      plate_no: 'กข-1111 ลำปาง', driver_name: 'คนขับ ทดสอบหนึ่ง',
+      morning_status: 'CHECKED_IN',  morning_time: '2026-08-26T00:42:00Z',
+      evening_status: 'PENDING',     evening_time: null },
+    { student_id: 'S-2', prefix: 'ด.ญ.', first_name: 'นักเรียน', last_name: 'ทดสอบสอง',
+      school_name: 'โรงเรียนบ้านตัวอย่าง', grade: 'ป.4', classroom: '2',
+      plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ทดสอบสอง',
+      morning_status: 'CHECKED_OUT', morning_time: '2026-08-26T00:51:00Z',
+      evening_status: 'ABSENT',      evening_time: null },
+  ] },
+  // Level 2 so the driver row and its tel: link render — at level 1 they are
+  // absent, which is why that link went unmeasured in the first pass.
+  '/api/qr/vehicle/QR-TEST-TOKEN': { data: {
+    level: 2, plate_no: 'กข-1111 ลำปาง',
+    inspection_status: 'ผ่าน', insurance_status: 'มีประกันภัย', driver_status: 'ปกติ',
+    driver_name: 'คนขับ ทดสอบหนึ่ง', emergency_contact: '0800000000',
+  } },
   '/api/reports/daily': { data: {
     date: '2026-08-26',
     morning_total: 186, morning_done: 174, evening_total: 186, evening_done: 168,
@@ -562,6 +581,24 @@ const SHOTS = [
     },
     expect: ['[role=dialog]', 'text=รหัสโรงเรียนปลายทาง', 'text=คำขอนี้ยังไม่ย้ายข้อมูล',
              'text=คำขอของนักเรียนคนนี้'] },
+  // The parent/LIFF and public-QR experiences had no captures at all. Outside
+  // LINE there is no LIFF SDK, so utils/liff falls back to the ?line_user_id
+  // query param — which is how these are reached here.
+  // ParentStatus cannot be captured with data outside LINE, and that is the
+  // point: getLiffIdToken() has no query-param fallback, so identity can only
+  // come from a verified LIFF id_token. What is asserted here is that refusal.
+  // The populated view has to be reviewed by a human inside the LINE client.
+  { id: '90-parent-status', url: '/parent?line_user_id=U-test-parent', user: null, vps: ['mobile', 'desktop'],
+    expect: ['text=ยังไม่ได้ผูกบัญชี LINE'] },
+  { id: '91-parent-link',   url: '/parent/link?line_user_id=U-test-parent', user: null, vps: ['mobile', 'desktop'],
+    expect: ['text=ผูกบัญชีผู้ปกครอง', 'text=เบอร์โทรศัพท์', 'text=รหัสนักเรียน'] },
+  { id: '92-public-qr',     url: '/qr/QR-TEST-TOKEN', user: null, vps: ['mobile', 'desktop'],
+    expect: ['text=กข-1111 ลำปาง', 'text=0800000000', 'button:has-text("ความเป็นส่วนตัว")'] },
+  // The privacy notice only exists once opened, so its dismiss button was
+  // never measured. It is now.
+  { id: '93-public-qr-notice', url: '/qr/QR-TEST-TOKEN', user: null, vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: 'ความเป็นส่วนตัว' }).first().click(); },
+    expect: ['text=รับทราบ'] },
   { id: '86-aff-accounts', url: '/affiliation/accounts', user: 'affiliation', vps: ['mobile', 'desktop'],
     act: async page => { await page.getByRole('button', { name: 'เปิดฟอร์ม' }).first().click(); },
     expect: ['text=รหัสโรงเรียน', 'text=ชื่อผู้ใช้', 'text=บัญชีที่สร้างล่าสุด', 'text=520341'] },
@@ -653,6 +690,28 @@ const SHOTS = [
         // mobile card list from one definition; the printed page must get the
         // table, not the cards. Assert that rather than assume the print
         // viewport lands above the md breakpoint.
+        // A visible focus indicator is a WCAG 2.4.7 requirement, and it can be
+        // lost silently: `.focus-ring:focus { outline: none }` and
+        // `.focus-ring:focus-visible { outline: … }` have equal specificity, so
+        // source order decides which wins. Tabbing once and reading the
+        // computed outline turns that into a number instead of an assumption.
+        metrics.focusRing = await (async () => {
+          await page.keyboard.press('Tab');
+          return page.evaluate(() => {
+            const el = document.activeElement;
+            if (!el || el === document.body) return { reached: false };
+            const cs = getComputedStyle(el);
+            const visible = cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) > 0;
+            return {
+              reached: true,
+              focusVisible: el.matches(':focus-visible'),
+              hasFocusRingClass: el.classList.contains('focus-ring') || el.classList.contains('focus-ring-inverse'),
+              outline: `${cs.outlineStyle} ${cs.outlineWidth}`,
+              visible,
+            };
+          });
+        })();
+
         if (shot.print) {
           metrics.screenTables = await page.evaluate(PRINT_MEASURE);
           await page.emulateMedia({ media: 'print' });

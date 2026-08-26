@@ -164,7 +164,16 @@ export default function VehicleQr() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-6">
           <div className="flex items-center justify-between mb-1">
             <h1 className="text-lg font-semibold text-gray-800">ข้อมูลรถรับส่งนักเรียน</h1>
-            <button onClick={() => setShowNotice(true)} className="text-xs text-blue-600 hover:text-blue-800 underline">ความเป็นส่วนตัว</button>
+            {/* 80x16 before: the hit box is now 44px tall via padding and a
+                 matching negative margin, so the row keeps its original
+                 height and the link keeps its inline appearance. */}
+            <button
+              type="button"
+              onClick={() => setShowNotice(true)}
+              className="focus-ring -my-3 -mr-2 inline-flex shrink-0 items-center min-h-[44px] px-2 rounded-lg text-xs text-blue-600 hover:text-blue-800 underline"
+            >
+              ความเป็นส่วนตัว
+            </button>
           </div>
           <p className="text-2xl font-bold text-gray-900 tabular-nums mb-4">{data.plate_no}</p>
 
@@ -209,7 +218,12 @@ export default function VehicleQr() {
                 <Row label="ชื่อคนขับ"><span className="text-sm font-medium text-gray-800">{data.driver_name || '—'}</span></Row>
                 <Row label="ติดต่อฉุกเฉิน">
                   {data.emergency_contact
-                    ? <a href={`tel:${data.emergency_contact}`} className="text-sm font-medium text-blue-600">{data.emergency_contact}</a>
+                    ? <a
+                        href={`tel:${data.emergency_contact}`}
+                        className="focus-ring -my-3 inline-flex items-center min-h-[44px] px-2 -mr-2 rounded-lg text-sm font-medium text-blue-600"
+                      >
+                        {data.emergency_contact}
+                      </a>
                     : <span className="text-sm text-gray-400">—</span>}
                 </Row>
               </>

@@ -15,7 +15,13 @@ export default function PublicPrivacyNotice({ onClose }) {
       <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-md p-5 sm:p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-gray-800 mb-3">{text?.title || 'ประกาศความเป็นส่วนตัว'}</h2>
         <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed mb-5">{text?.body || 'กำลังโหลด…'}</p>
-        <button onClick={onClose} className="w-full bg-ink hover:bg-ink/90 text-white text-sm font-medium py-2.5 rounded-lg transition">รับทราบ</button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="focus-ring w-full inline-flex items-center justify-center bg-ink hover:bg-ink/90 text-white text-sm font-medium min-h-[44px] rounded-lg transition"
+        >
+          รับทราบ
+        </button>
       </div>
     </div>
   );

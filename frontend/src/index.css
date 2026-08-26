@@ -24,7 +24,16 @@
      `.focus-ring` (light surfaces) or `.focus-ring-inverse` (navy shell), so
      keyboard users get the same visible affordance everywhere instead of the
      per-component ring styles that had drifted apart.
-     :focus-visible only — pointer users never see it. */
+     :focus-visible only — pointer users never see it.
+     ORDER MATTERS. `.focus-ring:focus` and `.focus-ring:focus-visible` have
+     the same specificity, so whichever comes last wins — and every
+     :focus-visible element also matches :focus. With the reset written after
+     the ring, `outline: none` silently won and the focus ring never rendered
+     anywhere in the app. The reset goes first. */
+  .focus-ring:focus,
+  .focus-ring-inverse:focus {
+    outline: none;
+  }
   .focus-ring:focus-visible {
     outline: 2px solid theme('colors.brand.600');
     outline-offset: 2px;
@@ -34,11 +43,6 @@
     outline: 2px solid #FFFFFF;
     outline-offset: 2px;
     border-radius: inherit;
-  }
-  /* Removes the browser default without losing the ring above. */
-  .focus-ring:focus,
-  .focus-ring-inverse:focus {
-    outline: none;
   }
 
   /* ── Touch targets ────────────────────────────────────────────────────────

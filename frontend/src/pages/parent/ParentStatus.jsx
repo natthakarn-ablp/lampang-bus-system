@@ -147,7 +147,7 @@ export default function ParentStatus() {
         <AppCard padding="lg" className="max-w-sm w-full text-center border-danger/30">
           <p className="text-4xl mb-3">⚠️</p>
           <p className="text-base text-red-600 font-medium mb-4">{error}</p>
-          <button onClick={() => window.location.reload()}
+          <button type="button" onClick={() => window.location.reload()}
             className="bg-red-50 hover:bg-red-100 text-red-700 font-medium px-6 py-3 rounded-xl transition border border-red-200">
             ลองใหม่อีกครั้ง
           </button>
@@ -197,13 +197,19 @@ export default function ParentStatus() {
             <p className="text-navy-200 text-sm">สำหรับผู้ปกครอง</p>
           </div>
           {view !== 'list' ? (
-            <button onClick={goBack}
-              className="bg-white/15 hover:bg-white/25 active:bg-white/30 font-semibold text-base px-5 py-2.5 rounded-xl transition">
+            <button
+              type="button"
+              onClick={goBack}
+              className="focus-ring-inverse inline-flex items-center justify-center bg-white/15 hover:bg-white/25 active:bg-white/30 font-semibold text-base px-5 min-h-[44px] rounded-xl transition"
+            >
               กลับ
             </button>
           ) : (
-            <button onClick={() => window.location.reload()}
-              className="bg-white/15 hover:bg-white/25 active:bg-white/30 text-sm px-4 py-2 rounded-xl transition">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="focus-ring-inverse inline-flex items-center justify-center bg-white/15 hover:bg-white/25 active:bg-white/30 text-sm px-4 min-h-[44px] rounded-xl transition"
+            >
               รีเฟรช
             </button>
           )}
@@ -409,8 +415,11 @@ export default function ParentStatus() {
                 <p className="text-xs text-ink-muted mt-3">
                   อัปเดต {eta.age_seconds != null ? `${eta.age_seconds}s ที่แล้ว` : '-'}
                 </p>
-                <button onClick={() => viewEta(selectedChild)}
-                  className="mt-4 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold px-6 py-2.5 rounded-xl border-2 border-amber-200 transition">
+                <button
+                  type="button"
+                  onClick={() => viewEta(selectedChild)}
+                  className="focus-ring mt-4 inline-flex items-center justify-center bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold px-6 min-h-[44px] rounded-xl border-2 border-amber-200 transition"
+                >
                   รีเฟรช ETA
                 </button>
               </AppCard>

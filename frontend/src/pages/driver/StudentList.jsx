@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
+import ErrorState from '../../components/ErrorState';
+import { StatusBadge } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
 import CheckinPanel from './CheckinPanel';
 import LoadingState from '../../components/LoadingState';
 import {
@@ -98,23 +101,18 @@ export default function StudentList() {
   return (
     <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
       {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold text-gray-800">รายชื่อนักเรียน</h1>
-        <div className="flex flex-wrap items-center gap-2 mt-2">
-          {data?.vehicle && (
-            <span className="text-sm text-gray-600">
-              🚌 <span className="font-semibold">{data.vehicle.plate_no}</span>
-            </span>
-          )}
-          <span className={`text-sm font-semibold px-3 py-1 rounded-full ${
-            session === 'morning'
-              ? 'bg-orange-100 text-orange-700'
-              : 'bg-indigo-100 text-indigo-700'
-          }`}>
-            {session === 'morning' ? '🌅' : '🌆'} {SESSION_LABEL[session]}
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        title="รายชื่อนักเรียน"
+        subtitle={data?.vehicle ? `รถทะเบียน ${data.vehicle.plate_no}` : undefined}
+        actions={
+          // The session was shown as an emoji plus an orange/indigo pill; the
+          // emoji carried no meaning a screen reader could use and the two
+          // hues were not semantic. One badge, one word.
+          <StatusBadge variant={session === 'morning' ? 'warn' : 'info'} size="lg">
+            {SESSION_LABEL[session]}
+          </StatusBadge>
+        }
+      />
 
       {/* Bulk action */}
       <div className="mb-5">
@@ -136,11 +134,7 @@ export default function StudentList() {
         {bulkMsg && <p className="text-center text-sm text-gray-600 mt-2">{bulkMsg}</p>}
       </div>
 
-      {error && (
-        <div className="bg-red-50 border-2 border-red-200 text-red-700 rounded-xl px-4 py-3 mb-4 text-base font-medium">
-          {error}
-        </div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" onRetry={load} />}
 
       {loading && <LoadingState />}
 

@@ -76,7 +76,11 @@ const PATTERNS = [
   },
   {
     key: 'states',
-    has: s => /api\.(get|post|put|delete)\(/.test(s),
+    // Only a page that READS data needs page-level loading / empty / error
+    // states. A page that only POSTs (a check-in button, an incident form)
+    // shows its progress on the submit button, and a full-page spinner there
+    // would be wrong.
+    has: s => /api\.get\(/.test(s),
     uses: s => /(LoadingState|Skeleton|DataTable)/.test(s) && /(EmptyState|ErrorState|DataTable|AlertBanner)/.test(s),
   },
 ];

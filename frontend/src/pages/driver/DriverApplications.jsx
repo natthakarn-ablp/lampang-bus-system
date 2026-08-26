@@ -3,13 +3,14 @@ import {
   Bus, FileCheck2, RefreshCw, Plus, ChevronDown,
 } from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { StatusStepRail } from '../../components/ui';
+import { StatusStepRail, FormField} from '../../components/ui';
 import { PageTransition } from '../../lib/motion';
 
 const STATUS = {
@@ -113,14 +114,11 @@ export default function DriverApplications() {
   return (
     <PageTransition>
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-ink flex items-center gap-2">
-              <FileCheck2 className="w-6 h-6 text-brand-700" />
-              ขึ้นทะเบียนรถ
-            </h1>
-            <p className="text-sm text-ink-muted mt-0.5">ยื่นคำขอและติดตามสถานะการขึ้นทะเบียนรถรับส่งนักเรียน</p>
-          </div>
+        <PageHeader
+          title="ขึ้นทะเบียนรถ"
+          subtitle="ยื่นคำขอและติดตามสถานะการขึ้นทะเบียนรถรับส่งนักเรียน"
+          icon={FileCheck2}
+          actions={
           <div className="flex gap-2">
             <button onClick={fetchData} className="inline-flex items-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3 py-2 rounded-lg border border-surface-border transition min-h-[44px]">
               <RefreshCw className="w-4 h-4" /> รีเฟรช
@@ -131,23 +129,24 @@ export default function DriverApplications() {
               </button>
             )}
           </div>
-        </div>
+          }
+        />
 
         {showForm && (
           <AppCard padding="lg" className="border-brand-200">
             <h2 className="text-base font-semibold text-ink mb-3">ยื่นคำขอขึ้นทะเบียนรถ</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-ink mb-1.5">เลือกรถ</label>
-                <select value={selectedVehicle} onChange={e => setSelectedVehicle(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-lg border border-surface-border bg-surface-raised text-ink text-sm focus:ring-2 focus:ring-brand-400 outline-none min-h-[44px]">
-                  <option value="">— เลือกรถ —</option>
-                  {vehicles.map(v => (
-                    <option key={v.vehicle_id} value={v.vehicle_id}>{v.plate_no} {v.vehicle_type || ''}</option>
-                  ))}
-                </select>
-                <p className="text-xs text-ink-muted mt-1.5">ระบบจะสร้างคำขอและส่งให้โรงเรียนตรวจสอบอัตโนมัติ</p>
-              </div>
+              <FormField label="เลือกรถ" helper="ระบบจะสร้างคำขอและส่งให้โรงเรียนตรวจสอบอัตโนมัติ">
+                {ctl => (
+                  <select {...ctl} value={selectedVehicle} onChange={e => setSelectedVehicle(e.target.value)}
+                    className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                    <option value="">— เลือกรถ —</option>
+                    {vehicles.map(v => (
+                      <option key={v.vehicle_id} value={v.vehicle_id}>{v.plate_no} {v.vehicle_type || ''}</option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
               <div className="flex gap-2">
                 <button type="submit" disabled={submitting}
                   className="inline-flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 disabled:opacity-50 text-surface-raised text-sm font-medium px-4 py-2 rounded-lg transition min-h-[44px]">

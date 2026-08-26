@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { FormField } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
 
 const CHECKLIST = [
@@ -100,8 +102,10 @@ export default function DriverPretrip() {
   if (!showDetail) {
     return (
       <div className="p-4 sm:p-5 max-w-lg mx-auto pb-8">
-        <h1 className="text-xl font-semibold text-gray-800 mb-1">ตรวจรถก่อนออก</h1>
-        <p className="text-sm text-gray-500 mb-6">ตรวจสอบความพร้อมของรถก่อนออกรับส่งนักเรียน</p>
+        <PageHeader
+          title="ตรวจรถก่อนออก"
+          subtitle="ตรวจสอบความพร้อมของรถก่อนออกรับส่งนักเรียน"
+        />
 
         {/* Checklist preview */}
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-5 mb-6">
@@ -134,7 +138,7 @@ export default function DriverPretrip() {
   // Detail mode: toggle items
   return (
     <div className="p-4 sm:p-5 max-w-lg mx-auto pb-8">
-      <h1 className="text-xl font-semibold text-gray-800 mb-1">ตรวจรถก่อนออก</h1>
+      <h2 className="text-xl font-semibold text-ink mb-1">ตรวจรถก่อนออก</h2>
       <p className="text-sm text-gray-500 mb-4">กดรายการที่ <strong>ผิดปกติ</strong> เพื่อระบุปัญหา</p>
 
       <div className="space-y-2 mb-5">
@@ -153,14 +157,13 @@ export default function DriverPretrip() {
 
       {/* Note for failed items */}
       {failedItems.length > 0 && (
-        <div className="mb-5">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            รายละเอียดสิ่งที่ผิดปกติ (ถ้ามี)
-          </label>
-          <textarea value={note} onChange={e => setNote(e.target.value)}
-            rows={3} placeholder="เช่น ยางหลังขวาลมอ่อน..."
-            className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-        </div>
+        <FormField className="mb-5" label="รายละเอียดสิ่งที่ผิดปกติ" helper="ไม่บังคับ">
+          {ctl => (
+            <textarea {...ctl} value={note} onChange={e => setNote(e.target.value)}
+              rows={3} placeholder="เช่น ยางหลังขวาลมอ่อน…"
+              className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 py-2.5 text-base text-ink placeholder:text-ink-muted transition" />
+          )}
+        </FormField>
       )}
 
       {/* Submit */}

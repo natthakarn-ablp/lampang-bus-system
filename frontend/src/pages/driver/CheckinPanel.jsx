@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/axios';
+import ErrorState from '../../components/ErrorState';
 import { ACTION_LABEL } from '../../utils/session';
 import { useToast } from '../../components/Toast';
 
@@ -67,7 +68,9 @@ export default function CheckinPanel({ student, session, onDone }) {
       )}
 
       {error && (
-        <p className="text-sm text-red-600 px-4 pb-3">{error}</p>
+        <div className="px-4 pb-3">
+          <ErrorState message={error} onRetry={load} />
+        </div>
       )}
     </div>
   );

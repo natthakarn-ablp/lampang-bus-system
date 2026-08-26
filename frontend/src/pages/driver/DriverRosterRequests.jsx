@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ClipboardList } from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import ApprovalBadge from '../../components/ApprovalBadge';
 import { useToast } from '../../components/Toast';
 import LoadingState from '../../components/LoadingState';
@@ -116,8 +117,10 @@ export default function DriverRosterRequests() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-xl font-bold text-gray-800">คำขอเปลี่ยนแปลงรายชื่อ</h1>
-          <p className="text-xs text-gray-400 mt-0.5">ขอเพิ่มหรือถอนนักเรียนจากรถ (โรงเรียนจะเป็นผู้อนุมัติ)</p>
+          <PageHeader
+            title="คำขอเปลี่ยนแปลงรายชื่อ"
+            subtitle="ขอเพิ่มหรือถอนนักเรียนจากรถ (โรงเรียนจะเป็นผู้อนุมัติ)"
+          />
         </div>
         <button onClick={() => { if (showForm) resetForm(); setShowForm(!showForm); }}
           className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">

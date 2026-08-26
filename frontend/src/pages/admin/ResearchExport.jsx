@@ -1,6 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Download, ShieldAlert } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import PageHeader from '../../components/PageHeader';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
+import EmptyState from '../../components/EmptyState';
+import { AppCard, AlertBanner, StatusBadge, FormField, SectionTitle } from '../../components/ui';
+
+const DATASETS = [
+  { key: 'snapshots', label: 'Snapshots',       desc: 'daily_snapshots' },
+  { key: 'audit',     label: 'Action Logs',     desc: 'audit_logs' },
+  { key: 'exports',   label: 'Export Evidence', desc: 'export events' },
+  { key: 'summary',   label: 'Summary',         desc: 'aggregated' },
+];
+
+const FORMATS = [
+  { key: 'json',  label: 'JSON',  hint: 'ข้อมูลดิบสำหรับวิเคราะห์' },
+  { key: 'csv',   label: 'CSV',   hint: 'เปิดใน Excel/Sheets ได้ทันที' },
+  { key: 'excel', label: 'Excel', hint: 'หลาย sheet แยกตามชุดข้อมูล' },
+];
+
+const EXT_MAP = { json: 'json', csv: 'csv', excel: 'xlsx' };
 
 export default function ResearchExport() {
   const toast = useToast();
@@ -9,40 +30,40 @@ export default function ResearchExport() {
   const [to, setTo] = useState(today);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
+  // The preview error was swallowed, so a failed request rendered
+  // "ไม่มีข้อมูลในช่วงที่เลือก" — an admin would widen the date range looking
+  // for data that was never actually queried.
+  const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(null); // null | 'json' | 'csv' | 'excel'
 
-  // Include toggles
-  const [incSnapshots, setIncSnapshots] = useState(true);
-  const [incAudit, setIncAudit] = useState(true);
-  const [incExports, setIncExports] = useState(true);
-  const [incSummary, setIncSummary] = useState(true);
+  const [included, setIncluded] = useState(() => new Set(DATASETS.map(d => d.key)));
 
-  useEffect(() => {
-    fetchPreview();
-  }, [from, to]);
-
-  async function fetchPreview() {
+  const fetchPreview = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const r = await api.get(`/admin/research-export/preview?from=${from}&to=${to}`);
       setPreview(r.data?.data || null);
-    } catch { setPreview(null); }
-    finally { setLoading(false); }
-  }
+    } catch (err) {
+      setError(err.response?.data?.message || 'ตรวจสอบข้อมูลในช่วงที่เลือกไม่สำเร็จ');
+      setPreview(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [from, to]);
 
-  function getInclude() {
-    const include = [];
-    if (incSnapshots) include.push('snapshots');
-    if (incAudit) include.push('audit');
-    if (incExports) include.push('exports');
-    if (incSummary) include.push('summary');
-    return include;
-  }
+  useEffect(() => { fetchPreview(); }, [fetchPreview]);
 
-  const EXT_MAP = { json: 'json', csv: 'csv', excel: 'xlsx' };
+  function toggleDataset(key) {
+    setIncluded(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   async function handleExport(format = 'json') {
-    const include = getInclude();
+    const include = DATASETS.filter(d => included.has(d.key)).map(d => d.key);
     if (include.length === 0) { toast.error('กรุณาเลือกอย่างน้อย 1 ชุดข้อมูล'); return; }
 
     setExporting(format);
@@ -66,116 +87,148 @@ export default function ResearchExport() {
 
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto pb-10">
-      {/* Header */}
-      <div className="bg-blue-800 text-white rounded-xl px-5 py-4 mb-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <p className="text-xs text-blue-200 uppercase tracking-wider">Research Dataset</p>
-            <h1 className="text-lg font-semibold">ส่งออกชุดข้อมูลวิจัย</h1>
-            <p className="text-sm text-blue-200 mt-0.5">Snapshot • Action Logs • Export Evidence • Summary</p>
-          </div>
-          <span className="bg-blue-600 text-blue-100 text-xs font-medium px-3 py-1.5 rounded-full shrink-0">Admin only</span>
-        </div>
-      </div>
+      <PageHeader
+        icon={Download}
+        title="ส่งออกชุดข้อมูลวิจัย"
+        subtitle="Snapshot · Action Logs · Export Evidence · Summary"
+        meta="Research Dataset"
+        actions={<StatusBadge variant="info">เฉพาะผู้ดูแลระบบ</StatusBadge>}
+      />
 
-      {/* Export form */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-700">ตั้งค่าการส่งออก</h2>
+      {/* Export settings */}
+      <AppCard padding="md" className="mb-5 space-y-4">
+        <SectionTitle title="ตั้งค่าการส่งออก" />
 
-        {/* Date range */}
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">วันที่เริ่มต้น</label>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">วันที่สิ้นสุด</label>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base" />
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <FormField label="วันที่เริ่มต้น" type="date" value={from} onChange={setFrom} />
+          <FormField
+            label="วันที่สิ้นสุด"
+            type="date"
+            value={to}
+            onChange={setTo}
+            error={to < from ? 'วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่มต้น' : undefined}
+          />
         </div>
 
-        {/* Dataset selection */}
-        <div>
-          <p className="text-xs text-gray-500 mb-2">ชุดข้อมูลที่ต้องการ</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Toggle label="Snapshots" checked={incSnapshots} onChange={setIncSnapshots} desc="daily_snapshots" />
-            <Toggle label="Action Logs" checked={incAudit} onChange={setIncAudit} desc="audit_logs" />
-            <Toggle label="Export Evidence" checked={incExports} onChange={setIncExports} desc="export events" />
-            <Toggle label="Summary" checked={incSummary} onChange={setIncSummary} desc="aggregated" />
+        <fieldset>
+          <legend className="text-sm font-medium text-ink mb-2">ชุดข้อมูลที่ต้องการ</legend>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {DATASETS.map(d => {
+              const on = included.has(d.key);
+              return (
+                <label
+                  key={d.key}
+                  className={`flex items-center gap-2 px-3 min-h-[44px] rounded-lg border cursor-pointer transition ${
+                    on ? 'bg-brand-50 border-brand-300' : 'bg-surface border-surface-border hover:bg-surface-border/40'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => toggleDataset(d.key)}
+                    className="focus-ring w-5 h-5 rounded border-surface-border accent-brand-600"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-ink">{d.label}</span>
+                    <span className="block text-caption text-ink-muted">{d.desc}</span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
-        </div>
-      </div>
+          {included.size === 0 && (
+            <p className="mt-2 text-caption text-danger">เลือกอย่างน้อย 1 ชุดข้อมูลจึงจะส่งออกได้</p>
+          )}
+        </fieldset>
+      </AppCard>
 
       {/* Preview */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">ตัวอย่างข้อมูลที่จะส่งออก</h2>
+      <AppCard padding="md" className="mb-5">
+        <SectionTitle title="ตัวอย่างข้อมูลที่จะส่งออก" className="mb-3" />
         {loading ? (
-          <p className="text-gray-400 text-center py-4">กำลังตรวจสอบ…</p>
+          <LoadingState compact message="กำลังตรวจสอบ…" />
+        ) : error ? (
+          <ErrorState title="ตรวจสอบข้อมูลไม่สำเร็จ" message={error} onRetry={fetchPreview} />
         ) : preview ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <PreviewCard label="Snapshots" value={preview.snapshots} sub={`${preview.baselines} baseline`} />
+            <PreviewCard label="Snapshots"  value={preview.snapshots}   sub={`${preview.baselines} baseline`} />
             <PreviewCard label="Audit Logs" value={preview.audit_logs} />
             <PreviewCard label="Export Logs" value={preview.export_logs} />
-            <PreviewCard label="ช่วงวันที่" value={`${fmtDate(preview.earliest_snapshot)} — ${fmtDate(preview.latest_snapshot)}`} small />
+            <PreviewCard
+              label="ช่วงวันที่"
+              value={`${fmtDate(preview.earliest_snapshot)} — ${fmtDate(preview.latest_snapshot)}`}
+              small
+            />
           </div>
         ) : (
-          <p className="text-gray-400 text-center py-4">ไม่มีข้อมูลในช่วงที่เลือก</p>
+          <EmptyState title="ไม่มีข้อมูลในช่วงที่เลือก" description="ลองขยายช่วงวันที่" />
         )}
-      </div>
+      </AppCard>
 
-      {/* Export buttons */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">ดาวน์โหลดชุดข้อมูล</h2>
+      {/* Download */}
+      <AppCard padding="md" className="mb-5">
+        <SectionTitle title="ดาวน์โหลดชุดข้อมูล" className="mb-3" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-          <button onClick={() => handleExport('json')} disabled={exporting !== null}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
-            {exporting === 'json' ? 'กำลังสร้าง…' : 'JSON'}
-          </button>
-          <button onClick={() => handleExport('csv')} disabled={exporting !== null}
-            className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
-            {exporting === 'csv' ? 'กำลังสร้าง…' : 'CSV'}
-          </button>
-          <button onClick={() => handleExport('excel')} disabled={exporting !== null}
-            className="flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition text-base">
-            {exporting === 'excel' ? 'กำลังสร้าง…' : 'Excel'}
-          </button>
+          {FORMATS.map(f => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => handleExport(f.key)}
+              disabled={exporting !== null || included.size === 0}
+              className="focus-ring flex flex-col items-center justify-center gap-0.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold py-3 min-h-[56px] rounded-xl transition disabled:opacity-50 disabled:pointer-events-none"
+            >
+              <span className="text-base">{exporting === f.key ? 'กำลังสร้าง…' : f.label}</span>
+              <span className="text-caption font-normal text-white/80">{f.hint}</span>
+            </button>
+          ))}
         </div>
-        <p className="text-xs text-gray-500 text-center">ไฟล์จะถูกบันทึกลงโฟลเดอร์ดาวน์โหลดของเบราว์เซอร์โดยอัตโนมัติ</p>
-        <div className="flex flex-wrap justify-center gap-4 mt-2 text-xs text-gray-400">
-          <span>JSON — ข้อมูลดิบสำหรับวิเคราะห์</span>
-          <span>CSV — เปิดใน Excel/Sheets ได้ทันที</span>
-          <span>Excel — หลาย sheet แยกตามชุดข้อมูล</span>
-        </div>
-      </div>
+        <p className="text-caption text-ink-muted text-center">
+          ไฟล์จะถูกบันทึกลงโฟลเดอร์ดาวน์โหลดของเบราว์เซอร์โดยอัตโนมัติ
+        </p>
+      </AppCard>
 
       {/* Data dictionary */}
-      <details className="bg-gray-50 rounded-xl border border-gray-200">
-        <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-600">คำอธิบายชุดข้อมูล (Data Dictionary)</summary>
-        <div className="border-t border-gray-200 px-4 py-3 text-xs text-gray-600 space-y-3">
-          <div>
-            <p className="font-semibold text-gray-700">snapshots[]</p>
-            <p>ข้อมูลสรุปรายวัน: จำนวนนักเรียน, รถ, ประกัน, ผลตรวจ, ความครบถ้วน, completion rate</p>
-            <p className="text-gray-400">Fields: snapshot_date, total_students, students_with_vehicle, students_with_parent, total_vehicles, vehicles_with_insurance, vehicles_inspected, vehicles_passed, morning_total/done, evening_total/done, emergency_count, active_users, total_users, is_baseline, baseline_note, run_type</p>
+      <AppCard padding="none">
+        <details>
+          <summary className="focus-ring flex items-center px-4 min-h-[44px] cursor-pointer text-sm font-medium text-ink-muted hover:bg-surface rounded-xl transition">
+            คำอธิบายชุดข้อมูล (Data Dictionary)
+          </summary>
+          <div className="border-t border-surface-border px-4 py-3 text-caption text-ink-muted space-y-3">
+            <div>
+              <p className="font-semibold text-ink">snapshots[]</p>
+              <p>ข้อมูลสรุปรายวัน: จำนวนนักเรียน, รถ, ประกัน, ผลตรวจ, ความครบถ้วน, completion rate</p>
+              <p>Fields: snapshot_date, total_students, students_with_vehicle, students_with_parent, total_vehicles, vehicles_with_insurance, vehicles_inspected, vehicles_passed, morning_total/done, evening_total/done, emergency_count, active_users, total_users, is_baseline, baseline_note, run_type</p>
+            </div>
+            <div>
+              <p className="font-semibold text-ink">audit_logs[]</p>
+              <p>ประวัติ action ทั้งหมด: login, create, update, delete, export, import, approve</p>
+              <p>Fields: id, user_id, user_role, action, entity_type, entity_id, new_value, created_at</p>
+              {/* This exclusion was a bare ⚠️ in amber text — the only marker
+                  that these three fields are deliberately withheld. */}
+              <p className="mt-1 inline-flex items-start gap-1.5 text-warn-ink font-medium">
+                <ShieldAlert className="w-4 h-4 shrink-0 mt-px" strokeWidth={2.2} aria-hidden="true" />
+                <span>ไม่รวม: ip_address, user_agent, old_value (เพื่อความเป็นส่วนตัว)</span>
+              </p>
+            </div>
+            <div>
+              <p className="font-semibold text-ink">export_evidence[]</p>
+              <p>เฉพาะ action=EXPORT — หลักฐานการดาวน์โหลดรายงาน</p>
+              <p>Fields: id, user_id, user_role, entity_type (report_csv/report_excel/report_pdf), entity_id, new_value, created_at</p>
+            </div>
+            <div>
+              <p className="font-semibold text-ink">summary</p>
+              <p>สรุป aggregate: จำนวนรวม, แยกตาม action type, แยกตาม role</p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold text-gray-700">audit_logs[]</p>
-            <p>ประวัติ action ทั้งหมด: login, create, update, delete, export, import, approve</p>
-            <p className="text-gray-400">Fields: id, user_id, user_role, action, entity_type, entity_id, new_value, created_at</p>
-            <p className="text-amber-600">⚠️ ไม่รวม: ip_address, user_agent, old_value (privacy)</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-700">export_evidence[]</p>
-            <p>เฉพาะ action=EXPORT — หลักฐานการดาวน์โหลดรายงาน</p>
-            <p className="text-gray-400">Fields: id, user_id, user_role, entity_type (report_csv/report_excel/report_pdf), entity_id, new_value, created_at</p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-700">summary{}</p>
-            <p>สรุป aggregate: จำนวนรวม, แยกตาม action type, แยกตาม role</p>
-          </div>
-        </div>
-      </details>
+        </details>
+      </AppCard>
+
+      <AlertBanner variant="info" title="ข้อมูลนี้ใช้เพื่อการวิจัย" className="mt-5">
+        {/* TODO: ตรวจสอบกับผู้เชี่ยวชาญ — ชุดข้อมูลนี้มี audit log ระดับผู้ใช้
+            (user_id, user_role) การเผยแพร่ภายนอกอาจต้องผ่านการพิจารณา PDPA
+            ก่อน จึงไม่เปลี่ยนขอบเขตข้อมูลเองในรอบนี้ */}
+        ชุดข้อมูลมี audit log ระดับผู้ใช้ — โปรดตรวจสอบขอบเขตการเผยแพร่ก่อนนำออกนอกหน่วยงาน
+      </AlertBanner>
     </div>
   );
 }
@@ -185,25 +238,12 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function Toggle({ label, checked, onChange, desc }) {
-  return (
-    <label className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${checked ? 'bg-blue-50 border-blue-300' : 'bg-gray-50 border-gray-200'}`}>
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
-        className="w-4 h-4 rounded text-blue-600" />
-      <div>
-        <p className="text-sm font-medium text-gray-700">{label}</p>
-        {desc && <p className="text-xs text-gray-400">{desc}</p>}
-      </div>
-    </label>
-  );
-}
-
 function PreviewCard({ label, value, sub, small }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-3 text-center">
-      <p className={`font-semibold text-gray-800 ${small ? 'text-sm' : 'text-xl'}`}>{value}</p>
-      <p className="text-xs text-gray-500">{label}</p>
-      {sub && <p className="text-xs text-gray-400">{sub}</p>}
+    <div className="bg-surface rounded-lg p-3 text-center border border-surface-border">
+      <p className={`font-semibold text-ink tabular-nums ${small ? 'text-sm' : 'text-xl'}`}>{value}</p>
+      <p className="text-caption text-ink-muted">{label}</p>
+      {sub && <p className="text-caption text-ink-muted">{sub}</p>}
     </div>
   );
 }

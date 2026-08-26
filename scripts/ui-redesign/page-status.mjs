@@ -144,6 +144,16 @@ const EXEMPT = {
     form: 'the login form is the page; its fields carry autocomplete and wired labels already, verified in the baseline audit',
     modal: 'the contact-admin panel is inline on the page, not a dialog',
   },
+  // ExecutivePrint is not a screen page that also prints — it IS the print
+  // artifact the report pages hand off to (their own screen tables already go
+  // through DataTable). Its bordered tables are sized for A4 and DataTable's
+  // mobile card mode has no meaning on paper, so forcing it here would change
+  // the printed document to satisfy a screen rule. `states` is NOT exempt and
+  // was fixed: the page now distinguishes "no evidence" from "request failed".
+  'pages/admin/ExecutivePrint.jsx': {
+    header: 'branded print header band carrying title, baseline date and generation time — it IS the document header, in the form the printed page uses',
+    table: 'A4 print tables with ruled cells; the screen path for these reports already renders through DataTable',
+  },
   'pages/ChangePassword.jsx': {
     header: 'rendered outside the shell, before a session is fully established',
   },
@@ -195,7 +205,7 @@ if (process.argv.includes('--json')) {
 } else {
   for (const r of rows) {
     const gaps = Object.entries(r.detail).filter(([, v]) => v === 'todo').map(([k]) => k).join(',');
-    const mark = r.status === 'Complete' ? 'OK ' : r.status === 'N/A' ? '-- ' : '>> ';
+    const mark = r.status === 'Complete' ? 'OK ' : r.status.startsWith('N/A') ? '-- ' : '>> ';
     console.log(`${mark}${r.file.padEnd(48)} ${r.status.padEnd(9)} ${gaps}`);
   }
   console.log('\n' + Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join('  ·  '));

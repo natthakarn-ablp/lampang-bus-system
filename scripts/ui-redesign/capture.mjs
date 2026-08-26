@@ -137,6 +137,28 @@ const PICKUP_VEHICLES = [
   { id: 'V-2', plate_no: 'กข-2222 ลำปาง', student_count: 4 },
 ];
 
+// Synthetic research fixtures — invented numbers, no production record.
+const SNAP_METRICS = {
+  total_students: 1240, students_with_vehicle: 1102, students_with_parent: 998,
+  total_vehicles: 186, vehicles_with_insurance: 171, vehicles_inspected: 160,
+  vehicles_passed: 152, morning_total: 186, morning_done: 174,
+  evening_total: 186, evening_done: 168, active_users: 276, total_users: 312,
+  emergency_count: 0,
+};
+const EVAL_SUMMARY = {
+  baseline: { date: '2026-01-08', data: { ...SNAP_METRICS, students_with_vehicle: 940, vehicles_inspected: 121 } },
+  latest:   { date: '2026-08-25', data: SNAP_METRICS },
+  role_actions: {
+    driver:      { total: 42, actions: { LOGIN: 20, UPDATE: 14, CREATE: 8 } },
+    school:      { total: 24, actions: { IMPORT: 6, UPDATE: 12, EXPORT: 6 } },
+    affiliation: { total: 9,  actions: { LOGIN: 5, EXPORT: 4 } },
+    province:    { total: 31, actions: { LOGIN: 12, EXPORT: 19 } },
+    transport:   { total: 3,  actions: { LOGIN: 3 } },
+    admin:       { total: 58, actions: { LOGIN: 22, UPDATE: 20, DELETE: 4, EXPORT: 12 } },
+  },
+  role_exports: { driver: 0, school: 6, affiliation: 4, province: 19, transport: 0, admin: 12 },
+};
+
 const SCENARIOS = {
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
@@ -203,6 +225,15 @@ const SCENARIOS = {
 // two roles; both need points, pupils and (for the school) vehicles before the
 // editor can be opened at all.
 const COMMON = {
+  '/api/admin/snapshots': { data: [
+    { id: 9, snapshot_date: '2026-08-25', is_baseline: false, run_type: 'manual', baseline_note: null, ...SNAP_METRICS },
+    { id: 1, snapshot_date: '2026-01-08', is_baseline: true,  run_type: 'manual', baseline_note: 'Research R2 Pre-measure Baseline', research_phase: 'pre-measure', ...SNAP_METRICS, students_with_vehicle: 940, vehicles_inspected: 121 },
+  ] },
+  '/api/admin/research-export/preview': { data: {
+    snapshots: 9, baselines: 1, audit_logs: 1240, export_logs: 41,
+    earliest_snapshot: '2026-01-08', latest_snapshot: '2026-08-25',
+  } },
+  '/api/admin/evaluation-summary': { data: EVAL_SUMMARY },
   '/api/driver/pickup-points':   { data: { vehicle: PICKUP_VEHICLES[0], points: PICKUP_POINTS.filter(p => p.vehicle_id === 'V-1') } },
   '/api/driver/pickup-students': { data: PICKUP_STUDENTS },
   '/api/school/pickup-points':   { data: PICKUP_POINTS },
@@ -355,6 +386,16 @@ const SHOTS = [
   { id: '39-driver-profile',    url: '/driver/profile',       user: 'driver', vps: ['mobile'] },
   { id: '40-change-password',   url: '/change-password',      user: 'school', vps: ['mobile', 'desktop'] },
   { id: '41-prov-pickup-map',   url: '/province/pickup-map',  user: 'province',    vps: ['mobile', 'desktop'] },
+  { id: '68-research-metrics', url: '/admin/research',        user: 'admin', vps: ['mobile', 'desktop'],
+    expect: ['table', 'text=เปรียบเทียบ Baseline', 'text=ดีขึ้น'] },
+  { id: '69-research-export',  url: '/admin/research-export', user: 'admin', vps: ['mobile', 'desktop'],
+    expect: ['input[type=date]', 'input[type=checkbox]', 'button:has-text("JSON")'] },
+  { id: '70-evaluation',       url: '/admin/evaluation',      user: 'admin', vps: ['mobile', 'desktop'],
+    // the role panels only render once expanded, so open one
+    act: async page => { await page.getByRole('button', { name: /คนขับ/ }).first().click(); },
+    expect: ['[aria-expanded="true"]', 'text=หลักฐานที่มี', 'text=Baseline vs Current'] },
+  { id: '71-executive-print',  url: '/admin/executive-print', user: 'admin', vps: ['desktop'],
+    expect: ['table', 'text=สรุปสำหรับผู้บริหาร', 'button:has-text("พิมพ์")'] },
   { id: '64-driver-pickup',     url: '/driver/pickup-map',   user: 'driver',      vps: ['mobile', 'desktop'] },
   { id: '65-school-pickup',     url: '/school/pickup-map',   user: 'school',      vps: ['mobile', 'desktop'] },
   // The editor is a modal: capture it OPEN, so its body is actually rendered.
@@ -376,7 +417,8 @@ const SHOTS = [
   const report = [];
 
   for (const shot of SHOTS) {
-    if (ONLY && !shot.id.includes(ONLY)) continue;
+    // --only accepts a comma-separated list, so one run can cover a batch
+    if (ONLY && !ONLY.split(',').some(f => shot.id.includes(f.trim()))) continue;
     for (const vname of shot.vps) {
       const name = `${shot.id}-${vname}`;
       const user = shot.user ? USERS[shot.user] : { role: 'none' };

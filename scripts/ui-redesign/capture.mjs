@@ -290,6 +290,22 @@ const COMMON = {
     { batch_id: 'B-2', created_at: '2026-08-25T03:00:00Z', filename: 'students-aug.csv', status: 'APPLIED',         rollback_status: null, total_rows: 42, insert_count: 40, error_count: 2, expires_at: '2026-09-25T03:00:00Z' },
     { batch_id: 'B-1', created_at: '2026-07-02T03:00:00Z', filename: 'students-jul.csv', status: 'APPLIED_PARTIAL', rollback_status: null, total_rows: 30, insert_count: 24, error_count: 6, expires_at: '2026-08-02T03:00:00Z' },
   ] },
+  '/api/transport/inspections': { data: [
+    { id: 'I-1', plate_no: 'กข-1111 ลำปาง', result: 'PASSED',    inspection_date: '2026-08-01', expiry_date: '2027-08-01', inspector_name: 'เจ้าหน้าที่ ทดสอบ', notes: null },
+    { id: 'I-2', plate_no: 'กข-2222 ลำปาง', result: 'NEEDS_FIX', inspection_date: '2026-07-15', expiry_date: null,         inspector_name: 'เจ้าหน้าที่ ทดสอบ', notes: 'ยางสึก' },
+  ], meta: { page: 1, per_page: 20, total: 2 } },
+  '/api/transport/vehicles': { data: PICKUP_VEHICLES, meta: { page: 1, per_page: 20, total: 2 } },
+  '/api/transport/schools': { data: [
+    { id: 'SC-1', name: 'โรงเรียนบ้านตัวอย่าง' },
+    { id: 'SC-2', name: 'โรงเรียนตัวอย่างสอง' },
+  ] },
+  '/api/province/schools': { data: [
+    { id: 'SC-1', name: 'โรงเรียนบ้านตัวอย่าง' },
+    { id: 'SC-2', name: 'โรงเรียนตัวอย่างสอง' },
+  ] },
+  '/api/verification/transport/queue': { data: [
+    { id: 'Q-1', plate_no: 'กข-1111 ลำปาง', school_name: 'โรงเรียนบ้านตัวอย่าง', status: 'PENDING', request_no: 'REQ-001' },
+  ] },
   '/api/admin/live-vehicles': { data: {
     generated_at: '2026-08-26T01:45:00Z',
     vehicles: [
@@ -497,6 +513,13 @@ const SHOTS = [
     },
     expect: ['[role=dialog]', 'text=รหัสโรงเรียนปลายทาง', 'text=คำขอนี้ยังไม่ย้ายข้อมูล',
              'text=คำขอของนักเรียนคนนี้'] },
+  { id: '83-inspection-form', url: '/transport/inspections', user: 'transport', vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: 'บันทึกผลตรวจเดิม' }).first().click(); },
+    expect: ['text=เลือกรถ', 'text=ผลตรวจ', 'text=วันที่ตรวจ', 'text=หน้านี้เป็นบันทึกแบบเดิม'] },
+  { id: '84-verification-queue', url: '/transport/verification', user: 'transport', vps: ['mobile', 'desktop'],
+    expect: ['text=ค้นหาในคิวตรวจ'] },
+  { id: '85-transport-dash', url: '/transport', user: 'transport', vps: ['mobile', 'desktop'],
+    expect: ['[role=radiogroup]', 'text=ค้นหาทะเบียนรถ'] },
   { id: '72-term-settings',    url: '/admin/term-settings',   user: 'admin', vps: ['mobile', 'desktop'],
     // the add-term form only exists once opened
     act: async page => { await page.getByRole('button', { name: /เพิ่มภาคเรียน/ }).first().click(); },

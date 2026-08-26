@@ -12,8 +12,7 @@ import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
 import {
   AppCard, AlertBanner, KPIGrid, KPIStat,
-  StatusBadge, DashboardSection,
-} from '../../components/ui';
+  StatusBadge, DashboardSection, FilterBar} from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import PageHeader from '../../components/PageHeader';
@@ -341,40 +340,28 @@ export default function TransportDashboard() {
         );
       })()}
 
-      {/* Quick filters */}
-      <div className="flex flex-wrap gap-2">
-        {FILTERS.map(f => {
-          const count = filterCounts[f.key];
-          const isActive = activeFilter === f.key;
-          return (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setActiveFilter(f.key)}
-              className={`inline-flex items-center text-sm font-medium px-3 py-2 min-h-[44px] rounded-lg transition border ${
-                isActive
-                  ? 'bg-brand-700 text-surface-raised border-brand-700'
-                  : 'bg-surface-raised text-ink-muted border-surface-border hover:bg-surface'
-              }`}
-            >
-              {f.label}{' '}
-              <span className={`ml-1 text-xs font-semibold ${isActive ? 'text-brand-100' : 'text-ink-muted'}`}>{count}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" strokeWidth={2} aria-hidden="true" />
-        <input
-          type="text"
-          value={vSearch}
-          onChange={e => setVSearch(e.target.value)}
-          placeholder="ค้นหาทะเบียนรถ…"
-          className="w-full min-h-[44px] border border-surface-border rounded-xl pl-9 pr-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-400"
-        />
-      </div>
+      {/* The chip row and the search box were a hand-rolled pair; the chips
+          were styled buttons rather than a radiogroup, and the search input
+          had no accessible name — a placeholder is not one. */}
+      <FilterBar
+        chips={{
+          label: 'กรองรถตามความเสี่ยง',
+          value: activeFilter,
+          onChange: setActiveFilter,
+          options: FILTERS.map(f => [f.key, f.label, filterCounts[f.key]]),
+        }}
+        search={{
+          value: vSearch,
+          onChange: setVSearch,
+          label: 'ค้นหาทะเบียนรถ',
+          placeholder: 'ค้นหาทะเบียนรถ…',
+        }}
+        count={filtered.length}
+        countLabel="คัน"
+        onClear={(activeFilter !== FILTERS[0].key || vSearch)
+          ? () => { setActiveFilter(FILTERS[0].key); setVSearch(''); }
+          : undefined}
+      />
 
       {/* Vehicle list */}
       <DashboardSection

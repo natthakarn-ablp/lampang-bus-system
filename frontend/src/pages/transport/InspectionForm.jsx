@@ -5,9 +5,15 @@ import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
-import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
+import PageHeader from '../../components/PageHeader';
 import Pagination from '../../components/Pagination';
+import {
+  AlertBanner, ConfirmDialog, DataTable, TableAction, FilterBar, FormField,
+} from '../../components/ui';
+
+// Shared by the selects on this form; FormField supplies the label wiring.
+const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition';
 
 const RESULT_OPTIONS = [
   { value: 'PASSED',   label: 'ผ่าน' },
@@ -53,6 +59,9 @@ export default function InspectionForm() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(!!prefillVehicleId);
   const [saving, setSaving] = useState(false);
+  // window.confirm could not show the plate and the date side by side, and
+  // put the default action on OK.
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const [resultFilter, setResultFilter] = useState('');
 
   const [form, setForm] = useState({
@@ -69,8 +78,10 @@ export default function InspectionForm() {
   const [newPlate, setNewPlate] = useState({ prefix: '', letters: '', number: '', province: 'ลำปาง' });
 
   useEffect(() => {
-    api.get('/transport/vehicles?per_page=200').then(r => setVehicles(r.data?.data || [])).catch(err => console.error('[InspectionForm] vehicles load failed:', err.message));
-    api.get('/transport/schools').then(r => setSchools(r.data?.data || [])).catch(err => console.error('[InspectionForm] schools load failed:', err.message));
+    // `|| []` only catches null; a non-array payload reached .filter() below
+    // and took the whole page into the error boundary.
+    api.get('/transport/vehicles?per_page=200').then(r => setVehicles(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => console.error('[InspectionForm] vehicles load failed:', err.message));
+    api.get('/transport/schools').then(r => setSchools(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => console.error('[InspectionForm] schools load failed:', err.message));
   }, []);
 
   const fetchInspections = useCallback(async (page = 1) => {
@@ -89,7 +100,7 @@ export default function InspectionForm() {
   useEffect(() => { fetchInspections(1); }, [fetchInspections]);
 
   async function handleDeleteInspection(ins) {
-    if (!window.confirm(`ลบผลตรวจของ ${ins.plate_no} (${formatThaiDate(ins.inspection_date)}) ?\nระบบจะคำนวณสถานะรถใหม่ และลบได้เฉพาะผลตรวจที่คุณบันทึกเอง`)) return;
+    setConfirmDelete(null);
     try {
       await api.delete(`/transport/inspections/${ins.id}`);
       toast.success('ลบผลตรวจสำเร็จ');
@@ -164,33 +175,36 @@ export default function InspectionForm() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">บันทึกตรวจสภาพรถ</h1>
-          <p className="text-xs text-gray-400 mt-0.5">บันทึกและดูประวัติการตรวจสภาพ</p>
-        </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <button onClick={() => navigate('/transport/verification')}
-            className="border border-blue-200 bg-blue-50 text-blue-700 font-medium px-4 py-2.5 rounded-lg transition">
-            ไปหน้าตรวจและรับรองรถ
-          </button>
-          <button onClick={() => setShowForm(!showForm)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg transition">
-            {showForm ? 'ปิดฟอร์ม' : 'บันทึกผลตรวจเดิม'}
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        icon={ClipboardList}
+        title="บันทึกตรวจสภาพรถ"
+        subtitle="บันทึกและดูประวัติการตรวจสภาพ"
+        actions={(
+          <>
+            <button
+              type="button"
+              onClick={() => navigate('/transport/verification')}
+              className="focus-ring border border-brand-200 bg-brand-50 hover:bg-brand-100 text-brand-700 text-sm font-medium px-4 min-h-[44px] rounded-lg transition"
+            >
+              ไปหน้าตรวจและรับรองรถ
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(!showForm)}
+              aria-expanded={showForm}
+              className="focus-ring bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white text-sm font-semibold px-5 min-h-[44px] rounded-lg transition"
+            >
+              {showForm ? 'ปิดฟอร์ม' : 'บันทึกผลตรวจเดิม'}
+            </button>
+          </>
+        )}
+      />
 
-      {/* แจ้งให้ใช้หน้าใหม่ — หน้านี้เป็นบันทึกแบบเดิม */}
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-        <p className="text-sm text-amber-800">
-          ⚠️ หน้านี้เป็น <strong>บันทึกแบบเดิม</strong> (เก็บไว้ดูประวัติ) — สำหรับตรวจและรับรองรถ ให้ใช้เมนู <strong>“ตรวจและรับรองรถ”</strong>
-        </p>
-        <button onClick={() => navigate('/transport/verification')}
-          className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700">
-          ไปหน้าตรวจและรับรองรถ
-        </button>
-      </div>
+      {/* แจ้งให้ใช้หน้าใหม่ — หน้านี้เป็นบันทึกแบบเดิม.
+          The ⚠️ was the only thing marking this as the legacy page. */}
+      <AlertBanner variant="warn" title="หน้านี้เป็นบันทึกแบบเดิม" className="mb-5">
+        เก็บไว้ดูประวัติ — สำหรับตรวจและรับรองรถ ให้ใช้เมนู “ตรวจและรับรองรถ”
+      </AlertBanner>
 
       {/* Prefill indicator */}
       {prefillVehicleId && showForm && (() => {
@@ -206,123 +220,178 @@ export default function InspectionForm() {
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-5 mb-6 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Searchable vehicle select */}
-            <div className="sm:col-span-2">
-              <label className="block text-sm text-gray-600 mb-1">เลือกรถ <span className="text-red-500">*</span></label>
+            <div className="sm:col-span-2 space-y-2">
               {!isOtherVehicle && (
-                <input type="text" value={vehicleSearch} onChange={e => setVehicleSearch(e.target.value)}
+                <FormField
+                  label="ค้นหาทะเบียนรถ"
+                  value={vehicleSearch}
+                  onChange={setVehicleSearch}
                   placeholder="พิมพ์ทะเบียนรถเพื่อค้นหา…"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base mb-1 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  helper="พิมพ์เพื่อกรองรายการด้านล่าง"
+                />
               )}
-              <select value={form.vehicle_id}
-                onChange={e => { setForm({ ...form, vehicle_id: e.target.value }); if (e.target.value !== '__other__') setNewPlate({ prefix: '', letters: '', number: '', province: 'ลำปาง' }); }}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
-                <option value="">— เลือกรถ —</option>
-                {filteredVehicles.map(v => <option key={v.id} value={v.id}>{v.plate_no}</option>)}
-                <option value="__other__">อื่นๆ (เพิ่มทะเบียนรถใหม่)</option>
-              </select>
+              <FormField label="เลือกรถ" required>
+                {ctl => (
+                  <select
+                    {...ctl}
+                    value={form.vehicle_id}
+                    onChange={e => { setForm({ ...form, vehicle_id: e.target.value }); if (e.target.value !== '__other__') setNewPlate({ prefix: '', letters: '', number: '', province: 'ลำปาง' }); }}
+                    className={CONTROL_CLS}
+                  >
+                    <option value="">— เลือกรถ —</option>
+                    {filteredVehicles.map(v => <option key={v.id} value={v.id}>{v.plate_no}</option>)}
+                    <option value="__other__">อื่นๆ (เพิ่มทะเบียนรถใหม่)</option>
+                  </select>
+                )}
+              </FormField>
 
               {/* New plate structured input */}
               {isOtherVehicle && (
-                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
-                  <p className="text-sm font-semibold text-amber-800">กรอกทะเบียนรถใหม่</p>
+                <div className="mt-3 bg-warn-soft border border-warn/30 rounded-lg p-4 space-y-3">
+                  <p className="text-sm font-semibold text-warn-ink">กรอกทะเบียนรถใหม่</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">เลขนำหน้า</label>
-                      <input type="text" value={newPlate.prefix} maxLength={1}
-                        onChange={e => setNewPlate({ ...newPlate, prefix: e.target.value.replace(/[^0-9]/g, '') })}
-                        placeholder="1" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base text-center focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">หมวดอักษร <span className="text-red-500">*</span></label>
-                      <input type="text" value={newPlate.letters} maxLength={2}
-                        onChange={e => setNewPlate({ ...newPlate, letters: e.target.value.replace(/[^ก-ฮ]/g, '') })}
-                        placeholder="กข" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base text-center focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">หมายเลข <span className="text-red-500">*</span></label>
-                      <input type="text" value={newPlate.number} maxLength={4}
-                        onChange={e => setNewPlate({ ...newPlate, number: e.target.value.replace(/[^0-9]/g, '') })}
-                        placeholder="1234" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base text-center focus:outline-none focus:ring-2 focus:ring-amber-400" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">จังหวัด <span className="text-red-500">*</span></label>
-                      <select value={newPlate.province} onChange={e => setNewPlate({ ...newPlate, province: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-2 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
-                        <option value="">เลือก</option>
-                        {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </div>
+                    <FormField
+                      label="เลขนำหน้า"
+                      value={newPlate.prefix}
+                      maxLength={1}
+                      inputMode="numeric"
+                      onChange={v => setNewPlate({ ...newPlate, prefix: v.replace(/[^0-9]/g, '') })}
+                      placeholder="1"
+                    />
+                    <FormField
+                      label="หมวดอักษร"
+                      required
+                      value={newPlate.letters}
+                      maxLength={2}
+                      onChange={v => setNewPlate({ ...newPlate, letters: v.replace(/[^ก-ฮ]/g, '') })}
+                      placeholder="กข"
+                    />
+                    <FormField
+                      label="หมายเลข"
+                      required
+                      value={newPlate.number}
+                      maxLength={4}
+                      inputMode="numeric"
+                      onChange={v => setNewPlate({ ...newPlate, number: v.replace(/[^0-9]/g, '') })}
+                      placeholder="1234"
+                    />
+                    <FormField label="จังหวัด" required>
+                      {ctl => (
+                        <select
+                          {...ctl}
+                          value={newPlate.province}
+                          onChange={e => setNewPlate({ ...newPlate, province: e.target.value })}
+                          className={CONTROL_CLS}
+                        >
+                          <option value="">เลือก</option>
+                          {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      )}
+                    </FormField>
                   </div>
                   {buildPlateNo() && (
-                    <p className="text-sm text-gray-700 bg-white rounded-lg px-3 py-2 border">
+                    <p className="text-sm text-ink bg-surface-raised rounded-lg px-3 py-2 border border-surface-border">
                       ทะเบียน: <strong>{buildPlateNo()}</strong>
                     </p>
                   )}
                 </div>
               )}
             </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">ผลตรวจ <span className="text-red-500">*</span></label>
-              <select value={form.result} onChange={e => setForm({ ...form, result: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
-                {RESULT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">วันที่ตรวจ</label>
-              <input type="date" value={form.inspection_date} required
-                onChange={e => setForm({ ...form, inspection_date: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">วันหมดอายุผลตรวจ</label>
-              <input type="date" value={form.expiry_date}
-                onChange={e => setForm({ ...form, expiry_date: e.target.value })}
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-            </div>
+            <FormField label="ผลตรวจ" required>
+              {ctl => (
+                <select
+                  {...ctl}
+                  value={form.result}
+                  onChange={e => setForm({ ...form, result: e.target.value })}
+                  className={CONTROL_CLS}
+                >
+                  {RESULT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              )}
+            </FormField>
+            <FormField
+              label="วันที่ตรวจ"
+              required
+              type="date"
+              value={form.inspection_date}
+              onChange={v => setForm({ ...form, inspection_date: v })}
+            />
+            <FormField
+              label="วันหมดอายุผลตรวจ"
+              type="date"
+              value={form.expiry_date}
+              onChange={v => setForm({ ...form, expiry_date: v })}
+              error={form.expiry_date && form.inspection_date && form.expiry_date < form.inspection_date
+                ? 'วันหมดอายุต้องไม่ก่อนวันที่ตรวจ' : undefined}
+            />
           </div>
 
           {/* Searchable school select */}
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">โรงเรียนที่ออกใบรับรอง</label>
-            <input type="text" value={schoolSearch} onChange={e => setSchoolSearch(e.target.value)}
+          <div className="space-y-2">
+            <FormField
+              label="ค้นหาโรงเรียน"
+              value={schoolSearch}
+              onChange={setSchoolSearch}
               placeholder="พิมพ์ชื่อโรงเรียนเพื่อค้นหา…"
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base mb-1 focus:outline-none focus:ring-2 focus:ring-blue-400" />
-            <select value={form.certifying_school_id}
-              onChange={e => { setForm({ ...form, certifying_school_id: e.target.value }); if (e.target.value !== '__other__') setCustomSchoolName(''); }}
-              size={Math.min(filteredSchools.length + 3, 8)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
-              <option value="">-- เลือกโรงเรียน --</option>
-              {filteredSchools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              <option value="__other__">อื่นๆ (ระบุเอง)</option>
-            </select>
+              helper="พิมพ์เพื่อกรองรายการด้านล่าง"
+            />
+            <FormField label="โรงเรียนที่ออกใบรับรอง">
+              {ctl => (
+                <select
+                  {...ctl}
+                  value={form.certifying_school_id}
+                  onChange={e => { setForm({ ...form, certifying_school_id: e.target.value }); if (e.target.value !== '__other__') setCustomSchoolName(''); }}
+                  size={Math.min(filteredSchools.length + 3, 8)}
+                  className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-base text-ink transition"
+                >
+                  <option value="">-- เลือกโรงเรียน --</option>
+                  {filteredSchools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  <option value="__other__">อื่นๆ (ระบุเอง)</option>
+                </select>
+              )}
+            </FormField>
             {isOtherSchool && (
-              <input type="text" value={customSchoolName} onChange={e => setCustomSchoolName(e.target.value)}
+              <FormField
+                label="ระบุชื่อโรงเรียน"
+                required
+                value={customSchoolName}
+                onChange={setCustomSchoolName}
                 placeholder="กรุณาระบุชื่อโรงเรียน"
-                className="w-full border-2 border-amber-300 rounded-lg px-4 py-2.5 text-base mt-2 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-amber-50" />
+              />
             )}
           </div>
 
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">หมายเหตุ</label>
-            <input type="text" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-              placeholder="รายละเอียดเพิ่มเติม"
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-          </div>
-          <button type="submit" disabled={saving}
-            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium px-6 py-3 rounded-lg transition">
+          <FormField
+            label="หมายเหตุ"
+            helper="ไม่บังคับ"
+            value={form.notes}
+            onChange={v => setForm({ ...form, notes: v })}
+            placeholder="รายละเอียดเพิ่มเติม"
+          />
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="focus-ring w-full sm:w-auto bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white font-semibold px-6 min-h-[48px] rounded-lg transition"
+          >
             {saving ? 'กำลังบันทึก…' : 'บันทึกผลตรวจ'}
           </button>
         </form>
       )}
 
-      <div className="flex flex-wrap gap-3 mb-4">
-        <select value={resultFilter} onChange={e => setResultFilter(e.target.value)}
-          className="border-2 border-gray-200 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400">
-          <option value="">ทุกผลตรวจ</option>
-          {RESULT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
+      <FilterBar
+        className="mb-4"
+        filters={[{
+          key: 'result',
+          label: 'ผลตรวจ',
+          value: resultFilter,
+          onChange: setResultFilter,
+          options: [['', 'ทุกผลตรวจ'], ...RESULT_OPTIONS.map(o => [o.value, o.label])],
+        }]}
+        count={meta.total}
+        countLabel="ผลตรวจ"
+        onClear={resultFilter ? () => setResultFilter('') : undefined}
+      />
 
       {loading ? (
         <LoadingState />
@@ -330,85 +399,46 @@ export default function InspectionForm() {
         <EmptyState icon={ClipboardList} title="ไม่มีบันทึกการตรวจ" description="เริ่มบันทึกผลตรวจรถคันใหม่จากฟอร์มด้านบน" />
       ) : (
         <>
-          {/* Desktop table */}
-          <AppCard padding="none" className="hidden md:block overflow-hidden">
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                <tr className="text-left">
-                  <th className="px-4 py-3">ทะเบียนรถ</th>
-                  <th className="px-4 py-3 text-center">ผลตรวจ</th>
-                  <th className="px-4 py-3">วันที่ตรวจ</th>
-                  <th className="px-4 py-3">หมดอายุ</th>
-                  <th className="px-4 py-3">ผู้ตรวจ</th>
-                  <th className="px-4 py-3">หมายเหตุ</th>
-                  <th className="px-4 py-3 text-right">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-border">
-                {inspections.map(ins => (
-                  <tr key={ins.id} className="hover:bg-surface transition">
-                    <td className="px-4 py-3 font-medium text-gray-800">{ins.plate_no}</td>
-                    <td className="px-4 py-3 text-center">
-                      <StatusBadge variant={RESULT_VARIANT[ins.result] || 'neutral'} size="sm">
-                        {RESULT_OPTIONS.find(o => o.value === ins.result)?.label || ins.result}
-                      </StatusBadge>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{formatThaiDate(ins.inspection_date)}</td>
-                    <td className="px-4 py-3 text-gray-600">{formatThaiDate(ins.expiry_date)}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{ins.inspector_name || '-'}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{ins.notes || '-'}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteInspection(ins)}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded-md px-2 py-1 transition"
-                        title="ลบผลตรวจที่ลงผิด"
-                      >
-                        ลบ
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </AppCard>
-
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-3">
-            {inspections.map(ins => (
-              <div key={ins.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="text-base font-bold text-gray-900">{ins.plate_no}</p>
-                  <StatusBadge variant={RESULT_VARIANT[ins.result] || 'neutral'} size="lg" className="shrink-0">
+          {/* One column definition, so the desktop row and the mobile card
+              cannot drift the way these two had. */}
+          <DataTable
+            caption="ประวัติการตรวจสภาพรถ"
+            columns={[
+              { key: 'plate_no', header: 'ทะเบียนรถ', primary: true, cell: ins => ins.plate_no },
+              { key: 'result', header: 'ผลตรวจ', align: 'center', badge: true,
+                cell: ins => (
+                  <StatusBadge variant={RESULT_VARIANT[ins.result] || 'neutral'} size="sm">
                     {RESULT_OPTIONS.find(o => o.value === ins.result)?.label || ins.result}
                   </StatusBadge>
-                </div>
-                <p className="text-sm text-gray-500">
-                  ตรวจ: {formatThaiDate(ins.inspection_date)}
-                  {ins.expiry_date && ` · หมดอายุ: ${formatThaiDate(ins.expiry_date)}`}
-                </p>
-                {ins.inspector_name && <p className="text-sm text-gray-400 mt-0.5">ผู้ตรวจ: {ins.inspector_name}</p>}
-                {ins.notes && <p className="text-sm text-gray-400 mt-0.5">หมายเหตุ: {ins.notes}</p>}
-                <div className="mt-2 text-right">
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteInspection(ins)}
-                    className="text-xs font-medium text-red-600 hover:bg-red-50 rounded-md px-2 py-1 transition"
-                  >
-                    ลบผลตรวจ
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+                ) },
+              { key: 'inspection_date', header: 'วันที่ตรวจ', secondary: true, cell: ins => formatThaiDate(ins.inspection_date) },
+              { key: 'expiry_date', header: 'หมดอายุ', cell: ins => formatThaiDate(ins.expiry_date) },
+              { key: 'inspector_name', header: 'ผู้ตรวจ', cell: ins => ins.inspector_name || '-' },
+              { key: 'notes', header: 'หมายเหตุ', cell: ins => ins.notes || '-' },
+            ]}
+            rows={inspections}
+            actions={ins => (
+              <TableAction tone="danger" onClick={() => setConfirmDelete(ins)}>
+                ลบผลตรวจ
+              </TableAction>
+            )}
+          />
 
           {totalPages > 1 && (
             <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={inspections.length} onPage={(p) => fetchInspections(p)} />
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="ลบผลตรวจนี้?"
+        itemName={confirmDelete ? `${confirmDelete.plate_no} · ${formatThaiDate(confirmDelete.inspection_date)}` : undefined}
+        description="ระบบจะคำนวณสถานะรถใหม่หลังลบ — ลบได้เฉพาะผลตรวจที่คุณบันทึกเอง"
+        confirmLabel="ลบผลตรวจ"
+        onConfirm={() => handleDeleteInspection(confirmDelete)}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

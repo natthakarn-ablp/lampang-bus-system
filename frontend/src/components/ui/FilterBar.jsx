@@ -11,6 +11,7 @@ import { Search, X } from 'lucide-react';
  *
  * search:  { value, onChange, placeholder, label }   label is the accessible
  *          name — a placeholder is not one, it disappears once typing starts.
+ * chips:   { label, value, onChange, options: [[value, label, count?], …] }
  * filters: [{ key, label, value, onChange, options: [[value, label], …] }]
  * count / countLabel: result summary, e.g. 276 / 'ผู้ใช้งาน'
  */
@@ -41,7 +42,11 @@ export default function FilterBar({
           aria-label={chips.label}
           className="flex flex-wrap gap-1.5"
         >
-          {chips.options.map(([value, label]) => {
+          {/* A third element is an optional count for that option — how many
+              rows the chip would leave. Some pages carry it and it is real
+              information, so it belongs on the chip rather than being
+              dropped to fit the shape. */}
+          {chips.options.map(([value, label, count]) => {
             const active = chips.value === value;
             return (
               <button
@@ -50,13 +55,18 @@ export default function FilterBar({
                 role="radio"
                 aria-checked={active}
                 onClick={() => chips.onChange(value)}
-                className={`focus-ring inline-flex items-center min-h-[44px] px-3.5 rounded-full border text-sm font-medium transition ${
+                className={`focus-ring inline-flex items-center gap-1 min-h-[44px] px-3.5 rounded-full border text-sm font-medium transition ${
                   active
                     ? 'bg-navy-700 text-white border-navy-700'
                     : 'bg-surface-raised text-ink-muted border-surface-border hover:bg-surface hover:text-ink active:bg-surface-border'
                 }`}
               >
                 {label}
+                {count !== undefined && (
+                  <span className={`text-xs font-semibold tabular-nums ${active ? 'text-white/80' : 'text-ink-muted'}`}>
+                    {count}
+                  </span>
+                )}
               </button>
             );
           })}

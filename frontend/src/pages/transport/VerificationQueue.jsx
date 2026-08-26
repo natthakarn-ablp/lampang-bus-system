@@ -20,7 +20,7 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { CommandHero, StatusStepRail, AlertBanner } from '../../components/ui';
+import { CommandHero, StatusStepRail, AlertBanner, ConfirmDialog, FilterBar, FormField} from '../../components/ui';
 import DocumentReviewPanel from '../../components/DocumentReviewPanel';
 
 const STATUS = {
@@ -343,49 +343,45 @@ function InspectionChecklistPanel({
           <p className="mt-0.5 text-xs text-ink-muted">ระบบเดาผลให้จากรายการตรวจ — แก้ไขได้ก่อนยืนยัน</p>
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-medium text-ink">
-              ผลรวม
-              <select
-                value={form.result}
-                onChange={event => setForm(current => ({ ...current, result: event.target.value }))}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-              >
-                {RESULT_OPTIONS.map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-              <span className="mt-1 block text-xs text-ink-muted">{RESULT_HELP[form.result]}</span>
-            </label>
+            <FormField label="ผลรวม" helper={RESULT_HELP[form.result]}>
+              {ctl => (
+                <select
+                  {...ctl}
+                  value={form.result}
+                  onChange={event => setForm(current => ({ ...current, result: event.target.value }))}
+                  className={CONTROL_CLS}
+                >
+                  {RESULT_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              )}
+            </FormField>
 
             {/* วันหมดอายุ: โชว์เฉพาะเมื่อผล = ผ่าน */}
             {form.result === 'PASSED' && (
-              <label className="text-sm font-medium text-ink">
-                วันหมดอายุ <span className="text-danger">* จำเป็น</span>
-                <input
-                  type="date"
-                  value={form.expiry_date}
-                  onChange={event => setForm(current => ({ ...current, expiry_date: event.target.value }))}
-                  className={`mt-1 min-h-[44px] w-full rounded-lg border bg-surface-raised p-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30 ${!form.expiry_date ? 'border-danger focus:border-danger' : 'border-surface-border focus:border-brand-600'}`}
-                />
-              </label>
+              <FormField
+                label="วันหมดอายุ"
+                required
+                type="date"
+                value={form.expiry_date}
+                onChange={v => setForm(current => ({ ...current, expiry_date: v }))}
+                error={!form.expiry_date ? 'ต้องระบุวันหมดอายุเมื่อผลเป็น “ผ่าน”' : undefined}
+              />
             )}
 
-            <label className="text-sm font-medium text-ink">
-              เลขอ้างอิงขนส่ง <span className="text-ink-muted">(ถ้ามี)</span>
-              <input
-                value={form.provider_reference}
-                onChange={event => setForm(current => ({ ...current, provider_reference: event.target.value }))}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-              />
-            </label>
-            <label className="text-sm font-medium text-ink">
-              หมายเหตุ <span className="text-ink-muted">(ถ้ามี)</span>
-              <input
-                value={form.notes}
-                onChange={event => setForm(current => ({ ...current, notes: event.target.value }))}
-                className="mt-1 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-              />
-            </label>
+            <FormField
+              label="เลขอ้างอิงขนส่ง"
+              helper="ถ้ามี"
+              value={form.provider_reference}
+              onChange={v => setForm(current => ({ ...current, provider_reference: v }))}
+            />
+            <FormField
+              label="หมายเหตุ"
+              helper="ถ้ามี"
+              value={form.notes}
+              onChange={v => setForm(current => ({ ...current, notes: v }))}
+            />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -452,31 +448,41 @@ function DriverAuthorizationPanel({
       <div className="mt-4 grid gap-5 xl:grid-cols-2">
         <form onSubmit={onAssign} className="space-y-3 rounded-xl border border-surface-border p-4">
           <p className="text-sm font-semibold text-ink">เพิ่มสิทธิ์ขับรถคันนี้</p>
-          <select
-            value={driverForm.driver_id}
-            onChange={event => setDriverForm(form => ({ ...form, driver_id: event.target.value }))}
-            className="min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-          >
-            <option value="">เลือกคนขับ</option>
-            {drivers.map(driver => (
-              <option key={driver.id} value={driver.id}>{driver.name} · {driver.qualification_status || 'ยังไม่รับรอง'}</option>
-            ))}
-          </select>
+          <FormField label="คนขับ" required>
+            {ctl => (
+              <select
+                {...ctl}
+                value={driverForm.driver_id}
+                onChange={event => setDriverForm(form => ({ ...form, driver_id: event.target.value }))}
+                className={CONTROL_CLS}
+              >
+                <option value="">เลือกคนขับ</option>
+                {drivers.map(driver => (
+                  <option key={driver.id} value={driver.id}>{driver.name} · {driver.qualification_status || 'ยังไม่รับรอง'}</option>
+                ))}
+              </select>
+            )}
+          </FormField>
           <div className="grid gap-2 sm:grid-cols-2">
-            <select
-              value={driverForm.assignment_role}
-              onChange={event => setDriverForm(form => ({ ...form, assignment_role: event.target.value }))}
-              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-            >
-              <option value="PRIMARY">คนขับหลัก</option>
-              <option value="BACKUP">คนขับสำรอง</option>
-            </select>
-            <input
+            <FormField label="บทบาท">
+              {ctl => (
+                <select
+                  {...ctl}
+                  value={driverForm.assignment_role}
+                  onChange={event => setDriverForm(form => ({ ...form, assignment_role: event.target.value }))}
+                  className={CONTROL_CLS}
+                >
+                  <option value="PRIMARY">คนขับหลัก</option>
+                  <option value="BACKUP">คนขับสำรอง</option>
+                </select>
+              )}
+            </FormField>
+            {/* This date was labelled by a `title` tooltip only. */}
+            <FormField
+              label="วันสิ้นสุดสิทธิ์"
               type="date"
               value={driverForm.valid_until}
-              onChange={event => setDriverForm(form => ({ ...form, valid_until: event.target.value }))}
-              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-              title="วันสิ้นสุดสิทธิ์"
+              onChange={v => setDriverForm(form => ({ ...form, valid_until: v }))}
             />
           </div>
           <button
@@ -489,39 +495,43 @@ function DriverAuthorizationPanel({
 
         <form onSubmit={onQualify} className="space-y-3 rounded-xl border border-surface-border p-4">
           <p className="text-sm font-semibold text-ink">รับรองใบอนุญาตคนขับ</p>
-          <select
-            value={qualificationForm.driver_id}
-            onChange={event => setQualificationForm(form => ({ ...form, driver_id: event.target.value }))}
-            className="min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-          >
-            <option value="">เลือกคนขับ</option>
-            {drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name}</option>)}
-          </select>
+          <FormField label="คนขับ" required>
+            {ctl => (
+              <select
+                {...ctl}
+                value={qualificationForm.driver_id}
+                onChange={event => setQualificationForm(form => ({ ...form, driver_id: event.target.value }))}
+                className={CONTROL_CLS}
+              >
+                <option value="">เลือกคนขับ</option>
+                {drivers.map(driver => <option key={driver.id} value={driver.id}>{driver.name}</option>)}
+              </select>
+            )}
+          </FormField>
+          {/* All four were placeholder-only or title-only; a placeholder is
+              not a label and disappears the moment typing starts. */}
           <div className="grid gap-2 sm:grid-cols-2">
-            <input
+            <FormField
+              label="เลขใบอนุญาต"
               value={qualificationForm.license_no}
-              onChange={event => setQualificationForm(form => ({ ...form, license_no: event.target.value }))}
-              placeholder="เลขใบอนุญาต"
-              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+              onChange={v => setQualificationForm(form => ({ ...form, license_no: v }))}
             />
-            <input
+            <FormField
+              label="ประเภทใบอนุญาต"
+              helper="เช่น ท.2"
               value={qualificationForm.license_type}
-              onChange={event => setQualificationForm(form => ({ ...form, license_type: event.target.value }))}
-              placeholder="ประเภท เช่น ท.2"
-              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+              onChange={v => setQualificationForm(form => ({ ...form, license_type: v }))}
             />
-            <input
+            <FormField
+              label="วันหมดอายุใบอนุญาต"
               type="date"
               value={qualificationForm.license_expiry}
-              onChange={event => setQualificationForm(form => ({ ...form, license_expiry: event.target.value }))}
-              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-              title="วันหมดอายุใบอนุญาต"
+              onChange={v => setQualificationForm(form => ({ ...form, license_expiry: v }))}
             />
-            <input
+            <FormField
+              label="เลขอ้างอิงขนส่ง"
               value={qualificationForm.provider_reference}
-              onChange={event => setQualificationForm(form => ({ ...form, provider_reference: event.target.value }))}
-              placeholder="เลขอ้างอิงขนส่ง"
-              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised p-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+              onChange={v => setQualificationForm(form => ({ ...form, provider_reference: v }))}
             />
           </div>
           <button
@@ -536,6 +546,9 @@ function DriverAuthorizationPanel({
   );
 }
 
+// Shared by the selects on this page; FormField supplies the label wiring.
+const CONTROL_CLS = 'focus-ring min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised px-3 text-base sm:text-sm text-ink transition';
+
 export default function VerificationQueue() {
   const toast = useToast();
   const [queue, setQueue] = useState([]);
@@ -549,6 +562,8 @@ export default function VerificationQueue() {
   const [driverForm, setDriverForm] = useState({ driver_id: '', assignment_role: 'BACKUP', valid_until: '' });
   const [qualificationForm, setQualificationForm] = useState({ driver_id: '', license_no: '', license_type: '', license_expiry: '', provider_reference: '' });
   const [filter, setFilter] = useState({ status: '', search: '' });
+  // Discarding a part-completed inspection is worth a real dialog.
+  const [confirmAbort, setConfirmAbort] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -620,7 +635,7 @@ export default function VerificationQueue() {
 
   async function abortAttempt() {
     if (!attemptId) return;
-    if (!window.confirm('ยืนยันยกเลิกการตรวจครั้งนี้?\nรายการที่ลงไว้จะถูกล้าง และสถานะรถจะกลับไปรอตรวจ')) return;
+    setConfirmAbort(false);
     setBusy(true);
     try {
       await api.delete(`/verification/transport/attempts/${attemptId}`);
@@ -777,27 +792,29 @@ export default function VerificationQueue() {
 
       <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
         <AppCard padding="md">
-          <div className="mb-3 flex gap-2">
-            <label className="relative flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-ink-muted" strokeWidth={2.2} aria-hidden="true" />
-              <input
-                value={filter.search}
-                onChange={event => setFilter(current => ({ ...current, search: event.target.value }))}
-                placeholder="ทะเบียน/เลขคำขอ/โรงเรียน"
-                className="min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised pl-9 pr-3 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-              />
-            </label>
-            <select
-              value={filter.status}
-              onChange={event => setFilter(current => ({ ...current, status: event.target.value }))}
-              className="min-h-[44px] rounded-lg border border-surface-border bg-surface-raised px-2 text-sm transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-            >
-              <option value="">ทุกสถานะ</option>
-              {Object.entries(STATUS).map(([value, [label]]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-          </div>
+          {/* The search box sat inside a <label> whose only other child was
+              an icon, so it had no accessible name at all. */}
+          <FilterBar
+            className="mb-3"
+            search={{
+              value: filter.search,
+              onChange: v => setFilter(current => ({ ...current, search: v })),
+              label: 'ค้นหาในคิวตรวจ',
+              placeholder: 'ทะเบียน/เลขคำขอ/โรงเรียน',
+            }}
+            filters={[{
+              key: 'status',
+              label: 'สถานะ',
+              value: filter.status,
+              onChange: v => setFilter(current => ({ ...current, status: v })),
+              options: [['', 'ทุกสถานะ'], ...Object.entries(STATUS).map(([value, [label]]) => [value, label])],
+            }]}
+            count={queue.length}
+            countLabel="คำขอ"
+            onClear={(filter.search || filter.status)
+              ? () => setFilter({ status: '', search: '' })
+              : undefined}
+          />
 
           {queue.length === 0 ? (
             <EmptyState icon={ClipboardCheck} title="ไม่มีรายการในคิว" />
@@ -859,7 +876,7 @@ export default function VerificationQueue() {
                     busy={busy}
                     disabledReason={disabledReason}
                     onFinalize={finalize}
-                    onAbort={abortAttempt}
+                    onAbort={() => setConfirmAbort(true)}
                   />
                 ) : (
                   <StartInspectionCard detail={detail} template={template} onStart={start} busy={busy} />
@@ -893,6 +910,17 @@ export default function VerificationQueue() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmAbort}
+        title="ยกเลิกการตรวจครั้งนี้?"
+        description="รายการที่ลงไว้จะถูกล้าง และสถานะรถจะกลับไปรอตรวจ"
+        confirmLabel="ยกเลิกการตรวจ"
+        cancelLabel="ตรวจต่อ"
+        loading={busy}
+        onConfirm={abortAttempt}
+        onCancel={() => setConfirmAbort(false)}
+      />
     </div>
   );
 }

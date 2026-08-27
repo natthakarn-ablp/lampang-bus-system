@@ -20,6 +20,7 @@ import {
   ALL_DONE_LABEL,
   DONE_LABEL,
 } from '../../utils/session';
+import { isDriverNotLinked, driverErrorMessage } from '../../utils/driverErrors';
 
 const POLL_INTERVAL = 30_000;
 
@@ -74,12 +75,21 @@ export default function DriverDashboard() {
   // Pre-trip gate
   const [pretripDone, setPretripDone] = useState(null); // null=loading, object={done,checked_at,all_pass}
   const [pretripLoading, setPretripLoading] = useState(true);
+  // บัญชีคนขับที่ยังไม่ผูกกับรถ — ต้องแยกจากข้อผิดพลาดอื่น ดู utils/driverErrors
+  const [notLinked, setNotLinked] = useState(false);
 
   // Fetch pretrip status
   useEffect(() => {
     api.get('/driver/pretrip-status')
       .then(r => setPretripDone(r.data?.data || { done: false }))
-      .catch(() => setPretripDone({ done: false }))
+      .catch((err) => {
+        // บัญชียังไม่ผูกรถ: ไม่ตั้งด่านตรวจสภาพรถ เพราะกดผ่านไม่ได้อยู่ดี
+        // (POST /driver/pretrip ล้มเหลวด้วยเหตุเดียวกัน) แล้วคนขับจะติดค้าง
+        // ในโมดัลที่ปิดไม่ได้ — ให้แสดงคำอธิบายว่าต้องทำอะไรต่อแทน
+        if (isDriverNotLinked(err)) setNotLinked(true);
+        // ข้อผิดพลาดอื่น (เน็ตหลุด/เซิร์ฟเวอร์ล่ม) คงด่านไว้ ปลอดภัยกว่า
+        else setPretripDone({ done: false });
+      })
       .finally(() => setPretripLoading(false));
   }, []);
 
@@ -92,7 +102,8 @@ export default function DriverDashboard() {
         setSession(resolved);
       })
       .catch((err) => {
-        setError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลได้');
+        if (isDriverNotLinked(err)) setNotLinked(true);
+        else setError(driverErrorMessage(err, 'ไม่สามารถโหลดข้อมูลได้'));
         const fallback = resolveSession(null);
         sessionRef.current = fallback;
         setSession(fallback);
@@ -111,7 +122,10 @@ export default function DriverDashboard() {
       setStatus(statusRes.data.data);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
+      // บัญชียังไม่ผูกรถ ไม่ใช่ "โหลดไม่สำเร็จ" — เป็นสถานะถาวรจนกว่าจะผูกรถ
+      // การ poll ซ้ำทุก 30 วิ จะไม่ทำให้ดีขึ้น จึงอธิบายให้ตรงสาเหตุแทน
+      if (isDriverNotLinked(err)) { setNotLinked(true); setError(''); }
+      else setError(driverErrorMessage(err, 'โหลดข้อมูลไม่สำเร็จ'));
     } finally {
       setLoading(false);
     }
@@ -119,11 +133,14 @@ export default function DriverDashboard() {
 
   useEffect(() => {
     if (!session) return;
+    // บัญชียังไม่ผูกรถ = สถานะถาวรจนกว่าเจ้าหน้าที่จะผูกให้ การถามซ้ำทุก 30 วิ
+    // ไม่ทำให้ดีขึ้น มีแต่เปลืองแบตกับเน็ตมือถือของคนขับ
+    if (notLinked) return;
     setLoading(true);
     fetchData();
     const timer = setInterval(fetchData, POLL_INTERVAL);
     return () => clearInterval(timer);
-  }, [session, fetchData]);
+  }, [session, fetchData, notLinked]);
 
   // Derived state
   const students = roster?.students || [];
@@ -132,7 +149,8 @@ export default function DriverDashboard() {
   const pending = notOnLeave.filter((st) => (session === 'morning' ? !st.morning_done : !st.evening_done));
   const done = notOnLeave.filter((st) => (session === 'morning' ? !!st.morning_done : !!st.evening_done));
   const allDone = !loading && notOnLeave.length > 0 && pending.length === 0;
-  const pretripBlocked = !pretripLoading && (!pretripDone || !pretripDone.done);
+  // notLinked ปลดด่าน เพราะโมดัลนี้ปิดไม่ได้และทุกปุ่มในนั้นจะล้มเหลวซ้ำ
+  const pretripBlocked = !pretripLoading && !notLinked && (!pretripDone || !pretripDone.done);
 
   async function handleCheckin(studentId) {
     if (pretripBlocked) { toast.error('กรุณาตรวจรถก่อนออกก่อนเช็กชื่อ'); return; }
@@ -211,6 +229,50 @@ export default function DriverDashboard() {
 
   if (!session) {
     return <div className="p-6 text-center text-lg text-ink-muted">กำลังตรวจสอบโหมด…</div>;
+  }
+
+  /* บัญชีคนขับที่ยังไม่ผูกกับรถ — ทุกอย่างในหน้านี้ต้องมีรถก่อนจึงทำงานได้
+     จึงอธิบายให้ตรงสาเหตุแทนการแสดงหน้าเปล่าที่ชวนเข้าใจผิดว่า "ไม่มีนักเรียน" */
+  if (notLinked) {
+    return (
+      <PageTransition>
+        <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
+          <AppCard padding="lg" className="text-center">
+            <Bus className="mx-auto h-12 w-12 text-ink-muted" strokeWidth={1.6} aria-hidden="true" />
+            <h2 className="mt-3 text-xl font-bold text-ink">บัญชีนี้ยังไม่ได้ผูกกับรถ</h2>
+            <p className="mt-2 text-base leading-relaxed text-ink-muted">
+              ระบบยังไม่ทราบว่าคุณขับรถคันไหน จึงยังแสดงรายชื่อนักเรียน
+              ตรวจสภาพรถ หรือเช็กชื่อขึ้น–ลงรถให้ไม่ได้
+            </p>
+            <div className="mt-5 rounded-xl bg-surface p-4 text-left">
+              <p className="text-sm font-semibold text-ink">สิ่งที่ต้องทำต่อ</p>
+              <ol className="mt-2 space-y-1.5 text-sm leading-relaxed text-ink-muted">
+                <li>1. แจ้งโรงเรียนที่คุณรับส่งนักเรียน ว่าต้องการผูกบัญชีกับรถที่ขับ</li>
+                <li>2. แจ้งชื่อผู้ใช้ของคุณและทะเบียนรถให้เจ้าหน้าที่</li>
+                <li>3. เมื่อผูกเรียบร้อยแล้ว เข้าสู่ระบบใหม่อีกครั้ง</li>
+              </ol>
+            </div>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="focus-ring inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 font-semibold text-white transition hover:bg-brand-700"
+              >
+                <RotateCcw className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
+                ตรวจสอบอีกครั้ง
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/driver/profile')}
+                className="focus-ring inline-flex min-h-[48px] items-center justify-center rounded-xl border border-surface-border px-6 font-semibold text-ink transition hover:bg-surface"
+              >
+                ดูโปรไฟล์ของฉัน
+              </button>
+            </div>
+          </AppCard>
+        </div>
+      </PageTransition>
+    );
   }
 
   return (

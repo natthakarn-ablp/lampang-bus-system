@@ -256,7 +256,7 @@ function InspectionChecklistPanel({
           <button
             type="button"
             onClick={passAll}
-            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
           >
             <CheckCheck className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
             ผ่านทั้งหมด
@@ -264,7 +264,7 @@ function InspectionChecklistPanel({
           <button
             type="button"
             onClick={clearAll}
-            className="inline-flex min-h-[40px] items-center rounded-lg border border-surface-border bg-surface-raised px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface"
+            className="inline-flex min-h-[44px] items-center rounded-lg border border-surface-border bg-surface-raised px-3 py-1.5 text-sm font-semibold text-ink transition hover:bg-surface"
           >
             ล้างทั้งหมด
           </button>
@@ -272,7 +272,7 @@ function InspectionChecklistPanel({
             type="button"
             disabled={busy}
             onClick={onAbort}
-            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-1.5 text-sm font-semibold text-danger-ink transition hover:bg-danger/10 disabled:opacity-50"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-danger/30 bg-danger-soft px-3 py-1.5 text-sm font-semibold text-danger-ink transition hover:bg-danger/10 disabled:opacity-50"
           >
             <XCircle className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
             ยกเลิกการตรวจ
@@ -849,7 +849,7 @@ export default function VerificationQueue() {
                   key={key}
                   type="button"
                   onClick={() => setTab(key)}
-                  className={`relative inline-flex min-h-[40px] items-center rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                  className={`relative inline-flex min-h-[44px] items-center rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
                     tab === key ? 'bg-brand-600 text-white shadow-sm' : 'text-ink-muted hover:text-ink'
                   }`}
                 >

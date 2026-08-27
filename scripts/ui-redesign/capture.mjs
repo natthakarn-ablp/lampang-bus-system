@@ -234,12 +234,70 @@ const SCENARIOS = {
   },
   // every call fails — dashboard must degrade, not blank out
   error: { __ALL_FAIL__: true },
+
+  // บัญชีคนขับที่ยังไม่ผูกกับรถ (`driver_id` ว่าง) — พบจริงบน production
+  // 27 ส.ค. 2569 บัญชีแบบนี้เคยติดกับดัก: PretripModal ที่ปิดไม่ได้เปิดขึ้นมา
+  // แล้วทุกปุ่มในนั้นล้มเหลวด้วยเหตุเดียวกัน ออกจากหน้าไม่ได้เลย
+  // หน้าต้องอธิบายสาเหตุเป็นภาษาไทย ไม่ใช่ปล่อยข้อความอังกฤษดิบหรือเปิดโมดัลค้าง
+  // สถานะจริงที่วัดจาก production: 4 เส้นทางตอบ 400 พร้อมข้อความอังกฤษ
+  // อีก 2 เส้นทางตอบ 409 พร้อมข้อความไทย — ความไม่สม่ำเสมอนี้จำลองไว้ตามจริง
+  driver_unlinked: {
+    '/api/driver/pretrip-status':      { __status: 400, message: 'Vehicle not found for this driver account' },
+    '/api/driver/status-today':        { __status: 400, message: 'Vehicle not found for this driver account' },
+    '/api/driver/roster':              { __status: 400, message: 'Vehicle not found for this driver account' },
+    '/api/driver/profile':             { __status: 400, message: 'Vehicle not found for this driver account' },
+    '/api/driver/authorized-vehicles': { __status: 409, message: 'บัญชีนี้ยังไม่เชื่อมกับข้อมูลคนขับ' },
+    '/api/driver/active-shift':        { __status: 409, message: 'บัญชีนี้ยังไม่เชื่อมกับข้อมูลคนขับ' },
+  },
 };
+
+// ── การตรวจรับรองรถของขนส่ง — ใช้ทดสอบขั้นตอนที่ "เขียนข้อมูล" ────────────
+// รูปทรงข้อมูลลอกจาก production จริง (ตรวจเมื่อ 27 ส.ค. 2569) เพื่อให้ flow
+// เริ่มตรวจ → ลงรายการ → ยกเลิก เดินได้เหมือนของจริงโดยไม่แตะฐานข้อมูลจริง
+const VERIFY_QUEUE = [
+  { id: 9001, request_no: 'VIA-20260827-TEST01', vehicle_id: 1, plate_no: 'กข-1111 ลำปาง',
+    vehicle_type: 'รถตู้', status: 'READY_TO_PRINT', verification_status: 'UNVERIFIED',
+    issuing_school_name: 'โรงเรียนตัวอย่าง ก', certified_capacity: null,
+    peak_rider_count: 12, morning_rider_count: 12, evening_rider_count: 11,
+    schools: [{ school_id: 11, school_name: 'โรงเรียนตัวอย่าง ก', morning_rider_count: 12, evening_rider_count: 11, peak_rider_count: 12 }],
+    routes: [], drivers: [] },
+  { id: 9002, request_no: 'VIA-20260827-TEST02', vehicle_id: 2, plate_no: 'กข-2222 ลำปาง',
+    vehicle_type: 'รถสองแถว', status: 'READY_TO_PRINT', verification_status: 'UNVERIFIED',
+    issuing_school_name: 'โรงเรียนตัวอย่าง ข', certified_capacity: null,
+    peak_rider_count: 20, morning_rider_count: 20, evening_rider_count: 20,
+    schools: [{ school_id: 12, school_name: 'โรงเรียนตัวอย่าง ข', morning_rider_count: 20, evening_rider_count: 20, peak_rider_count: 20 }],
+    routes: [], drivers: [] },
+];
+
+// สถานะจำลองของการตรวจ 1 ครั้ง — จำเป็นเพราะหน้าอ่าน attempts จาก detail
+// *หลัง* กดเริ่มตรวจ ถ้า mock ไร้สถานะ ขั้นตอนนี้จะทดสอบไม่ได้เลย
+// รีเซ็ตทุกครั้งที่เปิดหน้าใหม่ (ดู newPage) เพื่อไม่ให้ capture รบกวนกัน
+let inspectionAttempt = null;
+export function resetInspectionState() { inspectionAttempt = null; }
+
+const CHECKLIST_TEMPLATE = {
+  template_name: 'รายการตรวจสภาพรถรับส่งนักเรียน', version_no: 3,
+  items: [
+    { item_code: 'BRAKE',  category: 'ระบบความปลอดภัย', label_th: 'ระบบเบรก' },
+    { item_code: 'TIRE',   category: 'ระบบความปลอดภัย', label_th: 'สภาพยางและลมยาง' },
+    { item_code: 'BELT',   category: 'ระบบความปลอดภัย', label_th: 'เข็มขัดนิรภัยครบทุกที่นั่ง' },
+    { item_code: 'LIGHT',  category: 'อุปกรณ์ไฟ',       label_th: 'ไฟหน้า ไฟท้าย ไฟเลี้ยว' },
+    { item_code: 'EXIT',   category: 'ทางออกฉุกเฉิน',   label_th: 'ประตูและทางออกฉุกเฉิน' },
+  ],
+};
+
+const VERIFY_DRIVERS = [
+  { driver_id: 501, name: 'คนขับ ทดสอบหนึ่ง', license_no: null, license_expiry: null },
+  { driver_id: 502, name: 'คนขับ ทดสอบสอง', license_no: null, license_expiry: null },
+];
 
 // Endpoints shared by every scenario. The pickup editors are the same form on
 // two roles; both need points, pupils and (for the school) vehicles before the
 // editor can be opened at all.
 const COMMON = {
+  '/api/verification/transport/queue':     { data: VERIFY_QUEUE },
+  '/api/verification/transport/checklist': { data: [CHECKLIST_TEMPLATE] },
+  '/api/verification/transport/drivers':   { data: VERIFY_DRIVERS },
   '/api/admin/snapshots': { data: [
     { id: 9, snapshot_date: '2026-08-25', is_baseline: false, run_type: 'manual', baseline_note: null, ...SNAP_METRICS },
     { id: 1, snapshot_date: '2026-01-08', is_baseline: true,  run_type: 'manual', baseline_note: 'Research R2 Pre-measure Baseline', research_phase: 'pre-measure', ...SNAP_METRICS, students_with_vehicle: 940, vehicles_inspected: 121 },
@@ -348,9 +406,6 @@ const COMMON = {
     { id: 'SC-1', name: 'โรงเรียนบ้านตัวอย่าง' },
     { id: 'SC-2', name: 'โรงเรียนตัวอย่างสอง' },
   ] },
-  '/api/verification/transport/queue': { data: [
-    { id: 'Q-1', plate_no: 'กข-1111 ลำปาง', school_name: 'โรงเรียนบ้านตัวอย่าง', status: 'PENDING', request_no: 'REQ-001' },
-  ] },
   '/api/admin/live-vehicles': { data: {
     generated_at: '2026-08-26T01:45:00Z',
     vehicles: [
@@ -377,11 +432,34 @@ function mockFor(url, scenario) {
     if (exact) return exact;
     // A few endpoints carry an id in the path.
     if (/^\/api\/school\/students\/import\/[^/]+$/.test(u.pathname)) return IMPORT_DETAIL;
+    // Transport verification — the write flow. Start returns an attempt id so the
+    // checklist panel can render; finalize/abort answer so the UI can settle.
+    if (/^\/api\/verification\/applications\/\d+$/.test(u.pathname)) {
+      const id = Number(u.pathname.split('/').pop());
+      const row = VERIFY_QUEUE.find(r => r.id === id);
+      if (!row) return null;
+      const attempts = inspectionAttempt && inspectionAttempt.application_id === id
+        ? [inspectionAttempt] : [];
+      return { data: { ...row, drivers: [], attempts } };
+    }
+    if (/^\/api\/verification\/transport\/applications\/(\d+)\/start$/.test(u.pathname)) {
+      const appId = Number(u.pathname.match(/applications\/(\d+)\/start/)[1]);
+      inspectionAttempt = { id: 77001, application_id: appId, result: 'IN_PROGRESS',
+                            inspected_by: 1, started_at: '2026-08-27T02:00:00Z' };
+      return { data: { attempt_id: 77001, result: 'IN_PROGRESS' } };
+    }
+    if (/^\/api\/verification\/transport\/attempts\/\d+\/(finalize|abort)$/.test(u.pathname)) {
+      return { data: { ok: true } };
+    }
+    if (/^\/api\/verification\/transport\/(vehicles|drivers)\/\d+\/(drivers|qualification)$/.test(u.pathname)) {
+      return { data: { ok: true } };
+    }
     return null;
   } catch { return null; }
 }
 
 async function newPage(browser, user, viewport, scenario) {
+  resetInspectionState();
   const ctx = await browser.newContext({ viewport, locale: 'th-TH', timezoneId: 'Asia/Bangkok' });
   const page = await ctx.newPage();
   const errors = [];
@@ -414,6 +492,14 @@ async function newPage(browser, user, viewport, scenario) {
         body: JSON.stringify({ success: false, message: 'ระบบขัดข้องชั่วคราว' }) });
     }
     const m = mockFor(route.request().url(), scenario);
+    // A fixture may pin a non-2xx status — the only way to exercise the paths
+    // that branch on *why* a call failed rather than that it failed.
+    if (m?.__status) {
+      return route.fulfill({
+        status: m.__status, contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: m.message || '', errors: [], data: null }),
+      });
+    }
     await route.fulfill({
       status: 200, contentType: 'application/json',
       body: JSON.stringify(m ? { success: true, message: 'OK', ...m } : { success: true, message: 'OK', data: {} }),
@@ -516,6 +602,9 @@ const SHOTS = [
   { id: '09-school',       url: '/school',      user: 'school',      vps: ['mobile', 'desktop'] },
   { id: '10-transport',    url: '/transport',   user: 'transport',   vps: ['mobile', 'desktop'] },
   { id: '11-driver',       url: '/driver',      user: 'driver',      vps: ['mobile', 'tablet'] },
+  // บัญชีคนขับที่ยังไม่ผูกรถ — ต้องได้คำอธิบายภาษาไทย ไม่ใช่โมดัลบังคับที่ปิดไม่ได้
+  { id: '11b-driver-unlinked', url: '/driver',  user: 'driver',      vps: ['mobile'], scenario: 'driver_unlinked',
+    expect: ['text=บัญชีนี้ยังไม่ได้ผูกกับรถ', 'text=แจ้งโรงเรียน', 'button:has-text("ตรวจสอบอีกครั้ง")'] },
   { id: '12-reports',      url: '/reports/daily', user: 'admin',     vps: ['desktop'], print: true },
   // AuditLogTable renders a card timeline by design, not a table, so it is
   // not part of the print check.
@@ -538,6 +627,16 @@ const SHOTS = [
   { id: '34-reports-monthly',   url: '/reports/monthly',      user: 'admin',  vps: ['mobile', 'desktop'] },
   { id: '35-reports-summary',   url: '/reports/summary',      user: 'admin',  vps: ['desktop'] },
   { id: '36-driver-pretrip',    url: '/driver/pretrip',       user: 'driver', vps: ['mobile'] },
+  // ต้องบอกตั้งแต่ต้นว่าบันทึกไม่ได้ ไม่ใช่ปล่อยให้ติ๊กครบ 6 ข้อแล้วค่อยล้มเหลว
+  { id: '36b-driver-pretrip-unlinked', url: '/driver/pretrip', user: 'driver', vps: ['mobile'], scenario: 'driver_unlinked',
+    expect: ['text=บัญชีนี้ยังไม่ได้ผูกกับรถ', 'button:has-text("กลับหน้าแรก")'] },
+  // กวาดหน้าคนขับที่เหลือด้วยสถานการณ์เดียวกัน เพื่อดูว่ามีหน้าใดพังอีก
+  { id: '37-driver-roster-req-unlinked', url: '/driver/requests', user: 'driver', vps: ['mobile'], scenario: 'driver_unlinked' },
+  { id: '38-driver-emergency-unlinked', url: '/driver/emergency', user: 'driver', vps: ['mobile'], scenario: 'driver_unlinked' },
+  { id: '39-driver-profile-unlinked', url: '/driver/profile', user: 'driver', vps: ['mobile'], scenario: 'driver_unlinked',
+    expect: ['text=บัญชีนี้ยังไม่ได้ผูกกับรถ'] },
+  { id: '64-driver-pickup-unlinked', url: '/driver/pickup-map', user: 'driver', vps: ['mobile'], scenario: 'driver_unlinked' },
+  { id: '89-driver-vehicle-reg-unlinked', url: '/driver/vehicle-registration', user: 'driver', vps: ['mobile'], scenario: 'driver_unlinked' },
   { id: '37-driver-roster-req', url: '/driver/requests',      user: 'driver', vps: ['mobile'] },
   { id: '38-driver-emergency',  url: '/driver/emergency',     user: 'driver', vps: ['mobile'] },
   { id: '39-driver-profile',    url: '/driver/profile',       user: 'driver', vps: ['mobile'] },
@@ -635,6 +734,36 @@ const SHOTS = [
   { id: '83-inspection-form', url: '/transport/inspections', user: 'transport', vps: ['mobile', 'desktop'],
     act: async page => { await page.getByRole('button', { name: 'บันทึกผลตรวจเดิม' }).first().click(); },
     expect: ['text=เลือกรถ', 'text=ผลตรวจ', 'text=วันที่ตรวจ', 'text=หน้านี้เป็นบันทึกแบบเดิม'] },
+  // ── ขั้นตอนที่เขียนข้อมูลจริงของขนส่ง — ทดสอบด้วย fixture ไม่แตะ production ──
+  // 1) เลือกคำขอจากคิว  2) กด "เริ่มตรวจรถคันนี้"  3) ต้องได้รายการตรวจให้ลง
+  { id: '84b-transport-start-inspection', url: '/transport/verification', user: 'transport', vps: ['desktop'],
+    act: async page => {
+      await page.getByText('กข-1111 ลำปาง').first().click();
+      await page.getByRole('button', { name: /เริ่มตรวจรถคันนี้/ }).click();
+      await page.waitForTimeout(700);
+    },
+    expect: ['text=ระบบเบรก', 'text=เข็มขัดนิรภัยครบทุกที่นั่ง', 'text=ประตูและทางออกฉุกเฉิน'] },
+  // ทางถอยต้องมีจริง — เจ้าหน้าที่ที่กดเริ่มตรวจผิดคันต้องยกเลิกได้ และต้องมี
+  // การยืนยันก่อน ไม่ใช่ลบทิ้งทันทีจากการกดพลาด
+  { id: '84c-transport-abort-confirms', url: '/transport/verification', user: 'transport', vps: ['desktop'],
+    act: async page => {
+      await page.getByText('กข-1111 ลำปาง').first().click();
+      await page.getByRole('button', { name: /เริ่มตรวจรถคันนี้/ }).click();
+      await page.waitForTimeout(700);
+      await page.getByRole('button', { name: /ยกเลิกการตรวจ/ }).click();
+      await page.waitForTimeout(400);
+    },
+    expect: ['[role=alertdialog]', 'text=ยกเลิกการตรวจ'] },
+  // ลงผล "ผ่านทั้งหมด" ต้องทำให้ครบทุกหัวข้อ ไม่ใช่บางส่วน
+  { id: '84d-transport-pass-all', url: '/transport/verification', user: 'transport', vps: ['desktop'],
+    act: async page => {
+      await page.getByText('กข-1111 ลำปาง').first().click();
+      await page.getByRole('button', { name: /เริ่มตรวจรถคันนี้/ }).click();
+      await page.waitForTimeout(700);
+      await page.getByRole('button', { name: /ผ่านทั้งหมด/ }).click();
+      await page.waitForTimeout(400);
+    },
+    expect: ['text=ตรวจแล้ว 5/5 หัวข้อ'] },
   { id: '84-verification-queue', url: '/transport/verification', user: 'transport', vps: ['mobile', 'desktop'],
     expect: ['text=ค้นหาในคิวตรวจ'] },
   { id: '85-transport-dash', url: '/transport', user: 'transport', vps: ['mobile', 'desktop'],
@@ -769,7 +898,10 @@ const SHOTS = [
 
   const overflow = report.filter(r => r.metrics?.overflowPx > 0);
   const withErr  = report.filter(r => r.errors.length);
-  const unexpectedErr = report.filter(r => r.errors.length && r.scenario !== 'error');
+  // Scenarios that fail calls on purpose log browser-level "Failed to load
+  // resource" lines that are the fixture working, not the page misbehaving.
+  const FAILS_BY_DESIGN = new Set(['error', 'driver_unlinked']);
+  const unexpectedErr = report.filter(r => r.errors.length && !FAILS_BY_DESIGN.has(r.scenario));
   const failed   = report.filter(r => r.failed);
   const looping  = report.filter(r => r.renderLoops?.length);
   const smallTargets = report.filter(r => r.metrics?.smallTapTargets?.length);

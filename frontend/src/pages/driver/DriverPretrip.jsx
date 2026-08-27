@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import { useToast } from '../../components/Toast';
+import { isDriverNotLinked, driverErrorMessage } from '../../utils/driverErrors';
 
 const CHECKLIST = [
   { id: 'tires', label: 'ยางรถ / ลมยาง' },
@@ -27,6 +28,7 @@ export default function DriverPretrip() {
   const [done, setDone] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [alreadyDone, setAlreadyDone] = useState(false);
+  const [notLinked, setNotLinked] = useState(false);
 
   // If today's pretrip is already done, redirect back
   useEffect(() => {
@@ -35,7 +37,12 @@ export default function DriverPretrip() {
       .then(r => {
         if (r.data?.data?.done) { setAlreadyDone(true); }
       })
-      .catch(() => { /* the checklist still works if the status probe fails */ })
+      .catch((err) => {
+        // บัญชียังไม่ผูกรถ: บอกตั้งแต่ต้น อย่าปล่อยให้ติ๊กครบ 6 ข้อแล้วค่อย
+        // ล้มเหลวตอนกดบันทึก — เสียเวลาคนขับฟรีและข้อความที่ได้ก็อ่านไม่ออก
+        if (isDriverNotLinked(err)) setNotLinked(true);
+        /* ข้อผิดพลาดอื่น: ให้ทำรายการตรวจต่อได้ตามเดิม */
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -62,7 +69,8 @@ export default function DriverPretrip() {
       toast.success('บันทึกผลตรวจรถสำเร็จ');
       setDone(true);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'ไม่สำเร็จ');
+      if (isDriverNotLinked(err)) setNotLinked(true);
+      else toast.error(driverErrorMessage(err, 'บันทึกผลตรวจไม่สำเร็จ'));
     } finally {
       setSubmitting(false);
     }
@@ -111,6 +119,29 @@ export default function DriverPretrip() {
   // The status probe decides whether this driver has already completed today's
   // pre-trip, so the checklist must not flash before it answers.
   if (loading) return <LoadingState />;
+
+  // บัญชียังไม่ผูกรถ — บันทึกผลตรวจไม่ได้เพราะระบบไม่รู้ว่าตรวจรถคันไหน
+  if (notLinked) {
+    return (
+      <div className="p-4 sm:p-5 max-w-lg mx-auto pb-8">
+        <PageHeader title="ตรวจรถก่อนออก" />
+        <EmptyState
+          icon={AlertTriangle}
+          title="บัญชีนี้ยังไม่ได้ผูกกับรถ"
+          description="ระบบยังไม่ทราบว่าคุณขับรถคันไหน จึงบันทึกผลตรวจให้ไม่ได้ กรุณาแจ้งโรงเรียนที่คุณรับส่งนักเรียน เพื่อผูกบัญชีของคุณกับทะเบียนรถที่ขับ แล้วเข้าสู่ระบบใหม่อีกครั้ง"
+          action={(
+            <button
+              type="button"
+              onClick={() => navigate('/driver')}
+              className="focus-ring inline-flex min-h-[48px] items-center justify-center rounded-xl bg-brand-600 px-6 font-semibold text-white transition hover:bg-brand-700"
+            >
+              กลับหน้าแรก
+            </button>
+          )}
+        />
+      </div>
+    );
+  }
 
   // Default: Quick "all pass" mode
   if (!showDetail) {

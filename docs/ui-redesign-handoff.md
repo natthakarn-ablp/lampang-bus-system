@@ -202,6 +202,7 @@ the code it excuses, where it can be argued with.
 | Route matrix | `node scripts/ui-redesign/route-matrix.mjs --gate` | ✓ 89, reconciles (exit 0) |
 | Navigation | `node scripts/ui-redesign/nav-snapshot.mjs --compare outputs/ui-redesign/nav-before.json` | ✓ 89 routes / 74 menus, none lost |
 | Permissions | `node scripts/ui-redesign/permission-check.mjs` | ✓ 0 leaks, 0 dead links (exit 0) |
+| Driver errors | `node scripts/ui-redesign/driver-errors-check.mjs` | ✓ 14/14 (exit 0) — added 2026-08-27, see §3.6 |
 
 Menu entries per role, unchanged from baseline:
 `driver 8 · school 13 · affiliation 12 · province 12 · transport 4 · admin 25 = 74`
@@ -315,6 +316,73 @@ Driven with Playwright at 390 px against `/driver`:
 The only exit is answering the checklist. `Modal` gained `dismissible={false}`
 specifically so this gate could gain dialog semantics, a focus trap and a scroll
 lock **without** gaining a way to skip it.
+
+### §3.6 — The gate above became a trap in production (found 2026-08-27)
+
+Signing in as a real `driver` account on schoolbuslampang.com surfaced what no
+fixture had: an account whose `driver_id` is null. Every driver endpoint fails
+for it, and the pre-trip gate is unconditional, so:
+
+```
+account not linked to a vehicle
+  → GET /driver/pretrip-status → 400
+  → .catch(() => setPretripDone({ done: false }))   ← swallows the reason
+  → gate reads "pre-trip not done" → opens the un-dismissible modal
+  → driver presses "ทุกรายการปกติ" → POST /driver/pretrip → 400, same cause
+  → modal stays open, no exit exists → the driver is stuck on first login
+```
+
+The raw string `Vehicle not found for this driver account` was rendered to the
+driver — school-bus drivers are not an English-reading audience. Worse, the same
+condition reached `/driver/profile` as *Thai* text that pointed the wrong way:
+"ไม่พบข้อมูลโปรไฟล์ · กรุณาลองรีเฟรชหน้าจอ" — refreshing can never fix it.
+
+**Why this matters beyond one account:** 447 driver accounts (99.3%) have never
+completed a first sign-in. Whatever they hit on that first attempt is the whole
+product to them.
+
+Fixed frontend-only — backend, schema and API contracts untouched:
+
+| file | change |
+|---|---|
+| `frontend/src/utils/driverErrors.js` *(new)* | Separates "not linked to a vehicle" from "offline / server down" — they need opposite handling. Translates the six English strings that can reach a driver, and **withholds** unrecognised English rather than passing it through |
+| `DriverDashboard.jsx` | Lifts the gate for this cause only; explains the cause with the three steps to fix it; stops the 30-second poll that can never succeed |
+| `DriverPretrip.jsx` | Says so on open, instead of after the driver ticks all six items and presses save |
+| `DriverProfile.jsx` | Replaces the misleading "refresh the screen" advice |
+| `DriverPickupMap.jsx` | `label required` → `กรุณากรอกชื่อจุดรับส่ง`, plus three other raw-message sites |
+
+Two gates keep it fixed. `driver-errors-check.mjs` covers the branching (14
+cases, including that a 500 must **not** be read as unlinked). `capture.mjs`
+gained fixture support for non-2xx statuses — previously a scenario could only
+make calls fail, never say *why* — and a `driver_unlinked` scenario that mirrors
+production exactly, including that four endpoints answer 400 in English while
+two answer 409 in Thai.
+
+Proven by negative control: with `isDriverNotLinked` forced to `false`, the
+capture fails with *expected on page but missing: บัญชีนี้ยังไม่ได้ผูกกับรถ*.
+Restored, it passes. Full suite after the fix: **129 captures, 0 failed, 0
+regressions**.
+
+### §3.7 — Write-path reversibility, before any live write test
+
+Before running the outstanding write tests on production, each action was traced
+to what it actually persists and whether it can be undone. This is the difference
+between a test that leaves no trace and one that damages real records.
+
+| action | writes | undo | safe to test live? |
+|---|---|---|---|
+| Start inspection (`/transport/applications/:id/start`) | `INSERT inspection_attempts` + application → `INSPECTION_PENDING` | `abortInspectionAttempt` **hard-deletes** the attempt and reverts the application to `READY_TO_PRINT`; reachable from the UI | **Yes** — leaves no trace |
+| Finalize inspection (`/transport/attempts/:id/finalize`) | issues the certification | none — abort refuses once finalized (`ATTEMPT_ALREADY_FINALIZED`) | **No** — not on a real vehicle |
+| Authorize driver for vehicle (`/transport/vehicles/:id/drivers`) | `INSERT driver_vehicle_assignments` | `endAssignment` exists but is an admin lifecycle call | Only with that cleanup agreed in advance |
+| Verify driver qualification (`/transport/drivers/:id/qualification`) | sets the existing row `is_current = FALSE`, then inserts a new one | **no revoke path in the service** | **No** — it supersedes the driver's real qualification record |
+
+The safe live test is therefore **start → abort**, which exercises the whole
+transport queue flow and restores the prior state exactly. The two irreversible
+actions need either a disposable vehicle/driver record or an explicit decision to
+keep what they write.
+
+Driver-side "save pre-trip result" cannot be tested with the `Test3` account at
+all — it has no vehicle, so the write is rejected before it reaches the database.
 
 ---
 

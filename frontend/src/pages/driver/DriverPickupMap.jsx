@@ -9,6 +9,7 @@ import PickupMap from '../../components/PickupMap';
 import PickupPointFields from '../../components/PickupPointFields';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
 import { classroomLabel } from '../../utils/student';
+import { driverErrorMessage, driverFieldErrors } from '../../utils/driverErrors';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
 
@@ -37,7 +38,7 @@ export default function DriverPickupMap() {
       setVehicle(payload.vehicle || null);
       setPoints(Array.isArray(payload.points) ? payload.points : []);
     } catch (err) {
-      setError(err?.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
+      setError(driverErrorMessage(err, 'โหลดข้อมูลไม่สำเร็จ'));
       setPoints([]);
     } finally {
       setLoading(false);
@@ -55,7 +56,7 @@ export default function DriverPickupMap() {
       setConfirmDelete(null);
       fetchPoints(sessionFilter);
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'ลบจุดรับส่งไม่สำเร็จ');
+      toast.error(driverErrorMessage(err, 'ลบจุดรับส่งไม่สำเร็จ'));
     } finally { setDeletingId(null); }
   }, [fetchPoints, sessionFilter, toast]);
 
@@ -219,7 +220,7 @@ function CreatePickupModal({ onClose, onCreated }) {
       })
       .catch(err => {
         if (cancelled) return;
-        setStudentsError(err?.response?.data?.message || 'โหลดรายชื่อนักเรียนไม่สำเร็จ');
+        setStudentsError(driverErrorMessage(err, 'โหลดรายชื่อนักเรียนไม่สำเร็จ'));
       })
       .finally(() => { if (!cancelled) setStudentsLoading(false); });
     return () => { cancelled = true; };
@@ -253,8 +254,9 @@ function CreatePickupModal({ onClose, onCreated }) {
       });
       onCreated();
     } catch (err) {
-      setErrors(err?.response?.data?.errors
-        || [{ message: err?.response?.data?.message || 'บันทึกไม่สำเร็จ' }]);
+      // แปลข้อความ validate ของ backend เป็นไทยก่อนแสดง — เดิมคนขับที่เว้น
+      // ช่องชื่อจุดรับส่งไว้จะเห็นคำว่า "label required" ซึ่งอ่านไม่ออก
+      setErrors(driverFieldErrors(err, 'บันทึกไม่สำเร็จ'));
     } finally {
       setSaving(false);
     }

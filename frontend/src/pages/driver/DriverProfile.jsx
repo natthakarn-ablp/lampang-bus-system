@@ -5,6 +5,7 @@ import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
+import { isDriverNotLinked } from '../../utils/driverErrors';
 
 const VEHICLE_TYPE_OPTIONS = [
   'รถตู้',
@@ -39,6 +40,7 @@ function isKnownVehicleType(val) {
 export default function DriverProfile() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [notLinked, setNotLinked] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [vehicleTypeOther, setVehicleTypeOther] = useState('');
@@ -75,7 +77,11 @@ export default function DriverProfile() {
         setProfile(res.data.data);
         initForm(res.data.data);
       })
-      .catch(() => {})
+      .catch((err) => {
+        // แยกสาเหตุ เพราะคำแนะนำต่างกันคนละทาง: บัญชียังไม่ผูกรถต้องให้โรงเรียน
+        // ผูกให้ ส่วน "ลองรีเฟรช" ใช้ได้เฉพาะกรณีโหลดพลาดชั่วคราวเท่านั้น
+        if (isDriverNotLinked(err)) setNotLinked(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -154,6 +160,13 @@ export default function DriverProfile() {
   }
 
   if (loading) return <LoadingState />;
+  if (notLinked) return (
+    <EmptyState
+      icon={User}
+      title="บัญชีนี้ยังไม่ได้ผูกกับรถ"
+      description="ระบบยังไม่ทราบว่าคุณขับรถคันไหน จึงยังไม่มีข้อมูลโปรไฟล์คนขับให้แสดง กรุณาแจ้งโรงเรียนที่คุณรับส่งนักเรียน พร้อมบอกชื่อผู้ใช้ของคุณและทะเบียนรถที่ขับ แล้วเข้าสู่ระบบใหม่อีกครั้ง"
+    />
+  );
   if (!profile) return (
     <EmptyState
       icon={User}

@@ -294,7 +294,152 @@ const VERIFY_DRIVERS = [
 // Endpoints shared by every scenario. The pickup editors are the same form on
 // two roles; both need points, pupils and (for the school) vehicles before the
 // editor can be opened at all.
+/* รายชื่อนักเรียนของคนขับ — ชื่อสมมติล้วน ใช้กับหน้าเช็กชื่อซึ่งเป็นภาพหลัก
+   ในคู่มือคนขับ ถ้าไม่มี fixture นี้ หน้าจะขึ้น "ยังไม่มีนักเรียนในรถคันนี้"
+   แล้วครูจะไม่เห็นสิ่งที่ต้องกดจริง ๆ ตอนใช้งาน
+   สถานะจงใจให้ปนกัน: ขึ้นรถแล้ว / ยังไม่ขึ้น / ลา — ครอบคลุมทุกแบบที่คนขับเจอ */
+const DRIVER_ROSTER = {
+  vehicle: { id: 1, plate_no: 'กข-1111 ลำปาง', vehicle_type: 'รถตู้' },
+  students: [
+    { id: 501, first_name: 'ก',   last_name: 'ตัวอย่างหนึ่ง', grade: 'ป.3', classroom: '2', school_name: 'โรงเรียนตัวอย่าง ก', morning_done: 1, evening_done: 0, leave_session: null },
+    { id: 502, first_name: 'ข',   last_name: 'ตัวอย่างสอง',  grade: 'ป.3', classroom: '2', school_name: 'โรงเรียนตัวอย่าง ก', morning_done: 1, evening_done: 0, leave_session: null },
+    { id: 503, first_name: 'ค',   last_name: 'ตัวอย่างสาม',  grade: 'ป.5', classroom: '1', school_name: 'โรงเรียนตัวอย่าง ก', morning_done: 0, evening_done: 0, leave_session: null },
+    { id: 504, first_name: 'ง',   last_name: 'ตัวอย่างสี่',   grade: 'ป.6', classroom: '3', school_name: 'โรงเรียนตัวอย่าง ข', morning_done: 0, evening_done: 0, leave_session: 'morning' },
+    { id: 505, first_name: 'จ',   last_name: 'ตัวอย่างห้า',   grade: 'ม.1', classroom: '1', school_name: 'โรงเรียนตัวอย่าง ข', morning_done: 0, evening_done: 0, leave_session: null },
+  ],
+};
+
+/* แดชบอร์ดรายบทบาท — จำนวนถูกตั้งให้ "มีงานค้างอยู่บ้าง" ไม่ใช่ศูนย์และไม่ใช่
+   เสร็จครบ เพราะภาพในคู่มือควรแสดงสภาพวันทำงานจริงที่ครูจะเจอ */
+const SCHOOL_DASH = {
+  school: { id: 'SCH0001', name: 'โรงเรียนตัวอย่าง ก', affiliation_name: 'สังกัดตัวอย่าง เขต 1' },
+  date: '2026-08-27',
+  total_students: 128, total_vehicles: 10,
+  morning_total: 128, morning_done: 121, morning_pending: 7, morning_leave: 1,
+  evening_total: 128, evening_done: 96, evening_pending: 32, evening_leave: 1,
+  recent_emergencies: 0,
+  // ต้องครบทั้ง 6 field — SchoolDashboard หารทีละคู่แล้วเฉลี่ย ถ้าขาดตัวใด
+  // ตัวหนึ่งผลลัพธ์กลายเป็น NaN แล้วหน้าจะขึ้น 'NaN% ครบถ้วน'
+  completeness: {
+    students_total: 128, students_with_vehicle: 118, students_with_parent: 96,
+    vehicles_total: 10, vehicles_inspected: 9, vehicles_insured: 10,
+  },
+};
+const AFFILIATION_DASH = { ...dash({
+  total_schools: 42, total_students: 1284, total_vehicles: 96, total_affiliations: 1,
+  morning_total: 1284, morning_done: 1180, morning_pending: 104,
+  evening_total: 1284, evening_done: 902, evening_pending: 382,
+}) };
+// field ต้องตรงกับที่ TransportDashboard อ่าน — ถ้า total_vehicles หายไป
+// หน้าจะขึ้น 'ยังไม่มีรถในระบบ' ทั้งที่รายการข้างล่างแสดงรถอยู่
+const TRANSPORT_DASH = {
+  total_vehicles: 481,
+  passed: 402, not_inspected: 54, needs_fix: 21, failed: 4,
+  insurance_ok: 438, no_insurance_data: 19, expired_insurance: 8, expiring_insurance: 16,
+  expiring_docs_count: 23, expired_docs_count: 6,
+};
+const STATUS_TODAY = {
+  date: '2026-08-27',
+  rows: [
+    { vehicle_id: 1, plate_no: 'กข-1111 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ก', school_name: 'โรงเรียนตัวอย่าง ก', morning_total: 9, morning_done: 9, evening_total: 9, evening_done: 8 },
+    { vehicle_id: 2, plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ข', school_name: 'โรงเรียนตัวอย่าง ก', morning_total: 4, morning_done: 3, evening_total: 4, evening_done: 4 },
+    { vehicle_id: 3, plate_no: 'กข-3333 ลำปาง', driver_name: '-',              school_name: 'โรงเรียนตัวอย่าง ข', morning_total: 0, morning_done: 0, evening_total: 0, evening_done: 0 },
+  ],
+};
+const LIVE_VEHICLES = { vehicles: [
+  { vehicle_id: 1, plate_no: 'กข-1111 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ก', latitude: 18.2888, longitude: 99.4908, recorded_at: '2026-08-27T09:12:00+07:00', is_stale: false, students_onboard: 9 },
+  { vehicle_id: 2, plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ข', latitude: 18.2801, longitude: 99.5012, recorded_at: '2026-08-27T09:10:00+07:00', is_stale: false, students_onboard: 3 },
+] };
+const LEAVES = [
+  { id: 11, student_id: 504, student_name: 'ง ตัวอย่างสี่', grade: 'ป.6', classroom: '3', leave_session: 'morning', leave_date: '2026-08-27', reason: 'ผู้ปกครองมารับเอง', recorded_by: 'ครูตัวอย่าง' },
+];
+const EMERGENCIES = [
+  { id: 3, vehicle_id: 2, plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ข', kind: 'breakdown', note: 'ยางรั่วระหว่างทาง (ตัวอย่าง)', created_at: '2026-08-26T07:41:00+07:00', resolved_at: '2026-08-26T08:05:00+07:00' },
+];
+const AUDIT_ROWS_GENERIC = { data: AUDIT_ROWS, meta: { page: 1, per_page: 30, total: 1284 } };
+
 const COMMON = {
+  '/api/driver/roster':         { data: DRIVER_ROSTER },
+  '/api/driver/pretrip-status': { data: { done: false } },
+  '/api/driver/status-today':   { data: { current_session: 'evening', summary: { total: 5, boarded: 2, remaining: 3 } } },
+  '/api/driver/vehicle-location': { data: { latitude: 18.2888, longitude: 99.4908, recorded_at: '2026-08-27T09:12:00+07:00', is_sending: false } },
+  '/api/driver/profile':        { data: { id: 1, name: 'คนขับ ตัวอย่าง', phone: '0800000000', plate_no: 'กข-1111 ลำปาง', vehicle_type: 'รถตู้', line_linked: false } },
+  '/api/driver/schools':        { data: SCHOOL_ROWS },
+  '/api/driver/roster-requests': { data: [
+    { id: 5, school_name: 'โรงเรียนตัวอย่าง ก', status: 'PENDING', student_count: 2, created_at: '2026-08-26T10:00:00+07:00' },
+    { id: 4, school_name: 'โรงเรียนตัวอย่าง ข', status: 'APPROVED', student_count: 1, created_at: '2026-08-20T10:00:00+07:00' },
+  ] },
+
+  '/api/school/dashboard':      { data: SCHOOL_DASH },
+  '/api/school/status-today':   { data: STATUS_TODAY },
+  '/api/school/leaves':         { data: LEAVES },
+  '/api/school/emergencies':    { data: EMERGENCIES },
+  '/api/school/live-vehicles':  { data: LIVE_VEHICLES },
+  '/api/school/audit-logs':     AUDIT_ROWS_GENERIC,
+  '/api/school/teacher-accounts': { data: [
+    { id: 21, username: 'teacher-p4', display_name: 'ครูตัวอย่าง ป.4', grade_scope: 'ป.4', is_active: true, must_change_password: true },
+    { id: 22, username: 'teacher-p5', display_name: 'ครูตัวอย่าง ป.5', grade_scope: 'ป.5', is_active: true, must_change_password: false },
+  ] },
+  '/api/school/roster-requests': { data: [
+    { id: 9, driver_name: 'คนขับ ตัวอย่าง ก', plate_no: 'กข-1111 ลำปาง', student_count: 2, status: 'PENDING', created_at: '2026-08-26T10:00:00+07:00' },
+  ] },
+  '/api/school/registrations':  { data: [
+    { id: 7, plate_no: 'กข-4444 ลำปาง', owner_name: 'เจ้าของ ตัวอย่าง', driver_name: 'คนขับ ตัวอย่าง ง', status: 'PENDING', submitted_at: '2026-08-25T09:00:00+07:00' },
+  ] },
+  '/api/verification/school/applications': { data: [
+    { id: 12, plate_no: 'กข-2222 ลำปาง', status: 'NEEDS_FIX', submitted_at: '2026-08-24T09:00:00+07:00', reasons: ['ประกันภัยหมดอายุ'] },
+  ] },
+
+  '/api/affiliation/dashboard':     { data: AFFILIATION_DASH },
+  '/api/affiliation/status-today':  { data: STATUS_TODAY },
+  '/api/affiliation/emergencies':   { data: EMERGENCIES },
+  '/api/affiliation/live-vehicles': { data: LIVE_VEHICLES },
+  '/api/affiliation/pickup-map':    { data: PICKUP_POINTS },
+  '/api/affiliation/audit-logs':    AUDIT_ROWS_GENERIC,
+  '/api/affiliation/vehicles-at-risk': { data: [
+      // field ต้องตรงกับที่ VehicleAtRiskRow ใช้ — key={v.id} ถ้าไม่มี id
+    // React จะเตือน duplicate key และ gate จะจับได้
+    { id: 2, plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ข', student_count: 4,
+      school_names: 'โรงเรียนตัวอย่าง ก', risk_reasons: ['ประกันภัยใกล้หมดอายุ'] },
+    { id: 3, plate_no: 'กข-3333 ลำปาง', driver_name: '-', student_count: 0,
+      school_names: 'โรงเรียนตัวอย่าง ค', risk_reasons: ['ยังไม่มีคนขับ', 'ยังไม่ผ่านการตรวจ'] },
+  ] },
+
+  '/api/province/status-today':  { data: STATUS_TODAY },
+  '/api/province/emergencies':   { data: EMERGENCIES },
+  '/api/province/live-vehicles': { data: LIVE_VEHICLES },
+  '/api/province/pickup-map':    { data: PICKUP_POINTS },
+  '/api/province/audit-logs':    AUDIT_ROWS_GENERIC,
+  '/api/province/vehicles-at-risk': { data: [
+      // field ต้องตรงกับที่ VehicleAtRiskRow ใช้ — key={v.id} ถ้าไม่มี id
+    // React จะเตือน duplicate key และ gate จะจับได้
+    { id: 2, plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ข', student_count: 4,
+      school_names: 'โรงเรียนตัวอย่าง ก', risk_reasons: ['ประกันภัยใกล้หมดอายุ'] },
+    { id: 3, plate_no: 'กข-3333 ลำปาง', driver_name: '-', student_count: 0,
+      school_names: 'โรงเรียนตัวอย่าง ค', risk_reasons: ['ยังไม่มีคนขับ', 'ยังไม่ผ่านการตรวจ'] },
+  ] },
+
+  '/api/transport/dashboard':  { data: TRANSPORT_DASH },
+  '/api/transport/pickup-map': { data: PICKUP_POINTS },
+
+  '/api/admin/pending-requests-count': { data: { transfer: 2, vehicle: 1, roster: 1, registration: 1, total: 5 } },
+  '/api/admin/system-health': { data: {
+    db: { status: 'ok', latency_ms: 4 }, api: { status: 'ok', uptime_h: 8 },
+    backup: { status: 'ok', last_run: '2026-08-27T02:30:00+07:00', size_mb: 2.5 },
+    counters: { users: 1284, students: 4696, vehicles: 481, checkins_today: 1180 },
+  } },
+  '/api/readiness': { data: {
+    overall: 'ready',
+    checks: [
+      { key: 'accounts', label: 'บัญชีผู้ใช้พร้อมใช้งาน', status: 'warn', detail: 'ยังไม่เข้าระบบครั้งแรก 467 บัญชี' },
+      { key: 'vehicles', label: 'รถผ่านการตรวจ', status: 'ok', detail: '402 จาก 481 คัน' },
+      { key: 'backup', label: 'สำรองข้อมูลอัตโนมัติ', status: 'ok', detail: 'ล่าสุด 27 ส.ค. 02:30 น.' },
+    ],
+  } },
+  '/api/reports/monthly': { data: { month: '2026-08', rows: STATUS_TODAY.rows } },
+  '/api/reports/summary': { data: { term: '1/2569', rows: STATUS_TODAY.rows, totals: { students: 4696, checkins: 128400 } } },
+  // analytics ping — ไม่มีผลต่อภาพ แต่ถ้าไม่ตอบจะขึ้นในรายงาน fixture ที่ขาด
+  '/api/visits/track': { data: { ok: true } },
   '/api/verification/transport/queue':     { data: VERIFY_QUEUE },
   '/api/verification/transport/checklist': { data: [CHECKLIST_TEMPLATE] },
   '/api/verification/transport/drivers':   { data: VERIFY_DRIVERS },
@@ -460,7 +605,13 @@ function mockFor(url, scenario) {
 
 async function newPage(browser, user, viewport, scenario) {
   resetInspectionState();
-  const ctx = await browser.newContext({ viewport, locale: 'th-TH', timezoneId: 'Asia/Bangkok' });
+  // deviceScaleFactor เป็น option ของ context ไม่ใช่ของ viewport — ถ้าปล่อยปนอยู่
+  // ใน viewport, Playwright จะเมินเงียบ ๆ แล้วได้ภาพความละเอียด 1x
+  // (manual-screenshots.mjs ต้องการ 2x ให้ตรงกับภาพเดิมในคู่มือ)
+  const { deviceScaleFactor, ...vp } = viewport;
+  const ctx = await browser.newContext({
+    viewport: vp, deviceScaleFactor, locale: 'th-TH', timezoneId: 'Asia/Bangkok',
+  });
   const page = await ctx.newPage();
   const errors = [];
   const renderLoops = [];
@@ -803,7 +954,14 @@ const SHOTS = [
   { id: '43-aff-pickup-map',    url: '/affiliation/pickup-map', user: 'affiliation', vps: ['desktop'] },
 ];
 
-(async () => {
+// รันเป็นสคริปต์เท่านั้น — ไฟล์นี้ถูก import โดย manual-screenshots.mjs เพื่อใช้
+// fixtures ชุดเดียวกัน ถ้าไม่มีการ์ดนี้ การ import จะถ่ายภาพทั้ง 132 หน้าทันที
+const IS_MAIN = process.argv[1]
+  && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+export { USERS, VIEWPORTS, newPage, BASE };
+
+if (IS_MAIN) await (async () => {
   const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'] });
   const report = [];
 

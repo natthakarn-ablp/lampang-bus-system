@@ -210,13 +210,19 @@ export default function SchoolDashboard() {
               { done: c.vehicles_inspected,    total: c.vehicles_total },
               { done: c.vehicles_insured,      total: c.vehicles_total },
             ];
-            const pct = Math.round(
-              items.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / items.length * 100
-            );
+            // นับเฉพาะรายการที่ backend ส่งตัวเลขมาจริง — ถ้า field ใดหายไป
+            // (API เวอร์ชันต่างกัน หรือเพิ่มตัวชี้วัดใหม่ภายหลัง) การหารจะได้
+            // NaN แล้วหน้าขึ้น "NaN% ครบถ้วน" ให้ผู้ใช้เห็น
+            const usable = items.filter(i => Number.isFinite(i.done) && Number.isFinite(i.total));
+            const pct = usable.length
+              ? Math.round(
+                usable.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / usable.length * 100
+              )
+              : null;
             return (
               <CollapsibleSection
                 title="ความครบถ้วนข้อมูล"
-                subtitle={`${pct}% ครบถ้วน`}
+                subtitle={pct === null ? 'ยังคำนวณไม่ได้' : `${pct}% ครบถ้วน`}
                 defaultOpen={false}
               >
                 <CompletenessCard c={c} />

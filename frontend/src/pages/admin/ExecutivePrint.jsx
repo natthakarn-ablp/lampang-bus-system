@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Check, AlertTriangle } from 'lucide-react';
 import api from '../../api/axios';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
+import EmptyState from '../../components/EmptyState';
 
 function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'; }
@@ -35,18 +39,35 @@ function roleStatus(actions, hasSnap) {
 export default function ExecutivePrint() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // The load error was swallowed, so a failed request printed a page that said
+  // "ไม่มีข้อมูล" — an executive briefing asserting there is no evidence, when
+  // the truth was that the request failed.
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    api.get('/admin/evaluation-summary')
-      .then(r => setData(r.data?.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.get('/admin/evaluation-summary');
+      setData(r.data?.data || null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'โหลดข้อมูลสรุปผลไม่สำเร็จ');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (loading) return <p style={{ textAlign: 'center', padding: '40px', color: '#999' }}>กำลังโหลด…</p>;
-  if (!data) return <p style={{ textAlign: 'center', padding: '40px', color: '#999' }}>ไม่มีข้อมูล</p>;
+  useEffect(() => { load(); }, [load]);
 
-  const { baseline, latest, role_actions, role_exports } = data;
+  if (loading) return <LoadingState message="กำลังจัดทำรายงาน…" />;
+  if (error) return <ErrorState title="โหลดข้อมูลสรุปผลไม่สำเร็จ" message={error} onRetry={load} />;
+  if (!data) return <EmptyState title="ไม่มีข้อมูล" description="ยังไม่มี snapshot สำหรับจัดทำรายงาน" />;
+
+  const { baseline, latest } = data;
+  // A response missing either key used to throw on the first role lookup.
+  const role_actions = data.role_actions || {};
+  const role_exports = data.role_exports || {};
   const bD = baseline?.data || {};
   const lD = latest?.data || {};
   const hasSnap = !!baseline && !!latest;
@@ -74,13 +95,19 @@ export default function ExecutivePrint() {
     <>
       {/* Print button — hidden in print */}
       <div className="print:hidden fixed top-4 right-4 z-50 flex gap-2">
-        <button onClick={() => window.print()}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl shadow-lg transition">
-          🖨️ พิมพ์ / Save PDF
+        <button
+          type="button"
+          onClick={() => window.print()}
+          className="focus-ring bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold px-6 min-h-[44px] rounded-xl shadow-lg transition"
+        >
+          พิมพ์ / Save PDF
         </button>
-        <button onClick={() => window.history.back()}
-          className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium px-4 py-3 rounded-xl shadow transition">
-          ← กลับ
+        <button
+          type="button"
+          onClick={() => window.history.back()}
+          className="focus-ring bg-surface-border hover:bg-surface text-ink font-medium px-4 min-h-[44px] rounded-xl shadow transition"
+        >
+          <span aria-hidden="true">←</span> กลับ
         </button>
       </div>
 
@@ -92,9 +119,9 @@ export default function ExecutivePrint() {
           <h1 className="text-xl font-semibold text-blue-800">สรุปผลการประเมินระบบรถรับส่งนักเรียน</h1>
           <p className="text-sm text-gray-500">ระบบรถรับส่งนักเรียนจังหวัดลำปาง — สำหรับการประชุมผู้บริหาร</p>
           <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-xs text-gray-500">
-            <span>📌 Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
-            <span>📊 Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
-            <span>🗓️ จัดทำเมื่อ: {fmtNow()}</span>
+            <span>Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
+            <span>Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
+            <span>จัดทำเมื่อ: {fmtNow()}</span>
           </div>
         </div>
 
@@ -167,7 +194,8 @@ export default function ExecutivePrint() {
                     {m.delta > 0 ? '+' : ''}{m.delta}%
                   </td>
                   <td className="border border-gray-300 px-2 py-1 text-center">
-                    {m.improved ? '▲ ดีขึ้น' : m.declined ? '▼ ลดลง' : '= คงเดิม'}
+                    <span aria-hidden="true">{m.improved ? '▲' : m.declined ? '▼' : '='}</span>
+                    {' '}{m.improved ? 'ดีขึ้น' : m.declined ? 'ลดลง' : 'คงเดิม'}
                   </td>
                 </tr>
               ))}
@@ -178,7 +206,10 @@ export default function ExecutivePrint() {
         {/* 6+7. Improvements + Risks side by side */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="border border-gray-300 rounded-lg p-3">
-            <p className="font-semibold text-sm text-green-800 mb-1">✅ ประเด็นที่ดีขึ้น</p>
+            <p className="font-semibold text-sm text-success-ink mb-1 inline-flex items-center gap-1.5">
+              <Check className="w-4 h-4 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+              ประเด็นที่ดีขึ้น
+            </p>
             {improvements.length > 0 ? (
               <ul className="text-xs space-y-0.5">
                 {improvements.map(m => <li key={m.label}>• {m.label}: +{m.delta}%</li>)}
@@ -186,7 +217,10 @@ export default function ExecutivePrint() {
             ) : <p className="text-xs text-gray-500">ยังไม่มีการเปลี่ยนแปลงจาก baseline</p>}
           </div>
           <div className="border border-gray-300 rounded-lg p-3">
-            <p className="font-semibold text-sm text-red-800 mb-1">⚠️ ประเด็นที่ต้องติดตาม</p>
+            <p className="font-semibold text-sm text-danger-ink mb-1 inline-flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+              ประเด็นที่ต้องติดตาม
+            </p>
             <ul className="text-xs space-y-0.5">
               {risks.map(m => <li key={m.label}>• {m.label}: {m.delta}%</li>)}
               {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {m.current}%</li>)}
@@ -197,7 +231,7 @@ export default function ExecutivePrint() {
 
         {/* 8. Recommended actions */}
         <div className="border border-blue-300 bg-blue-50 rounded-lg p-3 mb-4">
-          <p className="font-semibold text-sm text-blue-800 mb-1">📋 ข้อเสนอเพื่อการสั่งการ</p>
+          <p className="font-semibold text-sm text-blue-800 mb-1">ข้อเสนอเพื่อการสั่งการ</p>
           <ul className="text-xs text-blue-700 space-y-0.5">
             {(6 - readyCount - partialCount) > 0 && <li>• เพิ่มการเก็บ evidence สำหรับ {6 - readyCount - partialCount} สิทธิ์ที่ยังมีข้อมูลไม่เพียงพอ</li>}
             {lowCoverage.length > 0 && <li>• เร่งเพิ่ม coverage ใน: {lowCoverage.map(m => m.label).join(', ')}</li>}

@@ -8,17 +8,90 @@
 
 const { formatPlateDisplay } = require('./vehiclePlate');
 
-// Bangkok aliases (and common variants) → the one canonical Thai province name.
-// Keyed by normalizeThaiText(lowercased). Extend here as more aliases appear.
-const PROVINCE_ALIASES = {
-  'กทม': 'กรุงเทพมหานคร',
-  'กทมฯ': 'กรุงเทพมหานคร',
-  'กรุงเทพ': 'กรุงเทพมหานคร',
-  'กรุงเทพฯ': 'กรุงเทพมหานคร',
-  'กรุงเทพมหานคร': 'กรุงเทพมหานคร',
-  'bangkok': 'กรุงเทพมหานคร',
-  'bkk': 'กรุงเทพมหานคร',
-};
+// Canonical Thai province names with official Thai and roman abbreviations.
+// Roman abbreviations follow the administrative abbreviation list, not ad-hoc
+// guesses. For example, Lampang is "LPG"; plain "LP" is intentionally not an
+// alias because it is ambiguous with nearby province names.
+const PROVINCE_ALIAS_ROWS = [
+  ['กรุงเทพมหานคร', 'กทม', 'BKK', ['กทมฯ', 'กรุงเทพ', 'กรุงเทพฯ', 'Bangkok']],
+  ['กระบี่', 'กบ', 'KBI'],
+  ['กาญจนบุรี', 'กจ', 'KRI'],
+  ['กาฬสินธุ์', 'กส', 'KSN'],
+  ['กำแพงเพชร', 'กพ', 'KPT'],
+  ['ขอนแก่น', 'ขก', 'KKN'],
+  ['จันทบุรี', 'จบ', 'CTI'],
+  ['ฉะเชิงเทรา', 'ฉช', 'CCO'],
+  ['ชลบุรี', 'ชบ', 'CBI'],
+  ['ชัยนาท', 'ชน', 'CNT'],
+  ['ชัยภูมิ', 'ชย', 'CPM'],
+  ['ชุมพร', 'ชพ', 'CPN'],
+  ['เชียงราย', 'ชร', 'CRI'],
+  ['เชียงใหม่', 'ชม', 'CMI'],
+  ['ตรัง', 'ตง', 'TRG'],
+  ['ตราด', 'ตร', 'TRT'],
+  ['ตาก', 'ตก', 'TAK'],
+  ['นครนายก', 'นย', 'NYK'],
+  ['นครปฐม', 'นฐ', 'NPT'],
+  ['นครพนม', 'นพ', 'NPM'],
+  ['นครราชสีมา', 'นม', 'NMA'],
+  ['นครศรีธรรมราช', 'นศ', 'NRT'],
+  ['นครสวรรค์', 'นว', 'NSN'],
+  ['นนทบุรี', 'นบ', 'NBI'],
+  ['นราธิวาส', 'นธ', 'NWT'],
+  ['น่าน', 'นน', 'NAN'],
+  ['บึงกาฬ', 'บก', 'BKN'],
+  ['บุรีรัมย์', 'บร', 'BRM'],
+  ['ปทุมธานี', 'ปท', 'PTE'],
+  ['ประจวบคีรีขันธ์', 'ปข', 'PKN'],
+  ['ปราจีนบุรี', 'ปจ', 'PRI'],
+  ['ปัตตานี', 'ปน', 'PTN'],
+  ['พะเยา', 'พย', 'PYO'],
+  ['พระนครศรีอยุธยา', 'อย', 'AYA'],
+  ['พังงา', 'พง', 'PNA'],
+  ['พัทลุง', 'พท', 'PLG'],
+  ['พิจิตร', 'พจ', 'PCT'],
+  ['พิษณุโลก', 'พล', 'PLK'],
+  ['เพชรบุรี', 'พบ', 'PBI'],
+  ['เพชรบูรณ์', 'พช', 'PNB'],
+  ['แพร่', 'พร', 'PRE'],
+  ['ภูเก็ต', 'ภก', 'PKT'],
+  ['มหาสารคาม', 'มค', 'MKM'],
+  ['มุกดาหาร', 'มห', 'MDH'],
+  ['แม่ฮ่องสอน', 'มส', 'MSN'],
+  ['ยโสธร', 'ยส', 'YST'],
+  ['ยะลา', 'ยล', 'YLA'],
+  ['ร้อยเอ็ด', 'รอ', 'RET'],
+  ['ระนอง', 'รน', 'RNG'],
+  ['ระยอง', 'รย', 'RYG'],
+  ['ราชบุรี', 'รบ', 'RBR'],
+  ['ลพบุรี', 'ลบ', 'LRI'],
+  ['ลำปาง', 'ลป', 'LPG'],
+  ['ลำพูน', 'ลพ', 'LPN'],
+  ['เลย', 'ลย', 'LEI'],
+  ['ศรีสะเกษ', 'ศก', 'SSK'],
+  ['สกลนคร', 'สน', 'SNK'],
+  ['สงขลา', 'สข', 'SKA'],
+  ['สตูล', 'สต', 'STN'],
+  ['สมุทรปราการ', 'สป', 'SPK'],
+  ['สมุทรสงคราม', 'สส', 'SKM'],
+  ['สมุทรสาคร', 'สค', 'SKN'],
+  ['สระแก้ว', 'สก', 'SKW'],
+  ['สระบุรี', 'สบ', 'SRI'],
+  ['สิงห์บุรี', 'สห', 'SBR'],
+  ['สุโขทัย', 'สท', 'STI'],
+  ['สุพรรณบุรี', 'สพ', 'SPB'],
+  ['สุราษฎร์ธานี', 'สฎ', 'SNI'],
+  ['สุรินทร์', 'สร', 'SRN'],
+  ['หนองคาย', 'นค', 'NKI'],
+  ['หนองบัวลำภู', 'นภ', 'NBP'],
+  ['อ่างทอง', 'อท', 'ATG'],
+  ['อำนาจเจริญ', 'อจ', 'ACR'],
+  ['อุดรธานี', 'อด', 'UDN'],
+  ['อุตรดิตถ์', 'อต', 'UTT'],
+  ['อุทัยธานี', 'อน', 'UTI'],
+  ['อุบลราชธานี', 'อบ', 'UBN'],
+];
+const CANONICAL_PROVINCES = new Set(PROVINCE_ALIAS_ROWS.map(([canonical]) => canonical));
 
 // Strip whitespace (incl. Thai/zero-width/nbsp), dashes and dots.
 function normalizeThaiText(input) {
@@ -28,6 +101,34 @@ function normalizeThaiText(input) {
     .trim();
 }
 
+function addProvinceAlias(map, alias, canonical) {
+  const key = normalizeThaiText(alias).toLowerCase();
+  if (key) map[key] = canonical;
+}
+
+function hasThaiText(input) {
+  return /[\u0E00-\u0E7F]/.test(String(input == null ? '' : input));
+}
+
+function buildProvinceAliasMap(rows) {
+  const map = {};
+  for (const [canonical, thaiAbbr, romanAbbr, extras = []] of rows) {
+    const aliases = [canonical, thaiAbbr, romanAbbr, ...extras].filter(Boolean);
+    for (const alias of aliases) {
+      addProvinceAlias(map, alias, canonical);
+      if (hasThaiText(alias)) {
+        addProvinceAlias(map, `จังหวัด${alias}`, canonical);
+        addProvinceAlias(map, `จ.${alias}`, canonical);
+        addProvinceAlias(map, `จ ${alias}`, canonical);
+      }
+    }
+  }
+  return map;
+}
+
+// Keyed by normalizeThaiText(lowercased).
+const PROVINCE_ALIASES = buildProvinceAliasMap(PROVINCE_ALIAS_ROWS);
+
 // Map a province (alias or canonical) to its canonical Thai name. Unknown
 // provinces are returned in their cleaned form (never guessed/dropped).
 function normalizeProvince(input) {
@@ -35,6 +136,11 @@ function normalizeProvince(input) {
   if (!cleaned) return '';
   const alias = PROVINCE_ALIASES[cleaned.toLowerCase()];
   return alias || cleaned;
+}
+
+function isKnownProvince(input) {
+  const canonical = normalizeProvince(input);
+  return !!canonical && CANONICAL_PROVINCES.has(canonical);
 }
 
 function detectProvinceAlias(input) {
@@ -65,12 +171,9 @@ function buildDisplayPlate({ plate_prefix, plate_number, province } = {}) {
 }
 
 // Best-effort split of a legacy free-text plate into structured parts.
-// Normalize dash/underscore separators to spaces so dash-written plates parse
-// the same as space-written ones (production plates are space-separated).
 function parseLegacyPlateText(plate_no) {
-  const cleaned = String(plate_no == null ? '' : plate_no).replace(/[-‐-―_]+/g, ' ');
-  const m = cleaned
-    .match(/^\s*([0-9]?[฀-๿]{1,3})\s*([0-9]{1,4})\s*([฀-๿a-zA-Z][฀-๿a-zA-Z\s]*)?\s*$/);
+  const m = String(plate_no == null ? '' : plate_no)
+    .match(/^\s*([0-9]?[\u0E00-\u0E7F]{1,3})[\s.．。_\-\u2010-\u2015]*([0-9]{1,4})(?:[\s.．。_\-\u2010-\u2015]*([\u0E00-\u0E7Fa-zA-Z][\u0E00-\u0E7Fa-zA-Z\s.．。]*))?\s*$/);
   if (!m) return null;
   return { plate_prefix: m[1], plate_number: m[2], province: (m[3] || '').trim() };
 }
@@ -172,6 +275,7 @@ module.exports = {
   PROVINCE_ALIASES,
   normalizeThaiText,
   normalizeProvince,
+  isKnownProvince,
   detectProvinceAlias,
   normalizePlatePrefix,
   normalizePlateNumber,

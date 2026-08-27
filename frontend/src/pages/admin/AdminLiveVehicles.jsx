@@ -4,10 +4,11 @@ import {
   Users, MapPin, Search, ShieldAlert,
 } from 'lucide-react';
 import api from '../../api/axios';
-import { AppCard, AlertBanner, StatusBadge, DashboardSection, LiveKpiCard } from '../../components/ui';
+import { AppCard, AlertBanner, StatusBadge, DashboardSection, FilterBar, LiveKpiCard } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
+import PageHeader from '../../components/PageHeader';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import {
   getStatusMeta,
@@ -161,20 +162,12 @@ export default function AdminLiveVehicles() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-          <ShieldAlert className="w-6 h-6 text-brand" strokeWidth={2} />
-          ตรวจสอบตำแหน่งรถ
-        </h1>
-        <p className="text-sm text-ink-muted mt-1">
-          หน้าสำหรับผู้ดูแลระบบใช้ตรวจสอบสถานะการส่งตำแหน่งของรถรับส่งทั้งหมด · อัปเดตทุก 15 วินาที
-          {generatedAt && (
-            <span className="ml-1 text-ink-muted">
-              · ข้อมูล {formatThaiTime(generatedAt)} น.
-            </span>
-          )}
-        </p>
-      </header>
+      <PageHeader
+        icon={ShieldAlert}
+        title="ตรวจสอบตำแหน่งรถ"
+        subtitle="หน้าสำหรับผู้ดูแลระบบใช้ตรวจสอบสถานะการส่งตำแหน่งของรถรับส่งทั้งหมด · อัปเดตทุก 15 วินาที"
+        meta={generatedAt ? `ข้อมูล ${formatThaiTime(generatedAt)} น.` : undefined}
+      />
 
       <AlertBanner variant="info" title="หน้าสำหรับสนับสนุน/ตรวจสอบเท่านั้น">
         ใช้ดูสถานะการส่งตำแหน่งของรถ ไม่ใช่หน้าหลักสำหรับงานประจำวัน หน้านี้ไม่มีปุ่มแก้ไข
@@ -238,29 +231,26 @@ export default function AdminLiveVehicles() {
                 suggestions={vehicles}
                 placeholder="ค้นหาทะเบียน หรือชื่อคนขับ…"
                 className="w-full min-w-0"
-                inputClassName="w-full text-sm border border-surface-border rounded-lg pl-9 pr-3 py-2 bg-surface text-ink"
                 leadingIcon={<Search className="w-4 h-4" strokeWidth={2} />}
               />
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {FILTERS.map(opt => {
-                const active = filter === opt.key;
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setFilter(opt.key)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
-                      active
-                        ? 'bg-brand text-white border-brand'
-                        : 'bg-surface text-ink-muted border-surface-border hover:bg-surface-border'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Chips move to FilterBar: same options, but a real radiogroup
+                at 44px instead of 30px pills that only looked selected. The
+                search stays on PlateSearchInput — it offers plate suggestions
+                that FilterBar's plain search box does not. */}
+            <FilterBar
+              chips={{
+                label: 'กรองตามสถานะการส่งตำแหน่ง',
+                value: filter,
+                onChange: setFilter,
+                options: FILTERS.map(opt => [opt.key, opt.label]),
+              }}
+              count={visible.length}
+              countLabel={`คัน จากทั้งหมด ${vehicles.length} คัน`}
+              onClear={(filter !== 'all' || search)
+                ? () => { setFilter('all'); setSearch(''); }
+                : undefined}
+            />
           </div>
 
           {visible.length === 0 ? (

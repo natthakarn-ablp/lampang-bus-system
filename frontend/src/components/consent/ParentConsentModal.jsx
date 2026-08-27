@@ -40,10 +40,16 @@ export default function ParentConsentModal({ idToken, onConsented, onClose }) {
 
         <div className="flex gap-2">
           <button onClick={confirm} disabled={!checked || busy}
-            className="flex-1 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium py-2.5 rounded-lg transition">
+            className="focus-ring flex-1 inline-flex items-center justify-center bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium min-h-[44px] rounded-lg transition">
             {busy ? 'กำลังบันทึก…' : 'ยืนยันความยินยอม'}
           </button>
-          <button onClick={onClose} className="px-4 text-gray-500 hover:text-gray-700 text-sm">ไม่ใช่ตอนนี้</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="focus-ring inline-flex items-center justify-center px-4 min-h-[44px] rounded-lg text-gray-500 hover:text-gray-700 text-sm"
+          >
+            ไม่ใช่ตอนนี้
+          </button>
         </div>
       </div>
     </div>

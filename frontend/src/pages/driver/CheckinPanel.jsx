@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/axios';
+import ErrorState from '../../components/ErrorState';
 import { ACTION_LABEL } from '../../utils/session';
 import { useToast } from '../../components/Toast';
 
@@ -43,7 +44,7 @@ export default function CheckinPanel({ student, session, onDone }) {
 
           {isDone && (
             <span className="text-green-700 bg-green-100 border border-green-300 text-sm font-bold px-3 py-1 rounded-full shrink-0">
-              ✓ {doneText}
+              {doneText}
             </span>
           )}
         </div>
@@ -67,7 +68,9 @@ export default function CheckinPanel({ student, session, onDone }) {
       )}
 
       {error && (
-        <p className="text-sm text-red-600 px-4 pb-3">{error}</p>
+        <div className="px-4 pb-3">
+          <ErrorState message={error} onRetry={load} />
+        </div>
       )}
     </div>
   );

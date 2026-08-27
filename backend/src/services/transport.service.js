@@ -2,6 +2,17 @@
 
 const { pool } = require('../config/database');
 const { normalizePlate } = require('../utils/vehiclePlate');
+const { logAudit } = require('../utils/audit');
+const { validateInspectionDates } = require('../utils/inspectionDates');
+
+// Thrown validation/authorization error carrying an HTTP status + machine code,
+// surfaced by the global errorHandler in the standard response shape.
+function svcError(message, statusCode = 400, code = null) {
+  const err = new Error(message);
+  err.statusCode = statusCode;
+  if (code) err.errors = [{ code }];
+  return err;
+}
 
 /**
  * Transport role sees ALL vehicles + inspection data, never student PII.
@@ -330,20 +341,129 @@ async function getInspections({ vehicle_id, result, page = 1, per_page = 20 } = 
   return { inspections, meta: { page, per_page, total } };
 }
 
-async function createInspection({ vehicleId, inspectionDate, expiryDate, result, notes, certifyingSchoolId, userId }) {
-  const [res] = await pool.query(
-    `INSERT INTO vehicle_inspections (vehicle_id, inspected_by, inspection_date, expiry_date, result, notes, certifying_school_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [vehicleId, userId, inspectionDate, expiryDate || null, result, notes || null, certifyingSchoolId || null]
-  );
-  return res.insertId;
+/**
+ * Record a legacy inspection result. Atomic (CLAUDE.md rule 7): verifies the
+ * vehicle exists (and is not soft-deleted) under a row lock, INSERTs the row,
+ * writes the audit log, and recomputes `vehicles.verification_status` — all in
+ * ONE transaction. Date fields are bounds-checked so a mistaken/abusive expiry
+ * (e.g. year 2099) or a future inspection date cannot slip through.
+ */
+async function createInspection(
+  { vehicleId, inspectionDate, expiryDate, result, notes, certifyingSchoolId, userId, ip = null, userAgent = null },
+  db = pool,
+) {
+  const dateErr = validateInspectionDates({ result, inspectionDate, expiryDate });
+  if (dateErr) throw svcError(dateErr.message, 400, dateErr.code);
+
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[vehicle]] = await conn.query(
+      `SELECT id FROM vehicles WHERE id = ? AND is_deleted = FALSE FOR UPDATE`,
+      [vehicleId],
+    );
+    if (!vehicle) throw svcError('ไม่พบรถที่ระบุ', 404, 'VEHICLE_NOT_FOUND');
+
+    const [res] = await conn.query(
+      `INSERT INTO vehicle_inspections
+        (vehicle_id, inspected_by, inspection_date, expiry_date, result, notes, certifying_school_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [vehicleId, userId, inspectionDate, expiryDate || null, result, notes || null, certifyingSchoolId || null],
+    );
+
+    await logAudit({
+      userId, action: 'CREATE', entityType: 'vehicle_inspection', entityId: String(res.insertId),
+      newValue: {
+        vehicle_id: vehicleId, inspection_date: inspectionDate, expiry_date: expiryDate || null,
+        result, notes: notes || null, certifying_school_id: certifyingSchoolId || null,
+      },
+      ipAddress: ip, userAgent, conn,
+    });
+
+    // eslint-disable-next-line global-require -- lazy to avoid a require cycle with vehicleVerification.service
+    const { refreshVehicleEligibility } = require('./vehicleVerification.service');
+    await refreshVehicleEligibility(conn, vehicleId);
+
+    await conn.commit();
+    return res.insertId;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
-async function updateInspection({ inspectionId, expiryDate, result, notes, userId }) {
-  await pool.query(
-    `UPDATE vehicle_inspections SET expiry_date = ?, result = ?, notes = ? WHERE id = ? AND inspected_by = ?`,
-    [expiryDate || null, result, notes || null, inspectionId, userId]
+/**
+ * Update a legacy inspection. Atomic (rule 7) and authorization-checked: loads
+ * the row under a lock, 404s if missing, and enforces inspector ownership
+ * (admins may edit any). Date bounds are re-validated against the row's own
+ * inspection date, the audit log and eligibility recompute run in the same
+ * transaction. Fixes the previous silent no-op (`WHERE id=? AND inspected_by=?`
+ * matched 0 rows yet returned 200 and wrote a misleading audit row).
+ */
+async function updateInspection(
+  { inspectionId, expiryDate, result, notes, userId, isAdmin = false, ip = null, userAgent = null },
+  db = pool,
+) {
+  const conn = await db.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[row]] = await conn.query(
+      `SELECT id, vehicle_id, inspected_by, result, notes,
+              DATE_FORMAT(inspection_date, '%Y-%m-%d') AS inspection_date,
+              DATE_FORMAT(expiry_date, '%Y-%m-%d')     AS expiry_date
+         FROM vehicle_inspections WHERE id = ? FOR UPDATE`,
+      [inspectionId],
+    );
+    if (!row) throw svcError('ไม่พบผลตรวจ', 404, 'INSPECTION_NOT_FOUND');
+    if (!isAdmin && row.inspected_by !== userId) {
+      throw svcError('แก้ไขได้เฉพาะผลตรวจที่คุณเป็นผู้บันทึก', 403, 'NOT_INSPECTION_OWNER');
+    }
+
+    const dateErr = validateInspectionDates({ result, inspectionDate: row.inspection_date, expiryDate });
+    if (dateErr) throw svcError(dateErr.message, 400, dateErr.code);
+
+    await conn.query(
+      `UPDATE vehicle_inspections SET expiry_date = ?, result = ?, notes = ? WHERE id = ?`,
+      [expiryDate || null, result, notes || null, inspectionId],
+    );
+
+    await logAudit({
+      userId, action: 'UPDATE', entityType: 'vehicle_inspection', entityId: String(inspectionId),
+      oldValue: { result: row.result, expiry_date: row.expiry_date, notes: row.notes },
+      newValue: { result, expiry_date: expiryDate || null, notes: notes || null },
+      ipAddress: ip, userAgent, conn,
+    });
+
+    // eslint-disable-next-line global-require -- lazy to avoid a require cycle
+    const { refreshVehicleEligibility } = require('./vehicleVerification.service');
+    await refreshVehicleEligibility(conn, row.vehicle_id);
+
+    await conn.commit();
+    return row;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
+ * Fetch a single vehicle by id for the transport `GET /vehicles/:id` detail
+ * view. Uses the curated, PII-free VEHICLE_LIST_COLUMNS list (NOT `SELECT v.*`)
+ * so internal/sensitive columns — `qr_token`, `qr_revoked_at` and the
+ * plate-normalization columns — are never shipped to the transport client.
+ */
+async function getVehicleById(id, db = pool) {
+  const [[row]] = await db.query(
+    `SELECT ${VEHICLE_LIST_COLUMNS}
+       FROM vehicles v
+      WHERE v.id = ? AND v.is_deleted = FALSE`,
+    [id],
   );
+  return row || null;
 }
 
 /**
@@ -378,6 +498,7 @@ module.exports = {
   getPendingVehicles,
   getExpiringVehicles,
   getInspections,
+  getVehicleById,
   createInspection,
   updateInspection,
   deleteInspection,

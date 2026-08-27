@@ -5,8 +5,9 @@
  *
  * ISOLATED — pool, audit, and auth are mocked, so this runs without globalSetup
  * and never touches the production DB. Exercises the real POST
- * /api/transport/vehicles handler: exact-normalized reuse is preserved, and
- * province-omitted/variant duplicates are now rejected (409) before any INSERT.
+ * /api/transport/vehicles handler: exact-normalized reuse is preserved,
+ * province-less plates are rejected by strict validation, and province variants
+ * are rejected (409) before any INSERT.
  */
 
 jest.mock('../src/config/database', () => ({ pool: { query: jest.fn() } }));
@@ -45,13 +46,11 @@ const insertCalled = () => pool.query.mock.calls.some(([sql]) => /INSERT INTO ve
 beforeEach(() => jest.clearAllMocks());
 
 describe('POST /api/transport/vehicles — province-variant duplicate guard', () => {
-  test('1. province-OMITTED duplicate (active w/ province exists) → 409, no INSERT', async () => {
+  test('1. province-OMITTED duplicate (active w/ province exists) → 400 strict validation, no INSERT', async () => {
     setupPool({ exact: [], candidates: [{ plate_no: 'นข4337 ลำปาง', normalized_plate: 'นข4337ลำปาง' }] });
     const res = await request(app).post('/api/transport/vehicles').send({ plate_no: 'นข4337' });
-    expect(res.status).toBe(409);
-    expect(res.body.errors?.[0]?.code).toBe('DUPLICATE_OR_INCOMPLETE_PLATE');
-    // Phase 10.13A-15 — 409 carries the conflicting plate(s) for the UI warning
-    expect(res.body.errors[0].candidates?.[0]?.plate_no).toBe('นข4337 ลำปาง');
+    expect(res.status).toBe(400);
+    expect(res.body.message).toContain('จังหวัด');
     expect(insertCalled()).toBe(false);
   });
 

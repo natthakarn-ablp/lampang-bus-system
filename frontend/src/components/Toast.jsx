@@ -1,12 +1,16 @@
+import { CheckCircle2, XCircle, Info } from 'lucide-react';
 import { useState, useCallback, createContext, useContext } from 'react';
 import { AnimatePresence, ToastSlide } from '../lib/motion';
 
 const ToastContext = createContext(null);
 
+// A toast's type was carried by a bare ✓ / ✕ / ℹ glyph plus a background
+// colour. Neither survives a screen reader, so each type now has a real icon
+// (aria-hidden, since it is decorative) and an sr-only word that is not.
 const ICONS = {
-  success: '✓',
-  error: '✕',
-  info: 'ℹ',
+  success: { Icon: CheckCircle2,  label: 'สำเร็จ' },
+  error:   { Icon: XCircle,       label: 'ผิดพลาด' },
+  info:    { Icon: Info,          label: 'ข้อมูล' },
 };
 
 const COLORS = {
@@ -38,7 +42,9 @@ export function ToastProvider({ children }) {
       {children}
       {/* Toast container — fixed bottom-right; lifts above bottom nav when --app-bottom-nav is set */}
       <div
-        className="fixed right-4 z-50 flex flex-col gap-2 pointer-events-none"
+        className="fixed right-4 z-toast flex flex-col gap-2 pointer-events-none"
+        role="status"
+        aria-live="polite"
         style={{ bottom: 'calc(1rem + var(--app-bottom-nav, 0px))' }}
       >
         <AnimatePresence>
@@ -47,7 +53,15 @@ export function ToastProvider({ children }) {
               key={t.id}
               className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg text-white text-sm shadow-lg ${COLORS[t.type]}`}
             >
-              <span className="font-semibold text-base leading-none">{ICONS[t.type]}</span>
+              {(() => {
+                const { Icon, label } = ICONS[t.type] || ICONS.info;
+                return (
+                  <>
+                    <Icon className="w-4 h-4 shrink-0" strokeWidth={2.4} aria-hidden="true" />
+                    <span className="sr-only">{label}:</span>
+                  </>
+                );
+              })()}
               <span>{t.message}</span>
             </ToastSlide>
           ))}

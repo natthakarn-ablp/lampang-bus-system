@@ -14,7 +14,9 @@ URL: **https://schoolbuslampang.com**
 ### 1.1 ระบบ
 - ▢ เปิด `https://schoolbuslampang.com` ในเบราว์เซอร์ แสดงหน้า login ได้ปกติ
 - ▢ `curl -s http://127.0.0.1:3000/health` → `success: true`, `database.connected: true`
-- ▢ `./scripts/health-check.sh` → exit 0, 8/8 OK
+- ▢ `./scripts/health-check.sh` → exit 0, ไม่มี fail, และ health commit ตรง git HEAD
+- ▢ สร้าง `outputs/operator-gates/<timestamp>/` ด้วย `node scripts/create-operator-gate-evidence-pack.js --base-url http://127.0.0.1:3000`
+- ▢ รัน production read-only gate แล้วเก็บ log ลง `outputs/operator-gates/<timestamp>/production-gate.redacted.log`
 - ▢ `systemctl is-active pm2-schoolbus` → `active`
 - ▢ `systemctl is-enabled pm2-schoolbus` → `enabled`
 
@@ -26,13 +28,16 @@ URL: **https://schoolbuslampang.com**
 - ▢ Backup ใหม่กว่า 24 ชั่วโมง (ถ้าเก่ากว่านี้ ให้รัน `./scripts/backup-db.sh` ก่อน)
 - ▢ sha256 + gzip ตรวจผ่าน (ดูใน output ของ health-check.sh)
 - ▢ Restore drill ผ่าน (อย่างน้อย 1 ครั้งก่อน go-live)
+- ▢ `node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp>` → PASS
 
 ### 1.3 LINE
 - ▢ LINE Developers Console — Webhook URL ตั้งเป็น
       `https://schoolbuslampang.com/api/line/webhook`
 - ▢ LINE Console — Verify ปุ่ม → ขึ้น Success สีเขียว
 - ▢ LIFF Endpoint URL — ตั้งเป็นโดเมนใหม่
-- ▢ พิมพ์ `สถานะ` ในแชตบอทจาก LINE account ทดสอบ — ได้ Flex card ตอบ
+- ▢ เปิด `/parent` และ `/parent/link` ผ่าน LIFF account ทดสอบได้
+- ▢ พิมพ์ `ผูกบัญชี` จาก LINE account ทดสอบ แล้ว flow ผูกบัญชีทำงาน
+- ▢ ยืนยัน policy ปัจจุบัน: สถานะประจำวันดูผ่าน LIFF เป็นหลัก, push ใช้กับเหตุสำคัญ/exception/emergency ตามนโยบายจังหวัด
 
 ### 1.4 บัญชี + เอกสาร
 - ▢ Admin มี credentials ครบใน password manager
@@ -44,10 +49,10 @@ URL: **https://schoolbuslampang.com**
   - `docs/user-guide-driver.md` ให้คนขับ
   - `docs/user-guide-transport-province-affiliation.md` ให้เขตพื้นที่/จังหวัด/ขนส่ง
 
-### 1.5 Off-host backup caveat (สำคัญ — ต้องรับทราบ)
-- ▢ Operator รับทราบว่า off-host backup ยังไม่ได้ตั้งค่า
-- ▢ มีแผนตั้งค่าภายใน 7 วันแรกหลัง go-live
-      (rclone หรือ rsync ตาม [`docs/ops-backup-restore.md §7.3`](ops-backup-restore.md))
+### 1.5 Off-host backup
+- ▢ `./scripts/check-offhost-backup-config.sh` ผ่าน
+- ▢ `/home/schoolbus/logs/offhost-sync.log` มี sync ล่าสุดและ remote listing ของไฟล์ backup วันนี้
+- ▢ รับทราบ follow-up: rclone/Google Drive ต้องใช้ organization-owned client ID ก่อนช่วงเลิกใช้ shared client ในปี 2026
 
 ---
 
@@ -64,7 +69,7 @@ URL: **https://schoolbuslampang.com**
 - ▢ **School grade-scoped teacher** → `/school` → เห็น scope chip,
       ปุ่ม "ยืนยันแทนคนขับ" / "เพิ่มนักเรียน" / "จัดการรถ" **ไม่ปรากฏ**
 - ▢ **Driver** → login ด้วย **ทะเบียนรถ** → `/driver` → pretrip pill + roster
-- ▢ **Parent/LINE** → ในแอป LINE พิมพ์ `สถานะ` → ได้ Flex card
+- ▢ **Parent/LINE** → `/parent` และ `/parent/link` โหลดได้, test parent เห็นเฉพาะบุตรหลานของตนเอง
 
 ---
 
@@ -74,7 +79,9 @@ URL: **https://schoolbuslampang.com**
 
 - ▢ `pm2 logs schoolbus-backend --lines 100 --nostream` → ไม่มี 500, TypeError, UnhandledPromiseRejection
 - ▢ `tail -30 /home/schoolbus/backups/lampang-bus/health-check.log` → ทุก entry `exit=0`
-- ▢ ดู `pm2 logs schoolbus-backend --lines 50 --nostream | grep -E "LINE|webhook"` → มี delivered messages, ไม่มี fetch failed
+- ▢ ดู `pm2 logs schoolbus-backend --lines 50 --nostream | grep -E "LINE|webhook|LIFF"` → ไม่มี fetch failed หรือ signature error
+- ▢ เก็บ postdeploy/PM2/health/off-host logs ลง `outputs/operator-gates/<timestamp>/`
+- ▢ `node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>` → PASS
 - ▢ บันทึก feedback จากผู้ใช้แต่ละ role (1 form ต่อ role)
 
 ---
@@ -92,17 +99,17 @@ URL: **https://schoolbuslampang.com**
   grep -c "exit=0" /home/schoolbus/backups/lampang-bus/health-check.log
   ```
   → มากกว่า 250 entries ใน 24 ชั่วโมง (5-min × 288 ≈ 288)
-- ▢ LINE notification ส่งได้: ดูใน `pm2 logs` ว่ามี `[LINE_PARENT_*_FLEX] delivered`
+- ▢ LINE/LIFF ใช้งานได้: test parent เปิดสถานะได้ และ emergency/exception push ใช้งานตาม policy
 
 ### 4.2 รายสัปดาห์
 - ▢ Restore drill: `./scripts/restore-drill-db.sh` → table counts match
 - ▢ รวบรวมปัญหาที่พบ → ใส่ใน backlog phase ถัดไป
 
 ### 4.3 ภายใน 7 วัน
-- ▢ **ตั้งค่า off-host backup destination** (rclone หรือ rsync) — งานสำคัญ
-      ที่สุดในรายการนี้
-- ▢ ติดตั้ง 02:45 cron entry หลัง sync จริงผ่าน
-- ▢ Flip off-host status จาก 🟡 → 🟢 → ระบบเป็น **FULL GREEN**
+- ▢ สร้าง `lampang_bus_restore_drill` ด้วย privileged MySQL user
+- ▢ รัน `scripts/restore-test-readiness.sh` ให้ READY
+- ▢ รัน restore drill อย่างน้อย 1 รอบ และยืนยัน production counts ไม่เปลี่ยน
+- ▢ แก้ rclone client ID เป็นของหน่วยงาน
 
 ### 4.4 ภายใน 30 วัน
 - ▢ Controlled reboot drill (`sudo reboot` ใน maintenance window) — ยืนยันว่า
@@ -123,4 +130,4 @@ URL: **https://schoolbuslampang.com**
 
 ---
 
-🟢 **เมื่อเช็คครบทุกข้อในส่วน Pre-go-live + Role smoke test แล้ว ระบบพร้อมเปิดใช้งานจริงได้**
+🟢 **เรียก 100% ได้เมื่อ Pre-go-live + Role smoke test + UAT/sign-off + restore/operator evidence validators + postdeploy monitor ผ่านครบ และ `node scripts/verify-100-readiness.js ...` ผ่านแบบไม่ใช้ `--allow-pending`**

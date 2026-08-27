@@ -21,6 +21,7 @@
 
 const { pool } = require('../src/config/database');
 const { logAudit } = require('../src/utils/audit');
+const env = require('../src/config/env');
 
 // nowExpr is NOW() for TIMESTAMP columns, CURDATE() for DATE columns. archive=null
 // means hard-delete (no copy). days defaults are PLACEHOLDERS — tune via flags.
@@ -28,6 +29,11 @@ const TABLES = [
   { table: 'audit_logs',   archive: 'audit_logs_archive',  dateCol: 'created_at', nowExpr: 'NOW()',     key: 'audit_logs',   def: 365 },
   { table: 'checkin_logs', archive: 'checkin_logs_archive', dateCol: 'check_date', nowExpr: 'CURDATE()', key: 'checkin_logs', def: 730 },
   { table: 'daily_status', archive: null,                   dateCol: 'check_date', nowExpr: 'CURDATE()', key: 'daily_status', def: 30 },
+  // vehicle_location_history (migration 040) — append-only raw GPS trail that
+  // otherwise grows without bound. It is location PII, so PDPA wants it bounded:
+  // hard-delete (no archive) rows older than LOCATION_HISTORY_RETENTION_DAYS,
+  // matched on the indexed received_at column (idx_vlh_received).
+  { table: 'vehicle_location_history', archive: null, dateCol: 'received_at', nowExpr: 'NOW()', key: 'vehicle_location_history', def: 30 },
 ];
 
 function intArg(name, def) {
@@ -101,9 +107,11 @@ async function main() {
     audit_logs: intArg('audit-retention-days', 365),
     checkin_logs: intArg('checkin-retention-days', 730),
     daily_status: intArg('daily-status-days', 30),
+    // Default from the (formerly unused) LOCATION_HISTORY_RETENTION_DAYS knob.
+    vehicle_location_history: intArg('location-history-days', env.tracking.locationHistoryRetentionDays),
   };
   const mode = apply ? 'APPLY' : 'DRY-RUN';
-  console.log(`[cleanup-logs] mode=${mode} · audit=${days.audit_logs}d checkin=${days.checkin_logs}d daily=${days.daily_status}d batch=${batch}`);
+  console.log(`[cleanup-logs] mode=${mode} · audit=${days.audit_logs}d checkin=${days.checkin_logs}d daily=${days.daily_status}d location=${days.vehicle_location_history}d batch=${batch}`);
 
   const summary = await runRetention(pool, { apply, batch, days });
   let purged = 0; let eligibleTotal = 0;

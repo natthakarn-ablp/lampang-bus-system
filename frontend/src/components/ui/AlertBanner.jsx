@@ -1,10 +1,10 @@
 import { CheckCircle2, AlertTriangle, AlertOctagon, Info, X } from 'lucide-react';
 
 const VARIANT_STYLE = {
-  success: { wrap: 'bg-success-soft border-success/30', icon: 'text-success', defaultIcon: CheckCircle2 },
-  warn:    { wrap: 'bg-warn-soft    border-warn/35',    icon: 'text-warn',    defaultIcon: AlertTriangle },
-  danger:  { wrap: 'bg-danger-soft  border-danger/35',  icon: 'text-danger',  defaultIcon: AlertOctagon },
-  info:    { wrap: 'bg-info-soft    border-info/35',    icon: 'text-info',    defaultIcon: Info },
+  success: { wrap: 'bg-success-soft border-success/30', icon: 'text-success-ink', defaultIcon: CheckCircle2 },
+  warn:    { wrap: 'bg-warn-soft    border-warn/35',    icon: 'text-warn-ink',    defaultIcon: AlertTriangle },
+  danger:  { wrap: 'bg-danger-soft  border-danger/35',  icon: 'text-danger-ink',  defaultIcon: AlertOctagon },
+  info:    { wrap: 'bg-info-soft    border-info/35',    icon: 'text-info-ink',    defaultIcon: Info },
 };
 
 export default function AlertBanner({

@@ -29,6 +29,7 @@ BACKUP_GLOB="${BACKUP_GLOB:-lampang_bus_*.sql.gz}"
 BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-36}"
 DISK_THRESHOLD="${DISK_THRESHOLD:-85}"
 DISK_MOUNT="${DISK_MOUNT:-/}"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 TS="$(date -Iseconds)"
 EXIT_CODE=0
@@ -53,7 +54,16 @@ else
   fi
   HEALTH_COMMIT="$(echo "$HEALTH_BODY" | grep -oE '"commit":"[^"]*"' | head -1 | cut -d'"' -f4 || true)"
   if [ -n "$HEALTH_COMMIT" ]; then
-    emit_ok "health commit=$HEALTH_COMMIT"
+    GIT_HEAD="$(git -C "$ROOT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+    if [ -n "$GIT_HEAD" ]; then
+      if [ "$HEALTH_COMMIT" = "$GIT_HEAD" ]; then
+        emit_ok "health commit=$HEALTH_COMMIT matches git HEAD"
+      else
+        emit_warn "health commit=$HEALTH_COMMIT differs from git HEAD=$GIT_HEAD"
+      fi
+    else
+      emit_ok "health commit=$HEALTH_COMMIT (git HEAD unavailable)"
+    fi
   else
     emit_warn "health commit not reported"
   fi

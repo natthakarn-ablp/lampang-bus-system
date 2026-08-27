@@ -26,10 +26,14 @@ const ExcelJS = require('exceljs');
 const bcrypt = require('bcrypt');
 const mysql = require('mysql2/promise');
 const { hashCid, generateVehicleId } = require('../src/utils/hash');
+const { deriveTermIdFromDateSync } = require('../src/services/term.service');
 
 const EXCEL_PATH = path.resolve(__dirname, '../../input/Lampang_Bus_System_MasterV.1.xlsx');
 const BCRYPT_COST = 12;
-const CURRENT_TERM = process.env.CURRENT_TERM || '2568-2';
+// Term for seeded rows: an explicit CURRENT_TERM override wins; otherwise derive
+// from today's date rather than a frozen literal (a frozen default is exactly what
+// went stale and mis-tagged a whole enrollment). See term.service date-derivation.
+const CURRENT_TERM = process.env.CURRENT_TERM || deriveTermIdFromDateSync(new Date());
 
 // ─── DB connection ────────────────────────────────────────────────────────────
 

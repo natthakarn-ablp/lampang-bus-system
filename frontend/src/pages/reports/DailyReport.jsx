@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FileBarChart } from 'lucide-react';
+import { FileBarChart, Bus, GraduationCap, Sunrise, Sunset} from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
 import ExportButtons from '../../components/ExportButtons';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
-import AppCard from '../../components/ui/AppCard';
-import StatusBadge from '../../components/ui/StatusBadge';
+import { StatusBadge, DataTable, FormField, AlertBanner} from '../../components/ui';
 
 export default function DailyReport() {
   const { user } = useAuth();
@@ -42,15 +41,23 @@ export default function DailyReport() {
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       {/* ── HEADER ── */}
-      <div className="bg-blue-800 text-white rounded-xl px-5 py-4 mb-5">
+      <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <p className="text-xs text-blue-200 uppercase tracking-wider">รายงานรายวัน</p>
+            <p className="text-caption text-navy-200 uppercase tracking-wider">รายงานรายวัน</p>
             <h1 className="text-lg font-semibold">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
-            <p className="text-sm text-blue-200 mt-0.5">{thaiDate}</p>
+            <p className="text-sm text-navy-200 mt-0.5">{thaiDate}</p>
           </div>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-            className="border border-blue-600 bg-blue-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 sm:w-44" />
+          <FormField
+            label="วันที่ของรายงาน"
+            labelClassName="text-navy-200"
+            className="sm:w-44"
+          >
+            {ctl => (
+              <input {...ctl} type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
+            )}
+          </FormField>
         </div>
       </div>
 
@@ -64,30 +71,31 @@ export default function DailyReport() {
         <>
           {/* ── KPI 4 CARDS ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            <KpiBox icon="🚌" label="รถรับส่ง" value={data.total_vehicles} sub="คัน" color="blue" />
-            <KpiBox icon="👨‍🎓" label="นักเรียน" value={data.total_students} sub="คน" color="blue" />
-            <KpiBox icon="🌅" label="ส่งเช้าสำเร็จ" value={`${mPct}%`}
+            <KpiBox icon={Bus} label="รถรับส่ง" value={data.total_vehicles} sub="คัน" tone="brand" />
+            <KpiBox icon={GraduationCap} label="นักเรียน" value={data.total_students} sub="คน" tone="brand" />
+            <KpiBox icon={Sunrise} label="ส่งเช้าสำเร็จ" value={`${mPct}%`}
               sub={`${data.morning_done}/${data.morning_total} คน`}
-              color={mPct === 100 ? 'green' : mPct >= 80 ? 'yellow' : 'red'} />
-            <KpiBox icon="🌆" label="รับเย็นสำเร็จ" value={`${ePct}%`}
+              tone={mPct === 100 ? 'success' : mPct >= 80 ? 'warn' : 'danger'} />
+            <KpiBox icon={Sunset} label="รับเย็นสำเร็จ" value={`${ePct}%`}
               sub={`${data.evening_done}/${data.evening_total} คน`}
-              color={ePct === 100 ? 'green' : ePct >= 80 ? 'yellow' : 'red'} />
+              tone={ePct === 100 ? 'success' : ePct >= 80 ? 'warn' : 'danger'} />
           </div>
 
           {/* ── ALERT: จุดที่ต้องติดตาม ── */}
           {(() => {
             const alerts = [];
-            if (data.morning_pending > 0) alerts.push(`🌅 รอส่งเช้า ${data.morning_pending} คน`);
-            if (data.evening_pending > 0) alerts.push(`🌆 รอรับเย็น ${data.evening_pending} คน`);
-            if (data.emergency_count > 0) alerts.push(`🚨 เหตุฉุกเฉิน ${data.emergency_count} รายการ`);
+            if (data.morning_pending > 0) alerts.push(`รอส่งเช้า ${data.morning_pending} คน`);
+            if (data.evening_pending > 0) alerts.push(`รอรับเย็น ${data.evening_pending} คน`);
+            if (data.emergency_count > 0) alerts.push(`เหตุฉุกเฉิน ${data.emergency_count} รายการ`);
             return alerts.length > 0 ? (
-              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 mb-5">
-                <p className="text-sm font-semibold text-amber-800 mb-1">⚠️ จุดที่ต้องติดตาม</p>
-                {alerts.map((a, i) => <p key={i} className="text-sm text-amber-700">{a}</p>)}
-              </div>
+              <AlertBanner variant="warn" title="จุดที่ต้องติดตาม" className="mb-5">
+                <ul className="space-y-0.5 mt-1">
+                  {alerts.map((a, i) => <li key={i}>{a}</li>)}
+                </ul>
+              </AlertBanner>
             ) : (
               <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-5 text-center">
-                <p className="text-sm font-semibold text-green-700">✅ ดำเนินการครบทุกรายการ</p>
+                <p className="text-sm font-semibold text-green-700">ดำเนินการครบทุกรายการ</p>
               </div>
             );
           })()}
@@ -95,90 +103,28 @@ export default function DailyReport() {
           {/* ── สรุปรายโรงเรียน ── */}
           {data.schools?.length > 0 && (
             <section className="mb-5">
-              <h2 className="text-sm font-semibold text-gray-700 mb-2">สรุปรายโรงเรียน</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                    <tr className="text-left">
-                      <th className="px-4 py-2.5">โรงเรียน</th>
-                      <th className="px-4 py-2.5 text-center">นักเรียน</th>
-                      <th className="px-4 py-2.5 text-center">ส่งเช้า</th>
-                      <th className="px-4 py-2.5 text-center">รับเย็น</th>
-                      <th className="px-4 py-2.5 text-center">สถานะ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {data.schools.map((s) => {
-                      const mOk = s.morning_done >= s.student_count;
-                      const eOk = s.evening_done >= s.student_count;
-                      return (
-                        <tr key={s.school_id} className="hover:bg-surface transition">
-                          <td className="px-4 py-2.5 text-gray-800 font-medium">{s.school_name}</td>
-                          <td className="px-4 py-2.5 text-center text-gray-600">{s.student_count}</td>
-                          <td className={`px-4 py-2.5 text-center font-medium ${mOk ? 'text-green-600' : 'text-amber-600'}`}>
-                            {s.morning_done}/{s.student_count}
-                          </td>
-                          <td className={`px-4 py-2.5 text-center font-medium ${eOk ? 'text-green-600' : 'text-amber-600'}`}>
-                            {s.evening_done}/{s.student_count}
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <StatusBadge variant={mOk && eOk ? 'success' : 'warn'} size="sm">
-                              {mOk && eOk ? 'ครบ' : 'ค้าง'}
-                            </StatusBadge>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink mb-2">สรุปรายโรงเรียน</h2>
+              <CompletionTable
+                caption="สรุปการรับ-ส่งรายโรงเรียน"
+                rows={data.schools}
+                rowKey={s => s.school_id}
+                labelHeader="โรงเรียน"
+                label={s => s.school_name}
+              />
             </section>
           )}
 
           {/* ── สรุปรายรถ ── */}
           {data.vehicles?.length > 0 && (
             <section className="mb-5">
-              <h2 className="text-sm font-semibold text-gray-700 mb-2">สรุปรายรถ</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                    <tr className="text-left">
-                      <th className="px-4 py-2.5">ทะเบียนรถ</th>
-                      <th className="px-4 py-2.5 text-center">นักเรียน</th>
-                      <th className="px-4 py-2.5 text-center">ส่งเช้า</th>
-                      <th className="px-4 py-2.5 text-center">รับเย็น</th>
-                      <th className="px-4 py-2.5 text-center">สถานะ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {data.vehicles.map((v) => {
-                      const mOk = v.morning_done >= v.student_count;
-                      const eOk = v.evening_done >= v.student_count;
-                      return (
-                        <tr key={v.vehicle_id} className="hover:bg-surface transition">
-                          <td className="px-4 py-2.5 text-gray-800 font-medium">{v.plate_no}</td>
-                          <td className="px-4 py-2.5 text-center text-gray-600">{v.student_count}</td>
-                          <td className={`px-4 py-2.5 text-center font-medium ${mOk ? 'text-green-600' : 'text-amber-600'}`}>
-                            {v.morning_done}/{v.student_count}
-                          </td>
-                          <td className={`px-4 py-2.5 text-center font-medium ${eOk ? 'text-green-600' : 'text-amber-600'}`}>
-                            {v.evening_done}/{v.student_count}
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <StatusBadge variant={mOk && eOk ? 'success' : 'warn'} size="sm">
-                              {mOk && eOk ? 'ครบ' : 'ค้าง'}
-                            </StatusBadge>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink mb-2">สรุปรายรถ</h2>
+              <CompletionTable
+                caption="สรุปการรับ-ส่งรายรถ"
+                rows={data.vehicles}
+                rowKey={v => v.vehicle_id}
+                labelHeader="ทะเบียนรถ"
+                label={v => v.plate_no}
+              />
             </section>
           )}
 
@@ -257,15 +203,62 @@ function DecisionLogModal({ onSubmit, onSkip, onCancel }) {
   );
 }
 
-function KpiBox({ icon, label, value, sub, color }) {
-  const bg = { blue: 'bg-blue-50 border-blue-200', green: 'bg-green-50 border-green-200', red: 'bg-red-50 border-red-200', yellow: 'bg-amber-50 border-amber-200' };
-  const text = { blue: 'text-blue-700', green: 'text-green-700', red: 'text-red-700', yellow: 'text-amber-700' };
+/**
+ * The four report KPI tiles used an emoji as the icon (🚌 👨‍🎓 🌅 🌆) and a
+ * hardcoded blue/green/red/amber palette. The emoji announced nothing useful
+ * and did not print reliably; the tones now come from the semantic tokens and
+ * the icons from Lucide, marked aria-hidden since the label says what the tile
+ * is.
+ */
+function KpiBox({ icon: Icon, label, value, sub, tone = 'brand' }) {
+  const TONES = {
+    brand:   'bg-brand-50     border-brand-200  text-brand-700',
+    success: 'bg-success-soft border-success/30 text-success-ink',
+    warn:    'bg-warn-soft    border-warn/30    text-warn-ink',
+    danger:  'bg-danger-soft  border-danger/30  text-danger-ink',
+  };
+  const cls = TONES[tone] || TONES.brand;
   return (
-    <div className={`rounded-xl border-2 p-3 text-center ${bg[color] || bg.blue}`}>
-      <p className="text-xl mb-0.5">{icon}</p>
-      <p className={`text-2xl font-bold ${text[color] || text.blue}`}>{value}</p>
-      <p className="text-xs text-gray-600">{label}</p>
-      {sub && <p className="text-xs text-gray-400">{sub}</p>}
+    <div className={`rounded-xl border p-3 text-center ${cls.replace(/text-[\w-]+$/, '')}`}>
+      {Icon && (
+        <Icon className={`w-5 h-5 mx-auto mb-1 ${cls.split(' ').pop()}`} strokeWidth={2} aria-hidden="true" />
+      )}
+      <p className={`text-2xl font-bold tabular-nums ${cls.split(' ').pop()}`}>{value}</p>
+      <p className="text-caption text-ink-muted">{label}</p>
+      {sub && <p className="text-caption text-ink-muted tabular-nums">{sub}</p>}
     </div>
+  );
+}
+
+/**
+ * CompletionTable — the daily report's two summary tables (per school, per
+ * vehicle) are the same table with a different label column, so they are one
+ * component here rather than two near-identical blocks.
+ *
+ * The done/total cells used green-vs-amber text alone to say whether a session
+ * was complete. The status column already carries that as a word, so the counts
+ * stay neutral and the badge does the signalling.
+ */
+function CompletionTable({ caption, rows, rowKey, labelHeader, label }) {
+  const done = (d, total) => `${d}/${total}`;
+  return (
+    <DataTable
+      caption={caption}
+      rows={rows}
+      rowKey={rowKey}
+      columns={[
+        { key: 'label', header: labelHeader, primary: true,
+          cell: r => <span className="font-medium text-ink">{label(r)}</span> },
+        { key: 'students', header: 'นักเรียน', numeric: true, cell: r => r.student_count },
+        { key: 'morning', header: 'ส่งเช้า', numeric: true, cell: r => done(r.morning_done, r.student_count) },
+        { key: 'evening', header: 'รับเย็น', numeric: true, cell: r => done(r.evening_done, r.student_count) },
+        { key: 'status', header: 'สถานะ', align: 'center', badge: true,
+          cell: r => {
+            const ok = r.morning_done >= r.student_count && r.evening_done >= r.student_count;
+            return <StatusBadge variant={ok ? 'success' : 'warn'}>{ok ? 'ครบ' : 'ค้าง'}</StatusBadge>;
+          } },
+      ]}
+      empty={{ title: 'ไม่มีข้อมูลในวันที่เลือก' }}
+    />
   );
 }

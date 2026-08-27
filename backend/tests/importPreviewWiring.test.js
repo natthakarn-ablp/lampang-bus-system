@@ -73,20 +73,34 @@ describe('applyBatch idempotency (10.13A-26A)', () => {
   // active → must return ALREADY_APPLIED, never insert.
   function makePool() {
     const calls = [];
+    const batchRow = {
+      id: 10,
+      batch_id: 1,
+      row_no: 2,
+      student_code: '900',
+      classification: 'INSERT_NEW',
+      can_apply: 1,
+      applied_at: null,
+      normalized_json: '{"first_name":"a","last_name":"b"}',
+      raw_json: '{"student_code":"900","first_name":"a","last_name":"b"}',
+      matched_vehicle_id: null,
+    };
     return {
       _calls: calls,
       getConnection: async () => ({
         query: async (sql, params) => {
           calls.push(sql.trim().split(/\s+/).slice(0, 2).join(' '));
+          if (/SELECT \* FROM import_batch_rows WHERE id/.test(sql)) return [[batchRow]];
           if (/SELECT id, is_deleted FROM students WHERE school_id/.test(sql)) return [[{ id: 5, is_deleted: 0 }]]; // exists active
-          return [{}];
+          if (/UPDATE import_batch_rows SET status='ALREADY_APPLIED'/.test(sql)) return [{ affectedRows: 1 }];
+          return [[]];
         },
         beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release: () => {},
       }),
       query: async (sql) => {
         if (/FROM import_batches WHERE id/.test(sql)) return [[{ id: 1, school_id: 'S1', status: 'PREVIEWED' }]];
-        if (/FROM import_batch_rows WHERE batch_id/.test(sql)) return [[{ id: 10, row_number: 2, student_code: '900', classification: 'INSERT_NEW', can_apply: 1, normalized_json: '{"first_name":"a","last_name":"b"}', matched_vehicle_id: null }]];
-        return [{}];
+        if (/FROM import_batch_rows WHERE batch_id/.test(sql)) return [[batchRow]];
+        return [[]];
       },
     };
   }

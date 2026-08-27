@@ -84,22 +84,22 @@ export default function ExecutiveSummary() {
   return (
     <div className="p-3 sm:p-6 max-w-4xl mx-auto pb-10">
       {/* Header */}
-      <div className="bg-brand-900 text-white rounded-xl px-5 py-5 mb-5">
+      <div className="bg-navy-700 text-white rounded-xl px-5 py-5 mb-5">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs text-blue-200 uppercase tracking-wider">Executive Summary</p>
+            <p className="text-caption text-navy-200 uppercase tracking-wider">Executive Summary</p>
             <h1 className="text-xl font-semibold mt-1">สรุปภาพรวมการประเมินระบบ</h1>
-            <p className="text-sm text-blue-200 mt-1">Baseline • Current • Role Readiness • Key Risks</p>
+            <p className="text-sm text-navy-200 mt-1">Baseline • Current • Role Readiness • Key Risks</p>
           </div>
           <button onClick={() => navigate('/admin/executive-print')}
-            className="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition shrink-0">
-            🖨️ พิมพ์รายงาน
+            className="focus-ring-inverse inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white text-sm font-medium px-4 min-h-[44px] rounded-lg transition shrink-0">
+            พิมพ์รายงาน
           </button>
         </div>
         <div className="flex flex-wrap gap-4 mt-3 text-xs text-blue-200">
-          <span>📌 Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
-          <span>📊 Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
-          <span>📝 Actions ทั้งหมด: {totalActions}</span>
+          <span>Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
+          <span>Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
+          <span>Actions ทั้งหมด: {totalActions}</span>
         </div>
       </div>
 
@@ -134,12 +134,12 @@ export default function ExecutiveSummary() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
         {/* Improvements */}
         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-green-800 mb-2">✅ สิ่งที่ดีขึ้นจาก Baseline</h2>
+          <h2 className="text-sm font-semibold text-green-800 mb-2">สิ่งที่ดีขึ้นจาก Baseline</h2>
           {improvements.length > 0 ? (
             <ul className="space-y-1">
               {improvements.map(m => (
                 <li key={m.key} className="text-sm text-green-700">
-                  <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold">▲ +{m.delta}%</span>
+                  <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold"><span aria-hidden="true">▲</span> +{m.delta}%</span>
                 </li>
               ))}
             </ul>
@@ -151,12 +151,12 @@ export default function ExecutiveSummary() {
         {/* Risks */}
         <div className={`border rounded-xl p-4 ${risks.length > 0 || lowCoverage.length > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
           <h2 className={`text-sm font-semibold mb-2 ${risks.length > 0 ? 'text-red-800' : 'text-gray-700'}`}>
-            {risks.length > 0 ? '⚠️ จุดเสี่ยง / ต้องติดตาม' : '✅ ไม่มีจุดเสี่ยงจากข้อมูลปัจจุบัน'}
+            {risks.length > 0 ? 'จุดเสี่ยง / ต้องติดตาม' : 'ไม่มีจุดเสี่ยงจากข้อมูลปัจจุบัน'}
           </h2>
           <ul className="space-y-1">
             {risks.map(m => (
               <li key={m.key} className="text-sm text-red-700">
-                <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold">▼ {m.delta}%</span>
+                <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold"><span aria-hidden="true">▼</span> {m.delta}%</span>
               </li>
             ))}
             {lowCoverage.map(m => (
@@ -173,7 +173,7 @@ export default function ExecutiveSummary() {
 
       {/* Recommended actions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
-        <h2 className="text-sm font-semibold text-blue-800 mb-2">📋 สิ่งที่ควรดำเนินการต่อ</h2>
+        <h2 className="text-sm font-semibold text-blue-800 mb-2">สิ่งที่ควรดำเนินการต่อ</h2>
         <ul className="space-y-1.5 text-sm text-blue-700">
           {missingCount > 0 && (
             <li>• เพิ่มการเก็บ evidence สำหรับ <strong>{missingCount} role</strong> ที่ยังมีข้อมูลไม่เพียงพอ</li>

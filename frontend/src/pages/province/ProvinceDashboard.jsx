@@ -12,6 +12,9 @@ import {
 const POLL_INTERVAL = 30_000; // 30s background refresh
 const TICK_INTERVAL = 1_000;  // 1s freshness ticker (re-render only)
 import api from '../../api/axios';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
+import EmptyState from '../../components/EmptyState';
 import { safePct, kpiColor } from '../../utils/kpi';
 import { relativeTime } from '../../utils/datetime';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
@@ -19,6 +22,7 @@ import {
   AppCard, AlertBanner, KPIGrid,
   RiskCard, DashboardSection, StatusBadge, AttentionCard,
 } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
 import { PageTransition } from '../../lib/motion';
 
 export default function ProvinceDashboard() {
@@ -26,6 +30,7 @@ export default function ProvinceDashboard() {
   const [incidents, setIncidents] = useState([]);
   const [atRiskVehicles, setAtRiskVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -43,11 +48,15 @@ export default function ProvinceDashboard() {
     setRefreshing(true);
     try {
       const [dashRes, incRes, atRiskRes] = await Promise.all([
-        api.get('/province/dashboard').catch(() => null),
+        api.get('/province/dashboard').catch((e) => e),
         api.get('/province/emergencies?per_page=5&page=1').catch(() => null),
         api.get('/province/vehicles-at-risk?limit=10').catch(() => null),
       ]);
-      if (dashRes) setData(dashRes.data.data);
+      // A failed dashboard call used to leave data null, which rendered
+      // "ไม่มีข้อมูล" — telling the province there is nothing to report when
+      // in fact nothing was fetched.
+      if (dashRes?.data?.data) { setData(dashRes.data.data); setError(null); }
+      else setError(dashRes?.response?.data?.message || 'โหลดข้อมูลภาพรวมจังหวัดไม่สำเร็จ');
       const incList = incRes?.data?.data;
       setIncidents(Array.isArray(incList) ? incList : []);
       const atRiskList = atRiskRes?.data?.data;
@@ -72,8 +81,9 @@ export default function ProvinceDashboard() {
     return () => clearInterval(t);
   }, []);
 
-  if (loading) return <p className="text-ink-muted py-10 text-center text-lg">{UI_MESSAGES.LOADING}</p>;
-  if (!data) return <p className="text-ink-muted py-10 text-center text-lg">{UI_MESSAGES.NO_DATA}</p>;
+  if (loading) return <LoadingState message={UI_MESSAGES.LOADING} />;
+  if (error && !data) return <ErrorState title="โหลดข้อมูลไม่สำเร็จ" message={error} onRetry={fetchAll} />;
+  if (!data) return <EmptyState title={UI_MESSAGES.NO_DATA} description="ยังไม่มีข้อมูลภาพรวมสำหรับวันนี้" />;
 
   const affs = data.affiliations ?? [];
   const problemSchools = data.schools_not_complete ?? [];
@@ -98,19 +108,20 @@ export default function ProvinceDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <header className="flex items-start justify-between gap-3 motion-safe:animate-fade-in-up">
-        <div className="min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">{PAGE_TITLES.PROVINCE_DASHBOARD}</h1>
-          {dateLabel && <p className="text-sm text-ink-muted mt-1">ข้อมูล ณ {dateLabel}</p>}
-        </div>
-        <FreshnessPill
-          lastSyncedAt={lastSyncedAt}
-          now={now}
-          refreshing={refreshing}
-          onRefresh={fetchAll}
-        />
-      </header>
+      {/* Header — shared PageHeader so every role opens on the same shape */}
+      <PageHeader
+        title={PAGE_TITLES.PROVINCE_DASHBOARD}
+        subtitle="ภาพรวมการเดินรถและงานที่ต้องติดตามทั้งจังหวัด"
+        meta={dateLabel ? `ข้อมูล ณ ${dateLabel}` : undefined}
+        actions={
+          <FreshnessPill
+            lastSyncedAt={lastSyncedAt}
+            now={now}
+            refreshing={refreshing}
+            onRefresh={fetchAll}
+          />
+        }
+      />
 
       {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern
           (flex-1 sm:flex-none + min-h 40px) so mobile users get fast tap-
@@ -644,7 +655,7 @@ function FreshnessPill({ lastSyncedAt, now, refreshing, onRefresh }) {
         type="button"
         onClick={onRefresh}
         disabled={refreshing}
-        className="ml-1 p-1 rounded-full hover:bg-surface-border transition disabled:opacity-50"
+        className="focus-ring tap-target ml-1 p-1 rounded-full hover:bg-surface-border active:bg-surface-border transition disabled:opacity-50"
         aria-label="รีเฟรชข้อมูล"
       >
         <RotateCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2.2} />

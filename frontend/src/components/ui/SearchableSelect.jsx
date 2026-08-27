@@ -170,7 +170,7 @@ export default function SearchableSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listboxId}
-        className="text-sm border border-surface-border rounded-lg pl-3 pr-9 py-2 bg-surface text-ink min-h-[40px] text-left flex items-center gap-2 hover:bg-surface-border/30 transition relative"
+        className="focus-ring text-base sm:text-sm border border-surface-border rounded-lg pl-3 pr-9 bg-surface-raised text-ink min-h-[44px] text-left flex items-center gap-2 hover:bg-surface transition relative"
       >
         <span className={`flex-1 truncate ${selected ? 'text-ink' : 'text-ink-muted'}`}>
           {selected ? selected.label : placeholder}
@@ -206,7 +206,7 @@ export default function SearchableSelect({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onSearchKey}
               placeholder={searchPlaceholder}
-              className="w-full text-sm bg-transparent pl-8 pr-3 py-2 outline-none text-ink"
+              className="w-full text-base sm:text-sm bg-transparent pl-8 pr-3 min-h-[44px] outline-none text-ink"
               aria-controls={listboxId}
               aria-autocomplete="list"
             />
@@ -230,7 +230,7 @@ export default function SearchableSelect({
                     aria-selected={isSelected}
                     onMouseEnter={() => setHighlight(i)}
                     onClick={() => pick(opt)}
-                    className={`px-3 py-2 text-sm cursor-pointer truncate ${
+                    className={`px-3 min-h-[44px] flex items-center text-sm cursor-pointer truncate ${
                       isHighlighted ? 'bg-brand-50' : ''
                     } ${isSelected ? 'font-semibold text-brand-700' : 'text-ink'}`}
                   >

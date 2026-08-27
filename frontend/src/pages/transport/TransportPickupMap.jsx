@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, RefreshCw, Bus, Building2 } from 'lucide-react';
 import api from '../../api/axios';
-import { AlertBanner, KPIGrid, KPIStat, SearchableSelect } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
+import { AlertBanner, KPIGrid, KPIStat, SearchableSelect, FormField} from '../../components/ui';
 import ReadOnlyPickupPointMap from '../../components/ReadOnlyPickupPointMap';
 
 const GRADE_OPTIONS = [
@@ -89,15 +90,11 @@ export default function TransportPickupMap() {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-          <MapIcon className="w-6 h-6 text-brand" strokeWidth={2} />
-          แผนที่จุดรับส่ง
-        </h1>
-        <p className="text-sm text-ink-muted mt-1">
-          แสดงจุดรับส่งเพื่อสนับสนุนการตรวจสอบเส้นทางและความปลอดภัย
-        </p>
-      </header>
+      <PageHeader
+        title="แผนที่จุดรับส่ง"
+        subtitle="แสดงจุดรับส่งเพื่อสนับสนุนการตรวจสอบเส้นทางและความปลอดภัย"
+        icon={MapIcon}
+      />
 
       {permError && (
         <AlertBanner variant="warn" title="ไม่มีสิทธิ์เข้าถึงข้อมูลนี้">
@@ -148,12 +145,12 @@ export default function TransportPickupMap() {
         />
         <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
           <button type="submit" disabled={loading}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-brand hover:bg-brand-700 disabled:bg-brand/60 text-white text-sm font-medium px-3 py-2.5 sm:py-2 rounded-lg transition min-h-[40px]">
+            className="focus-ring flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:bg-brand-600/60 text-white text-sm font-medium px-4 rounded-lg transition min-h-[44px]">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} strokeWidth={2} />
             {loading ? 'กำลังโหลด…' : 'ใช้ตัวกรอง'}
           </button>
           <button type="button" onClick={handleReset} disabled={loading}
-            className="text-sm text-ink-muted hover:text-ink px-3 py-2.5 sm:py-2 rounded-lg transition disabled:opacity-50 min-h-[40px]">
+            className="focus-ring text-sm text-ink-muted hover:text-ink hover:bg-surface px-4 rounded-lg transition disabled:opacity-50 min-h-[44px]">
             ล้างตัวกรอง
           </button>
         </div>
@@ -178,22 +175,29 @@ export default function TransportPickupMap() {
 
 function Field({ label, value, onChange, placeholder }) {
   return (
-    <label className="flex flex-col text-xs text-ink-muted w-full sm:w-auto sm:min-w-[160px]">
-      <span className="mb-1">{label}</span>
-      <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink min-h-[40px]" />
-    </label>
+    <FormField
+      className="w-full sm:w-auto sm:min-w-[160px]"
+      label={label}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+    />
   );
 }
 function Select({ label, value, onChange, options }) {
   return (
-    <label className="flex flex-col text-xs text-ink-muted w-full sm:w-auto sm:min-w-[140px]">
-      <span className="mb-1">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink min-h-[40px]">
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </label>
+    <FormField className="w-full sm:w-auto sm:min-w-[140px]" label={label}>
+      {ctl => (
+        <select
+          {...ctl}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base sm:text-sm text-ink transition"
+        >
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      )}
+    </FormField>
   );
 }
 

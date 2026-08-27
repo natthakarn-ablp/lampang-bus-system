@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users } from 'lucide-react';
+import { Users, Plus } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
-import EmptyState from '../../components/EmptyState';
-import LoadingState from '../../components/LoadingState';
-import AppCard from '../../components/ui/AppCard';
+import PageHeader from '../../components/PageHeader';
 import Pagination from '../../components/Pagination';
+import {
+  DataTable, TableAction, FilterBar, ConfirmDialog, FormField,
+  Modal as UiModal, StatusBadge as Badge,
+} from '../../components/ui';
 
 const ROLE_LABELS = {
   driver: 'คนขับ', school: 'โรงเรียน', affiliation: 'สังกัด',
@@ -34,8 +36,8 @@ export default function UserManagement() {
   const [affiliations, setAffiliations] = useState([]);
 
   useEffect(() => {
-    api.get('/province/schools?per_page=200').then(r => setSchools(r.data.data || [])).catch(() => {});
-    api.get('/province/affiliations').then(r => setAffiliations(r.data.data || [])).catch(() => {});
+    api.get('/province/schools?per_page=200').then(r => setSchools(Array.isArray(r.data?.data) ? r.data.data : [])).catch(() => {});
+    api.get('/province/affiliations').then(r => setAffiliations(Array.isArray(r.data?.data) ? r.data.data : [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export default function UserManagement() {
       if (filterRole) params.set('role', filterRole);
       if (debouncedSearch) params.set('search', debouncedSearch);
       const res = await api.get(`/admin/users?${params}`);
-      setUsers(res.data.data);
+      setUsers(Array.isArray(res.data.data) ? res.data.data : []);
       setMeta(res.data.meta);
     } catch {} finally { setLoading(false); }
   }, [filterRole, debouncedSearch]);
@@ -123,13 +125,22 @@ export default function UserManagement() {
   }
 
   // ── Delete ──
-  async function handleDelete(user) {
-    if (!window.confirm(`ลบผู้ใช้ "${user.username}" ออกจากระบบ?`)) return;
+  // window.confirm could not name what was being deleted beyond one line of
+  // unstyled text, and put the default action under Enter. ConfirmDialog shows
+  // the account, marks the action destructive, and starts focus on Cancel.
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  async function handleDelete() {
+    const user = confirmDelete;
+    if (!user) return;
+    setSaving(true);
     try {
       await api.delete(`/admin/users/${user.id}`);
       toast.success('ลบผู้ใช้สำเร็จ');
+      setConfirmDelete(null);
       fetchUsers(meta.page);
     } catch (err) { toast.error(err.response?.data?.message || 'ไม่สามารถลบได้'); }
+    finally { setSaving(false); }
   }
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
@@ -138,155 +149,139 @@ export default function UserManagement() {
     : form.role === 'affiliation' ? affiliations.map(a => ({ id: a.id, name: a.name }))
     : form.role === 'province' ? [{ id: 'LPG', name: 'จังหวัดลำปาง' }] : [];
 
+  const hasFilter = Boolean(debouncedSearch || filterRole);
+
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <h1 className="text-xl font-bold text-gray-800">จัดการผู้ใช้งาน</h1>
-        <button onClick={openCreate}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-lg transition text-sm">
-          + สร้างผู้ใช้ใหม่
-        </button>
-      </div>
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <PageHeader
+        title="จัดการผู้ใช้งาน"
+        subtitle="สร้าง แก้ไข รีเซ็ตรหัสผ่าน และระงับบัญชีผู้ใช้ระบบ"
+        actions={
+          <button
+            onClick={openCreate}
+            className="focus-ring inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-medium px-4 min-h-[44px] rounded-lg transition text-sm"
+          >
+            <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+            สร้างผู้ใช้ใหม่
+          </button>
+        }
+      />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="ค้นหาชื่อผู้ใช้…"
-          className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-        <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
-          className="border-2 border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 sm:w-48">
-          <option value="">ทุกบทบาท</option>
-          {ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
-      </div>
+      <FilterBar
+        className="mb-5"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: 'ค้นหาชื่อผู้ใช้…',
+          label: 'ค้นหาชื่อผู้ใช้',
+        }}
+        filters={[{
+          key: 'role',
+          label: 'กรองตามบทบาท',
+          value: filterRole,
+          onChange: setFilterRole,
+          options: [['', 'ทุกบทบาท'], ...ROLE_OPTIONS],
+        }]}
+        count={meta.total}
+        countLabel="บัญชี"
+        onClear={() => { setSearch(''); setFilterRole(''); }}
+      />
 
-      {loading ? (
-        <LoadingState />
-      ) : users.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title={debouncedSearch || filterRole ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้'}
-          description={debouncedSearch || filterRole ? 'ลองเปลี่ยนคำค้นหรือตัวกรองบทบาท' : undefined}
-        />
-      ) : (
-        <>
-          {/* Desktop table */}
-          <AppCard padding="none" className="hidden md:block overflow-hidden">
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                <tr className="text-left">
-                  <th className="px-4 py-3">ชื่อผู้ใช้</th>
-                  <th className="px-4 py-3">ชื่อแสดง</th>
-                  <th className="px-4 py-3">บทบาท</th>
-                  <th className="px-4 py-3">หน่วยงาน</th>
-                  <th className="px-4 py-3">ระดับชั้น</th>
-                  <th className="px-4 py-3 text-center">สถานะ</th>
-                  <th className="px-4 py-3 text-center">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-border">
-                {users.map(u => (
-                  <tr key={u.id} className="hover:bg-surface transition">
-                    <td className="px-4 py-3 text-gray-800 font-medium">{u.username}</td>
-                    <td className="px-4 py-3 text-gray-600">{u.display_name || '-'}</td>
-                    <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{u.scope_name || u.scope_id || '-'}</td>
-                    <td className="px-4 py-3 text-gray-700 text-xs">{u.grade_scope || '-'}</td>
-                    <td className="px-4 py-3 text-center">
-                      <StatusBadge active={u.is_active} mustChange={u.must_change_password} />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex justify-center gap-1">
-                        <button onClick={() => openEdit(u)} className="text-xs text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded">แก้ไข</button>
-                        <button onClick={() => openReset(u)} className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded">รีเซ็ตรหัส</button>
-                        <button onClick={() => handleDelete(u)} className="text-xs text-red-600 bg-red-50 hover:bg-red-100 px-2 py-1 rounded">ลบ</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </AppCard>
+      <DataTable
+        caption="รายการบัญชีผู้ใช้งานระบบ"
+        loading={loading}
+        rows={users}
+        rowKey={u => u.id}
+        columns={[
+          { key: 'username', header: 'ชื่อผู้ใช้', primary: true,
+            cell: u => <span className="font-medium text-ink">{u.username}</span> },
+          { key: 'display_name', header: 'ชื่อแสดง', secondary: true,
+            cell: u => u.display_name || '-' },
+          { key: 'role', header: 'บทบาท', cell: u => <RoleBadge role={u.role} /> },
+          { key: 'scope', header: 'หน่วยงาน',
+            cell: u => <span className="text-ink-muted">{u.scope_name || u.scope_id || '-'}</span> },
+          { key: 'grade', header: 'ระดับชั้น', cell: u => u.grade_scope || '-' },
+          { key: 'status', header: 'สถานะ', align: 'center', badge: true,
+            cell: u => <AccountStatus active={u.is_active} mustChange={u.must_change_password} /> },
+        ]}
+        actions={u => (
+          <>
+            <TableAction tone="brand"  onClick={() => openEdit(u)}>แก้ไข</TableAction>
+            <TableAction tone="neutral" onClick={() => openReset(u)}>รีเซ็ตรหัส</TableAction>
+            <TableAction tone="danger" onClick={() => setConfirmDelete(u)}>ลบ</TableAction>
+          </>
+        )}
+        empty={{
+          icon: Users,
+          title: hasFilter ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้',
+          description: hasFilter ? 'ลองเปลี่ยนคำค้นหรือตัวกรองบทบาท' : undefined,
+        }}
+      />
 
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-3">
-            {users.map(u => (
-              <div key={u.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="min-w-0">
-                    <p className="text-base font-bold text-gray-900 truncate">{u.username}</p>
-                    <p className="text-sm text-gray-500 truncate">{u.display_name || '-'}</p>
-                  </div>
-                  <div className="shrink-0">
-                    <StatusBadge active={u.is_active} mustChange={u.must_change_password} />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2 text-sm mb-3">
-                  <RoleBadge role={u.role} />
-                  {u.scope_name && <span className="text-gray-400 truncate">{u.scope_name}</span>}
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => openEdit(u)} className="flex-1 min-w-[80px] text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 py-2.5 rounded-lg font-medium min-h-[40px]">แก้ไข</button>
-                  <button onClick={() => openReset(u)} className="flex-1 min-w-[100px] text-sm text-amber-700 bg-amber-50 hover:bg-amber-100 py-2.5 rounded-lg font-medium min-h-[40px]">รีเซ็ตรหัส</button>
-                  <button onClick={() => handleDelete(u)} className="text-sm text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2.5 rounded-lg min-h-[40px]">ลบ</button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={users.length} onPage={(p) => fetchUsers(p)} />
-        </>
+      {users.length > 0 && (
+        <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={users.length} onPage={(p) => fetchUsers(p)} />
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="ลบผู้ใช้ออกจากระบบ?"
+        itemName={confirmDelete ? `${confirmDelete.username}${confirmDelete.display_name ? ` — ${confirmDelete.display_name}` : ''}` : ''}
+        description="บัญชีนี้จะเข้าใช้งานระบบไม่ได้อีก การกระทำนี้ถูกบันทึกใน audit log"
+        confirmLabel="ลบผู้ใช้"
+        loading={saving}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
 
       {/* ── Create Modal ── */}
       {modal === 'create' && (
         <Modal title="สร้างผู้ใช้ใหม่" onClose={() => setModal(null)}>
           <div className="space-y-3">
-            <Field label="ชื่อผู้ใช้ *" value={form.username} onChange={v => setForm({...form, username: v})} />
-            <Field label="รหัสผ่าน * (อย่างน้อย 6 ตัว)" value={form.password} onChange={v => setForm({...form, password: v})} type="password" />
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">บทบาท *</label>
-              <select value={form.role} onChange={e => setForm({...form, role: e.target.value, scope_id: ''})}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base">
-                {ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            {SCOPED_ROLES.includes(form.role) && (
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">หน่วยงาน *</label>
-                <select value={form.scope_id} onChange={e => setForm({...form, scope_id: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base">
-                  <option value="">— เลือก —</option>
-                  {scopeOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+            <Field label="ชื่อผู้ใช้" required value={form.username} onChange={v => setForm({...form, username: v})} />
+            <Field label="รหัสผ่าน" required helper="อย่างน้อย 6 ตัวอักษร" value={form.password} onChange={v => setForm({...form, password: v})} type="password" />
+            <FormField label="บทบาท" required>
+              {ctl => (
+                <select {...ctl} value={form.role} onChange={e => setForm({...form, role: e.target.value, scope_id: ''})}
+                  className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                  {ROLE_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
-              </div>
+              )}
+            </FormField>
+            {SCOPED_ROLES.includes(form.role) && (
+              <FormField label="หน่วยงาน" required>
+                {ctl => (
+                  <select {...ctl} value={form.scope_id} onChange={e => setForm({...form, scope_id: e.target.value})}
+                    className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                    <option value="">— เลือก —</option>
+                    {scopeOptions.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                )}
+              </FormField>
             )}
             {/* Phase 7.11.5 — grade_scope dropdown enabled only when
                 role=school. Empty = full school account; selected = grade
                 teacher sub-account (read-only on backend per 7.11.3). */}
             {form.role === 'school' && (
-              <div>
-                <label className="block text-sm text-gray-500 mb-1">ระดับชั้น (สำหรับครูประจำสายชั้น)</label>
-                <select value={form.grade_scope || ''}
-                  onChange={e => setForm({...form, grade_scope: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base">
-                  <option value="">— ไม่ระบุ (บัญชีหลักของโรงเรียน) —</option>
-                  {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6']
-                    .map(g => <option key={g} value={g}>{g}</option>)}
-                </select>
-                {form.grade_scope && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    บัญชีครูประจำสายชั้น: ดูข้อมูลเฉพาะระดับชั้น {form.grade_scope} และเป็นสิทธิ์อ่านอย่างเดียว
-                  </p>
+              <FormField
+                label="ระดับชั้น (สำหรับครูประจำสายชั้น)"
+                helper={form.grade_scope
+                  ? `บัญชีครูประจำสายชั้น: ดูข้อมูลเฉพาะระดับชั้น ${form.grade_scope} และเป็นสิทธิ์อ่านอย่างเดียว`
+                  : undefined}
+              >
+                {ctl => (
+                  <select {...ctl} value={form.grade_scope || ''}
+                    onChange={e => setForm({...form, grade_scope: e.target.value})}
+                    className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                    <option value="">— ไม่ระบุ (บัญชีหลักของโรงเรียน) —</option>
+                    {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6']
+                      .map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
                 )}
-              </div>
+              </FormField>
             )}
             <Field label="ชื่อแสดง" value={form.display_name} onChange={v => setForm({...form, display_name: v})} />
             <button onClick={handleCreate} disabled={saving}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition">
+              className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 text-white font-medium min-h-[48px] rounded-lg transition">
               {saving ? 'กำลังสร้าง…' : 'สร้างผู้ใช้'}
             </button>
           </div>
@@ -298,16 +293,17 @@ export default function UserManagement() {
         <Modal title={`แก้ไข: ${selected.username}`} onClose={() => setModal(null)}>
           <div className="space-y-3">
             <Field label="ชื่อแสดง" value={form.display_name} onChange={v => setForm({...form, display_name: v})} />
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">สถานะ</label>
-              <select value={form.is_active ? '1' : '0'} onChange={e => setForm({...form, is_active: e.target.value === '1'})}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base">
-                <option value="1">ใช้งาน</option>
-                <option value="0">ระงับ</option>
-              </select>
-            </div>
+            <FormField label="สถานะ">
+              {ctl => (
+                <select {...ctl} value={form.is_active ? '1' : '0'} onChange={e => setForm({...form, is_active: e.target.value === '1'})}
+                  className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                  <option value="1">ใช้งาน</option>
+                  <option value="0">ระงับ</option>
+                </select>
+              )}
+            </FormField>
             <button onClick={handleEdit} disabled={saving}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition">
+              className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 text-white font-medium min-h-[48px] rounded-lg transition">
               {saving ? 'กำลังบันทึก…' : 'บันทึก'}
             </button>
           </div>
@@ -334,39 +330,38 @@ export default function UserManagement() {
 }
 
 // ── Sub-components ──
+// Delegates to the shared Modal so this page gets the same dialog semantics,
+// Escape handling, focus trap and scroll lock as the rest of the app. The local
+// wrapper stays so the three call sites below read unchanged.
 function Modal({ title, children, onClose }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-bold text-gray-800 mb-4">{title}</h2>
-        {children}
-        <button onClick={onClose} className="w-full text-gray-500 hover:text-gray-700 text-sm py-2 mt-2 transition">ยกเลิก</button>
-      </div>
-    </div>
+    <UiModal title={title} onClose={onClose}>
+      {children}
+      <button
+        onClick={onClose}
+        className="focus-ring w-full text-ink-muted hover:text-ink hover:bg-surface text-sm min-h-[44px] rounded-lg mt-2 transition"
+      >
+        ยกเลิก
+      </button>
+    </UiModal>
   );
 }
 
-function Field({ label, value, onChange, type = 'text' }) {
-  return (
-    <div>
-      <label className="block text-sm text-gray-500 mb-1">{label}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-blue-400" />
-    </div>
-  );
+// Thin alias kept so the call sites in this file stay unchanged; the wiring
+// (label htmlFor, aria-describedby, error placement) now comes from FormField.
+function Field(props) {
+  return <FormField {...props} />;
 }
 
+// Role is an attribute, not a status, so every role gets the same neutral
+// treatment. The old six-colour palette (purple/blue/teal/green/orange/grey)
+// competed with the semantic colours that DO carry meaning in this table.
 function RoleBadge({ role }) {
-  const cls = {
-    admin: 'bg-purple-100 text-purple-700', province: 'bg-blue-100 text-blue-700',
-    affiliation: 'bg-teal-100 text-teal-700', school: 'bg-green-100 text-green-700',
-    driver: 'bg-orange-100 text-orange-700', transport: 'bg-gray-100 text-gray-700',
-  };
-  return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cls[role] || 'bg-gray-100'}`}>{ROLE_LABELS[role] || role}</span>;
+  return <Badge variant="neutral">{ROLE_LABELS[role] || role}</Badge>;
 }
 
-function StatusBadge({ active, mustChange }) {
-  if (!active) return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-600">ระงับ</span>;
-  if (mustChange) return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">รอเปลี่ยนรหัส</span>;
-  return <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">ใช้งาน</span>;
+function AccountStatus({ active, mustChange }) {
+  if (!active)    return <Badge variant="danger">ระงับ</Badge>;
+  if (mustChange) return <Badge variant="warn">รอเปลี่ยนรหัส</Badge>;
+  return <Badge variant="success">ใช้งาน</Badge>;
 }

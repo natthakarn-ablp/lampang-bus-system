@@ -1,6 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { CalendarDays, Download, Upload } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import {
+  AlertBanner, ConfirmDialog, DataTable, FilterBar, FormField, Modal, StatusBadge,
+} from '../../components/ui';
+
+const THAI_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function fmtThaiDate(isoYmd) {
+  if (!isoYmd) return '';
+  const [y, m, d] = String(isoYmd).slice(0, 10).split('-').map(Number);
+  return `${d} ${THAI_MON[m - 1]} ${y + 543}`;
+}
 
 // Phase 10.13A-26B — student import preview / confirm-apply workflow UI.
 // Preview NEVER writes student data; apply requires an explicit click and only
@@ -11,6 +22,7 @@ import { useToast } from '../../components/Toast';
 // blocker, blue=already-applied/info.
 const CLASS_META = {
   INSERT_NEW: { label: 'พร้อมนำเข้า', tone: 'emerald' },
+  INSERT_NEW_AUTO_VEHICLE: { label: 'พร้อมนำเข้า + สร้างรถ', tone: 'emerald' },
   CROSS_SCHOOL_SAME_CODE_ALLOWED: { label: 'รหัสซ้ำต่างโรงเรียน แต่นำเข้าได้', tone: 'emerald' },
   SKIP_DUPLICATE_SAME_SCHOOL: { label: 'มีอยู่แล้วในโรงเรียนนี้', tone: 'slate' },
   GUARDIAN_MISMATCH: { label: 'ผู้ปกครองไม่ตรง', tone: 'amber' },
@@ -25,12 +37,23 @@ const CLASS_META = {
   ALREADY_APPLIED: { label: 'นำเข้าแล้ว', tone: 'blue' },
   APPLY_FAILED: { label: 'นำเข้าไม่สำเร็จ', tone: 'red' },
 };
-const TONE = {
-  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  slate: 'bg-slate-50 text-slate-600 border-slate-200',
-  amber: 'bg-amber-50 text-amber-700 border-amber-200',
-  red: 'bg-red-50 text-red-700 border-red-200',
-  blue: 'bg-blue-50 text-blue-700 border-blue-200',
+// The classification tones above are the vocabulary this file was written in;
+// they map onto the design system's semantic variants rather than being
+// replaced, so the emerald=ready / slate=neutral-duplicate / amber=needs-
+// confirmation / red=blocker / blue=already-applied reading is preserved.
+const VARIANT = {
+  emerald: 'success',
+  slate: 'neutral',
+  amber: 'warn',
+  red: 'danger',
+  blue: 'info',
+};
+const SUMMARY_TONE = {
+  emerald: 'bg-success-soft text-success-ink border-success/30',
+  slate:   'bg-surface text-ink-muted border-surface-border',
+  amber:   'bg-warn-soft text-warn-ink border-warn/30',
+  red:     'bg-danger-soft text-danger-ink border-danger/30',
+  blue:    'bg-info-soft text-info-ink border-info/30',
 };
 // After apply, prefer the row STATUS for the badge (the classification stays the
 // original, e.g. GUARDIAN_MISMATCH, while status becomes GUARDIAN_UPDATED).
@@ -84,9 +107,23 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   const [selGuardian, setSelGuardian] = useState(() => new Set());
   const [selReactivate, setSelReactivate] = useState(() => new Set());
   const [requestedVehicle, setRequestedVehicle] = useState(() => new Set());   // 10.13B-7 restore-requested rows
+  const [autoCreateVehicle, setAutoCreateVehicle] = useState(false);
+  const [term, setTerm] = useState(null);          // current academic term (date-derived)
+
+  // Tell schools which term today's rows will be tagged as — the term is derived
+  // server-side from the entry date, so this banner is the only place they see it.
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    api.get('/terms/current')
+      .then((res) => { if (alive) setTerm(res.data.data); })
+      .catch(() => { if (alive) setTerm(null); });
+    return () => { alive = false; };
+  }, [open]);
 
   const TERMINAL = ['APPLIED', 'ALREADY_APPLIED', 'GUARDIAN_UPDATED', 'REACTIVATED'];
   const canApplyCount = useMemo(() => (rows || []).filter((r) => r.can_apply && !TERMINAL.includes(r.status)).length, [rows]);
+  const autoVehicleRows = useMemo(() => (rows || []).filter((r) => r.classification === 'INSERT_NEW_AUTO_VEHICLE' && !TERMINAL.includes(r.status)).length, [rows]);
   const errorCount = useMemo(() => (rows || []).filter((r) => r.status === 'ERROR' || r.classification === 'APPLY_FAILED').length, [rows]);
   const vehicleIssues = useMemo(() => (rows || []).filter((r) => String(r.classification).startsWith('VEHICLE_')).length, [rows]);
   const guardianRows = useMemo(() => (rows || []).filter((r) => r.can_confirm_guardian_update && !TERMINAL.includes(r.status)), [rows]);
@@ -102,7 +139,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   function reset() {
     setFile(null); setBusy(false); setError(''); setBatchId(null);
     setSummary(null); setRows(null); setFilter('all'); setConfirming(false); setApplyResult(null);
-    setSelGuardian(new Set()); setSelReactivate(new Set()); setRequestedVehicle(new Set());
+    setSelGuardian(new Set()); setSelReactivate(new Set()); setRequestedVehicle(new Set()); setAutoCreateVehicle(false);
   }
   function close() { reset(); onClose(); }
 
@@ -118,6 +155,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
     try {
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('auto_create_vehicle', autoCreateVehicle ? 'true' : 'false');
       const res = await api.post('/school/students/import/preview', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       const d = res.data.data;
       if (!d.rows || d.rows.length === 0) { setError('ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)'); setBusy(false); return; }
@@ -135,11 +173,13 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
     try {
       const confirmG = selGuardian.size > 0, confirmR = selReactivate.size > 0;
       const mode = (confirmG || confirmR) ? 'mixed_confirmed' : 'insert_ready';
+      const shouldAutoCreateVehicle = autoCreateVehicle || autoVehicleRows > 0;
       const res = await api.post(`/school/students/import/${batchId}/apply`, {
         mode,
         selected_row_ids: [...selGuardian, ...selReactivate],
         confirm_guardian_update: confirmG,
         confirm_reactivate: confirmR,
+        auto_create_vehicle: shouldAutoCreateVehicle,
       });
       setApplyResult(res.data.data);
       // Refresh row statuses from the persisted report.
@@ -192,195 +232,325 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
 
   const applied = !!applyResult;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-4" onClick={close}>
-      <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="px-5 sm:px-6 py-4 border-b border-gray-100 flex items-start justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800">ตรวจสอบไฟล์ก่อนนำเข้า</h2>
-            <p className="text-sm text-gray-400 mt-0.5">
-              {rows ? 'ขั้นตอนนี้เป็นการตรวจสอบข้อมูลเท่านั้น ระบบยังไม่บันทึกข้อมูลนักเรียน' : 'อัปโหลดไฟล์ CSV หรือ Excel (.xlsx) เพื่อตรวจสอบรายแถวก่อนนำเข้าจริง'}
-            </p>
+  const rowColumns = [
+    {
+      key: 'choose', header: 'เลือก',
+      cell: r => {
+        const isG = r.can_confirm_guardian_update && !TERMINAL.includes(r.status);
+        const isR = r.can_confirm_reactivate && !TERMINAL.includes(r.status);
+        if (!isG && !isR) return null;
+        return (
+          <div className="flex flex-col">
+            {isG && (
+              <RowChoice
+                checked={selGuardian.has(r.row_number)}
+                onChange={() => toggleSel(setSelGuardian, r.row_number)}
+                label="อัปเดตผู้ปกครอง"
+              />
+            )}
+            {isR && (
+              <RowChoice
+                checked={selReactivate.has(r.row_number)}
+                onChange={() => toggleSel(setSelReactivate, r.row_number)}
+                label="กู้คืนนักเรียน"
+              />
+            )}
           </div>
-          <button onClick={close} className="text-gray-400 hover:text-gray-600 text-xl leading-none px-2">×</button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4">
-          {/* ── Upload step ── */}
-          {!rows && (
-            <div className="space-y-4 max-w-md mx-auto">
-              <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center">
-                <input type="file" accept=".xlsx,.xls,.csv"
-                  onChange={(e) => pickFile(e.target.files?.[0] || null)}
-                  className="block w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-200 file:text-sm file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100" />
-                {file && <p className="text-sm text-emerald-600 mt-2">{file.name}</p>}
-              </div>
-              {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
-              <button onClick={runPreview} disabled={busy || !file}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-medium py-3 rounded-lg transition">
-                {busy ? 'กำลังตรวจสอบ…' : 'ตรวจสอบไฟล์ก่อนนำเข้า'}
-              </button>
-              <a href="/templates/student_import_template_th.csv" download="แบบฟอร์มนำเข้านักเรียน.csv"
-                className="block text-center text-sm text-blue-600 hover:text-blue-800 py-1">ดาวน์โหลดไฟล์ตัวอย่าง</a>
+        );
+      },
+    },
+    { key: 'row_number', header: 'แถว', numeric: true, cell: r => r.row_number },
+    { key: 'student_code', header: 'รหัส', secondary: true, cell: r => r.student_code },
+    { key: 'student_name', header: 'ชื่อนักเรียน', primary: true, cell: r => r.student_name || '—' },
+    { key: 'input_vehicle_plate', header: 'ทะเบียนในไฟล์', cell: r => r.input_vehicle_plate || '—' },
+    { key: 'matched_display_plate', header: 'รถที่จับคู่ได้', cell: r => r.matched_display_plate || '—' },
+    {
+      key: 'status', header: 'สถานะ', badge: true,
+      cell: r => {
+        const m = badgeFor(r);
+        return <StatusBadge variant={VARIANT[m.tone] || 'neutral'} size="sm">{m.label}</StatusBadge>;
+      },
+    },
+    {
+      key: 'message_th', header: 'คำอธิบาย / สิ่งที่ต้องทำ',
+      cell: r => (
+        <div>
+          <div>{r.message_th}</div>
+          {r.guardian_mismatch && (
+            <div className="text-caption text-warn-ink mt-0.5">
+              ผู้ปกครอง: <span className="line-through text-ink-muted">{r.guardian_current || '—'}</span>
+              {' '}<span aria-hidden="true">→</span>{' '}
+              <span className="font-medium">{r.guardian_input || '—'}</span>
             </div>
           )}
-
-          {/* ── Preview step ── */}
-          {rows && (
-            <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
-                {applied
-                  ? `นำเข้าสำเร็จ ${applyResult.applied} รายการ${applyResult.already_applied ? ` · มีอยู่แล้ว ${applyResult.already_applied}` : ''}${applyResult.failed ? ` · ไม่สำเร็จ ${applyResult.failed}` : ''} — กรุณาตรวจสอบจำนวนในหน้ารายชื่อนักเรียน`
-                  : 'ระบบยังไม่ได้บันทึกข้อมูลนักเรียน กรุณาตรวจสอบรายการด้านล่างก่อนกดยืนยันนำเข้า'}
-                <span className="text-blue-400"> · ชุดนำเข้า #{batchId}</span>
-              </div>
-
-              {/* Summary cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                <SummaryCard label="ทั้งหมด" value={summary.total} tone="slate" />
-                <SummaryCard label="พร้อมนำเข้า" value={canApplyCount} tone="emerald" />
-                <SummaryCard label="ซ้ำในโรงเรียน" value={summary.skip} tone="slate" />
-                <SummaryCard label="คำเตือน" value={summary.warning} tone="amber" />
-                <SummaryCard label="ข้อผิดพลาด" value={errorCount} tone="red" />
-                <SummaryCard label="รถมีปัญหา" value={vehicleIssues} tone="red" />
-              </div>
-
-              {/* Filters */}
-              <div className="flex flex-wrap gap-1.5">
-                {FILTERS.map((f) => (
-                  <button key={f.key} onClick={() => setFilter(f.key)}
-                    className={`text-xs px-3 py-1.5 rounded-full border transition ${filter === f.key ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Confirm-action guidance (10.13B-4) */}
-              {!applied && (guardianRows.length > 0 || reactivateRows.length > 0) && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-800 space-y-1">
-                  {guardianRows.length > 0 && <div>• ติ๊กเลือก “ยืนยันอัปเดตผู้ปกครอง” — ระบบจะอัปเดตเฉพาะข้อมูลผู้ปกครองของรายการที่เลือกเท่านั้น ({selGuardian.size}/{guardianRows.length})</div>}
-                  {reactivateRows.length > 0 && <div>• ติ๊กเลือก “ยืนยันกู้คืนนักเรียน” — ระบบจะกู้คืนเฉพาะนักเรียนในโรงเรียนเดียวกันและรหัสนักเรียนเดียวกันเท่านั้น ({selReactivate.size}/{reactivateRows.length})</div>}
-                </div>
-              )}
-
-              {/* Row table */}
-              <div className="border border-gray-100 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto max-h-[42vh]">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-500 text-xs sticky top-0">
-                      <tr>
-                        <th className="text-left font-medium px-3 py-2">เลือก</th>
-                        <th className="text-left font-medium px-3 py-2">แถว</th>
-                        <th className="text-left font-medium px-3 py-2">รหัส</th>
-                        <th className="text-left font-medium px-3 py-2">ชื่อนักเรียน</th>
-                        <th className="text-left font-medium px-3 py-2">ทะเบียนในไฟล์</th>
-                        <th className="text-left font-medium px-3 py-2">รถที่จับคู่ได้</th>
-                        <th className="text-left font-medium px-3 py-2">สถานะ</th>
-                        <th className="text-left font-medium px-3 py-2">คำอธิบาย / สิ่งที่ต้องทำ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {filtered.map((r) => {
-                        const m = badgeFor(r);
-                        const isG = r.can_confirm_guardian_update && !TERMINAL.includes(r.status);
-                        const isR = r.can_confirm_reactivate && !TERMINAL.includes(r.status);
-                        return (
-                          <tr key={r.row_number} className="hover:bg-gray-50/50">
-                            <td className="px-3 py-2">
-                              {isG && <input type="checkbox" checked={selGuardian.has(r.row_number)} onChange={() => toggleSel(setSelGuardian, r.row_number)} className="accent-amber-600" title="ยืนยันอัปเดตผู้ปกครอง" />}
-                              {isR && <input type="checkbox" checked={selReactivate.has(r.row_number)} onChange={() => toggleSel(setSelReactivate, r.row_number)} className="accent-amber-600" title="ยืนยันกู้คืนนักเรียน" />}
-                            </td>
-                            <td className="px-3 py-2 text-gray-400 tabular-nums">{r.row_number}</td>
-                            <td className="px-3 py-2 text-gray-700 tabular-nums">{r.student_code}</td>
-                            <td className="px-3 py-2 text-gray-800">{r.student_name || '—'}</td>
-                            <td className="px-3 py-2 text-gray-500">{r.input_vehicle_plate || '—'}</td>
-                            <td className="px-3 py-2 text-gray-500">{r.matched_display_plate || '—'}</td>
-                            <td className="px-3 py-2 whitespace-nowrap">
-                              <span className={`text-xs px-2 py-0.5 rounded-full border ${TONE[m.tone]}`}>{m.label}</span>
-                            </td>
-                            <td className="px-3 py-2 text-gray-600">
-                              <div>{r.message_th}</div>
-                              {r.guardian_mismatch && (
-                                <div className="text-xs text-amber-700 mt-0.5">
-                                  ผู้ปกครอง: <span className="line-through text-gray-400">{r.guardian_current || '—'}</span> → <span className="font-medium">{r.guardian_input || '—'}</span>
-                                </div>
-                              )}
-                              {r.action_required && !TERMINAL.includes(r.status) && <div className="text-xs text-amber-600 mt-0.5">ต้องทำ: {r.action_required}</div>}
-                              {/* 10.13B-7 — next actions for vehicle blockers */}
-                              {r.classification === 'VEHICLE_SOFT_DELETED' && (
-                                requestedVehicle.has(r.row_number)
-                                  ? <div className="text-xs text-emerald-600 mt-1">ส่งคำขอกู้คืนรถแล้ว</div>
-                                  : <button onClick={() => requestVehicleRestore(r)} className="text-xs text-blue-600 hover:text-blue-800 underline mt-1">ขอกู้คืนรถ</button>
-                              )}
-                              {r.classification === 'VEHICLE_NOT_FOUND' && <div className="text-xs text-gray-400 mt-1">เพิ่มรถได้ที่เมนู “จัดการรถ” แล้วตรวจสอบไฟล์อีกครั้ง</div>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {filtered.length === 0 && (
-                        <tr><td colSpan={8} className="px-3 py-8 text-center text-gray-400 text-sm">ไม่มีรายการในตัวกรองนี้</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {error && <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{error}</div>}
-            </div>
+          {r.action_required && !TERMINAL.includes(r.status) && (
+            <div className="text-caption text-warn-ink mt-0.5">ต้องทำ: {r.action_required}</div>
           )}
-        </div>
-
-        {/* Footer actions */}
-        {rows && (
-          <div className="px-5 sm:px-6 py-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-xs text-gray-500">
-              {applied ? 'นำเข้าเสร็จสิ้น' : <>เพิ่มใหม่ <span className="font-semibold text-emerald-600">{canApplyCount}</span>{selGuardian.size > 0 && <> · อัปเดตผู้ปกครอง <span className="font-semibold text-amber-600">{selGuardian.size}</span></>}{selReactivate.size > 0 && <> · กู้คืน <span className="font-semibold text-amber-600">{selReactivate.size}</span></>} · รายการที่มีปัญหาจะยังไม่ถูกบันทึก</>}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={downloadReport} className="text-sm text-gray-600 border border-gray-200 hover:bg-gray-50 px-3 py-2 rounded-lg transition">ดาวน์โหลดรายงาน (CSV)</button>
-              {!applied
-                ? <button onClick={() => setConfirming(true)} disabled={busy || (canApplyCount === 0 && selGuardian.size === 0 && selReactivate.size === 0)}
-                    className="text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-medium px-4 py-2 rounded-lg transition">
-                    ยืนยันนำเข้า
-                  </button>
-                : <button onClick={close} className="text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition">เสร็จสิ้น</button>}
-            </div>
-          </div>
-        )}
-
-        {/* Confirm-apply modal */}
-        {confirming && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirming(false)}>
-            <div className="bg-surface-raised border border-surface-border rounded-xl shadow-elevate w-full max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-              <h3 className="text-base font-semibold text-gray-800 mb-2">ยืนยันการนำเข้า</h3>
-              <div className="text-sm text-gray-600 space-y-1 mb-3">
-                <div className="flex justify-between"><span>ชุดนำเข้า</span><span className="text-gray-400">#{batchId}</span></div>
-                <div className="flex justify-between"><span>พร้อมเพิ่มใหม่</span><span className="font-semibold text-emerald-600">{canApplyCount}</span></div>
-                {selGuardian.size > 0 && <div className="flex justify-between"><span>ยืนยันอัปเดตผู้ปกครอง</span><span className="font-semibold text-amber-600">{selGuardian.size}</span></div>}
-                {selReactivate.size > 0 && <div className="flex justify-between"><span>ยืนยันกู้คืนนักเรียน</span><span className="font-semibold text-amber-600">{selReactivate.size}</span></div>}
-                <div className="flex justify-between"><span>ข้ามรายการซ้ำ</span><span className="text-slate-500">{summary.skip}</span></div>
-                <div className="flex justify-between"><span>มีปัญหา/ผิดพลาด (ไม่นำเข้า)</span><span className="text-red-500">{errorCount}</span></div>
-              </div>
-              <p className="text-xs text-gray-400 mb-4">ระบบจะดำเนินการเฉพาะรายการที่พร้อมและรายการที่ท่านเลือกยืนยันเท่านั้น</p>
-              <div className="flex gap-2">
-                <button onClick={runApply} disabled={busy}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-sm font-medium py-2.5 rounded-lg transition">
-                  {busy ? 'กำลังนำเข้า…' : 'ยืนยันนำเข้า'}
+          {/* 10.13B-7 — next actions for vehicle blockers */}
+          {r.classification === 'VEHICLE_SOFT_DELETED' && (
+            requestedVehicle.has(r.row_number)
+              ? <div className="text-caption text-success-ink mt-1">ส่งคำขอกู้คืนรถแล้ว</div>
+              : (
+                <button
+                  type="button"
+                  onClick={() => requestVehicleRestore(r)}
+                  className="focus-ring inline-flex items-center text-sm font-medium text-brand-700 underline px-1 min-h-[44px] rounded-lg hover:bg-brand-50 transition"
+                >
+                  ขอกู้คืนรถ
                 </button>
-                <button onClick={() => setConfirming(false)} className="px-4 text-gray-500 hover:text-gray-700 text-sm py-2.5 transition">ยกเลิก</button>
-              </div>
+              )
+          )}
+          {r.classification === 'VEHICLE_NOT_FOUND' && (
+            <div className="text-caption text-ink-muted mt-1">เพิ่มรถได้ที่เมนู “จัดการรถ” แล้วตรวจสอบไฟล์อีกครั้ง</div>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <>
+      <Modal
+        title="ตรวจสอบไฟล์ก่อนนำเข้า"
+        size="lg"
+        onClose={() => { if (!busy) close(); }}
+        footer={rows ? (
+          <>
+            <p className="text-caption text-ink-muted sm:mr-auto sm:self-center">
+              {applied ? 'นำเข้าเสร็จสิ้น' : (
+                <>
+                  เพิ่มใหม่ <span className="font-semibold text-success-ink">{canApplyCount}</span>
+                  {selGuardian.size > 0 && <> · อัปเดตผู้ปกครอง <span className="font-semibold text-warn-ink">{selGuardian.size}</span></>}
+                  {selReactivate.size > 0 && <> · กู้คืน <span className="font-semibold text-warn-ink">{selReactivate.size}</span></>}
+                  {' · รายการที่มีปัญหาจะยังไม่ถูกบันทึก'}
+                </>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={downloadReport}
+              className="focus-ring inline-flex items-center justify-center gap-1.5 text-sm font-medium text-ink border border-surface-border hover:bg-surface px-3 min-h-[44px] rounded-lg transition"
+            >
+              <Download className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+              ดาวน์โหลดรายงาน (CSV)
+            </button>
+            {!applied ? (
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                disabled={busy || (canApplyCount === 0 && selGuardian.size === 0 && selReactivate.size === 0)}
+                className="focus-ring text-sm bg-success hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
+              >
+                ยืนยันนำเข้า
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={close}
+                className="focus-ring text-sm bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
+              >
+                เสร็จสิ้น
+              </button>
+            )}
+          </>
+        ) : undefined}
+      >
+        <p className="text-sm text-ink-muted mb-4">
+          {rows
+            ? 'ขั้นตอนนี้เป็นการตรวจสอบข้อมูลเท่านั้น ระบบยังไม่บันทึกข้อมูลนักเรียน'
+            : 'อัปโหลดไฟล์ CSV หรือ Excel (.xlsx) เพื่อตรวจสอบรายแถวก่อนนำเข้าจริง'}
+        </p>
+
+        {/* Current academic term (date-derived) — info, not a warning. */}
+        {term && (
+          <AlertBanner variant="info" icon={CalendarDays} title="ภาคเรียนที่จะบันทึก" className="mb-4">
+            <span className="font-semibold">{term.name || `ภาคเรียน ${term.term_id}`}</span>
+            {term.start_date && term.end_date && (
+              <span> · ช่วง {fmtThaiDate(term.start_date)} – {fmtThaiDate(term.end_date)}</span>
+            )}
+            <span className="block text-caption mt-0.5">ระบบกำหนดภาคเรียนจากวันที่นำเข้าโดยอัตโนมัติ</span>
+          </AlertBanner>
+        )}
+
+        {/* ── Upload step ── */}
+        {!rows && (
+          <div className="space-y-4 max-w-md mx-auto">
+            <div className="border-2 border-dashed border-surface-border rounded-lg p-6">
+              <FormField label="ไฟล์รายชื่อนักเรียน" required helper="รองรับ .csv, .xls และ .xlsx">
+                {ctl => (
+                  <input
+                    {...ctl}
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    onChange={(e) => pickFile(e.target.files?.[0] || null)}
+                    className="focus-ring block w-full min-h-[44px] text-base text-ink-muted file:mr-3 file:h-11 file:px-4 file:rounded-lg file:border file:border-surface-border file:text-sm file:font-medium file:bg-surface file:text-ink hover:file:bg-surface-border file:cursor-pointer"
+                  />
+                )}
+              </FormField>
+              {file && <p className="text-sm text-success-ink mt-2">{file.name}</p>}
             </div>
+
+            <label className="flex items-start gap-2 text-sm text-ink bg-surface-raised border border-surface-border rounded-lg p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoCreateVehicle}
+                onChange={(e) => setAutoCreateVehicle(e.target.checked)}
+                className="focus-ring mt-0.5 w-5 h-5 rounded border-surface-border accent-brand-600 shrink-0"
+              />
+              <span>สร้างรถอัตโนมัติสำหรับทะเบียนใหม่ที่มีจังหวัดครบถ้วน โดยบันทึกเป็นรถรอตรวจสอบ</span>
+            </label>
+
+            {error && <AlertBanner variant="danger" title="ตรวจสอบไฟล์ไม่สำเร็จ">{error}</AlertBanner>}
+
+            <button
+              type="button"
+              onClick={runPreview}
+              disabled={busy || !file}
+              className="focus-ring w-full inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-semibold min-h-[48px] rounded-lg transition"
+            >
+              <Upload className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+              {busy ? 'กำลังตรวจสอบ…' : 'ตรวจสอบไฟล์ก่อนนำเข้า'}
+            </button>
+
+            <a
+              href="/templates/student_import_template_th.csv"
+              download="แบบฟอร์มนำเข้านักเรียน.csv"
+              className="focus-ring flex items-center justify-center text-sm font-medium text-brand-700 min-h-[44px] rounded-lg hover:bg-brand-50 transition"
+            >
+              ดาวน์โหลดไฟล์ตัวอย่าง
+            </a>
           </div>
         )}
-      </div>
+
+        {/* ── Preview step ── */}
+        {rows && (
+          <div className="space-y-4">
+            <AlertBanner
+              variant={applied ? 'success' : 'info'}
+              title={applied ? 'นำเข้าเสร็จสิ้น' : 'ยังไม่ได้บันทึกข้อมูล'}
+            >
+              {applied
+                ? `นำเข้าสำเร็จ ${applyResult.applied} รายการ${applyResult.already_applied ? ` · มีอยู่แล้ว ${applyResult.already_applied}` : ''}${applyResult.failed ? ` · ไม่สำเร็จ ${applyResult.failed}` : ''} — กรุณาตรวจสอบจำนวนในหน้ารายชื่อนักเรียน`
+                : 'ระบบยังไม่ได้บันทึกข้อมูลนักเรียน กรุณาตรวจสอบรายการด้านล่างก่อนกดยืนยันนำเข้า'}
+              <span className="block text-caption mt-0.5">ชุดนำเข้า #{batchId}</span>
+            </AlertBanner>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              <SummaryCard label="ทั้งหมด" value={summary.total} tone="slate" />
+              <SummaryCard label="พร้อมนำเข้า" value={canApplyCount} tone="emerald" />
+              <SummaryCard label="ซ้ำในโรงเรียน" value={summary.skip} tone="slate" />
+              <SummaryCard label="คำเตือน" value={summary.warning} tone="amber" />
+              <SummaryCard label="ข้อผิดพลาด" value={errorCount} tone="red" />
+              <SummaryCard label="รถมีปัญหา" value={vehicleIssues} tone="red" />
+            </div>
+
+            <FilterBar
+              chips={{
+                label: 'กรองรายการตามสถานะการตรวจสอบ',
+                value: filter,
+                onChange: setFilter,
+                options: FILTERS.map(f => [f.key, f.label]),
+              }}
+              count={filtered.length}
+              countLabel="แถว"
+              onClear={filter !== 'all' ? () => setFilter('all') : undefined}
+            />
+
+            {autoVehicleRows > 0 && (
+              <AlertBanner variant="success" title="จะสร้างรถรอตรวจสอบ">
+                ระบบจะสร้างรถสถานะรอตรวจสอบสำหรับทะเบียนใหม่ {autoVehicleRows} รายการตอนยืนยันนำเข้า
+              </AlertBanner>
+            )}
+
+            {!applied && (guardianRows.length > 0 || reactivateRows.length > 0) && (
+              <AlertBanner variant="warn" title="ต้องเลือกยืนยันรายแถว">
+                <ul className="space-y-0.5 text-caption">
+                  {guardianRows.length > 0 && (
+                    <li>
+                      ติ๊กเลือก “อัปเดตผู้ปกครอง” — ระบบจะอัปเดตเฉพาะข้อมูลผู้ปกครองของรายการที่เลือกเท่านั้น
+                      {' '}(เลือกแล้ว {selGuardian.size} จาก {guardianRows.length})
+                    </li>
+                  )}
+                  {reactivateRows.length > 0 && (
+                    <li>
+                      ติ๊กเลือก “กู้คืนนักเรียน” — ระบบจะกู้คืนเฉพาะนักเรียนในโรงเรียนเดียวกันและรหัสนักเรียนเดียวกันเท่านั้น
+                      {' '}(เลือกแล้ว {selReactivate.size} จาก {reactivateRows.length})
+                    </li>
+                  )}
+                </ul>
+              </AlertBanner>
+            )}
+
+            <DataTable
+              caption={`รายการในไฟล์นำเข้า ชุด #${batchId}`}
+              columns={rowColumns}
+              rows={filtered}
+              rowKey={r => r.row_number}
+              empty={{ title: 'ไม่มีรายการในตัวกรองนี้', description: 'ลองเลือกตัวกรองอื่น' }}
+            />
+
+            {error && <AlertBanner variant="danger" title="นำเข้าไม่สำเร็จ">{error}</AlertBanner>}
+          </div>
+        )}
+      </Modal>
+
+      {/* Confirm-apply — this is the step that writes student data. */}
+      <ConfirmDialog
+        open={confirming}
+        tone="brand"
+        title="ยืนยันการนำเข้า"
+        description="ระบบจะดำเนินการเฉพาะรายการที่พร้อมและรายการที่ท่านเลือกยืนยันเท่านั้น"
+        confirmLabel={busy ? 'กำลังนำเข้า…' : 'ยืนยันนำเข้า'}
+        loading={busy}
+        onConfirm={runApply}
+        onCancel={() => setConfirming(false)}
+      >
+        <dl className="text-sm text-ink-muted space-y-1">
+          <ConfirmRow label="ชุดนำเข้า" value={`#${batchId}`} />
+          <ConfirmRow label="พร้อมเพิ่มใหม่" value={canApplyCount} tone="text-success-ink font-semibold" />
+          {autoVehicleRows > 0 && <ConfirmRow label="สร้างรถรอตรวจสอบ" value={autoVehicleRows} tone="text-success-ink font-semibold" />}
+          {selGuardian.size > 0 && <ConfirmRow label="ยืนยันอัปเดตผู้ปกครอง" value={selGuardian.size} tone="text-warn-ink font-semibold" />}
+          {selReactivate.size > 0 && <ConfirmRow label="ยืนยันกู้คืนนักเรียน" value={selReactivate.size} tone="text-warn-ink font-semibold" />}
+          <ConfirmRow label="ข้ามรายการซ้ำ" value={summary?.skip ?? 0} />
+          <ConfirmRow label="มีปัญหา/ผิดพลาด (ไม่นำเข้า)" value={errorCount} tone="text-danger-ink font-semibold" />
+        </dl>
+      </ConfirmDialog>
+    </>
+  );
+}
+
+/**
+ * A row can offer two different confirmations, and they used to be two bare
+ * checkboxes side by side in one cell with nothing but a `title` — a screen
+ * reader announced two unlabelled checkboxes and a sighted user had to hover
+ * each to learn which was which.
+ */
+function RowChoice({ checked, onChange, label }) {
+  return (
+    <label className="flex items-center gap-1.5 px-1 min-h-[44px] cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="focus-ring w-5 h-5 rounded border-surface-border accent-warn"
+      />
+      <span className="text-caption text-ink-muted whitespace-nowrap">{label}</span>
+    </label>
+  );
+}
+
+function ConfirmRow({ label, value, tone = '' }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt>{label}</dt>
+      <dd className={`tabular-nums ${tone}`}>{value}</dd>
     </div>
   );
 }
 
 function SummaryCard({ label, value, tone }) {
   return (
-    <div className={`rounded-lg border px-3 py-2.5 ${TONE[tone]}`}>
+    <div className={`rounded-lg border px-3 py-2.5 ${SUMMARY_TONE[tone] || SUMMARY_TONE.slate}`}>
       <div className="text-xl font-bold tabular-nums leading-none">{value}</div>
       <div className="text-xs font-medium mt-1 opacity-80">{label}</div>
     </div>

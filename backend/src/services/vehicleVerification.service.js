@@ -1,8 +1,9 @@
 'use strict';
 
 const crypto = require('crypto');
-const { getCurrentTermCachedSync } = require('./term.service');
+const { getCurrentTermCachedSync, getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
+const { validateInspectionDates } = require('../utils/inspectionDates');
 
 const ACTIVE_APPLICATION_STATUSES = [
   'DRAFT', 'READY_TO_PRINT', 'SUBMITTED', 'INSPECTION_PENDING', 'NEEDS_FIX',
@@ -235,11 +236,16 @@ async function createApplication(pool, {
   vehicleId,
   issuingSchoolId,
   userId,
-  currentTerm = getCurrentTermCachedSync(),
 }) {
   if (!vehicleId || !issuingSchoolId || !userId) {
     throw appError('vehicleId, issuingSchoolId และ userId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
   }
+
+  // Term is SERVER-authoritative — derived from today's Bangkok date, never taken
+  // from the client — and frozen onto the application (current_term +
+  // active_request_key) at INSERT, so the dedup key is stable for the whole
+  // lifecycle even across a term boundary.
+  const currentTerm = await getCurrentTerm(pool);
 
   const conn = await pool.getConnection();
   try {
@@ -771,7 +777,9 @@ async function finalizeInspection(pool, {
     await conn.beginTransaction();
     const [[attempt]] = await conn.query(
       `SELECT ia.id, ia.application_id, ia.checklist_template_id, ia.inspected_by,
-              ia.result, ia.inspection_date, a.vehicle_id, a.rider_summary_json
+              ia.result, ia.inspection_date,
+              DATE_FORMAT(ia.inspection_date, '%Y-%m-%d') AS inspection_date_iso,
+              a.vehicle_id, a.rider_summary_json
          FROM inspection_attempts ia
          JOIN vehicle_inspection_applications a ON a.id = ia.application_id
         WHERE ia.id = ?
@@ -799,7 +807,11 @@ async function finalizeInspection(pool, {
         [attemptId, item.checklist_item_id, item.result, item.severity, item.notes]
       );
     }
-    const effectiveInspectionDate = inspectionDate || isoDate(attempt.inspection_date);
+    const effectiveInspectionDate = inspectionDate || attempt.inspection_date_iso || isoDate(attempt.inspection_date);
+    // Bound the date fields (no future/absurdly-old inspection date, expiry
+    // within a sane window) — same rule as the legacy transport path.
+    const dateErr = validateInspectionDates({ result, inspectionDate: effectiveInspectionDate, expiryDate });
+    if (dateErr) throw appError(dateErr.message, 400, dateErr.code);
     await conn.query(
       `UPDATE inspection_attempts
           SET result = ?, inspection_date = ?, expiry_date = ?, notes = ?,
@@ -982,11 +994,14 @@ async function abortInspectionAttempt(pool, {
 async function createDriverApplication(pool, {
   vehicleId,
   driverUserId,
-  currentTerm = getCurrentTermCachedSync(),
 }) {
   if (!vehicleId || !driverUserId) {
     throw appError('vehicleId และ driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
   }
+
+  // Term is SERVER-authoritative (see createApplication) — derived here, never from
+  // the driver client, and frozen onto the application at INSERT.
+  const currentTerm = await getCurrentTerm(pool);
 
   const conn = await pool.getConnection();
   try {

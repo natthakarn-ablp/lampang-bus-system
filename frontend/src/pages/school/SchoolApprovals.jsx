@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ClipboardList } from 'lucide-react';
 import api from '../../api/axios';
+import { ConfirmDialog, FilterBar, FormField } from '../../components/ui';
+import EmptyState from '../../components/EmptyState';
+import PageHeader from '../../components/PageHeader';
 import ApprovalBadge from '../../components/ApprovalBadge';
 import LoadingState from '../../components/LoadingState';
 import { useToast } from '../../components/Toast';
@@ -11,6 +15,8 @@ export default function SchoolApprovals() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
   const [processingId, setProcessingId] = useState(null); // double-submit guard
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [reviewNote, setReviewNote] = useState('');
   const toast = useToast();
   const { user } = useAuth();
   const isTeacher = isGradeTeacher(user); // teacher views in read-only mode
@@ -25,15 +31,16 @@ export default function SchoolApprovals() {
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
-  async function handleReview(id, status) {
+  async function handleReview(id, status, note = '') {
     // Double-submit guard: prevent approving/rejecting the same request twice
     // (double-click or impatient repeat click).
     if (processingId === id) return;
     setProcessingId(id);
-    const note = status === 'rejected' ? prompt('เหตุผลที่ปฏิเสธ (ถ้ามี):') : '';
     try {
-      await api.put(`/school/roster-requests/${id}`, { status, review_note: note || '' });
+      await api.put(`/school/roster-requests/${id}`, { status, review_note: note.trim() });
       toast.success(status === 'approved' ? 'อนุมัติสำเร็จ' : 'ปฏิเสธสำเร็จ');
+      setRejectTarget(null);
+      setReviewNote('');
       fetchRequests();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถดำเนินการได้');
@@ -46,30 +53,38 @@ export default function SchoolApprovals() {
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">คำขอเปลี่ยนแปลงรายชื่อ</h1>
+      <PageHeader
+        title="คำขอเปลี่ยนแปลงรายชื่อ"
+        subtitle="คำขอเพิ่มหรือถอนนักเรียนจากรถรับส่ง ที่ส่งมาจากคนขับ"
+      />
 
-      <div className="flex gap-2 mb-4">
-        {['pending', 'approved', 'rejected'].map(s => (
-          <button key={s} onClick={() => setFilter(s)}
-            className={`flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium rounded-lg transition min-h-[40px] ${filter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-            {s === 'pending' ? 'รออนุมัติ' : s === 'approved' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว'}
-          </button>
-        ))}
-      </div>
+      <FilterBar
+        className="mb-4"
+        chips={{
+          label: 'กรองตามสถานะคำขอ',
+          value: filter,
+          onChange: setFilter,
+          options: [['pending', 'รออนุมัติ'], ['approved', 'อนุมัติแล้ว'], ['rejected', 'ปฏิเสธแล้ว']],
+        }}
+        count={requests.length}
+        countLabel="คำขอ"
+      />
 
       {loading ? (
         <LoadingState />
       ) : requests.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">
-          {filter === 'pending' ? 'ยังไม่มีคำขอที่รออนุมัติ' : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก'}
-        </p>
+        <EmptyState
+          icon={ClipboardList}
+          title={filter === 'pending' ? 'ยังไม่มีคำขอที่รออนุมัติ' : 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก'}
+          description={filter === 'pending' ? 'คำขอจากคนขับจะแสดงที่นี่' : 'ลองเลือกสถานะอื่น'}
+        />
       ) : (
         <div className="space-y-3">
           {requests.map(r => (
-            <div key={r.id} className="bg-white rounded-xl border border-gray-200 px-4 sm:px-5 py-4">
+            <div key={r.id} className="bg-surface-raised rounded-xl border border-surface-border px-4 sm:px-5 py-4">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-800 break-words">{TYPE_LABEL[r.request_type]} — {r.student_name}</p>
+                  <p className="text-sm font-medium text-ink break-words">{TYPE_LABEL[r.request_type]} — {r.student_name}</p>
                   <p className="text-xs text-gray-500 break-words">
                     รถ: {r.plate_no} · {r.grade && r.classroom ? `${r.grade}/${r.classroom}` : ''} · ขอโดย: {r.requested_by_name || '-'}
                   </p>
@@ -91,7 +106,7 @@ export default function SchoolApprovals() {
                     className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-5 py-2.5 rounded-lg transition">
                     {processingId === r.id ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
                   </button>
-                  <button onClick={() => handleReview(r.id, 'rejected')}
+                  <button onClick={() => { setReviewNote(''); setRejectTarget(r); }}
                     disabled={processingId === r.id}
                     className="flex-1 sm:flex-none bg-red-100 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed text-red-700 font-medium px-5 py-2.5 rounded-lg transition">
                     {processingId === r.id ? 'กำลังดำเนินการ...' : 'ปฏิเสธ'}
@@ -102,6 +117,26 @@ export default function SchoolApprovals() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        title="ยืนยันการปฏิเสธคำขอ"
+        description="ระบุหมายเหตุได้หากต้องการแจ้งเหตุผลให้ผู้ขอทราบ"
+        itemName={rejectTarget?.student_name}
+        confirmLabel="ปฏิเสธคำขอ"
+        loading={processingId === rejectTarget?.id}
+        onConfirm={() => handleReview(rejectTarget.id, 'rejected', reviewNote)}
+        onCancel={() => {
+          if (processingId !== rejectTarget?.id) { setRejectTarget(null); setReviewNote(''); }
+        }}
+      >
+        <FormField
+          label="เหตุผลที่ปฏิเสธ (ถ้ามี)"
+          value={reviewNote}
+          onChange={setReviewNote}
+          placeholder="เช่น ข้อมูลนักเรียนไม่ตรงกับทะเบียน"
+        />
+      </ConfirmDialog>
     </div>
   );
 }

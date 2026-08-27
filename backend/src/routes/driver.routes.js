@@ -36,6 +36,7 @@ const vllSvc            = require('../services/vehicleLocation.service');
 const lineSvc           = require('../services/line.service');
 const driverShiftSvc    = require('../services/driverShift.service');
 const safetyPolicySvc   = require('../services/safetyPolicy.service');
+const emergencySvc      = require('../services/emergency.service');
 // Phase 11A — Intelligent Tracking Layer (2026-06-23). Lazy-required inside
 // the /vehicle-location hook so the modules are only loaded when their
 // feature flag is on; this keeps the driver router's startup cost flat on
@@ -620,74 +621,82 @@ router.post('/emergency', async (req, res, next) => {
       policy = await assessSafety(req, vehicle, 'EMERGENCY_REPORT', { emergency: true });
     }
 
-    const [result] = await pool.query(
-      `INSERT INTO emergency_logs
-         (reported_by, channel, vehicle_id, plate_no, detail, note,
-          latitude, longitude, location_accuracy_m)
-       VALUES (?, 'web', ?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.id, vehicle.vehicle_id, vehicle.plate_no, detail, note || null,
-       lat, lng, acc]
-    );
+    // Idempotent create — a rapid double-tap (or offline retry) of the same
+    // report by this driver is collapsed into the first row. Only a genuinely
+    // NEW report writes an audit row and pushes a LINE card to the school group.
+    const report = await emergencySvc.createEmergencyReport({
+      reportedBy: req.user.id,
+      vehicleId:  vehicle.vehicle_id,
+      plateNo:    vehicle.plate_no,
+      detail,
+      note:       note || null,
+      latitude:   lat,
+      longitude:  lng,
+      accuracyM:  acc,
+    }, pool);
 
-    await logAudit({
-      userId:     req.user.id,
-      action:     'CREATE',
-      entityType: 'emergency',
-      entityId:   result.insertId,
-      newValue:   {
-        vehicleId: vehicle.vehicle_id,
-        plateNo:   vehicle.plate_no,
-        detail,
-        hasGps:    lat != null,
-        gpsStatus,
-        safety_policy: policy,
-      },
-      ipAddress:  req.ip,
-      userAgent:  req.headers['user-agent'],
-    });
-
-    // Phase 10.3E-HF2 — push Flex card to school LINE group.
-    // Wrapped so a LINE failure NEVER blocks the emergency report.
-    try {
-      const [[meta]] = await pool.query(
-        `SELECT v.vehicle_type,
-                (SELECT GROUP_CONCAT(DISTINCT sc.name SEPARATOR ', ')
-                   FROM students s
-                   JOIN schools sc ON sc.id = s.school_id
-                  WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE) AS schools
-           FROM vehicles v
-          WHERE v.id = ?`,
-        [vehicle.vehicle_id]
-      );
-      await lineSvc.pushEmergencyFlexMessage({
-        plateNo:     vehicle.plate_no,
-        vehicleType: meta?.vehicle_type,
-        driverName:  req.user.display_name || req.user.username || '-',
-        schools:     meta?.schools,
-        detail,
-        note:        note || null,
-        timestamp:   new Date(),
-        latitude:    lat,
-        longitude:   lng,
-        accuracy:    acc,
+    if (!report.isDuplicate) {
+      await logAudit({
+        userId:     req.user.id,
+        action:     'CREATE',
+        entityType: 'emergency',
+        entityId:   report.id,
+        newValue:   {
+          vehicleId: vehicle.vehicle_id,
+          plateNo:   vehicle.plate_no,
+          detail,
+          hasGps:    lat != null,
+          gpsStatus,
+          safety_policy: policy,
+        },
+        ipAddress:  req.ip,
+        userAgent:  req.headers['user-agent'],
       });
-    } catch (pushErr) {
-      console.error('[LINE_EMERGENCY_FLEX_PUSH] unexpected error (suppressed):', pushErr.message);
+
+      // Phase 10.3E-HF2 — push Flex card to school LINE group.
+      // Wrapped so a LINE failure NEVER blocks the emergency report.
+      try {
+        const [[meta]] = await pool.query(
+          `SELECT v.vehicle_type,
+                  (SELECT GROUP_CONCAT(DISTINCT sc.name SEPARATOR ', ')
+                     FROM students s
+                     JOIN schools sc ON sc.id = s.school_id
+                    WHERE s.vehicle_id = v.id AND s.is_deleted = FALSE) AS schools
+             FROM vehicles v
+            WHERE v.id = ?`,
+          [vehicle.vehicle_id]
+        );
+        await lineSvc.pushEmergencyFlexMessage({
+          plateNo:     vehicle.plate_no,
+          vehicleType: meta?.vehicle_type,
+          driverName:  req.user.display_name || req.user.username || '-',
+          schools:     meta?.schools,
+          detail,
+          note:        note || null,
+          timestamp:   new Date(),
+          latitude:    lat,
+          longitude:   lng,
+          accuracy:    acc,
+        });
+      } catch (pushErr) {
+        console.error('[LINE_EMERGENCY_FLEX_PUSH] unexpected error (suppressed):', pushErr.message);
+      }
     }
 
     return sendSuccess(
       res,
       {
-        id: result.insertId,
+        id: report.id,
         vehicle_id: vehicle.vehicle_id,
         plate_no: vehicle.plate_no,
         has_gps: lat != null,
+        duplicate: report.isDuplicate,
         vehicle_warning: vehicle.vehicle_id ? null : 'ไม่พบรถที่คนขับคันนี้ประจำ — บันทึกเหตุฉุกเฉินโดยไม่ระบุรถ',
         safety_policy: policy,
       },
-      'Emergency reported',
+      report.isDuplicate ? 'Emergency already reported (duplicate ignored)' : 'Emergency reported',
       null,
-      201
+      report.isDuplicate ? 200 : 201
     );
   } catch (err) {
     return next(err);

@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
-import EmptyState from '../../components/EmptyState';
-import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
+import PageHeader from '../../components/PageHeader';
+import { DataTable, FilterBar, StatusBadge } from '../../components/ui';
 import Pagination from '../../components/Pagination';
 
 export default function AffStudentSearch() {
@@ -22,7 +22,7 @@ export default function AffStudentSearch() {
 
   useEffect(() => {
     api.get('/affiliation/schools')
-      .then((res) => setSchools(res.data.data))
+      .then((res) => setSchools(Array.isArray(res.data.data) ? res.data.data : []))
       .catch(() => {});
   }, []);
 
@@ -43,7 +43,7 @@ export default function AffStudentSearch() {
       if (schoolId) params.set('school_id', schoolId);
 
       const res = await api.get(`/affiliation/students?${params}`);
-      setStudents(res.data.data);
+      setStudents(Array.isArray(res.data.data) ? res.data.data : []);
       setMeta(res.data.meta);
     } catch (err) {
       setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
@@ -58,113 +58,79 @@ export default function AffStudentSearch() {
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
+  const hasFilter = Boolean(debouncedSearch || grade || schoolId);
+
   return (
-    <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">ข้อมูลนักเรียน</h1>
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <PageHeader
+        title="ข้อมูลนักเรียน"
+        subtitle="ค้นหานักเรียนที่ใช้บริการรถรับส่งในสังกัด"
+      />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <input
-          type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-          placeholder="ค้นหาชื่อ นามสกุล หรือรหัส…"
-          className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400"
-        />
-        <div className="flex gap-2">
-          <select value={grade} onChange={(e) => setGrade(e.target.value)}
-            className="flex-1 sm:flex-none border-2 border-gray-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <option value="">ทุกชั้น</option>
-            {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map((g) => (
-              <option key={g} value={g}>{g}</option>
-            ))}
-          </select>
-          <select value={schoolId} onChange={(e) => setSchoolId(e.target.value)}
-            className="flex-1 sm:flex-none border-2 border-gray-200 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <option value="">ทุกโรงเรียน</option>
-            {schools.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <FilterBar
+        className="mb-5"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: 'ค้นหาชื่อ นามสกุล หรือรหัส…',
+          label: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส',
+        }}
+        filters={[
+          { key: 'grade', label: 'กรองตามระดับชั้น', value: grade, onChange: setGrade,
+            options: [['', 'ทุกชั้น'], ...['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => [g, g])] },
+          { key: 'school', label: 'กรองตามโรงเรียน', value: schoolId, onChange: setSchoolId,
+            options: [['', 'ทุกโรงเรียน'], ...schools.map(sc => [sc.id, sc.name])] },
+        ]}
+        count={meta.total}
+        countLabel="คน"
+        onClear={() => { setSearch(''); setGrade(''); setSchoolId(''); }}
+      />
 
-      {error && <ErrorState message={error} className="mb-4" />}
+      {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}
 
-      {loading ? (
-        <LoadingState />
-      ) : students.length === 0 ? (
-        <EmptyState
-          icon={GraduationCap}
-          title="ไม่พบนักเรียน"
-          description="ลองเปลี่ยนคำค้นหรือตัวกรอง"
-        />
-      ) : (
-        <>
-          {/* Desktop table */}
-          <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-left">
-                  <th className="px-4 py-3 font-medium">รหัส</th>
-                  <th className="px-4 py-3 font-medium">ชื่อ-นามสกุล</th>
-                  <th className="px-4 py-3 font-medium">ชั้น/ห้อง</th>
-                  <th className="px-4 py-3 font-medium">โรงเรียน</th>
-                  <th className="px-4 py-3 font-medium whitespace-nowrap text-center">ทะเบียนรถ</th>
-                  <th className="px-4 py-3 font-medium">เช้า</th>
-                  <th className="px-4 py-3 font-medium">เย็น</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {students.map((s) => (
-                  <tr key={s.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-600">{s.id}</td>
-                    <td className="px-4 py-3 text-gray-800">{s.prefix}{s.first_name} {s.last_name}</td>
-                    <td className="px-4 py-3 text-gray-600">{s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{s.school_name || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-center">
-                      {s.plate_no ? (
-                        <button onClick={() => navigate(`/affiliation/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
-                          className="text-blue-600 hover:underline text-sm">{s.plate_no}</button>
-                      ) : <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.morning_enabled ? <span className="text-green-600 text-xs font-medium">ใช้</span> : <span className="text-gray-400 text-xs">-</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.evening_enabled ? <span className="text-green-600 text-xs font-medium">ใช้</span> : <span className="text-gray-400 text-xs">-</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <DataTable
+        caption="รายชื่อนักเรียนที่ใช้บริการรถรับส่ง"
+        loading={loading}
+        rows={students}
+        rowKey={s => s.id}
+        columns={[
+          { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
+            cell: s => <span className="font-medium text-ink">{s.prefix}{s.first_name} {s.last_name}</span> },
+          { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
+            cell: s => (s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-') },
+          { key: 'id', header: 'รหัส', cell: s => <span className="tabular-nums">{s.id}</span> },
+          { key: 'school', header: 'โรงเรียน', cell: s => s.school_name || '-' },
+          { key: 'plate', header: 'ทะเบียนรถ', align: 'center',
+            cell: s => (s.plate_no
+              ? (
+                <button
+                  onClick={() => navigate(`/affiliation/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
+                  className="focus-ring inline-flex items-center min-h-[44px] px-2 -mx-2 rounded-lg text-brand-700 hover:bg-brand-50 active:bg-brand-100 transition"
+                >
+                  {s.plate_no}
+                </button>
+              )
+              : <span className="text-ink-muted">ไม่มีรถ</span>) },
+          { key: 'sessions', header: 'รอบที่ใช้', badge: true,
+            /* The old cells used a bare ✅ / — pair, which carries meaning by
+               symbol alone. Spelled out instead so it survives a screen reader
+               and a monochrome print. */
+            cell: s => {
+              const used = [s.morning_enabled && 'เช้า', s.evening_enabled && 'เย็น'].filter(Boolean);
+              return used.length
+                ? <StatusBadge variant="success">{used.join(' · ')}</StatusBadge>
+                : <StatusBadge variant="neutral">ไม่ใช้บริการ</StatusBadge>;
+            } },
+        ]}
+        empty={{
+          icon: GraduationCap,
+          title: 'ไม่พบนักเรียน',
+          description: 'ลองเปลี่ยนคำค้นหรือตัวกรอง',
+        }}
+      />
 
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-3">
-            {students.map((s) => (
-              <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-start justify-between gap-2 mb-1">
-                  <p className="text-base font-bold text-gray-900">{s.first_name} {s.last_name}</p>
-                  <span className="text-sm text-gray-400 shrink-0">#{s.id}</span>
-                </div>
-                <p className="text-sm text-gray-500">
-                  {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
-                  <span className="text-gray-300"> · </span>
-                  {s.school_name || '-'}
-                </p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mt-2">
-                  {s.plate_no ? (
-                    <button onClick={() => navigate(`/affiliation/vehicles?plate=${encodeURIComponent(s.plate_no)}`)}
-                      className="text-blue-600 hover:underline">🚌 {s.plate_no}</button>
-                  ) : <span className="text-gray-400">🚌 ไม่มีรถ</span>}
-                  <span className="text-gray-500">เช้า {s.morning_enabled ? '✅' : '—'} เย็น {s.evening_enabled ? '✅' : '—'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Pagination */}
-          <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={students.length} onPage={(p) => fetchStudents(p)} />
-        </>
+      {students.length > 0 && (
+        <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={students.length} onPage={(p) => fetchStudents(p)} />
       )}
     </div>
   );

@@ -1,7 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { FlaskConical, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
+import EmptyState from '../../components/EmptyState';
+import {
+  AppCard, AlertBanner, StatusBadge, DataTable, FormField, Modal, SectionTitle,
+} from '../../components/ui';
 
 // Metric definitions — edit here to add/change metrics
 const METRICS = [
@@ -24,12 +31,18 @@ function calcDelta(current, baseline) {
   return Math.round((current - baseline) * 100) / 100;
 }
 
+/**
+ * The direction of a change was carried by a bare ▲ / ▼ / = glyph in a colour.
+ * A screen reader read "black up-pointing triangle", and a red/green pair is
+ * the only thing separating "ดีขึ้น" from "ลดลง" for a colour-blind reader.
+ * Each trend now carries its own word and an icon marked decorative.
+ */
 function trendMeta(delta, higher) {
-  if (delta === 0) return { icon: '=', cls: 'text-gray-500', label: 'คงเดิม' };
+  if (delta === 0) return { Icon: Minus, tone: 'neutral', cls: 'text-ink-muted', label: 'คงเดิม' };
   const improved = higher ? delta > 0 : delta < 0;
   return improved
-    ? { icon: '▲', cls: 'text-green-600', label: 'ดีขึ้น' }
-    : { icon: '▼', cls: 'text-red-600', label: 'ลดลง' };
+    ? { Icon: TrendingUp,   tone: 'success', cls: 'text-success-ink', label: 'ดีขึ้น' }
+    : { Icon: TrendingDown, tone: 'danger',  cls: 'text-danger-ink',  label: 'ลดลง' };
 }
 
 function fmtDate(d) {
@@ -37,25 +50,40 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function fmtDelta(delta) {
+  return `${delta > 0 ? '+' : ''}${delta}%`;
+}
+
 export default function ResearchMetrics() {
   const toast = useToast();
   const [snapshots, setSnapshots] = useState([]);
   const [loading, setLoading] = useState(true);
+  // The load error used to be swallowed, so a failed request rendered the
+  // "ยังไม่มี snapshot" empty state — telling the admin there is no baseline
+  // when there may well be one.
+  const [error, setError] = useState(null);
   const [selectedBaselineId, setSelectedBaselineId] = useState(null);
   const [running, setRunning] = useState(false);
   const [showPreMeasure, setShowPreMeasure] = useState(false);
 
-  useEffect(() => {
-    api.get('/admin/snapshots?limit=50')
-      .then(r => {
-        const data = r.data?.data || [];
-        setSnapshots(data);
-        const firstBaseline = data.find(s => s.is_baseline);
-        if (firstBaseline) setSelectedBaselineId(firstBaseline.id);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.get('/admin/snapshots?limit=50');
+      const data = Array.isArray(r.data?.data) ? r.data.data : [];
+      setSnapshots(data);
+      const firstBaseline = data.find(s => s.is_baseline);
+      if (firstBaseline) setSelectedBaselineId(firstBaseline.id);
+    } catch (err) {
+      setError(err.response?.data?.message || 'โหลดข้อมูล snapshot ไม่สำเร็จ');
+      setSnapshots([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   async function handleRunSnapshot(isBaseline = false, researchPhase = null, note = null) {
     setRunning(true);
@@ -67,7 +95,7 @@ export default function ResearchMetrics() {
       });
       toast.success(isBaseline ? 'สร้าง baseline สำเร็จ' : 'บันทึก snapshot สำเร็จ');
       const r = await api.get('/admin/snapshots?limit=50');
-      const data = r.data?.data || [];
+      const data = Array.isArray(r.data?.data) ? r.data.data : [];
       setSnapshots(data);
       if (isBaseline) {
         const nb = data.find(s => s.is_baseline);
@@ -82,196 +110,242 @@ export default function ResearchMetrics() {
   const baseline = baselines.find(s => s.id === selectedBaselineId) || baselines[0] || null;
   const latest = snapshots.find(s => !s.is_baseline) || snapshots[0] || null;
 
+  // One row per metric, computed once and shared by the table and the cards so
+  // the two cannot disagree.
+  const comparison = METRICS.map(m => {
+    const bNum = baseline?.[m.num] ?? 0;
+    const bDen = baseline?.[m.den] ?? 0;
+    const cNum = latest?.[m.num] ?? 0;
+    const cDen = latest?.[m.den] ?? 0;
+    const bVal = calcPct(bNum, bDen);
+    const cVal = calcPct(cNum, cDen);
+    const delta = baseline && latest ? calcDelta(cVal, bVal) : null;
+    return {
+      ...m, bNum, bDen, cNum, cDen, bVal, cVal, delta,
+      trend: delta !== null ? trendMeta(delta, m.higher) : null,
+      hasBaseline: Boolean(baseline),
+      hasLatest: Boolean(latest),
+    };
+  });
+
+  const columns = [
+    { key: 'label', header: 'ตัวชี้วัด', primary: true, cell: r => r.label },
+    {
+      key: 'baseline', header: 'Baseline', align: 'center', numeric: true,
+      cell: r => (r.hasBaseline ? `${r.bVal}% (${r.bNum}/${r.bDen})` : '-'),
+    },
+    {
+      key: 'current', header: 'ปัจจุบัน', align: 'center', numeric: true,
+      cell: r => (r.hasLatest ? <span className="font-semibold text-ink">{r.cVal}% ({r.cNum}/{r.cDen})</span> : '-'),
+    },
+    {
+      key: 'delta', header: 'เปลี่ยนแปลง', align: 'center', numeric: true,
+      cell: r => (r.delta === null ? '-' : (
+        <span className={`inline-flex items-center gap-1 font-semibold ${r.trend.cls}`}>
+          <r.trend.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+          {fmtDelta(r.delta)}
+        </span>
+      )),
+    },
+    {
+      key: 'status', header: 'สถานะ', align: 'center', badge: true,
+      cell: r => (r.trend
+        ? <StatusBadge variant={r.trend.tone} size="sm">{r.trend.label}</StatusBadge>
+        : '-'),
+    },
+  ];
+
   if (loading) return <LoadingState />;
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto pb-10">
-      {/* Header */}
-      <div className="bg-blue-800 text-white rounded-xl px-5 py-4 mb-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <p className="text-xs text-blue-200 uppercase tracking-wider">Research Evaluation</p>
-            <h1 className="text-lg font-bold">เปรียบเทียบ Baseline กับสถานะปัจจุบัน</h1>
-            <p className="text-sm text-blue-200 mt-0.5">ดูความเปลี่ยนแปลงของข้อมูลหลักจาก baseline</p>
-          </div>
-          <span className="bg-blue-600 text-blue-100 text-xs font-medium px-3 py-1.5 rounded-full shrink-0">Admin only</span>
-        </div>
-      </div>
+      <PageHeader
+        icon={FlaskConical}
+        title="เปรียบเทียบ Baseline กับสถานะปัจจุบัน"
+        subtitle="ดูความเปลี่ยนแปลงของข้อมูลหลักจาก baseline"
+        meta="Research Evaluation"
+        actions={<StatusBadge variant="info">เฉพาะผู้ดูแลระบบ</StatusBadge>}
+      />
 
       {/* Baseline selector + actions */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
+      <AppCard padding="md" className="mb-5">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+          <div className="min-w-0">
             {baselines.length > 0 ? (
-              <div>
-                <label className="text-xs text-gray-500">Baseline อ้างอิง:</label>
-                <select value={selectedBaselineId || ''} onChange={e => setSelectedBaselineId(Number(e.target.value))}
-                  className="ml-2 border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
-                  {baselines.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {fmtDate(b.snapshot_date)} {b.baseline_note ? `— ${b.baseline_note}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <FormField label="Baseline อ้างอิง" className="sm:max-w-md">
+                {ctl => (
+                  <select
+                    {...ctl}
+                    value={selectedBaselineId || ''}
+                    onChange={e => setSelectedBaselineId(Number(e.target.value))}
+                    className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base sm:text-sm text-ink transition"
+                  >
+                    {baselines.map(b => (
+                      <option key={b.id} value={b.id}>
+                        {fmtDate(b.snapshot_date)} {b.baseline_note ? `— ${b.baseline_note}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </FormField>
             ) : (
-              <p className="text-sm text-amber-700 font-medium">⚠️ ยังไม่มี baseline — กดปุ่มด้านขวาเพื่อสร้าง</p>
+              <AlertBanner variant="warn" title="ยังไม่มี baseline">
+                กด “สร้าง Baseline” เพื่อเริ่มเก็บข้อมูลเปรียบเทียบ
+              </AlertBanner>
             )}
-            {latest && <p className="text-xs text-gray-400 mt-1">Snapshot ล่าสุด: {fmtDate(latest.snapshot_date)}</p>}
+            {latest && (
+              <p className="text-caption text-ink-muted mt-1">
+                Snapshot ล่าสุด: {fmtDate(latest.snapshot_date)}
+              </p>
+            )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => handleRunSnapshot(false)} disabled={running}
-              className="text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg transition disabled:opacity-50">
-              {running ? '...' : '📸 Snapshot วันนี้'}
-            </button>
-            <button onClick={() => handleRunSnapshot(true)} disabled={running}
-              className="text-sm bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 px-4 py-2 rounded-lg transition disabled:opacity-50">
-              {running ? '...' : '🔖 สร้าง Baseline'}
-            </button>
-            <button onClick={() => setShowPreMeasure(true)} disabled={running}
-              className="text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2 rounded-lg transition disabled:opacity-50 font-medium">
-              {running ? '...' : '🔬 Baseline (Pre-measure)'}
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* No data state */}
-      {!baseline && !latest ? (
-        <div className="text-center py-16 bg-gray-50 rounded-xl border border-gray-200">
-          <p className="text-3xl mb-3">📊</p>
-          <p className="text-lg font-semibold text-gray-600">ยังไม่มี snapshot</p>
-          <p className="text-sm text-gray-400 mt-1">กด "สร้าง Baseline" เพื่อเริ่มเก็บข้อมูลเปรียบเทียบ</p>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleRunSnapshot(false)}
+              disabled={running}
+              className="focus-ring text-sm font-medium bg-brand-50 hover:bg-brand-100 active:bg-brand-200 text-brand-700 border border-brand-200 px-4 min-h-[44px] rounded-lg transition disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {running ? 'กำลังบันทึก…' : 'Snapshot วันนี้'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRunSnapshot(true)}
+              disabled={running}
+              className="focus-ring text-sm font-medium bg-success-soft hover:opacity-90 text-success-ink border border-success/30 px-4 min-h-[44px] rounded-lg transition disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {running ? 'กำลังบันทึก…' : 'สร้าง Baseline'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPreMeasure(true)}
+              disabled={running}
+              className="focus-ring text-sm font-semibold bg-navy-50 hover:bg-navy-100 text-navy-700 border border-navy-200 px-4 min-h-[44px] rounded-lg transition disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {running ? 'กำลังบันทึก…' : 'Baseline (Pre-measure)'}
+            </button>
+          </div>
         </div>
+      </AppCard>
+
+      {error ? (
+        <ErrorState title="โหลดข้อมูล snapshot ไม่สำเร็จ" message={error} onRetry={load} />
+      ) : !baseline && !latest ? (
+        <EmptyState
+          title="ยังไม่มี snapshot"
+          description='กด "สร้าง Baseline" เพื่อเริ่มเก็บข้อมูลเปรียบเทียบ'
+        />
       ) : (
         <>
           {/* KPI comparison cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            {METRICS.map(m => {
-              const bVal = baseline ? calcPct(baseline[m.num], baseline[m.den]) : null;
-              const cVal = latest ? calcPct(latest[m.num], latest[m.den]) : null;
-              const delta = bVal !== null && cVal !== null ? calcDelta(cVal, bVal) : null;
-              const trend = delta !== null ? trendMeta(delta, m.higher) : null;
-
-              return (
-                <div key={m.key} className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                  <p className="text-xs text-gray-500 mb-1">{m.label}</p>
-                  <p className="text-2xl font-bold text-gray-800">{cVal !== null ? `${cVal}%` : '-'}</p>
-                  {trend && delta !== null && (
-                    <p className={`text-sm font-medium mt-0.5 ${trend.cls}`}>
-                      {trend.icon} {delta > 0 ? '+' : ''}{delta}%
-                    </p>
-                  )}
-                  {bVal !== null && <p className="text-xs text-gray-400 mt-0.5">baseline: {bVal}%</p>}
-                </div>
-              );
-            })}
+            {comparison.map(r => (
+              <AppCard key={r.key} padding="sm" className="text-center">
+                <p className="text-caption text-ink-muted mb-1">{r.label}</p>
+                <p className="text-2xl font-bold text-ink tabular-nums">
+                  {r.hasLatest ? `${r.cVal}%` : '-'}
+                </p>
+                {r.trend && r.delta !== null && (
+                  <p className={`inline-flex items-center gap-1 text-sm font-medium mt-0.5 ${r.trend.cls}`}>
+                    <r.trend.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+                    <span className="tabular-nums">{fmtDelta(r.delta)}</span>
+                    <span className="sr-only">{r.trend.label}</span>
+                  </p>
+                )}
+                {r.hasBaseline && (
+                  <p className="text-caption text-ink-muted mt-0.5 tabular-nums">baseline: {r.bVal}%</p>
+                )}
+              </AppCard>
+            ))}
           </div>
 
-          {/* Detail comparison table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto mb-5">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-left">
-                  <th className="px-4 py-3 font-medium">ตัวชี้วัด</th>
-                  <th className="px-4 py-3 font-medium text-center">Baseline</th>
-                  <th className="px-4 py-3 font-medium text-center">ปัจจุบัน</th>
-                  <th className="px-4 py-3 font-medium text-center">เปลี่ยนแปลง</th>
-                  <th className="px-4 py-3 font-medium text-center">สถานะ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {METRICS.map(m => {
-                  const bNum = baseline?.[m.num] ?? 0;
-                  const bDen = baseline?.[m.den] ?? 0;
-                  const cNum = latest?.[m.num] ?? 0;
-                  const cDen = latest?.[m.den] ?? 0;
-                  const bVal = calcPct(bNum, bDen);
-                  const cVal = calcPct(cNum, cDen);
-                  const delta = baseline && latest ? calcDelta(cVal, bVal) : null;
-                  const trend = delta !== null ? trendMeta(delta, m.higher) : null;
-
-                  return (
-                    <tr key={m.key} className="hover:bg-gray-50">
-                      <td className="px-4 py-2.5 text-gray-800 font-medium">{m.label}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-600">
-                        {baseline ? `${bVal}% (${bNum}/${bDen})` : '-'}
-                      </td>
-                      <td className="px-4 py-2.5 text-center text-gray-800 font-medium">
-                        {latest ? `${cVal}% (${cNum}/${cDen})` : '-'}
-                      </td>
-                      <td className={`px-4 py-2.5 text-center font-bold ${trend?.cls || 'text-gray-400'}`}>
-                        {delta !== null ? `${trend.icon} ${delta > 0 ? '+' : ''}${delta}%` : '-'}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        {trend ? (
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            trend.label === 'ดีขึ้น' ? 'bg-green-100 text-green-700' :
-                            trend.label === 'ลดลง' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-600'
-                          }`}>{trend.label}</span>
-                        ) : '-'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="mb-5">
+            <DataTable
+              caption="ตารางเปรียบเทียบตัวชี้วัดกับ baseline"
+              columns={columns}
+              rows={comparison}
+              rowKey={r => r.key}
+              empty={{ title: 'ยังไม่มีตัวชี้วัด' }}
+            />
           </div>
 
           {/* Snapshot history */}
-          <details className="bg-white rounded-xl border border-gray-200">
-            <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-600 hover:bg-gray-50">
-              📋 ประวัติ Snapshot ({snapshots.length} รายการ)
-            </summary>
-            <div className="border-t border-gray-100 divide-y divide-gray-50">
-              {snapshots.slice(0, 20).map(s => (
-                <div key={s.id} className="px-4 py-2 flex items-center justify-between text-sm">
-                  <div>
-                    <span className="text-gray-800">{fmtDate(s.snapshot_date)}</span>
-                    {s.is_baseline && <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Baseline</span>}
-                    {s.research_phase && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">{s.research_phase}</span>}
-                    <span className="ml-2 text-xs text-gray-400">{s.run_type}</span>
+          <AppCard padding="none">
+            <details className="group">
+              <summary className="focus-ring flex items-center px-4 min-h-[44px] cursor-pointer text-sm font-medium text-ink-muted hover:bg-surface rounded-xl transition">
+                ประวัติ Snapshot ({snapshots.length} รายการ)
+              </summary>
+              <div className="border-t border-surface-border divide-y divide-surface-border">
+                {snapshots.slice(0, 20).map(s => (
+                  <div key={s.id} className="px-4 py-2.5 flex items-center justify-between gap-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
+                      <span className="text-ink">{fmtDate(s.snapshot_date)}</span>
+                      {s.is_baseline && <StatusBadge variant="success" size="sm">Baseline</StatusBadge>}
+                      {s.research_phase && <StatusBadge variant="info" size="sm">{s.research_phase}</StatusBadge>}
+                      <span className="text-caption text-ink-muted">{s.run_type}</span>
+                    </div>
+                    <span className="text-caption text-ink-muted truncate">{s.baseline_note || ''}</span>
                   </div>
-                  <span className="text-xs text-gray-400">{s.baseline_note || ''}</span>
-                </div>
-              ))}
-            </div>
-          </details>
+                ))}
+              </div>
+            </details>
+          </AppCard>
         </>
       )}
 
-      {/* Pre-measure Baseline Confirmation Modal */}
-      {showPreMeasure && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-elevate max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-purple-800 mb-2">บันทึก Baseline (Pre-measure)</h3>
-            <p className="text-sm text-gray-600 mb-3">
-              ระบบจะบันทึก snapshot ปัจจุบันเป็น <strong>Baseline สำหรับการวิจัย R2 (Pre-measure)</strong>
-            </p>
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4 text-sm text-purple-700 space-y-1">
-              <p><strong>วันที่:</strong> {new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-              <p><strong>ประเภท:</strong> Research Baseline — Pre-measure</p>
-              <p><strong>หมายเหตุ:</strong> ข้อมูลนี้จะถูกแยกจาก snapshot ปกติในการส่งออกงานวิจัย</p>
-            </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 text-xs text-amber-700">
-              ห้ามบันทึก baseline ซ้ำภายใน 24 ชั่วโมง — หากมี baseline อยู่แล้วระบบจะแจ้งเตือน
-            </div>
-            <div className="flex gap-3">
-              <button onClick={() => setShowPreMeasure(false)}
-                className="flex-1 text-sm text-gray-600 border border-gray-300 px-4 py-2.5 rounded-lg hover:bg-gray-50 transition">
-                ยกเลิก
-              </button>
-              <button
-                onClick={() => handleRunSnapshot(true, 'pre-measure', 'Research R2 Pre-measure Baseline')}
-                disabled={running}
-                className="flex-1 text-sm bg-purple-600 hover:bg-purple-700 text-white font-medium px-4 py-2.5 rounded-lg transition disabled:opacity-50">
-                {running ? 'กำลังบันทึก...' : 'ยืนยันบันทึก Baseline'}
-              </button>
-            </div>
+      {/* Pre-measure baseline — a research record, so it states exactly what it
+          will write before it writes it. */}
+      <Modal
+        open={showPreMeasure}
+        title="บันทึก Baseline (Pre-measure)"
+        onClose={() => { if (!running) setShowPreMeasure(false); }}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowPreMeasure(false)}
+              disabled={running}
+              className="focus-ring px-4 min-h-[44px] text-sm font-medium rounded-lg border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRunSnapshot(true, 'pre-measure', 'Research R2 Pre-measure Baseline')}
+              disabled={running}
+              className="focus-ring px-4 min-h-[44px] text-sm font-semibold rounded-lg bg-navy-700 hover:bg-navy-800 active:bg-navy-900 text-white transition disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {running ? 'กำลังบันทึก…' : 'ยืนยันบันทึก Baseline'}
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-muted mb-3">
+          ระบบจะบันทึก snapshot ปัจจุบันเป็น{' '}
+          <strong className="text-ink">Baseline สำหรับการวิจัย R2 (Pre-measure)</strong>
+        </p>
+
+        <SectionTitle title="รายละเอียดที่จะบันทึก" className="mb-2" />
+        <dl className="bg-navy-50 border border-navy-200 rounded-lg p-3 mb-4 text-sm text-navy-800 space-y-1">
+          <div className="flex gap-2">
+            <dt className="font-semibold shrink-0">วันที่:</dt>
+            <dd>{new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}</dd>
           </div>
-        </div>
-      )}
+          <div className="flex gap-2">
+            <dt className="font-semibold shrink-0">ประเภท:</dt>
+            <dd>Research Baseline — Pre-measure</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="font-semibold shrink-0">หมายเหตุ:</dt>
+            <dd>ข้อมูลนี้จะถูกแยกจาก snapshot ปกติในการส่งออกงานวิจัย</dd>
+          </div>
+        </dl>
+
+        <AlertBanner variant="warn" title="บันทึกซ้ำไม่ได้ภายใน 24 ชั่วโมง">
+          หากมี baseline อยู่แล้วระบบจะแจ้งเตือน
+        </AlertBanner>
+      </Modal>
     </div>
   );
 }

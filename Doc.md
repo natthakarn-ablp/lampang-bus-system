@@ -2,7 +2,7 @@
 
 **Branch:** `security/audit-fixes-2026-06-18`
 **เซิร์ฟเวอร์:** `ssh.schoolbus.lp-pao.go.th` → `/home/schoolbus/apps/lampang-bus-system/`
-**Production:** ทำงานปกติ, PM2 online, build ผ่าน, ฐานข้อมูล 245 คัน, Phase 10.14 deploy แล้ว (27 มิ.ย. 2569)
+**Production:** ทำงานปกติ, PM2 online, build ผ่าน, ฐานข้อมูล 245 คัน, Phase 10.15A+10.15B deploy แล้ว (29 มิ.ย. 2569)
 
 ---
 
@@ -11,11 +11,13 @@
 1. [Role Inversion — กลับทิศบทบาทการขึ้นทะเบียนรถ](#1-role-inversion)
 2. [Tier 3 — กระจายงานแอดมินไปสังกัด](#2-tier-3)
 3. [Phase 10.14 — แนบเอกสารหลักฐาน + ขึ้นทะเบียนรถแบบคนขับเริ่มเอง](#3-phase-1014)
-4. [อัปเดตคู่มือและเอกสาร](#4-อัปเดตคู่มือ)
-5. [รายการไฟล์ที่เปลี่ยนแปลงทั้งหมด](#5-ไฟล์ที่เปลี่ยนแปลง)
-6. [สถาปัตยกรรมและ State Machine](#6-สถาปัตยกรรม)
-7. [API Endpoints ใหม่ทั้งหมด](#7-api-endpoints)
-8. [งานที่เหลือ](#8-งานที่เหลือ)
+4. [Phase 10.15A — สร้างรถอัตโนมัติตอนนำเข้านักเรียน](#4-phase-1015a)
+5. [Phase 10.15B — ป้องกันระบบพังเวลาแก้ไขงานอื่น](#5-phase-1015b)
+6. [อัปเดตคู่มือและเอกสาร](#6-อัปเดตคู่มือ)
+7. [รายการไฟล์ที่เปลี่ยนแปลงทั้งหมด](#7-ไฟล์ที่เปลี่ยนแปลง)
+8. [สถาปัตยกรรมและ State Machine](#8-สถาปัตยกรรม)
+9. [API Endpoints ใหม่ทั้งหมด](#9-api-endpoints)
+10. [งานที่เหลือ](#10-งานที่เหลือ)
 
 ---
 
@@ -207,7 +209,86 @@
 
 ---
 
-## 4. อัปเดตคู่มือ
+## 4. Phase 10.15A — สร้างรถอัตโนมัติตอนนำเข้านักเรียน
+
+**Commit:** `8f4d096` — 2 files changed (29 มิ.ย. 2569)
+
+### วัตถุประสงค์
+
+เมื่อโรงเรียนนำเข้าไฟล์นักเรียน และพบทะเบียนรถที่ยังไม่มีในระบบ ให้ระบบ **สร้างรถให้โดยอัตโนมัติ** แทนการส่ง error ว่า "ไม่พบทะเบียนรถ" โรงเรียนไม่ต้องไปเพิ่มรถเองก่อนนำเข้าไฟล์
+
+### การเปลี่ยนแปลง
+
+- **`studentImportPreview.service.js`**:
+  - `analyzeRows()`: เพิ่มพารามิเตอร์ `autoCreateVehicle` — เมื่อเปิดใช้งาน แถวที่เคยเป็น `VEHICLE_NOT_FOUND` จะกลายเป็น `INSERT_NEW_AUTO_VEHICLE` (status=READY, can_apply=true)
+  - `createVehicleForImport()`: ฟังก์ชันใหม่ — ตรวจสอบว่าทะเบียนมีอยู่แล้วหรือไม่ ถ้าไม่มีจะสร้างรถใหม่พร้อม `verification_status='UNVERIFIED'` และ audit log
+  - `applyInsertRow()`: ใช้ `autoCreateVehicle` เพื่อเรียก `createVehicleForImport()` เมื่อไม่มี `matched_vehicle_id`
+  - `applyBatch()`: ส่ง `autoCreateVehicle` ผ่านไปยัง `applyInsertRow()` และรวม `INSERT_NEW_AUTO_VEHICLE` ใน query
+  - `runPreview()`: รับ `autoCreateVehicle` และส่งต่อไปยัง `analyzeRows()`
+- **`school.routes.js`**:
+  - `POST /students/import/preview`: รับ `auto_create_vehicle` จาก form body
+  - `POST /students/import/:batchId/apply`: รับ `auto_create_vehicle` จาก JSON body
+
+### ผลลัพธ์การทดสอบ (โรงเรียนอนุบาลวังเหนือ, school_id=52030081)
+
+- ไฟล์ 150 แถว: 26 แถวพร้อมนำเข้า (สร้างรถอัตโนมัติ), 122 แถวซ้ำ (skip), 2 แถว guardian mismatch
+- Apply สำเร็จ: 26 นักเรียนใหม่, 0 ล้มเหลว
+- รถที่สร้างอัตโนมัติ: นก 5080 ลำปาง, นข 6016 ลำปาง, นข 5917 เชียงราย, ฮน 8353 ลำปาง, ผข 561 ลำปาง ฯลฯ
+- Unit tests: 5/5 ผ่าน
+
+### ข้อจำกัดเพิ่มเติม (Phase 10.15A-1)
+
+- ทะเบียนรถที่ **ไม่มีจังหวัด** (เช่น `นข 2210` หรือ `นข2210`) จะไม่ถูกสร้างอัตโนมัติ
+- เหตุผล: ป้องกันการลงทะเบียนซ้ำซ้อน เพราะทะเบียนที่ไม่ระบุจังหวัดอาจไปชนกับรถที่มีจังหวัดอื่น
+- แถวดังกล่าวจะยังคงเป็น `VEHICLE_NOT_FOUND` และให้โรงเรียนแก้ไขไฟล์ก่อน
+- **Commit:** `49b480a`
+
+### การใช้งาน
+
+- โรงเรียนส่ง `auto_create_vehicle=true` ใน form data ตอน preview
+- ระบบจะแสดงข้อความ "พร้อมนำเข้า (ระบบจะสร้างรถอัตโนมัติตอนนำเข้า)" แทน error
+- ตอน apply ส่ง `auto_create_vehicle: true` ใน JSON body ด้วย
+- ต้องใส่ทะเบียนรถพร้อมจังหวัด เช่น `นข 2210 ลำปาง`
+
+---
+
+## 5. Phase 10.15B — ป้องกันระบบพังเวลาแก้ไขงานอื่น
+
+**Commit:** `19a9122` — 2 files changed (29 มิ.ย. 2569)
+
+### ปัญหา
+
+- Backend รันด้วย `pm2 start npm -- start` (ผ่าน `npm`) ไม่มี crash-loop protection
+- ถ้าแก้โค้ดแล้วมี syntax error หรือ runtime error ระบบจะ restart วนเร็วเกินไป อาจทำให้ service ล่ม
+- มี backup directory `frontend/dist.bak-*` เก่าสะสมใน project root
+
+### การแก้ไข
+
+- **Adopt `ecosystem.config.js`**:
+  - `max_restarts: 10`
+  - `restart_delay: 5000`
+  - `exp_backoff_restart_delay: 1000`
+  - `max_memory_restart: '500M'`
+  - บังคับใช้ `pm2 reload /home/schoolbus/apps/lampang-bus-system/ecosystem.config.js`
+- **สร้าง `scripts/deploy-backend.sh`**: deploy ปลอดภัยที่ทำ syntax check + unit tests ก่อน reload ถ้า fail จะไม่ reload
+- **ลบ `frontend/dist.bak-*` เก่า** 3 รายการ (เก่าสุด 21–27 มิ.ย.) ที่ไม่จำเป็นแล้ว
+
+### สถานะ
+
+- ✅ Backend รันด้วย ecosystem config แล้ว
+- ✅ Health check `/health` OK
+- ✅ 0 unstable restarts
+- ✅ Deploy script สามารถใช้งานได้
+
+### วิธีใช้ Deploy Script
+
+```bash
+/home/schoolbus/apps/lampang-bus-system/scripts/deploy-backend.sh
+```
+
+---
+
+## 6. อัปเดตคู่มือ
 
 **Commit:** `a1ba2e6` — 4 files changed, +100 -1
 
@@ -241,6 +322,23 @@
   - `studentImportPreview.service.js`: fuzzy normalized match — ถ้าข้อความทะเบียนป้อนเข้ามาใกล้เคียงกับรถในระบบพอดีคันเดียว ระบบจะจับคู่และแปลงเป็นทะเบียนรถตามข้อมูลในระบบ
 - **ผลลัพธ์:** ทดสอบ `analyzeRows` กับรถ 2 คันของโรงเรียน จับคู่ได้ถูกต้องทั้ง `ลป-2204`, `ลป 2204`, `ลป2204`, `ลป 2204 ลำ` และ `นข-3402 ลำปาง` สถานะ `READY` พร้อมนำเข้า
 
+#### แก้ไขเพิ่ม (29 มิ.ย. 2569) — CSV ที่บันทึกเป็น TIS-620/Windows-874 ทำให้รหัสนักเรียนผิด
+
+- **ปัญหา:** โรงเรียนอนุบาลวังเหนือ (และอีกหลายโรงเรียน) export ไฟล์ CSV จาก Excel ใน encoding TIS-620 แทน UTF-8 ระบบอ่าน header เป็นมัยก์เบก (mojibake) ทำให้ column `รหัสนักเรียน` ไม่ถูก map ทุกแถวจึง error `รหัสนักเรียนไม่ถูกต้อง`
+- **วิธีแก้:** สร้าง `backend/src/utils/readCsvWithEncoding.js` ใช้ `iconv-lite` ตรวจหา encoding: ลอง UTF-8 ก่อน ถ้ามี replacement character หรือไม่มี Thai จะ fallback เป็น TIS-620 แล้ว Windows-874 นำไปใช้ใน `studentImportPreview.service.js`, `school.routes.js` (POST `/students/import`), และ `affiliation.routes.js` (import โรงเรียน)
+- **ผลลัพธ์:** ไฟล์ CSV ของโรงเรียนอนุบาลวังเหนือ (150 แถว) ถูก parse ได้ถูกต้อง รหัสนักเรียน `65001`, `65002`, ... อ่านได้ครบ ไม่มีแถวว่าง
+
+#### แก้ไขเพิ่ม (29 มิ.ย. 2569) — เบอร์โทรผู้ปกครอง 9 หลัก (Excel ตัดเลข 0 ข้างหน้า)
+
+- **ปัญหา:** หลัง encoding ถูกต้อง ระบบพบว่าเบอร์โทรผู้ปกครองในไฟล์เป็น 9 หลัก เช่น `909755785` แทนที่จะเป็น `0909755785` เพราะ Excel ตีคอลัมน์เป็นตัวเลขและตัดเลข 0 นำ ทำให้ทุกแถว error `เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 10 หลัก`
+- **วิธีแก้:** ปรับ `studentImportClassifier.js` ให้ถ้าเบอร์โทรมี 9 หลักและไม่ขึ้นต้นด้วย 0 ระบบจะ auto-prepend `0` ให้ (กลายเป็น 10 หลัก) ก่อนตรวจสอบความยาว
+- **ผลลัพธ์:** นำเข้าข้อมูลโรงเรียนอนุบาลวังเหนือ (`school_id=52030081`) สำเร็จ 124 คน จาก 150 แถว ที่เหลือ 26 แถวติด `VEHICLE_NOT_FOUND` เพราะทะเบียนรถยังไม่มีในระบบ ต้องให้โรงเรียนเพิ่มรถก่อน
+
+##### ทะเบียนรถที่ยังไม่มีในระบบ (26 แถว)
+
+- `นก 5080 ลำปาง` (2 แถว), `นข 6016 ลำปาง` (2 แถว), `นข 5917 เชียงราย` (3 แถว), `ฮน 8353 ลำปาง` (2 แถว), `ผข 561 ลำปาง` (1 แถว) และอื่น ๆ
+- ให้โรงเรียนเพิ่มรถเหล่านี้ในระบบก่อน แล้ว import ไฟล์ซ้ำอีกครั้ง
+
 ### 4.3 แก้ไขปัญหา /manual ติดหน้า login หลัง Deploy
 
 **Commit:** `22f33b3`
@@ -262,7 +360,7 @@
 
 ---
 
-## 5. ไฟล์ที่เปลี่ยนแปลง
+## 7. ไฟล์ที่เปลี่ยนแปลง
 
 ### Backend
 
@@ -298,7 +396,7 @@
 
 ---
 
-## 6. สถาปัตยกรรม
+## 8. สถาปัตยกรรม
 
 ### State Machine: การขึ้นทะเบียนรถ (Role Inversion)
 
@@ -332,7 +430,7 @@ PENDING_SCHOOL_REVIEW    (คนขับยื่นคำขอ)
 
 ---
 
-## 7. API Endpoints
+## 9. API Endpoints
 
 ### ใหม่ทั้งหมด (13 endpoints)
 
@@ -395,7 +493,7 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 
 ---
 
-## 8. งานที่เหลือ
+## 10. งานที่เหลือ
 
 - [ ] ถ่ายภาพหน้าจอใหม่สำหรับคู่มือ (driver applications, affiliation approvals, driver documents, school registration review)
 - [ ] UAT เชิงผู้ใช้กับ Phase 10.14 (driver-initiated registration + document review)
@@ -404,9 +502,16 @@ GET    /:docType/:id/file                   # docType=vehicle|driver, serve auth
 
 ---
 
-## 9. Git Log
+## 11. Git Log
 
 ```
+fb29553 docs: document Phase 10.15A-1 province requirement for auto-create vehicle
+49b480a feat: reject auto-create vehicle for plates without province (Phase 10.15A-1)
+f0a7fc8 docs: add Phase 10.15A and 10.15B sections to Doc.md
+19a9122 ops: adopt PM2 ecosystem config and add safe backend deploy script
+8f4d096 feat: auto-create missing vehicles during student import (Phase 10.15A)
+f0cb341 fix: auto-prepend 0 to 9-digit guardian phones in student imports (Excel drops leading zero)
+2258c84 fix: auto-detect Thai CSV encodings (TIS-620/Windows-874) in student imports
 0f76944 fix: harden school scope for registration review + lock APPROVED document deletion
 3ff12c7 docs: restructure Doc.md, add Phase 10.14 section and update git log
 db26fce docs: mark driver documents + registration roster as deployed and fix file list

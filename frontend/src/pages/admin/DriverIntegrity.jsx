@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ShieldCheck, AlertTriangle, CheckCircle2, OctagonAlert, Info } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import PageHeader from '../../components/PageHeader';
+import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
-import SectionTitle from '../../components/ui/SectionTitle';
 import AlertBanner from '../../components/ui/AlertBanner';
+import FormField from '../../components/ui/FormField';
+import Modal from '../../components/ui/Modal';
 
 // Phase 10.13B-8 — driver integrity dashboard + guided lifecycle wizard.
 // Read-only visibility + preflight-gated restore / reassign / deactivate.
@@ -25,20 +29,31 @@ const ACTIONS = [
   { key: 'DEACTIVATE_DRIVER', label: 'ปิดใช้งานคนขับ', endpoint: (id) => `/admin/drivers/${id}/deactivate` },
 ];
 
-const inputCls = 'w-full min-h-[44px] rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-sm text-ink transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30';
+const selectCls = 'focus-ring w-full min-h-[44px] rounded-lg border border-surface-border bg-surface-raised px-3 text-base sm:text-sm text-ink transition';
 
 export default function DriverIntegrity() {
-  const toast = useToast();
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
+  // A failed load only raised a toast, so the page settled into a permanent
+  // grid of "—" cards that reads as "everything is fine, no records".
+  const [error, setError] = useState(null);
   const [wiz, setWiz] = useState(false);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
-  async function load() {
+  const load = useCallback(async () => {
     setBusy(true);
-    try { const res = await api.get('/admin/driver-integrity'); setData(res.data.data); }
-    catch { toast.error('โหลดข้อมูลไม่สำเร็จ'); } finally { setBusy(false); }
-  }
+    setError(null);
+    try {
+      const res = await api.get('/admin/driver-integrity');
+      setData(res.data.data);
+    } catch (err) {
+      setError(err.response?.data?.message || 'โหลดข้อมูลสุขภาพข้อมูลคนขับไม่สำเร็จ');
+      setData(null);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const cards = data ? [
     { label: 'รถที่ยังไม่มีคนขับ', value: data.vehicles_no_active_driver, tone: data.vehicles_no_active_driver ? 'warn' : 'success' },
@@ -52,14 +67,15 @@ export default function DriverIntegrity() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto motion-safe:animate-fade-in-up motion-reduce:animate-none">
-      <SectionTitle
+      <PageHeader
+        icon={ShieldCheck}
         title="สุขภาพข้อมูลคนขับ"
-        description="ตรวจสอบความถูกต้องของบัญชีคนขับและการผูกรถ"
-        className="mb-4"
-        action={(
+        subtitle="ตรวจสอบความถูกต้องของบัญชีคนขับและการผูกรถ"
+        actions={(
           <button
+            type="button"
             onClick={() => setWiz(true)}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
+            className="focus-ring inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-700 active:bg-brand-800"
           >
             <ShieldCheck className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
             เครื่องมือจัดการคนขับ
@@ -67,34 +83,44 @@ export default function DriverIntegrity() {
         )}
       />
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        {cards.map((c) => {
-          const badge = TONE_BADGE[c.tone] || TONE_BADGE.neutral;
-          return (
-            <AppCard key={c.label} padding="sm" className="flex flex-col gap-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="text-2xl font-bold tabular-nums leading-none text-ink">{c.value ?? '—'}</div>
-                <StatusBadge variant={badge.variant} size="sm" icon={badge.icon}>{badge.label}</StatusBadge>
-              </div>
-              <div className="text-xs font-medium text-ink-muted">{c.label}</div>
-            </AppCard>
-          );
-        })}
-      </div>
-
-      {data?.vehicles_no_driver_list?.length > 0 && (
-        <AppCard padding="none" className="overflow-hidden">
-          <div className="px-4 py-2 bg-surface text-xs font-medium text-ink-muted border-b border-surface-border">รถที่ยังไม่มีคนขับ</div>
-          <div className="divide-y divide-surface-border">
-            {data.vehicles_no_driver_list.map((v) => (
-              <div key={v.id} className="px-4 py-2 text-sm text-ink flex justify-between">
-                <span>{v.plate_no}</span><span className="text-ink-muted text-xs tabular-nums">{v.id}</span>
-              </div>
-            ))}
+      {busy && !data ? (
+        <LoadingState message="กำลังตรวจสอบข้อมูลคนขับ…" />
+      ) : error ? (
+        <ErrorState title="โหลดข้อมูลไม่สำเร็จ" message={error} onRetry={load} />
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            {cards.map((c) => {
+              const badge = TONE_BADGE[c.tone] || TONE_BADGE.neutral;
+              return (
+                <AppCard key={c.label} padding="sm" className="flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-2xl font-bold tabular-nums leading-none text-ink">{c.value ?? '—'}</div>
+                    <StatusBadge variant={badge.variant} size="sm" icon={badge.icon}>{badge.label}</StatusBadge>
+                  </div>
+                  <div className="text-xs font-medium text-ink-muted">{c.label}</div>
+                </AppCard>
+              );
+            })}
           </div>
-        </AppCard>
+
+          {data?.vehicles_no_driver_list?.length > 0 && (
+            <AppCard padding="none" className="overflow-hidden">
+              <h2 className="px-4 py-2 bg-surface text-xs font-medium text-ink-muted border-b border-surface-border">
+                รถที่ยังไม่มีคนขับ
+              </h2>
+              <ul className="divide-y divide-surface-border">
+                {data.vehicles_no_driver_list.map((v) => (
+                  <li key={v.id} className="px-4 py-2 text-sm text-ink flex justify-between gap-3">
+                    <span>{v.plate_no}</span>
+                    <span className="text-ink-muted text-xs tabular-nums">{v.id}</span>
+                  </li>
+                ))}
+              </ul>
+            </AppCard>
+          )}
+        </>
       )}
-      {busy && !data && <div className="text-center text-ink-muted text-sm py-8">กำลังโหลด…</div>}
 
       {wiz && <DriverWizard onClose={() => setWiz(false)} onDone={() => { setWiz(false); load(); }} />}
     </div>
@@ -124,6 +150,7 @@ function DriverWizard({ onClose, onDone }) {
   }
   async function runAction() {
     if (!reason.trim()) { toast.error('กรุณาระบุเหตุผล'); return; }
+    if (busy) return; // these actions change account state — never twice
     setBusy(true);
     try {
       const ep = ACTIONS.find((a) => a.key === action).endpoint(userId);
@@ -138,62 +165,104 @@ function DriverWizard({ onClose, onDone }) {
 
   const blocked = pf && pf.allowed === false;
   const pfVariant = blocked ? 'danger' : pf?.severity === 'WARNING' ? 'warn' : 'success';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 motion-safe:animate-fade-in motion-reduce:animate-none" onClick={onClose}>
-      <div
-        className="bg-surface-raised rounded-2xl shadow-elevate border border-surface-border w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6 motion-safe:animate-scale-in motion-reduce:animate-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-lg font-semibold text-ink mb-1">เครื่องมือจัดการคนขับ</h2>
-        <p className="text-sm text-ink-muted mb-4">ตรวจสอบก่อนดำเนินการ · ทุกการเปลี่ยนแปลงถูกบันทึกประวัติ</p>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-ink-muted mb-1">การดำเนินการ</label>
-            <select value={action} onChange={(e) => { setAction(e.target.value); setPf(null); }} className={inputCls}>
+    <Modal
+      title="เครื่องมือจัดการคนขับ"
+      onClose={() => { if (!busy) onClose(); }}
+      footer={
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={busy}
+          className="focus-ring px-4 min-h-[44px] text-sm font-medium rounded-lg border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50"
+        >
+          ปิด
+        </button>
+      }
+    >
+      <p className="text-sm text-ink-muted mb-4">ตรวจสอบก่อนดำเนินการ · ทุกการเปลี่ยนแปลงถูกบันทึกประวัติ</p>
+
+      <div className="space-y-3">
+        <FormField label="การดำเนินการ">
+          {ctl => (
+            <select
+              {...ctl}
+              value={action}
+              onChange={(e) => { setAction(e.target.value); setPf(null); }}
+              className={selectCls}
+            >
               {ACTIONS.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-ink-muted mb-1">รหัสผู้ใช้คนขับ (user id)</label>
-            <input value={userId} onChange={(e) => { setUserId(e.target.value); setPf(null); }} className={inputCls} />
-          </div>
-          {action === 'REASSIGN_DRIVER_VEHICLE' && (
-            <div>
-              <label className="block text-xs font-medium text-ink-muted mb-1">รถปลายทาง (vehicle id)</label>
-              <input value={vehicleId} onChange={(e) => { setVehicleId(e.target.value); setPf(null); }} className={inputCls} />
-            </div>
           )}
-          <button
-            onClick={runPreflight}
-            disabled={busy}
-            className="w-full min-h-[44px] inline-flex items-center justify-center rounded-lg border border-surface-border bg-surface text-ink text-sm font-medium py-2.5 transition hover:bg-brand-50 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-          >
-            ตรวจสอบก่อนดำเนินการ
-          </button>
+        </FormField>
 
-          {pf && (
-            <AlertBanner variant={pfVariant} title={pf.message_th}>
-              {pf.canonical_user_id && <span>บัญชีหลัก: #{pf.canonical_user_id}</span>}
-            </AlertBanner>
-          )}
-          {pf && pf.classification === 'TARGET_VEHICLE_HAS_ACTIVE_DRIVER' && (
-            <label className="flex items-center gap-2 text-xs text-ink"><input type="checkbox" checked={endTarget} onChange={(e) => setEndTarget(e.target.checked)} className="accent-warn min-h-[20px] min-w-[20px]" /> ยืนยันสิ้นสุดงานคนขับเดิมของรถคันนี้</label>
-          )}
-          {pf && pf.allowed && (
-            <>
-              <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="เหตุผล *" className={inputCls} />
-              <button
-                onClick={runAction}
-                disabled={busy || !reason.trim()}
-                className="w-full min-h-[44px] inline-flex items-center justify-center rounded-lg bg-brand-600 text-white text-sm font-semibold py-2.5 transition hover:bg-brand-700 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-              >
-                ยืนยันดำเนินการ
-              </button>
-            </>
-          )}
-        </div>
-        <button onClick={onClose} className="w-full min-h-[44px] text-ink-muted hover:text-ink text-sm py-2 mt-3 transition">ปิด</button>
+        <FormField
+          label="รหัสผู้ใช้คนขับ"
+          required
+          helper="user id ในระบบ"
+          inputMode="numeric"
+          value={userId}
+          onChange={(v) => { setUserId(v); setPf(null); }}
+        />
+
+        {action === 'REASSIGN_DRIVER_VEHICLE' && (
+          <FormField
+            label="รถปลายทาง"
+            required
+            helper="vehicle id"
+            value={vehicleId}
+            onChange={(v) => { setVehicleId(v); setPf(null); }}
+          />
+        )}
+
+        <button
+          type="button"
+          onClick={runPreflight}
+          disabled={busy}
+          className="focus-ring w-full min-h-[44px] inline-flex items-center justify-center rounded-lg border border-surface-border bg-surface text-ink text-sm font-medium transition hover:bg-brand-50 disabled:opacity-40 disabled:pointer-events-none"
+        >
+          {busy && !pf ? 'กำลังตรวจสอบ…' : 'ตรวจสอบก่อนดำเนินการ'}
+        </button>
+
+        {pf && (
+          <AlertBanner variant={pfVariant} title={pf.message_th}>
+            {pf.canonical_user_id && <span>บัญชีหลัก: #{pf.canonical_user_id}</span>}
+          </AlertBanner>
+        )}
+
+        {pf && pf.classification === 'TARGET_VEHICLE_HAS_ACTIVE_DRIVER' && (
+          <label className="flex items-center gap-2 px-1 min-h-[44px] text-sm text-ink cursor-pointer">
+            <input
+              type="checkbox"
+              checked={endTarget}
+              onChange={(e) => setEndTarget(e.target.checked)}
+              className="focus-ring w-5 h-5 rounded border-surface-border accent-warn"
+            />
+            ยืนยันสิ้นสุดงานคนขับเดิมของรถคันนี้
+          </label>
+        )}
+
+        {pf && pf.allowed && (
+          <>
+            <FormField
+              label="เหตุผล"
+              required
+              helper="บันทึกลงประวัติการเปลี่ยนแปลง"
+              value={reason}
+              onChange={setReason}
+            />
+            <button
+              type="button"
+              onClick={runAction}
+              disabled={busy || !reason.trim()}
+              className="focus-ring w-full min-h-[44px] inline-flex items-center justify-center rounded-lg bg-brand-600 text-white text-sm font-semibold transition hover:bg-brand-700 active:bg-brand-800 disabled:opacity-40 disabled:pointer-events-none"
+            >
+              {busy ? 'กำลังดำเนินการ…' : 'ยืนยันดำเนินการ'}
+            </button>
+          </>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }

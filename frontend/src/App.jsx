@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Lock, Bus } from 'lucide-react';
 import { AuthProvider, useAuth } from './hooks/useAuth';
@@ -83,6 +83,7 @@ const ReportsLayout        = lazy(() => import('./pages/reports/ReportsLayout'))
 const DailyReport          = lazy(() => import('./pages/reports/DailyReport'));
 const MonthlyReport        = lazy(() => import('./pages/reports/MonthlyReport'));
 const SummaryReport        = lazy(() => import('./pages/reports/SummaryReport'));
+const PolicyReport         = lazy(() => import('./pages/reports/PolicyReport'));
 
 // Transport
 const TransportLayout      = lazy(() => import('./pages/transport/TransportLayout'));
@@ -168,6 +169,13 @@ function VisitTracker() {
   return null;
 }
 
+function ManualRedirect() {
+  useEffect(() => {
+    window.location.replace('/manual/index.html');
+  }, []);
+  return <RouteFallback />;
+}
+
 // ── Role-based redirect after login ─────────────────────────────────────────
 function RootRedirect() {
   const { user, loading } = useAuth();
@@ -189,6 +197,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/change-password" element={<ChangePassword />} />
+          <Route path="/manual/*" element={<ManualRedirect />} />
 
           {/* Driver module */}
           <Route
@@ -295,6 +304,7 @@ export default function App() {
             <Route path="daily"   element={<DailyReport />} />
             <Route path="monthly" element={<MonthlyReport />} />
             <Route path="summary" element={<SummaryReport />} />
+            <Route path="policy"  element={<PolicyReport />} />
           </Route>
 
           {/* Transport module */}

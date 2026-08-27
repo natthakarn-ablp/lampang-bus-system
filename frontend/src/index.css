@@ -19,6 +19,55 @@
 @tailwind utilities;
 
 @layer utilities {
+  /* ── Focus ────────────────────────────────────────────────────────────────
+     One focus treatment for the whole app. Every interactive element uses
+     `.focus-ring` (light surfaces) or `.focus-ring-inverse` (navy shell), so
+     keyboard users get the same visible affordance everywhere instead of the
+     per-component ring styles that had drifted apart.
+     :focus-visible only — pointer users never see it.
+     ORDER MATTERS. `.focus-ring:focus` and `.focus-ring:focus-visible` have
+     the same specificity, so whichever comes last wins — and every
+     :focus-visible element also matches :focus. With the reset written after
+     the ring, `outline: none` silently won and the focus ring never rendered
+     anywhere in the app. The reset goes first. */
+  .focus-ring:focus,
+  .focus-ring-inverse:focus {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    outline: 2px solid theme('colors.brand.600');
+    outline-offset: 2px;
+    border-radius: inherit;
+  }
+  .focus-ring-inverse:focus-visible {
+    outline: 2px solid #FFFFFF;
+    outline-offset: 2px;
+    border-radius: inherit;
+  }
+
+  /* ── Touch targets ────────────────────────────────────────────────────────
+     WCAG 2.2 AA (2.5.8) minimum. Applied to controls whose visual box is
+     intentionally smaller than the hit area (icon buttons, table row actions):
+     the element keeps its size, the ::after pad extends the tappable box. */
+  .tap-target {
+    position: relative;
+  }
+  .tap-target::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ── Mobile safe areas (LIFF / notched phones) ───────────────────────── */
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .pt-safe { padding-top:    env(safe-area-inset-top, 0px); }
+
   .text-balance {
     text-wrap: balance;
   }
@@ -56,4 +105,31 @@
     scroll-behavior: auto !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* ── Leaflet map chrome ──
+   Leaflet ships 30x30 zoom buttons, which fail WCAG 2.5.8 (44x44) on the
+   phone screens the drivers actually use. Restyling them here keeps every map
+   page consistent instead of each one patching its own container.
+
+   Not raised: the marker pins (25x41) and the attribution links. A pin's size
+   IS its position — enlarging it moves the point it claims to mark — and the
+   attribution is required link text, both covered by the 2.5.8 "essential"
+   exception. Panning and the point list give keyboard and touch users a route
+   to the same information. */
+/* Leaflet's own rules are injected after this stylesheet, so the override
+   needs the extra class to win rather than relying on order. */
+.leaflet-container .leaflet-bar a.leaflet-control-zoom-in,
+.leaflet-container .leaflet-bar a.leaflet-control-zoom-out,
+.leaflet-touch .leaflet-bar a.leaflet-control-zoom-in,
+.leaflet-touch .leaflet-bar a.leaflet-control-zoom-out {
+  width: 44px;
+  height: 44px;
+  line-height: 44px;
+  font-size: 1.25rem;
+}
+
+.leaflet-container .leaflet-bar a:focus-visible {
+  outline: 2px solid #1D4ED8;
+  outline-offset: 2px;
 }

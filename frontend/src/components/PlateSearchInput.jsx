@@ -145,8 +145,13 @@ export default function PlateSearchInput({
   }
 
   const wrapperCls = className || 'w-full sm:w-64';
+  // The default now makes room for the icon this component already renders,
+  // so a caller no longer has to override the whole class just to add left
+  // padding — the one that did lost the 44px height and the 16px mobile text.
   const inputCls = inputClassName ||
-    'w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400';
+    `focus-ring w-full border border-surface-border bg-surface-raised rounded-lg ${
+      leadingIcon ? 'pl-10 pr-4' : 'px-4'
+    } min-h-[44px] text-base sm:text-sm text-ink transition`;
 
   return (
     <div ref={wrapRef} className={`relative ${wrapperCls}`}>

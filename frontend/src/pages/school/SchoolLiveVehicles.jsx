@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Map as MapIcon, Bus, Activity, Pause, WifiOff, AlertTriangle } from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection, LiveKpiCard } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
 import LoadingState from '../../components/LoadingState';
@@ -100,11 +101,11 @@ export default function SchoolLiveVehicles() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-          <MapIcon className="w-6 h-6 text-brand" strokeWidth={2} />
-          ตำแหน่งปัจจุบัน
-        </h1>
+      <PageHeader
+        title="ตำแหน่งปัจจุบัน"
+        subtitle="ตำแหน่งล่าสุดของรถรับส่งของโรงเรียน"
+      />
+      <div className="-mt-4">
         <p className="text-sm text-ink-muted mt-1">
           แสดงตำแหน่งล่าสุดของรถที่ให้บริการโรงเรียนของคุณ · อัปเดตทุก 15 วินาที
           {generatedAt && (
@@ -113,7 +114,7 @@ export default function SchoolLiveVehicles() {
             </span>
           )}
         </p>
-      </header>
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <LiveKpiCard icon={Activity}        label="ออนไลน์"        value={counts.online}  variant="success" />

@@ -34,18 +34,23 @@ export default function PageHeader({
   iconColor = 'blue',
   actions,
   breadcrumb,
+  // Full-bleed map pages put the header in a fixed strip above a flex-1 map.
+  // The default bottom margin and title size would eat map space there, so
+  // those pages opt into a tighter variant rather than rolling their own
+  // header and drifting from this one.
+  compact = false,
 }) {
   const toneClass = ICON_TONES[iconColor] || ICON_TONES.blue;
 
   return (
-    <div className="mb-6 animate-fade-in-up">
+    <div className={compact ? 'animate-fade-in-up' : 'mb-6 animate-fade-in-up'}>
       {breadcrumb && breadcrumb.length > 0 && (
-        <nav aria-label="breadcrumb" className="mb-2 flex items-center gap-1.5 text-xs text-gray-500">
+        <nav aria-label="breadcrumb" className="mb-2 flex items-center gap-1.5 text-caption text-ink-muted">
           {breadcrumb.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1.5">
-              {i > 0 && <span className="text-gray-300">/</span>}
+              {i > 0 && <span className="text-surface-border">/</span>}
               {crumb.to ? (
-                <Link to={crumb.to} className="hover:text-blue-600 transition">{crumb.label}</Link>
+                <Link to={crumb.to} className="focus-ring rounded hover:text-brand-600 transition">{crumb.label}</Link>
               ) : (
                 <span>{crumb.label}</span>
               )}
@@ -62,12 +67,12 @@ export default function PageHeader({
             </div>
           )}
           <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-semibold text-gray-900 leading-tight truncate">{title}</h1>
+            <h1 className={`font-semibold text-ink leading-tight truncate ${compact ? 'text-lg' : 'text-xl sm:text-2xl'}`}>{title}</h1>
             {subtitle && (
-              <p className="text-sm text-gray-600 mt-0.5 truncate">{subtitle}</p>
+              <p className="text-sm text-ink-muted mt-0.5 text-pretty">{subtitle}</p>
             )}
             {meta && (
-              <p className="text-xs text-gray-400 mt-0.5">{meta}</p>
+              <p className="text-caption text-ink-muted mt-1">{meta}</p>
             )}
           </div>
         </div>

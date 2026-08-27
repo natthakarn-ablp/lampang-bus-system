@@ -35,9 +35,14 @@ describe('classifier confirm-flags (10.13B-4)', () => {
 // per-row student lookup (or undefined → "gone"). vehicleActive controls the
 // reactivate vehicle re-check.
 function makePool({ batchSchool = 'S1', guardianRows = [], reactRows = [], insertRows = [], studentByCode = {}, vehicleActive = true }) {
+  const rowsById = new Map([...guardianRows, ...reactRows, ...insertRows].map((r) => [r.id, r]));
   const conn = () => ({
     beginTransaction: async () => {}, commit: async () => {}, rollback: async () => {}, release: () => {},
     query: async (sql, params) => {
+      if (/FROM import_batch_rows WHERE id = \? FOR UPDATE/.test(sql)) {
+        const locked = rowsById.get(params[0]);
+        return locked ? [[{ ...locked, applied_at: null }]] : [[]];
+      }
       if (/FROM students WHERE school_id = \? AND student_code/.test(sql)) {
         const s = studentByCode[params[1]];
         return [s ? [s] : []];
@@ -58,6 +63,7 @@ function makePool({ batchSchool = 'S1', guardianRows = [], reactRows = [], inser
     getConnection: async () => conn(),
     query: async (sql) => {
       if (/FROM import_batches WHERE id/.test(sql)) return [[{ id: 1, school_id: batchSchool }]];
+      if (/FROM terms/.test(sql)) return [[{ id: '2569-1' }]];
       if (/classification = 'GUARDIAN_MISMATCH'/.test(sql)) return [guardianRows];
       if (/classification = 'SOFT_DELETED_SAME_SCHOOL_REACTIVATE'/.test(sql)) return [reactRows];
       if (/classification IN \('INSERT_NEW'/.test(sql)) return [insertRows];

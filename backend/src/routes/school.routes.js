@@ -18,6 +18,9 @@ const schoolSvc = require('../services/school.service');
 const leaveSvc = require('../services/leave.service');
 const { classifyStudentImport } = require('../utils/studentImport');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
+const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
+const { parseCsvRecords } = require('../utils/csv');
+const { readWorkbookSafely } = require('../utils/xlsxPreflight');
 const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
@@ -31,40 +34,7 @@ const checkinSvc = require('../services/checkin.service');
  * @returns {string[][]} array of rows, each an array of field strings
  */
 function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; }
-        else { inQuotes = false; }
-      } else {
-        field += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ',') {
-        row.push(field); field = '';
-      } else if (ch === '\n') {
-        row.push(field); rows.push(row); row = []; field = '';
-      } else if (ch === '\r') {
-        // skip — handled by \n
-      } else {
-        field += ch;
-      }
-    }
-  }
-  // last field/row if file doesn't end with newline
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-  // drop empty trailing rows
-  return rows.filter(r => r.some(c => c.trim() !== ''));
+  return parseCsvRecords(text);
 }
 
 /**
@@ -1401,7 +1371,7 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
       // Medium fix: use a proper RFC 4180 CSV parser that handles quoted
       // fields (e.g. parent names containing commas like "สมชาย, สมหญิง")
       // instead of split(',') which would shift columns silently.
-      const raw = fs.readFileSync(req.file.path, 'utf-8').replace(/^\uFEFF/, '');
+      const raw = decodeCsvBuffer(fs.readFileSync(req.file.path)).replace(/^\uFEFF/, '');
       const csvRows = parseCsv(raw);
       if (csvRows.length < 2) return sendError(res, 'ไม่พบข้อมูลในไฟล์ (ไม่มีแถวข้อมูล)', [], 400);
 
@@ -1436,26 +1406,44 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
     } else {
       // Parse Excel
       const wb = new ExcelJS.Workbook();
-      await wb.xlsx.readFile(req.file.path);
+      await readWorkbookSafely(wb, req.file.path);
       const ws = wb.getWorksheet(1) || wb.worksheets[0];
       if (!ws) return sendError(res, 'ไม่พบข้อมูลในไฟล์', [], 400);
 
+      const headerValues = (ws.getRow(1).values || []).slice(1).map((v) => (v == null ? '' : String(v).replace(/\*/g, '').trim()));
+      const colMap = {};
+      headerValues.forEach((h, i) => {
+        if (h.includes('รหัสนักเรียน')) colMap.id = i + 1;
+        else if (h.includes('คำนำหน้า')) colMap.prefix = i + 1;
+        else if (h === 'ชื่อ') colMap.first_name = i + 1;
+        else if (h.includes('นามสกุล')) colMap.last_name = i + 1;
+        else if (h === 'ชั้น' || h.includes('ระดับชั้น') || h.includes('ระดับ')) colMap.grade = i + 1;
+        else if (h === 'ห้อง') colMap.classroom = i + 1;
+        else if (h.includes('ทะเบียนรถ')) colMap.plate_no = i + 1;
+        else if (h.includes('ใช้บริการเช้า')) colMap.morning = i + 1;
+        else if (h.includes('ใช้บริการเย็น')) colMap.evening = i + 1;
+        else if (h.includes('ผู้ปกครอง') && !h.includes('เบอร์')) colMap.parent_name = i + 1;
+        else if (h.includes('เบอร์')) colMap.parent_phone = i + 1;
+      });
+
       ws.eachRow((row, rowNum) => {
         if (rowNum === 1) return;
-        const get = (col) => {
+        const get = (key) => {
+          const col = colMap[key];
+          if (!col) return '';
           const cell = row.getCell(col);
           return cell.value !== null && cell.value !== undefined ? String(cell.value).trim() : '';
         };
-        // Columns: 1=รหัส 2=คำนำหน้า 3=ชื่อ 4=นามสกุล 5=ชั้น 6=ห้อง 7=ผู้ปกครอง 8=เบอร์โทร 9=ทะเบียนรถ
-        rows.push({
+        const item = {
           rowNum,
-          id: get(1), prefix: get(2),
-          first_name: get(3), last_name: get(4),
-          grade: get(5), classroom: get(6),
-          parent_name: get(7), parent_phone: get(8),
-          plate_no: get(9),
-          morning: '', evening: '',
-        });
+          id: get('id'), prefix: get('prefix'),
+          first_name: get('first_name'), last_name: get('last_name'),
+          grade: get('grade'), classroom: get('classroom'),
+          plate_no: get('plate_no'),
+          morning: get('morning'), evening: get('evening'),
+          parent_name: get('parent_name'), parent_phone: get('parent_phone'),
+        };
+        if (item.id || item.first_name || item.last_name || item.plate_no || item.parent_name || item.parent_phone) rows.push(item);
       });
     }
 
@@ -1540,7 +1528,7 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
           }
         }
 
-        // Generate cid_hash placeholder (unique per row).
+        // Generate a synthetic cid_hash marker (unique per row, not a national-ID hash).
         // Audit 2026-06-18 (HIGH, fileupload-import): this used an undefined
         // `studentId` (it lives only in the PUT/DELETE handlers), throwing a
         // ReferenceError that rolled back the whole import → 500 every time. Use
@@ -1673,7 +1661,7 @@ router.get('/students/import/:batchId', requireFullSchoolScope, async (req, res,
 
 // POST /students/import/preview — analyse rows row-by-row, persist batch + rows,
 // return summary + classifications. Writes NO student/vehicle/parent data.
-router.post('/students/import/preview', requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
+router.post('/students/import/preview', importExportLimiter, requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return sendError(res, 'ไม่พบไฟล์ที่อัปโหลด', [], 400);
     // Phase 10.13B-1 — retained preview files may contain guardian PII; keep them
@@ -1681,8 +1669,11 @@ router.post('/students/import/preview', requireFullSchoolScope, importUpload.sin
     try { fs.chmodSync(req.file.path, 0o600); } catch { /* best-effort */ }
     const schoolId = resolveSchoolId(req);
     const importPreview = require('../services/studentImportPreview.service');
+    // Phase 10.15A — schools can opt in to auto-create missing vehicles during import.
+    const autoCreateVehicle = req.body && (req.body.auto_create_vehicle === 'true' || req.body.auto_create_vehicle === true);
     const out = await importPreview.runPreview(pool, {
       schoolId, importedBy: req.user.id, filePath: req.file.path, originalName: decodeUploadFilename(req.file.originalname),
+      autoCreateVehicle,
     });
     await logAudit({
       userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(out.batch_id),
@@ -1694,12 +1685,12 @@ router.post('/students/import/preview', requireFullSchoolScope, importUpload.sin
 });
 
 // POST /students/import/:batchId/apply — apply can_apply (INSERT) rows, idempotent.
-router.post('/students/import/:batchId/apply', requireFullSchoolScope, async (req, res, next) => {
+router.post('/students/import/:batchId/apply', importExportLimiter, requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     const batchId = parseInt(req.params.batchId, 10);
     // Phase 10.13B-4 — explicit apply modes; risky modes act only on selected rows.
-    const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate } = req.body || {};
+    const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate, auto_create_vehicle } = req.body || {};
     const VALID_MODES = ['insert_ready', 'update_guardian_confirmed', 'reactivate_student_confirmed', 'mixed_confirmed'];
     if (!VALID_MODES.includes(mode)) return sendError(res, 'โหมดการนำเข้าไม่ถูกต้อง', [], 400);
     const importPreview = require('../services/studentImportPreview.service');
@@ -1708,6 +1699,7 @@ router.post('/students/import/:batchId/apply', requireFullSchoolScope, async (re
       selectedRowIds: Array.isArray(selected_row_ids) ? selected_row_ids : [],
       confirmGuardianUpdate: !!confirm_guardian_update,
       confirmReactivate: !!confirm_reactivate,
+      autoCreateVehicle: !!auto_create_vehicle,
     });
     await logAudit({
       userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(batchId),
@@ -1739,7 +1731,7 @@ router.get('/students/import/:batchId/report', requireFullSchoolScope, async (re
 
 // POST /students/import/:batchId/rollback — soft-delete ONLY the students this
 // batch inserted (Phase 10.13B-5). Selected rows only; idempotent; audited.
-router.post('/students/import/:batchId/rollback', requireFullSchoolScope, async (req, res, next) => {
+router.post('/students/import/:batchId/rollback', importExportLimiter, requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     const batchId = parseInt(req.params.batchId, 10);
@@ -2060,3 +2052,9 @@ router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, nex
 });
 
 module.exports = router;
+
+// Exposed for unit testing only. These are PURE request-scope resolvers and the
+// linchpin of cross-school / grade isolation; attaching them to the router
+// object does not affect `app.use('/api/school', router)`.
+module.exports.resolveSchoolId = resolveSchoolId;
+module.exports.resolveGradeScope = resolveGradeScope;

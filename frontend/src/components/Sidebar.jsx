@@ -4,150 +4,140 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert, ShieldCheck, MapPin, Route, Clock, Calendar,
+  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
 import { PAGE_TITLES } from '../constants/uiLabels';
-import { motion } from 'motion/react';
 
 // section: string = section heading (not a link)
 // to + label + icon (lucide component) = nav link item
+//
+// Section vocabulary is shared across every role (Phase 2 of the redesign):
+//   ภาพรวม               — where the role lands; "what is today like"
+//   งานดำเนินการ          — things awaiting a decision or an action
+//   ข้อมูลหลัก            — the records the role owns / reads
+//   ตรวจสอบและสนับสนุน    — oversight, maps, integrity, audit
+//   รายงานและวิจัย        — reporting and analysis
+//   ตั้งค่าระบบ           — configuration
+// Only the GROUPING changed; every `to` from the previous menu is still here.
 
 const DRIVER_NAV = [
   { section: 'ภาพรวม' },
   { to: '/driver',             icon: BarChart3,      label: PAGE_TITLES.DRIVER_DASHBOARD },
-  { section: 'งานประจำวัน' },
+  { section: 'งานดำเนินการ' },
   { to: '/driver/shift',       icon: Bus,            label: 'เลือกรถและเริ่มรอบ' },
   { to: '/driver/pickup-map',  icon: Map,            label: 'แผนที่จุดรับส่ง' },
   { to: '/driver/requests',    icon: ClipboardList,  label: 'คำขอรายชื่อ' },
   { to: '/driver/vehicle-registration', icon: GraduationCap, label: 'รายชื่อเด็กในรถ' },
   { to: '/driver/applications', icon: CheckSquare,   label: 'สถานะส่งตรวจรถ' },
   { to: '/driver/emergency',   icon: AlertTriangle,  label: 'แจ้งเหตุฉุกเฉิน' },
-  { section: 'ข้อมูล' },
+  { section: 'ข้อมูลหลัก' },
   { to: '/driver/profile',     icon: User,           label: 'ข้อมูลคนขับ' },
 ];
 
-// Phase 8.2 — school main crossed 10 items after Phase 7.11/7.12; split
-// into smaller cluster-groups and turn on collapsible so daily-use
-// sections (ภาพรวม / นักเรียนและรถ / แผนที่และตำแหน่ง) stay above the fold.
 const SCHOOL_NAV = [
   { section: 'ภาพรวม' },
   { to: '/school',               icon: BarChart3,     label: PAGE_TITLES.SCHOOL_DASHBOARD },
-  { section: 'นักเรียนและรถรับส่ง' },
-  { to: '/school/students',      icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
-  { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
-  { to: '/school/vehicle-verification', icon: CheckSquare, label: 'ส่งตรวจและรับรองรถ' },
-  { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
-  { section: 'แผนที่และตำแหน่ง' },
-  { to: '/school/pickup-map',    icon: Map,           label: 'แผนที่จุดรับส่ง' },
-  { to: '/school/live-vehicles', icon: Activity,      label: 'ตำแหน่งปัจจุบัน' },
-  { section: 'คำขอและบัญชี' },
+  { section: 'งานดำเนินการ' },
   { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },
   { to: '/school/registration-review', icon: ClipboardList, label: 'ตรวจลงทะเบียนรถ' },
+  { to: '/school/vehicle-verification', icon: CheckSquare, label: 'ส่งตรวจและรับรองรถ' },
+  { section: 'ข้อมูลหลัก' },
+  { to: '/school/students',      icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
+  { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
+  { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
   { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
-  { section: 'ติดตามและบันทึก' },
+  { section: 'ตรวจสอบและสนับสนุน' },
+  { to: '/school/pickup-map',    icon: Map,           label: 'แผนที่จุดรับส่ง' },
+  { to: '/school/live-vehicles', icon: Activity,      label: 'ตำแหน่งปัจจุบัน' },
   { to: '/school/emergencies',   icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
-  { section: 'รายงาน' },
+  { section: 'รายงานและวิจัย' },
   { to: '/reports/daily',        icon: FileText,      label: 'รายงาน' },
 ];
 
-// Phase 8.2 — light grouping, no collapse (9 items). Surface the existing
-// /affiliation/schools route ("โรงเรียนในสังกัด") which was reachable but
-// not linked from the sidebar.
 const AFFILIATION_NAV = [
   { section: 'ภาพรวม' },
   { to: '/affiliation',             icon: BarChart3,     label: PAGE_TITLES.AFFILIATION_DASHBOARD },
-  { section: 'ข้อมูลในสังกัด' },
+  { section: 'งานดำเนินการ' },
+  { to: '/affiliation/transfer-requests', icon: Users,   label: 'คำขอโอนย้ายนักเรียน' },
+  { to: '/affiliation/vehicle-requests',  icon: Wrench,  label: 'คำขอเกี่ยวกับรถ' },
+  { section: 'ข้อมูลหลัก' },
   { to: '/affiliation/schools',     icon: Building2,     label: 'โรงเรียนในสังกัด' },
   { to: '/affiliation/students',    icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/affiliation/vehicles',    icon: Bus,           label: 'รถรับส่ง' },
-  // Phase 10.8UX-B-1 — folded the orphan "คำขอและบัญชี" section (single
-  // item) into "ข้อมูลในสังกัด" so the sidebar doesn't carry a one-item
-  // section header. Route + permission unchanged.
   { to: '/affiliation/accounts',    icon: Key,           label: 'เพิ่มโรงเรียนใหม่' },
-  { section: 'คำขอและอนุมัติ' },
-  { to: '/affiliation/transfer-requests', icon: Users,   label: 'คำขอโอนย้ายนักเรียน' },
-  { to: '/affiliation/vehicle-requests',  icon: Wrench,  label: 'คำขอเกี่ยวกับรถ' },
-  { section: 'แผนที่และตำแหน่ง' },
+  { section: 'ตรวจสอบและสนับสนุน' },
   { to: '/affiliation/live-vehicles', icon: Activity,    label: 'ตำแหน่งปัจจุบัน' },
   { to: '/affiliation/pickup-map',  icon: Map,           label: 'แผนที่จุดรับส่ง' },
-  { section: 'ติดตามและบันทึก' },
   { to: '/affiliation/emergencies', icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/affiliation/audit-log',   icon: FileText,      label: 'ประวัติการแก้ไข' },
-  { section: 'รายงาน' },
+  { section: 'รายงานและวิจัย' },
   { to: '/reports/daily',           icon: FileText,      label: 'รายงาน' },
 ];
 
-// Phase 8.2 — split the previous broad "ข้อมูล" group (6 items) into
-// "ข้อมูลพื้นฐาน" (read-only catalog) + "แผนที่และการกำกับติดตาม"
-// (live + pickup map). Same items, clearer mental model.
 const PROVINCE_NAV = [
   { section: 'ภาพรวม' },
   { to: '/province',              icon: BarChart3,     label: PAGE_TITLES.PROVINCE_DASHBOARD },
-  { section: 'ข้อมูลพื้นฐาน' },
+  { section: 'ข้อมูลหลัก' },
   { to: '/province/affiliations', icon: Landmark,      label: 'สังกัด' },
   { to: '/province/schools',      icon: Building2,     label: 'โรงเรียน' },
   { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/province/vehicles',     icon: Bus,           label: 'รถรับส่ง' },
-  { section: 'แผนที่และการกำกับติดตาม' },
+  { section: 'ตรวจสอบและสนับสนุน' },
   { to: '/province/live-vehicles', icon: Activity,     label: 'ตำแหน่งปัจจุบัน' },
   { to: '/province/pickup-map',   icon: Map,           label: 'แผนที่จุดรับส่ง' },
-  { section: 'ติดตามและบันทึก' },
   { to: '/province/readiness',    icon: ShieldCheck,   label: 'ความพร้อมเปิดใช้งาน' },
   { to: '/admin/route-deviations', icon: Route,        label: 'การเบี่ยงเส้นทาง' },
   { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
-  { section: 'รายงาน' },
+  { section: 'รายงานและวิจัย' },
   { to: '/reports/daily',         icon: FileText,      label: 'รายงาน' },
 ];
 
 const TRANSPORT_NAV = [
   { section: 'ภาพรวม' },
   { to: '/transport',              icon: BarChart3,    label: 'ภาพรวมตรวจสภาพรถ' },
-  { to: '/transport/pickup-map',   icon: Map,          label: 'แผนที่จุดรับส่ง' },
-  { section: 'บันทึก' },
+  { section: 'งานดำเนินการ' },
   { to: '/transport/verification', icon: CheckSquare,  label: 'ตรวจรับรองรถ' },
   { to: '/transport/inspections',  icon: ClipboardList, label: 'บันทึกตรวจสภาพ' },
+  { section: 'ตรวจสอบและสนับสนุน' },
+  { to: '/transport/pickup-map',   icon: Map,          label: 'แผนที่จุดรับส่ง' },
 ];
 
-// Phase 8.2 — the old "ข้อมูลจังหวัด" mixed read-only province views with
-// management tools for school/affiliation/transport (per Phase 8.1
-// finding #2). Split into a pure province "มุมมองจังหวัด" group and a
-// dedicated "จัดการระบบ" group for cross-role admin tools, and merge
-// the analytics/reports cluster into "รายงานและวิเคราะห์".
 const ADMIN_NAV = [
   { section: 'ภาพรวม' },
   { to: '/admin',                 icon: Home,        label: 'ศูนย์ควบคุมระบบ' },
-  { section: 'จัดการระบบ' },
+  { section: 'งานดำเนินการ' },
+  { to: '/admin/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },
+  { to: '/admin/vehicle-requests', icon: Wrench,     label: 'คำขอเกี่ยวกับรถ' },
+  { section: 'ข้อมูลหลัก' },
   { to: '/admin/users',           icon: Users,       label: 'จัดการผู้ใช้งาน' },
   { to: '/school',                icon: Building2,   label: 'จัดการโรงเรียน' },
   { to: '/affiliation/accounts',  icon: Key,         label: 'เพิ่มโรงเรียนใหม่' },
-  { to: '/transport',             icon: Wrench,      label: 'ตรวจสภาพรถ' },
+  { to: '/province',              icon: Map,         label: 'ภาพรวมจังหวัด' },
+  { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
+  { to: '/province/vehicles',     icon: Bus,         label: 'รถรับส่ง' },
   { section: 'ตรวจสอบและสนับสนุน' },
   { to: '/admin/readiness',       icon: ShieldCheck, label: 'ความพร้อมเปิดใช้งาน' },
-  { to: '/admin/pickup-points',   icon: Map,         label: 'ตรวจสอบจุดรับส่ง' },
+  { to: '/admin/pickup-points',   icon: MapPin,      label: 'ตรวจสอบจุดรับส่ง' },
   { to: '/admin/live-vehicles',   icon: ShieldAlert, label: 'ตรวจสอบตำแหน่งรถ' },
-  { to: '/admin/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },
-  { to: '/admin/vehicle-requests', icon: Wrench,     label: 'คำขอเกี่ยวกับรถ' },
   { to: '/admin/driver-integrity', icon: ShieldAlert, label: 'สุขภาพข้อมูลคนขับ' },
   { to: '/admin/geofences',       icon: MapPin,      label: 'จุดเตือนภัย (Geofences)' },
   { to: '/admin/route-deviations', icon: Route,      label: 'การเบี่ยงเส้นทาง' },
   { to: '/admin/audit-logs',      icon: FileText,    label: 'ประวัติการใช้งาน' },
   { to: '/admin/system-health',   icon: Activity,    label: 'สุขภาพระบบ' },
-  { to: '/admin/term-settings',   icon: Calendar,    label: 'ภาคเรียนปัจจุบัน' },
-  { section: 'มุมมองจังหวัด' },
-  { to: '/province',              icon: Map,         label: 'ภาพรวมจังหวัด' },
-  { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
-  { to: '/province/vehicles',     icon: Bus,         label: 'รถรับส่ง' },
-  { section: 'รายงานและวิเคราะห์' },
+  { to: '/transport',             icon: Wrench,      label: 'ตรวจสภาพรถ' },
+  { section: 'รายงานและวิจัย' },
   { to: '/admin/measurement',     icon: Ruler,       label: 'กรอบวัดผลระบบ' },
   { to: '/admin/research',        icon: TrendingUp,  label: 'เปรียบเทียบ Baseline' },
   { to: '/admin/research-export', icon: Package,     label: 'ส่งออกข้อมูลวิจัย' },
   { to: '/admin/evaluation',      icon: Target,      label: 'ประเมินผลแยก Role' },
   { to: '/admin/executive',       icon: BarChart3,   label: 'สรุปผู้บริหาร' },
   { to: '/reports/daily',         icon: FileText,    label: 'รายงาน' },
+  { section: 'ตั้งค่าระบบ' },
+  { to: '/admin/term-settings',   icon: Calendar,    label: 'ภาคเรียนปัจจุบัน' },
 ];
 
 const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATION_NAV, province: PROVINCE_NAV, transport: TRANSPORT_NAV, admin: ADMIN_NAV };
@@ -195,10 +185,9 @@ function navItemsForUser(user, features) {
   return deduped.filter(item => item.section || !TEACHER_BLOCKED_PATHS.has(item.to));
 }
 
-// Phase 8.2 — collapsible groups for roles that crossed the 10-item
-// threshold (admin always; school main after 7.11/7.12 brought it to 11
-// items). School grade teachers see only ~8 filtered items, so they keep
-// static headers so the active section is always visible.
+// Collapsible groups for roles whose menu crossed the 10-item threshold.
+// Grade teachers see ~8 filtered items, so they keep static headers and the
+// active section is always visible.
 function isCollapsibleForUser(user) {
   if (!user) return false;
   if (user.role === 'admin') return true;
@@ -221,8 +210,8 @@ function buildGroups(items) {
       current.items.push(item);
     }
   }
-  // Phase 8.2 — drop section headers whose items were all filtered out
-  // (e.g. teacher-blocked routes). Keeps the grade-teacher sidebar tight.
+  // Drop section headers whose items were all filtered out (e.g.
+  // teacher-blocked routes). Keeps the grade-teacher sidebar tight.
   return groups.filter(g => g.items.length > 0);
 }
 
@@ -243,14 +232,15 @@ function readStoredSections() {
   }
 }
 
-export default function Sidebar({ onClose }) {
+export default function Sidebar({ onClose, collapsed = false }) {
   const { user, features, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
   const groups = useMemo(() => buildGroups(navItemsForUser(user, features)), [user?.role, user?.grade_scope, user?.gradeScope, features]);
   const teacherGrade = getGradeScope(user);
-  const useCollapsible = isCollapsibleForUser(user);
+  // In rail mode every group is flattened to icons, so collapsing is moot.
+  const useCollapsible = isCollapsibleForUser(user) && !collapsed;
 
   const activeGroupKey = useMemo(() => {
     if (!useCollapsible) return null;
@@ -289,37 +279,45 @@ export default function Sidebar({ onClose }) {
   }
 
   return (
-    <aside className="w-full md:w-56 shrink-0 h-full bg-brand-800 text-white flex flex-col">
+    <aside
+      className={`h-full shrink-0 bg-navy-700 text-white flex flex-col ${
+        collapsed ? 'w-full md:w-sidebar-rail' : 'w-full md:w-sidebar'
+      }`}
+      aria-label="เมนูหลัก"
+    >
       {/* Brand */}
-      <div className="px-5 py-5 border-b border-brand-700 shrink-0 flex items-start justify-between">
-        <div>
-          <p className="font-semibold text-sm leading-tight">ระบบรถรับส่งนักเรียน</p>
-          <p className="text-brand-200 text-xs mt-0.5">จังหวัดลำปาง</p>
-        </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            className="md:hidden -mr-2 -mt-1 inline-flex items-center justify-center w-10 h-10 rounded-md hover:bg-brand-700 active:bg-brand-600 transition"
-            aria-label="ปิดเมนู"
-          >
-            <X className="w-5 h-5" strokeWidth={2} />
-          </button>
+      <div className={`shrink-0 border-b border-navy-600/70 flex items-start justify-between ${collapsed ? 'px-0 py-4 justify-center' : 'px-5 py-4'}`}>
+        {collapsed ? (
+          <span className="w-10 h-10 rounded-xl bg-white/10 inline-flex items-center justify-center" title="ระบบรถรับส่งนักเรียน จังหวัดลำปาง">
+            <Bus className="w-5 h-5" strokeWidth={2} aria-hidden="true" />
+            <span className="sr-only">ระบบรถรับส่งนักเรียน จังหวัดลำปาง</span>
+          </span>
+        ) : (
+          <>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm leading-tight">ระบบรถรับส่งนักเรียน</p>
+              <p className="text-navy-200 text-xs mt-0.5">จังหวัดลำปาง</p>
+              {teacherGrade && (
+                <p className="text-[11px] text-navy-100 mt-1">
+                  ครูประจำสายชั้น · ขอบเขต {teacherGrade}
+                </p>
+              )}
+            </div>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="focus-ring-inverse md:hidden -mr-2 -mt-1 inline-flex items-center justify-center w-11 h-11 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition"
+                aria-label="ปิดเมนู"
+              >
+                <X className="w-5 h-5" strokeWidth={2} />
+              </button>
+            )}
+          </>
         )}
       </div>
 
-      {/* User info */}
-      <div className="px-5 py-3 border-b border-brand-700 shrink-0">
-        <p className="text-xs text-brand-200">เข้าสู่ระบบในฐานะ</p>
-        <p className="font-semibold text-sm truncate">{user?.display_name || user?.username}</p>
-        {teacherGrade && (
-          <p className="text-[11px] text-brand-100 mt-0.5">
-            ครูประจำสายชั้น · ขอบเขต {teacherGrade}
-          </p>
-        )}
-      </div>
-
-      {/* Navigation — collapsible only when isCollapsibleForUser, flat otherwise */}
-      <nav className="flex-1 overflow-y-auto px-3 py-3">
+      {/* Navigation — the only scroll container in the shell besides <main> */}
+      <nav className={`flex-1 overflow-y-auto overscroll-contain py-3 ${collapsed ? 'px-2' : 'px-3'}`}>
         {groups.map((group, gi) => {
           const key = group.section || `__g${gi}`;
           const hasHeader = !!group.section;
@@ -328,13 +326,16 @@ export default function Sidebar({ onClose }) {
           const panelId = `sidebar-section-${gi}`;
           return (
             <div key={key}>
-              {hasHeader && sectionCollapsible && (
+              {/* Rail mode: a hairline stands in for the section header */}
+              {collapsed && gi > 0 && <div className="my-2 mx-2 border-t border-navy-600/60" />}
+
+              {!collapsed && hasHeader && sectionCollapsible && (
                 <button
                   type="button"
                   onClick={() => toggleSection(key)}
                   aria-expanded={isOpen}
                   aria-controls={panelId}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-[10px] font-semibold uppercase tracking-wider text-brand-300 hover:text-brand-100 hover:bg-brand-700/40 active:bg-brand-700/60 transition ${gi === 0 ? 'mt-0' : 'mt-2'}`}
+                  className={`focus-ring-inverse w-full flex items-center justify-between px-3 py-2 min-h-[44px] rounded-md text-[11px] font-semibold tracking-wide text-navy-200 hover:text-white hover:bg-navy-600/50 active:bg-navy-600 transition ${gi === 0 ? 'mt-0' : 'mt-2'}`}
                 >
                   <span>{group.section}</span>
                   <ChevronDown
@@ -344,11 +345,12 @@ export default function Sidebar({ onClose }) {
                   />
                 </button>
               )}
-              {hasHeader && !sectionCollapsible && (
-                <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-brand-300 ${gi === 0 ? 'pt-1' : 'pt-4'}`}>
+              {!collapsed && hasHeader && !sectionCollapsible && (
+                <p className={`px-3 pb-1 text-[11px] font-semibold tracking-wide text-navy-200 ${gi === 0 ? 'pt-1' : 'pt-4'}`}>
                   {group.section}
                 </p>
               )}
+
               <div
                 id={panelId}
                 className={
@@ -365,23 +367,34 @@ export default function Sidebar({ onClose }) {
                       to={item.to}
                       end={item.to.split('/').length === 2}
                       tabIndex={isOpen ? 0 : -1}
+                      title={collapsed ? item.label : undefined}
                       className={({ isActive }) =>
-                        `relative flex items-center gap-2.5 px-4 py-2.5 rounded-lg text-sm transition mb-0.5 min-h-[40px] ${
-                          isActive ? 'text-brand-800 font-semibold' : 'text-brand-50 hover:bg-brand-700 active:bg-brand-600'
+                        `focus-ring-inverse group relative flex items-center rounded-lg text-sm transition mb-0.5 min-h-[44px] ${
+                          collapsed ? 'justify-center px-0' : 'gap-2.5 pl-4 pr-3'
+                        } ${
+                          isActive
+                            // Active = tinted panel + a 3px left accent, not a
+                            // full white slab. Reads clearly against navy while
+                            // keeping the rail visually calm.
+                            ? 'bg-white/12 text-white font-semibold'
+                            : 'text-navy-50 hover:bg-white/8 hover:text-white active:bg-white/15'
                         }`
                       }
                     >
                       {({ isActive }) => (
                         <>
                           {isActive && (
-                            <motion.span
-                              layoutId="sidebar-active"
-                              className="absolute inset-0 rounded-lg bg-white"
-                              transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                            <span
+                              className={`absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-white ${collapsed ? 'left-0' : ''}`}
+                              aria-hidden="true"
                             />
                           )}
-                          {item.icon && <item.icon className="w-4 h-4 shrink-0 relative z-10" strokeWidth={2} />}
-                          <span className="truncate relative z-10">{item.label}</span>
+                          {item.icon && <item.icon className="w-[18px] h-[18px] shrink-0" strokeWidth={isActive ? 2.4 : 2} aria-hidden="true" />}
+                          {collapsed ? (
+                            <span className="sr-only">{item.label}</span>
+                          ) : (
+                            <span className="truncate">{item.label}</span>
+                          )}
                         </>
                       )}
                     </NavLink>
@@ -393,19 +406,25 @@ export default function Sidebar({ onClose }) {
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="px-5 py-3 border-t border-brand-700 shrink-0">
-        <button onClick={handleLogout}
-          className="w-full text-sm text-brand-100 hover:text-white hover:bg-brand-700 active:bg-brand-600 rounded-lg px-4 py-2.5 min-h-[40px] transition">
-          ออกจากระบบ
+      {/* Logout — fixed position at the bottom, never scrolls away */}
+      <div className={`shrink-0 border-t border-navy-600/70 ${collapsed ? 'px-2 py-3' : 'px-3 py-3'}`}>
+        <button
+          onClick={handleLogout}
+          title={collapsed ? 'ออกจากระบบ' : undefined}
+          className={`focus-ring-inverse w-full inline-flex items-center rounded-lg text-sm text-navy-50 hover:bg-white/10 hover:text-white active:bg-white/15 min-h-[44px] transition ${
+            collapsed ? 'justify-center px-0' : 'gap-2.5 px-4'
+          }`}
+        >
+          <LogOut className="w-[18px] h-[18px] shrink-0" strokeWidth={2} aria-hidden="true" />
+          {collapsed ? <span className="sr-only">ออกจากระบบ</span> : 'ออกจากระบบ'}
         </button>
       </div>
 
-      <div className="px-5 pb-3 shrink-0">
-        <div className="border-t border-blue-700/40 pt-2">
-          <p className="text-[11px] text-blue-300/80">Copyright © 2026 Natthakarn S. | v2.0</p>
+      {!collapsed && (
+        <div className="px-5 pb-3 shrink-0">
+          <p className="text-[11px] text-navy-300">Copyright © 2026 Natthakarn S. | v2.0</p>
         </div>
-      </div>
+      )}
     </aside>
   );
 }

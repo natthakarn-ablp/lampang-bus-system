@@ -13,37 +13,77 @@ beforeEach(() => termSvc.invalidateTermCache());
 
 const poolQuery = (handler) => ({ query: jest.fn(async (sql, p) => handler(sql, p)) });
 
-describe('getCurrentTerm (cache + fallback)', () => {
-  test('reads terms.is_current and caches it (2nd call = no query)', async () => {
-    const pool = poolQuery((sql) => (/is_current = TRUE/.test(sql) ? [[{ id: '2569-1' }]] : [[]]));
+describe('getCurrentTerm (date-window + convention, cached per-day)', () => {
+  test('derives from the terms date-window for today and caches it (2nd call = no query)', async () => {
+    const pool = poolQuery((sql) => (/BETWEEN start_date AND end_date/.test(sql) ? [[{ id: '2569-1' }]] : [[]]));
     expect(await termSvc.getCurrentTerm(pool)).toBe('2569-1');
     expect(await termSvc.getCurrentTerm(pool)).toBe('2569-1');
     expect(pool.query).toHaveBeenCalledTimes(1); // cache hit on the 2nd
   });
 
-  test('falls back to a non-empty env value when no is_current row', async () => {
+  test('falls back to the pure convention when no date-window matches (never empty)', async () => {
     const pool = poolQuery(() => [[]]);
     const v = await termSvc.getCurrentTerm(pool);
-    expect(typeof v).toBe('string');
-    expect(v.length).toBeGreaterThan(0);
+    expect(v).toMatch(/^\d{4}-[123]$/);
   });
 
-  test('NEVER throws on a DB error — falls back', async () => {
+  test('NEVER throws on a DB error — falls back to the convention', async () => {
     const pool = { query: jest.fn().mockRejectedValue(new Error('db down')) };
     const v = await termSvc.getCurrentTerm(pool);
-    expect(typeof v).toBe('string');
+    expect(v).toMatch(/^\d{4}-[123]$/);
   });
 });
 
 describe('getCurrentTermCachedSync', () => {
-  test('returns env fallback when the cache is cold', () => {
+  test('returns a valid term (today via convention) when the cache is cold', () => {
     const v = termSvc.getCurrentTermCachedSync();
-    expect(typeof v).toBe('string');
-    expect(v.length).toBeGreaterThan(0);
+    expect(v).toMatch(/^\d{4}-[123]$/);
   });
-  test('returns the warmed value after getCurrentTerm', async () => {
+  test('returns the window-refined value after getCurrentTerm warms it', async () => {
     await termSvc.getCurrentTerm(poolQuery(() => [[{ id: '2570-2' }]]));
     expect(termSvc.getCurrentTermCachedSync()).toBe('2570-2');
+  });
+});
+
+describe('computeTermIdByConvention (date → BE-term, Thai calendar with break gaps)', () => {
+  // [date, expected, why] — boundaries are exactly where a mis-tag would recur.
+  const cases = [
+    ['2026-07-06', '2569-1', 'the mis-tag date — mid term 1'],
+    ['2026-05-15', '2569-1', 'summer break tail → upcoming term 1'],
+    ['2026-05-16', '2569-1', 'term 1 opens'],
+    ['2026-10-11', '2569-1', 'term 1 last day'],
+    ['2026-10-12', '2569-2', 'October break → upcoming term 2'],
+    ['2026-10-31', '2569-2', 'October break tail → upcoming term 2'],
+    ['2026-11-01', '2569-2', 'term 2 opens'],
+    ['2026-12-31', '2569-2', 'term 2, end of Gregorian year'],
+    ['2027-01-01', '2569-2', 'term 2 spilling into the next Gregorian year (still 2569)'],
+    ['2027-04-01', '2569-2', 'term 2 last day'],
+    ['2027-04-02', '2570-1', 'summer break → upcoming term 1 of next academic year'],
+    ['2026-04-01', '2568-2', 'term 2 of the PREVIOUS academic year'],
+    ['2026-04-02', '2569-1', 'summer break → upcoming term 1'],
+    ['2025-11-15', '2568-2', 'term 2 of 2568 begins'],
+    ['2025-06-01', '2568-1', 'term 1 of 2568'],
+  ];
+  test.each(cases)('%s → %s (%s)', (date, expected) => {
+    expect(termSvc.computeTermIdByConvention(date)).toBe(expected);
+  });
+  test('accepts a Date object (normalized on the Bangkok calendar)', () => {
+    expect(termSvc.computeTermIdByConvention(new Date('2026-07-06T00:00:00+07:00'))).toBe('2569-1');
+  });
+});
+
+describe('deriveTermIdFromDate (window-first, convention fallback)', () => {
+  test('uses the DB date-window when one contains the date', async () => {
+    const pool = poolQuery(() => [[{ id: '2569-1' }]]);
+    expect(await termSvc.deriveTermIdFromDate(pool, '2026-07-06')).toBe('2569-1');
+  });
+  test('falls back to the convention when no window matches (gap date)', async () => {
+    const pool = poolQuery(() => [[]]);
+    expect(await termSvc.deriveTermIdFromDate(pool, '2026-10-20')).toBe('2569-2');
+  });
+  test('falls back to the convention on a DB error (never throws)', async () => {
+    const pool = { query: jest.fn().mockRejectedValue(new Error('down')) };
+    expect(await termSvc.deriveTermIdFromDate(pool, '2026-07-06')).toBe('2569-1');
   });
 });
 

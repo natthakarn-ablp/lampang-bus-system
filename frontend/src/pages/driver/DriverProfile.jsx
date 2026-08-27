@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { User } from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
+import { isDriverNotLinked } from '../../utils/driverErrors';
 
 const VEHICLE_TYPE_OPTIONS = [
   'รถตู้',
@@ -38,6 +40,7 @@ function isKnownVehicleType(val) {
 export default function DriverProfile() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [notLinked, setNotLinked] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [vehicleTypeOther, setVehicleTypeOther] = useState('');
@@ -74,7 +77,11 @@ export default function DriverProfile() {
         setProfile(res.data.data);
         initForm(res.data.data);
       })
-      .catch(() => {})
+      .catch((err) => {
+        // แยกสาเหตุ เพราะคำแนะนำต่างกันคนละทาง: บัญชียังไม่ผูกรถต้องให้โรงเรียน
+        // ผูกให้ ส่วน "ลองรีเฟรช" ใช้ได้เฉพาะกรณีโหลดพลาดชั่วคราวเท่านั้น
+        if (isDriverNotLinked(err)) setNotLinked(true);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -153,6 +160,13 @@ export default function DriverProfile() {
   }
 
   if (loading) return <LoadingState />;
+  if (notLinked) return (
+    <EmptyState
+      icon={User}
+      title="บัญชีนี้ยังไม่ได้ผูกกับรถ"
+      description="ระบบยังไม่ทราบว่าคุณขับรถคันไหน จึงยังไม่มีข้อมูลโปรไฟล์คนขับให้แสดง กรุณาแจ้งโรงเรียนที่คุณรับส่งนักเรียน พร้อมบอกชื่อผู้ใช้ของคุณและทะเบียนรถที่ขับ แล้วเข้าสู่ระบบใหม่อีกครั้ง"
+    />
+  );
   if (!profile) return (
     <EmptyState
       icon={User}
@@ -206,7 +220,7 @@ export default function DriverProfile() {
 
   return (
     <div className="p-4 sm:p-6 max-w-2xl mx-auto space-y-4">
-      <h1 className="text-xl font-bold text-gray-800">ข้อมูลคนขับและรถ</h1>
+      <PageHeader title="ข้อมูลคนขับและรถ" subtitle="ข้อมูลประจำตัวคนขับและรถที่รับผิดชอบ" />
 
       {/* Photo */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col items-center gap-3">
@@ -246,7 +260,7 @@ export default function DriverProfile() {
           ))}
 
           <button onClick={() => setEditing(true)}
-            className="w-full sm:w-auto bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium px-5 py-2.5 rounded-lg border border-blue-200 transition">
+            className="focus-ring w-full sm:w-auto inline-flex items-center justify-center bg-brand-50 hover:bg-brand-100 active:bg-brand-200 text-brand-700 text-sm font-medium px-5 min-h-[44px] rounded-lg border border-brand-200 transition">
             แก้ไขข้อมูล
           </button>
         </>
@@ -254,8 +268,8 @@ export default function DriverProfile() {
 
       {/* Edit mode */}
       {editing && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
-          <h2 className="text-sm font-semibold text-gray-700">แก้ไขข้อมูลทั้งหมด</h2>
+        <div className="bg-surface-raised rounded-xl border border-surface-border p-5 space-y-5">
+          <h2 className="text-sm font-semibold text-ink">แก้ไขข้อมูลทั้งหมด</h2>
           <p className="text-xs text-gray-400">ทะเบียนรถไม่สามารถแก้ไขได้จากหน้านี้</p>
 
           {/* Driver */}
@@ -368,8 +382,8 @@ export default function DriverProfile() {
 
       {/* Change password */}
       {showPwdForm ? (
-        <form onSubmit={handleChangePassword} className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700">เปลี่ยนรหัสผ่าน</h2>
+        <form onSubmit={handleChangePassword} className="bg-surface-raised rounded-xl border border-surface-border p-5 space-y-4">
+          <h2 className="text-sm font-semibold text-ink">เปลี่ยนรหัสผ่าน</h2>
           <FormField label="รหัสผ่านเดิม" value={pwdForm.current_password} type="password" required
             onChange={(v) => setPwdForm({ ...pwdForm, current_password: v })} />
           <FormField label="รหัสผ่านใหม่" value={pwdForm.new_password} type="password" required minLength={4}
@@ -392,7 +406,7 @@ export default function DriverProfile() {
         </form>
       ) : (
         <button onClick={() => setShowPwdForm(true)}
-          className="w-full sm:w-auto bg-gray-50 hover:bg-gray-100 text-gray-600 text-sm px-5 py-2.5 rounded-lg border border-gray-200 transition">
+          className="focus-ring w-full sm:w-auto inline-flex items-center justify-center bg-surface hover:bg-surface-border active:bg-surface-border text-ink text-sm px-5 min-h-[44px] rounded-lg border border-surface-border transition">
           เปลี่ยนรหัสผ่าน
         </button>
       )}

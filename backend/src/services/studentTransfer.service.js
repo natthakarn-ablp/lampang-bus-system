@@ -114,12 +114,13 @@ async function approveAndApply(pool, { requestId, adminUserId, adminNote }) {
     // Re-validate the request is still safe to apply.
     if (!st || st.is_deleted || String(st.school_id) !== String(req.source_school_id) || String(st.student_code) !== String(req.student_code)) {
       await conn.query("UPDATE student_transfer_requests SET status='STALE_NEEDS_REVIEW', admin_note=?, updated_at=NOW() WHERE id=?", [String(adminNote || '').slice(0, 500), requestId]);
+      await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId), conn, newValue: { status: 'STALE_NEEDS_REVIEW' } });
       await conn.commit(); return { status: 'STALE_NEEDS_REVIEW' };
     }
     const [[dest]] = await conn.query('SELECT id FROM schools WHERE id = ? AND COALESCE(is_deleted, FALSE) = FALSE', [req.destination_school_id]);
-    if (!dest) { await conn.query("UPDATE student_transfer_requests SET status='FAILED', admin_note='destination school missing', updated_at=NOW() WHERE id=?", [requestId]); await conn.commit(); return { status: 'FAILED', reason: 'DESTINATION_MISSING' }; }
+    if (!dest) { await conn.query("UPDATE student_transfer_requests SET status='FAILED', admin_note='destination school missing', updated_at=NOW() WHERE id=?", [requestId]); await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId), conn, newValue: { status: 'FAILED', reason: 'DESTINATION_MISSING' } }); await conn.commit(); return { status: 'FAILED', reason: 'DESTINATION_MISSING' }; }
     const [[dup]] = await conn.query('SELECT id FROM students WHERE school_id = ? AND student_code = ? AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1', [req.destination_school_id, req.student_code]);
-    if (dup) { await conn.query("UPDATE student_transfer_requests SET status='FAILED', admin_note=?, updated_at=NOW() WHERE id=?", [`destination already has student_code ${req.student_code}`, requestId]); await conn.commit(); return { status: 'FAILED', reason: 'DESTINATION_CODE_EXISTS' }; }
+    if (dup) { await conn.query("UPDATE student_transfer_requests SET status='FAILED', admin_note=?, updated_at=NOW() WHERE id=?", [`destination already has student_code ${req.student_code}`, requestId]); await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId), conn, newValue: { status: 'FAILED', reason: 'DESTINATION_CODE_EXISTS' } }); await conn.commit(); return { status: 'FAILED', reason: 'DESTINATION_CODE_EXISTS' }; }
 
     // Option B: soft-close source, create fresh destination student.
     await conn.query('UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL WHERE id = ?', [st.id]);
@@ -147,7 +148,10 @@ async function approveAndApply(pool, { requestId, adminUserId, adminNote }) {
     return { status: 'APPLIED', applied_student_id: newId };
   } catch (e) {
     await conn.rollback();
-    if (!e.statusCode) await pool.query("UPDATE student_transfer_requests SET status='FAILED', admin_note=?, updated_at=NOW() WHERE id=? AND status='PENDING'", [String(e.code || e.message).slice(0, 400), requestId]);
+    if (!e.statusCode) {
+      const [fr] = await pool.query("UPDATE student_transfer_requests SET status='FAILED', admin_note=?, updated_at=NOW() WHERE id=? AND status='PENDING'", [String(e.code || e.message).slice(0, 400), requestId]);
+      if (fr && fr.affectedRows > 0) await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId), newValue: { status: 'FAILED', reason: String(e.code || e.message).slice(0, 200) } });
+    }
     throw e;
   } finally { conn.release(); }
 }

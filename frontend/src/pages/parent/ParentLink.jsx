@@ -1,6 +1,9 @@
+import { Link2, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
 import { resolveLineUserId, getLiffIdToken, isInLiffClient } from '../../utils/liff';
+import PageHeader from '../../components/PageHeader';
+import { AlertBanner, FormField } from '../../components/ui';
 
 // Phase 10.3E-UX1 — parent account linking via LIFF form.
 //
@@ -141,12 +144,12 @@ export default function ParentLink() {
   if (step === STEP.SUCCESS) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6">
-        <div className="text-6xl mb-5">✅</div>
-        <h2 className="text-xl font-bold text-gray-800 mb-2">ผูกบัญชีสำเร็จ</h2>
+        <CheckCircle2 className="w-16 h-16 mb-5 text-success" strokeWidth={2} aria-hidden="true" />
+        <h2 className="text-xl font-bold text-ink mb-2">ผูกบัญชีสำเร็จ</h2>
         <p className="text-gray-500 text-sm text-center max-w-xs mb-8">
           ระบบได้เชื่อมต่อบัญชี LINE ของคุณกับข้อมูลบุตรหลานเรียบร้อยแล้ว
         </p>
-        <p className="text-gray-400 text-xs text-center max-w-xs">
+        <p className="text-ink-muted text-caption text-center max-w-xs">
           ปิดหน้านี้แล้วกลับไปที่ LINE OA<br />
           พิมพ์ &quot;สถานะ&quot; เพื่อดูสถานะรับ-ส่งวันนี้
         </p>
@@ -161,20 +164,17 @@ export default function ParentLink() {
     return (
       <div className="min-h-screen bg-surface p-4 sm:p-6">
         <div className="max-w-lg mx-auto">
-          <div className="mb-5">
-            <h1 className="text-xl font-bold text-blue-700">ตรวจสอบข้อมูล</h1>
-            <p className="text-sm text-gray-500 mt-1">กรุณายืนยันก่อนผูกบัญชี</p>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-              <div className="text-xs text-blue-700 font-semibold mb-1">นักเรียน</div>
-              <div className="text-lg font-bold text-gray-800">👦 {fullName || '-'}</div>
-              {gradeRoom && <div className="text-sm text-gray-600 mt-1">ระดับชั้น: {gradeRoom}</div>}
-              {s.school_name && <div className="text-sm text-gray-600">โรงเรียน: {s.school_name}</div>}
+          <PageHeader title="ตรวจสอบข้อมูล" subtitle="กรุณายืนยันก่อนผูกบัญชี" />
+          <div className="bg-surface-raised rounded-2xl border border-surface-border shadow-sm p-5 space-y-4">
+            <div className="bg-brand-50 border border-brand-100 rounded-xl p-4">
+              <div className="text-caption text-brand-700 font-semibold mb-1">นักเรียน</div>
+              <div className="text-lg font-bold text-ink">{fullName || '-'}</div>
+              {gradeRoom && <div className="text-sm text-ink-muted mt-1">ระดับชั้น: {gradeRoom}</div>}
+              {s.school_name && <div className="text-sm text-ink-muted">โรงเรียน: {s.school_name}</div>}
             </div>
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">เบอร์โทรศัพท์ที่ใช้ค้นหา</span>
-              <span className="font-bold text-gray-800">{maskedPhone}</span>
+              <span className="text-ink-muted">เบอร์โทรศัพท์ที่ใช้ค้นหา</span>
+              <span className="font-bold text-ink">{maskedPhone}</span>
             </div>
             {serverErr && (
               <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-2">
@@ -209,74 +209,60 @@ export default function ParentLink() {
   return (
     <div className="min-h-screen bg-surface p-4 sm:p-6">
       <div className="max-w-lg mx-auto">
-        <div className="mb-5">
-          <h1 className="text-xl font-bold text-blue-700">🔗 ผูกบัญชีผู้ปกครอง</h1>
-          <p className="text-sm text-gray-500 mt-1">เชื่อมต่อบัญชี LINE กับข้อมูลบุตรหลาน</p>
-        </div>
+        <PageHeader
+          icon={Link2}
+          title="ผูกบัญชีผู้ปกครอง"
+          subtitle="เชื่อมต่อบัญชี LINE กับข้อมูลบุตรหลาน"
+        />
 
         {!inLineClient && (
-          <div className="mb-4 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2">
-            ⚠️ ดูเหมือนคุณกำลังเปิดในเบราว์เซอร์ภายนอก
+          <AlertBanner variant="warn" icon={ShieldAlert} title="เปิดจากนอก LINE" className="mb-4">
+            ดูเหมือนคุณกำลังเปิดในเบราว์เซอร์ภายนอก
             แนะนำให้เปิดผ่านลิงก์ใน LINE OA เพื่อความปลอดภัย
-          </div>
+          </AlertBanner>
         )}
 
-        <form onSubmit={onPreview} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              เบอร์โทรศัพท์ <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="tel"
-              inputMode="numeric"
-              autoComplete="tel"
-              maxLength={10}
-              value={phone}
-              onChange={(e) => { setPhone(e.target.value); setPhoneErr(''); }}
-              placeholder="0901234567"
-              className={`w-full border rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 ${
-                phoneErr ? 'border-red-300 focus:ring-red-300' : 'border-gray-300 focus:ring-blue-400'
-              }`}
-            />
-            {phoneErr && <p className="text-red-600 text-xs mt-1">{phoneErr}</p>}
-            <p className="text-gray-400 text-xs mt-1">เบอร์ที่ลงทะเบียนไว้กับโรงเรียน (10 หลัก)</p>
-          </div>
+        <form onSubmit={onPreview} className="bg-surface-raised rounded-2xl border border-surface-border shadow-sm p-5 space-y-4">
+          {/* Neither label was tied to its input, so tapping the label did
+              nothing and a screen reader announced both fields unnamed. */}
+          <FormField
+            label="เบอร์โทรศัพท์"
+            required
+            type="tel"
+            inputMode="numeric"
+            autoComplete="tel"
+            maxLength={10}
+            value={phone}
+            onChange={(v) => { setPhone(v); setPhoneErr(''); }}
+            placeholder="0901234567"
+            helper="เบอร์ที่ลงทะเบียนไว้กับโรงเรียน (10 หลัก)"
+            error={phoneErr || undefined}
+          />
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              รหัสนักเรียน <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              value={studentId}
-              onChange={(e) => { setStudentId(e.target.value); setStudentErr(''); }}
-              placeholder="18985"
-              className={`w-full border rounded-lg px-4 py-2.5 text-base focus:outline-none focus:ring-2 ${
-                studentErr ? 'border-red-300 focus:ring-red-300' : 'border-gray-300 focus:ring-blue-400'
-              }`}
-            />
-            {studentErr && <p className="text-red-600 text-xs mt-1">{studentErr}</p>}
-            <p className="text-gray-400 text-xs mt-1">รหัสนักเรียนของบุตรหลาน (ตัวเลข)</p>
-          </div>
+          <FormField
+            label="รหัสนักเรียน"
+            required
+            inputMode="numeric"
+            autoComplete="off"
+            value={studentId}
+            onChange={(v) => { setStudentId(v); setStudentErr(''); }}
+            placeholder="18985"
+            helper="รหัสนักเรียนของบุตรหลาน (ตัวเลข)"
+            error={studentErr || undefined}
+          />
 
-          {serverErr && (
-            <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-              {serverErr}
-            </p>
-          )}
+          {serverErr && <AlertBanner variant="danger" title="ค้นหาไม่สำเร็จ">{serverErr}</AlertBanner>}
 
           <button
             type="submit"
             disabled={busy}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition"
+            className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white font-semibold min-h-[48px] rounded-lg transition"
           >
             {busy ? 'กำลังค้นหา…' : 'ค้นหาข้อมูลบุตรหลาน'}
           </button>
         </form>
 
-        <div className="mt-4 text-center text-xs text-gray-400">
+        <div className="mt-4 text-center text-caption text-ink-muted">
           ระบบรถรับส่งนักเรียนจังหวัดลำปาง
         </div>
       </div>

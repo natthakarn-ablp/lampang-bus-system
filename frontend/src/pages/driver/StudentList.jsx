@@ -1,5 +1,9 @@
+import { Building2 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
+import ErrorState from '../../components/ErrorState';
+import { StatusBadge } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
 import CheckinPanel from './CheckinPanel';
 import LoadingState from '../../components/LoadingState';
 import {
@@ -98,29 +102,24 @@ export default function StudentList() {
   return (
     <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
       {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold text-gray-800">รายชื่อนักเรียน</h1>
-        <div className="flex flex-wrap items-center gap-2 mt-2">
-          {data?.vehicle && (
-            <span className="text-sm text-gray-600">
-              🚌 <span className="font-semibold">{data.vehicle.plate_no}</span>
-            </span>
-          )}
-          <span className={`text-sm font-semibold px-3 py-1 rounded-full ${
-            session === 'morning'
-              ? 'bg-orange-100 text-orange-700'
-              : 'bg-indigo-100 text-indigo-700'
-          }`}>
-            {session === 'morning' ? '🌅' : '🌆'} {SESSION_LABEL[session]}
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        title="รายชื่อนักเรียน"
+        subtitle={data?.vehicle ? `รถทะเบียน ${data.vehicle.plate_no}` : undefined}
+        actions={
+          // The session was shown as an emoji plus an orange/indigo pill; the
+          // emoji carried no meaning a screen reader could use and the two
+          // hues were not semantic. One badge, one word.
+          <StatusBadge variant={session === 'morning' ? 'warn' : 'info'} size="lg">
+            {SESSION_LABEL[session]}
+          </StatusBadge>
+        }
+      />
 
       {/* Bulk action */}
       <div className="mb-5">
         {allDone ? (
           <div className="bg-green-100 border-2 border-green-300 text-green-800 rounded-xl px-4 py-3 text-center text-lg font-semibold">
-            ✅ {ALL_DONE_LABEL[session]}
+            {ALL_DONE_LABEL[session]}
           </div>
         ) : (
           <button
@@ -136,11 +135,7 @@ export default function StudentList() {
         {bulkMsg && <p className="text-center text-sm text-gray-600 mt-2">{bulkMsg}</p>}
       </div>
 
-      {error && (
-        <div className="bg-red-50 border-2 border-red-200 text-red-700 rounded-xl px-4 py-3 mb-4 text-base font-medium">
-          {error}
-        </div>
-      )}
+      {error && <ErrorState message={error} className="mb-4" onRetry={load} />}
 
       {loading && <LoadingState />}
 
@@ -148,12 +143,12 @@ export default function StudentList() {
       {!loading && pending.length > 0 && (
         <section className="mb-6">
           <h2 className="text-base font-semibold text-gray-600 mb-3">
-            ⏳ รอดำเนินการ ({pending.length})
+            รอดำเนินการ ({pending.length})
           </h2>
           {groupBySchool(pending).map(([school, sts]) => (
             <div key={school} className="mb-4">
               <p className="text-sm font-semibold text-blue-600 bg-blue-50 rounded-lg px-3 py-1.5 mb-2">
-                🏫 {school}
+                <Building2 className="w-4 h-4 shrink-0 inline align-[-2px] mr-1" strokeWidth={2} aria-hidden="true" />{school}
               </p>
               <div className="space-y-3">
                 {sts.map((st) => (
@@ -169,7 +164,7 @@ export default function StudentList() {
       {!loading && done.length > 0 && (
         <section className="mb-6">
           <h2 className="text-base font-semibold text-green-600 mb-3">
-            ✅ เสร็จแล้ว ({done.length})
+            เสร็จแล้ว ({done.length})
           </h2>
           <div className="space-y-2">
             {done.map((st) => (

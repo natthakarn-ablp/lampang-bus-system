@@ -20,7 +20,7 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { AlertBanner, CommandHero, StatusStepRail } from '../../components/ui';
+import { AlertBanner, CommandHero, ConfirmDialog, DataTable, FormField, StatusStepRail } from '../../components/ui';
 
 const STATUS = {
   PENDING_SCHOOL_REVIEW: ['รอตรวจสอบ', 'warn'],
@@ -222,28 +222,21 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
               <h3 className="font-semibold text-ink">จำนวนผู้โดยสารแยกโรงเรียน</h3>
             </div>
             <p className="mt-1 text-sm text-ink-muted">แสดงเฉพาะจำนวน ไม่มีรายชื่อนักเรียน</p>
-            <div className="mt-3 overflow-x-auto rounded-xl border border-surface-border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-surface text-left text-ink-muted">
-                    <th className="p-3 font-semibold">โรงเรียน</th>
-                    <th className="p-3 font-semibold">เช้า</th>
-                    <th className="p-3 font-semibold">เย็น</th>
-                    <th className="p-3 font-semibold">สูงสุด</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(selected.schools || []).map(school => (
-                    <tr key={school.school_id} className="border-t border-surface-border">
-                      <td className="p-3 text-ink">{school.school_name}</td>
-                      <td className="p-3 text-ink-muted">{school.morning_rider_count}</td>
-                      <td className="p-3 text-ink-muted">{school.evening_rider_count}</td>
-                      <td className="p-3 font-semibold text-ink">{school.peak_rider_count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              className="mt-3"
+              caption="จำนวนผู้โดยสารแยกตามโรงเรียน"
+              rows={selected.schools || []}
+              rowKey={school => school.school_id}
+              columns={[
+                { key: 'school', header: 'โรงเรียน', primary: true,
+                  cell: school => <span className="text-ink">{school.school_name}</span> },
+                { key: 'morning', header: 'เช้า', numeric: true, cell: school => school.morning_rider_count },
+                { key: 'evening', header: 'เย็น', numeric: true, cell: school => school.evening_rider_count },
+                { key: 'peak', header: 'สูงสุด', numeric: true,
+                  cell: school => <span className="font-semibold text-ink">{school.peak_rider_count}</span> },
+              ]}
+              empty={{ icon: Users, title: 'ยังไม่มีข้อมูลผู้โดยสารแยกโรงเรียน' }}
+            />
             <p className="mt-3 text-sm font-semibold text-ink">
               จำนวนสูงสุดรวมต่อรอบ: {selected.peak_rider_count} คน
             </p>
@@ -286,7 +279,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
               type="button"
               disabled={busy}
               onClick={() => onReview(false)}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger-ink transition hover:bg-danger/10 disabled:opacity-50"
             >
               ปฏิเสธคำขอ
             </button>
@@ -318,7 +311,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
             type="button"
             disabled={busy}
             onClick={onCancel}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-50"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-semibold text-danger-ink transition hover:bg-danger/10 disabled:opacity-50"
           >
             <XCircle className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
             ยกเลิกคำขอ
@@ -341,6 +334,8 @@ export default function VehicleVerification() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [actionReason, setActionReason] = useState('');
   const isGradeTeacher = Boolean(user?.grade_scope || user?.gradeScope);
 
   const load = useCallback(async () => {
@@ -408,7 +403,6 @@ export default function VehicleVerification() {
   }
 
   async function review(approved) {
-    if (!approved && !confirm('ยืนยันปฏิเสธคำขอนี้?')) return;
     setBusy(true);
     try {
       await api.post(`/verification/applications/${selected.id}/review`, { approved });
@@ -419,6 +413,8 @@ export default function VehicleVerification() {
       } else {
         setSelected(null);
       }
+      setConfirmAction(null);
+      setActionReason('');
     } catch (err) {
       toast.error(err.response?.data?.message || 'ตรวจสอบคำขอไม่สำเร็จ');
     } finally {
@@ -427,14 +423,14 @@ export default function VehicleVerification() {
   }
 
   async function cancel() {
-    if (!confirm('ยืนยันยกเลิกคำขอนี้? เมื่อยกเลิกแล้วจะไม่สามารถนำกลับมาใช้ได้')) return;
-    const reason = prompt('เหตุผลที่ยกเลิก (ถ้ามี):') ?? '';
     setBusy(true);
     try {
-      await api.post(`/verification/applications/${selected.id}/cancel`, { reason: reason.trim() || null });
+      await api.post(`/verification/applications/${selected.id}/cancel`, { reason: actionReason.trim() || null });
       toast.success('ยกเลิกคำขอแล้ว');
       await load();
       setSelected(null);
+      setConfirmAction(null);
+      setActionReason('');
     } catch (err) {
       toast.error(err.response?.data?.message || 'ยกเลิกคำขอไม่สำเร็จ');
     } finally {
@@ -561,12 +557,39 @@ export default function VehicleVerification() {
           qr={qr}
           busy={busy}
           isGradeTeacher={isGradeTeacher}
-          onBack={() => setSelected(null)}
+          onBack={() => { setSelected(null); setConfirmAction(null); setActionReason(''); }}
           onMarkReady={markReady}
-          onReview={review}
-          onCancel={cancel}
+          onReview={(approved) => {
+            if (approved) review(true);
+            else { setActionReason(''); setConfirmAction('reject'); }
+          }}
+          onCancel={() => { setActionReason(''); setConfirmAction('cancel'); }}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        title={confirmAction === 'cancel' ? 'ยืนยันยกเลิกคำขอ' : 'ยืนยันปฏิเสธคำขอ'}
+        description={confirmAction === 'cancel'
+          ? 'เมื่อยกเลิกแล้วจะไม่สามารถนำคำขอนี้กลับมาใช้ได้'
+          : 'คำขอนี้จะถูกปิดและโรงเรียนต้องเริ่มกระบวนการใหม่'}
+        itemName={selected?.vehicle?.plate_no || selected?.plate_no}
+        confirmLabel={confirmAction === 'cancel' ? 'ยกเลิกคำขอ' : 'ปฏิเสธคำขอ'}
+        loading={busy}
+        onConfirm={() => { if (confirmAction === 'cancel') cancel(); else review(false); }}
+        onCancel={() => {
+          if (!busy) { setConfirmAction(null); setActionReason(''); }
+        }}
+      >
+        {confirmAction === 'cancel' && (
+          <FormField
+            label="เหตุผลที่ยกเลิก (ถ้ามี)"
+            value={actionReason}
+            onChange={setActionReason}
+            placeholder="ระบุเหตุผลเพื่อใช้ตรวจสอบย้อนหลัง"
+          />
+        )}
+      </ConfirmDialog>
 
       {!selected && applications.some(application => application.status === 'PASSED') && (
         <AlertBanner variant="success" icon={CheckCircle2} className="print:hidden">

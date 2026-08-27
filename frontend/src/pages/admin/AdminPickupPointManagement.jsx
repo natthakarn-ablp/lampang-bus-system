@@ -1,9 +1,15 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Map as MapIcon, Plus, Pencil, Trash2, X, Users } from 'lucide-react';
+import { Map as MapIcon, Plus, Pencil, Trash2, Users } from 'lucide-react';
 import api from '../../api/axios';
-import { AppCard, AlertBanner, StatusBadge, DashboardSection } from '../../components/ui';
+import {
+  AlertBanner, StatusBadge, DashboardSection,
+  ConfirmDialog, DataTable, TableAction, FilterBar, FormField, Modal,
+} from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
-import PickupCoordPicker from '../../components/PickupCoordPicker';
+import ErrorState from '../../components/ErrorState';
+import EmptyState from '../../components/EmptyState';
+import PickupPointFields from '../../components/PickupPointFields';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
 import { useToast } from '../../components/Toast';
 import Pagination from '../../components/Pagination';
@@ -123,27 +129,105 @@ export default function AdminPickupPointManagement() {
 
   const totalPages = Math.max(1, Math.ceil((meta.total || 0) / (meta.per_page || 20)));
 
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+
+  async function handleDeleteOne() {
+    if (!confirmDelete || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await api.delete(`/admin/pickup-points/${confirmDelete.id}`);
+      toast.success('ลบจุดรับส่งแล้ว');
+      setConfirmDelete(null);
+      fetchRows();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'ลบไม่สำเร็จ');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  // Sequential: keeps backend load predictable + makes audit_log per-item
+  // ordered. A per-item failure does not abort the batch — the successes are
+  // still pruned from the selection and the failures are reported.
+  async function handleBulkDelete() {
+    if (bulkBusy || selectedRows.length === 0) return;
+    setBulkBusy(true);
+    setBulkProgress({ done: 0, total: selectedRows.length });
+    const successIds = [];
+    const failures = [];
+    for (let i = 0; i < selectedRows.length; i++) {
+      const row = selectedRows[i];
+      try {
+        await api.delete(`/admin/pickup-points/${row.id}`);
+        successIds.push(row.id);
+      } catch (err) {
+        failures.push({ id: row.id, label: row.label, message: err?.response?.data?.message || 'ลบไม่สำเร็จ' });
+      }
+      setBulkProgress({ done: i + 1, total: selectedRows.length });
+    }
+    if (failures.length === 0) {
+      toast.success(`ลบสำเร็จ ${successIds.length} รายการ`);
+    } else if (successIds.length === 0) {
+      toast.error('ไม่สามารถลบรายการที่เลือกได้');
+    } else {
+      toast.error(`ลบสำเร็จ ${successIds.length} รายการ ไม่สำเร็จ ${failures.length} รายการ`);
+    }
+    setBulkBusy(false);
+    setBulkConfirmOpen(false);
+    if (successIds.length > 0) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        successIds.forEach(id => next.delete(id));
+        return next;
+      });
+      fetchRows();
+    }
+  }
+
+  // Name the first few so the confirmation is about specific points rather
+  // than an abstract count.
+  const bulkPreview = (() => {
+    const names = selectedRows.slice(0, 5).map(r => r.label || `จุดที่ ${r.id}`);
+    const rest = Math.max(0, selectedIds.size - names.length);
+    if (names.length === 0) return '';
+    return `${names.join(', ')}${rest > 0 ? ` และอีก ${rest} รายการ` : ''}\n`;
+  })();
+
+  const columns = [
+    { key: 'plate_no', header: 'ทะเบียนรถ', primary: true, cell: r => r.plate_no || r.vehicle_id },
+    { key: 'label', header: 'ป้ายชื่อ', secondary: true,
+      cell: r => <span className="block truncate max-w-[200px]">{r.label}</span> },
+    { key: 'session', header: 'รอบ', badge: true,
+      cell: r => <StatusBadge variant="neutral" size="sm">{SESSION_LABEL[r.session] || r.session}</StatusBadge> },
+    { key: 'student_count', header: 'นักเรียน', align: 'right', numeric: true, cell: r => r.student_count },
+    { key: 'coords', header: 'พิกัด', hideOnMobile: true,
+      cell: r => (
+        <span className="text-xs text-ink-muted tabular-nums">
+          {r.latitude?.toFixed(5)}, {r.longitude?.toFixed(5)}
+        </span>
+      ) },
+  ];
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-            <MapIcon className="w-6 h-6 text-brand" strokeWidth={2} />
-            ตรวจสอบจุดรับส่ง
-          </h1>
-          <p className="text-sm text-ink-muted mt-1">
-            ภาพรวมจุดรับส่งของรถทั้งหมดในระบบ · {meta.total} จุด
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setEditing('new')}
-          className="shrink-0 inline-flex items-center gap-1.5 bg-brand hover:bg-brand-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-        >
-          <Plus className="w-4 h-4" strokeWidth={2.5} />
-          เพิ่มกรณีพิเศษ
-        </button>
-      </header>
+      <PageHeader
+        icon={MapIcon}
+        title="ตรวจสอบจุดรับส่ง"
+        subtitle="ภาพรวมจุดรับส่งของรถทั้งหมดในระบบ"
+        meta={`${meta.total} จุด`}
+        actions={(
+          <button
+            type="button"
+            onClick={() => setEditing('new')}
+            className="focus-ring shrink-0 inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white text-sm font-medium px-4 min-h-[44px] rounded-lg transition"
+          >
+            <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+            เพิ่มกรณีพิเศษ
+          </button>
+        )}
+      />
 
       {/* Phase 6.1 — admin override role banner.
           The primary creator of pickup points is Driver or School.
@@ -154,19 +238,18 @@ export default function AdminPickupPointManagement() {
         การเพิ่มจุดรับส่งหลักทำผ่านบัญชีคนขับหรือบัญชีโรงเรียน หน้านี้สำหรับผู้ดูแลระบบใช้ตรวจสอบภาพรวม และเพิ่ม/แก้ไขในกรณีพิเศษเท่านั้น
       </AlertBanner>
 
-      {/* Filter */}
-      <div className="flex items-center gap-3">
-        <select
-          value={vehicleFilter}
-          onChange={e => { setVehicleFilter(e.target.value); setPage(1); }}
-          className="text-sm border border-surface-border rounded-lg px-3 py-1.5 bg-surface text-ink"
-        >
-          <option value="">รถทุกคัน</option>
-          {vehicles.map(v => (
-            <option key={v.id} value={v.id}>{v.plate_no}</option>
-          ))}
-        </select>
-      </div>
+      <FilterBar
+        filters={[{
+          key: 'vehicle',
+          label: 'รถ',
+          value: vehicleFilter,
+          onChange: v => { setVehicleFilter(v); setPage(1); },
+          options: [['', 'รถทุกคัน'], ...vehicles.map(v => [v.id, v.plate_no])],
+        }]}
+        count={meta.total}
+        countLabel="จุดรับส่ง"
+        onClear={vehicleFilter ? () => { setVehicleFilter(''); setPage(1); } : undefined}
+      />
 
       {/* Phase 10.10G-B — sticky selected-action bar (only visible when ≥1 row selected) */}
       {isAnySelected && (
@@ -178,16 +261,16 @@ export default function AdminPickupPointManagement() {
             <button
               type="button"
               onClick={clearSelection}
-              className="px-3 py-1.5 text-xs rounded-lg border border-surface-border bg-surface hover:bg-surface-border text-ink"
+              className="focus-ring px-3 min-h-[44px] text-sm font-medium rounded-lg border border-surface-border bg-surface hover:bg-surface-border text-ink transition"
             >
               ยกเลิกการเลือก
             </button>
             <button
               type="button"
               onClick={() => setBulkConfirmOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-danger hover:bg-danger/90 text-white"
+              className="focus-ring inline-flex items-center gap-1.5 px-3 min-h-[44px] text-sm font-medium rounded-lg bg-danger hover:bg-danger/90 text-white transition"
             >
-              <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} />
+              <Trash2 className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
               ลบรายการที่เลือก
             </button>
           </div>
@@ -195,83 +278,48 @@ export default function AdminPickupPointManagement() {
       )}
 
       {error ? (
-        <AlertBanner variant="danger" title="โหลดข้อมูลไม่สำเร็จ">{error}</AlertBanner>
+        <ErrorState title="โหลดข้อมูลไม่สำเร็จ" message={error} onRetry={fetchRows} />
       ) : loading ? (
         <LoadingState />
       ) : rows.length === 0 ? (
-        <AlertBanner variant="info" title="ยังไม่มีจุดรับส่งในระบบ">
-          บัญชีคนขับหรือบัญชีโรงเรียนสามารถเริ่มสร้างจุดรับส่งได้จากแผนที่ของตนเอง — หน้านี้จะแสดงเมื่อมีจุดให้ตรวจสอบ
-        </AlertBanner>
+        <EmptyState
+          icon={MapIcon}
+          title="ยังไม่มีจุดรับส่งในระบบ"
+          description="บัญชีคนขับหรือบัญชีโรงเรียนสามารถเริ่มสร้างจุดรับส่งได้จากแผนที่ของตนเอง — หน้านี้จะแสดงเมื่อมีจุดให้ตรวจสอบ"
+        />
       ) : (
         <>
           <DashboardSection title="รายการจุดรับส่ง" description={`หน้า ${meta.page} / ${totalPages}`}>
-            <AppCard padding="none">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-surface-border/30 text-ink-muted text-xs uppercase">
-                    <tr>
-                      <th className="px-3 py-2 w-10">
-                        <input
-                          ref={headerCheckboxRef}
-                          type="checkbox"
-                          aria-label={isAllVisibleSelected ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมดในหน้านี้'}
-                          checked={isAllVisibleSelected}
-                          disabled={visibleIds.length === 0}
-                          onChange={toggleSelectAllVisible}
-                          className="w-4 h-4 rounded border-surface-border text-brand focus:ring-brand cursor-pointer disabled:cursor-not-allowed"
-                        />
-                      </th>
-                      <th className="text-left px-3 py-2">ทะเบียนรถ</th>
-                      <th className="text-left px-3 py-2">ป้ายชื่อ</th>
-                      <th className="text-left px-3 py-2">รอบ</th>
-                      <th className="text-right px-3 py-2">นักเรียน</th>
-                      <th className="text-left px-3 py-2">พิกัด</th>
-                      <th className="text-right px-3 py-2">จัดการ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(r => {
-                      const checked = selectedIds.has(r.id);
-                      return (
-                        <tr
-                          key={r.id}
-                          className={`border-t border-surface-border ${checked ? 'bg-brand/5' : ''}`}
-                        >
-                          <td className="px-3 py-2">
-                            <input
-                              type="checkbox"
-                              aria-label={`เลือก ${r.label}`}
-                              checked={checked}
-                              onChange={() => toggleSelect(r.id)}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-4 h-4 rounded border-surface-border text-brand focus:ring-brand cursor-pointer"
-                            />
-                          </td>
-                          <td className="px-3 py-2 font-medium text-ink">{r.plate_no || r.vehicle_id}</td>
-                          <td className="px-3 py-2 text-ink truncate max-w-[200px]">{r.label}</td>
-                          <td className="px-3 py-2">
-                            <StatusBadge variant="neutral" size="sm">
-                              {SESSION_LABEL[r.session] || r.session}
-                            </StatusBadge>
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">{r.student_count}</td>
-                          <td className="px-3 py-2 text-xs text-ink-muted tabular-nums">
-                            {r.latitude?.toFixed(5)}, {r.longitude?.toFixed(5)}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center justify-end gap-1">
-                              <IconBtn icon={Users} title="จัดการนักเรียน" onClick={() => setAssigning(r)} />
-                              <IconBtn icon={Pencil} title="แก้ไข" onClick={() => setEditing(r)} />
-                              <IconBtn icon={Trash2} title="ลบ" danger onClick={() => setConfirmDelete(r)} />
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </AppCard>
+            <DataTable
+              caption="จุดรับส่งทั้งหมดในระบบ"
+              columns={columns}
+              rows={rows}
+              rowClassName={r => (selectedIds.has(r.id) ? 'bg-brand/5' : undefined)}
+              selection={{
+                selected: selectedIds,
+                onToggle: r => toggleSelect(r.id),
+                onToggleAll: toggleSelectAllVisible,
+                allSelected: isAllVisibleSelected,
+                selectAllLabel: isAllVisibleSelected ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมดในหน้านี้',
+                rowLabel: r => `เลือก ${r.label}`,
+              }}
+              actions={r => (
+                <>
+                  <TableAction onClick={() => setAssigning(r)} aria-label={`จัดการนักเรียนของจุด ${r.label}`}>
+                    <Users className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                    <span className="sr-only sm:not-sr-only">นักเรียน</span>
+                  </TableAction>
+                  <TableAction tone="brand" onClick={() => setEditing(r)} aria-label={`แก้ไขจุด ${r.label}`}>
+                    <Pencil className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                    <span className="sr-only sm:not-sr-only">แก้ไข</span>
+                  </TableAction>
+                  <TableAction tone="danger" onClick={() => setConfirmDelete(r)} aria-label={`ลบจุด ${r.label}`}>
+                    <Trash2 className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                    <span className="sr-only sm:not-sr-only">ลบ</span>
+                  </TableAction>
+                </>
+              )}
+            />
           </DashboardSection>
 
           {totalPages > 1 && (
@@ -296,55 +344,37 @@ export default function AdminPickupPointManagement() {
           onSaved={() => { setAssigning(null); fetchRows(); }}
         />
       )}
-      {confirmDelete && (
-        <DeleteConfirmModal
-          row={confirmDelete}
-          onClose={() => setConfirmDelete(null)}
-          onDeleted={() => { setConfirmDelete(null); fetchRows(); }}
-        />
-      )}
-      {bulkConfirmOpen && (
-        <BulkDeleteConfirmModal
-          items={selectedRows}
-          totalSelected={selectedIds.size}
-          onClose={() => setBulkConfirmOpen(false)}
-          onDone={({ successIds }) => {
-            setBulkConfirmOpen(false);
-            if (successIds.length > 0) {
-              setSelectedIds(prev => {
-                const next = new Set(prev);
-                successIds.forEach(id => next.delete(id));
-                return next;
-              });
-              fetchRows();
-            }
-          }}
-          toast={toast}
-        />
-      )}
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="ลบจุดรับส่งนี้?"
+        itemName={confirmDelete?.label}
+        description="การลบเป็นแบบ soft-delete — ข้อมูลจะถูกซ่อนจากหน้าจอ แต่ยังคงอยู่ใน audit log"
+        confirmLabel="ลบจุดรับส่ง"
+        loading={deleteBusy}
+        onConfirm={handleDeleteOne}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        title={`ลบจุดรับส่ง ${selectedIds.size} รายการ?`}
+        description={bulkBusy
+          ? `กำลังลบ… ${bulkProgress.done} / ${bulkProgress.total} รายการ`
+          : `${bulkPreview}${'\n'}การดำเนินการนี้จะซ่อนรายการจากหน้าจอ แต่ไม่ลบประวัติย้อนหลัง`}
+        confirmLabel={`ยืนยันลบ ${selectedIds.size} รายการ`}
+        loading={bulkBusy}
+        onConfirm={handleBulkDelete}
+        onCancel={() => { if (!bulkBusy) setBulkConfirmOpen(false); }}
+      />
     </div>
   );
 }
 
-/* ── Small icon button ── */
-function IconBtn({ icon: Icon, title, danger = false, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      className={`p-1.5 rounded-md transition ${
-        danger
-          ? 'text-danger hover:bg-danger/10'
-          : 'text-ink-muted hover:bg-surface-border hover:text-ink'
-      }`}
-    >
-      <Icon className="w-4 h-4" strokeWidth={2} />
-    </button>
-  );
-}
-
-/* ── Edit/Add modal ─────────────────────────────────────────────────────── */
+/* ── Edit/Add modal ──
+   The field block is the same one the driver and school editors use; this
+   passes its vehicle select in through `leadingFields` and omits the pupil
+   checklist, because an admin assigns pupils through PickupStudentsModal
+   instead. Endpoints and payload (including `sequence`) are unchanged. */
 function EditPickupPointModal({ row, vehicles, onClose, onSaved }) {
   const isNew = !row;
   const [form, setForm] = useState(() => ({
@@ -363,6 +393,7 @@ function EditPickupPointModal({ row, vehicles, onClose, onSaved }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return; // guard the double submit
     setSaving(true); setErrors([]);
     try {
       const payload = {
@@ -384,263 +415,67 @@ function EditPickupPointModal({ row, vehicles, onClose, onSaved }) {
     }
   };
 
-  const coords = useMemo(() => {
-    const lat = parseFloat(form.latitude), lng = parseFloat(form.longitude);
-    return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null;
-  }, [form.latitude, form.longitude]);
+  // The vehicle cannot move once the point exists, so the select is locked
+  // when editing — same rule as before, now with the reason on screen.
+  const vehicleField = (
+    <FormField
+      label="ทะเบียนรถ"
+      required
+      helper={isNew ? undefined : 'เปลี่ยนรถของจุดที่มีอยู่แล้วไม่ได้ — ให้สร้างจุดใหม่แทน'}
+    >
+      {ctl => (
+        <select
+          {...ctl}
+          value={form.vehicle_id}
+          onChange={e => update('vehicle_id', e.target.value)}
+          disabled={!isNew}
+          required
+          className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base sm:text-sm text-ink transition disabled:opacity-60 disabled:bg-surface"
+        >
+          <option value="">เลือกรถ…</option>
+          {vehicles.map(v => (
+            <option key={v.id} value={v.id}>{v.plate_no}</option>
+          ))}
+        </select>
+      )}
+    </FormField>
+  );
 
   return (
-    <Modal onClose={onClose} title={isNew ? 'เพิ่มกรณีพิเศษ' : 'แก้ไขจุดรับส่ง'}>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <Field label="ทะเบียนรถ">
-          <select
-            value={form.vehicle_id}
-            onChange={e => update('vehicle_id', e.target.value)}
-            disabled={!isNew}
-            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface text-ink disabled:opacity-60"
-            required
+    <Modal
+      title={isNew ? 'เพิ่มกรณีพิเศษ' : 'แก้ไขจุดรับส่ง'}
+      size="lg"
+      onClose={() => { if (!saving) onClose(); }}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="focus-ring px-4 min-h-[44px] text-sm font-medium rounded-lg border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50"
           >
-            <option value="">เลือกรถ…</option>
-            {vehicles.map(v => (
-              <option key={v.id} value={v.id}>{v.plate_no}</option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="ป้ายชื่อจุด">
-          <input
-            type="text" required maxLength={100}
-            value={form.label}
-            onChange={e => update('label', e.target.value)}
-            placeholder="เช่น หน้าโรงเรียน, ปาก ซ.5"
-            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2"
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Latitude">
-            <input
-              type="number" step="any" required min={-90} max={90}
-              value={form.latitude}
-              onChange={e => update('latitude', e.target.value)}
-              className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 tabular-nums"
-            />
-          </Field>
-          <Field label="Longitude">
-            <input
-              type="number" step="any" required min={-180} max={180}
-              value={form.longitude}
-              onChange={e => update('longitude', e.target.value)}
-              className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 tabular-nums"
-            />
-          </Field>
-        </div>
-
-        <p className="text-xs text-ink-muted">คลิกบนแผนที่เพื่อกำหนดพิกัด หรือกรอกตัวเลขโดยตรง</p>
-        <PickupCoordPicker
-          value={coords}
-          onChange={([lat, lng]) => {
-            update('latitude', lat.toFixed(6));
-            update('longitude', lng.toFixed(6));
-          }}
-        />
-
-        <Field label="รอบ">
-          <div className="flex gap-1.5">
-            {['morning', 'evening', 'both'].map(s => (
-              <button
-                type="button"
-                key={s}
-                onClick={() => update('session', s)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition border ${
-                  form.session === s
-                    ? 'bg-brand text-white border-brand'
-                    : 'bg-surface text-ink-muted border-surface-border'
-                }`}
-              >
-                {SESSION_LABEL[s]}
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        <Field label="หมายเหตุ (ไม่บังคับ)">
-          <input
-            type="text" maxLength={255}
-            value={form.notes}
-            onChange={e => update('notes', e.target.value)}
-            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2"
-          />
-        </Field>
-
-        {errors.length > 0 && (
-          <AlertBanner variant="danger" title="ข้อมูลไม่ถูกต้อง">
-            <ul className="list-disc pl-4 text-xs">
-              {errors.map((e, i) => <li key={i}>{e.field ? `${e.field}: ` : ''}{e.message}</li>)}
-            </ul>
-          </AlertBanner>
-        )}
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border">
             ยกเลิก
           </button>
-          <button type="submit" disabled={saving} className="px-4 py-2 text-sm rounded-lg bg-brand hover:bg-brand-700 text-white disabled:opacity-60">
+          <button
+            type="submit"
+            form="admin-pickup-form"
+            disabled={saving}
+            className="focus-ring px-4 min-h-[44px] text-sm font-semibold rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white transition disabled:opacity-60 disabled:pointer-events-none"
+          >
             {saving ? 'กำลังบันทึก…' : isNew ? 'สร้าง' : 'บันทึก'}
           </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
-
-
-/* ── Delete confirm modal ── */
-function DeleteConfirmModal({ row, onClose, onDeleted }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const handleDelete = async () => {
-    setBusy(true); setError(null);
-    try {
-      await api.delete(`/admin/pickup-points/${row.id}`);
-      onDeleted();
-    } catch (err) {
-      setError(err?.response?.data?.message || 'ลบไม่สำเร็จ');
-      setBusy(false);
-    }
-  };
-  return (
-    <Modal onClose={onClose} title="ยืนยันการลบ">
-      <p className="text-sm mb-3">
-        ต้องการลบจุดรับส่ง <strong>{row.label}</strong> ใช่หรือไม่?
-      </p>
-      <p className="text-xs text-ink-muted mb-3">
-        การลบเป็นแบบ soft-delete — ข้อมูลจะถูกซ่อนแต่ยังคงอยู่ใน audit log
-      </p>
-      {error && <AlertBanner variant="danger" title="ลบไม่สำเร็จ">{error}</AlertBanner>}
-      <div className="flex justify-end gap-2 pt-3">
-        <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border">
-          ยกเลิก
-        </button>
-        <button type="button" onClick={handleDelete} disabled={busy} className="px-4 py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60">
-          {busy ? 'กำลังลบ…' : 'ลบ'}
-        </button>
-      </div>
-    </Modal>
-  );
-}
-
-/* ── Generic modal shell ── */
-function Modal({ title, onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-[9999] isolate flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="relative z-[10000] bg-surface w-full max-w-lg rounded-2xl shadow-elevate max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <header className="flex items-center justify-between p-4 border-b border-surface-border">
-          <h2 className="font-semibold text-ink">{title}</h2>
-          <button type="button" onClick={onClose} className="p-1 rounded-full hover:bg-surface-border" aria-label="ปิด">
-            <X className="w-4 h-4 text-ink-muted" />
-          </button>
-        </header>
-        <div className="p-4">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-ink-muted mb-1">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-/* ── Bulk delete confirm modal (Phase 10.10G-B) ────────────────────────────
- * Sequentially deletes selected pickup points via the existing per-id endpoint
- * (DELETE /api/admin/pickup-points/:id). Per-item failure does not abort the
- * batch — caller gets back a list of successfully-deleted ids so it can prune
- * the selection set and refresh.                                              */
-function BulkDeleteConfirmModal({ items, totalSelected, onClose, onDone, toast }) {
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: totalSelected });
-  const previewItems = items.slice(0, 5);
-  const overflowCount = Math.max(0, totalSelected - previewItems.length);
-
-  const handleConfirm = async () => {
-    setBusy(true);
-    setProgress({ done: 0, total: totalSelected });
-    const successIds = [];
-    const failures = [];
-
-    // Sequential: keeps backend load predictable + makes audit_log per-item ordered.
-    for (let i = 0; i < items.length; i++) {
-      const row = items[i];
-      try {
-        await api.delete(`/admin/pickup-points/${row.id}`);
-        successIds.push(row.id);
-      } catch (err) {
-        failures.push({
-          id: row.id,
-          label: row.label,
-          message: err?.response?.data?.message || 'ลบไม่สำเร็จ',
-        });
+        </>
       }
-      setProgress({ done: i + 1, total: items.length });
-    }
-
-    // Result toast
-    if (failures.length === 0) {
-      toast.success(`ลบสำเร็จ ${successIds.length} รายการ`);
-    } else if (successIds.length === 0) {
-      toast.error('ไม่สามารถลบรายการที่เลือกได้');
-    } else {
-      toast.error(`ลบสำเร็จ ${successIds.length} รายการ ไม่สำเร็จ ${failures.length} รายการ`);
-    }
-    onDone({ successIds, failures });
-  };
-
-  return (
-    <Modal onClose={busy ? () => {} : onClose} title="ยืนยันการลบหลายรายการ">
-      <p className="text-sm mb-2">
-        คุณกำลังจะลบ <strong className="tabular-nums">{totalSelected}</strong> รายการ
-      </p>
-      {previewItems.length > 0 && (
-        <ul className="text-xs text-ink-muted list-disc pl-5 mb-3 space-y-0.5 max-h-32 overflow-y-auto">
-          {previewItems.map(r => (
-            <li key={r.id} className="truncate">{r.label || `จุดที่ ${r.id}`}</li>
-          ))}
-          {overflowCount > 0 && (
-            <li className="list-none italic">และอีก {overflowCount} รายการ</li>
-          )}
-        </ul>
-      )}
-      <p className="text-xs text-ink-muted mb-3">
-        การดำเนินการนี้จะซ่อนรายการจากหน้าจอ แต่ไม่ลบประวัติย้อนหลัง
-      </p>
-      {busy && (
-        <p className="text-xs text-ink-muted mb-2 tabular-nums">
-          กำลังลบ… {progress.done} / {progress.total}
-        </p>
-      )}
-      <div className="flex justify-end gap-2 pt-2">
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={busy}
-          className="px-4 py-2 text-sm rounded-lg border border-surface-border hover:bg-surface-border disabled:opacity-60"
-        >
-          ยกเลิก
-        </button>
-        <button
-          type="button"
-          onClick={handleConfirm}
-          disabled={busy || totalSelected === 0}
-          className="px-4 py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60"
-        >
-          {busy ? 'กำลังลบ…' : `ยืนยันลบ ${totalSelected} รายการ`}
-        </button>
-      </div>
+    >
+      <form id="admin-pickup-form" onSubmit={handleSubmit}>
+        <PickupPointFields
+          form={form}
+          onChange={update}
+          sessionLabels={SESSION_LABEL}
+          leadingFields={vehicleField}
+          errors={errors}
+        />
+      </form>
     </Modal>
   );
 }

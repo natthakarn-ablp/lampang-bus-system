@@ -20,12 +20,19 @@ export default defineConfig({
     chunkSizeWarningLimit: 350,
     rollupOptions: {
       output: {
-        manualChunks: {
+        manualChunks(id) {
           // Stable vendor: React + router. Cached across deploys that don't
           // touch React/Router. ~140 KB raw / ~45 KB gzip.
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          if (
+            id.includes('/node_modules/react/') ||
+            id.includes('/node_modules/react-dom/') ||
+            id.includes('/node_modules/react-router/') ||
+            id.includes('/node_modules/react-router-dom/')
+          ) {
+            return 'react-vendor';
+          }
           // Icon set used across every authed page. ~30 KB raw.
-          'lucide':       ['lucide-react'],
+          if (id.includes('/node_modules/lucide-react/')) return 'lucide';
         },
       },
     },

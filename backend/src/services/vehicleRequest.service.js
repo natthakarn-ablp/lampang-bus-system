@@ -133,17 +133,17 @@ async function approveVehicleRequest(pool, { requestId, adminUserId, adminNote }
 
     if (q.request_type === 'RESTORE_SOFT_DELETED_VEHICLE') {
       const [[v]] = await conn.query('SELECT id, plate_no, is_deleted FROM vehicles WHERE id = ? FOR UPDATE', [q.vehicle_id]);
-      if (!v) { await conn.query("UPDATE vehicle_requests SET status='FAILED', admin_note=?, updated_at=NOW() WHERE id=?", ['vehicle missing', requestId]); await conn.commit(); return { status: 'FAILED', reason: 'VEHICLE_MISSING' }; }
-      if (!v.is_deleted) { await conn.query("UPDATE vehicle_requests SET status='ALREADY_APPLIED', applied_at=NOW(), admin_note=?, updated_at=NOW() WHERE id=?", [note, requestId]); await conn.commit(); return { status: 'ALREADY_APPLIED', vehicle_id: v.id }; }
+      if (!v) { await conn.query("UPDATE vehicle_requests SET status='FAILED', admin_note=?, updated_at=NOW() WHERE id=?", ['vehicle missing', requestId]); await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(requestId), conn, newValue: { status: 'FAILED', reason: 'VEHICLE_MISSING' } }); await conn.commit(); return { status: 'FAILED', reason: 'VEHICLE_MISSING' }; }
+      if (!v.is_deleted) { await conn.query("UPDATE vehicle_requests SET status='ALREADY_APPLIED', applied_at=NOW(), admin_note=?, updated_at=NOW() WHERE id=?", [note, requestId]); await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(requestId), conn, newValue: { status: 'ALREADY_APPLIED', reason: 'VEHICLE_ALREADY_ACTIVE' } }); await conn.commit(); return { status: 'ALREADY_APPLIED', vehicle_id: v.id }; }
       const canonical = PI.canonicalPlateForStorage(v.plate_no);
       if (canonical) {
         const [[sib]] = await conn.query('SELECT id FROM vehicles WHERE canonical_plate = ? AND is_deleted = FALSE AND id <> ? LIMIT 1', [canonical, v.id]);
-        if (sib) { await conn.query("UPDATE vehicle_requests SET status='FAILED', admin_note=?, updated_at=NOW() WHERE id=?", ['active canonical sibling exists', requestId]); await conn.commit(); return { status: 'FAILED', reason: 'ACTIVE_CANONICAL_CONFLICT' }; }
+        if (sib) { await conn.query("UPDATE vehicle_requests SET status='FAILED', admin_note=?, updated_at=NOW() WHERE id=?", ['active canonical sibling exists', requestId]); await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(requestId), conn, newValue: { status: 'FAILED', reason: 'ACTIVE_CANONICAL_CONFLICT' } }); await conn.commit(); return { status: 'FAILED', reason: 'ACTIVE_CANONICAL_CONFLICT' }; }
       }
       try {
         await conn.query('UPDATE vehicles SET is_deleted = FALSE, deleted_at = NULL, canonical_plate = ? WHERE id = ? AND is_deleted = TRUE', [canonical, v.id]);
       } catch (e) {
-        if (e.code === 'ER_DUP_ENTRY') { await conn.rollback(); await pool.query("UPDATE vehicle_requests SET status='FAILED', admin_note='canonical race', updated_at=NOW() WHERE id=?", [requestId]); return { status: 'FAILED', reason: 'ACTIVE_CANONICAL_CONFLICT' }; }
+        if (e.code === 'ER_DUP_ENTRY') { await conn.rollback(); const [fr] = await pool.query("UPDATE vehicle_requests SET status='FAILED', admin_note='canonical race', updated_at=NOW() WHERE id=?", [requestId]); if (fr && fr.affectedRows > 0) await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(requestId), newValue: { status: 'FAILED', reason: 'ACTIVE_CANONICAL_CONFLICT' } }); return { status: 'FAILED', reason: 'ACTIVE_CANONICAL_CONFLICT' }; }
         throw e;
       }
       await logAudit({ userId: adminUserId, action: 'UPDATE', entityType: 'vehicle', entityId: String(v.id), conn,

@@ -118,7 +118,7 @@ describe('School add vehicle', () => {
     const res = await request(app)
       .post('/api/school/vehicles')
       .set('Authorization', `Bearer ${schoolToken}`)
-      .send({ plate_no: 'ZZTEST 9901 ลำปาง', vehicle_type: 'รถตู้', driver_name: '__BulkDriver', driver_phone: '0000000000' });
+      .send({ plate_no: 'ผก 9901 ลำปาง', vehicle_type: 'รถตู้', driver_name: '__BulkDriver', driver_phone: '0000000000' });
     expect(res.status).toBe(201);
     expect(res.body.data).toHaveProperty('vehicle_id');
   });

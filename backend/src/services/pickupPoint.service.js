@@ -2,6 +2,7 @@
 
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 /* ─────────────────────────────────────────────────────────────────────────
  * Read functions (driver + school)
@@ -63,17 +64,18 @@ async function getPickupPointsForSchool(schoolId, { session = null, gradeFilter 
   // JSON list (so the teacher sees only her own grade in each point
   // card) AND the EXISTS clause (so points whose only assigned
   // students are out-of-grade are hidden entirely).
-  const innerGrade  = gradeFilter ? ' AND s.grade = ?'  : '';
-  const existsGrade = gradeFilter ? ' AND s2.grade = ?' : '';
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const innerGrade  = gradeFilter ? ' AND s.grade IN (?)'  : '';
+  const existsGrade = gradeFilter ? ' AND s2.grade IN (?)' : '';
   const params = [schoolId];
-  if (gradeFilter) params.push(gradeFilter);
+  if (gradeFilter) params.push(eq);
   let sessionFilter = '';
   if (session === 'morning' || session === 'evening') {
     sessionFilter = ` AND pp.session IN (?, 'both')`;
     params.push(session);
   }
   params.push(schoolId);
-  if (gradeFilter) params.push(gradeFilter);
+  if (gradeFilter) params.push(eq);
 
   const [rows] = await pool.query(`
     SELECT
@@ -346,12 +348,13 @@ async function getStudentsForVehicle(vehicleId, { session = null } = {}) {
 async function getVehiclesForSchool(schoolId, { gradeFilter = null } = {}) {
   // student_count counts only in-grade students when a teacher asks,
   // so the modal-dropdown reading matches the perspective.
-  const countGrade = gradeFilter ? ' AND s2.grade = ?'  : '';
-  const joinGrade  = gradeFilter ? ' AND s.grade = ?'   : '';
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const countGrade = gradeFilter ? ' AND s2.grade IN (?)'  : '';
+  const joinGrade  = gradeFilter ? ' AND s.grade IN (?)'   : '';
   const params = [schoolId];
-  if (gradeFilter) params.push(gradeFilter);
+  if (gradeFilter) params.push(eq);
   params.push(schoolId);
-  if (gradeFilter) params.push(gradeFilter);
+  if (gradeFilter) params.push(eq);
   const [rows] = await pool.query(`
     SELECT DISTINCT v.id, v.plate_no,
            (SELECT COUNT(*) FROM students s2
@@ -370,8 +373,8 @@ async function getStudentsForSchoolAndVehicle(schoolId, vehicleId, { session = n
   let where = 'school_id = ? AND vehicle_id = ? AND is_deleted = FALSE';
   const params = [schoolId, vehicleId];
   if (gradeFilter) {
-    where += ' AND grade = ?';
-    params.push(gradeFilter);
+    where += ' AND grade IN (?)';
+    params.push(gradeEquivalents(gradeFilter));
   }
   if (conflictIds.length > 0) {
     where += ' AND id NOT IN (?)';
@@ -447,8 +450,8 @@ async function getAssignableStudentsForPickupPoint(point, { schoolId = null, gra
     params.push(schoolId);
   }
   if (gradeFilter) {
-    where += ' AND s.grade = ?';
-    params.push(gradeFilter);
+    where += ' AND s.grade IN (?)';
+    params.push(gradeEquivalents(gradeFilter));
   }
   if (conflictIds.length > 0) {
     where += ' AND s.id NOT IN (?)';
@@ -719,8 +722,8 @@ async function getReadOnlyPickupMap({
     where.push("pp.session = 'both'");
   }
   if (grade) {
-    where.push('s.grade = ?');
-    params.push(grade);
+    where.push('s.grade IN (?)');
+    params.push(gradeEquivalents(grade));
   }
   if (search) {
     const term = '%' + String(search).slice(0, 100).replace(/[\\%_]/g, m => '\\' + m) + '%';

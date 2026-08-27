@@ -18,8 +18,10 @@ const AppCard = forwardRef(function AppCard({
   // Opt-in hover lift for clickable cards (DESIGN.md: shadow appears on
   // interaction, not as decoration). Reduced-motion users keep a static card
   // via the global prefers-reduced-motion rule.
+  // `focus-ring` is the app-wide focus treatment (see index.css) — one ring
+  // everywhere rather than a per-component variant.
   const interactiveCls = interactive
-    ? 'transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-elevate focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-600/25 cursor-pointer'
+    ? 'focus-ring transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-elevate active:translate-y-0 active:shadow-soft disabled:opacity-60 disabled:pointer-events-none cursor-pointer'
     : '';
   return (
     <Tag

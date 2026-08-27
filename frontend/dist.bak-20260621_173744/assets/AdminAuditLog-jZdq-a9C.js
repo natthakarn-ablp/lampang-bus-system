@@ -1,1 +1,0 @@
-import{j as t}from"./index-H_tNlNvV.js";import{A as i}from"./AuditLogTable-CUZQC_gY.js";import"./react-vendor-C-PLMXBs.js";import"./lucide-sxRlRDOU.js";import"./AppCard-CtAgCkFD.js";import"./StatusBadge-DMANgU8Q.js";import"./EmptyState-a_VdUkh5.js";function d(){return t.jsx(i,{apiPath:"/admin/audit-logs",title:"ประวัติการใช้งานระบบ (ทั้งหมด)"})}export{d as default};

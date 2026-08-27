@@ -8,7 +8,7 @@ import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import AlertBanner from '../../components/ui/AlertBanner';
-import { CommandHero } from '../../components/ui';
+import { CommandHero, FormField} from '../../components/ui';
 
 const REASONS = {
   VEHICLE_NOT_ELIGIBLE: 'รถยังไม่ผ่านเงื่อนไขความปลอดภัย',
@@ -202,18 +202,15 @@ export default function DriverShift() {
       ) : (
         <>
           <AppCard padding="md">
-            <label className="block text-sm font-semibold text-ink">
-              รอบการเดินรถ
-              <select
-                value={session}
-                onChange={event => setSession(event.target.value)}
-                className="mt-2 min-h-[44px] w-full rounded-lg border border-surface-border bg-surface-raised p-2 text-sm text-ink transition focus:border-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-600/30"
-              >
-                <option value="MORNING">เช้า</option>
-                <option value="EVENING">เย็น</option>
-                <option value="OTHER">อื่น ๆ</option>
-              </select>
-            </label>
+            <FormField label="รอบการเดินรถ">
+              {ctl => (
+                <select {...ctl} value={session} onChange={event => setSession(event.target.value)} className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                  <option value="MORNING">เช้า</option>
+                  <option value="EVENING">เย็น</option>
+                  <option value="OTHER">อื่น ๆ</option>
+                </select>
+              )}
+            </FormField>
           </AppCard>
 
           {vehicles.length === 0 ? (

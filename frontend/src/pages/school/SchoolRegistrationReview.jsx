@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Check, X, ClipboardCheck, Search } from 'lucide-react';
+import { ArrowLeft, Check, X, ClipboardCheck, Search , ClipboardList } from 'lucide-react';
 import api from '../../api/axios';
+import { ConfirmDialog, FilterBar, FormField } from '../../components/ui';
+import EmptyState from '../../components/EmptyState';
+import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
@@ -47,29 +50,42 @@ export default function SchoolRegistrationReview() {
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-      <h1 className="text-xl font-bold text-gray-800 mb-1">ตรวจสอบคำขอขึ้นทะเบียนรถ</h1>
-      <p className="text-xs text-gray-400 mb-4">คนขับส่งรายชื่อเด็กของโรงเรียน — ตรวจสอบและจับคู่กับฐานข้อมูล แล้วอนุมัติ</p>
+      <PageHeader
+        title="ตรวจสอบคำขอขึ้นทะเบียนรถ"
+        subtitle="คนขับส่งรายชื่อเด็กของโรงเรียน — ตรวจสอบและจับคู่กับฐานข้อมูล แล้วอนุมัติ"
+      />
 
-      <div className="flex gap-2 mb-4">
-        {[['PENDING_SCHOOL_REVIEW', 'รอตรวจสอบ'], ['APPROVED', 'อนุมัติแล้ว'], ['NEEDS_REVISION', 'ส่งกลับ']].map(([val, label]) => (
-          <button key={val} onClick={() => setFilter(val)}
-            className={`flex-1 sm:flex-none px-4 py-2.5 text-sm font-medium rounded-lg transition ${filter === val ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <FilterBar
+        className="mb-4"
+        chips={{
+          label: 'กรองตามสถานะคำขอ',
+          value: filter,
+          onChange: setFilter,
+          options: [
+            ['PENDING_SCHOOL_REVIEW', 'รอตรวจสอบ'],
+            ['APPROVED', 'อนุมัติแล้ว'],
+            ['NEEDS_REVISION', 'ส่งกลับ'],
+          ],
+        }}
+        count={list.length}
+        countLabel="คำขอ"
+      />
 
       {loading ? (
         <LoadingState />
       ) : list.length === 0 ? (
-        <p className="text-gray-400 py-10 text-center">ไม่พบคำขอตามเงื่อนไขที่เลือก</p>
+        <EmptyState
+          icon={ClipboardList}
+          title="ไม่พบคำขอตามเงื่อนไขที่เลือก"
+          description="ลองเลือกสถานะอื่น"
+        />
       ) : (
         <div className="space-y-3">
           {list.map((r) => (
-            <div key={r.application_id} className="bg-white rounded-xl border border-gray-200 px-4 sm:px-5 py-4 flex items-center justify-between gap-3">
+            <div key={r.application_id} className="bg-surface-raised rounded-xl border border-surface-border px-4 sm:px-5 py-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800">รถ {r.plate_no || '-'}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-sm font-medium text-ink">รถ {r.plate_no || '-'}</p>
+                <p className="text-caption text-ink-muted">
                   {r.roster_count} คน · เช้า {r.morning_rider_count} · เย็น {r.evening_rider_count}
                   {Number(r.unmatched_count) > 0 && <span className="text-amber-600"> · ยังไม่ตรวจ {r.unmatched_count}</span>}
                 </p>
@@ -93,6 +109,8 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [approving, setApproving] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   // Manual student search (for roster rows with no auto-match)
   const [searchFor, setSearchFor] = useState(null); // rosterId currently searching
   const [searchQ, setSearchQ] = useState('');
@@ -164,13 +182,14 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
   }
 
   async function reject() {
-    const reason = window.prompt('เหตุผลที่ส่งกลับให้แก้ไข:');
-    if (reason == null) return;
-    if (!reason.trim()) { toast.error('กรุณาระบุเหตุผล'); return; }
+    const reason = rejectReason.trim();
+    if (!reason) return;
     setApproving(true);
     try {
       await api.post(`/school/registrations/${applicationId}/reject`, { reason });
       toast.success('ส่งกลับให้แก้ไขแล้ว');
+      setRejectOpen(false);
+      setRejectReason('');
       onBack();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สำเร็จ');
@@ -195,8 +214,8 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
         <>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-lg font-bold text-gray-800">เด็กที่คนขับแจ้ง ({roster.length})</h1>
-              {unmatched > 0 && <p className="text-xs text-amber-600">ยังมี {unmatched} คนที่ยังไม่ตรวจสอบ</p>}
+              <h2 className="text-lg font-bold text-ink">เด็กที่คนขับแจ้ง ({roster.length})</h2>
+              {unmatched > 0 && <p className="text-caption text-warn-ink">ยังมี {unmatched} คนที่ยังไม่ตรวจสอบ</p>}
             </div>
             <Pill status={detail.approval_status} />
           </div>
@@ -206,14 +225,14 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
               <div key={r.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-800">
+                    <p className="text-sm font-medium text-ink">
                       {r.raw_student_name}
                       {r.raw_grade ? <span className="text-gray-400 font-normal"> · {r.raw_grade}</span> : null}
                       {r.raw_student_code ? <span className="text-gray-400 font-normal"> · เลข {r.raw_student_code}</span> : null}
                     </p>
-                    <p className="text-xs text-gray-500">{PICKUP_LABEL[r.pickup_type] || '-'}</p>
+                    <p className="text-caption text-ink-muted">{PICKUP_LABEL[r.pickup_type] || '-'}</p>
                   </div>
-                  {r.match_status === 'MATCHED' && <span className="text-xs text-green-600 shrink-0">จับคู่แล้ว ✓</span>}
+                  {r.match_status === 'MATCHED' && <span className="text-xs text-green-600 shrink-0">จับคู่แล้ว</span>}
                   {r.match_status === 'NOT_FOUND' && <span className="text-xs text-gray-400 shrink-0">ไม่ใช่เด็กที่นี่</span>}
                 </div>
 
@@ -312,7 +331,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                 <ClipboardCheck className="w-4 h-4" />
                 {unmatched > 0 ? `ตรวจให้ครบก่อน (เหลือ ${unmatched})` : 'อนุมัติทั้งหมด'}
               </button>
-              <button onClick={reject} disabled={approving}
+              <button onClick={() => { setRejectReason(''); setRejectOpen(true); }} disabled={approving}
                 className="bg-red-50 border border-red-300 text-red-700 hover:bg-red-100 disabled:opacity-50 text-sm font-medium px-5 py-3 rounded-lg transition">
                 ส่งกลับแก้ไข
               </button>
@@ -323,6 +342,26 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={rejectOpen}
+        title="ส่งคำขอกลับให้แก้ไข"
+        description="เหตุผลนี้จะแสดงให้ผู้ยื่นคำขอทราบ"
+        itemName={detail?.plate_no ? `รถ ${detail.plate_no}` : undefined}
+        confirmLabel="ส่งกลับแก้ไข"
+        loading={approving}
+        confirmDisabled={!rejectReason.trim()}
+        onConfirm={reject}
+        onCancel={() => { if (!approving) { setRejectOpen(false); setRejectReason(''); } }}
+      >
+        <FormField
+          label="เหตุผลที่ส่งกลับ"
+          value={rejectReason}
+          onChange={setRejectReason}
+          placeholder="เช่น รายชื่อนักเรียนไม่ครบถ้วน"
+          required
+        />
+      </ConfirmDialog>
     </div>
   );
 }

@@ -17,6 +17,9 @@ const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { logAudit } = require('../utils/audit');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
+const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
+const { parseCsvRecords } = require('../utils/csv');
+const { readWorkbookSafely } = require('../utils/xlsxPreflight');
 
 // ─── Bulk-import upload (Phase 10.2A) ────────────────────────────────────────
 // Disk-backed multer config mirroring backend/src/routes/school.routes.js.
@@ -76,20 +79,20 @@ async function parseSchoolImportFile(filePath) {
   }
 
   if (ext === '.csv') {
-    const raw = fs.readFileSync(filePath, 'utf-8').replace(/^﻿/, '');
-    const lines = raw.split(/\r?\n/).filter(l => l.trim().length);
-    if (lines.length < 2) return [];
-    const header = lines[0].split(',').map(c => c.trim());
+    const raw = decodeCsvBuffer(fs.readFileSync(filePath)).replace(/^﻿/, '');
+    const csvRows = parseCsvRecords(raw);
+    if (csvRows.length < 2) return [];
+    const header = csvRows[0].map(c => c.trim());
     const colMap = {};
     header.forEach((h, i) => { const k = matchHeader(h); if (k) colMap[k] = i; });
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',');
+    for (let i = 1; i < csvRows.length; i++) {
+      const cols = csvRows[i];
       rows.push({
         rowNum: i + 1,
-        school_code:      (cols[colMap.school_code]      ?? '').trim().replace(/^"|"$/g, ''),
-        school_name:      (cols[colMap.school_name]      ?? '').trim().replace(/^"|"$/g, ''),
-        username:         (cols[colMap.username]         ?? '').trim().replace(/^"|"$/g, ''),
-        initial_password: (cols[colMap.initial_password] ?? '').trim().replace(/^"|"$/g, ''),
+        school_code:      (cols[colMap.school_code]      ?? '').trim(),
+        school_name:      (cols[colMap.school_name]      ?? '').trim(),
+        username:         (cols[colMap.username]         ?? '').trim(),
+        initial_password: (cols[colMap.initial_password] ?? '').trim(),
       });
     }
     return rows;
@@ -97,7 +100,7 @@ async function parseSchoolImportFile(filePath) {
 
   // .xlsx via ExcelJS
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(filePath);
+  await readWorkbookSafely(wb, filePath);
   const ws = wb.getWorksheet(1) || wb.worksheets[0];
   if (!ws) return [];
 
@@ -401,7 +404,7 @@ router.put('/school-accounts/:id', async (req, res, next) => {
 // Security:
 //   - Affiliation scope comes from JWT via resolveAffiliationId(req); the
 //     caller cannot override it from the body or query.
-//   - The plaintext initial_password (operator-supplied or defaulted) is
+//   - The plaintext initial_password (operator-supplied, required) is
 //     consumed inline by bcrypt.hash() in the service layer and is NEVER
 //     returned in any API response.
 //   - Multer disk-storage files are deleted in `finally`.
@@ -435,7 +438,7 @@ router.get('/school-accounts/import-template', importExportLimiter, async (_req,
       school_code: '101010',
       school_name: 'โรงเรียนตัวอย่าง',
       username: '101010',
-      initial_password: '',  // blank → defaults to school_code at commit time
+      initial_password: 'TempPass1',
     });
 
     // Sheet 2: instructions
@@ -448,7 +451,7 @@ router.get('/school-accounts/import-template', importExportLimiter, async (_req,
       ['• school_code (จำเป็น) — รหัสโรงเรียน 6-10 หลัก', false],
       ['• school_name (จำเป็น) — ชื่อโรงเรียน', false],
       ['• username (ไม่บังคับ) — รหัส OBEC 6 หลัก ถ้าไม่ระบุ ระบบจะใช้ school_code (กรณี 6 หลัก) เป็นค่าเริ่มต้น', false],
-      ['• initial_password (ไม่บังคับ) — รหัสผ่านเริ่มต้น ถ้าไม่ระบุ ระบบจะใช้ school_code เป็นค่าเริ่มต้น', false],
+      ['• initial_password (จำเป็น) — รหัสผ่านเริ่มต้นอย่างน้อย 8 ตัว และไม่ใช่รหัสผ่านเดาง่าย', false],
       ['', false],
       ['ข้อปฏิบัติ:', false],
       ['• ลบแถวตัวอย่างก่อนกรอกข้อมูลจริง', false],

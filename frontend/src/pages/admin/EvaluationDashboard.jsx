@@ -1,16 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  ClipboardCheck, ChevronDown, Check, X as XIcon, Minus,
+  TrendingUp, TrendingDown, AlertTriangle,
+} from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
+import { AppCard, AlertBanner, StatusBadge, DataTable } from '../../components/ui';
 
 function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function delta(c, b) { return Math.round((c - b) * 100) / 100; }
+
+/**
+ * Direction of change. The glyphs ▲ / ▼ / = carried the whole meaning before:
+ * unreadable to a screen reader and, paired only with red/green, invisible to
+ * a colour-blind reader. Each trend now names itself.
+ */
 function trend(d, higher = true) {
-  if (d === 0) return { icon: '=', cls: 'text-gray-500', label: 'คงเดิม', bg: 'bg-gray-100' };
+  if (d === 0) return { Icon: Minus, cls: 'text-ink-muted', label: 'คงเดิม' };
   const ok = higher ? d > 0 : d < 0;
   return ok
-    ? { icon: '▲', cls: 'text-green-600', label: 'ดีขึ้น', bg: 'bg-green-100' }
-    : { icon: '▼', cls: 'text-red-600', label: 'ลดลง', bg: 'bg-red-100' };
+    ? { Icon: TrendingUp,   cls: 'text-success-ink', label: 'ดีขึ้น' }
+    : { Icon: TrendingDown, cls: 'text-danger-ink',  label: 'ลดลง' };
 }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'; }
 
@@ -48,114 +61,171 @@ const ROLE_DEFS = [
     ]},
 ];
 
-const CODE_BG = { orange: 'bg-orange-500', green: 'bg-green-600', teal: 'bg-teal-600', blue: 'bg-blue-600', indigo: 'bg-indigo-600', purple: 'bg-purple-600' };
+// The role initials are an identity marker, not a status, so they use the
+// structural navy/brand family rather than the semantic success/warn/danger
+// tones that mean something elsewhere on this page.
+const CODE_BG = {
+  orange: 'bg-navy-500', green: 'bg-navy-600', teal:   'bg-navy-700',
+  blue:   'bg-brand-600', indigo: 'bg-brand-700', purple: 'bg-navy-800',
+};
 
-function evalStatus(roleId, actions, snapHas) {
+function evalStatus(actions, snapHas) {
   const total = actions?.total || 0;
-  if (!snapHas || total < 5) return { label: 'ยังต้องเพิ่มหลักฐาน', cls: 'bg-red-100 text-red-700' };
-  if (total >= 20) return { label: 'พร้อมประเมิน', cls: 'bg-green-100 text-green-700' };
-  return { label: 'ประเมินได้บางส่วน', cls: 'bg-amber-100 text-amber-700' };
+  if (!snapHas || total < 5) return { label: 'ยังต้องเพิ่มหลักฐาน', variant: 'danger' };
+  if (total >= 20) return { label: 'พร้อมประเมิน', variant: 'success' };
+  return { label: 'ประเมินได้บางส่วน', variant: 'warn' };
+}
+
+/**
+ * Evidence coverage was `Snapshots: ✅` / `❌` — the emoji WAS the answer, so a
+ * screen reader announced "Snapshots: white heavy check mark" and a reader who
+ * cannot see the colour got nothing at all. The word is now the answer and the
+ * icon is decorative.
+ */
+function EvidenceChip({ label, present, count, absentText = 'ยังไม่มี' }) {
+  const Icon = present ? Check : XIcon;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-medium ${
+      present ? 'bg-success-soft text-success-ink' : 'bg-danger-soft text-danger-ink'
+    }`}>
+      <Icon className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+      {label}: {present ? (count != null ? `มี ${count} รายการ` : 'มี') : absentText}
+    </span>
+  );
 }
 
 export default function EvaluationDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // A failed request used to render the "ยังไม่มีข้อมูล" empty state, which
+  // reads as "evaluation has no evidence yet" — the opposite of "we could not
+  // check". On this page that distinction is the whole point.
+  const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState('');
 
-  useEffect(() => {
-    api.get('/admin/evaluation-summary')
-      .then(r => setData(r.data?.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await api.get('/admin/evaluation-summary');
+      setData(r.data?.data || null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'โหลดข้อมูลการประเมินไม่สำเร็จ');
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (loading) return <LoadingState />;
-  if (!data) return <EmptyState title="ยังไม่มีข้อมูล" />;
+  useEffect(() => { load(); }, [load]);
 
-  const { baseline, latest, role_actions, role_exports } = data;
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState title="โหลดข้อมูลการประเมินไม่สำเร็จ" message={error} onRetry={load} />;
+  if (!data) return <EmptyState title="ยังไม่มีข้อมูล" description="ยังไม่มี snapshot หรือ action log สำหรับการประเมิน" />;
+
+  const { baseline, latest } = data;
+  // These come back keyed by role; a response missing either key used to throw
+  // on the first lookup.
+  const roleActions = data.role_actions || {};
+  const roleExports = data.role_exports || {};
   const bData = baseline?.data || {};
   const lData = latest?.data || {};
-  const hasSnap = !!baseline && !!latest;
+  const hasSnap = Boolean(baseline) && Boolean(latest);
 
-  const readyCount = ROLE_DEFS.filter(r => evalStatus(r.id, role_actions[r.id], hasSnap).label === 'พร้อมประเมิน').length;
-  const partialCount = ROLE_DEFS.filter(r => evalStatus(r.id, role_actions[r.id], hasSnap).label === 'ประเมินได้บางส่วน').length;
+  const statuses = ROLE_DEFS.map(r => evalStatus(roleActions[r.id], hasSnap).label);
+  const readyCount = statuses.filter(l => l === 'พร้อมประเมิน').length;
+  const partialCount = statuses.filter(l => l === 'ประเมินได้บางส่วน').length;
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto pb-10">
-      {/* Header */}
-      <div className="bg-blue-800 text-white rounded-xl px-5 py-4 mb-5">
-        <p className="text-xs text-blue-200 uppercase tracking-wider">Role-by-Role Evaluation</p>
-        <h1 className="text-lg font-semibold">แดชบอร์ดประเมินผลแยกตามสิทธิ์</h1>
-        <p className="text-sm text-blue-200 mt-0.5">Snapshot • Action Logs • Export Evidence</p>
-      </div>
+      <PageHeader
+        icon={ClipboardCheck}
+        title="แดชบอร์ดประเมินผลแยกตามสิทธิ์"
+        subtitle="Snapshot · Action Logs · Export Evidence"
+        meta="Role-by-Role Evaluation"
+      />
 
       {/* Global summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        <SummaryPill label="Baseline" value={baseline ? fmtDate(baseline.date) : 'ยังไม่มี'} color={baseline ? 'blue' : 'gray'} />
-        <SummaryPill label="Snapshot ล่าสุด" value={latest ? fmtDate(latest.date) : 'ยังไม่มี'} color={latest ? 'blue' : 'gray'} />
-        <SummaryPill label="พร้อมประเมิน" value={`${readyCount} / ${ROLE_DEFS.length} role`} color={readyCount >= 4 ? 'green' : 'amber'} />
-        <SummaryPill label="ยังต้องเพิ่ม" value={`${ROLE_DEFS.length - readyCount - partialCount} role`} color="gray" />
+        <SummaryPill label="Baseline" value={baseline ? fmtDate(baseline.date) : 'ยังไม่มี'} tone={baseline ? 'brand' : 'muted'} />
+        <SummaryPill label="Snapshot ล่าสุด" value={latest ? fmtDate(latest.date) : 'ยังไม่มี'} tone={latest ? 'brand' : 'muted'} />
+        <SummaryPill label="พร้อมประเมิน" value={`${readyCount} / ${ROLE_DEFS.length} role`} tone={readyCount >= 4 ? 'success' : 'warn'} />
+        <SummaryPill label="ยังต้องเพิ่ม" value={`${ROLE_DEFS.length - readyCount - partialCount} role`} tone="muted" />
       </div>
 
-      {/* Role cards */}
       <div className="space-y-3">
         {ROLE_DEFS.map(role => {
-          const actions = role_actions[role.id] || { actions: {}, total: 0 };
-          const exports = role_exports[role.id] || 0;
-          const status = evalStatus(role.id, actions, hasSnap);
+          const actions = roleActions[role.id] || { actions: {}, total: 0 };
+          const exports = roleExports[role.id] || 0;
+          const status = evalStatus(actions, hasSnap);
           const isOpen = expanded === role.id;
+          const panelId = `eval-panel-${role.id}`;
+
+          const metricRows = role.metrics.map(m => {
+            const bv = pct(bData[m.num] || 0, bData[m.den] || 0);
+            const cv = pct(lData[m.num] || 0, lData[m.den] || 0);
+            const d = delta(cv, bv);
+            return { ...m, bv, cv, d, t: trend(d) };
+          });
 
           return (
-            <div key={role.id} className={`bg-white rounded-xl border-2 overflow-hidden transition ${isOpen ? 'border-gray-300 shadow-sm' : 'border-gray-200'}`}>
-              {/* Card header */}
-              <button onClick={() => setExpanded(isOpen ? '' : role.id)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-gray-50 transition">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0 ${CODE_BG[role.color]}`}>
-                  {role.code}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-800">{role.name}</p>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.cls}`}>{status.label}</span>
-                  </div>
-                  <p className="text-xs text-gray-500">{role.focus} · {actions.total || 0} actions · {exports} exports</p>
-                </div>
-                {/* Mini metrics */}
-                <div className="hidden sm:flex gap-2 shrink-0">
-                  {role.metrics.slice(0, 2).map(m => {
-                    const cv = pct(lData[m.num] || 0, lData[m.den] || 0);
-                    return <span key={m.label} className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{m.label} {cv}%</span>;
-                  })}
-                </div>
-                <span className="text-gray-400 shrink-0">{isOpen ? '▲' : '▼'}</span>
-              </button>
+            <AppCard key={role.id} padding="none" className={isOpen ? 'ring-1 ring-surface-border' : undefined}>
+              <h2>
+                <button
+                  type="button"
+                  onClick={() => setExpanded(isOpen ? '' : role.id)}
+                  aria-expanded={isOpen}
+                  aria-controls={panelId}
+                  className="focus-ring w-full flex items-center gap-3 px-4 py-3 min-h-[44px] text-left hover:bg-surface rounded-xl transition"
+                >
+                  <span className={`w-11 h-11 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0 ${CODE_BG[role.color]}`}>
+                    {role.code}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-ink">{role.name}</span>
+                      <StatusBadge variant={status.variant} size="sm">{status.label}</StatusBadge>
+                    </span>
+                    <span className="block text-caption text-ink-muted">
+                      {role.focus} · {actions.total || 0} actions · {exports} exports
+                    </span>
+                  </span>
+                  <span className="hidden sm:flex gap-2 shrink-0">
+                    {role.metrics.slice(0, 2).map(m => (
+                      <span key={m.label} className="text-caption text-ink-muted bg-surface px-2 py-0.5 rounded tabular-nums">
+                        {m.label} {pct(lData[m.num] || 0, lData[m.den] || 0)}%
+                      </span>
+                    ))}
+                  </span>
+                  <ChevronDown
+                    className={`w-5 h-5 text-ink-muted shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  />
+                </button>
+              </h2>
 
-              {/* Expanded detail */}
               {isOpen && (
-                <div className="border-t border-gray-200 px-4 py-4 space-y-4">
-                  {/* Evidence coverage */}
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <span className={`px-2 py-0.5 rounded-full font-medium ${hasSnap ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      Snapshots: {hasSnap ? '✅' : '❌'}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full font-medium ${(actions.total || 0) > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      Audit logs: {(actions.total || 0) > 0 ? `✅ ${actions.total}` : '❌'}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full font-medium ${exports > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      Exports: {exports > 0 ? `✅ ${exports}` : '—'}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">
-                      External: ⚠️ ต้องใช้ร่วม
-                    </span>
+                <div id={panelId} className="border-t border-surface-border px-4 py-4 space-y-4">
+                  <div>
+                    <h3 className="text-caption font-semibold text-ink-muted mb-1.5">หลักฐานที่มี</h3>
+                    <div className="flex flex-wrap gap-2">
+                      <EvidenceChip label="Snapshots" present={hasSnap} />
+                      <EvidenceChip label="Audit logs" present={(actions.total || 0) > 0} count={actions.total || 0} />
+                      <EvidenceChip label="Exports" present={exports > 0} count={exports} absentText="ยังไม่มี" />
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-caption font-medium bg-warn-soft text-warn-ink">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" strokeWidth={2.5} aria-hidden="true" />
+                        External: ต้องใช้หลักฐานภายนอกร่วม
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Action breakdown */}
                   {actions.actions && Object.keys(actions.actions).length > 0 && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-1">Action breakdown</p>
+                      <h3 className="text-caption font-semibold text-ink-muted mb-1.5">Action breakdown</h3>
                       <div className="flex flex-wrap gap-1.5">
                         {Object.entries(actions.actions).map(([action, cnt]) => (
-                          <span key={action} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                          <span key={action} className="text-caption bg-surface text-ink-muted px-2 py-1 rounded tabular-nums">
                             {action}: {cnt}
                           </span>
                         ))}
@@ -163,50 +233,38 @@ export default function EvaluationDashboard() {
                     </div>
                   )}
 
-                  {/* Metric comparison */}
                   {hasSnap && (
                     <div>
-                      <p className="text-xs font-semibold text-gray-500 mb-2">Baseline vs Current</p>
-                      <div className="bg-gray-50 rounded-lg overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="text-xs text-gray-400">
-                              <th className="px-3 py-2 text-left font-medium">ตัวชี้วัด</th>
-                              <th className="px-3 py-2 text-center font-medium">Baseline</th>
-                              <th className="px-3 py-2 text-center font-medium">ปัจจุบัน</th>
-                              <th className="px-3 py-2 text-center font-medium">เปลี่ยนแปลง</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {role.metrics.map(m => {
-                              const bv = pct(bData[m.num] || 0, bData[m.den] || 0);
-                              const cv = pct(lData[m.num] || 0, lData[m.den] || 0);
-                              const d = delta(cv, bv);
-                              const t = trend(d);
-                              return (
-                                <tr key={m.label} className="border-t border-gray-100">
-                                  <td className="px-3 py-2 text-gray-700 font-medium">{m.label}</td>
-                                  <td className="px-3 py-2 text-center text-gray-500">{bv}%</td>
-                                  <td className="px-3 py-2 text-center font-semibold text-gray-800">{cv}%</td>
-                                  <td className={`px-3 py-2 text-center font-semibold ${t.cls}`}>
-                                    {t.icon} {d > 0 ? '+' : ''}{d}%
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                      <h3 className="text-caption font-semibold text-ink-muted mb-1.5">Baseline vs Current</h3>
+                      <DataTable
+                        caption={`ตัวชี้วัดของสิทธิ์${role.name} เทียบกับ baseline`}
+                        rowKey={r => r.label}
+                        rows={metricRows}
+                        columns={[
+                          { key: 'label', header: 'ตัวชี้วัด', primary: true, cell: r => r.label },
+                          { key: 'bv', header: 'Baseline', align: 'center', numeric: true, cell: r => `${r.bv}%` },
+                          { key: 'cv', header: 'ปัจจุบัน', align: 'center', numeric: true,
+                            cell: r => <span className="font-semibold text-ink">{r.cv}%</span> },
+                          { key: 'd', header: 'เปลี่ยนแปลง', align: 'center', numeric: true,
+                            cell: r => (
+                              <span className={`inline-flex items-center gap-1 font-semibold ${r.t.cls}`}>
+                                <r.t.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+                                {r.d > 0 ? '+' : ''}{r.d}%
+                                <span className="sr-only">{r.t.label}</span>
+                              </span>
+                            ) },
+                        ]}
+                      />
                     </div>
                   )}
 
-                  {/* Missing note */}
-                  <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-                    ⚠️ บาง metric ของ role นี้ต้องใช้หลักฐานภายนอก (แบบสอบถาม, สัมภาษณ์, บันทึกประชุม) ร่วมด้วย — ดูรายละเอียดที่หน้า "กรอบวัดผลระบบ"
-                  </p>
+                  <AlertBanner variant="warn" title="ต้องใช้หลักฐานภายนอกร่วม">
+                    บาง metric ของสิทธิ์นี้ต้องใช้แบบสอบถาม สัมภาษณ์ หรือบันทึกประชุมร่วมด้วย —
+                    ดูรายละเอียดที่หน้า “กรอบวัดผลระบบ”
+                  </AlertBanner>
                 </div>
               )}
-            </div>
+            </AppCard>
           );
         })}
       </div>
@@ -214,12 +272,18 @@ export default function EvaluationDashboard() {
   );
 }
 
-function SummaryPill({ label, value, color }) {
-  const bg = { blue: 'bg-blue-50 text-blue-700', green: 'bg-green-50 text-green-700', amber: 'bg-amber-50 text-amber-700', gray: 'bg-gray-50 text-gray-600' };
+const PILL_TONES = {
+  brand:   'bg-brand-50 text-brand-700',
+  success: 'bg-success-soft text-success-ink',
+  warn:    'bg-warn-soft text-warn-ink',
+  muted:   'bg-surface text-ink-muted border border-surface-border',
+};
+
+function SummaryPill({ label, value, tone }) {
   return (
-    <div className={`rounded-xl p-3 text-center ${bg[color] || bg.gray}`}>
+    <div className={`rounded-xl p-3 text-center ${PILL_TONES[tone] || PILL_TONES.muted}`}>
       <p className="text-sm font-semibold">{value}</p>
-      <p className="text-xs mt-0.5 opacity-70">{label}</p>
+      <p className="text-caption mt-0.5 opacity-80">{label}</p>
     </div>
   );
 }

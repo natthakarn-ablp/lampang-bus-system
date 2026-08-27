@@ -12,10 +12,10 @@ import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
 import {
   AppCard, AlertBanner, KPIGrid, KPIStat,
-  StatusBadge, DashboardSection,
-} from '../../components/ui';
+  StatusBadge, DashboardSection, FilterBar} from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import PageHeader from '../../components/PageHeader';
 import { PageTransition } from '../../lib/motion';
 
 // SLA configuration — days allowed to resolve a risk item
@@ -170,7 +170,11 @@ export default function TransportDashboard() {
       api.get('/transport/dashboard').then(r => r.data.data),
       api.get('/transport/vehicles?per_page=200').then(r => r.data.data).catch(() => []),
     ])
-      .then(([dash, vList]) => { setData(dash); setVehicles(vList || []); })
+      // `vList || []` let a non-array response through (an error envelope or an
+      // object body is truthy), and every downstream vehicles.filter(...) then
+      // threw, blanking the whole dashboard. Guard on the shape, not on
+      // truthiness.
+      .then(([dash, vList]) => { setData(dash); setVehicles(Array.isArray(vList) ? vList : []); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -211,10 +215,10 @@ export default function TransportDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
-      <header className="motion-safe:animate-fade-in-up">
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight">ภาพรวมตรวจสภาพรถ</h1>
-        <p className="text-sm text-ink-muted mt-1">สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด</p>
-      </header>
+      <PageHeader
+        title="ภาพรวมตรวจสภาพรถ"
+        subtitle="สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด"
+      />
 
       {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern
           (flex-1 sm:flex-none + min-h 40px) so transport operators can tap
@@ -336,40 +340,28 @@ export default function TransportDashboard() {
         );
       })()}
 
-      {/* Quick filters */}
-      <div className="flex flex-wrap gap-2">
-        {FILTERS.map(f => {
-          const count = filterCounts[f.key];
-          const isActive = activeFilter === f.key;
-          return (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setActiveFilter(f.key)}
-              className={`inline-flex items-center text-sm font-medium px-3 py-2 min-h-[44px] rounded-lg transition border ${
-                isActive
-                  ? 'bg-brand-700 text-surface-raised border-brand-700'
-                  : 'bg-surface-raised text-ink-muted border-surface-border hover:bg-surface'
-              }`}
-            >
-              {f.label}{' '}
-              <span className={`ml-1 text-xs font-semibold ${isActive ? 'text-brand-100' : 'text-ink-muted'}`}>{count}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" strokeWidth={2} aria-hidden="true" />
-        <input
-          type="text"
-          value={vSearch}
-          onChange={e => setVSearch(e.target.value)}
-          placeholder="ค้นหาทะเบียนรถ…"
-          className="w-full min-h-[44px] border border-surface-border rounded-xl pl-9 pr-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-brand-400"
-        />
-      </div>
+      {/* The chip row and the search box were a hand-rolled pair; the chips
+          were styled buttons rather than a radiogroup, and the search input
+          had no accessible name — a placeholder is not one. */}
+      <FilterBar
+        chips={{
+          label: 'กรองรถตามความเสี่ยง',
+          value: activeFilter,
+          onChange: setActiveFilter,
+          options: FILTERS.map(f => [f.key, f.label, filterCounts[f.key]]),
+        }}
+        search={{
+          value: vSearch,
+          onChange: setVSearch,
+          label: 'ค้นหาทะเบียนรถ',
+          placeholder: 'ค้นหาทะเบียนรถ…',
+        }}
+        count={filtered.length}
+        countLabel="คัน"
+        onClear={(activeFilter !== FILTERS[0].key || vSearch)
+          ? () => { setActiveFilter(FILTERS[0].key); setVSearch(''); }
+          : undefined}
+      />
 
       {/* Vehicle list */}
       <DashboardSection
@@ -481,7 +473,7 @@ function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
 
       <div className="flex flex-wrap items-center gap-2">
         {sug && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-warn bg-warn-soft border border-warn/30 px-2 py-1 rounded-lg">
+          <span className="inline-flex items-center gap-1.5 text-xs text-warn-ink bg-warn-soft border border-warn/30 px-2 py-1 rounded-lg">
             <Lightbulb className="w-3.5 h-3.5" strokeWidth={2} />
             {sug}
           </span>
@@ -489,7 +481,7 @@ function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
         <button
           type="button"
           onClick={onRecord}
-          className="inline-flex items-center gap-1.5 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-2.5 py-1 rounded-lg transition"
+          className="focus-ring inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 active:bg-brand-200 border border-brand-200 px-3 min-h-[44px] rounded-lg transition"
         >
           <FileText className="w-3.5 h-3.5" strokeWidth={2} />
           บันทึกตรวจ
@@ -497,7 +489,7 @@ function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
         {v.driver_phone && (
           <a
             href={`tel:${v.driver_phone}`}
-            className="inline-flex items-center gap-1.5 text-xs text-success bg-success-soft hover:bg-success/20 border border-success/30 px-2.5 py-1 rounded-lg transition"
+            className="inline-flex items-center gap-1.5 text-xs text-success-ink bg-success-soft hover:bg-success/20 border border-success/30 px-2.5 py-1 rounded-lg transition"
           >
             <Phone className="w-3.5 h-3.5" strokeWidth={2} />
             โทรคนขับ

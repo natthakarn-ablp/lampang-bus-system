@@ -306,7 +306,7 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
           newStudentId = await allocateStudentId(conn);
         }
 
-        // Generate placeholder cid_hash (PDPA: driver doesn't provide national ID)
+        // Generate a synthetic cid_hash marker (PDPA: driver does not provide national ID)
         const crypto = require('crypto');
         const cidHash = crypto.createHash('sha256')
           .update(`placeholder-${newStudentId}-${Date.now()}-${requestId}`)

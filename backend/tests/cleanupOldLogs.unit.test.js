@@ -11,6 +11,7 @@ const svc = require('../scripts/cleanup-old-logs');
 
 const T_AUDIT = svc.TABLES.find((t) => t.table === 'audit_logs');
 const T_DAILY = svc.TABLES.find((t) => t.table === 'daily_status');
+const T_LOCATION = svc.TABLES.find((t) => t.table === 'vehicle_location_history');
 
 describe('eligibleWhere (future-safe cutoff)', () => {
   test('audit_logs: DATE_SUB(NOW()) window AND never future-dated rows', () => {
@@ -20,6 +21,27 @@ describe('eligibleWhere (future-safe cutoff)', () => {
   });
   test('daily_status compares the DATE column to CURDATE()', () => {
     expect(svc.eligibleWhere(T_DAILY, 30)).toMatch(/check_date <= CURDATE\(\)/);
+  });
+  test('vehicle_location_history purges by the indexed received_at column', () => {
+    const w = svc.eligibleWhere(T_LOCATION, 30);
+    expect(w).toMatch(/received_at < DATE_SUB\(NOW\(\), INTERVAL 30 DAY\)/);
+    expect(w).toMatch(/received_at <= NOW\(\)/);
+  });
+});
+
+describe('vehicle_location_history retention config (#4)', () => {
+  test('is registered as a hard-delete table (no archive — it is raw location PII)', () => {
+    expect(T_LOCATION).toBeDefined();
+    expect(T_LOCATION.archive).toBeNull();
+    expect(T_LOCATION.dateCol).toBe('received_at');
+  });
+
+  test('purgeBatch hard-deletes the batch with NO archive copy', async () => {
+    const conn = makeConn((sql) => (/SELECT id FROM/.test(sql) ? [[{ id: 11 }, { id: 12 }]] : [{ affectedRows: 2 }]));
+    const n = await svc.purgeBatch(poolOf(conn), T_LOCATION, 30, 5000);
+    expect(n).toBe(2);
+    expect(conn.calls.some(([s]) => /INSERT IGNORE/.test(s))).toBe(false);
+    expect(conn.calls.some(([s]) => /DELETE FROM vehicle_location_history/.test(s))).toBe(true);
   });
 });
 
@@ -70,9 +92,10 @@ describe('runRetention', () => {
       getConnection: jest.fn(() => { throw new Error('must not getConnection in dry-run'); }),
     };
     const summary = await svc.runRetention(pool, {
-      apply: false, batch: 5000, days: { audit_logs: 365, checkin_logs: 730, daily_status: 30 },
+      apply: false, batch: 5000, days: { audit_logs: 365, checkin_logs: 730, daily_status: 30, vehicle_location_history: 30 },
     });
-    expect(summary).toHaveLength(3);
+    expect(summary).toHaveLength(4);
+    expect(summary.some((s) => s.table === 'vehicle_location_history')).toBe(true);
     expect(summary.every((s) => s.eligible === 7 && s.deleted === 0)).toBe(true);
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
@@ -81,9 +104,10 @@ describe('runRetention', () => {
     const conn = makeConn((sql) => (/SELECT id FROM/.test(sql) ? [[{ id: 1 }]] : [{ affectedRows: 1 }]));
     const pool = { query: jest.fn(async () => [[{ n: 1 }]]), getConnection: jest.fn().mockResolvedValue(conn) };
     const summary = await svc.runRetention(pool, {
-      apply: true, batch: 5000, days: { audit_logs: 1, checkin_logs: 1, daily_status: 1 },
+      apply: true, batch: 5000, days: { audit_logs: 1, checkin_logs: 1, daily_status: 1, vehicle_location_history: 1 },
     });
     expect(summary.find((s) => s.table === 'audit_logs')).toMatchObject({ deleted: 1, archived: 1 });
     expect(summary.find((s) => s.table === 'daily_status')).toMatchObject({ deleted: 1, archived: 0 });
+    expect(summary.find((s) => s.table === 'vehicle_location_history')).toMatchObject({ deleted: 1, archived: 0 });
   });
 });

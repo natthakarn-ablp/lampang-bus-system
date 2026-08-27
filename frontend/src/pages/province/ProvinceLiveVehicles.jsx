@@ -4,6 +4,7 @@ import {
   Users, MapPin,
 } from 'lucide-react';
 import api from '../../api/axios';
+import PageHeader from '../../components/PageHeader';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection, LiveKpiCard } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
 import LoadingState from '../../components/LoadingState';
@@ -101,11 +102,11 @@ export default function ProvinceLiveVehicles() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-ink leading-tight flex items-center gap-2">
-          <MapIcon className="w-6 h-6 text-brand" strokeWidth={2} />
-          ตำแหน่งปัจจุบัน
-        </h1>
+      <PageHeader
+        title="ตำแหน่งปัจจุบัน"
+        subtitle="ตำแหน่งล่าสุดของรถรับส่งระดับจังหวัด"
+      />
+      <div className="-mt-4">
         <p className="text-sm text-ink-muted mt-1">
           แสดงตำแหน่งล่าสุดของรถรับส่งในภาพรวมระดับจังหวัด · อัปเดตทุก 15 วินาที
           {generatedAt && (
@@ -114,7 +115,7 @@ export default function ProvinceLiveVehicles() {
             </span>
           )}
         </p>
-      </header>
+      </div>
 
       {!loading && vehicles.length > 0 && (
         <AppCard padding="sm" className="bg-surface-alt">

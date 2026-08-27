@@ -168,7 +168,7 @@ function PointRow({ point, selected, onClick, showSchool, showAffiliation, showS
           </p>
         </div>
         {!hasCoords(point) && (
-          <span className="shrink-0 text-[11px] text-warn bg-warn-soft px-2 py-0.5 rounded">
+          <span className="shrink-0 text-[11px] text-warn-ink bg-warn-soft px-2 py-0.5 rounded">
             ไม่มีพิกัด
           </span>
         )}

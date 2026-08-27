@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
-import { AppCard, StatusBadge } from '../../components/ui';
+import { AppCard, StatusBadge, ConfirmDialog, FormField, Modal} from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
@@ -20,6 +20,7 @@ import {
   ALL_DONE_LABEL,
   DONE_LABEL,
 } from '../../utils/session';
+import { isDriverNotLinked, driverErrorMessage } from '../../utils/driverErrors';
 
 const POLL_INTERVAL = 30_000;
 
@@ -60,6 +61,8 @@ export default function DriverDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [bulkLoading, setBulkLoading] = useState(false);
+  // Cancelling a leave puts the pupil back on today's run — worth naming who.
+  const [confirmCancelLeave, setConfirmCancelLeave] = useState(null);
   const [bulkMsg, setBulkMsg] = useState('');
   // End-of-route drop-off confirmation (records CHECKED_OUT for everyone boarded —
   // the step that was missing, leaving checkout recorded only ~11% of the time).
@@ -72,12 +75,21 @@ export default function DriverDashboard() {
   // Pre-trip gate
   const [pretripDone, setPretripDone] = useState(null); // null=loading, object={done,checked_at,all_pass}
   const [pretripLoading, setPretripLoading] = useState(true);
+  // บัญชีคนขับที่ยังไม่ผูกกับรถ — ต้องแยกจากข้อผิดพลาดอื่น ดู utils/driverErrors
+  const [notLinked, setNotLinked] = useState(false);
 
   // Fetch pretrip status
   useEffect(() => {
     api.get('/driver/pretrip-status')
       .then(r => setPretripDone(r.data?.data || { done: false }))
-      .catch(() => setPretripDone({ done: false }))
+      .catch((err) => {
+        // บัญชียังไม่ผูกรถ: ไม่ตั้งด่านตรวจสภาพรถ เพราะกดผ่านไม่ได้อยู่ดี
+        // (POST /driver/pretrip ล้มเหลวด้วยเหตุเดียวกัน) แล้วคนขับจะติดค้าง
+        // ในโมดัลที่ปิดไม่ได้ — ให้แสดงคำอธิบายว่าต้องทำอะไรต่อแทน
+        if (isDriverNotLinked(err)) setNotLinked(true);
+        // ข้อผิดพลาดอื่น (เน็ตหลุด/เซิร์ฟเวอร์ล่ม) คงด่านไว้ ปลอดภัยกว่า
+        else setPretripDone({ done: false });
+      })
       .finally(() => setPretripLoading(false));
   }, []);
 
@@ -90,7 +102,8 @@ export default function DriverDashboard() {
         setSession(resolved);
       })
       .catch((err) => {
-        setError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลได้');
+        if (isDriverNotLinked(err)) setNotLinked(true);
+        else setError(driverErrorMessage(err, 'ไม่สามารถโหลดข้อมูลได้'));
         const fallback = resolveSession(null);
         sessionRef.current = fallback;
         setSession(fallback);
@@ -109,7 +122,10 @@ export default function DriverDashboard() {
       setStatus(statusRes.data.data);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
+      // บัญชียังไม่ผูกรถ ไม่ใช่ "โหลดไม่สำเร็จ" — เป็นสถานะถาวรจนกว่าจะผูกรถ
+      // การ poll ซ้ำทุก 30 วิ จะไม่ทำให้ดีขึ้น จึงอธิบายให้ตรงสาเหตุแทน
+      if (isDriverNotLinked(err)) { setNotLinked(true); setError(''); }
+      else setError(driverErrorMessage(err, 'โหลดข้อมูลไม่สำเร็จ'));
     } finally {
       setLoading(false);
     }
@@ -117,11 +133,14 @@ export default function DriverDashboard() {
 
   useEffect(() => {
     if (!session) return;
+    // บัญชียังไม่ผูกรถ = สถานะถาวรจนกว่าเจ้าหน้าที่จะผูกให้ การถามซ้ำทุก 30 วิ
+    // ไม่ทำให้ดีขึ้น มีแต่เปลืองแบตกับเน็ตมือถือของคนขับ
+    if (notLinked) return;
     setLoading(true);
     fetchData();
     const timer = setInterval(fetchData, POLL_INTERVAL);
     return () => clearInterval(timer);
-  }, [session, fetchData]);
+  }, [session, fetchData, notLinked]);
 
   // Derived state
   const students = roster?.students || [];
@@ -130,7 +149,8 @@ export default function DriverDashboard() {
   const pending = notOnLeave.filter((st) => (session === 'morning' ? !st.morning_done : !st.evening_done));
   const done = notOnLeave.filter((st) => (session === 'morning' ? !!st.morning_done : !!st.evening_done));
   const allDone = !loading && notOnLeave.length > 0 && pending.length === 0;
-  const pretripBlocked = !pretripLoading && (!pretripDone || !pretripDone.done);
+  // notLinked ปลดด่าน เพราะโมดัลนี้ปิดไม่ได้และทุกปุ่มในนั้นจะล้มเหลวซ้ำ
+  const pretripBlocked = !pretripLoading && !notLinked && (!pretripDone || !pretripDone.done);
 
   async function handleCheckin(studentId) {
     if (pretripBlocked) { toast.error('กรุณาตรวจรถก่อนออกก่อนเช็กชื่อ'); return; }
@@ -164,6 +184,7 @@ export default function DriverDashboard() {
     try {
       await api.delete(`/driver/leave/${leaveId}`);
       toast.success('ยกเลิกการลาสำเร็จ');
+      setConfirmCancelLeave(null);
       await fetchData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถยกเลิกได้');
@@ -210,6 +231,50 @@ export default function DriverDashboard() {
     return <div className="p-6 text-center text-lg text-ink-muted">กำลังตรวจสอบโหมด…</div>;
   }
 
+  /* บัญชีคนขับที่ยังไม่ผูกกับรถ — ทุกอย่างในหน้านี้ต้องมีรถก่อนจึงทำงานได้
+     จึงอธิบายให้ตรงสาเหตุแทนการแสดงหน้าเปล่าที่ชวนเข้าใจผิดว่า "ไม่มีนักเรียน" */
+  if (notLinked) {
+    return (
+      <PageTransition>
+        <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
+          <AppCard padding="lg" className="text-center">
+            <Bus className="mx-auto h-12 w-12 text-ink-muted" strokeWidth={1.6} aria-hidden="true" />
+            <h2 className="mt-3 text-xl font-bold text-ink">บัญชีนี้ยังไม่ได้ผูกกับรถ</h2>
+            <p className="mt-2 text-base leading-relaxed text-ink-muted">
+              ระบบยังไม่ทราบว่าคุณขับรถคันไหน จึงยังแสดงรายชื่อนักเรียน
+              ตรวจสภาพรถ หรือเช็กชื่อขึ้น–ลงรถให้ไม่ได้
+            </p>
+            <div className="mt-5 rounded-xl bg-surface p-4 text-left">
+              <p className="text-sm font-semibold text-ink">สิ่งที่ต้องทำต่อ</p>
+              <ol className="mt-2 space-y-1.5 text-sm leading-relaxed text-ink-muted">
+                <li>1. แจ้งโรงเรียนที่คุณรับส่งนักเรียน ว่าต้องการผูกบัญชีกับรถที่ขับ</li>
+                <li>2. แจ้งชื่อผู้ใช้ของคุณและทะเบียนรถให้เจ้าหน้าที่</li>
+                <li>3. เมื่อผูกเรียบร้อยแล้ว เข้าสู่ระบบใหม่อีกครั้ง</li>
+              </ol>
+            </div>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="focus-ring inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 font-semibold text-white transition hover:bg-brand-700"
+              >
+                <RotateCcw className="h-5 w-5" strokeWidth={2.2} aria-hidden="true" />
+                ตรวจสอบอีกครั้ง
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/driver/profile')}
+                className="focus-ring inline-flex min-h-[48px] items-center justify-center rounded-xl border border-surface-border px-6 font-semibold text-ink transition hover:bg-surface"
+              >
+                ดูโปรไฟล์ของฉัน
+              </button>
+            </div>
+          </AppCard>
+        </div>
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition>
     <div className="p-3 sm:p-5 max-w-2xl mx-auto pb-8">
@@ -241,7 +306,7 @@ export default function DriverDashboard() {
           <button
             type="button"
             onClick={() => navigate('/driver/emergency')}
-            className="inline-flex items-center gap-1.5 bg-danger hover:bg-danger/90 text-white font-semibold text-sm px-4 py-2 rounded-xl transition"
+            className="focus-ring inline-flex items-center justify-center gap-1.5 bg-danger hover:bg-danger/90 active:bg-danger text-white font-semibold text-sm px-4 min-h-[44px] rounded-xl transition"
           >
             <AlertTriangle className="w-4 h-4" strokeWidth={2.2} />
             ฉุกเฉิน
@@ -328,13 +393,13 @@ export default function DriverDashboard() {
           <div className="mb-5">
             {allDone ? (
               checkedOut ? (
-                <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success rounded-xl px-4 py-3 text-center text-lg font-semibold">
+                <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success-ink rounded-xl px-4 py-3 text-center text-lg font-semibold">
                   <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />
                   จบรอบ — ส่งนักเรียนลงครบแล้ว
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success rounded-xl px-4 py-3 text-center text-lg font-semibold">
+                  <div className="inline-flex w-full items-center justify-center gap-2 bg-success-soft border-2 border-success/40 text-success-ink rounded-xl px-4 py-3 text-center text-lg font-semibold">
                     <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />
                     {ALL_DONE_LABEL[session]}
                   </div>
@@ -368,7 +433,7 @@ export default function DriverDashboard() {
                 </button>
                 <button
                   onClick={() => setShowIndividual(true)}
-                  className="inline-flex w-full items-center justify-center gap-2 bg-warn-soft hover:bg-warn/15 text-warn font-semibold text-lg py-4 rounded-2xl border-2 border-warn/30 transition"
+                  className="inline-flex w-full items-center justify-center gap-2 bg-warn-soft hover:bg-warn/15 text-warn-ink font-semibold text-lg py-4 rounded-2xl border-2 border-warn/30 transition"
                 >
                   <AlertTriangle className="w-5 h-5" strokeWidth={2.2} />
                   มีข้อยกเว้น — เลือกทีละคน
@@ -456,7 +521,7 @@ export default function DriverDashboard() {
               <div className="space-y-2">
                 {onLeave.map((st) => (
                   <StudentCard key={st.id} student={st} session={session} state="leave"
-                    onCancelLeave={() => handleCancelLeave(st.leave_id)} />
+                    onCancelLeave={() => setConfirmCancelLeave(st)} />
                 ))}
               </div>
             </section>
@@ -472,6 +537,19 @@ export default function DriverDashboard() {
           </p>
         </>
       )}
+      <ConfirmDialog
+        open={Boolean(confirmCancelLeave)}
+        title="ยกเลิกการลาของนักเรียนคนนี้?"
+        itemName={confirmCancelLeave
+          ? `${confirmCancelLeave.prefix || ''}${confirmCancelLeave.first_name} ${confirmCancelLeave.last_name}`
+          : undefined}
+        description="นักเรียนจะกลับมาอยู่ในรายชื่อที่ต้องรับ-ส่งวันนี้"
+        confirmLabel="ยกเลิกการลา"
+        cancelLabel="คงการลาไว้"
+        onConfirm={() => handleCancelLeave(confirmCancelLeave.leave_id)}
+        onCancel={() => setConfirmCancelLeave(null)}
+      />
+
     </div>
     </PageTransition>
   );
@@ -568,7 +646,7 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
           <button
             onClick={() => setShowLeave(true)}
             disabled={leaveLoading}
-            className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-base px-4 py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
+            className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn-ink font-semibold text-base px-4 py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
           >
             ลา
           </button>
@@ -582,14 +660,14 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
             <button
               onClick={() => { onLeave('morning'); setShowLeave(false); }}
               disabled={leaveLoading}
-              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
+              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn-ink font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
             >
               ลาเช้า
             </button>
             <button
               onClick={() => { onLeave('evening'); setShowLeave(false); }}
               disabled={leaveLoading}
-              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
+              className="bg-warn-soft hover:bg-warn/15 active:bg-warn/25 text-warn-ink font-semibold text-sm py-3 rounded-xl transition border border-warn/30 disabled:opacity-50"
             >
               ลาเย็น
             </button>
@@ -674,17 +752,22 @@ function PretripModal({ onComplete }) {
     }
   }
 
+  // A gate, not a dialog the driver can dismiss: no close button, no Escape,
+  // no backdrop click — but it now carries dialog semantics, a focus trap and
+  // a scroll lock, none of which the hand-rolled overlay had.
   return (
-    <div className="fixed inset-0 bg-ink/60 z-50 flex items-center justify-center p-3 motion-safe:animate-fade-in">
-      <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-elevate max-w-md w-full max-h-[90vh] overflow-y-auto motion-safe:animate-scale-in">
+    <Modal
+      title={mode === 'summary' ? 'ตรวจรถก่อนออก' : 'ระบุรายการผิดปกติ'}
+      dismissible={false}
+    >
+      <div>
 
         {/* ── Mode: Summary (default) ── */}
         {mode === 'summary' && (
-          <div className="p-6 text-center">
+          <div className="text-center">
             <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-brand-50 inline-flex items-center justify-center">
               <Bus className="w-8 h-8 text-brand-700" strokeWidth={2} aria-hidden="true" />
             </div>
-            <h2 className="text-xl font-semibold text-ink mb-1">ตรวจรถก่อนออก</h2>
             <p className="text-base text-ink-muted mb-5">เพื่อความปลอดภัยของนักเรียน</p>
 
             {/* Checklist preview */}
@@ -711,7 +794,7 @@ function PretripModal({ onComplete }) {
             </button>
 
             <button onClick={() => setMode('detail')}
-              className="inline-flex w-full items-center justify-center gap-2 bg-warn-soft hover:bg-warn/15 text-warn font-semibold text-lg py-4 rounded-2xl border-2 border-warn/30 transition">
+              className="inline-flex w-full items-center justify-center gap-2 bg-warn-soft hover:bg-warn/15 text-warn-ink font-semibold text-lg py-4 rounded-2xl border-2 border-warn/30 transition">
               <AlertTriangle className="w-5 h-5" strokeWidth={2.2} />
               มีรายการผิดปกติ
             </button>
@@ -720,17 +803,17 @@ function PretripModal({ onComplete }) {
 
         {/* ── Mode: Detail (toggle items) ── */}
         {mode === 'detail' && (
-          <div className="p-5">
-            <h2 className="text-lg font-semibold text-ink mb-1">ระบุรายการผิดปกติ</h2>
+          <div>
             <p className="text-sm text-ink-muted mb-4">กดรายการที่ <strong>ผิดปกติ</strong></p>
 
             <div className="space-y-2 mb-4">
               {items.map(item => (
-                <button key={item.id} onClick={() => toggleItem(item.id)}
-                  className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left text-base font-medium transition ${
+                <button key={item.id} type="button" onClick={() => toggleItem(item.id)}
+                  aria-pressed={!item.ok}
+                  className={`focus-ring w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left text-base font-medium transition ${
                     item.ok
-                      ? 'bg-success-soft border-success/40 text-success'
-                      : 'bg-danger-soft border-danger/50 text-danger'
+                      ? 'bg-success-soft border-success/40 text-success-ink'
+                      : 'bg-danger-soft border-danger/50 text-danger-ink'
                   }`}>
                   {item.ok
                     ? <CheckCircle2 className="w-6 h-6 shrink-0 text-success" strokeWidth={2.2} />
@@ -741,14 +824,18 @@ function PretripModal({ onComplete }) {
             </div>
 
             {failedItems.length > 0 && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-ink mb-1">
-                  รายละเอียด (ถ้ามี)
-                </label>
-                <textarea value={note} onChange={e => setNote(e.target.value)}
-                  rows={2} placeholder="เช่น ยางหลังขวาลมอ่อน…"
-                  className="w-full border border-surface-border rounded-xl px-4 py-3 text-base text-ink bg-surface-raised focus:outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/25" />
-              </div>
+              <FormField label="รายละเอียด" helper="ถ้ามี" className="mb-4">
+                {ctl => (
+                  <textarea
+                    {...ctl}
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    rows={2}
+                    placeholder="เช่น ยางหลังขวาลมอ่อน…"
+                    className="focus-ring w-full border border-surface-border rounded-xl px-4 py-3 text-base text-ink bg-surface-raised transition"
+                  />
+                )}
+              </FormField>
             )}
 
             {failedItems.length > 0 ? (
@@ -773,13 +860,16 @@ function PretripModal({ onComplete }) {
               </button>
             )}
 
-            <button onClick={() => { setMode('summary'); setItems(PRETRIP_ITEMS.map(c => ({ ...c, ok: true }))); setNote(''); }}
-              className="w-full text-ink-muted hover:text-ink text-base py-3 transition">
-              ← กลับ
+            <button
+              type="button"
+              onClick={() => { setMode('summary'); setItems(PRETRIP_ITEMS.map(c => ({ ...c, ok: true }))); setNote(''); }}
+              className="focus-ring w-full text-ink-muted hover:text-ink text-base min-h-[44px] rounded-lg transition"
+            >
+              <span aria-hidden="true">←</span> กลับ
             </button>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }

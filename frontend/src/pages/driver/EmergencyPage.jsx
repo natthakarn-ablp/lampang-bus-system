@@ -1,6 +1,10 @@
+import { AlertTriangle, Satellite, MapPin, MapPinOff, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import ErrorState from '../../components/ErrorState';
+import { FormField } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
 
 // Geolocation timeout per Phase 10.3E-HF2 design decision: try for 8s,
@@ -111,7 +115,7 @@ export default function EmergencyPage() {
   if (success) {
     return (
       <div className="p-3 sm:p-6 max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="text-6xl mb-5">✅</div>
+        <CheckCircle2 className="w-16 h-16 mx-auto mb-5 text-success" strokeWidth={2} aria-hidden="true" />
         <h2 className="text-xl font-bold text-gray-800 mb-2">แจ้งเหตุฉุกเฉินแล้ว</h2>
         <p className="text-gray-500 text-sm mb-8">ทีมงานจะดำเนินการโดยเร็ว</p>
         <button
@@ -129,7 +133,7 @@ export default function EmergencyPage() {
       case 'requesting':
         return {
           tone: 'border-info bg-info-soft text-info',
-          icon: '📡',
+          icon: Satellite,
           title: 'กำลังขอตำแหน่ง GPS…',
           body: 'กรุณาอนุญาตการเข้าถึงตำแหน่งเมื่อเบราว์เซอร์ถาม',
           pulse: true,
@@ -138,7 +142,7 @@ export default function EmergencyPage() {
       case 'granted':
         return {
           tone: 'border-success bg-success-soft text-success',
-          icon: '📍',
+          icon: MapPin,
           title: 'ระบุตำแหน่งได้แล้ว',
           body: `ความแม่นยำ ±${Math.round(position?.accuracy ?? 0)} เมตร`,
           pulse: false,
@@ -147,7 +151,7 @@ export default function EmergencyPage() {
       case 'denied':
         return {
           tone: 'border-warn bg-warn-soft text-warn',
-          icon: '⚠️',
+          icon: MapPinOff,
           title: 'ปฏิเสธการเข้าถึงตำแหน่ง',
           body: 'เปิดสิทธิ์ตำแหน่งใน Safari → Settings → Privacy แล้วกดลองอีกครั้ง',
           pulse: false,
@@ -156,7 +160,7 @@ export default function EmergencyPage() {
       case 'timeout':
         return {
           tone: 'border-warn bg-warn-soft text-warn',
-          icon: '⚠️',
+          icon: MapPinOff,
           title: 'ระบุตำแหน่งไม่สำเร็จ',
           body: 'ลองออกไปนอกอาคารแล้วกดลองอีกครั้ง หรือส่งโดยไม่มี GPS ก็ได้',
           pulse: false,
@@ -166,7 +170,7 @@ export default function EmergencyPage() {
       default:
         return {
           tone: 'border-warn bg-warn-soft text-warn',
-          icon: '⚠️',
+          icon: MapPinOff,
           title: 'อุปกรณ์ไม่รองรับ GPS',
           body: 'จะส่งโดยไม่มีตำแหน่ง',
           pulse: false,
@@ -178,41 +182,41 @@ export default function EmergencyPage() {
   return (
     <div className="p-3 sm:p-6 max-w-lg mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-red-700">🚨 แจ้งเหตุฉุกเฉิน</h1>
-        <p className="text-sm text-gray-500 mt-1">กรอกรายละเอียดเหตุการณ์ที่เกิดขึ้น</p>
+        <PageHeader
+          title="แจ้งเหตุฉุกเฉิน"
+          subtitle="กรอกรายละเอียดเหตุการณ์ที่เกิดขึ้น"
+          icon={AlertTriangle}
+          iconColor="red"
+        />
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-5">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            รายละเอียด <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            value={detail}
-            onChange={(e) => setDetail(e.target.value)}
-            required
-            rows={4}
-            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
-            placeholder="อธิบายเหตุการณ์ที่เกิดขึ้น เช่น รถเสีย, อุบัติเหตุ, นักเรียนเจ็บป่วย"
-          />
-        </div>
+      <form onSubmit={handleSubmit} className="bg-surface-raised rounded-2xl border border-surface-border shadow-soft p-6 space-y-5">
+        <FormField label="รายละเอียด" required>
+          {ctl => (
+            <textarea
+              {...ctl}
+              value={detail}
+              onChange={(e) => setDetail(e.target.value)}
+              required
+              rows={4}
+              className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 py-2.5 text-base text-ink placeholder:text-ink-muted transition"
+              placeholder="อธิบายเหตุการณ์ที่เกิดขึ้น เช่น รถเสีย, อุบัติเหตุ, นักเรียนเจ็บป่วย"
+            />
+          )}
+        </FormField>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">หมายเหตุ</label>
-          <input
-            type="text"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
-            placeholder="ข้อมูลเพิ่มเติม (ถ้ามี)"
-          />
-        </div>
+        <FormField
+          label="หมายเหตุ"
+          value={note}
+          onChange={setNote}
+          placeholder="ข้อมูลเพิ่มเติม (ถ้ามี)"
+        />
 
         <div
           data-testid="gps-status-card"
           className={`rounded-xl border px-4 py-3.5 flex items-start gap-3 ${gpsCard.tone} ${gpsCard.pulse ? 'animate-pulse' : ''}`}
         >
-          <span className="text-2xl leading-none mt-0.5" aria-hidden>{gpsCard.icon}</span>
+          {gpsCard.icon && <gpsCard.icon className="w-6 h-6 shrink-0 mt-0.5" strokeWidth={2} aria-hidden="true" />}
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm leading-tight">{gpsCard.title}</div>
             <div className="text-xs mt-1 opacity-90 leading-snug">{gpsCard.body}</div>
@@ -228,11 +232,7 @@ export default function EmergencyPage() {
           </div>
         </div>
 
-        {error && (
-          <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-            {error}
-          </p>
-        )}
+        {error && <ErrorState message={error} />}
 
         <div className="flex gap-3 pt-1">
           <button

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { FileBarChart } from 'lucide-react';
 import api from '../../api/axios';
+import { FormField, DataTable } from '../../components/ui';
 import DashboardCard from '../../components/DashboardCard';
 import KpiCard from '../../components/KpiCard';
 import ExportButtons from '../../components/ExportButtons';
@@ -45,20 +46,24 @@ export default function MonthlyReport() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
 
       {/* ── HEADER ── */}
-      <div className="bg-blue-800 text-white rounded-xl px-5 py-4 mb-5">
+      <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <p className="text-xs text-blue-200 uppercase tracking-wider">รายงานรายเดือน</p>
+            <p className="text-caption text-navy-200 uppercase tracking-wider">รายงานรายเดือน</p>
             <h1 className="text-lg font-bold">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
-            <p className="text-sm text-blue-200 mt-0.5">
+            <p className="text-sm text-navy-200 mt-0.5">
               {month ? new Date(month + '-01').toLocaleDateString('th-TH', { year: 'numeric', month: 'long' }) : ''}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-              className="border border-blue-600 bg-blue-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+            <FormField label="เดือนของรายงาน" labelClassName="text-navy-200">
+              {ctl => (
+                <input {...ctl} type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+                  className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
+              )}
+            </FormField>
             <button onClick={resetMonth}
-              className="text-sm text-blue-200 hover:text-white px-3 py-2 border border-blue-600 rounded-lg hover:bg-blue-700 transition">
+              className="focus-ring-inverse self-end text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
               ปัจจุบัน
             </button>
           </div>
@@ -115,7 +120,7 @@ export default function MonthlyReport() {
             }
             return weeks.length > 1 ? (
               <section className="mb-6">
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">แนวโน้มรายสัปดาห์</h2>
+                <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">แนวโน้มรายสัปดาห์</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {weeks.map((w, i) => (
                     <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
@@ -150,44 +155,32 @@ export default function MonthlyReport() {
 
           {data.daily_trend?.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">แนวโน้มรายวัน</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[650px]">
-                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                    <tr className="text-left">
-                      <th className="px-4 py-3">วันที่</th>
-                      <th className="px-4 py-3 text-center">ส่งเช้า %</th>
-                      <th className="px-4 py-3 text-center">รับเย็น %</th>
-                      <th className="px-4 py-3 text-center">ส่งเช้า (คน)</th>
-                      <th className="px-4 py-3 text-center">รับเย็น (คน)</th>
-                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {data.daily_trend.map((d) => (
-                      <tr key={d.date} className={`hover:bg-surface transition ${d.morning_pct >= 100 && d.evening_pct >= 100 ? 'bg-success-soft/40' : ''}`}>
-                        <td className="px-4 py-2.5 text-gray-800">
-                          {new Date(d.date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' })}
-                        </td>
-                        <td className={`px-4 py-2.5 text-center font-medium ${kpiColor(d.morning_pct)}`}>{safePct(d.morning_pct)}</td>
-                        <td className={`px-4 py-2.5 text-center font-medium ${kpiColor(d.evening_pct)}`}>{safePct(d.evening_pct)}</td>
-                        <td className="px-4 py-2.5 text-center text-gray-600">{d.morning_done}/{d.morning_expected}</td>
-                        <td className="px-4 py-2.5 text-center text-gray-600">{d.evening_done}/{d.evening_expected}</td>
-                        <td className="px-4 py-2.5 text-center text-gray-500">-</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">แนวโน้มรายวัน</h2>
+              <DataTable
+                caption="แนวโน้มรายวันตลอดเดือน"
+                rows={data.daily_trend}
+                rowKey={d => d.date}
+                rowClassName={d => (d.morning_pct >= 100 && d.evening_pct >= 100 ? 'bg-success-soft/40' : '')}
+                columns={[
+                  { key: 'date', header: 'วันที่', primary: true,
+                    cell: d => new Date(d.date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' }) },
+                  { key: 'm_pct', header: 'ส่งเช้า %', align: 'center',
+                    cell: d => <span className={`font-medium tabular-nums ${kpiColor(d.morning_pct)}`}>{safePct(d.morning_pct)}</span> },
+                  { key: 'e_pct', header: 'รับเย็น %', align: 'center',
+                    cell: d => <span className={`font-medium tabular-nums ${kpiColor(d.evening_pct)}`}>{safePct(d.evening_pct)}</span> },
+                  { key: 'm_cnt', header: 'ส่งเช้า (คน)', numeric: true, cell: d => `${d.morning_done}/${d.morning_expected}` },
+                  { key: 'e_cnt', header: 'รับเย็น (คน)', numeric: true, cell: d => `${d.evening_done}/${d.evening_expected}` },
+                  { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
+                ]}
+                empty={{ title: 'ไม่มีข้อมูลในเดือนที่เลือก' }}
+              />
             </section>
           )}
 
           {/* ── SECTION 5 — School Rankings ─────────────────── */}
           {data.schools?.length > 1 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">จัดอันดับโรงเรียน</h2>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">จัดอันดับโรงเรียน</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RankingTable title="โรงเรียนผลงานดีที่สุด" items={topN(data.schools, 'morning_kpi')} nameKey="school_name" />
                 <RankingTable title="โรงเรียนที่ควรเฝ้าระวัง" items={bottomN(data.schools, 'morning_kpi')} nameKey="school_name" />
@@ -198,7 +191,7 @@ export default function MonthlyReport() {
           {/* ── SECTION 6 — Vehicle Rankings ────────────────── */}
           {data.vehicles?.length > 1 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">จัดอันดับรถรับส่ง</h2>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">จัดอันดับรถรับส่ง</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RankingTable title="รถผลงานดีที่สุด" items={topN(data.vehicles, 'morning_kpi')} nameKey="plate_no" showSchool />
                 <RankingTable title="รถที่ควรเฝ้าระวัง" items={bottomN(data.vehicles, 'morning_kpi')} nameKey="plate_no" showSchool />
@@ -209,103 +202,89 @@ export default function MonthlyReport() {
           {/* ── SECTION 7 — Full School Summary ────────────── */}
           {data.schools?.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามโรงเรียน</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[700px]">
-                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                    <tr className="text-left">
-                      <th className="px-4 py-3">โรงเรียน</th>
-                      <th className="px-4 py-3 text-center">ส่งเช้า %</th>
-                      <th className="px-4 py-3 text-center">รับเย็น %</th>
-                      <th className="px-4 py-3 text-center">วันครบ 100%</th>
-                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
-                      <th className="px-4 py-3 text-center">ระดับ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {sortByKpi(data.schools).map((s) => {
-                      const badge = levelBadge(s.morning_kpi, s.evening_kpi);
-                      return (
-                        <tr key={s.school_id} className="hover:bg-surface transition">
-                          <td className="px-4 py-3">
-                            <p className="text-gray-800 font-medium">{s.school_name}</p>
-                            <p className="text-xs text-gray-400">{s.student_count} คน</p>
-                          </td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(s.morning_kpi)}`}>
-                            {safePct(s.morning_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{s.total_morning_done}/{s.morning_expected * (s.days_with_data || 1)}</p>
-                          </td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(s.evening_kpi)}`}>
-                            {safePct(s.evening_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{s.total_evening_done}/{s.evening_expected * (s.days_with_data || 1)}</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-600">
-                            <p>เช้า {s.days_morning_100}/{s.days_with_data}</p>
-                            <p className="text-xs text-gray-400">เย็น {s.days_evening_100}/{s.days_with_data}</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-500">-</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามโรงเรียน</h2>
+              <DataTable
+                caption="สรุปผลรายโรงเรียนตลอดเดือน"
+                rows={sortByKpi(data.schools)}
+                rowKey={s2 => s2.school_id}
+                columns={[
+                  { key: 'school', header: 'โรงเรียน', primary: true,
+                    cell: s2 => (
+                      <>
+                        <p className="text-ink font-medium">{s2.school_name}</p>
+                        <p className="text-caption text-ink-muted tabular-nums">{s2.student_count} คน</p>
+                      </>
+                    ) },
+                  { key: 'm_pct', header: 'ส่งเช้า %', align: 'center',
+                    cell: s2 => (
+                      <div className={`font-medium ${kpiColor(s2.morning_kpi)}`}>
+                        <span className="tabular-nums">{safePct(s2.morning_kpi)}</span>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{s2.total_morning_done}/{s2.morning_expected * (s2.days_with_data || 1)}</p>
+                      </div>
+                    ) },
+                  { key: 'e_pct', header: 'รับเย็น %', align: 'center',
+                    cell: s2 => (
+                      <div className={`font-medium ${kpiColor(s2.evening_kpi)}`}>
+                        <span className="tabular-nums">{safePct(s2.evening_kpi)}</span>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{s2.total_evening_done}/{s2.evening_expected * (s2.days_with_data || 1)}</p>
+                      </div>
+                    ) },
+                  { key: 'full_days', header: 'วันครบ 100%', align: 'center',
+                    cell: s2 => (
+                      <div className="tabular-nums">
+                        <p className="text-ink">เช้า {s2.days_morning_100}/{s2.days_with_data}</p>
+                        <p className="text-caption text-ink-muted">เย็น {s2.days_evening_100}/{s2.days_with_data}</p>
+                      </div>
+                    ) },
+                  { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
+                  { key: 'level', header: 'ระดับ', align: 'center', badge: true,
+                    cell: s2 => {
+                      const b = levelBadge(s2.morning_kpi, s2.evening_kpi);
+                      return <StatusBadge variant={b.variant || 'neutral'}>{b.label}</StatusBadge>;
+                    } },
+                ]}
+                empty={{ title: 'ไม่มีข้อมูลโรงเรียนในเดือนที่เลือก' }}
+              />
             </section>
           )}
 
           {/* ── SECTION 8 — Full Vehicle Summary ───────────── */}
           {data.vehicles?.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">สรุปตามรถ</h2>
-              <AppCard padding="none" className="overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[750px]">
-                  <thead className="bg-surface text-ink-muted text-xs font-semibold uppercase tracking-wide">
-                    <tr className="text-left">
-                      <th className="px-4 py-3">ทะเบียนรถ</th>
-                      <th className="px-4 py-3">โรงเรียน</th>
-                      <th className="px-4 py-3 text-center">ส่งเช้า %</th>
-                      <th className="px-4 py-3 text-center">รับเย็น %</th>
-                      <th className="px-4 py-3 text-center">วันครบ 100%</th>
-                      <th className="px-4 py-3 text-center">ฉุกเฉิน</th>
-                      <th className="px-4 py-3 text-center">ระดับ</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-border">
-                    {sortByKpi(data.vehicles).map((v) => {
-                      const badge = levelBadge(v.morning_kpi, v.evening_kpi);
-                      return (
-                        <tr key={v.vehicle_id} className="hover:bg-surface transition">
-                          <td className="px-4 py-3">
-                            <p className="text-gray-800 font-medium">{v.plate_no}</p>
-                            <p className="text-xs text-gray-400">{v.student_count} คน</p>
-                          </td>
-                          <td className="px-4 py-3 text-gray-600 text-xs">{v.school_names || '-'}</td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(v.morning_kpi)}`}>
-                            {safePct(v.morning_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{v.total_morning_done}/{v.student_count * (v.days_with_data || 1)}</p>
-                          </td>
-                          <td className={`px-4 py-3 text-center font-medium ${kpiColor(v.evening_kpi)}`}>
-                            {safePct(v.evening_kpi)}
-                            <p className="text-xs text-gray-400 font-normal">{v.total_evening_done}/{v.student_count * (v.days_with_data || 1)}</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-gray-500">{v.days_with_data || '-'}</td>
-                          <td className="px-4 py-3 text-center text-gray-500">-</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${badge.cls}`}>{badge.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              </AppCard>
+              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามรถ</h2>
+              <DataTable
+                caption="สรุปผลรายรถตลอดเดือน"
+                rows={sortByKpi(data.vehicles)}
+                rowKey={v => v.vehicle_id}
+                columns={[
+                  { key: 'plate', header: 'ทะเบียนรถ', primary: true,
+                    cell: v => (
+                      <>
+                        <p className="text-ink font-medium">{v.plate_no}</p>
+                        <p className="text-caption text-ink-muted tabular-nums">{v.student_count} คน</p>
+                      </>
+                    ) },
+                  { key: 'school', header: 'โรงเรียน', secondary: true, cell: v => v.school_names || '-' },
+                  { key: 'm_pct', header: 'ส่งเช้า %', align: 'center',
+                    cell: v => <span className={`font-medium tabular-nums ${kpiColor(v.morning_kpi)}`}>{safePct(v.morning_kpi)}</span> },
+                  { key: 'e_pct', header: 'รับเย็น %', align: 'center',
+                    cell: v => <span className={`font-medium tabular-nums ${kpiColor(v.evening_kpi)}`}>{safePct(v.evening_kpi)}</span> },
+                  { key: 'full_days', header: 'วันครบ 100%', align: 'center',
+                    cell: v => (
+                      <div className="tabular-nums">
+                        <p className="text-ink">เช้า {v.days_morning_100}/{v.days_with_data}</p>
+                        <p className="text-caption text-ink-muted">เย็น {v.days_evening_100}/{v.days_with_data}</p>
+                      </div>
+                    ) },
+                  { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
+                  { key: 'level', header: 'ระดับ', align: 'center', badge: true,
+                    cell: v => {
+                      const b = levelBadge(v.morning_kpi, v.evening_kpi);
+                      return <StatusBadge variant={b.variant || 'neutral'}>{b.label}</StatusBadge>;
+                    } },
+                ]}
+                empty={{ title: 'ไม่มีข้อมูลรถในเดือนที่เลือก' }}
+              />
             </section>
           )}
 
@@ -331,7 +310,11 @@ export default function MonthlyReport() {
 
           {/* ── FOOTER ── */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 mt-6">
-            <ExportButtons queryParams={`date=${month}-01`} filenamePrefix={`report-${month}`} />
+            <ExportButtons
+              basePath="/api/reports/export/monthly"
+              queryParams={`month=${month}`}
+              filenamePrefix={`monthly-report-${month}`}
+            />
             <p className="text-xs text-gray-400">
               สร้างจากระบบรถรับส่งนักเรียนจังหวัดลำปาง · {new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
             </p>

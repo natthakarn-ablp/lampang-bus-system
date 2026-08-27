@@ -10,6 +10,8 @@ dist/
 .vscode/
 .claude/
 .DS_Store
+__pycache__/
+*.pyc
 coverage/
 backend/node_modules/
 frontend/node_modules/
@@ -25,3 +27,9 @@ scripts/restore-test.env
 # Deployment-transfer and in-repo backup artifacts
 /backups/
 *.bundle
+
+# Local Codex planning and generated evidence bundles; never deploy or commit
+# raw UAT screenshots, local validator logs, or machine-specific handoff output.
+/outputs/
+/task_plan.md
+/notes.md

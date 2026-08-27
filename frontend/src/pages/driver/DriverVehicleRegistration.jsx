@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { GraduationCap, Plus, Trash2, CheckCircle2, Clock, ChevronDown, Paperclip, Eye, FileText } from 'lucide-react';
+import { GraduationCap, Plus, Trash2, CheckCircle2, Clock, ChevronDown, Paperclip, Eye, FileText, Users, Check } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
+import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { ConfirmDialog, FormField } from '../../components/ui';
+
+// Deliberately oversized: this page is used one-handed, on a phone, beside
+// the bus. FormField wires the label; the size stays.
+const BIG_INPUT = 'focus-ring w-full border-2 border-surface-border rounded-2xl px-4 py-4 text-lg text-ink bg-surface-raised transition';
 
 // Elderly / low-tech driver UI: large text, large touch targets (≥56px), the
 // fewest possible fields (just name + school + when), plain Thai, and status
@@ -36,6 +42,9 @@ export default function DriverVehicleRegistration() {
   const [showMore, setShowMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  // window.confirm on a phone is a system sheet the driver cannot read
+  // alongside the row it refers to.
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const toast = useToast();
 
   const [form, setForm] = useState({
@@ -78,13 +87,13 @@ export default function DriverVehicleRegistration() {
     } finally { setSaving(false); }
   }
 
-  async function handleDelete(id, name) {
+  async function handleDelete(id) {
     if (deletingId) return;
-    if (!window.confirm(`ลบ "${name}" ออกจากรายชื่อ?`)) return;
     setDeletingId(id);
     try {
       await api.delete(`/driver/registrations/students/${id}`);
       toast.success('ลบแล้ว');
+      setConfirmDelete(null);
       fetchData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ลบไม่ได้');
@@ -98,14 +107,13 @@ export default function DriverVehicleRegistration() {
   const schoolSummary = data.schools || [];
   const approvedCount = schoolSummary.filter((s) => s.approval_status === 'APPROVED').length;
 
-  const bigInput = 'w-full border-2 border-gray-300 rounded-2xl px-4 py-4 text-lg focus:outline-none focus:border-blue-500';
-
   return (
     <div className="p-4 max-w-xl mx-auto pb-28">
-      <h1 className="text-2xl font-bold text-gray-900">รายชื่อเด็กในรถ</h1>
-      <p className="text-base text-gray-600 mt-1 leading-relaxed">
-        ใส่ชื่อเด็กที่ขึ้นรถของคุณ แล้วเลือกโรงเรียน โรงเรียนจะตรวจและรับเข้าระบบ
-      </p>
+      <PageHeader
+        icon={Users}
+        title="รายชื่อเด็กในรถ"
+        subtitle="ใส่ชื่อเด็กที่ขึ้นรถของคุณ แล้วเลือกโรงเรียน โรงเรียนจะตรวจและรับเข้าระบบ"
+      />
 
       {/* Vehicle ready banner — big and word-based */}
       {!loading && data.vehicle_id && (
@@ -134,57 +142,101 @@ export default function DriverVehicleRegistration() {
       {/* Add form — only 3 things needed */}
       {showForm && (
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl border-2 border-gray-200 p-5 mt-5 space-y-5">
-          <div>
-            <label className="block text-lg font-medium text-gray-800 mb-2">1. ชื่อเด็ก</label>
-            <input type="text" value={form.raw_student_name} autoFocus
-              onChange={(e) => setForm({ ...form, raw_student_name: e.target.value })}
-              placeholder="เช่น เด็กชายสมชาย ใจดี"
-              className={bigInput} />
-          </div>
+          {/* The oversized controls are deliberate — this page is used by a
+              driver on a phone, often standing beside the bus. FormField only
+              supplies the label wiring; the sizing stays as it was. */}
+          <FormField label="1. ชื่อเด็ก" labelClassName="text-lg text-ink" required>
+            {ctl => (
+              <input
+                {...ctl}
+                type="text"
+                value={form.raw_student_name}
+                autoFocus
+                onChange={(e) => setForm({ ...form, raw_student_name: e.target.value })}
+                placeholder="เช่น เด็กชายสมชาย ใจดี"
+                className={BIG_INPUT}
+              />
+            )}
+          </FormField>
+
+          <FormField label="2. โรงเรียน" labelClassName="text-lg text-ink" required>
+            {ctl => (
+              <select
+                {...ctl}
+                value={form.school_id}
+                onChange={(e) => setForm({ ...form, school_id: e.target.value })}
+                className={BIG_INPUT}
+              >
+                <option value="">— แตะเพื่อเลือกโรงเรียน —</option>
+                {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
+          </FormField>
 
           <div>
-            <label className="block text-lg font-medium text-gray-800 mb-2">2. โรงเรียน</label>
-            <select value={form.school_id} onChange={(e) => setForm({ ...form, school_id: e.target.value })}
-              className={bigInput}>
-              <option value="">— แตะเพื่อเลือกโรงเรียน —</option>
-              {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-lg font-medium text-gray-800 mb-2">3. ขึ้นรถรอบไหน</label>
-            <div className="grid grid-cols-1 gap-2">
-              {PICKUP_OPTIONS.map((opt) => (
-                <button key={opt.val} type="button" onClick={() => setForm({ ...form, pickup_type: opt.val })}
-                  className={`w-full text-lg font-medium rounded-2xl py-4 border-2 ${form.pickup_type === opt.val
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'bg-white border-gray-300 text-gray-700'}`}>
-                  {form.pickup_type === opt.val ? '✓ ' : ''}{opt.label}
-                </button>
-              ))}
+            {/* One choice from a fixed set — a radiogroup, not three styled
+                buttons whose selected state was a fill colour plus a ✓ glyph. */}
+            <p id="pickup-type-label" className="block text-lg font-medium text-ink mb-2">3. ขึ้นรถรอบไหน</p>
+            <div role="radiogroup" aria-labelledby="pickup-type-label" className="grid grid-cols-1 gap-2">
+              {PICKUP_OPTIONS.map((opt) => {
+                const on = form.pickup_type === opt.val;
+                return (
+                  <button
+                    key={opt.val}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setForm({ ...form, pickup_type: opt.val })}
+                    className={`focus-ring w-full text-lg font-medium rounded-2xl py-4 border-2 transition ${
+                      on
+                        ? 'bg-brand-600 border-brand-600 text-white'
+                        : 'bg-surface-raised border-surface-border text-ink'
+                    }`}
+                  >
+                    {on && <Check className="inline w-5 h-5 mr-1 -mt-0.5" strokeWidth={3} aria-hidden="true" />}
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Optional details — hidden by default so the form looks short */}
           {!showMore ? (
-            <button type="button" onClick={() => setShowMore(true)}
-              className="text-base text-blue-600 font-medium flex items-center gap-1">
-              <ChevronDown className="w-5 h-5" /> ใส่ชั้น/รหัสนักเรียน (ถ้าทราบ)
+            <button
+              type="button"
+              onClick={() => setShowMore(true)}
+              aria-expanded={false}
+              className="focus-ring text-base text-brand-700 font-medium inline-flex items-center gap-1 px-2 min-h-[44px] rounded-lg hover:bg-brand-50 transition"
+            >
+              <ChevronDown className="w-5 h-5" aria-hidden="true" /> ใส่ชั้น/รหัสนักเรียน (ถ้าทราบ)
             </button>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-base text-gray-600 mb-1">ชั้น</label>
-                <input type="text" value={form.raw_grade}
-                  onChange={(e) => setForm({ ...form, raw_grade: e.target.value })}
-                  placeholder="เช่น ป.4" className={bigInput} />
-              </div>
-              <div>
-                <label className="block text-base text-gray-600 mb-1">รหัสนักเรียน</label>
-                <input type="text" value={form.raw_student_code}
-                  onChange={(e) => setForm({ ...form, raw_student_code: e.target.value })}
-                  placeholder="ถ้ามี" className={bigInput} />
-              </div>
+              <FormField label="ชั้น" labelClassName="text-base text-ink-muted">
+                {ctl => (
+                  <input
+                    {...ctl}
+                    type="text"
+                    value={form.raw_grade}
+                    onChange={(e) => setForm({ ...form, raw_grade: e.target.value })}
+                    placeholder="เช่น ป.4"
+                    className={BIG_INPUT}
+                  />
+                )}
+              </FormField>
+              <FormField label="รหัสนักเรียน" labelClassName="text-base text-ink-muted" helper="ถ้าทราบ">
+                {ctl => (
+                  <input
+                    {...ctl}
+                    type="text"
+                    value={form.raw_student_code}
+                    onChange={(e) => setForm({ ...form, raw_student_code: e.target.value })}
+                    placeholder="ถ้ามี"
+                    className={BIG_INPUT}
+                  />
+                )}
+              </FormField>
             </div>
           )}
 
@@ -226,7 +278,7 @@ export default function DriverVehicleRegistration() {
                           <div className="mt-2"><ApprovalPill status={st.approval_status} /></div>
                         </div>
                         {!locked && (
-                          <button onClick={() => handleDelete(st.id, st.raw_student_name)} disabled={deletingId === st.id}
+                          <button onClick={() => setConfirmDelete(st)} disabled={deletingId === st.id}
                             className="shrink-0 flex flex-col items-center text-red-600 active:text-red-800 disabled:opacity-40 px-2 py-1">
                             <Trash2 className="w-7 h-7" />
                             <span className="text-sm font-medium mt-0.5">ลบ</span>
@@ -244,6 +296,17 @@ export default function DriverVehicleRegistration() {
 
       {/* Vehicle + driver evidence documents */}
       <DriverDocuments />
+
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="ลบชื่อเด็กคนนี้ออกจากรายชื่อ?"
+        itemName={confirmDelete?.raw_student_name}
+        description="ชื่อนี้จะหายไปจากรายชื่อเด็กในรถของคุณ — ถ้าโรงเรียนรับเข้าระบบแล้ว ข้อมูลของเด็กในระบบจะไม่ถูกลบ"
+        confirmLabel="ลบออกจากรายชื่อ"
+        loading={deletingId === confirmDelete?.id}
+        onConfirm={() => handleDelete(confirmDelete.id)}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }
@@ -279,7 +342,8 @@ function DriverDocuments() {
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [busyId, setBusyId] = useState(null); // doc id being viewed/deleted
+  const [busyId, setBusyId] = useState(null);
+  const [confirmDoc, setConfirmDoc] = useState(null); // doc id being viewed/deleted
 
   const load = useCallback(async () => {
     try {
@@ -331,13 +395,13 @@ function DriverDocuments() {
     } finally { setBusyId(null); }
   }
 
-  async function del(kind, id, label) {
+  async function del(kind, id) {
     if (busyId) return;
-    if (!window.confirm(`ลบ "${label}" ออกจากระบบ?`)) return;
     setBusyId(id);
     try {
       await api.delete(`/driver/registrations/documents/${kind}/${id}`);
       toast.success('ลบแล้ว');
+      setConfirmDoc(null);
       load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ลบไม่ได้');
@@ -413,7 +477,7 @@ function DriverDocuments() {
                         <span className="text-sm font-medium mt-0.5">ดู</span>
                       </button>
                       {!locked && (
-                        <button onClick={() => del(d.kind, d.id, DOC_LABEL[d.doc_type] || 'เอกสาร')} disabled={busyId === d.id}
+                        <button onClick={() => setConfirmDoc(d)} disabled={busyId === d.id}
                           className="flex flex-col items-center text-red-600 active:text-red-800 disabled:opacity-40 px-2">
                           <Trash2 className="w-7 h-7" />
                           <span className="text-sm font-medium mt-0.5">ลบ</span>
@@ -427,6 +491,17 @@ function DriverDocuments() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmDoc)}
+        title="ลบเอกสารนี้?"
+        itemName={confirmDoc ? (DOC_LABEL[confirmDoc.doc_type] || 'เอกสาร') : undefined}
+        description="ไฟล์จะถูกลบออกจากระบบ ต้องแนบใหม่ถ้าโรงเรียนหรือขนส่งขอตรวจอีกครั้ง"
+        confirmLabel="ลบเอกสาร"
+        loading={busyId === confirmDoc?.id}
+        onConfirm={() => del(confirmDoc.kind, confirmDoc.id)}
+        onCancel={() => setConfirmDoc(null)}
+      />
     </div>
   );
 }

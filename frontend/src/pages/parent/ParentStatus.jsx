@@ -1,13 +1,14 @@
+import { Link2, Users, Bus, ClipboardList, MapPin, CalendarDays, Sunrise, Sunset, CheckCircle2, Clock} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
 import { getLiffIdToken } from '../../utils/liff';
 import AppCard from '../../components/ui/AppCard';
 
 const STATUS_MAP = {
-  CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-green-100 text-green-700 border-green-200', icon: '✅' },
-  CHECKED_OUT: { label: 'ส่งแล้ว',  cls: 'bg-blue-100 text-blue-700 border-blue-200',  icon: '✅' },
+  CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-success-soft text-success border-success/30', icon: '✅' },
+  CHECKED_OUT: { label: 'ส่งแล้ว',  cls: 'bg-brand-100 text-brand-700 border-brand-200',  icon: '✅' },
   ABSENT:      { label: 'ไม่มา',   cls: 'bg-red-100 text-red-700 border-red-200',    icon: '❌' },
-  CANCELLED:   { label: 'ยกเลิก',  cls: 'bg-gray-100 text-gray-500 border-gray-200',  icon: '↩️' },
+  CANCELLED:   { label: 'ยกเลิก',  cls: 'bg-surface text-ink-muted border-surface-border',  icon: '↩️' },
 };
 
 export default function ParentStatus() {
@@ -40,7 +41,7 @@ export default function ParentStatus() {
         const res = await axios.get('/api/parent/children', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!cancelled) setChildren(res.data.data || []);
+        if (!cancelled) setChildren(Array.isArray(res.data?.data) ? res.data.data : []);
       } catch (err) {
         if (!cancelled) {
           const code = err.response?.status;
@@ -110,9 +111,9 @@ export default function ParentStatus() {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-4">
         <AppCard padding="lg" className="max-w-sm w-full text-center">
-          <p className="text-5xl mb-4">🔗</p>
-          <h1 className="text-xl font-semibold text-gray-800 mb-3">ยังไม่ได้ผูกบัญชี LINE</h1>
-          <p className="text-base text-gray-600 mb-6">ทำตามขั้นตอนด้านล่าง เพื่อดูสถานะรับ-ส่งบุตรหลาน</p>
+          <Link2 className="w-12 h-12 mx-auto mb-4 text-brand-700" strokeWidth={1.6} aria-hidden="true" />
+          <h1 className="text-xl font-semibold text-ink mb-3">ยังไม่ได้ผูกบัญชี LINE</h1>
+          <p className="text-base text-ink-muted mb-6">ทำตามขั้นตอนด้านล่าง เพื่อดูสถานะรับ-ส่งบุตรหลาน</p>
 
           <div className="text-left space-y-4 mb-6">
             <StepItem number="1" text="เพิ่มเพื่อน LINE OA ระบบรถรับส่งนักเรียน" />
@@ -121,7 +122,7 @@ export default function ParentStatus() {
             <StepItem number="4" text="รอโรงเรียนอนุมัติ" />
           </div>
 
-          <p className="text-sm text-gray-400">หลังอนุมัติแล้ว เปิดหน้านี้อีกครั้ง</p>
+          <p className="text-sm text-ink-muted">หลังอนุมัติแล้ว เปิดหน้านี้อีกครั้ง</p>
         </AppCard>
       </div>
     );
@@ -130,10 +131,10 @@ export default function ParentStatus() {
   // ── Loading ──
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-surface flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-600 mx-auto mb-3" />
-          <p className="text-gray-400">กำลังโหลดข้อมูล…</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600 mx-auto mb-3" />
+          <p className="text-ink-muted">กำลังโหลดข้อมูล…</p>
         </div>
       </div>
     );
@@ -142,11 +143,11 @@ export default function ParentStatus() {
   // ── Error state ──
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-surface flex items-center justify-center p-4">
         <AppCard padding="lg" className="max-w-sm w-full text-center border-danger/30">
           <p className="text-4xl mb-3">⚠️</p>
           <p className="text-base text-red-600 font-medium mb-4">{error}</p>
-          <button onClick={() => window.location.reload()}
+          <button type="button" onClick={() => window.location.reload()}
             className="bg-red-50 hover:bg-red-100 text-red-700 font-medium px-6 py-3 rounded-xl transition border border-red-200">
             ลองใหม่อีกครั้ง
           </button>
@@ -160,24 +161,24 @@ export default function ParentStatus() {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-4">
         <AppCard padding="lg" className="max-w-sm w-full text-center">
-          <p className="text-5xl mb-4">👨‍👩‍👧‍👦</p>
-          <h1 className="text-xl font-semibold text-gray-800 mb-3">ไม่พบข้อมูลบุตรหลาน</h1>
-          <p className="text-base text-gray-600 mb-2">
+          <Users className="w-12 h-12 mx-auto mb-4 text-ink-muted" strokeWidth={1.6} aria-hidden="true" />
+          <h1 className="text-xl font-semibold text-ink mb-3">ไม่พบข้อมูลบุตรหลาน</h1>
+          <p className="text-base text-ink-muted mb-2">
             บัญชี LINE ของคุณยังไม่ได้ผูกกับนักเรียน
           </p>
-          <p className="text-base text-amber-600 font-medium mb-6">
+          <p className="text-base text-warn-ink font-medium mb-6">
             หรืออยู่ระหว่างรอโรงเรียนอนุมัติ
           </p>
 
-          <div className="text-left space-y-3 mb-6 bg-gray-50 rounded-xl p-4">
-            <p className="text-sm font-semibold text-gray-600 mb-2">วิธีผูกบัญชี:</p>
+          <div className="text-left space-y-3 mb-6 bg-surface rounded-xl p-4">
+            <p className="text-sm font-semibold text-ink-muted mb-2">วิธีผูกบัญชี:</p>
             <StepItem number="1" text='พิมพ์ "ผูกบัญชี" ใน LINE OA' />
             <StepItem number="2" text="กรอกเบอร์โทร + รหัสนักเรียนของบุตรหลาน" />
             <StepItem number="3" text="รอโรงเรียนอนุมัติ" />
           </div>
 
           <button onClick={() => window.location.reload()}
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition">
+            className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold min-h-[48px] py-3 rounded-xl transition">
             รีเฟรชข้อมูล
           </button>
         </AppCard>
@@ -187,23 +188,29 @@ export default function ParentStatus() {
 
   // ── Main view ──
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-surface pb-safe">
       {/* Header */}
-      <div className="bg-green-600 text-white px-4 py-4 shadow-md">
+      <div className="bg-navy-700 text-white px-4 py-4 shadow-soft">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
             <h1 className="font-semibold text-lg">ระบบรถรับส่งนักเรียน</h1>
-            <p className="text-green-100 text-sm">สำหรับผู้ปกครอง</p>
+            <p className="text-navy-200 text-sm">สำหรับผู้ปกครอง</p>
           </div>
           {view !== 'list' ? (
-            <button onClick={goBack}
-              className="bg-green-500 hover:bg-green-400 active:bg-green-300 font-semibold text-base px-5 py-2.5 rounded-xl transition">
-              ← กลับ
+            <button
+              type="button"
+              onClick={goBack}
+              className="focus-ring-inverse inline-flex items-center justify-center bg-white/15 hover:bg-white/25 active:bg-white/30 font-semibold text-base px-5 min-h-[44px] rounded-xl transition"
+            >
+              กลับ
             </button>
           ) : (
-            <button onClick={() => window.location.reload()}
-              className="bg-green-500 hover:bg-green-400 active:bg-green-300 text-sm px-4 py-2 rounded-xl transition">
-              🔄 รีเฟรช
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="focus-ring-inverse inline-flex items-center justify-center bg-white/15 hover:bg-white/25 active:bg-white/30 text-sm px-4 min-h-[44px] rounded-xl transition"
+            >
+              รีเฟรช
             </button>
           )}
         </div>
@@ -213,26 +220,27 @@ export default function ParentStatus() {
         {/* ── Children list ── */}
         {view === 'list' && (
           <div className="space-y-4">
-            <p className="text-base font-semibold text-gray-600">
+            <p className="text-base font-semibold text-ink-muted">
               บุตรหลานของคุณ ({children.length} คน)
             </p>
             {children.map(child => (
               <AppCard key={child.id} padding="none" className="overflow-hidden">
                 {/* Child info */}
                 <div className="p-4 pb-3">
-                  <p className="text-lg font-semibold text-gray-900">
+                  <p className="text-lg font-semibold text-ink">
                     {child.first_name} {child.last_name}
                   </p>
-                  <p className="text-base text-gray-500 mt-0.5">
+                  <p className="text-base text-ink-muted mt-0.5">
                     {child.grade && child.classroom ? `${child.grade}/${child.classroom}` : child.grade || '-'}
                     {child.school_name && (
-                      <span className="text-gray-400"> · {child.school_name}</span>
+                      <span className="text-ink-muted"> · {child.school_name}</span>
                     )}
                   </p>
                   {child.plate_no && (
-                    <p className="text-sm text-blue-600 font-medium mt-1.5">
-                      🚌 {child.plate_no}
-                      {child.driver_name && <span className="text-gray-500 font-normal"> · {child.driver_name}</span>}
+                    <p className="text-sm text-brand-600 font-medium mt-1.5">
+                      <Bus className="w-4 h-4 inline align-[-3px] mr-1" strokeWidth={2} aria-hidden="true" />
+                      {child.plate_no}
+                      {child.driver_name && <span className="text-ink-muted font-normal"> · {child.driver_name}</span>}
                     </p>
                   )}
                 </div>
@@ -240,16 +248,19 @@ export default function ParentStatus() {
                 {/* Action buttons */}
                 <div className="flex gap-2 px-4 pb-4">
                   <button onClick={() => viewStatus(child)}
-                    className="flex-1 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold py-3 rounded-xl transition text-base">
-                    📋 สถานะวันนี้
+                    className="focus-ring flex-1 inline-flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold min-h-[48px] rounded-xl transition text-base">
+                    <ClipboardList className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                    สถานะวันนี้
                   </button>
                   <button onClick={() => viewEta(child)}
-                    className="flex-1 bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-700 font-semibold py-3 rounded-xl transition border-2 border-amber-200 text-base">
-                    📍 ETA
+                    className="focus-ring flex-1 inline-flex items-center justify-center gap-1.5 bg-warn-soft hover:bg-warn-soft/70 text-warn-ink font-semibold min-h-[48px] rounded-xl transition border border-warn/30 text-base">
+                    <MapPin className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                    ETA
                   </button>
                   <button onClick={() => viewHistory(child)}
-                    className="flex-1 bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 font-semibold py-3 rounded-xl transition border-2 border-blue-200 text-base">
-                    📅 ย้อนหลัง
+                    className="focus-ring flex-1 inline-flex items-center justify-center gap-1.5 bg-brand-50 hover:bg-brand-100 active:bg-brand-200 text-brand-700 font-semibold min-h-[48px] rounded-xl transition border border-brand-200 text-base">
+                    <CalendarDays className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                    ย้อนหลัง
                   </button>
                 </div>
               </AppCard>
@@ -262,22 +273,22 @@ export default function ParentStatus() {
           <div className="space-y-4">
             {/* Child header */}
             <AppCard padding="md">
-              <p className="text-lg font-semibold text-gray-900">
+              <p className="text-lg font-semibold text-ink">
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
-              <p className="text-base text-gray-500">
+              <p className="text-base text-ink-muted">
                 {selectedChild.grade && selectedChild.classroom ? `${selectedChild.grade}/${selectedChild.classroom}` : selectedChild.grade || '-'}
                 {selectedChild.school_name && ` · ${selectedChild.school_name}`}
               </p>
             </AppCard>
 
-            <p className="text-base font-semibold text-gray-600">สถานะวันนี้</p>
+            <p className="text-base font-semibold text-ink-muted">สถานะวันนี้</p>
 
             {/* Morning / Evening cards */}
             <div className="grid grid-cols-2 gap-3">
               <StatusCard
                 label="ส่งเช้า"
-                icon="🌅"
+                icon={Sunrise}
                 done={status?.morning_done}
                 time={status?.morning_ts}
                 doneText="ส่งถึงแล้ว"
@@ -285,7 +296,7 @@ export default function ParentStatus() {
               />
               <StatusCard
                 label="รับเย็น"
-                icon="🌆"
+                icon={Sunset}
                 done={status?.evening_done}
                 time={status?.evening_ts}
                 doneText="รับแล้ว"
@@ -294,15 +305,15 @@ export default function ParentStatus() {
             </div>
 
             {!status?.morning_done && !status?.evening_done && (
-              <p className="text-sm text-gray-400 text-center bg-gray-50 rounded-xl py-3">
+              <p className="text-sm text-ink-muted text-center bg-surface rounded-xl py-3">
                 ยังไม่มีข้อมูลเช็คอินวันนี้
               </p>
             )}
 
             {/* Quick action */}
             <button onClick={() => viewStatus(selectedChild)}
-              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-medium py-3 rounded-xl transition text-base">
-              🔄 รีเฟรชสถานะ
+              className="w-full bg-surface hover:bg-surface-border text-ink-muted font-medium py-3 rounded-xl transition text-base">
+              รีเฟรชสถานะ
             </button>
           </div>
         )}
@@ -312,40 +323,42 @@ export default function ParentStatus() {
           <div className="space-y-4">
             {/* Child header */}
             <AppCard padding="md">
-              <p className="text-lg font-semibold text-gray-900">
+              <p className="text-lg font-semibold text-ink">
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
-              <p className="text-base text-gray-500">
+              <p className="text-base text-ink-muted">
                 {selectedChild.school_name || '-'}
               </p>
             </AppCard>
 
-            <p className="text-base font-semibold text-gray-600">ประวัติ 7 วันล่าสุด</p>
+            <p className="text-base font-semibold text-ink-muted">ประวัติ 7 วันล่าสุด</p>
 
             {history.length === 0 ? (
               <AppCard padding="lg" className="text-center">
-                <p className="text-gray-400 text-lg">ไม่มีประวัติในช่วงนี้</p>
+                <p className="text-ink-muted text-lg">ไม่มีประวัติในช่วงนี้</p>
               </AppCard>
             ) : (
               <div className="space-y-2">
                 {history.map((h, i) => {
-                  const st = STATUS_MAP[h.status] || { label: h.status, cls: 'bg-gray-100 text-gray-500 border-gray-200', icon: '—' };
+                  const st = STATUS_MAP[h.status] || { label: h.status, cls: 'bg-surface text-ink-muted border-surface-border', icon: '—' };
                   const dateStr = new Date(h.check_date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
                   const timeStr = h.checked_at ? new Date(h.checked_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '-';
 
                   return (
                     <AppCard key={i} padding="sm" className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-base font-medium text-gray-800">{dateStr}</p>
-                        <p className="text-sm text-gray-500">
-                          {h.session === 'morning' ? '🌅 ส่งเช้า' : '🌆 รับเย็น'}
+                        <p className="text-base font-medium text-ink">{dateStr}</p>
+                        <p className="text-sm text-ink-muted">
+                          {h.session === 'morning' ? 'ส่งเช้า' : 'รับเย็น'}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
                         <span className={`inline-block text-sm font-semibold px-3 py-1 rounded-full border ${st.cls}`}>
-                          {st.icon} {st.label}
+                          {/* The label carries the state; the emoji is
+                               decoration and should not be announced. */}
+                          <span aria-hidden="true">{st.icon}</span> {st.label}
                         </span>
-                        <p className="text-sm text-gray-400 mt-0.5">{timeStr}</p>
+                        <p className="text-sm text-ink-muted mt-0.5">{timeStr}</p>
                       </div>
                     </AppCard>
                   );
@@ -359,31 +372,31 @@ export default function ParentStatus() {
         {view === 'eta' && selectedChild && (
           <div className="space-y-4">
             <AppCard padding="md">
-              <p className="text-lg font-semibold text-gray-900">
+              <p className="text-lg font-semibold text-ink">
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
-              <p className="text-base text-gray-500">
+              <p className="text-base text-ink-muted">
                 {selectedChild.school_name || '-'}
               </p>
             </AppCard>
 
-            <p className="text-base font-semibold text-gray-600">เวลาถึงโดยประมาณ (ETA)</p>
+            <p className="text-base font-semibold text-ink-muted">เวลาถึงโดยประมาณ (ETA)</p>
 
             {eta == null ? (
               <AppCard padding="lg" className="text-center">
-                <p className="text-4xl mb-2">📍</p>
-                <p className="text-gray-500 text-base">
+                <MapPin className="w-10 h-10 mx-auto mb-2 text-ink-muted" strokeWidth={1.8} aria-hidden="true" />
+                <p className="text-ink-muted text-base">
                   ยังไม่มีข้อมูล ETA — รถอาจออฟไลน์ หรือยังไม่เริ่มรอบ
                 </p>
-                <p className="text-sm text-gray-400 mt-2">
+                <p className="text-sm text-ink-muted mt-2">
                   ลองกดรีเฟรชอีกครั้งเมื่อรถเริ่มวิ่ง
                 </p>
               </AppCard>
             ) : (
               <AppCard padding="lg" className="text-center">
-                <p className="text-5xl mb-3">🚌</p>
-                <p className="text-sm text-gray-500 mb-1">รถ {eta.plate_no}</p>
-                <p className="text-base font-semibold text-gray-700 mb-3">
+                <Bus className="w-12 h-12 mx-auto mb-3 text-ink-muted" strokeWidth={1.6} aria-hidden="true" />
+                <p className="text-sm text-ink-muted mb-1">รถ {eta.plate_no}</p>
+                <p className="text-base font-semibold text-ink mb-3">
                   จุด: {eta.label}
                 </p>
                 <div className="inline-flex flex-col items-center bg-amber-50 border-2 border-amber-200 rounded-2xl px-6 py-4">
@@ -399,12 +412,15 @@ export default function ParentStatus() {
                     ความมั่นใจ: {eta.confidence === 'HIGH' ? 'สูง' : eta.confidence === 'MEDIUM' ? 'ปานกลาง' : eta.confidence === 'LOW' ? 'ต่ำ' : 'ไม่ทราบ'}
                   </p>
                 </div>
-                <p className="text-xs text-gray-400 mt-3">
+                <p className="text-xs text-ink-muted mt-3">
                   อัปเดต {eta.age_seconds != null ? `${eta.age_seconds}s ที่แล้ว` : '-'}
                 </p>
-                <button onClick={() => viewEta(selectedChild)}
-                  className="mt-4 bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold px-6 py-2.5 rounded-xl border-2 border-amber-200 transition">
-                  🔄 รีเฟรช ETA
+                <button
+                  type="button"
+                  onClick={() => viewEta(selectedChild)}
+                  className="focus-ring mt-4 inline-flex items-center justify-center bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold px-6 min-h-[44px] rounded-xl border-2 border-amber-200 transition"
+                >
+                  รีเฟรช ETA
                 </button>
               </AppCard>
             )}
@@ -419,27 +435,41 @@ export default function ParentStatus() {
 function StepItem({ number, text }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="bg-green-600 text-white font-semibold w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0">
+      <span className="bg-navy-700 text-white font-semibold w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0">
         {number}
       </span>
-      <p className="text-base text-gray-700 leading-snug pt-0.5">{text}</p>
+      <p className="text-base text-ink leading-snug pt-0.5">{text}</p>
     </div>
   );
 }
 
 /* ── Status card for today view ── */
-function StatusCard({ label, icon, done, time, doneText, pendingText }) {
+/**
+ * The done/pending state was a 3xl ✅ or ⏳ above the label — the emoji WAS the
+ * status, so a parent using a screen reader got nothing, and the session icon
+ * (🌅 / 🌆) sat inside the label text. Both are Lucide icons now, aria-hidden,
+ * with the existing doneText / pendingText carrying the meaning.
+ */
+function StatusCard({ label, icon: SessionIcon, done, time, doneText, pendingText }) {
   const timeStr = time ? new Date(time).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : null;
+  const StateIcon = done ? CheckCircle2 : Clock;
 
   return (
-    <div className={`rounded-2xl border-2 p-4 text-center ${done ? 'bg-green-50 border-green-300' : 'bg-gray-50 border-gray-200'}`}>
-      <p className="text-3xl mb-2">{done ? '✅' : '⏳'}</p>
-      <p className="text-base font-semibold text-gray-700">{icon} {label}</p>
-      <p className={`text-sm font-medium mt-1 ${done ? 'text-green-700' : 'text-gray-400'}`}>
+    <div className={`rounded-2xl border-2 p-4 text-center ${done ? 'bg-success-soft border-success/40' : 'bg-surface border-surface-border'}`}>
+      <StateIcon
+        className={`w-8 h-8 mx-auto mb-2 ${done ? 'text-success-ink' : 'text-ink-muted'}`}
+        strokeWidth={2}
+        aria-hidden="true"
+      />
+      <p className="text-base font-semibold text-ink inline-flex items-center justify-center gap-1.5">
+        {SessionIcon && <SessionIcon className="w-4 h-4 text-ink-muted" strokeWidth={2} aria-hidden="true" />}
+        {label}
+      </p>
+      <p className={`text-sm font-medium mt-1 ${done ? 'text-success-ink' : 'text-ink-muted'}`}>
         {done ? doneText : pendingText}
       </p>
       {done && timeStr && (
-        <p className="text-lg font-semibold text-green-800 mt-1">{timeStr} น.</p>
+        <p className="text-lg font-semibold text-success-ink mt-1 tabular-nums">{timeStr} น.</p>
       )}
     </div>
   );

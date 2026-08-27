@@ -187,22 +187,9 @@ router.get('/vehicles/expiring', async (req, res, next) => {
 // ─── GET /api/transport/vehicles/:id ────────────────────────────────────────
 router.get('/vehicles/:id', async (req, res, next) => {
   try {
-    const data = await transportSvc.getVehicles({ page: 1, per_page: 1 });
-    // Filter by id from full list — simple approach for MVP
-    const { pool } = require('../config/database');
-    const [rows] = await pool.query(
-      `SELECT v.*,
-              (SELECT d.name FROM driver_vehicle_assignments dva
-               JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
-               WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE LIMIT 1) AS driver_name,
-              (SELECT d.phone FROM driver_vehicle_assignments dva
-               JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
-               WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE LIMIT 1) AS driver_phone
-       FROM vehicles v WHERE v.id = ? AND v.is_deleted = FALSE`,
-      [req.params.id]
-    );
-    if (rows.length === 0) return sendError(res, 'Vehicle not found', [], 404);
-    sendSuccess(res, rows[0]);
+    const vehicle = await transportSvc.getVehicleById(req.params.id);
+    if (!vehicle) return sendError(res, 'Vehicle not found', [], 404);
+    sendSuccess(res, vehicle);
   } catch (err) { next(err); }
 });
 
@@ -230,13 +217,9 @@ router.post('/inspections', async (req, res, next) => {
     if (!validResults.includes(result)) {
       return sendError(res, `result must be one of: ${validResults.join(', ')}`, [], 400);
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(inspection_date)) {
-      return sendError(res, 'inspection_date must be YYYY-MM-DD format', [], 400);
-    }
-    if (expiry_date && !/^\d{4}-\d{2}-\d{2}$/.test(expiry_date)) {
-      return sendError(res, 'expiry_date must be YYYY-MM-DD format', [], 400);
-    }
 
+    // Date-bound validation + audit + eligibility refresh all happen atomically
+    // inside the service (CLAUDE.md rule 7). Do not audit here.
     const id = await transportSvc.createInspection({
       vehicleId: vehicle_id,
       inspectionDate: inspection_date,
@@ -245,12 +228,8 @@ router.post('/inspections', async (req, res, next) => {
       notes,
       certifyingSchoolId: certifying_school_id || null,
       userId: req.user.id,
-    });
-
-    await logAudit({
-      userId: req.user.id, action: 'CREATE', entityType: 'vehicle_inspection',
-      entityId: id, newValue: req.body,
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
     });
 
     sendSuccess(res, { id }, 'Inspection recorded', null, 201);
@@ -260,21 +239,27 @@ router.post('/inspections', async (req, res, next) => {
 // ─── PUT /api/transport/inspections/:id ─────────────────────────────────────
 router.put('/inspections/:id', async (req, res, next) => {
   try {
+    const inspectionId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(inspectionId) || inspectionId <= 0) return sendError(res, 'invalid id', [], 400);
+
     const { expiry_date, result, notes } = req.body;
     if (!result) return sendError(res, 'result is required', [], 400);
+    const validResults = ['PASSED', 'FAILED', 'NEEDS_FIX', 'PENDING'];
+    if (!validResults.includes(result)) {
+      return sendError(res, `result must be one of: ${validResults.join(', ')}`, [], 400);
+    }
 
+    // Ownership check, date-bound validation, audit and eligibility refresh all
+    // happen atomically inside the service (rule 7). 404/403 surface from there.
     await transportSvc.updateInspection({
-      inspectionId: req.params.id,
+      inspectionId,
       expiryDate: expiry_date,
       result,
       notes,
       userId: req.user.id,
-    });
-
-    await logAudit({
-      userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_inspection',
-      entityId: req.params.id, newValue: req.body,
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      isAdmin: req.user.role === 'admin',
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
     });
 
     sendSuccess(res, null, 'Inspection updated');

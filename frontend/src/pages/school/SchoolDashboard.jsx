@@ -9,6 +9,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import api from '../../api/axios';
+import StudentStatusTable from '../../components/StudentStatusTable';
 import { useToast } from '../../components/Toast';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import { DonutChart, HBarChart } from '../../components/MiniCharts';
@@ -17,8 +18,7 @@ import { SkeletonKpiGrid } from '../../components/Skeleton';
 import SchoolOverrideModal from '../../components/SchoolOverrideModal';
 import {
   AppCard, AlertBanner, KPIGrid, KPIStat,
-  StatusBadge, DashboardSection, SectionTitle,
-} from '../../components/ui';
+  StatusBadge, DashboardSection, SectionTitle, ConfirmDialog} from '../../components/ui';
 import {
   PAGE_TITLES, CARD_LABELS, CHART_TITLES, SECTION_TITLES,
   STATUS, UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS,
@@ -66,9 +66,13 @@ export default function SchoolDashboard() {
     refetchDashboard().finally(() => setLoading(false));
   }, []);
 
+  // Cancelling a leave is destructive and was behind a bare confirm(), which
+  // could not name the pupil or the date being cancelled.
+  const [confirmLeave, setConfirmLeave] = useState(null);
+
   async function handleCancelLeave(leaveId) {
     if (!leaveId) return;
-    if (!confirm('ยืนยันยกเลิกการลานี้?')) return;
+    setConfirmLeave(null);
     setLeaveLoading(prev => ({ ...prev, [leaveId]: true }));
     try {
       await api.delete(`/school/leaves/${leaveId}`);
@@ -206,13 +210,19 @@ export default function SchoolDashboard() {
               { done: c.vehicles_inspected,    total: c.vehicles_total },
               { done: c.vehicles_insured,      total: c.vehicles_total },
             ];
-            const pct = Math.round(
-              items.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / items.length * 100
-            );
+            // นับเฉพาะรายการที่ backend ส่งตัวเลขมาจริง — ถ้า field ใดหายไป
+            // (API เวอร์ชันต่างกัน หรือเพิ่มตัวชี้วัดใหม่ภายหลัง) การหารจะได้
+            // NaN แล้วหน้าขึ้น "NaN% ครบถ้วน" ให้ผู้ใช้เห็น
+            const usable = items.filter(i => Number.isFinite(i.done) && Number.isFinite(i.total));
+            const pct = usable.length
+              ? Math.round(
+                usable.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / usable.length * 100
+              )
+              : null;
             return (
               <CollapsibleSection
                 title="ความครบถ้วนข้อมูล"
-                subtitle={`${pct}% ครบถ้วน`}
+                subtitle={pct === null ? 'ยังคำนวณไม่ได้' : `${pct}% ครบถ้วน`}
                 defaultOpen={false}
               >
                 <CompletenessCard c={c} />
@@ -308,7 +318,7 @@ export default function SchoolDashboard() {
           {/* Leave list with cancel — school can cancel leaves recorded in error */}
           {leaves.length > 0 && !isTeacher && (
             <CollapsibleSection
-              title="นักเรียนลาวันนี้"
+              title="นักเรียนลา"
               subtitle={`${leaves.length} รายการ`}
               defaultOpen={false}
             >
@@ -325,9 +335,9 @@ export default function SchoolDashboard() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleCancelLeave(lv.id)}
+                      onClick={() => setConfirmLeave(lv.id)}
                       disabled={!!leaveLoading[lv.id]}
-                      className="shrink-0 text-xs font-medium text-danger hover:text-danger/80 disabled:opacity-50 px-2.5 py-1 rounded border border-danger/30 hover:bg-danger-soft transition min-h-[36px]"
+                      className="shrink-0 text-xs font-medium text-danger-ink hover:text-danger-ink/80 disabled:opacity-50 px-2.5 py-1 rounded border border-danger/30 hover:bg-danger-soft transition min-h-[36px]"
                     >
                       {leaveLoading[lv.id] ? 'กำลัง...' : 'ยกเลิก'}
                     </button>
@@ -415,6 +425,16 @@ export default function SchoolDashboard() {
         </>
       )}
     </div>
+      <ConfirmDialog
+        open={Boolean(confirmLeave)}
+        title="ยกเลิกการลานี้?"
+        itemName={confirmLeave?.student_name || confirmLeave?.name || ''}
+        description="นักเรียนจะกลับมาอยู่ในรายการรับ-ส่งตามปกติ และการกระทำนี้ถูกบันทึกใน audit log"
+        confirmLabel="ยกเลิกการลา"
+        loading={Boolean(confirmLeave && leaveLoading[confirmLeave.id ?? confirmLeave])}
+        onConfirm={() => handleCancelLeave(confirmLeave?.id ?? confirmLeave)}
+        onCancel={() => setConfirmLeave(null)}
+      />
     </PageTransition>
   );
 }
@@ -503,7 +523,7 @@ function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
         {notStarted ? (
           <p className="text-2xl font-bold text-ink-muted tabular-nums">–</p>
         ) : allDone ? (
-          <p className="text-2xl font-bold text-success">{label}ครบแล้ว ✓</p>
+          <p className="text-2xl font-bold text-success">{label}ครบแล้ว</p>
         ) : (
           <p className="text-3xl font-bold text-ink tabular-nums leading-none">
             {done}
@@ -526,17 +546,17 @@ function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
         ) : (
           <>
             {pending > 0 && (
-              <span className="inline-flex items-center gap-1 bg-danger-soft text-danger px-2 py-0.5 rounded-full border border-danger/30 font-medium tabular-nums">
+              <span className="inline-flex items-center gap-1 bg-danger-soft text-danger-ink px-2 py-0.5 rounded-full border border-danger/30 font-medium tabular-nums">
                 {STATUS.PENDING} {pending}
               </span>
             )}
             {leave > 0 && (
-              <span className="inline-flex items-center gap-1 bg-warn-soft text-warn px-2 py-0.5 rounded-full border border-warn/30 font-medium tabular-nums">
+              <span className="inline-flex items-center gap-1 bg-warn-soft text-warn-ink px-2 py-0.5 rounded-full border border-warn/30 font-medium tabular-nums">
                 {STATUS.LEAVE} {leave}
               </span>
             )}
             {pending === 0 && leave === 0 && (
-              <span className="text-success font-medium">ทุกรายการ ✓</span>
+              <span className="text-success font-medium">ทุกรายการเรียบร้อย</span>
             )}
           </>
         )}
@@ -595,33 +615,17 @@ function VehicleRow({ vehicle, isExpanded, onToggle }) {
       </button>
 
       {isExpanded && (
-        <div className="border-t border-surface-border overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-surface text-ink-muted text-xs">
-                <th className="px-4 py-2 text-left font-medium">ชื่อนักเรียน</th>
-                <th className="px-4 py-2 text-left font-medium">ชั้น/ห้อง</th>
-                <th className="px-4 py-2 text-center font-medium">ส่งเช้า</th>
-                <th className="px-4 py-2 text-center font-medium">รับเย็น</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-border">
-              {vehicle.students.map(s => (
-                <tr key={s.id} className={`${s.leave_session ? 'bg-warn-soft/40' : ''} hover:bg-surface`}>
-                  <td className="px-4 py-2 text-ink text-sm">{s.name}</td>
-                  <td className="px-4 py-2 text-ink-muted text-xs">
-                    {s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-'}
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <StudentStatus enabled={s.morning_enabled} done={s.morning_done} ts={s.morning_ts} leave={isMorningLeave(s)} />
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <StudentStatus enabled={s.evening_enabled} done={s.evening_done} ts={s.evening_ts} leave={isEveningLeave(s)} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="border-t border-surface-border p-4">
+          <StudentStatusTable
+            students={vehicle.students}
+            caption={`สถานะนักเรียนในรถ ${vehicle.plate_no || ''}`}
+            rowClassName={s => (s.leave_session ? 'bg-warn-soft/40' : '')}
+            renderStatus={(s, session) => (
+              session === 'morning'
+                ? <StudentStatus enabled={s.morning_enabled} done={s.morning_done} ts={s.morning_ts} leave={isMorningLeave(s)} />
+                : <StudentStatus enabled={s.evening_enabled} done={s.evening_done} ts={s.evening_ts} leave={isEveningLeave(s)} />
+            )}
+          />
         </div>
       )}
     </AppCard>
@@ -645,7 +649,9 @@ function StudentStatus({ enabled, done, ts, leave }) {
   if (done) return (
     <span className="inline-flex items-center gap-1 text-success text-xs font-medium">
       <span className="w-1.5 h-1.5 bg-success rounded-full" />
-      {ts ? new Date(ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '✓'}
+      {/* Without a timestamp the cell was a bare ✓ — the tick was the whole
+          answer, and a screen reader read "check mark" with no subject. */}
+      {ts ? new Date(ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : 'เรียบร้อย'}
     </span>
   );
   return (

@@ -822,8 +822,9 @@ GET  /api/province/live-vehicles           — ตำแหน่งรถแบ
 GET  /api/province/pickup-map              — แผนที่จุดรับ-ส่งทั้งจังหวัด (aggregate, ไม่มี PII) (Phase 7.12.2)
 ```
 
-> **ยังไม่ implement / deferred:**
-> - `GET /api/province/reports/policy` (รายงานเชิงนโยบาย ตามสเปกรุ่นแรก `/api/central/reports/policy`) — **ยังไม่มีในระบบ** (404 ทุก path) ยังไม่ได้ทำ อย่าถือว่ามีอยู่จริง
+> **หมายเหตุ (อัปเดต 2026-08-27):**
+> - **รายงานเชิงนโยบาย implement แล้ว** แต่อยู่ที่ **`GET /api/reports/policy`** (ดู §5.8) ไม่ใช่
+>   `/api/province/reports/policy` ตามสเปกรุ่นแรก — service บังคับ role `province`/`admin` เอง (403 ถ้าไม่ใช่)
 > - ไม่มี `/districts/:id/dashboard`, `/export/:type`, `/system-params` ตามสเปกรุ่นแรก — รายงาน/Export ใช้ `/api/reports/*` (ดู §5.8) ส่วน export CSV เฉพาะ audit ทำผ่าน `/api/province/audit-logs?format=csv`
 
 ### 5.6 ขนส่ง (role: transport)
@@ -840,13 +841,14 @@ GET  /api/transport/schools                — รายชื่อโรงเ
 GET  /api/transport/inspections            — รายการตรวจสภาพ (vehicle_id, result, page, per_page)
 POST /api/transport/inspections            — บันทึกผลตรวจ
 PUT  /api/transport/inspections/:id        — แก้ไขผลตรวจ
-GET  /api/transport/vehicles/pending       — รถที่ยังไม่ตรวจ (กำลัง implement — 2026-06-23)
-GET  /api/transport/vehicles/expiring      — รถที่ใกล้หมดอายุ (กำลัง implement — 2026-06-23)
+GET  /api/transport/vehicles/pending       — รถที่ยังไม่ตรวจ (page, per_page, include_pending)
+GET  /api/transport/vehicles/expiring      — เอกสารรถใกล้หมดอายุใน 30 วัน (page, per_page; ?expired=true = หมดอายุแล้ว)
 GET  /api/transport/pickup-map             — แผนที่จุดรับ-ส่ง (aggregate, ไม่มี PII) (Phase 7.12.2)
 ```
 
-> **หมายเหตุ:** `vehicles/pending` และ `vehicles/expiring` อยู่ระหว่างการ implement (อีก agent หนึ่ง
-> กำลังเพิ่มอยู่ ณ 2026-06-23) — เก็บไว้ในเอกสารว่าจะมี ไม่ต้อง mark ว่า deferred
+> **หมายเหตุ:** `vehicles/pending` และ `vehicles/expiring` **implement เสร็จแล้ว** (ยืนยันในโค้ด 2026-08-27)
+> — ทั้งคู่ต้องประกาศ **ก่อน** `/vehicles/:id` ใน `transport.routes.js` ไม่งั้น Express จะจับ `pending`/`expiring`
+> เป็นค่า `:id` แล้ว 404 "Vehicle not found"
 > ส่วน `/export/:type` ตามสเปกรุ่นแรก **ไม่มีอยู่จริง** — export/รายงานใช้ `/api/reports/*` (ดู §5.8)
 
 ### 5.7 LINE Webhook & Parent API
@@ -871,6 +873,7 @@ POST /api/parent/link-child                — ผูกบุตรหลาน
 GET  /api/reports/daily                    — รายงานรายวัน (JSON)
 GET  /api/reports/monthly                  — รายงานรายเดือน (JSON)
 GET  /api/reports/summary                  — รายงานสรุป (JSON)
+GET  /api/reports/policy                   — รายงานเชิงนโยบายทั้งจังหวัด (JSON; role province/admin เท่านั้น — 403 ถ้าไม่ใช่)
 GET  /api/reports/export/csv               — export CSV (มี BOM)
 GET  /api/reports/export/excel             — export Excel (exceljs)
 GET  /api/reports/export/pdf               — export PDF (pdfkit)

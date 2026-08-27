@@ -306,11 +306,21 @@ def build_one(src_name: str, out_name: str) -> Path:
 def publish_web_pdf(src_pdf: Path, web_name: str) -> Path:
     """Expose a built PDF under its stable web name.
 
-    A relative symlink keeps the web copy in step with the build output for
-    free, so it stays the first choice. Windows refuses os.symlink unless the
-    process is elevated or Developer Mode is on, which made this script
-    unrunnable there; fall back to copying so the manual can be rebuilt on any
-    machine. The copy is byte-identical, only no longer self-updating.
+    These entries are symlinks into manual-training-2026-08/pdf/, where the
+    real files live, and the server serves them through those links.
+
+    Windows refuses os.symlink without elevation or Developer Mode. Copying the
+    PDF instead makes the file readable locally but breaks the repository: git
+    still records mode 120000 for the path, so the whole PDF body lands in a
+    blob that is supposed to hold a short path. Checking that out on Linux
+    calls symlink() with megabytes as the link target and fails with
+    ENAMETOOLONG — it took a production deploy down twice.
+
+    With core.symlinks=false (git's default on Windows) git represents a
+    symlink exactly as a small text file holding the target path, so writing
+    that same text keeps the repository correct. The local file is then not a
+    readable PDF on Windows, which is the normal trade-off for symlinks there —
+    read the real file under manual-training-2026-08/pdf/ instead.
     """
     web_path = WEB_OUT_DIR / web_name
     relative_target = Path("..") / ".." / "manual-training-2026-08" / "pdf" / src_pdf.name
@@ -319,7 +329,7 @@ def publish_web_pdf(src_pdf: Path, web_name: str) -> Path:
     try:
         web_path.symlink_to(relative_target)
     except OSError:
-        shutil.copyfile(src_pdf, web_path)
+        web_path.write_text(relative_target.as_posix(), encoding="utf-8", newline="")
     return web_path
 
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import html
 import re
+import shutil
 from pathlib import Path
 
 from reportlab.lib import colors
@@ -53,6 +54,7 @@ FILES = [
     ("06-driver.md", "06-คู่มือคนขับ-Driver.pdf", "06-driver.pdf"),
     ("07-transport.md", "07-คู่มือขนส่ง-Transport.pdf", "07-transport.pdf"),
     ("08-parent-line.md", "08-คู่มือผู้ปกครอง-LINE-OA.pdf", "08-parent-line.pdf"),
+    ("09-teacher-training-prep.md", "09-เอกสารเตรียมอบรมครู-ผลทดสอบระบบจริง.pdf", "09-teacher-training-prep.pdf"),
 ]
 
 
@@ -302,11 +304,22 @@ def build_one(src_name: str, out_name: str) -> Path:
 
 
 def publish_web_pdf(src_pdf: Path, web_name: str) -> Path:
+    """Expose a built PDF under its stable web name.
+
+    A relative symlink keeps the web copy in step with the build output for
+    free, so it stays the first choice. Windows refuses os.symlink unless the
+    process is elevated or Developer Mode is on, which made this script
+    unrunnable there; fall back to copying so the manual can be rebuilt on any
+    machine. The copy is byte-identical, only no longer self-updating.
+    """
     web_path = WEB_OUT_DIR / web_name
     relative_target = Path("..") / ".." / "manual-training-2026-08" / "pdf" / src_pdf.name
     if web_path.exists() or web_path.is_symlink():
         web_path.unlink()
-    web_path.symlink_to(relative_target)
+    try:
+        web_path.symlink_to(relative_target)
+    except OSError:
+        shutil.copyfile(src_pdf, web_path)
     return web_path
 
 

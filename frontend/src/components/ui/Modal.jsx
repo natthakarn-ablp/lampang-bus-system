@@ -32,6 +32,11 @@ export default function Modal({
 }) {
   const panelRef = useRef(null);
   const restoreRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (open) restoreRef.current = document.activeElement;
@@ -53,7 +58,7 @@ export default function Modal({
     function onKeyDown(e) {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        if (dismissible) onClose?.();
+        if (dismissible) onCloseRef.current?.();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -72,7 +77,7 @@ export default function Modal({
       const el = restoreRef.current;
       if (el && typeof el.focus === 'function' && document.contains(el)) el.focus();
     };
-  }, [open, onClose, dismissible]);
+  }, [open, dismissible]);
 
   if (!open) return null;
 
@@ -80,7 +85,7 @@ export default function Modal({
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-navy-950/60 motion-safe:animate-fade-in"
-        onClick={dismissible ? onClose : undefined}
+        onClick={dismissible ? () => onCloseRef.current?.() : undefined}
         aria-hidden="true"
       />
       <div

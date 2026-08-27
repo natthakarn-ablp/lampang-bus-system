@@ -46,6 +46,7 @@ export default function FormField({
     'aria-invalid': error ? true : undefined,
     'aria-describedby': describedBy,
     'aria-required': required || undefined,
+    required,
     disabled,
   };
 

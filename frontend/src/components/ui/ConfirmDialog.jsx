@@ -42,6 +42,11 @@ export default function ConfirmDialog({
   const panelRef = useRef(null);
   const cancelRef = useRef(null);
   const restoreRef = useRef(null);
+  const onCancelRef = useRef(onCancel);
+
+  useEffect(() => {
+    onCancelRef.current = onCancel;
+  }, [onCancel]);
 
   useEffect(() => {
     if (open) restoreRef.current = document.activeElement;
@@ -56,7 +61,7 @@ export default function ConfirmDialog({
     cancelRef.current?.focus();
 
     function onKeyDown(e) {
-      if (e.key === 'Escape') { e.stopPropagation(); onCancel?.(); return; }
+      if (e.key === 'Escape') { e.stopPropagation(); onCancelRef.current?.(); return; }
       if (e.key !== 'Tab') return;
       // Not just buttons: a dialog with a required reason field has to keep
       // that field inside the trap, or Tab walks straight past it.
@@ -79,7 +84,7 @@ export default function ConfirmDialog({
       const el = restoreRef.current;
       if (el && typeof el.focus === 'function' && document.contains(el)) el.focus();
     };
-  }, [open, onCancel]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -89,7 +94,7 @@ export default function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-navy-950/60 motion-safe:animate-fade-in" onClick={onCancel} aria-hidden="true" />
+      <div className="absolute inset-0 bg-navy-950/60 motion-safe:animate-fade-in" onClick={() => onCancelRef.current?.()} aria-hidden="true" />
       <div
         ref={panelRef}
         role="alertdialog"

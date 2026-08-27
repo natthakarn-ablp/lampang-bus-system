@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { FileText, Eye, Check, X } from 'lucide-react';
 import api from '../api/axios';
 import { useToast } from './Toast';
+import { ConfirmDialog, FormField } from './ui';
 
 // Shared review panel for vehicle + driver supporting-evidence documents, reused
 // by the school registration review and the transport verification queue. The
@@ -31,6 +32,8 @@ export default function DocumentReviewPanel({ apiBase, vehicleId, driverId, canR
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [rejectNote, setRejectNote] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,17 +64,13 @@ export default function DocumentReviewPanel({ apiBase, vehicleId, driverId, canR
     } finally { setBusyId(null); }
   }
 
-  async function review(kind, id, decision) {
-    let note = null;
-    if (decision === 'REJECTED') {
-      note = window.prompt('เหตุผลที่ไม่ผ่าน (เช่น เอกสารเบลอ / หมดอายุ):');
-      if (note == null) return;
-      if (!note.trim()) { toast.error('กรุณาระบุเหตุผล'); return; }
-    }
+  async function review(kind, id, decision, note = null) {
     setBusyId(id);
     try {
       await api.post(`${apiBase}/${kind}/${id}/review`, { decision, note });
       toast.success(decision === 'APPROVED' ? 'อนุมัติเอกสารแล้ว' : 'ทำเครื่องหมายไม่ผ่านแล้ว');
+      setRejectTarget(null);
+      setRejectNote('');
       load();
     } catch (e) {
       toast.error(e.response?.data?.message || 'ไม่สำเร็จ');
@@ -119,7 +118,7 @@ export default function DocumentReviewPanel({ apiBase, vehicleId, driverId, canR
                     className="text-xs font-medium bg-green-50 border border-green-300 text-green-700 px-3 py-1.5 rounded-lg hover:bg-green-100 disabled:opacity-50">
                     <Check className="w-3.5 h-3.5 inline -mt-0.5" /> ผ่าน
                   </button>
-                  <button onClick={() => review(d.kind, d.id, 'REJECTED')} disabled={busyId === d.id}
+                  <button onClick={() => { setRejectNote(''); setRejectTarget(d); }} disabled={busyId === d.id}
                     className="text-xs font-medium text-gray-500 hover:text-red-600 disabled:opacity-50">
                     <X className="w-3.5 h-3.5 inline -mt-0.5" /> ไม่ผ่าน
                   </button>
@@ -129,6 +128,28 @@ export default function DocumentReviewPanel({ apiBase, vehicleId, driverId, canR
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        title="ยืนยันว่าเอกสารไม่ผ่าน"
+        description="ระบุเหตุผลให้ชัดเจนเพื่อให้ผู้ยื่นแก้ไขได้ถูกต้อง"
+        itemName={rejectTarget ? `${DOC_LABEL[rejectTarget.doc_type] || 'เอกสาร'} — ${rejectTarget.original_name || '-'}` : undefined}
+        confirmLabel="ทำเครื่องหมายไม่ผ่าน"
+        loading={busyId === rejectTarget?.id}
+        confirmDisabled={!rejectNote.trim()}
+        onConfirm={() => review(rejectTarget.kind, rejectTarget.id, 'REJECTED', rejectNote.trim())}
+        onCancel={() => {
+          if (busyId !== rejectTarget?.id) { setRejectTarget(null); setRejectNote(''); }
+        }}
+      >
+        <FormField
+          label="เหตุผลที่ไม่ผ่าน"
+          value={rejectNote}
+          onChange={setRejectNote}
+          placeholder="เช่น เอกสารเบลอ หรือเอกสารหมดอายุ"
+          required
+        />
+      </ConfirmDialog>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Check, X, ClipboardCheck, Search , ClipboardList } from 'lucide-react';
 import api from '../../api/axios';
-import { FilterBar } from '../../components/ui';
+import { ConfirmDialog, FilterBar, FormField } from '../../components/ui';
 import EmptyState from '../../components/EmptyState';
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
@@ -109,6 +109,8 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [approving, setApproving] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   // Manual student search (for roster rows with no auto-match)
   const [searchFor, setSearchFor] = useState(null); // rosterId currently searching
   const [searchQ, setSearchQ] = useState('');
@@ -180,13 +182,14 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
   }
 
   async function reject() {
-    const reason = window.prompt('เหตุผลที่ส่งกลับให้แก้ไข:');
-    if (reason == null) return;
-    if (!reason.trim()) { toast.error('กรุณาระบุเหตุผล'); return; }
+    const reason = rejectReason.trim();
+    if (!reason) return;
     setApproving(true);
     try {
       await api.post(`/school/registrations/${applicationId}/reject`, { reason });
       toast.success('ส่งกลับให้แก้ไขแล้ว');
+      setRejectOpen(false);
+      setRejectReason('');
       onBack();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สำเร็จ');
@@ -328,7 +331,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                 <ClipboardCheck className="w-4 h-4" />
                 {unmatched > 0 ? `ตรวจให้ครบก่อน (เหลือ ${unmatched})` : 'อนุมัติทั้งหมด'}
               </button>
-              <button onClick={reject} disabled={approving}
+              <button onClick={() => { setRejectReason(''); setRejectOpen(true); }} disabled={approving}
                 className="bg-red-50 border border-red-300 text-red-700 hover:bg-red-100 disabled:opacity-50 text-sm font-medium px-5 py-3 rounded-lg transition">
                 ส่งกลับแก้ไข
               </button>
@@ -339,6 +342,26 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={rejectOpen}
+        title="ส่งคำขอกลับให้แก้ไข"
+        description="เหตุผลนี้จะแสดงให้ผู้ยื่นคำขอทราบ"
+        itemName={detail?.plate_no ? `รถ ${detail.plate_no}` : undefined}
+        confirmLabel="ส่งกลับแก้ไข"
+        loading={approving}
+        confirmDisabled={!rejectReason.trim()}
+        onConfirm={reject}
+        onCancel={() => { if (!approving) { setRejectOpen(false); setRejectReason(''); } }}
+      >
+        <FormField
+          label="เหตุผลที่ส่งกลับ"
+          value={rejectReason}
+          onChange={setRejectReason}
+          placeholder="เช่น รายชื่อนักเรียนไม่ครบถ้วน"
+          required
+        />
+      </ConfirmDialog>
     </div>
   );
 }

@@ -599,6 +599,28 @@ const SHOTS = [
   { id: '93-public-qr-notice', url: '/qr/QR-TEST-TOKEN', user: null, vps: ['mobile', 'desktop'],
     act: async page => { await page.getByRole('button', { name: 'ความเป็นส่วนตัว' }).first().click(); },
     expect: ['text=รับทราบ'] },
+  // Regression checks that screenshots alone cannot prove: typing must not
+  // reset focus when an inline close callback changes identity, and required
+  // FormField controls must participate in native form validation.
+  { id: '94-modal-focus', url: '/admin/users', user: 'admin', vps: ['desktop'],
+    act: async page => {
+      await page.getByRole('button', { name: 'สร้างผู้ใช้ใหม่' }).first().click();
+      const password = page.getByLabel(/รหัสผ่าน/).first();
+      await password.click();
+      await password.pressSequentially('secret12');
+      const keptFocus = await password.evaluate(el => document.activeElement === el && el.value === 'secret12');
+      if (!keptFocus) throw new Error('modal input lost focus while typing');
+    },
+    expect: ['[role=dialog]', 'input[type=password]'] },
+  { id: '95-required-fields', url: '/change-password', user: 'school', vps: ['desktop'],
+    act: async page => {
+      const result = await page.locator('form').evaluate(form => ({
+        required: [...form.querySelectorAll('input[type=password]')].every(input => input.required),
+        valid: form.checkValidity(),
+      }));
+      if (!result.required || result.valid) throw new Error('required FormField controls do not block an empty form');
+    },
+    expect: ['input[type=password][required]'] },
   { id: '86-aff-accounts', url: '/affiliation/accounts', user: 'affiliation', vps: ['mobile', 'desktop'],
     act: async page => { await page.getByRole('button', { name: 'เปิดฟอร์ม' }).first().click(); },
     expect: ['text=รหัสโรงเรียน', 'text=ชื่อผู้ใช้', 'text=บัญชีที่สร้างล่าสุด', 'text=520341'] },
@@ -747,13 +769,38 @@ const SHOTS = [
 
   const overflow = report.filter(r => r.metrics?.overflowPx > 0);
   const withErr  = report.filter(r => r.errors.length);
+  const unexpectedErr = report.filter(r => r.errors.length && r.scenario !== 'error');
   const failed   = report.filter(r => r.failed);
   const looping  = report.filter(r => r.renderLoops?.length);
+  const smallTargets = report.filter(r => r.metrics?.smallTapTargets?.length);
+  const tinyInputs = report.filter(r => r.metrics?.tinyInputs?.length);
+  const unnamedRegions = report.filter(r => r.metrics?.unnamedScrollRegions > 0);
+  const invisibleFocus = report.filter(r => (
+    r.metrics?.focusRing?.hasFocusRingClass && !r.metrics.focusRing.visible
+  ));
   console.log(`\n── ${TAG} summary ──`);
   console.log(`  captures: ${report.length}`);
   console.log(`  horizontal overflow: ${overflow.length}${overflow.length ? ' → ' + overflow.map(r => r.name).join(', ') : ''}`);
-  console.log(`  console errors:      ${withErr.length}${withErr.length ? ' → ' + withErr.map(r => r.name).join(', ') : ''}`);
+  console.log(`  console errors:      ${withErr.length} total · ${unexpectedErr.length} unexpected${unexpectedErr.length ? ' → ' + unexpectedErr.map(r => r.name).join(', ') : ''}`);
   console.log(`  failed captures:     ${failed.length}${failed.length ? ' → ' + failed.map(r => r.name).join(', ') : ''}`);
   console.log(`  render loops:        ${looping.length}${looping.length ? ' → ' + looping.map(r => r.name).join(', ') : ''}`);
+  console.log(`  tap targets <44px:   ${smallTargets.length}${smallTargets.length ? ' → ' + smallTargets.map(r => r.name).join(', ') : ''}`);
+  console.log(`  mobile inputs <16px: ${tinyInputs.length}${tinyInputs.length ? ' → ' + tinyInputs.map(r => r.name).join(', ') : ''}`);
+  console.log(`  unnamed regions:     ${unnamedRegions.length}${unnamedRegions.length ? ' → ' + unnamedRegions.map(r => r.name).join(', ') : ''}`);
+  console.log(`  invisible focus:     ${invisibleFocus.length}${invisibleFocus.length ? ' → ' + invisibleFocus.map(r => r.name).join(', ') : ''}`);
   console.log(`  → ${OUT}`);
+
+  // The report is written before this point so failed runs still leave useful
+  // evidence. Gate only this fresh run (not stale rows merged by --only).
+  const gateFailures = [
+    failed,
+    overflow,
+    unexpectedErr,
+    looping,
+    smallTargets,
+    tinyInputs,
+    unnamedRegions,
+    invisibleFocus,
+  ];
+  if (gateFailures.some(rows => rows.length > 0)) process.exitCode = 1;
 })();

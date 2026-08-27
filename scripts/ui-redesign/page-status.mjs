@@ -29,6 +29,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..');
 const SRC = resolve(root, 'frontend/src');
 
+function withoutComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+}
+
+function hasNativeDialog(src) {
+  const code = withoutComments(src);
+  const calls = code.matchAll(/\b(?:window\.)?(?:confirm|prompt)\s*\(/g);
+  return [...calls].some(match => {
+    const prefix = code.slice(Math.max(0, match.index - 32), match.index);
+    return !/(?:async\s+)?function\s*$/.test(prefix);
+  });
+}
+
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
@@ -80,7 +95,7 @@ const PATTERNS = [
   },
   {
     key: 'destructive',
-    has: s => /window\.confirm|api\.delete\(/.test(s),
+    has: s => hasNativeDialog(s) || /api\.delete\(/.test(s),
     uses: s => /ConfirmDialog/.test(s),
   },
   {
@@ -191,9 +206,13 @@ for (const file of walk(SRC)) {
 rows.sort((a, b) => a.file.localeCompare(b.file));
 
 const counts = rows.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1), m), {});
+const nativeDialogs = walk(SRC)
+  .filter(file => hasNativeDialog(readFileSync(file, 'utf8')))
+  .map(file => relative(SRC, file).replace(/\\/g, '/'))
+  .sort();
 
 if (process.argv.includes('--json')) {
-  console.log(JSON.stringify({ counts, rows }, null, 2));
+  console.log(JSON.stringify({ counts, nativeDialogs, rows }, null, 2));
 } else if (process.argv.includes('--md')) {
   console.log('| page | status | gaps |');
   console.log('|---|---|---|');
@@ -202,6 +221,7 @@ if (process.argv.includes('--json')) {
     console.log(`| \`${r.file}\` | ${r.status} | ${gaps || '—'} |`);
   }
   console.log(`\nComplete ${counts.Complete || 0} · Partial ${counts.Partial || 0} · N/A ${counts['N/A'] || 0}`);
+  console.log(`Native confirm/prompt ${nativeDialogs.length}${nativeDialogs.length ? `: ${nativeDialogs.join(', ')}` : ''}`);
 } else {
   for (const r of rows) {
     const gaps = Object.entries(r.detail).filter(([, v]) => v === 'todo').map(([k]) => k).join(',');
@@ -209,7 +229,10 @@ if (process.argv.includes('--json')) {
     console.log(`${mark}${r.file.padEnd(48)} ${r.status.padEnd(9)} ${gaps}`);
   }
   console.log('\n' + Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join('  ·  '));
+  console.log(`Native confirm/prompt: ${nativeDialogs.length}${nativeDialogs.length ? ` → ${nativeDialogs.join(', ')}` : ''}`);
 }
 
-// Exit non-zero while anything is still Partial, so this can gate the goal.
-process.exit((counts.Partial || 0) === 0 ? 0 : 1);
+// Exit non-zero while anything is still Partial or any native blocking dialog
+// remains anywhere in the frontend, so shared components cannot evade the
+// per-page classifier.
+process.exit((counts.Partial || 0) === 0 && nativeDialogs.length === 0 ? 0 : 1);

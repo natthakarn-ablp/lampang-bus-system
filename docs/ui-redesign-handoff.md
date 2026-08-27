@@ -1,7 +1,8 @@
-# UI Redesign — Pre-merge Handoff
+# UI Redesign — Production Release Handoff
 
-**Status:** feature-complete; targeted post-freeze accessibility fixes applied.
-Nothing pushed, nothing merged, nothing deployed.
+**Status:** release candidate verified for controlled production deployment.
+Deployment is a separate operator action whose result must be verified against
+the live `/api/health` response and the server's Git HEAD.
 **Generated:** 2026-08-27
 
 ---
@@ -13,32 +14,31 @@ Nothing pushed, nothing merged, nothing deployed.
 | Branch | `codex/full-ui-redesign` |
 | Worktree | `D:/Projects/lampang-bus-system-uiredesign` |
 | Base commit | `d9485ec1e6769dc52aa61b3897d27cf8d840c0ee` — *feat: refresh production login branding* |
-| HEAD commit | `73c145d4c174ad7dae6d46cb31677f9b2a1eeb3a` — *chore(a11y,docs): finish the emoji sweep, add a permission gate, regenerate UAT* |
-| HEAD date | 2026-08-26 23:08 +07:00 |
-| Commits in range | **37** (`d9485ec..HEAD`) |
+| Release commit | Current `codex/full-ui-redesign` tip — resolve with `git rev-parse HEAD` (the document intentionally does not attempt to contain its own commit hash) |
+| Commits in range | **38** (`d9485ec..HEAD`) after the release-blocker fix commit |
 | Upstream | **none** — cleared with `git branch --unset-upstream` |
-| Remote branches matching | **0** — this branch has never been pushed |
+| Remote target | Must be `origin/codex/full-ui-redesign`; verify with `git ls-remote` before advancing production |
 | Rebase / squash / reset performed | **none** |
 
 ### Working tree
 
-**Clean.** Everything is committed. The two files that were previously left
-uncommitted, plus the targeted accessibility fixes, are now in commits **#36**
-and **#37** (see §8).
+**Clean after the release commit.** The two files that were previously left
+uncommitted and all targeted accessibility/release-blocker fixes are included
+in the `d9485ec..HEAD` review range.
 
 ### Diffstat
 
 ```
-119 files changed, 11514 insertions(+), 7129 deletions(-)
+123 files changed, 12465 insertions(+), 7162 deletions(-)
 ```
 
 | change | count |
 |---|---|
-| Added | 19 |
-| Modified | 100 |
+| Added | 20 |
+| Modified | 103 |
 | **Deleted** | **0** |
 
-**Added (19):**
+**Added (20):**
 
 *Shared components (11)* — `components/PickupPointFields.jsx`,
 `components/StudentStatusTable.jsx`, `components/VehicleRosterCard.jsx`,
@@ -46,7 +46,8 @@ and **#37** (see §8).
 
 *Verification tooling (5)* — `scripts/ui-redesign/{capture,nav-snapshot,page-status,permission-check,route-matrix}.mjs`
 
-*Docs (3)* — `docs/ui-design-system.md`, `docs/ui-redesign-plan.md`, `docs/ui-redesign-uat.md`
+*Docs (4)* — `docs/ui-design-system.md`, `docs/ui-redesign-plan.md`,
+`docs/ui-redesign-uat.md`, `docs/ui-redesign-handoff.md`
 
 ### Scope guards — all verified against the diff
 
@@ -205,7 +206,7 @@ the code it excuses, where it can be argued with.
 Menu entries per role, unchanged from baseline:
 `driver 8 · school 13 · affiliation 12 · province 12 · transport 4 · admin 25 = 74`
 
-### Runtime smoke — 120 captures at 390 / 768 / 1280 / 1920
+### Runtime smoke — 122 captures at 390 / 768 / 1280 / 1920
 
 | metric | result |
 |---|---|
@@ -216,7 +217,13 @@ Menu entries per role, unchanged from baseline:
 | Failed captures (missing expected content) | **0** |
 | Sub-16px mobile text inputs | **0** |
 | Unnamed keyboard scroll regions | **0** |
-| Focus ring visible on keyboard focus | **114 / 114** elements carrying `.focus-ring` |
+| Focus ring visible on keyboard focus | **116 / 116** elements carrying `.focus-ring` |
+
+The runtime harness now exits non-zero for failed captures, overflow,
+unexpected console errors, render loops, sub-44px controls, sub-16px mobile
+inputs, unnamed keyboard scroll regions, or an invisible shared focus ring.
+It also types through a rerendering modal and checks native `required`
+validation, covering the two release-blocking regressions found in review.
 
 ### Post-freeze accessibility fixes — what was actually wrong
 
@@ -604,7 +611,7 @@ outside scope, so nothing was discarded, checked out or deleted:
 
 ---
 
-## 8. Recommended review commands — none of these push, merge or deploy
+## 8. Recommended review commands — read-only/local verification
 
 ```bash
 cd D:/Projects/lampang-bus-system-uiredesign
@@ -626,8 +633,10 @@ node scripts/ui-redesign/permission-check.mjs
 
 # re-run the visual + runtime smoke (needs the dev server)
 cd frontend && npx vite --port 5173     # terminal 1
-node scripts/ui-redesign/capture.mjs --tag after   # terminal 2
+node scripts/ui-redesign/capture.mjs --tag codex-release   # terminal 2
 ```
 
-**Deliberately not included:** `git push`, `git merge`, `git rebase`,
-`git reset`, and any deploy command. Those await a separate instruction.
+Deployment is intentionally kept out of this local verification block. The
+approved operator path advances production only by fast-forward (never force),
+builds to `frontend/dist-new`, atomically swaps the live `dist`, retains the
+previous bundle for rollback, and then runs the postdeploy/public gates.

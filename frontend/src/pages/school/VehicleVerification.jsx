@@ -20,7 +20,7 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
-import { AlertBanner, CommandHero, StatusStepRail, DataTable} from '../../components/ui';
+import { AlertBanner, CommandHero, ConfirmDialog, DataTable, FormField, StatusStepRail } from '../../components/ui';
 
 const STATUS = {
   PENDING_SCHOOL_REVIEW: ['รอตรวจสอบ', 'warn'],
@@ -334,6 +334,8 @@ export default function VehicleVerification() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [actionReason, setActionReason] = useState('');
   const isGradeTeacher = Boolean(user?.grade_scope || user?.gradeScope);
 
   const load = useCallback(async () => {
@@ -401,7 +403,6 @@ export default function VehicleVerification() {
   }
 
   async function review(approved) {
-    if (!approved && !confirm('ยืนยันปฏิเสธคำขอนี้?')) return;
     setBusy(true);
     try {
       await api.post(`/verification/applications/${selected.id}/review`, { approved });
@@ -412,6 +413,8 @@ export default function VehicleVerification() {
       } else {
         setSelected(null);
       }
+      setConfirmAction(null);
+      setActionReason('');
     } catch (err) {
       toast.error(err.response?.data?.message || 'ตรวจสอบคำขอไม่สำเร็จ');
     } finally {
@@ -420,14 +423,14 @@ export default function VehicleVerification() {
   }
 
   async function cancel() {
-    if (!confirm('ยืนยันยกเลิกคำขอนี้? เมื่อยกเลิกแล้วจะไม่สามารถนำกลับมาใช้ได้')) return;
-    const reason = prompt('เหตุผลที่ยกเลิก (ถ้ามี):') ?? '';
     setBusy(true);
     try {
-      await api.post(`/verification/applications/${selected.id}/cancel`, { reason: reason.trim() || null });
+      await api.post(`/verification/applications/${selected.id}/cancel`, { reason: actionReason.trim() || null });
       toast.success('ยกเลิกคำขอแล้ว');
       await load();
       setSelected(null);
+      setConfirmAction(null);
+      setActionReason('');
     } catch (err) {
       toast.error(err.response?.data?.message || 'ยกเลิกคำขอไม่สำเร็จ');
     } finally {
@@ -554,12 +557,39 @@ export default function VehicleVerification() {
           qr={qr}
           busy={busy}
           isGradeTeacher={isGradeTeacher}
-          onBack={() => setSelected(null)}
+          onBack={() => { setSelected(null); setConfirmAction(null); setActionReason(''); }}
           onMarkReady={markReady}
-          onReview={review}
-          onCancel={cancel}
+          onReview={(approved) => {
+            if (approved) review(true);
+            else { setActionReason(''); setConfirmAction('reject'); }
+          }}
+          onCancel={() => { setActionReason(''); setConfirmAction('cancel'); }}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmAction)}
+        title={confirmAction === 'cancel' ? 'ยืนยันยกเลิกคำขอ' : 'ยืนยันปฏิเสธคำขอ'}
+        description={confirmAction === 'cancel'
+          ? 'เมื่อยกเลิกแล้วจะไม่สามารถนำคำขอนี้กลับมาใช้ได้'
+          : 'คำขอนี้จะถูกปิดและโรงเรียนต้องเริ่มกระบวนการใหม่'}
+        itemName={selected?.vehicle?.plate_no || selected?.plate_no}
+        confirmLabel={confirmAction === 'cancel' ? 'ยกเลิกคำขอ' : 'ปฏิเสธคำขอ'}
+        loading={busy}
+        onConfirm={() => { if (confirmAction === 'cancel') cancel(); else review(false); }}
+        onCancel={() => {
+          if (!busy) { setConfirmAction(null); setActionReason(''); }
+        }}
+      >
+        {confirmAction === 'cancel' && (
+          <FormField
+            label="เหตุผลที่ยกเลิก (ถ้ามี)"
+            value={actionReason}
+            onChange={setActionReason}
+            placeholder="ระบุเหตุผลเพื่อใช้ตรวจสอบย้อนหลัง"
+          />
+        )}
+      </ConfirmDialog>
 
       {!selected && applications.some(application => application.status === 'PASSED') && (
         <AlertBanner variant="success" icon={CheckCircle2} className="print:hidden">

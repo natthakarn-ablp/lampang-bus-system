@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ClipboardList } from 'lucide-react';
 import api from '../../api/axios';
-import { FilterBar } from '../../components/ui';
+import { ConfirmDialog, FilterBar, FormField } from '../../components/ui';
 import EmptyState from '../../components/EmptyState';
 import PageHeader from '../../components/PageHeader';
 import ApprovalBadge from '../../components/ApprovalBadge';
@@ -15,6 +15,8 @@ export default function SchoolApprovals() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('pending');
   const [processingId, setProcessingId] = useState(null); // double-submit guard
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [reviewNote, setReviewNote] = useState('');
   const toast = useToast();
   const { user } = useAuth();
   const isTeacher = isGradeTeacher(user); // teacher views in read-only mode
@@ -29,15 +31,16 @@ export default function SchoolApprovals() {
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
-  async function handleReview(id, status) {
+  async function handleReview(id, status, note = '') {
     // Double-submit guard: prevent approving/rejecting the same request twice
     // (double-click or impatient repeat click).
     if (processingId === id) return;
     setProcessingId(id);
-    const note = status === 'rejected' ? prompt('เหตุผลที่ปฏิเสธ (ถ้ามี):') : '';
     try {
-      await api.put(`/school/roster-requests/${id}`, { status, review_note: note || '' });
+      await api.put(`/school/roster-requests/${id}`, { status, review_note: note.trim() });
       toast.success(status === 'approved' ? 'อนุมัติสำเร็จ' : 'ปฏิเสธสำเร็จ');
+      setRejectTarget(null);
+      setReviewNote('');
       fetchRequests();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถดำเนินการได้');
@@ -103,7 +106,7 @@ export default function SchoolApprovals() {
                     className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-5 py-2.5 rounded-lg transition">
                     {processingId === r.id ? 'กำลังดำเนินการ...' : 'อนุมัติ'}
                   </button>
-                  <button onClick={() => handleReview(r.id, 'rejected')}
+                  <button onClick={() => { setReviewNote(''); setRejectTarget(r); }}
                     disabled={processingId === r.id}
                     className="flex-1 sm:flex-none bg-red-100 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed text-red-700 font-medium px-5 py-2.5 rounded-lg transition">
                     {processingId === r.id ? 'กำลังดำเนินการ...' : 'ปฏิเสธ'}
@@ -114,6 +117,26 @@ export default function SchoolApprovals() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        title="ยืนยันการปฏิเสธคำขอ"
+        description="ระบุหมายเหตุได้หากต้องการแจ้งเหตุผลให้ผู้ขอทราบ"
+        itemName={rejectTarget?.student_name}
+        confirmLabel="ปฏิเสธคำขอ"
+        loading={processingId === rejectTarget?.id}
+        onConfirm={() => handleReview(rejectTarget.id, 'rejected', reviewNote)}
+        onCancel={() => {
+          if (processingId !== rejectTarget?.id) { setRejectTarget(null); setReviewNote(''); }
+        }}
+      >
+        <FormField
+          label="เหตุผลที่ปฏิเสธ (ถ้ามี)"
+          value={reviewNote}
+          onChange={setReviewNote}
+          placeholder="เช่น ข้อมูลนักเรียนไม่ตรงกับทะเบียน"
+        />
+      </ConfirmDialog>
     </div>
   );
 }

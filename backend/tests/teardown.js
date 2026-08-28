@@ -12,19 +12,13 @@
 require('./loadTestEnv');
 require('dotenv').config();
 const { assertDisposableTestDatabase } = require('../src/utils/testDatabaseGuard');
-const mysql = require('mysql2/promise');
+// Same +07:00 connection the suite and the app use — see tests/dbHelper.js.
+const { getTestConnection } = require('./dbHelper');
 
 module.exports = async function globalTeardown() {
   assertDisposableTestDatabase(process.env);
 
-  const conn = await mysql.createConnection({
-    host:     process.env.DB_HOST     || 'localhost',
-    port:     parseInt(process.env.DB_PORT || '3306', 10),
-    database: process.env.DB_NAME     || 'lampang_bus',
-    user:     process.env.DB_USER     || 'lampang',
-    password: process.env.DB_PASSWORD || '',
-    charset:  'utf8mb4',
-  });
+  const conn = await getTestConnection();
 
   // Phase 8 tables
   await conn.query(`DELETE FROM student_leaves WHERE student_id = 99999`).catch(() => {});

@@ -12,21 +12,15 @@
 require('./loadTestEnv');
 require('dotenv').config();
 const { assertDisposableTestDatabase } = require('../src/utils/testDatabaseGuard');
-const mysql = require('mysql2/promise');
+// Opens the connection through the shared helper so the seed sees the SAME
+// "today" (+07:00 CURDATE()) the application writes — see tests/dbHelper.js.
+const { getTestConnection } = require('./dbHelper');
 const bcrypt = require('bcrypt');
 
 module.exports = async function globalSetup() {
   assertDisposableTestDatabase(process.env);
 
-  const conn = await mysql.createConnection({
-    host:     process.env.DB_HOST     || 'localhost',
-    port:     parseInt(process.env.DB_PORT || '3306', 10),
-    database: process.env.DB_NAME     || 'lampang_bus',
-    user:     process.env.DB_USER     || 'lampang',
-    password: process.env.DB_PASSWORD || '',
-    charset:  'utf8mb4',
-    multipleStatements: true,
-  });
+  const conn = await getTestConnection({ multipleStatements: true });
 
   const hash = await bcrypt.hash('testpass123', 12);
 

@@ -340,6 +340,25 @@ const TRANSPORT_DASH = {
 };
 const STATUS_TODAY = {
   date: '2026-08-27',
+  // SchoolOverrideModal consumes vehicles[].students — the inverted "tick who
+  // did NOT board" picker is driven entirely from this shape, so the fixture
+  // has to carry one pupil of each state the picker branches on.
+  vehicles: [
+    { vehicle_id: 1, plate_no: 'กข-1111 ลำปาง', students: [
+      { id: 501, name: 'ด.ช.นักเรียน ตัวอย่าง ก', grade: 'ป.3', classroom: '2',
+        morning_enabled: true, evening_enabled: true, morning_done: false, evening_done: false, leave_session: null },
+      { id: 502, name: 'ด.ญ.นักเรียน ตัวอย่าง ข', grade: 'ป.3', classroom: '2',
+        morning_enabled: true, evening_enabled: true, morning_done: false, evening_done: false, leave_session: null },
+      { id: 503, name: 'ด.ช.นักเรียน ตัวอย่าง ค', grade: 'ป.5', classroom: '1',
+        morning_enabled: true, evening_enabled: true, morning_done: true,  evening_done: false, leave_session: null },
+      { id: 504, name: 'ด.ญ.นักเรียน ตัวอย่าง ง', grade: 'ป.6', classroom: '3',
+        morning_enabled: true, evening_enabled: true, morning_done: false, evening_done: false, leave_session: 'morning' },
+    ] },
+    { vehicle_id: 2, plate_no: 'กข-2222 ลำปาง', students: [
+      { id: 505, name: 'ด.ช.นักเรียน ตัวอย่าง จ', grade: 'ม.1', classroom: '1',
+        morning_enabled: false, evening_enabled: true, morning_done: false, evening_done: false, leave_session: null },
+    ] },
+  ],
   rows: [
     { vehicle_id: 1, plate_no: 'กข-1111 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ก', school_name: 'โรงเรียนตัวอย่าง ก', morning_total: 9, morning_done: 9, evening_total: 9, evening_done: 8 },
     { vehicle_id: 2, plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ข', school_name: 'โรงเรียนตัวอย่าง ก', morning_total: 4, morning_done: 3, evening_total: 4, evening_done: 4 },
@@ -774,6 +793,15 @@ const SHOTS = [
   { id: '30-prov-students',     url: '/province/students',    user: 'province',    vps: ['mobile', 'desktop'] },
   { id: '31-aff-students',      url: '/affiliation/students', user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '32-school-students',   url: '/school/students',      user: 'school', vps: ['mobile', 'desktop'] },
+  // ยืนยันแทนคนขับแบบยกชุด — การติ๊กกลับด้าน (ติ๊ก = ไม่ได้ขึ้นรถ) ต้องอ่านไม่ผิด
+  // จึงยืนยันว่าคำอธิบายและตัวนับทั้งสองฝั่งปรากฏพร้อมกันบนหน้าจอ
+  { id: '09b-school-override-bulk', url: '/school', user: 'school', vps: ['desktop'],
+    act: async (page) => {
+      const btn = page.locator('button:has-text("ยืนยันแทนคนขับ")').first();
+      if (await btn.count()) { await btn.click(); await page.waitForTimeout(600); }
+    },
+    expect: ['[role=dialog], .fixed.inset-0', 'text=ติ๊กเฉพาะคนที่', 'text=ไม่ได้ขึ้นรถ',
+             'text=จะยืนยันว่า', 'button:has-text("ยืนยัน")'] },
   // ตัวกรอง "ยังไม่ผูกรถ" ต้องปรากฏให้ทั้งสามบทบาทที่ดูรายชื่อนักเรียนได้
   { id: '32b-school-students-filter', url: '/school/students', user: 'school', vps: ['desktop'],
     expect: ['text=กรองตามการผูกรถ', 'text=ยังไม่ผูกรถ'] },

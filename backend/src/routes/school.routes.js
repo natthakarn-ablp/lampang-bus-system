@@ -654,6 +654,73 @@ router.post('/checkin-override', requireFullSchoolScope, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// ─── POST /checkin-override/all ──────────────────────────────────────────────
+// School confirms a whole session on behalf of the driver, ticking only the
+// pupils who did NOT board. Everyone else eligible is confirmed present.
+// Same guard as the single-student path: grade-scoped teachers are blocked.
+
+router.post('/checkin-override/all', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) {
+      return sendError(
+        res,
+        req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียนที่ผูกกับบัญชีนี้',
+        [],
+        req.user.role === 'admin' ? 400 : 403
+      );
+    }
+
+    const { session, status, reason, absent_student_ids } = req.body || {};
+    const errors = [];
+    if (!['morning', 'evening'].includes(session)) {
+      errors.push({ field: 'session', message: "session ต้องเป็น 'morning' หรือ 'evening'" });
+    }
+    const finalStatus = status || 'CHECKED_IN';
+    if (!['CHECKED_IN', 'CHECKED_OUT'].includes(finalStatus)) {
+      errors.push({ field: 'status', message: "status ต้องเป็น 'CHECKED_IN' หรือ 'CHECKED_OUT'" });
+    }
+    const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+    if (!trimmedReason) {
+      errors.push({ field: 'reason', message: 'กรุณาระบุเหตุผลการยืนยันแทน' });
+    } else if (trimmedReason.length > 500) {
+      errors.push({ field: 'reason', message: 'เหตุผลต้องไม่เกิน 500 ตัวอักษร' });
+    }
+    // Cap the exception list. It names pupils who will NOT be confirmed, so an
+    // unbounded array is a way to make the request do nothing while looking
+    // like it worked; a school roster never legitimately needs more than this.
+    if (absent_student_ids !== undefined) {
+      if (!Array.isArray(absent_student_ids)) {
+        errors.push({ field: 'absent_student_ids', message: 'absent_student_ids ต้องเป็น array' });
+      } else if (absent_student_ids.length > 2000) {
+        errors.push({ field: 'absent_student_ids', message: 'รายชื่อที่ไม่ยืนยันยาวเกินกำหนด' });
+      }
+    }
+    if (errors.length) return sendError(res, 'ข้อมูลไม่ครบถ้วน', errors, 400);
+
+    const result = await checkinSvc.processSchoolOverrideAll(pool, {
+      userId:          req.user.id,
+      userRole:        req.user.role,
+      userDisplayName: req.user.displayName || req.user.username || null,
+      ipAddress:       req.ip,
+      userAgent:       req.headers['user-agent'],
+      schoolId,
+      session,
+      status:            finalStatus,
+      reason:            trimmedReason,
+      absentStudentIds:  absent_student_ids || [],
+    });
+
+    return sendSuccess(
+      res,
+      result,
+      `ยืนยันการรับ-ส่งแล้ว ${result.confirmed_count} คน · ไม่ยืนยัน ${result.absent_marked_count} คน`,
+      null,
+      201
+    );
+  } catch (err) { next(err); }
+});
+
 // ─── GET /roster-requests ────────────────────────────────────────────────────
 
 router.get('/roster-requests', async (req, res, next) => {

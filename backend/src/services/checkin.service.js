@@ -872,6 +872,228 @@ async function processSchoolOverride(pool, {
   }
 }
 
+// ─── processSchoolOverrideAll ─────────────────────────────────────────────────
+
+/**
+ * School confirms a whole session on behalf of the driver, marking only the
+ * exceptions.
+ *
+ * The single-student override (processSchoolOverride) required the school to
+ * pick pupils one at a time, which does not match how the day actually works:
+ * the driver ran the route and almost everyone boarded. The school knows the
+ * short list of who did not. So the selection is inverted — the caller sends
+ * `absentStudentIds`, and every other eligible pupil is confirmed present.
+ *
+ * Eligibility mirrors processCheckinAll (the driver's own bulk path) so the two
+ * cannot disagree about who counts:
+ *   - assigned to a vehicle
+ *   - session enabled for that pupil
+ *   - not already done for the session today
+ *   - no active leave record for today + session
+ * A pupil on recorded leave is therefore never confirmed present even if the
+ * caller forgets to tick them — the leave record wins, matching the 409 the
+ * single-student path raises.
+ *
+ * Transaction shape follows processCheckinAll: one pooled connection for the
+ * whole batch (a per-pupil getConnection() thrashed the 10-slot pool at 07:00),
+ * with a SAVEPOINT per pupil so one failure does not discard the rest.
+ *
+ * Each confirmed pupil gets the same checkin_override audit row the
+ * single-student path writes, plus one batch-level row recording the whole
+ * decision — including who was left out and why the school says so.
+ */
+async function processSchoolOverrideAll(pool, {
+  userId,
+  userRole,
+  userDisplayName,
+  ipAddress,
+  userAgent,
+  schoolId,
+  session,
+  status = 'CHECKED_IN',
+  reason,
+  absentStudentIds = [],
+  gradeFilter = null,
+}) {
+  assertSession(session);
+  if (!['CHECKED_IN', 'CHECKED_OUT'].includes(status)) {
+    throw makeError("status must be 'CHECKED_IN' or 'CHECKED_OUT'", 400);
+  }
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+  if (!trimmedReason) throw makeError('กรุณาระบุเหตุผลการยืนยันแทน', 400);
+  if (trimmedReason.length > 500) throw makeError('เหตุผลต้องไม่เกิน 500 ตัวอักษร', 400);
+  if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
+
+  // Absent ids arrive from a form; keep only positive integers so a malformed
+  // entry cannot silently widen the set that gets confirmed present.
+  const absentSet = new Set(
+    (Array.isArray(absentStudentIds) ? absentStudentIds : [])
+      .map(n => Number.parseInt(n, 10))
+      .filter(n => Number.isInteger(n) && n > 0)
+  );
+
+  const sessionFilter = session === 'morning'
+    ? 'AND s.morning_enabled = TRUE'
+    : 'AND s.evening_enabled = TRUE';
+  const doneColumn = session === 'morning' ? 'ds.morning_done' : 'ds.evening_done';
+  const gradeAnd = gradeFilter ? ' AND s.grade = ?' : '';
+
+  const params = [schoolId];
+  if (gradeFilter) params.push(gradeFilter);
+  params.push(session);
+
+  const [eligible] = await pool.query(
+    `SELECT s.id, s.vehicle_id, s.first_name, s.last_name, v.plate_no
+       FROM students s
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id
+       LEFT JOIN daily_status ds
+              ON ds.student_id = s.id AND ds.check_date = CURDATE()
+      WHERE s.school_id = ?
+        AND s.is_deleted = FALSE
+        AND s.vehicle_id IS NOT NULL
+        AND (${doneColumn} IS NULL OR ${doneColumn} = FALSE)
+        ${sessionFilter}${gradeAnd}
+        AND NOT EXISTS (
+          SELECT 1 FROM student_leaves sl
+           WHERE sl.student_id = s.id
+             AND sl.leave_date = CURDATE()
+             AND sl.cancelled = FALSE
+             AND (sl.session = ? OR sl.session = 'both'))`,
+    params
+  );
+
+  const toConfirm = eligible.filter(s => !absentSet.has(Number(s.id)));
+  const skipped = eligible
+    .filter(s => absentSet.has(Number(s.id)))
+    .map(s => ({ student_id: s.id, reason: 'marked_absent' }));
+
+  const succeeded = [];
+  const failed = [];
+  const confirmedAt = new Date().toISOString();
+  const termId = await getCurrentTerm(pool);
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    for (const student of toConfirm) {
+      const sp = `sov_${student.id}`;
+      try {
+        await conn.query(`SAVEPOINT ${sp}`);
+
+        const [[prior]] = await conn.query(
+          `SELECT morning_done, morning_ts, evening_done, evening_ts
+             FROM daily_status WHERE check_date = CURDATE() AND student_id = ? LIMIT 1`,
+          [student.id]
+        );
+        const priorDailyStatus = prior
+          ? {
+            morning_done: !!prior.morning_done,
+            morning_ts: prior.morning_ts ? new Date(prior.morning_ts).toISOString() : null,
+            evening_done: !!prior.evening_done,
+            evening_ts: prior.evening_ts ? new Date(prior.evening_ts).toISOString() : null,
+          }
+          : { morning_done: false, morning_ts: null, evening_done: false, evening_ts: null };
+
+        const result = await _buildCheckinTransaction(conn, {
+          userId,
+          vehicleId: student.vehicle_id,
+          plateNo: student.plate_no || null,
+          studentId: student.id,
+          session,
+          status,
+          termId,
+          source: 'web',
+        });
+
+        await logAudit({
+          conn,
+          userId,
+          action: 'UPDATE',
+          entityType: 'checkin_override',
+          entityId: String(student.id),
+          oldValue: priorDailyStatus,
+          newValue: {
+            school_id: schoolId,
+            student_id: student.id,
+            student_name: `${student.first_name} ${student.last_name}`,
+            vehicle_id: student.vehicle_id,
+            plate_no: student.plate_no || null,
+            session,
+            status,
+            reason: trimmedReason,
+            confirmed_by_user_id: userId,
+            confirmed_by_role: userRole || null,
+            confirmed_by_display_name: userDisplayName || null,
+            override_checkin_log_id: result.log_id,
+            timestamp_utc: confirmedAt,
+            batch: true,
+          },
+          ipAddress: ipAddress || null,
+          userAgent: userAgent || null,
+        });
+
+        await conn.query(`RELEASE SAVEPOINT ${sp}`);
+        succeeded.push({ student_id: student.id, checkin_log_id: result.log_id });
+      } catch (err) {
+        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        failed.push({ student_id: student.id, error: err.message });
+      }
+    }
+
+    // One row describing the whole decision. Without it the audit trail shows a
+    // burst of individual confirmations with no record of who was deliberately
+    // left out — which is the half a complaint would actually ask about.
+    await logAudit({
+      conn,
+      userId,
+      action: 'UPDATE',
+      entityType: 'checkin_override_batch',
+      entityId: String(schoolId),
+      oldValue: null,
+      newValue: {
+        school_id: schoolId,
+        session,
+        status,
+        reason: trimmedReason,
+        grade_scope: gradeFilter || null,
+        eligible_count: eligible.length,
+        confirmed_count: succeeded.length,
+        absent_marked_count: skipped.length,
+        failed_count: failed.length,
+        absent_student_ids: skipped.map(s => s.student_id),
+        confirmed_by_user_id: userId,
+        confirmed_by_role: userRole || null,
+        confirmed_by_display_name: userDisplayName || null,
+        timestamp_utc: confirmedAt,
+      },
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null,
+    });
+
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* swallow */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+
+  return {
+    session,
+    status,
+    eligible_count: eligible.length,
+    confirmed_count: succeeded.length,
+    absent_marked_count: skipped.length,
+    failed_count: failed.length,
+    confirmed_at: confirmedAt,
+    confirmed_by: userDisplayName || null,
+    succeeded,
+    skipped,
+    failed,
+  };
+}
+
 // ─── getNoShowStudents (roadmap A — no-show; checkout-independent) ─────────────
 // Students who SHOULD have boarded (assigned to a bus + session-enabled) but have
 // NO CHECKED_IN for the day/session, excluding those on leave. Built on CHECKED_IN
@@ -1078,5 +1300,6 @@ module.exports = {
   getStatusToday,
   getNoShowStudents,
   processSchoolOverride,
+  processSchoolOverrideAll,
   voidCheckin,
 };

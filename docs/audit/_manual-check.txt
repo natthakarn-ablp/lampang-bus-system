@@ -1,0 +1,132 @@
+=== เมนูจริงต่อบทบาท (จาก Sidebar.jsx) ===
+
+  [driver] 8 รายการ
+     /driver                                PAGE_TITLES.DRIVER_DASHBOARD }
+     /driver/shift                          เลือกรถและเริ่มรอบ' }
+     /driver/pickup-map                     แผนที่จุดรับส่ง' }
+     /driver/requests                       คำขอรายชื่อ' }
+     /driver/vehicle-registration           รายชื่อเด็กในรถ' }
+     /driver/applications                   สถานะส่งตรวจรถ' }
+     /driver/emergency                      แจ้งเหตุฉุกเฉิน' }
+     /driver/profile                        ข้อมูลคนขับ' }
+
+  [school] 13 รายการ
+     /school                                PAGE_TITLES.SCHOOL_DASHBOARD }
+     /school/approvals                      คำขอรายชื่อ' }
+     /school/registration-review            ตรวจลงทะเบียนรถ' }
+     /school/vehicle-verification           ส่งตรวจและรับรองรถ' }
+     /school/students                       ข้อมูลนักเรียน' }
+     /school/vehicles                       รถรับส่ง' }
+     /school/bulk-vehicles                  เพิ่มรถรับส่ง' }
+     /school/teacher-accounts               บัญชีครูประจำสายชั้น' }
+     /school/pickup-map                     แผนที่จุดรับส่ง' }
+     /school/live-vehicles                  ตำแหน่งปัจจุบัน' }
+     /school/emergencies                    เหตุฉุกเฉิน' }
+     /school/audit-log                      ประวัติการแก้ไข' }
+     /reports/daily                         รายงาน' }
+
+  [affiliation] 12 รายการ
+     /affiliation                           PAGE_TITLES.AFFILIATION_DASHBOARD }
+     /affiliation/transfer-requests         คำขอโอนย้ายนักเรียน' }
+     /affiliation/vehicle-requests          คำขอเกี่ยวกับรถ' }
+     /affiliation/schools                   โรงเรียนในสังกัด' }
+     /affiliation/students                  ข้อมูลนักเรียน' }
+     /affiliation/vehicles                  รถรับส่ง' }
+     /affiliation/accounts                  เพิ่มโรงเรียนใหม่' }
+     /affiliation/live-vehicles             ตำแหน่งปัจจุบัน' }
+     /affiliation/pickup-map                แผนที่จุดรับส่ง' }
+     /affiliation/emergencies               เหตุฉุกเฉิน' }
+     /affiliation/audit-log                 ประวัติการแก้ไข' }
+     /reports/daily                         รายงาน' }
+
+  [province] 12 รายการ
+     /province                              PAGE_TITLES.PROVINCE_DASHBOARD }
+     /province/affiliations                 สังกัด' }
+     /province/schools                      โรงเรียน' }
+     /province/students                     ข้อมูลนักเรียน' }
+     /province/vehicles                     รถรับส่ง' }
+     /province/live-vehicles                ตำแหน่งปัจจุบัน' }
+     /province/pickup-map                   แผนที่จุดรับส่ง' }
+     /province/readiness                    ความพร้อมเปิดใช้งาน' }
+     /admin/route-deviations                การเบี่ยงเส้นทาง' }
+     /province/emergencies                  เหตุฉุกเฉิน' }
+     /province/audit-log                    ประวัติการแก้ไข' }
+     /reports/daily                         รายงาน' }
+
+  [transport] 4 รายการ
+     /transport                             ภาพรวมตรวจสภาพรถ' }
+     /transport/verification                ตรวจรับรองรถ' }
+     /transport/inspections                 บันทึกตรวจสภาพ' }
+     /transport/pickup-map                  แผนที่จุดรับส่ง' }
+
+  [admin] 25 รายการ
+     /admin                                 ศูนย์ควบคุมระบบ' }
+     /admin/transfer-requests               คำขอโอนย้ายนักเรียน' }
+     /admin/vehicle-requests                คำขอเกี่ยวกับรถ' }
+     /admin/users                           จัดการผู้ใช้งาน' }
+     /school                                จัดการโรงเรียน' }
+     /affiliation/accounts                  เพิ่มโรงเรียนใหม่' }
+     /province                              ภาพรวมจังหวัด' }
+     /province/students                     ข้อมูลนักเรียน' }
+     /province/vehicles                     รถรับส่ง' }
+     /admin/readiness                       ความพร้อมเปิดใช้งาน' }
+     /admin/pickup-points                   ตรวจสอบจุดรับส่ง' }
+     /admin/live-vehicles                   ตรวจสอบตำแหน่งรถ' }
+     /admin/driver-integrity                สุขภาพข้อมูลคนขับ' }
+     /admin/geofences                       จุดเตือนภัย (Geofences)' }
+     /admin/route-deviations                การเบี่ยงเส้นทาง' }
+     /admin/audit-logs                      ประวัติการใช้งาน' }
+     /admin/system-health                   สุขภาพระบบ' }
+     /transport                             ตรวจสภาพรถ' }
+     /admin/measurement                     กรอบวัดผลระบบ' }
+     /admin/research                        เปรียบเทียบ Baseline' }
+     /admin/research-export                 ส่งออกข้อมูลวิจัย' }
+     /admin/evaluation                      ประเมินผลแยก Role' }
+     /admin/executive                       สรุปผู้บริหาร' }
+     /reports/daily                         รายงาน' }
+     /admin/term-settings                   ภาคเรียนปัจจุบัน' }
+
+=== เมนูล่างมือถือ (คนขับใช้จริง) ===
+     /driver                                หน้าแรก
+     /driver/vehicle-registration           รายชื่อเด็ก
+     /driver/applications                   ขึ้นทะเบียน
+     /driver/emergency                      ฉุกเฉิน
+     /driver/profile                        โปรไฟล์
+
+=== สิทธิ์ระดับ router (backend) ===
+     admin.routes.js                    admin
+     affiliation.routes.js              affiliation, admin
+     documents.routes.js                driver, school, transport, admin
+     driver.routes.js                   driver
+     province.routes.js                 province, admin
+     readiness.routes.js                province, admin
+     report.routes.js                   school, affiliation, province, admin
+     routeDeviation.routes.js           admin, province
+     school.routes.js                   school, admin
+     transport.routes.js                transport, admin
+
+=== feature flag ใน .env.example ===
+     FEATURE_DRIVER_REGISTRATION            ปิด
+     FEATURE_DRIVER_SHIFT_SELECTION         ปิด
+     FEATURE_QR_LEVEL3                      ปิด
+     FEATURE_VEHICLE_QR                     ปิด
+
+
+=== ตรวจคู่มือ: ลิงก์/เส้นทางที่อ้างถึงแต่ไม่มีในระบบ ===
+
+  user-guide-affiliation.html
+      ไม่พบในระบบ: /affiliation/status
+
+  user-guide-province.html
+      ไม่พบในระบบ: /province/status
+
+  user-guide-transport.html
+      ไม่พบในระบบ: /admin/vehicle-qr
+      ไม่พบในระบบ: /transport/vehicles
+
+  02-province.md
+      ไม่พบในระบบ: /province/status
+
+  08-parent-line.md
+      ไม่พบในระบบ: /parent
+      ไม่พบในระบบ: /parent/link

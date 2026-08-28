@@ -13,7 +13,7 @@
 | ดูโรงเรียน | `/province/schools` |
 | ค้นหานักเรียน | `/province/students` |
 | ดูรถรับส่ง | `/province/vehicles` |
-| ดูสถานะวันนี้ | `/province/status` |
+| ดูสถานะวันนี้ | `/province/status` — ไม่มีในเมนู ต้องพิมพ์ URL เอง |
 | ดูตำแหน่งรถ | `/province/live-vehicles` |
 | ดูแผนที่จุดรับส่ง | `/province/pickup-map` |
 | ดูเหตุฉุกเฉิน | `/province/emergencies` |

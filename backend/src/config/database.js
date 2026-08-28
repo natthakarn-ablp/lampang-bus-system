@@ -13,7 +13,9 @@ const env = require('./env');
 // is set to the SAME offset, absolute TIMESTAMP values (created_at, checked_at,
 // password_changed_at) are unchanged — only the server-side date functions shift.
 // OPS: verify on the live DB after deploy: `SELECT CURDATE(), NOW(), @@session.time_zone;`
-const DB_TIMEZONE = '+07:00';
+// The offset lives in ./dbTimezone so the integration-test connections pin the
+// same one — see the note there.
+const { DB_TIMEZONE } = require('./dbTimezone');
 
 const pool = mysql.createPool({
   host: env.db.host,

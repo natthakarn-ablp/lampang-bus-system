@@ -168,5 +168,5 @@ mysql -u root -p lampang_bus < /path/to/backup.sql
 | QR สาธารณะ + consent | ✅ สร้างแล้ว | `/api/qr/*` + `/api/consent/*` + `/qr/:token` (migration 034/035) |
 | PDF ภาษาไทย | ✅ ใช้งานได้ | ใช้ THSarabunNew font ฝังใน PDF export |
 | import_batches | ✅ ใช้งานแล้ว | ตั้งแต่ Phase 10.13B — ระบบ import preview/apply/rollback ใช้ `import_batches` track ทุกชุด |
-| รายงานเชิงนโยบาย `/api/province/reports/policy` | ⬜ ยังไม่ implement | ยังคงเป็น known gap — วางไว้ทำในเฟสถัดไป |
+| รายงานเชิงนโยบาย | ✅ สร้างแล้ว (2026-06-28) | mount จริงคือ `GET /api/reports/policy` (ไม่ใช่ `/api/province/reports/policy` ตามสเปกรุ่นแรก) — `report.service.getPolicyReport` บังคับ role `province`/`admin` |
 | Readiness drill-down ราย รร./เขต | ⬜ ยังไม่ทำ | ปัจจุบันเป็น aggregate ระดับจังหวัดเท่านั้น |

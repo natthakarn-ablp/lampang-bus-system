@@ -204,12 +204,12 @@ router.get('/students', async (req, res, next) => {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
-    const { search, grade, school_id, vehicle_id, sort, order } = req.query;
+    const { search, grade, school_id, vehicle_id, has_vehicle, sort, order } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
 
     const result = await affSvc.getStudents(affId, {
-      search, grade, school_id, vehicle_id, page, per_page, sort, order,
+      search, grade, school_id, vehicle_id, has_vehicle, page, per_page, sort, order,
     });
     return sendSuccess(res, result.students, 'OK', result.meta);
   } catch (err) {

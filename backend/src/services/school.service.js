@@ -181,7 +181,7 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
 /**
  * Search/list students for a school with optional filters.
  */
-async function getStudents(schoolId, { search, grade, vehicle_id, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
+async function getStudents(schoolId, { search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
   const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'vehicle_id'];
   const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
   const sortDir = order === 'desc' ? 'DESC' : 'ASC';
@@ -218,6 +218,10 @@ async function getStudents(schoolId, { search, grade, vehicle_id, morning_enable
     where += ' AND s.vehicle_id = ?';
     params.push(vehicle_id);
   }
+  // ตัวกรอง "ยังไม่ผูกรถ" — ใช้ has_vehicle แทนการส่ง vehicle_id ว่าง
+  // เพราะ `if (vehicle_id)` ข้างบนตีความค่าว่างเป็น "ไม่กรอง"
+  if (has_vehicle === 'no') where += ' AND s.vehicle_id IS NULL';
+  else if (has_vehicle === 'yes') where += ' AND s.vehicle_id IS NOT NULL';
   if (morning_enabled !== undefined) {
     where += ' AND s.morning_enabled = ?';
     params.push(morning_enabled === 'true' || morning_enabled === true ? 1 : 0);

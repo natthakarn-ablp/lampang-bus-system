@@ -17,6 +17,9 @@ export default function AffStudentSearch() {
   const [search, setSearch] = useState('');
   const [grade, setGrade] = useState('');
   const [schoolId, setSchoolId] = useState('');
+  const [hasVehicle, setHasVehicle] = useState(
+    () => new URLSearchParams(window.location.search).get('has_vehicle') || ''
+  );
   const [schools, setSchools] = useState([]);
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -41,6 +44,7 @@ export default function AffStudentSearch() {
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (grade) params.set('grade', grade);
       if (schoolId) params.set('school_id', schoolId);
+      if (hasVehicle) params.set('has_vehicle', hasVehicle);
 
       const res = await api.get(`/affiliation/students?${params}`);
       setStudents(Array.isArray(res.data.data) ? res.data.data : []);
@@ -50,7 +54,7 @@ export default function AffStudentSearch() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, grade, schoolId]);
+  }, [debouncedSearch, grade, schoolId, hasVehicle]);
 
   useEffect(() => {
     fetchStudents(1);
@@ -76,6 +80,8 @@ export default function AffStudentSearch() {
           label: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส',
         }}
         filters={[
+          { key: 'hasVehicle', label: 'กรองตามการผูกรถ', value: hasVehicle, onChange: setHasVehicle,
+            options: [['', 'ทุกสถานะการผูกรถ'], ['no', 'ยังไม่ผูกรถ'], ['yes', 'ผูกรถแล้ว']] },
           { key: 'grade', label: 'กรองตามระดับชั้น', value: grade, onChange: setGrade,
             options: [['', 'ทุกชั้น'], ...['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => [g, g])] },
           { key: 'school', label: 'กรองตามโรงเรียน', value: schoolId, onChange: setSchoolId,
@@ -83,7 +89,7 @@ export default function AffStudentSearch() {
         ]}
         count={meta.total}
         countLabel="คน"
-        onClear={() => { setSearch(''); setGrade(''); setSchoolId(''); }}
+        onClear={() => { setSearch(''); setGrade(''); setSchoolId(''); setHasVehicle(''); }}
       />
 
       {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}

@@ -385,7 +385,7 @@ async function getSchools({ affiliation_id, page = 1, per_page = 50 }) {
 /**
  * Search/list all students system-wide.
  */
-async function getStudents({ search, grade, school_id, affiliation_id, vehicle_id, page = 1, per_page = 20, sort = 'first_name', order = 'asc' }) {
+async function getStudents({ search, grade, school_id, affiliation_id, vehicle_id, has_vehicle, page = 1, per_page = 20, sort = 'first_name', order = 'asc' }) {
   const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'school_id', 'vehicle_id'];
   const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
   const sortDir = order === 'desc' ? 'DESC' : 'ASC';
@@ -414,6 +414,10 @@ async function getStudents({ search, grade, school_id, affiliation_id, vehicle_i
     where += ' AND s.vehicle_id = ?';
     params.push(vehicle_id);
   }
+  // ตัวกรอง "ยังไม่ผูกรถ" — ใช้ has_vehicle แทนการส่ง vehicle_id ว่าง
+  // เพราะ `if (vehicle_id)` ข้างบนตีความค่าว่างเป็น "ไม่กรอง"
+  if (has_vehicle === 'no') where += ' AND s.vehicle_id IS NULL';
+  else if (has_vehicle === 'yes') where += ' AND s.vehicle_id IS NOT NULL';
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM students s

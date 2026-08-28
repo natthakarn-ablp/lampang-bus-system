@@ -40,6 +40,11 @@ export default function StudentSearch() {
 
   const [search, setSearch] = useState('');
   const [grade, setGrade] = useState('');
+  // การ์ด "ความครบถ้วนข้อมูล" บนหน้าภาพรวมลิงก์มาที่นี่พร้อม ?has_vehicle=no
+  // เพื่อให้กด "ดูรายชื่อ" แล้วเห็นเฉพาะคนที่ยังไม่ผูกรถทันที
+  const [hasVehicle, setHasVehicle] = useState(
+    () => new URLSearchParams(window.location.search).get('has_vehicle') || ''
+  );
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Edit modal state
@@ -72,6 +77,7 @@ export default function StudentSearch() {
       params.set('per_page', '20');
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (grade) params.set('grade', grade);
+      if (hasVehicle) params.set('has_vehicle', hasVehicle);
 
       const res = await api.get(`/school/students?${params}`);
       setStudents(Array.isArray(res.data.data) ? res.data.data : []);
@@ -81,7 +87,7 @@ export default function StudentSearch() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, grade]);
+  }, [debouncedSearch, grade, hasVehicle]);
 
   useEffect(() => {
     fetchStudents(1);
@@ -253,12 +259,15 @@ export default function StudentSearch() {
           label: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส',
         }}
         filters={[{
+          key: 'hasVehicle', label: 'กรองตามการผูกรถ', value: hasVehicle, onChange: setHasVehicle,
+          options: [['', 'ทุกสถานะการผูกรถ'], ['no', 'ยังไม่ผูกรถ'], ['yes', 'ผูกรถแล้ว']] },
+        {
           key: 'grade', label: 'กรองตามระดับชั้น', value: grade, onChange: setGrade,
           options: [['', 'ทุกระดับชั้น'], ...['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => [g, g])],
         }]}
         count={meta.total}
         countLabel="คน"
-        onClear={() => { setSearch(''); setGrade(''); }}
+        onClear={() => { setSearch(''); setGrade(''); setHasVehicle(''); }}
       />
 
       {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}

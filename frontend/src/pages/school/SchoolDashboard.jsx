@@ -443,7 +443,9 @@ export default function SchoolDashboard() {
 
 function CompletenessCard({ c }) {
   const items = [
-    { label: 'นักเรียนมีรถ',     done: c.students_with_vehicle, total: c.students_total, link: '/school/students', linkLabel: 'ดูรายชื่อ' },
+    // ลิงก์พาไปที่รายชื่อ "ที่ยังไม่ผูกรถ" โดยตรง — เดิมพาไปหน้ารายชื่อทั้งหมด
+    // ซึ่งโรงเรียนที่มีนักเรียนหลายร้อยคนต้องไล่หาเองทีละหน้า
+    { label: 'นักเรียนมีรถ',     done: c.students_with_vehicle, total: c.students_total, link: '/school/students?has_vehicle=no', linkLabel: 'ดูที่ยังไม่ผูก' },
     { label: 'ผู้ปกครองครบ',     done: c.students_with_parent,  total: c.students_total, link: '/school/students', linkLabel: 'ดูรายชื่อ' },
     { label: 'รถผ่านตรวจสภาพ',   done: c.vehicles_inspected,    total: c.vehicles_total, link: '/school/vehicles', linkLabel: 'ดูรถ' },
     { label: 'ประกันภัยครบ',     done: c.vehicles_insured,      total: c.vehicles_total, link: '/school/vehicles', linkLabel: 'ดูรถ' },

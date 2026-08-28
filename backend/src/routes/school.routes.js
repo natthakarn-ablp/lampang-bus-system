@@ -195,7 +195,7 @@ router.get('/students', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const { search, grade, vehicle_id, morning_enabled, evening_enabled, sort, order } = req.query;
+    const { search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled, sort, order } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
     const include_deleted = req.query.include_deleted === '1' || req.query.include_deleted === 'true';
@@ -203,7 +203,7 @@ router.get('/students', async (req, res, next) => {
 
     const gradeFilter = resolveGradeScope(req);
     const result = await schoolSvc.getStudents(schoolId, {
-      search, grade, vehicle_id, morning_enabled, evening_enabled,
+      search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled,
       page, per_page, sort, order, gradeFilter, include_deleted, only_deleted,
     });
 

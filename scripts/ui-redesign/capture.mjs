@@ -774,6 +774,13 @@ const SHOTS = [
   { id: '30-prov-students',     url: '/province/students',    user: 'province',    vps: ['mobile', 'desktop'] },
   { id: '31-aff-students',      url: '/affiliation/students', user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '32-school-students',   url: '/school/students',      user: 'school', vps: ['mobile', 'desktop'] },
+  // ตัวกรอง "ยังไม่ผูกรถ" ต้องปรากฏให้ทั้งสามบทบาทที่ดูรายชื่อนักเรียนได้
+  { id: '32b-school-students-filter', url: '/school/students', user: 'school', vps: ['desktop'],
+    expect: ['text=กรองตามการผูกรถ', 'text=ยังไม่ผูกรถ'] },
+  { id: '31b-aff-students-filter',    url: '/affiliation/students', user: 'affiliation', vps: ['desktop'],
+    expect: ['text=กรองตามการผูกรถ', 'text=ยังไม่ผูกรถ'] },
+  { id: '30b-prov-students-filter',   url: '/province/students', user: 'province', vps: ['desktop'],
+    expect: ['text=กรองตามการผูกรถ', 'text=ยังไม่ผูกรถ'] },
   { id: '33-teacher-accounts',  url: '/school/teacher-accounts', user: 'school', vps: ['mobile', 'desktop'] },
   { id: '34-reports-monthly',   url: '/reports/monthly',      user: 'admin',  vps: ['mobile', 'desktop'] },
   { id: '35-reports-summary',   url: '/reports/summary',      user: 'admin',  vps: ['desktop'] },

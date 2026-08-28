@@ -2,6 +2,7 @@
 
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 /**
  * Create a student leave record.
@@ -134,8 +135,12 @@ async function getLeavesForVehicle(vehicleId, date) {
  * Get leaves for a school on a date.
  */
 async function getLeavesForSchool(schoolId, date, { gradeFilter = null } = {}) {
-  const gradeAnd = gradeFilter ? ' AND s.grade = ?' : '';
-  const params   = gradeFilter ? [schoolId, gradeFilter, date] : [schoolId, date];
+  // Tolerant grade match — students.grade is stored in several spellings, and an
+  // exact `= ?` makes a teacher's own leave list come back empty rather than wrong,
+  // which reads as "nobody is on leave today".
+  const eq       = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const gradeAnd = eq ? ` AND s.grade IN (${eq.map(() => '?').join(',')})` : '';
+  const params   = eq ? [schoolId, ...eq, date] : [schoolId, date];
   const [rows] = await pool.query(
     `SELECT sl.id, sl.student_id, sl.vehicle_id, sl.leave_date, sl.session, sl.reason,
             sl.reported_role, sl.cancelled, sl.created_at,

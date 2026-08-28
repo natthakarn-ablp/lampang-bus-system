@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useToast } from './Toast';
+import { useAuth } from '../hooks/useAuth';
+import { getGradeScope } from '../utils/authScope';
 
 const FORMATS = [
   { key: 'csv',   label: 'CSV',   ext: 'csv',  style: 'bg-success-soft hover:bg-success-soft/80 text-success border-success/20' },
@@ -16,6 +18,14 @@ export default function ExportButtons({
 }) {
   const [downloading, setDownloading] = useState(null);
   const toast = useToast();
+  const { user } = useAuth();
+
+  // A homeroom teacher's export holds only their own grade (AUD-004). The file
+  // leaves the app and gets forwarded, and nothing inside a spreadsheet says it
+  // is a partial roster — so the grade goes in the name. Done here rather than
+  // at each call site so a report page added later cannot forget it.
+  const grade = getGradeScope(user);
+  const downloadName = grade ? `${filenamePrefix}-${grade}` : filenamePrefix;
 
   async function handleExport(fmt) {
     // Call onBeforeExport hook if provided (returns a promise)
@@ -45,7 +55,7 @@ export default function ExportButtons({
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `${filenamePrefix}.${fmt.ext}`;
+      a.download = `${downloadName}.${fmt.ext}`;
       a.click();
       URL.revokeObjectURL(a.href);
       toast.success(`ดาวน์โหลด ${fmt.label} สำเร็จ`);

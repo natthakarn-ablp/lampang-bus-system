@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 // Phase 10.7C-1 — match province.service.js window so "ยังไม่เริ่มใช้ระบบ"
 // means the same thing at both scopes. School is "used recently" if it has
@@ -246,8 +247,12 @@ async function getStudents(affiliationId, { search, grade, school_id, vehicle_id
     params.push(like, like, like);
   }
   if (grade) {
-    where += ' AND s.grade = ?';
-    params.push(grade);
+    // Tolerant grade match, same as the school student search. students.grade is
+    // stored in several spellings, so an exact match makes the same dropdown give
+    // a different answer here than it does inside the school module.
+    const eq = gradeEquivalents(grade);
+    where += ` AND s.grade IN (${eq.map(() => '?').join(',')})`;
+    params.push(...eq);
   }
   if (school_id) {
     where += ' AND s.school_id = ?';

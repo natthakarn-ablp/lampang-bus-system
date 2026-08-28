@@ -2,6 +2,7 @@
 
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 /**
  * Create a roster change request (driver → pending → school approval).
@@ -188,15 +189,22 @@ async function getRequestsForSchool(schoolId, { status, page = 1, per_page = 20,
   const params = [schoolId];
   if (status) { where += ' AND rcr.status = ?'; params.push(status); }
   if (gradeFilter) {
+    // Tolerant grade match on BOTH arms. The stored grade and the grade typed
+    // into a pending request are equally likely to be a variant spelling
+    // ('ประถมศึกษาปีที่ 4'), and an exact `= ?` drops those requests from the
+    // teacher's queue entirely — they do not appear anywhere else, so nobody
+    // ever finds out they were filtered out.
+    const eq = gradeEquivalents(gradeFilter);
+    const marks = eq.map(() => '?').join(',');
     where += ` AND (
       (rcr.student_id IS NOT NULL AND EXISTS (
         SELECT 1 FROM students sx
-        WHERE sx.id = rcr.student_id AND sx.grade = ?
+        WHERE sx.id = rcr.student_id AND sx.grade IN (${marks})
       ))
       OR (rcr.student_id IS NULL AND
-          JSON_UNQUOTE(JSON_EXTRACT(rcr.new_student_data, '$.grade')) = ?)
+          JSON_UNQUOTE(JSON_EXTRACT(rcr.new_student_data, '$.grade')) IN (${marks}))
     )`;
-    params.push(gradeFilter, gradeFilter);
+    params.push(...eq, ...eq);
   }
 
   const [[{ total }]] = await pool.query(

@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { gradeEquivalents } = require('../utils/gradeScope');
 const {
   ONLINE_SECONDS_MAX,
   STALE_SECONDS_MAX,
@@ -399,8 +400,12 @@ async function getStudents({ search, grade, school_id, affiliation_id, vehicle_i
     params.push(like, like, like);
   }
   if (grade) {
-    where += ' AND s.grade = ?';
-    params.push(grade);
+    // Tolerant grade match, same as the school student search. students.grade is
+    // stored in several spellings, so an exact match makes the same dropdown give
+    // a different answer here than it does inside the school module.
+    const eq = gradeEquivalents(grade);
+    where += ` AND s.grade IN (${eq.map(() => '?').join(',')})`;
+    params.push(...eq);
   }
   if (school_id) {
     where += ' AND s.school_id = ?';

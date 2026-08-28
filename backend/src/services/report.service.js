@@ -1,10 +1,31 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 /**
  * Build WHERE clause fragments for role-based scoping.
  * Returns { where, params } to append to queries involving students + schools.
+ *
+ * AUD-004 — the grade boundary is enforced here too. A school sub-account with
+ * users.grade_scope set (a homeroom teacher, e.g. 'ป.4') is pinned to its own
+ * grade in every /api/school read: routes/school.routes.js:68-73 resolves it and
+ * services/school.service.js:204-207 hard-pins `gradeFilter || grade || null` so
+ * the teacher cannot unlock another grade with a query param. Reports used to be
+ * the one module that did not agree, so the CSV/Excel/PDF export handed a
+ * single-grade teacher every student in the school — names, grades, bus plates
+ * and attendance — while the same account is deliberately 403'd from the school
+ * audit log, which carries strictly less about the children.
+ *
+ * The clause is appended to `where` rather than applied per query on purpose:
+ * four of the five report functions read their scope from here, so one clause
+ * covers daily, monthly, summary and every export. Two queries rewrite this
+ * string for a second student alias (`where.replace(/\bs\./g, 's2.')`); the
+ * clause is written with the `s.` prefix so it survives that rewrite.
+ *
+ * Grades are matched TOLERANTLY through gradeEquivalents() — students.grade is
+ * stored inconsistently ('ป.5', 'ประถมศึกษาปีที่ 5', 'ป. 5'), and an exact match
+ * would silently hide a teacher's own pupils rather than fail loudly.
  */
 function buildScopeFilter(user, { date, month, school_id, affiliation_id, vehicle_id }) {
   let where = 's.is_deleted = FALSE';
@@ -14,6 +35,11 @@ function buildScopeFilter(user, { date, month, school_id, affiliation_id, vehicl
   if (user.role === 'school') {
     where += ' AND s.school_id = ?';
     params.push(user.scopeId);
+    if (user.gradeScope) {
+      const eq = gradeEquivalents(user.gradeScope);
+      where += ` AND s.grade IN (${eq.map(() => '?').join(',')})`;
+      params.push(...eq);
+    }
   } else if (user.role === 'affiliation') {
     where += ' AND sc.affiliation_id = ?';
     params.push(user.scopeId);
@@ -371,7 +397,20 @@ async function getSummaryReport(user, filters) {
     }));
   }
 
-  // Per-affiliation KPI (for province/admin users seeing multiple affiliations)
+  // Per-affiliation KPI — for province/admin users seeing multiple affiliations,
+  // as the comment has always said, and for an affiliation account, whose single
+  // row is correctly its own.
+  //
+  // A school account was getting a row too: its own school's numbers printed
+  // under the education service area's name — and, now that reports are
+  // grade-scoped, ONE CLASSROOM's numbers under the name of a whole area. A
+  // label that overstates its own figures by two levels is worse than no row,
+  // and for a single school the row never told anyone anything.
+  if (user.role === 'school') {
+    daily.affiliations = [];
+    return daily;
+  }
+
   const [affRows] = await pool.query(
     `SELECT a.id AS affiliation_id, a.name AS affiliation_name,
             COUNT(DISTINCT s.id) AS student_count,

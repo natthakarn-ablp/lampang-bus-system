@@ -48,7 +48,7 @@ function resolveSchoolId(req) {
 
 // Phase 7.11.5 — extracted into shared util so admin.routes.js can
 // use the same whitelist.
-const { VALID_GRADE_SCOPES, isValidGradeScope } = require('../utils/gradeScope');
+const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents } = require('../utils/gradeScope');
 
 /**
  * Resolve grade scope for a school-scoped request.
@@ -185,8 +185,12 @@ router.get('/no-show', async (req, res, next) => {
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const session = req.query.session === 'evening' ? 'evening' : 'morning';
     const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
-    const students = await checkinSvc.getNoShowStudents(pool, { schoolId, session, date });
-    return sendSuccess(res, { session, date: date || 'today', count: students.length, students });
+    // AUD-004 — this was the one read on the router that consulted neither
+    // resolveGradeScope nor requireFullSchoolScope, so a teacher pinned to one
+    // grade could name every child school-wide who missed the bus, on any date.
+    const gradeFilter = resolveGradeScope(req);
+    const students = await checkinSvc.getNoShowStudents(pool, { schoolId, session, date, gradeFilter });
+    return sendSuccess(res, { session, date: date || 'today', count: students.length, students, grade_scope: gradeFilter || null });
   } catch (err) { next(err); }
 });
 
@@ -519,9 +523,14 @@ router.get('/missing', async (req, res, next) => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     const session = req.query.session; // optional: morning | evening
     const gradeFilter = resolveGradeScope(req);
-    const gradeAnd  = gradeFilter ? ' AND s.grade = ?' : '';
+    // Tolerant match, like every other grade filter in the school module. An
+    // exact `= ?` here hides a teacher's own pupils whenever their grade is
+    // stored in a variant spelling — the divergence gradeScopeCounts.test.js
+    // exists to catch, and the direction that fails silently.
+    const eqGrades = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+    const gradeAnd  = eqGrades ? ` AND s.grade IN (${eqGrades.map(() => '?').join(',')})` : '';
     const baseParams = [today, today, session || 'morning', schoolId];
-    if (gradeFilter) baseParams.push(gradeFilter);
+    if (eqGrades) baseParams.push(...eqGrades);
     baseParams.push(session, session, session);
 
     const [rows] = await pool.query(

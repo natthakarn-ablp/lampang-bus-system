@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import Layout from '../../components/Layout';
+import TeacherScopeChip from '../../components/TeacherScopeChip';
 import { useAuth } from '../../hooks/useAuth';
 
 const TABS = [
@@ -35,6 +36,9 @@ export default function ReportsLayout() {
           ))}
         </nav>
       </div>
+      {/* Every figure below is filtered to this teacher's grade. Without the chip
+          the headings read like the whole school's numbers. */}
+      <TeacherScopeChip user={user} note="ตัวเลขทุกส่วนในหน้านี้นับเฉพาะสายชั้นของคุณ" />
       <Outlet />
     </Layout>
   );

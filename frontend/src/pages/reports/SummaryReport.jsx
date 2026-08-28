@@ -94,7 +94,18 @@ export default function SummaryReport() {
           </button>
           {data && (
             <div className="sm:ml-auto">
-              <ExportButtons filenamePrefix="summary" onPdf={handlePrintPdf} />
+              {/* CSV and Excel here hit the shared /api/reports/export endpoint,
+                  which returns the per-student daily roster — not this page's
+                  summary. Only PDF renders the summary itself. Naming the file
+                  "summary" made the other two look like something they are not,
+                  so they carry the date and the report they actually contain.
+                  Passing the date explicitly also keeps the file in step with the
+                  day this page is showing rather than the server's today. */}
+              <ExportButtons
+                queryParams={data.date ? `date=${data.date}` : ''}
+                filenamePrefix={`report-${data.date || 'today'}`}
+                onPdf={handlePrintPdf}
+              />
             </div>
           )}
         </div>

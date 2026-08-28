@@ -152,6 +152,12 @@ const TEACHER_BLOCKED_PATHS = new Set([
   '/school/audit-log',
   '/school/bulk-vehicles',
   '/school/teacher-accounts',
+  // A registration application is one driver's rider list for a whole bus, with
+  // that application's school-wide totals — nothing on it is divisible by grade,
+  // and a teacher can take no action there. The backend now 403s the whole
+  // module for these accounts (registration.routes.js), so the link would only
+  // lead to an error.
+  '/school/registration-review',
 ]);
 
 function navItemsForUser(user, features) {

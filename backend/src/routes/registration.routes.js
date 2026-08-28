@@ -169,10 +169,23 @@ driverRouter.delete('/documents/:kind/:id', async (req, res, next) => {
 const schoolRouter = express.Router();
 schoolRouter.use(authenticate, requireRole('school', 'admin'));
 
-// Grade-teacher (sub-role) accounts are read-only: they may VIEW the roster and
-// documents but must not match/approve/reject/review. Enforce at the backend so
-// the frontend `!isTeacher` gate is not the only line of defence (CLAUDE.md §12.9).
-// admin has no gradeScope, full-school accounts have a falsy one — both pass.
+// Grade-teacher (sub-role) accounts are blocked from this module entirely.
+//
+// They were read-only here: allowed to VIEW the roster and documents, blocked
+// from match/approve/reject/review. But the thing on view is a driver's rider
+// list for a whole bus, plus that application's school-wide rider totals — so a
+// teacher pinned to ป.4 was reading every grade's names, which contradicts the
+// rule that a teacher sees only their own grade (owner decision, 28 ส.ค. 2569).
+//
+// Filtering was the alternative and was rejected: the roster is reviewed as one
+// document, a partial one cannot be judged, the aps.*_rider_count totals have no
+// grade dimension to filter by at all, and a teacher can take no action here
+// anyway. Blocking matches how /school/audit-logs already treats this account —
+// and that page holds strictly less about the children than this one does.
+//
+// Enforced at the backend so the frontend `!isTeacher` gate is not the only line
+// of defence (CLAUDE.md §12.9). admin has no gradeScope, full-school accounts
+// have a falsy one — both pass.
 function requireFullSchoolScope(req, res, next) {
   if (req.user.role === 'school' && req.user.gradeScope) {
     return sendError(res, 'บัญชีครูประจำสายชั้นดูได้อย่างเดียว ไม่มีสิทธิ์ดำเนินการนี้',
@@ -180,6 +193,12 @@ function requireFullSchoolScope(req, res, next) {
   }
   return next();
 }
+
+// Applied to the whole school-facing router rather than route by route: this
+// module has no grade dimension anywhere, so there is no read here a grade
+// teacher should reach, and a route added later inherits the guard instead of
+// having to remember it.
+schoolRouter.use(requireFullSchoolScope);
 
 // ─── Documents (school reviews evidence for vehicles/drivers in its scope) ────
 schoolRouter.get('/documents/vehicle/:vehicleId', async (req, res, next) => {

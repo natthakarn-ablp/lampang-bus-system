@@ -21,6 +21,7 @@ const env = require('../config/env');
 const { getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -936,10 +937,16 @@ async function processSchoolOverrideAll(pool, {
     ? 'AND s.morning_enabled = TRUE'
     : 'AND s.evening_enabled = TRUE';
   const doneColumn = session === 'morning' ? 'ds.morning_done' : 'ds.evening_done';
-  const gradeAnd = gradeFilter ? ' AND s.grade = ?' : '';
+  // Tolerant grade match, not `= ?`. The route in front of this currently blocks
+  // grade teachers outright, so gradeFilter is null today — but an exact match is
+  // the bug gradeScopeCounts.test.js was written for (variant spellings like
+  // 'ประถมศึกษาปีที่ 4' silently match nothing), and leaving it here would hand
+  // that bug to whoever wires the parameter up later.
+  const eqGrades = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const gradeAnd = eqGrades ? ` AND s.grade IN (${eqGrades.map(() => '?').join(',')})` : '';
 
   const params = [schoolId];
-  if (gradeFilter) params.push(gradeFilter);
+  if (eqGrades) params.push(...eqGrades);
   params.push(session);
 
   const [eligible] = await pool.query(
@@ -1098,14 +1105,23 @@ async function processSchoolOverrideAll(pool, {
 // Students who SHOULD have boarded (assigned to a bus + session-enabled) but have
 // NO CHECKED_IN for the day/session, excluding those on leave. Built on CHECKED_IN
 // (reliably recorded ~90%+) so it is trustworthy even though checkout is not.
-async function getNoShowStudents(pool, { schoolId, session, date = null }) {
+// AUD-004 — `gradeFilter` pins the result to one grade for a teacher sub-account.
+// This read names children who did NOT board, with their classroom and bus, for any
+// date the caller asks for; it is the most sensitive roster on the school router, so
+// it follows the same grade boundary as every other /api/school read rather than
+// being the one exception. Matched tolerantly (gradeEquivalents) because
+// students.grade is stored inconsistently — an exact match would hide a teacher's
+// own missing pupils, which is the failure that matters here.
+async function getNoShowStudents(pool, { schoolId, session, date = null, gradeFilter = null }) {
   assertSession(session);
   const enabledCol = session === 'morning' ? 's.morning_enabled' : 's.evening_enabled';
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const gradeAnd = eq ? ` AND s.grade IN (${eq.map(() => '?').join(',')})` : '';
   const [rows] = await pool.query(
     `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom, s.vehicle_id, v.plate_no
        FROM students s
        LEFT JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
-      WHERE s.school_id = ? AND s.is_deleted = FALSE
+      WHERE s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}
         AND ${enabledCol} = TRUE
         AND s.vehicle_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM checkin_logs ci
@@ -1115,7 +1131,8 @@ async function getNoShowStudents(pool, { schoolId, session, date = null }) {
                          WHERE sl.student_id = s.id AND sl.leave_date = COALESCE(?, CURDATE())
                            AND sl.cancelled = FALSE AND (sl.session = ? OR sl.session = 'both'))
       ORDER BY s.grade, s.classroom, s.first_name`,
-    [schoolId, session, date, date, session]
+    eq ? [schoolId, ...eq, session, date, date, session]
+       : [schoolId, session, date, date, session]
   );
   return rows;
 }

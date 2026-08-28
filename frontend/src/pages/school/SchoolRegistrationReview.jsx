@@ -33,6 +33,12 @@ export default function SchoolRegistrationReview() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null); // application_id when viewing detail
 
+  // The sidebar link is hidden for a teacher and the backend 403s the whole
+  // module, but the URL is still typeable — and fetchList swallows errors, so
+  // without this the page would render as an empty list and read like "there are
+  // no applications" rather than "this is not yours to see".
+  const teacherBlocked = isTeacher;
+
   const fetchList = useCallback(async () => {
     setLoading(true);
     try {
@@ -41,7 +47,25 @@ export default function SchoolRegistrationReview() {
     } catch {} finally { setLoading(false); }
   }, [filter]);
 
-  useEffect(() => { if (!selected) fetchList(); }, [fetchList, selected]);
+  useEffect(() => { if (!teacherBlocked && !selected) fetchList(); }, [teacherBlocked, fetchList, selected]);
+
+  if (teacherBlocked) {
+    return (
+      <div className="p-4 sm:p-6">
+        <PageHeader icon={ClipboardList} title="ตรวจลงทะเบียนรถ" />
+        <EmptyState
+          variant="info"
+          icon={ClipboardList}
+          title="หน้านี้เป็นงานระดับโรงเรียน"
+          description={
+            'คำขอจดทะเบียนรถหนึ่งคำขอคือรายชื่อผู้โดยสารทั้งคันของคนขับ ' +
+            'ซึ่งรวมนักเรียนทุกสายชั้น จึงแยกตามสายชั้นไม่ได้ ' +
+            'กรุณาติดต่อบัญชีหลักของโรงเรียนหากต้องการตรวจสอบคำขอ'
+          }
+        />
+      </div>
+    );
+  }
 
   if (selected) {
     return <RegistrationDetail applicationId={selected} isTeacher={isTeacher}

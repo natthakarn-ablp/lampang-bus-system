@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, Bell, ChevronDown, LogOut, KeyRound, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { getGradeScope } from '../utils/authScope';
 import api from '../api/axios';
 import { PulseDot } from '../lib/motion';
 
@@ -81,7 +82,14 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
 
   const displayName = user?.display_name || user?.username || '';
   const initial = displayName.charAt(0).toUpperCase();
-  const scopeLabel = user?.scope_type ? SCOPE_LABEL[user.scope_type] : null;
+  // scope_type is 'SCHOOL' for a full school account AND for a homeroom-teacher
+  // sub-account, so this badge told a teacher their scope was the whole school —
+  // the opposite of what it is, in the one spot whose job is to state the scope.
+  // grade_scope is the only field that separates them.
+  const teacherGrade = getGradeScope(user);
+  const scopeLabel = teacherGrade
+    ? `ขอบเขตสายชั้น ${teacherGrade}`
+    : (user?.scope_type ? SCOPE_LABEL[user.scope_type] : null);
 
   return (
     <header className="sticky top-0 z-sticky h-topbar shrink-0 bg-surface-raised/90 backdrop-blur border-b border-surface-border">

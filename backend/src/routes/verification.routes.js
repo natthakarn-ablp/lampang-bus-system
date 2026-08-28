@@ -140,18 +140,37 @@ router.get(
   requireRole('school', 'transport', 'province', 'admin', 'driver'),
   async (req, res, next) => {
     try {
-      // A driver may only read the timeline of an application they themselves
-      // submitted — mirror getApplication's driver scope (a.requested_by = ?).
-      // Folded into this query as a correlated EXISTS so no extra round-trip is
-      // added: for non-drivers the guard is the constant TRUE and is a no-op.
+      // Each role reads only the timelines it is entitled to. Folded into this
+      // query as a correlated EXISTS so no extra round-trip is added.
+      //
+      // A driver may only read an application they themselves submitted —
+      // mirrors getApplication's driver scope (a.requested_by = ?).
+      //
+      // A school may only read an application its own school is linked to —
+      // mirrors the access join getApplication already uses
+      // (vehicleVerification.service.js:435-437). This branch was missing: the
+      // guard was the constant TRUE for every non-driver, so a school account
+      // could read the audit timeline of ANY application by id, including other
+      // schools' — request numbers, ridership figures, cancellation reasons,
+      // reviewers' free-text notes, and the names of the other school's staff.
+      // Application ids are sequential, so the table was walkable. The sibling
+      // detail route answers 404 for exactly this case; the timeline did not.
+      //
+      // Fails closed: a school account with no scopeId matches nothing.
       const isDriver = req.user.role === 'driver';
+      const isSchool = req.user.role === 'school';
       const driverGuard = isDriver
         ? `EXISTS (SELECT 1 FROM vehicle_inspection_applications a
                     WHERE a.id = al.entity_id AND a.requested_by = ?)`
-        : 'TRUE';
+        : isSchool
+          ? `EXISTS (SELECT 1 FROM inspection_application_schools aps
+                      WHERE aps.application_id = al.entity_id AND aps.school_id = ?)`
+          : 'TRUE';
       const params = isDriver
         ? [String(req.params.id), req.user.id]
-        : [String(req.params.id)];
+        : isSchool
+          ? [String(req.params.id), req.user.scopeId || null]
+          : [String(req.params.id)];
       const [rows] = await pool.query(
         `SELECT al.id, al.action, al.entity_type, al.old_value, al.new_value,
                 al.created_at, u.display_name AS actor_name, u.role AS actor_role

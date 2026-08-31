@@ -1,5 +1,5 @@
-import { Building2, Bus, ChevronDown } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { Building2, Bus, ChevronDown, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import StudentStatusTable from '../../components/StudentStatusTable';
@@ -8,6 +8,8 @@ import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 
+const REFRESH_INTERVAL_MS = 30_000;
+
 export default function AffDailyStatus() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -15,13 +17,43 @@ export default function AffDailyStatus() {
   const [expandedSchool, setExpandedSchool] = useState(null);
   const [expandedVehicle, setExpandedVehicle] = useState(null);
   const [plateSearch, setPlateSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const requestInFlight = useRef(false);
+
+  const refreshStatus = useCallback(async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setRefreshing(true);
+    try {
+      const res = await api.get('/affiliation/status-today');
+      setData(res.data.data);
+      setError('');
+      setLastUpdatedAt(new Date());
+    } catch (err) {
+      setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
+    } finally {
+      requestInFlight.current = false;
+      setRefreshing(false);
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    api.get('/affiliation/status-today')
-      .then((res) => setData(res.data.data))
-      .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
-      .finally(() => setLoading(false));
-  }, []);
+    refreshStatus();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshStatus();
+    };
+    const timer = setInterval(refreshWhenVisible, REFRESH_INTERVAL_MS);
+    const onVisibilityChange = () => {
+      refreshWhenVisible();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [refreshStatus]);
 
   function toggleSchool(schoolId) {
     setExpandedSchool((prev) => (prev === schoolId ? null : schoolId));
@@ -50,10 +82,29 @@ export default function AffDailyStatus() {
       <PageHeader
         title="สถานะวันนี้"
         subtitle="ความคืบหน้าการรับ-ส่งนักเรียนรายคันในสังกัด"
-        meta={data?.date
-          ? `ข้อมูล ณ ${new Date(data.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}`
-          : undefined}
-        actions={<PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicleSuggestions} />}
+        meta={[
+          data?.date
+            ? `ข้อมูล ณ ${new Date(data.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}`
+            : null,
+          lastUpdatedAt
+            ? `อัปเดตล่าสุด ${lastUpdatedAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+            : null,
+        ].filter(Boolean).join(' · ') || undefined}
+        actions={(
+          <>
+            <PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicleSuggestions} />
+            <button
+              type="button"
+              onClick={refreshStatus}
+              disabled={refreshing}
+              aria-label="รีเฟรชข้อมูลสถานะ"
+              title="รีเฟรชข้อมูลสถานะ"
+              className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-surface-border bg-surface-raised text-ink-muted transition hover:bg-surface hover:text-ink disabled:cursor-wait disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2} aria-hidden="true" />
+            </button>
+          </>
+        )}
       />
 
       {error && <ErrorState message={error} className="mb-4" />}

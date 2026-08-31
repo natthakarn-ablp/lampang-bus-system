@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Map, Building2, GraduationCap, Bus, ClipboardList, AlertTriangle,
@@ -6,7 +6,7 @@ import {
   // Phase 10.7C-2 — icons for the 5-card school-checklist hero
   Clock,
   // Phase 10.8UX-B-1 — action row icons
-  Activity, FileText,
+  Activity, FileText, RefreshCw,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
@@ -24,6 +24,8 @@ import {
 } from '../../constants/uiLabels';
 import { PageTransition } from '../../lib/motion';
 
+const REFRESH_INTERVAL_MS = 30_000;
+
 export default function AffiliationDashboard() {
   const toast = useToast();
   const [data, setData] = useState(null);
@@ -31,6 +33,9 @@ export default function AffiliationDashboard() {
   const [atRiskVehicles, setAtRiskVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notified, setNotified] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const requestInFlight = useRef(false);
 
   // Schools is the only detail section that exists today on Affiliation,
   // so it's the only attention-card jump target. Incidents + vehicles
@@ -40,22 +45,56 @@ export default function AffiliationDashboard() {
   const scrollTo = (ref) =>
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  useEffect(() => {
-    Promise.all([
+  const refreshDashboard = useCallback(async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setRefreshing(true);
+    try {
+      const [dashRes, incRes, atRiskRes] = await Promise.all([
       api.get('/affiliation/dashboard').catch(() => null),
       api.get('/affiliation/emergencies?per_page=5&page=1').catch(() => null),
       api.get('/affiliation/vehicles-at-risk?limit=10').catch(() => null),
-    ]).then(([dashRes, incRes, atRiskRes]) => {
-      if (dashRes) setData(dashRes.data.data);
-      const incList = incRes?.data?.data;
-      setIncidents(Array.isArray(incList) ? incList : []);
-      const atRiskList = atRiskRes?.data?.data;
-      setAtRiskVehicles(Array.isArray(atRiskList) ? atRiskList : []);
-    }).finally(() => setLoading(false));
+      ]);
+      if (dashRes) {
+        setData(dashRes.data.data);
+        setLastUpdatedAt(new Date());
+      }
+      if (incRes) {
+        const incList = incRes.data?.data;
+        setIncidents(Array.isArray(incList) ? incList : []);
+      }
+      if (atRiskRes) {
+        const atRiskList = atRiskRes.data?.data;
+        setAtRiskVehicles(Array.isArray(atRiskList) ? atRiskList : []);
+      }
+    } finally {
+      requestInFlight.current = false;
+      setRefreshing(false);
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshDashboard();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshDashboard();
+    };
+    const timer = setInterval(refreshWhenVisible, REFRESH_INTERVAL_MS);
+    const onVisibilityChange = () => {
+      refreshWhenVisible();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [refreshDashboard]);
 
   const dateLabel = data?.date
     ? `วันที่ ${new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
+    : null;
+  const freshnessLabel = lastUpdatedAt
+    ? `อัปเดตล่าสุด ${lastUpdatedAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
     : null;
 
   return (
@@ -64,9 +103,21 @@ export default function AffiliationDashboard() {
       <PageHeader
         title={PAGE_TITLES.AFFILIATION_DASHBOARD}
         subtitle={data?.affiliation?.name}
-        meta={dateLabel}
+        meta={[dateLabel, freshnessLabel].filter(Boolean).join(' · ') || undefined}
         icon={Map}
         iconColor="sky"
+        actions={(
+          <button
+            type="button"
+            onClick={refreshDashboard}
+            disabled={refreshing}
+            aria-label="รีเฟรชข้อมูลแดชบอร์ด"
+            title="รีเฟรชข้อมูลแดชบอร์ด"
+            className="focus-ring inline-flex h-11 w-11 items-center justify-center rounded-lg border border-surface-border bg-surface-raised text-ink-muted transition hover:bg-surface hover:text-ink disabled:cursor-wait disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2} aria-hidden="true" />
+          </button>
+        )}
       />
 
       {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern

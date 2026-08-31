@@ -3,6 +3,7 @@ import api from '../../api/axios';
 import ErrorState from '../../components/ErrorState';
 import { ACTION_LABEL } from '../../utils/session';
 import { useToast } from '../../components/Toast';
+import { formatGradeClass } from '../../utils/student';
 
 export default function CheckinPanel({ student, session, onDone }) {
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,7 @@ export default function CheckinPanel({ student, session, onDone }) {
               {student.first_name} {student.last_name}
             </p>
             <p className="text-sm text-gray-500 mt-0.5">
-              {student.grade && student.classroom ? `${student.grade}/${student.classroom}` : student.grade || '-'}
+              {formatGradeClass(student.grade, student.classroom)}
               {student.school_name && <span className="text-gray-400"> · {student.school_name}</span>}
             </p>
           </div>

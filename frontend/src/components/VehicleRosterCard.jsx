@@ -3,6 +3,7 @@ import { Bus, ChevronDown, User } from 'lucide-react';
 import api from '../api/axios';
 import { VehicleSafetySection } from './VehicleSafety';
 import { AppCard, StatusBadge, DataTable } from './ui';
+import { formatGradeClass } from '../utils/student';
 
 /**
  * VehicleRosterCard — one vehicle, with an expandable pupil roster.
@@ -64,7 +65,7 @@ export default function VehicleRosterCard({
     name:   { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
               cell: s => `${s.prefix || ''}${s.first_name} ${s.last_name}` },
     grade:  { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
-              cell: s => (s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-') },
+              cell: s => formatGradeClass(s.grade, s.classroom) },
     school: { key: 'school', header: 'โรงเรียน', cell: s => s.school_name || '-' },
     parent: { key: 'parent', header: 'ผู้ปกครอง', cell: s => s.parent_name || '-' },
     phone:  { key: 'phone', header: 'เบอร์โทร', cell: s => s.parent_phone || '-' },

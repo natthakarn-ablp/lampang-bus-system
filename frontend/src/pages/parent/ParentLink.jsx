@@ -4,6 +4,7 @@ import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT
 import { resolveLineUserId, getLiffIdToken, isInLiffClient } from '../../utils/liff';
 import PageHeader from '../../components/PageHeader';
 import { AlertBanner, FormField } from '../../components/ui';
+import { formatGradeClass } from '../../utils/student';
 
 // Phase 10.3E-UX1 — parent account linking via LIFF form.
 //
@@ -160,7 +161,7 @@ export default function ParentLink() {
   if (step === STEP.PREVIEW) {
     const s = previewStudent || {};
     const fullName = [s.prefix, s.first_name, s.last_name].filter(Boolean).join('');
-    const gradeRoom = [s.grade, s.classroom].filter(Boolean).join(' / ');
+    const gradeRoom = formatGradeClass(s.grade, s.classroom, '');
     return (
       <div className="min-h-screen bg-surface p-4 sm:p-6">
         <div className="max-w-lg mx-auto">

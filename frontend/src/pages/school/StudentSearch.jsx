@@ -15,6 +15,7 @@ import VehicleSelect from '../../components/VehicleSelect';
 import Pagination from '../../components/Pagination';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
+import { formatGradeClass } from '../../utils/student';
 
 // Mask parent phone in list views for PDPA compliance — shows first 3 and
 // last 2 digits only (e.g. 081****67). The edit form shows the full number
@@ -281,7 +282,7 @@ export default function StudentSearch() {
           { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
             cell: s2 => <span className="font-medium text-ink">{s2.prefix}{s2.first_name} {s2.last_name}</span> },
           { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
-            cell: s2 => (s2.grade && s2.classroom ? `${s2.grade}/${s2.classroom}` : s2.grade || s2.classroom || '-') },
+            cell: s2 => formatGradeClass(s2.grade, s2.classroom) },
           { key: 'code', header: 'รหัส', cell: s2 => <span className="tabular-nums">{s2.student_code ?? s2.id}</span> },
           { key: 'plate', header: 'ทะเบียนรถ', align: 'center',
             cell: s2 => (s2.plate_no

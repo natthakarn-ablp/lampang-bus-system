@@ -9,6 +9,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const reportSvc = require('../services/report.service');
 const { logAudit } = require('../utils/audit');
 const { csvCell, neutralizeSpreadsheetCell } = require('../utils/exportSecurity');
+const { abbreviateGrade } = require('../utils/gradeDisplay');
 
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
@@ -224,7 +225,7 @@ router.get('/export/csv', async (req, res, next) => {
       const line = [
         csvCell(r.student_id),
         csvCell(r.student_name),
-        csvCell(r.grade || ''),
+        csvCell(abbreviateGrade(r.grade)),
         csvCell(r.classroom || ''),
         csvCell(r.school_name),
         csvCell(r.affiliation_name),
@@ -279,7 +280,7 @@ router.get('/export/excel', async (req, res, next) => {
       sheet.addRow({
         col0: r.student_id,
         col1: neutralizeSpreadsheetCell(r.student_name),
-        col2: neutralizeSpreadsheetCell(r.grade || ''),
+        col2: neutralizeSpreadsheetCell(abbreviateGrade(r.grade)),
         col3: neutralizeSpreadsheetCell(r.classroom || ''),
         col4: neutralizeSpreadsheetCell(r.school_name),
         col5: neutralizeSpreadsheetCell(r.affiliation_name),

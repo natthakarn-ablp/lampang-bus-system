@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 const env = require('../config/env');
+const { formatGradeClass } = require('../utils/gradeDisplay');
 
 // Lazy-init LINE client (only when credentials are configured)
 let _client = null;
@@ -885,7 +886,7 @@ function parentStatusBadge(state, label) {
 
 function buildChildSection(child, status, idx, total) {
   const fullName  = `${child.prefix || ''}${child.first_name} ${child.last_name}`.trim();
-  const gradeRoom = [child.grade, child.classroom].filter(Boolean).join(' / ');
+  const gradeRoom = formatGradeClass(child.grade, child.classroom, '');
   const metaLine  = [gradeRoom, child.school_name].filter(Boolean).join(' · ');
 
   const mState = status.morning_done ? 'done' : 'pending';
@@ -1133,7 +1134,7 @@ function buildParentStatusText(childrenWithStatus) {
     const eLabel = status.evening_done
       ? `✅ ส่งถึงจุดรับแล้ว ${formatTimeTH(status.evening_ts)}`.trim()
       : '⏳ ยังไม่ส่งถึงจุดรับ';
-    const gradeRoom = [child.grade, child.classroom].filter(Boolean).join('/');
+    const gradeRoom = formatGradeClass(child.grade, child.classroom, '');
     if (total > 1) msg += `\n— คนที่ ${idx + 1}/${total} —`;
     msg += `\n👦 ${child.prefix || ''}${child.first_name} ${child.last_name}`;
     msg += `\n   ${gradeRoom} - ${child.school_name || ''}`;

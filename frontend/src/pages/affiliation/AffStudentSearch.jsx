@@ -6,6 +6,7 @@ import ErrorState from '../../components/ErrorState';
 import PageHeader from '../../components/PageHeader';
 import { DataTable, FilterBar, StatusBadge } from '../../components/ui';
 import Pagination from '../../components/Pagination';
+import { formatGradeClass } from '../../utils/student';
 
 export default function AffStudentSearch() {
   const navigate = useNavigate();
@@ -103,7 +104,7 @@ export default function AffStudentSearch() {
           { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
             cell: s => <span className="font-medium text-ink">{s.prefix}{s.first_name} {s.last_name}</span> },
           { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
-            cell: s => (s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-') },
+            cell: s => formatGradeClass(s.grade, s.classroom) },
           { key: 'id', header: 'รหัส', cell: s => <span className="tabular-nums">{s.id}</span> },
           { key: 'school', header: 'โรงเรียน', cell: s => s.school_name || '-' },
           { key: 'plate', header: 'ทะเบียนรถ', align: 'center',

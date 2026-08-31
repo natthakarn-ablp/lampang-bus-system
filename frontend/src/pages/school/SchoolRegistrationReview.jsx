@@ -9,6 +9,7 @@ import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
 import DocumentReviewPanel from '../../components/DocumentReviewPanel';
+import { abbreviateGrade } from '../../utils/student';
 
 const APPROVAL = {
   PENDING_SCHOOL_REVIEW: { label: 'รอตรวจสอบ', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -251,7 +252,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-ink">
                       {r.raw_student_name}
-                      {r.raw_grade ? <span className="text-gray-400 font-normal"> · {r.raw_grade}</span> : null}
+                      {r.raw_grade ? <span className="text-gray-400 font-normal"> · {abbreviateGrade(r.raw_grade)}</span> : null}
                       {r.raw_student_code ? <span className="text-gray-400 font-normal"> · เลข {r.raw_student_code}</span> : null}
                     </p>
                     <p className="text-caption text-ink-muted">{PICKUP_LABEL[r.pickup_type] || '-'}</p>
@@ -267,7 +268,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs text-gray-600">
                           ระบบแนะนำ: <span className="font-medium text-gray-800">{r.suggestion.student.full_name}</span>
-                          {r.suggestion.student.grade ? ` (${r.suggestion.student.grade})` : ''}
+                          {r.suggestion.student.grade ? ` (${abbreviateGrade(r.suggestion.student.grade)})` : ''}
                           <span className="text-gray-400"> · {r.suggestion.confidence === 'high' ? 'ตรงเลขประจำตัว' : 'ใกล้เคียง'}</span>
                         </p>
                         {canAct && (
@@ -286,7 +287,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                         <div className="space-y-1.5">
                           {(r.suggestion.candidates || []).map((c) => (
                             <div key={c.id} className="flex items-center justify-between gap-2">
-                              <span className="text-xs text-gray-700">{c.full_name}{c.grade ? ` (${c.grade})` : ''}</span>
+                              <span className="text-xs text-gray-700">{c.full_name}{c.grade ? ` (${abbreviateGrade(c.grade)})` : ''}</span>
                               {canAct && (
                                 <button onClick={() => doMatch(r.id, c.id)} disabled={busyId === r.id}
                                   className="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50">เลือก</button>
@@ -313,7 +314,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                             <div key={s.id} className="flex items-center justify-between gap-2">
                               <span className="text-xs text-gray-700">
                                 {(s.prefix || '')}{s.first_name} {s.last_name}
-                                {s.grade ? ` (${s.grade})` : ''}{s.student_code ? ` · ${s.student_code}` : ''}
+                                {s.grade ? ` (${abbreviateGrade(s.grade)})` : ''}{s.student_code ? ` · ${s.student_code}` : ''}
                               </span>
                               <button onClick={() => doMatch(r.id, s.id)} disabled={busyId === r.id}
                                 className="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:opacity-50">เลือก</button>

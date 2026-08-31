@@ -31,6 +31,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
 import { PageTransition } from '../../lib/motion';
+import { formatGradeClass } from '../../utils/student';
 
 export default function SchoolDashboard() {
   // Phase 10.7E-1 — read user from auth context to decide whether to
@@ -328,7 +329,7 @@ export default function SchoolDashboard() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-ink truncate">{lv.student_name}</p>
                       <p className="text-xs text-ink-muted">
-                        {lv.grade && lv.classroom ? `${lv.grade}/${lv.classroom}` : lv.grade || ''} · {lv.plate_no}
+                        {formatGradeClass(lv.grade, lv.classroom, '')} · {lv.plate_no}
                         {lv.session && ` · ${lv.session === 'morning' ? 'เช้า' : lv.session === 'evening' ? 'เย็น' : 'ทั้งวัน'}`}
                         {lv.reason && ` · ${lv.reason}`}
                       </p>

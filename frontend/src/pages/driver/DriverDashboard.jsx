@@ -21,6 +21,7 @@ import {
   DONE_LABEL,
 } from '../../utils/session';
 import { isDriverNotLinked, driverErrorMessage } from '../../utils/driverErrors';
+import { formatGradeClass } from '../../utils/student';
 
 const POLL_INTERVAL = 30_000;
 
@@ -594,7 +595,7 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
               {student.first_name} {student.last_name}
             </p>
             <p className="text-sm text-ink-muted mt-0.5">
-              {student.grade && student.classroom ? `${student.grade}/${student.classroom}` : student.grade || '-'}
+              {formatGradeClass(student.grade, student.classroom)}
             </p>
           </div>
 

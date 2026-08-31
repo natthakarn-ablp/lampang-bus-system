@@ -7,6 +7,7 @@ import Pagination from './Pagination';
 import PageHeader from './PageHeader';
 import { FilterBar } from './ui';
 import { ClipboardList, Download } from 'lucide-react';
+import { abbreviateGrade, formatGradeClass } from '../utils/student';
 
 const ACTION_OPTIONS = [
   { value: '', label: 'ทุกการกระทำ' },
@@ -37,7 +38,7 @@ function summarize(row) {
   }
   if (nv.action === 'withdraw') {
     const name = ov.student_name || nv.student_name || '';
-    const info = [ov.grade, ov.classroom].filter(Boolean).join('/');
+    const info = formatGradeClass(ov.grade, ov.classroom, '');
     const plate = ov.plate_no ? ` · รถ ${ov.plate_no}` : '';
     return `ลาออก: ${name}${info ? ` (${info})` : ''}${plate}`;
   }
@@ -57,7 +58,8 @@ function summarize(row) {
 
   const fields = Object.keys(nv).filter(k => k !== 'action');
   if (fields.length > 0 && Object.keys(ov).length > 0 && fields.length <= 3) {
-    return fields.map(k => `${FIELD_LABEL[k] || k}: ${ov[k] ?? '-'} → ${nv[k] ?? '-'}`).join(' · ');
+    const displayValue = (key, value) => key === 'grade' ? abbreviateGrade(value) || '-' : value ?? '-';
+    return fields.map(k => `${FIELD_LABEL[k] || k}: ${displayValue(k, ov[k])} → ${displayValue(k, nv[k])}`).join(' · ');
   }
   // The generic field-list fallback used to read "แก้ไข: …" for EVERY action
   // that carried a new_value, so an EXPORT row rendered as

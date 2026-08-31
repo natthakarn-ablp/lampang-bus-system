@@ -9,6 +9,7 @@ import LoadingState from '../../components/LoadingState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
+import { formatGradeClass } from '../../utils/student';
 
 export default function SchoolApprovals() {
   const [requests, setRequests] = useState([]);
@@ -86,7 +87,7 @@ export default function SchoolApprovals() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-ink break-words">{TYPE_LABEL[r.request_type]} — {r.student_name}</p>
                   <p className="text-xs text-gray-500 break-words">
-                    รถ: {r.plate_no} · {r.grade && r.classroom ? `${r.grade}/${r.classroom}` : ''} · ขอโดย: {r.requested_by_name || '-'}
+                    รถ: {r.plate_no} · {formatGradeClass(r.grade, r.classroom, '')} · ขอโดย: {r.requested_by_name || '-'}
                   </p>
                   {r.reason && <p className="text-xs text-gray-400 mt-0.5 break-words">เหตุผล: {r.reason}</p>}
                   <p className="text-xs text-gray-400 mt-0.5">

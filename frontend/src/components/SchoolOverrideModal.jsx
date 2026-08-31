@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, Search, AlertTriangle } from 'lucide-react';
 import api from '../api/axios';
 import { AlertBanner, StatusBadge } from './ui';
+import { formatGradeClass } from '../utils/student';
 
 /**
  * School "ยืนยันแทนคนขับ" modal.
@@ -315,7 +316,7 @@ export default function SchoolOverrideModal({ vehicles = [], onClose, onSaved })
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm text-ink truncate">{s.name}</span>
                           <span className="block text-xs text-ink-muted truncate">
-                            {s.grade}{s.classroom ? ` / ${s.classroom}` : ''}
+                            {formatGradeClass(s.grade, s.classroom, '')}
                             {s.plate_no ? ` · ${s.plate_no}` : ''}
                           </span>
                         </span>
@@ -357,7 +358,7 @@ export default function SchoolOverrideModal({ vehicles = [], onClose, onSaved })
                 <div className="border border-brand-700/40 bg-brand-50/40 rounded-lg p-3 text-sm">
                   <p className="font-medium text-ink">{selectedStudent.name}</p>
                   <p className="text-xs text-ink-muted mt-0.5">
-                    {selectedStudent.grade}{selectedStudent.classroom ? ` / ${selectedStudent.classroom}` : ''}
+                    {formatGradeClass(selectedStudent.grade, selectedStudent.classroom, '')}
                     {selectedStudent.plate_no ? ` · ${selectedStudent.plate_no}` : ''}
                   </p>
                   {ineligibleReason(selectedStudent) && (
@@ -400,7 +401,7 @@ export default function SchoolOverrideModal({ vehicles = [], onClose, onSaved })
                               <div className="min-w-0">
                                 <p className="text-sm text-ink truncate">{s.name}</p>
                                 <p className="text-xs text-ink-muted truncate">
-                                  {s.grade}{s.classroom ? ` / ${s.classroom}` : ''}
+                                  {formatGradeClass(s.grade, s.classroom, '')}
                                   {s.plate_no ? ` · ${s.plate_no}` : ''}
                                 </p>
                               </div>

@@ -7,6 +7,7 @@ import ApprovalBadge from '../../components/ApprovalBadge';
 import { useToast } from '../../components/Toast';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { formatGradeClass } from '../../utils/student';
 
 const PREFIX_OPTIONS = ['เด็กชาย', 'เด็กหญิง', 'นาย', 'นางสาว', 'นาง'];
 
@@ -169,7 +170,7 @@ export default function DriverRosterRequests() {
                   <option value="">— เลือกนักเรียน —</option>
                   {students.map(s => (
                     <option key={s.id} value={s.id}>
-                      {s.prefix}{s.first_name} {s.last_name} ({s.grade}/{s.classroom})
+                      {s.prefix}{s.first_name} {s.last_name} ({formatGradeClass(s.grade, s.classroom)})
                     </option>
                   ))}
                 </select>
@@ -330,7 +331,7 @@ function RequestCard({ r, typeLabel }) {
             {isNew && <span className="text-xs text-amber-600 ml-1">(ใหม่)</span>}
           </p>
           <p className="text-xs text-gray-500 mt-0.5">
-            {r.grade && r.classroom ? `${r.grade}/${r.classroom}` : ''}
+            {formatGradeClass(r.grade, r.classroom, '')}
             {r.reason && <>{r.grade ? ' · ' : ''}{r.reason}</>}
             {!r.grade && !r.reason && '-'}
           </p>

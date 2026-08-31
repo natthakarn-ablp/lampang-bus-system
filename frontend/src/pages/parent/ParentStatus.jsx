@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
 import { getLiffIdToken } from '../../utils/liff';
 import AppCard from '../../components/ui/AppCard';
+import { formatGradeClass } from '../../utils/student';
 
 const STATUS_MAP = {
   CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-success-soft text-success border-success/30', icon: '✅' },
@@ -231,7 +232,7 @@ export default function ParentStatus() {
                     {child.first_name} {child.last_name}
                   </p>
                   <p className="text-base text-ink-muted mt-0.5">
-                    {child.grade && child.classroom ? `${child.grade}/${child.classroom}` : child.grade || '-'}
+                    {formatGradeClass(child.grade, child.classroom)}
                     {child.school_name && (
                       <span className="text-ink-muted"> · {child.school_name}</span>
                     )}
@@ -277,7 +278,7 @@ export default function ParentStatus() {
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
               <p className="text-base text-ink-muted">
-                {selectedChild.grade && selectedChild.classroom ? `${selectedChild.grade}/${selectedChild.classroom}` : selectedChild.grade || '-'}
+                {formatGradeClass(selectedChild.grade, selectedChild.classroom)}
                 {selectedChild.school_name && ` · ${selectedChild.school_name}`}
               </p>
             </AppCard>

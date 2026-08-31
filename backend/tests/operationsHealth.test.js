@@ -83,7 +83,13 @@ describe('readiness scripts exit safely when config is missing (10.13B-9)', () =
     const script = bashPath(path.join(ROOT, rel));
     const command = process.platform === 'win32' ? 'wsl' : 'bash';
     const args = process.platform === 'win32' ? ['-e', 'bash', script] : [script];
-    try { execFileSync(command, args, { stdio: 'pipe' }); return 0; }
+    const missingConfig = bashPath(path.join(ROOT, 'tmp', '__test_missing_ops_config.env'));
+    const env = {
+      ...process.env,
+      RESTORE_TEST_CONFIG_FILE: missingConfig,
+      OFFHOST_BACKUP_CONFIG_FILE: missingConfig,
+    };
+    try { execFileSync(command, args, { stdio: 'pipe', env }); return 0; }
     catch (e) { return e.status; }
   };
   // restore-test-readiness.sh reaches its "exit 1 (not ready / missing config)"

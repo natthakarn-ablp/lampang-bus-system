@@ -29,6 +29,7 @@ const REFRESH_INTERVAL_MS = 30_000;
 export default function AffiliationDashboard() {
   const toast = useToast();
   const [data, setData] = useState(null);
+  const [schools, setSchools] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [atRiskVehicles, setAtRiskVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,14 +51,19 @@ export default function AffiliationDashboard() {
     requestInFlight.current = true;
     setRefreshing(true);
     try {
-      const [dashRes, incRes, atRiskRes] = await Promise.all([
-      api.get('/affiliation/dashboard').catch(() => null),
-      api.get('/affiliation/emergencies?per_page=5&page=1').catch(() => null),
-      api.get('/affiliation/vehicles-at-risk?limit=10').catch(() => null),
+      const [dashRes, schoolsRes, incRes, atRiskRes] = await Promise.all([
+        api.get('/affiliation/dashboard').catch(() => null),
+        api.get('/affiliation/schools').catch(() => null),
+        api.get('/affiliation/emergencies?per_page=5&page=1').catch(() => null),
+        api.get('/affiliation/vehicles-at-risk?limit=10').catch(() => null),
       ]);
       if (dashRes) {
         setData(dashRes.data.data);
         setLastUpdatedAt(new Date());
+      }
+      if (schoolsRes) {
+        const schoolList = schoolsRes.data?.data;
+        setSchools(Array.isArray(schoolList) ? schoolList : []);
       }
       if (incRes) {
         const incList = incRes.data?.data;
@@ -186,7 +192,7 @@ export default function AffiliationDashboard() {
             <AppCard padding="md">
               <div className="flex items-start gap-2 mb-2">
                 <Building2 className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
-                <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนทั้งหมด / เข้าใช้งานแล้ว</p>
+                <p className="text-sm font-semibold text-ink leading-tight">การใช้งานเช็กชื่อ</p>
               </div>
               <div className="space-y-1.5">
                 <div className="flex items-baseline justify-between">
@@ -194,13 +200,13 @@ export default function AffiliationDashboard() {
                   <span className="text-2xl font-bold text-ink tabular-nums">{data.school_total ?? data.total_schools ?? 0}</span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-xs text-ink-muted">เข้าใช้งานล่าสุด 14 วัน</span>
+                  <span className="text-xs text-ink-muted">มีข้อมูลเช็กชื่อใน 14 วัน</span>
                   <span className={`text-base font-semibold tabular-nums ${(data.school_used_recently ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
                     {data.school_used_recently ?? 0}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-xs text-ink-muted">ยังไม่เข้าใช้งาน</span>
+                  <span className="text-xs text-ink-muted">ยังไม่มีข้อมูลเช็กชื่อ</span>
                   <span className={`text-base font-semibold tabular-nums ${(data.school_not_using_recently ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
                     {data.school_not_using_recently ?? 0}
                   </span>
@@ -282,8 +288,8 @@ export default function AffiliationDashboard() {
                 </span>
               </div>
               {problemSchools.length > 0 && (
-                <p className="text-xs text-ink-muted mt-1 truncate">
-                  เช่น {problemSchools.slice(0, 2).map(s => s.school_name).join(' · ')}
+                <p className="text-xs text-ink-muted mt-1">
+                  {problemSchools.length} จาก {data.school_total ?? data.total_schools ?? schools.length} โรงเรียนมีรายการค้าง
                 </p>
               )}
             </AppCard>
@@ -315,6 +321,8 @@ export default function AffiliationDashboard() {
             </AppCard>
 
           </div>
+
+          <SchoolReadinessSection schools={schools} />
 
           {/* Auxiliary system size — was hero cards 2/3/4 in the pre-10.7C-2
               layout. Demoted because students/schools/vehicles totals don't
@@ -403,6 +411,54 @@ export default function AffiliationDashboard() {
       })()}
     </div>
     </PageTransition>
+  );
+}
+
+function SchoolReadinessSection({ schools }) {
+  const withData = schools.filter(s => Number(s.student_count) > 0).length;
+  const loggedInWaiting = schools.filter(s => Number(s.student_count) === 0 && s.last_login_at).length;
+  const notStarted = Math.max(0, schools.length - withData - loggedInWaiting);
+
+  return (
+    <DashboardSection
+      title="สถานะโรงเรียนในสังกัด"
+      description={`ครบ ${schools.length} โรงเรียน · มีข้อมูล ${withData} · เข้าระบบแล้วรอนำเข้า ${loggedInWaiting} · ยังไม่เข้าใช้ ${notStarted}`}
+      action={(
+        <Link to="/affiliation/schools" className="text-sm font-medium text-brand hover:text-brand-700 focus-ring rounded">
+          ดูรายละเอียด
+        </Link>
+      )}
+    >
+      {schools.length === 0 ? (
+        <p className="py-6 text-center text-sm text-ink-muted">ยังไม่มีข้อมูลโรงเรียนในสังกัด</p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-surface-border bg-surface-raised divide-y divide-surface-border">
+          {schools.map(school => {
+            const hasData = Number(school.student_count) > 0;
+            const hasLoggedIn = Boolean(school.last_login_at);
+            const status = hasData
+              ? { variant: 'success', label: 'มีข้อมูลนักเรียนแล้ว' }
+              : hasLoggedIn
+                ? { variant: 'warn', label: 'เข้าสู่ระบบแล้ว รอนำเข้าข้อมูล' }
+                : { variant: 'neutral', label: 'ยังไม่เข้าใช้' };
+            return (
+              <div key={school.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <p className="font-medium text-ink">{school.name}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">
+                    นักเรียน {school.student_count ?? 0} คน · รถที่ผูกกับนักเรียน {school.vehicle_count ?? 0} คัน
+                    {school.last_login_at ? ` · เข้าระบบ ${relativeTime(school.last_login_at)}` : ''}
+                  </p>
+                </div>
+                <StatusBadge variant={status.variant} size="sm" className="self-start shrink-0 sm:self-auto">
+                  {status.label}
+                </StatusBadge>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </DashboardSection>
   );
 }
 

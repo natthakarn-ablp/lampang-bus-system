@@ -220,7 +220,10 @@ async function getSchools(affiliationId) {
             (SELECT COUNT(*) FROM students s
              WHERE s.school_id = sc.id AND s.is_deleted = FALSE) AS student_count,
             (SELECT COUNT(DISTINCT s.vehicle_id) FROM students s
-             WHERE s.school_id = sc.id AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL) AS vehicle_count
+             WHERE s.school_id = sc.id AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL) AS vehicle_count,
+            (SELECT MAX(u.last_login) FROM users u
+             WHERE u.scope_type = 'SCHOOL' AND u.scope_id = sc.id
+               AND u.role = 'school' AND u.is_deleted = FALSE) AS last_login_at
      FROM schools sc
      WHERE sc.affiliation_id = ? AND sc.is_deleted = FALSE
      ORDER BY sc.name`,

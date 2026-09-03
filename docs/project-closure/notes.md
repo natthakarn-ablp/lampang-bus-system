@@ -22,7 +22,7 @@
 - ระบบ production เป็น single backend instance และ lockout/dedup/linking state บางส่วนอยู่ใน memory; ต้องย้าย state ไป Redis/DB ก่อน scale หลาย instance
 - Security residuals ที่ต้อง fix หรือมี risk acceptance: refresh-token rotation/replay, localStorage token, export rate-limit coverage, export streaming และ legacy weak-password rotation
 - ต้องยืนยัน PDPA/consent/QR/LINE policy โดย DPO/ผู้มีอำนาจจริงก่อนเปิด feature ที่เกี่ยวข้อง
-- ต้องตัดสินใจ business logic ของบัญชีกลางโรงเรียน/ต้นสังกัด/ขนส่ง และบัญชีคนขับที่ login ด้วยทะเบียนรถ ก่อนขยาย self-service recovery
+- Account recovery ทุกสิทธิ์เป็น accepted scope; ต้องตัดสินใจ business logic ของบัญชีกลางโรงเรียน/ต้นสังกัด/ขนส่ง และบัญชีคนขับที่ login ด้วยทะเบียนรถก่อนเปิดแต่ละกลุ่ม
 - คู่มือบางสถานะอ้าง feature flag และ commit เก่า ต้องทำ content/version audit แล้ว regenerate PDF/เว็บไซต์จาก source ปัจจุบัน
 - เอกสาร screenshot tracker เดือนพฤษภาคมล้าสมัยกว่าภาพที่มีจริง จึงห้ามใช้ tracker นั้นเป็นสถานะปัจจุบันจนกว่าจะ reconcile
 - ต้องทดสอบ controlled reboot, external uptime alert และกำหนด RTO/RPO/on-call เพื่อปิด operational resilience

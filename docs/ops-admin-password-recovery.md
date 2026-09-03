@@ -1,6 +1,6 @@
 # คู่มือเปิดใช้การกู้คืนรหัสผ่านผู้ดูแลระบบผ่าน LINE
 
-แผนขยายงานและ decision gate ของแต่ละบทบาทอยู่ที่ `docs/admin-password-recovery-roadmap.md`
+แผนขยายงานทุกสิทธิ์และ decision gate ของแต่ละบทบาทอยู่ที่ `docs/password-recovery-all-roles-roadmap.md`
 
 สถานะเริ่มต้น: **ปิด (dark launch)** รองรับเฉพาะบัญชี `role=admin`
 

@@ -57,6 +57,7 @@
 - Audit log และการตรวจสอบย้อนหลังตามสิทธิ์
 - การตรวจรถ/เอกสาร/คิวรับรองของขนส่งและโรงเรียน
 - Parent LINE binding/status/notification เฉพาะ policy ที่อนุมัติให้เปิด
+- การลืมรหัสผ่านด้วยตนเองครบ 6 login roles และการกู้คืนการผูก LINE ของผู้ปกครอง
 - Backup, off-host, restore, monitoring, incident response และ rollback
 
 ### 4.2 Feature ที่ต้องตัดสินใจว่าจะรับรองหรือ defer
@@ -71,7 +72,7 @@
 | QR level 3 | ปิด | ต้องมี consent และ data-minimization approval |
 | Parent consent required | ปิด | ต้องรับรองข้อความ/ฐานกฎหมาย/กระบวนการถอนความยินยอม |
 | Admin password recovery | dark launch | ต้องผ่าน admin + LINE UAT ก่อนเปิด |
-| Recovery ของบทบาทอื่น | ยังไม่อยู่ใน accepted scope | ต้องยืนยัน ownership ของบัญชีกลาง/บัญชีบุคคล |
+| Account recovery ทุกสิทธิ์ | เป็น accepted scope บังคับ | ใช้ Admin เป็น pilot แล้วขยายทุก role; ผู้ปกครองใช้การผูก LINE ใหม่แทนรหัสผ่าน |
 
 การ defer ต้องบันทึก `feature`, `เหตุผล`, `ความเสี่ยง`, `workaround`, `owner`, `target release` และยืนยันว่าเมนู/API ถูกซ่อนอย่างปลอดภัย
 
@@ -122,7 +123,7 @@ Exit gate: baseline ทุกเอกสารอ้าง commit เดีย�
 - [ ] ยืนยันทุก query ใช้ scope ฝั่ง server ไม่พึ่งการซ่อนเมนูอย่างเดียว
 - [ ] ปิด Critical/Major logic conflict และเพิ่ม regression test
 - [ ] ตัดสินใจ feature flags ทุกตัวว่า `accept`, `pilot` หรือ `defer`
-- [ ] ทำ admin password recovery UAT ตาม `docs/admin-password-recovery-roadmap.md`
+- [ ] ทำ Admin technical pilot แล้วขยาย account recovery ครบทุกสิทธิ์ตาม `docs/password-recovery-all-roles-roadmap.md`
 
 Exit gate: Core scope ไม่มี Critical/Major defect และ logic decision ลงนามครบ
 
@@ -300,6 +301,7 @@ Exit gate: ผ่าน Definition of Done ทั้งหมดและผู�
 - [ ] Release candidate commit ตรงกับ `/health.data.commit` และ server worktree สะอาด
 - [ ] Tests/build/dependency/security/migration validators ผ่าน
 - [ ] UAT evidence pack ทุกบทบาทผ่าน strict validator
+- [ ] Account recovery ทุก login role และ parent LINE re-link ผ่าน UAT ตาม policy ของบทบาท
 - [ ] Critical = 0, Major = 0
 - [ ] Data owner รับรองข้อมูลใน rollout scope
 - [ ] DPO/legal decision ครบตาม feature ที่เปิด

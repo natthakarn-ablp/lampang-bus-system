@@ -22,6 +22,9 @@
 - ระบบ production เป็น single backend instance และ lockout/dedup/linking state บางส่วนอยู่ใน memory; ต้องย้าย state ไป Redis/DB ก่อน scale หลาย instance
 - Security residuals ที่ต้อง fix หรือมี risk acceptance: refresh-token rotation/replay, localStorage token, export rate-limit coverage, export streaming และ legacy weak-password rotation
 - ต้องยืนยัน PDPA/consent/QR/LINE policy โดย DPO/ผู้มีอำนาจจริงก่อนเปิด feature ที่เกี่ยวข้อง
+- มี consent ledger และ UI สำหรับ Parent Vehicle QR/Driver แล้ว แต่ ParentStatus ยังไม่มี consent UI, `/api/parent/children` ยังไม่ใช้ consent gate และ feature dependency ยังไม่ป้องกันการเปิด parent consent โดยไม่มีช่องทางให้ consent
+- Consent, privacy acknowledgement และ data certification ต้องแยกความหมาย/ตารางหลักฐานตาม `docs/pdpa-consent-and-data-confirmation-plan.md`; ปัจจุบัน acknowledgement/certification ข้ามบทบาทยังไม่ implement
+- ต้องทดสอบว่าการถอน driver/parent consent มีผลสอดคล้องกันใน QR, ParentStatus, LIFF, LINE message, report และ export ก่อนเปิด production
 - Account recovery ทุกสิทธิ์เป็น accepted scope; ต้องตัดสินใจ business logic ของบัญชีกลางโรงเรียน/ต้นสังกัด/ขนส่ง และบัญชีคนขับที่ login ด้วยทะเบียนรถก่อนเปิดแต่ละกลุ่ม
 - คู่มือบางสถานะอ้าง feature flag และ commit เก่า ต้องทำ content/version audit แล้ว regenerate PDF/เว็บไซต์จาก source ปัจจุบัน
 - เอกสาร screenshot tracker เดือนพฤษภาคมล้าสมัยกว่าภาพที่มีจริง จึงห้ามใช้ tracker นั้นเป็นสถานะปัจจุบันจนกว่าจะ reconcile

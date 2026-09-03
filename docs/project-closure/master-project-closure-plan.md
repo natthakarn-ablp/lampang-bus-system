@@ -2,7 +2,7 @@
 
 ชื่อระบบ: อุ่นใจไปโรงเรียน (School Safe Connect)
 
-อัปเดต: 3 กันยายน 2569
+อัปเดต: 4 กันยายน 2569
 
 สถานะเอกสาร: Master plan สำหรับดำเนินงานต่อและปิดโครงการ ไม่ใช่หนังสือรับรองว่าโครงการปิดแล้ว
 
@@ -150,6 +150,9 @@ Exit gate: Critical data integrity = 0, Major = 0 และ Data owner sign-off 
 - [ ] ตรวจ default/legacy weak passwords และกำหนด force rotation
 - [ ] รับรอง data inventory, purpose, minimization, retention, access request และ breach response
 - [ ] DPO/legal ตัดสินใจ LINE, consent, QR และข้อมูลระดับสูง
+- [ ] ดำเนินการตาม `docs/pdpa-consent-and-data-confirmation-plan.md` โดยแยก Consent, Acknowledgement และ Data Certification ห้ามใช้กล่องยินยอมรวมทุกวัตถุประสงค์
+- [ ] เพิ่มกล่องรับทราบทุกบทบาทและการรับรองข้อมูลก่อน import/รับรองสถานะ พร้อมหลักฐานแบบ append-only
+- [ ] ปิดช่องว่าง parent consent UI/API และพิสูจน์ withdrawal cascade ครบ QR, ParentStatus, LIFF, LINE, report และ export ก่อนเปิด feature flag
 - [ ] ทดสอบ incident playbook กรณีข้อมูลข้ามสิทธิ์, LINE ผิดคน และไฟล์ export หลุด
 
 Exit gate: ไม่มี Critical/Major security finding, DPO decision ครบ และ residual risk มีผู้มีอำนาจลงนาม
@@ -305,6 +308,7 @@ Exit gate: ผ่าน Definition of Done ทั้งหมดและผู�
 - [ ] Critical = 0, Major = 0
 - [ ] Data owner รับรองข้อมูลใน rollout scope
 - [ ] DPO/legal decision ครบตาม feature ที่เปิด
+- [ ] Consent/Acknowledgement/Data Certification ผ่าน Matrix และ UAT ใน `docs/pdpa-consent-and-data-confirmation-plan.md`
 - [ ] Capacity test ผ่านค่าที่ประกาศ โดยเฉพาะคำกล่าวรองรับ 1,000 concurrent users
 - [ ] Backup/off-host/restore/reboot/rollback/monitor ผ่านพร้อมหลักฐาน
 - [ ] คู่มือและเว็บไซต์ตรงกับ release ปัจจุบัน
@@ -322,6 +326,7 @@ Exit gate: ผ่าน Definition of Done ทั้งหมดและผู�
 - UAT evidence/sign-off แยกบทบาท
 - Data-quality report และ Data owner certification
 - DPO/privacy/legal decisions
+- Consent, privacy acknowledgement และ data-certification evidence ตามเวอร์ชัน/ขอบเขต โดย redact ข้อมูลระบุตัวบุคคล
 - Backup/off-host/restore/reboot/rollback/monitor logs แบบ redacted
 - คู่มือ HTML/PDF, training deck, attendance และ FAQ
 - Incident/support/hypercare summary

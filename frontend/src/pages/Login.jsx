@@ -103,9 +103,9 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-ink">
-      <div className="flex min-h-screen items-center justify-center px-3 py-3 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
+      <div className="flex min-h-screen items-center justify-center px-3 py-3 sm:px-6 sm:py-6 lg:px-10 lg:py-6">
         <div className="grid w-full max-w-6xl overflow-hidden rounded-lg border border-surface-border bg-white shadow-elevate motion-safe:animate-scale-in lg:grid-cols-[1.08fr_0.92fr]">
-          <section className="hidden min-h-[620px] bg-brand-900 p-9 text-white lg:block">
+          <section className="hidden min-h-[580px] bg-brand-900 p-8 text-white lg:block xl:min-h-[600px]">
             <div className="flex h-full flex-col justify-between">
               <div>
                 <div className="inline-flex items-center gap-3 text-sm font-semibold text-blue-50">
@@ -117,27 +117,27 @@ export default function Login() {
                   ระบบรถรับส่งนักเรียนจังหวัดลำปาง
                 </div>
 
-                <div className="mt-8 overflow-hidden rounded-lg border border-white/30 bg-white shadow-elevate">
+                <div className="mt-6 overflow-hidden rounded-lg border border-white/30 bg-white shadow-elevate">
                   <img
                     src={BRAND_BANNER}
                     alt="ระบบรถรับส่งนักเรียนจังหวัดลำปาง เดินทางปลอดภัย อุ่นใจทุกเส้นทาง"
-                    className="aspect-[16/7] w-full object-cover"
+                    className="aspect-[16/6] w-full object-cover"
                   />
                 </div>
 
-                <div className="mt-7 max-w-xl">
-                  <p className="text-base font-semibold text-cyan-100">อุ่นใจไปโรงเรียน</p>
-                  <h1 className="mt-3 text-4xl font-black leading-tight tracking-normal">
+                <div className="mt-5 max-w-xl">
+                  <p className="text-sm font-semibold text-cyan-100">อุ่นใจไปโรงเรียน</p>
+                  <h1 className="mt-2 text-3xl font-black leading-tight tracking-normal">
                     ทุกการเดินทางของนักเรียน
-                    <span className="mt-2 block text-3xl text-cyan-100">ต้องปลอดภัย ตรวจสอบได้ และอุ่นใจทุกคน</span>
+                    <span className="mt-1 block text-2xl text-cyan-100">ต้องปลอดภัย ตรวจสอบได้ และอุ่นใจทุกคน</span>
                   </h1>
-                  <p className="mt-4 max-w-lg text-base leading-7 text-blue-50">
+                  <p className="mt-3 max-w-lg text-sm leading-6 text-blue-50">
                     ใช้ติดตามข้อมูลรถรับส่ง นักเรียน คนขับ ผู้ปกครอง โรงเรียน ต้นสังกัด และรายงานการเดินทางในจังหวัดลำปาง
                   </p>
                 </div>
               </div>
 
-              <div className="mt-7 border-t border-white/20 pt-5">
+              <div className="mt-5 border-t border-white/20 pt-4">
                 <div className="grid grid-cols-3 gap-5">
                   {[
                     ['6', 'สิทธิ์ผู้ใช้งาน'],
@@ -145,8 +145,8 @@ export default function Login() {
                     ['แจ้งเตือน', 'ถึงผู้ปกครอง'],
                   ].map(([value, label]) => (
                     <div key={label}>
-                      <p className="text-2xl font-black text-white">{value}</p>
-                      <p className="mt-1 text-sm text-blue-100">{label}</p>
+                      <p className="text-xl font-black text-white">{value}</p>
+                      <p className="mt-1 text-xs text-blue-100">{label}</p>
                     </div>
                   ))}
                 </div>
@@ -154,7 +154,7 @@ export default function Login() {
             </div>
           </section>
 
-          <main className="bg-surface-raised px-4 py-5 sm:px-10 sm:py-8 lg:px-12 lg:py-10">
+          <main className="bg-surface-raised px-4 py-5 sm:px-10 sm:py-8 lg:px-12">
             <div className="mx-auto flex w-full max-w-md flex-col">
               <div className="mb-5 lg:hidden">
                 <div className="inline-flex items-center gap-3 text-sm font-semibold text-brand-900">

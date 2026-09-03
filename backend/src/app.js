@@ -127,6 +127,7 @@ app.use(GLOBAL_API_LIMITED_PREFIXES, globalApiLimiter);
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth',   authRoutes);
+app.use('/api/auth/recovery', require('./routes/adminPasswordRecovery.routes'));
 
 // ─── Phase 10.14 — Driver-initiated vehicle registration (feature-flagged) ───
 // Mounted BEFORE the broad /api/driver and /api/school routers so the more

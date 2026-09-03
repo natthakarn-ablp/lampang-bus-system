@@ -15,6 +15,8 @@ import Login from './pages/Login';
 // Lazy: everything past auth. Chunks are grouped by role so each user only
 // downloads what their role uses.
 const ChangePassword       = lazy(() => import('./pages/ChangePassword'));
+const ForgotPassword       = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword        = lazy(() => import('./pages/ResetPassword'));
 const ParentStatus         = lazy(() => import('./pages/parent/ParentStatus'));
 const ParentLink           = lazy(() => import('./pages/parent/ParentLink'));
 const VehicleQr            = lazy(() => import('./pages/qr/VehicleQr'));
@@ -112,6 +114,7 @@ const ExecutivePrint       = lazy(() => import('./pages/admin/ExecutivePrint'));
 const SystemHealth         = lazy(() => import('./pages/admin/SystemHealth'));
 const TermSettings         = lazy(() => import('./pages/admin/TermSettings'));
 const AdminLiveVehicles    = lazy(() => import('./pages/admin/AdminLiveVehicles'));
+const AdminAccountSecurity = lazy(() => import('./pages/admin/AdminAccountSecurity'));
 
 export const ROLE_HOME = {
   driver:      '/driver',
@@ -196,6 +199,8 @@ export default function App() {
         <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/manual/*" element={<ManualRedirect />} />
 
@@ -332,6 +337,11 @@ export default function App() {
           <Route path="/admin/users" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><UserManagement /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/parent/link/admin-recovery" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><AdminAccountSecurity /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/audit-logs" element={

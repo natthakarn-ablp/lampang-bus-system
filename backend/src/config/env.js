@@ -52,6 +52,23 @@ function validateFeatureDependencies(source = process.env) {
   if (source.FEATURE_QR_LEVEL3 === 'true' && source.FEATURE_VEHICLE_QR !== 'true') {
     throw new Error('FEATURE_QR_LEVEL3 requires FEATURE_VEHICLE_QR=true');
   }
+  if (source.FEATURE_ADMIN_PASSWORD_RECOVERY === 'true') {
+    if (!String(source.LINE_LIFF_ID || '').trim()) {
+      throw new Error('FEATURE_ADMIN_PASSWORD_RECOVERY requires LINE_LIFF_ID');
+    }
+    if (!String(source.LINE_CHANNEL_ACCESS_TOKEN || '').trim()) {
+      throw new Error('FEATURE_ADMIN_PASSWORD_RECOVERY requires LINE_CHANNEL_ACCESS_TOKEN');
+    }
+    let publicUrl;
+    try {
+      publicUrl = new URL(source.PUBLIC_APP_URL || 'https://schoolbuslampang.com');
+    } catch {
+      throw new Error('PUBLIC_APP_URL must be a valid HTTPS URL');
+    }
+    if (publicUrl.protocol !== 'https:') {
+      throw new Error('PUBLIC_APP_URL must be a valid HTTPS URL');
+    }
+  }
   return true;
 }
 
@@ -161,6 +178,7 @@ const env = {
       'https://schoolbuslampang.com,https://www.schoolbuslampang.com,https://schoolbus.lp-pao.go.th')
       .split(',').map((s) => s.trim()).filter(Boolean),
     timezone: process.env.TZ || 'Asia/Bangkok',
+    publicUrl: process.env.PUBLIC_APP_URL || 'https://schoolbuslampang.com',
     currentTerm: process.env.CURRENT_TERM || '2568-2',
     // Hour (0-23, Bangkok time) at which the session switches morning → evening.
     // Before this hour = morning (ส่งเช้า). From this hour onward = evening (รับเย็น).
@@ -174,6 +192,9 @@ const env = {
   // featureVehicleQr is false the /api/qr + /api/consent routers are not mounted,
   // so the existing system is byte-for-byte unchanged.
   features: {
+    // Admin-only self-service recovery through server-verified LINE Login plus
+    // a one-use recovery code. Migration 049 must exist before enabling.
+    adminPasswordRecovery: process.env.FEATURE_ADMIN_PASSWORD_RECOVERY === 'true',
     vehicleQr: process.env.FEATURE_VEHICLE_QR === 'true',
     driverShiftSelection: process.env.FEATURE_DRIVER_SHIFT_SELECTION === 'true',
     qrLevel3: process.env.FEATURE_QR_LEVEL3 === 'true',   // Level-3 sensitive viewer (default off, DPO-gated)

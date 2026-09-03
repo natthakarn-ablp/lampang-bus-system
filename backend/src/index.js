@@ -81,6 +81,37 @@ const REQUIRED_TRACKING_TABLES = [
   'eta_predictions',
 ];
 
+const REQUIRED_ADMIN_RECOVERY_TABLES = [
+  'user_recovery_channels',
+  'user_recovery_codes',
+  'password_reset_requests',
+];
+
+async function assertAdminRecoveryMigrationPresent() {
+  if (!env.features.adminPasswordRecovery) return;
+  const placeholders = REQUIRED_ADMIN_RECOVERY_TABLES.map(() => '?').join(', ');
+  let presentTables;
+  try {
+    const [rows] = await pool.query(
+      `SELECT table_name AS table_name FROM information_schema.tables
+        WHERE table_schema = ? AND table_name IN (${placeholders})`,
+      [env.db.name, ...REQUIRED_ADMIN_RECOVERY_TABLES]
+    );
+    presentTables = new Set(rows.map((row) => String(row.table_name).toLowerCase()));
+  } catch (error) {
+    throw new Error(`Could not verify admin-recovery migration 049: ${error.message}`);
+  }
+  const missing = REQUIRED_ADMIN_RECOVERY_TABLES.filter((table) => !presentTables.has(table));
+  if (missing.length) {
+    console.error(
+      `[app] FATAL: FEATURE_ADMIN_PASSWORD_RECOVERY=true requires migration 049 — ` +
+      `missing table(s): ${missing.join(', ')}.`
+    );
+    process.exit(1);
+  }
+  console.log('[app] Admin password-recovery migration check passed (migration 049 tables present)');
+}
+
 async function assertTrackingMigrationPresent() {
   const anyTrackingFlag =
     env.features.eta || env.features.geofence || env.features.routeDeviation;
@@ -123,6 +154,7 @@ async function start() {
   await testConnection();
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();
+  await assertAdminRecoveryMigrationPresent();
   // Warm the current-term cache so getCurrentTermCachedSync() returns the live
   // DB value (terms.is_current) from the first request. Best-effort — falls back
   // to env.app.currentTerm if the table/row isn't present yet (pre-migration-046).

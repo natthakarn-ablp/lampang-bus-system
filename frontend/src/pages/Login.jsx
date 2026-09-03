@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ChevronDown,
@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/Toast';
 import { ROLE_HOME } from '../App';
+import api from '../api/axios';
 
 // Token-based styles for each error class. Full border + soft semantic
 // background + readable ink (DESIGN.md: status is never color-only and never a
@@ -47,6 +48,13 @@ export default function Login() {
   const [loading,  setLoading]  = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [adminRecoveryEnabled, setAdminRecoveryEnabled] = useState(false);
+
+  useEffect(() => {
+    api.get('/auth/recovery/config')
+      .then((res) => setAdminRecoveryEnabled(Boolean(res.data.data?.admin_password_recovery)))
+      .catch(() => setAdminRecoveryEnabled(false));
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -285,6 +293,11 @@ export default function Login() {
                     <p className="font-bold">ช่องทางขอความช่วยเหลือ</p>
                     <p className="mt-1">โรงเรียนและคนขับ: ติดต่อผู้ดูแลบัญชีของโรงเรียน</p>
                     <p>ต้นสังกัด ขนส่ง และจังหวัด: ติดต่อผู้ดูแลระบบระดับจังหวัด</p>
+                    {adminRecoveryEnabled && (
+                      <Link to="/forgot-password" className="focus-ring mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-white px-3 font-bold text-brand-700 shadow-sm hover:bg-surface">
+                        ผู้ดูแลระบบ: รีเซ็ตผ่าน LINE
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>

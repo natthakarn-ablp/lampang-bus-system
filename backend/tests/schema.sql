@@ -1200,6 +1200,53 @@ ALTER TABLE audit_logs
        'GEOFENCE_ENTER','GEOFENCE_EXIT','ROUTE_DEVIATION','ETA_REFRESH')
   NOT NULL, ALGORITHM=INSTANT;
 
+-- Migration 049: admin password recovery (dark by default)
+CREATE TABLE IF NOT EXISTS user_recovery_channels (
+  id bigint NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  provider enum('LINE') NOT NULL,
+  provider_subject varchar(100) NOT NULL,
+  is_verified tinyint(1) NOT NULL DEFAULT '1',
+  verified_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_recovery_channel_user_provider (user_id, provider),
+  UNIQUE KEY uq_recovery_channel_subject (provider, provider_subject),
+  CONSTRAINT fk_recovery_channel_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_recovery_codes (
+  id bigint NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  code_hash char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  used_at timestamp NULL,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_recovery_code_hash (code_hash),
+  KEY idx_recovery_code_user_unused (user_id, used_at),
+  CONSTRAINT fk_recovery_code_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS password_reset_requests (
+  id char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  user_id int NOT NULL,
+  token_hash char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  expires_at timestamp NOT NULL,
+  used_at timestamp NULL,
+  delivery_status enum('PENDING','SENT','FAILED') NOT NULL DEFAULT 'PENDING',
+  failed_attempts tinyint unsigned NOT NULL DEFAULT '0',
+  request_ip_hash char(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  active_user_id int GENERATED ALWAYS AS ((case when (`used_at` is null) then `user_id` else NULL end)) STORED,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_password_reset_token_hash (token_hash),
+  UNIQUE KEY uq_password_reset_one_active_per_user (active_user_id),
+  KEY idx_password_reset_user_active (user_id, used_at, expires_at),
+  KEY idx_password_reset_expiry (expires_at),
+  CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

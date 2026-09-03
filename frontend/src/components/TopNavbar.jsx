@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, Bell, ChevronDown, LogOut, KeyRound, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Menu, Bell, ChevronDown, LogOut, KeyRound, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getGradeScope } from '../utils/authScope';
 import api from '../api/axios';
@@ -49,7 +49,7 @@ function useDismissable(open, setOpen, ref) {
 }
 
 export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollapsed = false }) {
-  const { user, logout } = useAuth();
+  const { user, features, logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -217,6 +217,16 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
                 <KeyRound className="w-4 h-4 text-ink-muted" strokeWidth={2} />
                 เปลี่ยนรหัสผ่าน
               </button>
+              {isAdmin && features?.adminPasswordRecovery && (
+                <button
+                  role="menuitem"
+                  onClick={() => { setMenuOpen(false); navigate('/parent/link/admin-recovery'); }}
+                  className="focus-ring w-full flex items-center gap-2 px-4 py-2.5 min-h-[44px] text-sm text-ink hover:bg-surface active:bg-surface-border transition"
+                >
+                  <ShieldCheck className="w-4 h-4 text-ink-muted" strokeWidth={2} />
+                  ความปลอดภัยบัญชี
+                </button>
+              )}
               <button
                 role="menuitem"
                 onClick={handleLogout}

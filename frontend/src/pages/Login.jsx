@@ -289,10 +289,14 @@ export default function Login() {
                 )}
               </div>
 
-              <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-ink-muted">
-                <ShieldCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
-                ระบบกำกับความปลอดภัยรถรับส่งนักเรียน
-              </p>
+              <footer className="mt-3 border-t border-surface-border pt-3 text-center text-xs leading-5 text-ink-muted">
+                <p className="flex items-center justify-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
+                  ริเริ่ม ออกแบบ และพัฒนาระบบโดย
+                </p>
+                <p className="font-bold text-ink">นางสาวณัฐกานต์ เสถียรกาล</p>
+                <p>ครูโรงเรียนอนุบาลลำปางเขลางค์รัตน์อนุสรณ์</p>
+              </footer>
             </div>
           </main>
         </div>

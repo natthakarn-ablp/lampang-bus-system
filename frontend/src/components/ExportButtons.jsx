@@ -4,9 +4,9 @@ import { useAuth } from '../hooks/useAuth';
 import { getGradeScope } from '../utils/authScope';
 
 const FORMATS = [
-  { key: 'csv',   label: 'CSV',   ext: 'csv',  style: 'bg-success-soft hover:bg-success-soft/80 text-success border-success/20' },
+  { key: 'csv',   label: 'CSV',   ext: 'csv',  style: 'bg-success-soft hover:bg-success-soft/80 text-success-ink border-success/20' },
   { key: 'excel', label: 'Excel', ext: 'xlsx', style: 'bg-brand-50 hover:bg-brand-50/80 text-brand-700 border-brand-200' },
-  { key: 'pdf',   label: 'PDF',   ext: 'pdf',  style: 'bg-danger-soft hover:bg-danger-soft/80 text-danger border-danger/20' },
+  { key: 'pdf',   label: 'PDF',   ext: 'pdf',  style: 'bg-danger-soft hover:bg-danger-soft/80 text-danger-ink border-danger/20' },
 ];
 
 export default function ExportButtons({

@@ -138,7 +138,7 @@ export default function DataTable({
           rather than a bare overflow div. */}
       <AppCard padding="none" className="hidden md:block overflow-hidden">
         <div
-          className="focus-ring overflow-x-auto"
+          className="focus-ring app-scrollbar overflow-x-auto"
           role="region"
           aria-label={caption || 'ตารางข้อมูล'}
           tabIndex={0}

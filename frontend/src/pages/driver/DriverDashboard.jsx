@@ -560,9 +560,9 @@ export default function DriverDashboard() {
 function SummaryPill({ label, value, color }) {
   const cls = {
     blue:  'bg-brand-50   text-brand-700 border-brand-200',
-    green: 'bg-success-soft text-success border-success/30',
-    amber: 'bg-warn-soft    text-warn    border-warn/30',
-    red:   'bg-danger-soft  text-danger  border-danger/30',
+    green: 'bg-success-soft text-success-ink border-success/30',
+    amber: 'bg-warn-soft    text-warn-ink    border-warn/30',
+    red:   'bg-danger-soft  text-danger-ink  border-danger/30',
   };
   return (
     <div className={`rounded-xl border text-center py-2 px-1 ${cls[color] || cls.blue}`}>

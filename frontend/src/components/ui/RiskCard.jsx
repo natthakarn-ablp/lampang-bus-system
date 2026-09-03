@@ -6,9 +6,9 @@ import StatusBadge from './StatusBadge';
 // never a decorative left bar or color alone (DESIGN.md: status needs text/icon,
 // no border-left accent strips).
 const LEVEL = {
-  low:    { chip: 'bg-success-soft text-success', badge: 'success', label: 'ปกติ' },
-  medium: { chip: 'bg-warn-soft    text-warn',    badge: 'warn',    label: 'เฝ้าระวัง' },
-  high:   { chip: 'bg-danger-soft  text-danger',  badge: 'danger',  label: 'เสี่ยงสูง' },
+  low:    { chip: 'bg-success-soft text-success-ink', badge: 'success', label: 'ปกติ' },
+  medium: { chip: 'bg-warn-soft    text-warn-ink',    badge: 'warn',    label: 'เฝ้าระวัง' },
+  high:   { chip: 'bg-danger-soft  text-danger-ink',  badge: 'danger',  label: 'เสี่ยงสูง' },
 };
 
 export default function RiskCard({

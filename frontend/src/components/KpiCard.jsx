@@ -17,9 +17,9 @@ export default function KpiCard({ label, pct, detail, sub }) {
                     'ink-muted';
 
   const colors = {
-    success:   'bg-success-soft  border-success/20  text-success',
-    warn:      'bg-warn-soft     border-warn/20     text-warn',
-    danger:    'bg-danger-soft   border-danger/20   text-danger',
+    success:   'bg-success-soft  border-success/20  text-success-ink',
+    warn:      'bg-warn-soft     border-warn/20     text-warn-ink',
+    danger:    'bg-danger-soft   border-danger/20   text-danger-ink',
     'ink-muted': 'bg-surface    border-surface-border text-ink-muted',
   };
 

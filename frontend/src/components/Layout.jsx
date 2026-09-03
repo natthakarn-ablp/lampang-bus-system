@@ -61,7 +61,7 @@ export default function Layout({ children, bottomNav = null }) {
         />
         {/* The single page-level scroll container. Pages must not add their
             own full-height scrollers on top of this one. */}
-        <main className="flex-1 overflow-y-auto overscroll-contain bg-surface">
+        <main className="app-scrollbar scrollbar-gutter-stable flex-1 overflow-y-auto overscroll-contain bg-surface">
           {/* App-wide route transition: content fades in on navigation. Keyed by
               pathname so each route re-triggers; reduced-motion users get it
               instantly (motion-safe + the global prefers-reduced-motion rule). */}

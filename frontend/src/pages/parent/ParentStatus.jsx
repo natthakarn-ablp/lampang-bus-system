@@ -6,7 +6,7 @@ import AppCard from '../../components/ui/AppCard';
 import { formatGradeClass } from '../../utils/student';
 
 const STATUS_MAP = {
-  CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-success-soft text-success border-success/30', icon: '✅' },
+  CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-success-soft text-success-ink border-success/30', icon: '✅' },
   CHECKED_OUT: { label: 'ส่งแล้ว',  cls: 'bg-brand-100 text-brand-700 border-brand-200',  icon: '✅' },
   ABSENT:      { label: 'ไม่มา',   cls: 'bg-red-100 text-red-700 border-red-200',    icon: '❌' },
   CANCELLED:   { label: 'ยกเลิก',  cls: 'bg-surface text-ink-muted border-surface-border',  icon: '↩️' },

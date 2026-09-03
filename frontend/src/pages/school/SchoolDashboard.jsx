@@ -273,10 +273,10 @@ export default function SchoolDashboard() {
             const Chip = ({ tone, label, value }) => {
               const cls = {
                 neutral: 'bg-surface-raised text-ink-muted border-surface-border',
-                info:    'bg-info-soft   text-info   border-info/30',
-                warn:    'bg-warn-soft   text-warn   border-warn/30',
-                danger:  'bg-danger-soft text-danger border-danger/30',
-                success: 'bg-success-soft text-success border-success/30',
+                info:    'bg-info-soft   text-info-ink   border-info/30',
+                warn:    'bg-warn-soft   text-warn-ink   border-warn/30',
+                danger:  'bg-danger-soft text-danger-ink border-danger/30',
+                success: 'bg-success-soft text-success-ink border-success/30',
               }[tone] || 'bg-surface-raised text-ink-muted border-surface-border';
               return (
                 <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border tabular-nums ${cls}`}>
@@ -584,9 +584,9 @@ function VehicleRow({ vehicle, isExpanded, onToggle }) {
   // row state is never communicated by color alone (DESIGN.md No Color-Only
   // Status Rule). Replaces the former bare colored vertical strip.
   const status = allMorningDone && allEveningDone
-    ? { Icon: CheckCircle2, cls: 'bg-success-soft text-success', label: 'ครบแล้ว' }
+    ? { Icon: CheckCircle2, cls: 'bg-success-soft text-success-ink', label: 'ครบแล้ว' }
     : mPending + ePending > 0
-    ? { Icon: AlertTriangle, cls: 'bg-warn-soft text-warn', label: 'มีรายการค้าง' }
+    ? { Icon: AlertTriangle, cls: 'bg-warn-soft text-warn-ink', label: 'มีรายการค้าง' }
     : { Icon: Bus, cls: 'bg-surface text-ink-muted', label: 'ยังไม่เริ่ม' };
   const StatusIcon = status.Icon;
 

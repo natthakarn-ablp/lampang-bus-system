@@ -1,6 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Lock, WifiOff, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  CircleHelp,
+  Clock,
+  Eye,
+  EyeOff,
+  Loader2,
+  Lock,
+  ShieldCheck,
+  WifiOff,
+} from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/Toast';
 import { ROLE_HOME } from '../App';
@@ -17,12 +28,13 @@ const ERROR_STYLE = {
 };
 
 const FIELD_CLASS =
-  'w-full min-h-[48px] rounded-2xl border border-surface-border bg-surface-raised px-4 py-3 ' +
+  'w-full min-h-[48px] rounded-lg border border-surface-border bg-surface-raised px-4 py-3 ' +
   'text-lg font-semibold text-ink placeholder:text-ink-muted/70 shadow-sm transition-colors duration-150 ' +
   'focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/15';
 
-const BRAND_LOGO = '/brand/school-safe-logo.jpg';
-const BRAND_BANNER = '/brand/school-safe-banner.png';
+const BRAND_LOGO = '/brand/school-safe-logo.webp';
+const BRAND_BANNER = '/brand/school-safe-banner.webp';
+const BRAND_BANNER_MOBILE = '/brand/school-safe-banner-640.webp';
 
 export default function Login() {
   const { login } = useAuth();
@@ -34,6 +46,7 @@ export default function Login() {
   const [error,    setError]    = useState(null); // { msg, hint?, type? }
   const [loading,  setLoading]  = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -89,29 +102,13 @@ export default function Login() {
   const errStyle = error ? (ERROR_STYLE[error.type] || ERROR_STYLE.server) : null;
 
   return (
-    <div className="min-h-screen overflow-hidden bg-slate-50 text-ink">
-      <div
-        className="pointer-events-none fixed inset-0 opacity-70"
-        aria-hidden="true"
-        style={{
-          backgroundImage:
-            'linear-gradient(90deg, rgba(37,99,235,0.07) 1px, transparent 1px), linear-gradient(rgba(37,99,235,0.07) 1px, transparent 1px)',
-          backgroundSize: '72px 72px',
-        }}
-      />
-
-      <div className="relative flex min-h-screen items-center justify-center px-4 py-8 sm:px-6 lg:px-10">
-        <div className="grid w-full max-w-6xl overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-2xl shadow-brand-900/10 motion-safe:animate-scale-in lg:grid-cols-[1.08fr_0.92fr]">
-          <section className="relative hidden min-h-[640px] bg-brand-900 p-10 text-white lg:block">
-            <div className="absolute inset-0" aria-hidden="true">
-              <div className="absolute left-[-10%] top-[-14%] h-96 w-96 rounded-full bg-info/20 blur-3xl" />
-              <div className="absolute bottom-[-18%] right-[-10%] h-[28rem] w-[28rem] rounded-full bg-brand-600/20 blur-3xl" />
-              <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-slate-950/45 to-transparent" />
-            </div>
-
-            <div className="relative z-10 flex h-full flex-col justify-between">
+    <div className="min-h-screen bg-slate-50 text-ink">
+      <div className="flex min-h-screen items-center justify-center px-3 py-3 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
+        <div className="grid w-full max-w-6xl overflow-hidden rounded-lg border border-surface-border bg-white shadow-elevate motion-safe:animate-scale-in lg:grid-cols-[1.08fr_0.92fr]">
+          <section className="hidden min-h-[620px] bg-brand-900 p-9 text-white lg:block">
+            <div className="flex h-full flex-col justify-between">
               <div>
-                <div className="inline-flex items-center gap-3 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-blue-50 backdrop-blur">
+                <div className="inline-flex items-center gap-3 text-sm font-semibold text-blue-50">
                   <img
                     src={BRAND_LOGO}
                     alt=""
@@ -120,7 +117,7 @@ export default function Login() {
                   ระบบรถรับส่งนักเรียนจังหวัดลำปาง
                 </div>
 
-                <div className="mt-10 overflow-hidden rounded-[24px] border border-white/30 bg-white shadow-2xl shadow-slate-950/30">
+                <div className="mt-8 overflow-hidden rounded-lg border border-white/30 bg-white shadow-elevate">
                   <img
                     src={BRAND_BANNER}
                     alt="ระบบรถรับส่งนักเรียนจังหวัดลำปาง เดินทางปลอดภัย อุ่นใจทุกเส้นทาง"
@@ -128,26 +125,26 @@ export default function Login() {
                   />
                 </div>
 
-                <div className="mt-8 max-w-xl">
+                <div className="mt-7 max-w-xl">
                   <p className="text-base font-semibold text-cyan-100">อุ่นใจไปโรงเรียน</p>
                   <h1 className="mt-3 text-4xl font-black leading-tight tracking-normal">
                     ทุกการเดินทางของนักเรียน
                     <span className="mt-2 block text-3xl text-cyan-100">ต้องปลอดภัย ตรวจสอบได้ และอุ่นใจทุกคน</span>
                   </h1>
-                  <p className="mt-5 max-w-lg text-lg leading-8 text-blue-50">
+                  <p className="mt-4 max-w-lg text-base leading-7 text-blue-50">
                     ใช้ติดตามข้อมูลรถรับส่ง นักเรียน คนขับ ผู้ปกครอง โรงเรียน ต้นสังกัด และรายงานการเดินทางในจังหวัดลำปาง
                   </p>
                 </div>
               </div>
 
-              <div className="relative mt-8 rounded-2xl border border-white/20 bg-white/10 p-5 backdrop-blur">
-                <div className="grid grid-cols-3 gap-3">
+              <div className="mt-7 border-t border-white/20 pt-5">
+                <div className="grid grid-cols-3 gap-5">
                   {[
                     ['6', 'สิทธิ์ผู้ใช้งาน'],
                     ['ตรวจสอบ', 'ข้อมูลย้อนหลัง'],
                     ['แจ้งเตือน', 'ถึงผู้ปกครอง'],
                   ].map(([value, label]) => (
-                    <div key={label} className="rounded-xl bg-white/10 p-4">
+                    <div key={label}>
                       <p className="text-2xl font-black text-white">{value}</p>
                       <p className="mt-1 text-sm text-blue-100">{label}</p>
                     </div>
@@ -157,10 +154,10 @@ export default function Login() {
             </div>
           </section>
 
-          <main className="relative bg-surface-raised px-5 py-8 sm:px-10 lg:px-12 lg:py-14">
+          <main className="bg-surface-raised px-4 py-5 sm:px-10 sm:py-8 lg:px-12 lg:py-10">
             <div className="mx-auto flex w-full max-w-md flex-col">
-              <div className="mb-8 lg:hidden">
-                <div className="inline-flex items-center gap-3 rounded-full bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-900">
+              <div className="mb-5 lg:hidden">
+                <div className="inline-flex items-center gap-3 text-sm font-semibold text-brand-900">
                   <img
                     src={BRAND_LOGO}
                     alt=""
@@ -168,26 +165,29 @@ export default function Login() {
                   />
                   รถรับส่งนักเรียนลำปาง
                 </div>
-                <div className="mt-5 overflow-hidden rounded-3xl border border-brand-100 bg-brand-50 shadow-lg shadow-brand-900/10">
-                  <img
-                    src={BRAND_BANNER}
-                    alt="ระบบรถรับส่งนักเรียนจังหวัดลำปาง"
-                    className="h-32 w-full object-cover object-center"
-                  />
+                <div className="mt-3 overflow-hidden rounded-lg border border-brand-100 bg-brand-50">
+                  <picture>
+                    <source media="(max-width: 767px)" srcSet={BRAND_BANNER_MOBILE} />
+                    <img
+                      src={BRAND_BANNER}
+                      alt="ระบบรถรับส่งนักเรียนจังหวัดลำปาง"
+                      className="h-24 w-full object-cover object-center sm:h-28"
+                    />
+                  </picture>
                 </div>
               </div>
 
-              <div className="mb-8">
-                <p className="text-sm font-bold text-brand-600">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</p>
-                <h2 className="mt-3 text-4xl font-black leading-tight text-brand-900 sm:text-5xl">
+              <div className="mb-5">
+                <p className="hidden text-sm font-bold text-brand-600 lg:block">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</p>
+                <h2 className="text-3xl font-black leading-tight text-brand-900 sm:text-4xl lg:mt-2">
                   เข้าสู่ระบบ
                 </h2>
-                <p className="mt-3 text-base leading-7 text-ink-muted">
+                <p className="mt-2 text-sm leading-6 text-ink-muted sm:text-base">
                   สำหรับผู้มีสิทธิ์ใช้งานระบบ เพื่อตรวจสอบข้อมูลรถรับส่งและการเดินทางของนักเรียน
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label htmlFor="login-username" className="mb-2 block text-base font-bold text-ink">
                     ชื่อผู้ใช้หรือทะเบียนรถ
@@ -203,7 +203,7 @@ export default function Login() {
                     className={FIELD_CLASS}
                     placeholder="เช่น school001 หรือ กข-1234"
                   />
-                  <p className="mt-2 text-sm leading-6 text-ink-muted">
+                  <p className="mt-1.5 text-sm leading-5 text-ink-muted">
                     คนขับสามารถใช้ทะเบียนรถที่ได้รับมอบหมาย
                   </p>
                 </div>
@@ -216,10 +216,13 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
-                      className="inline-flex min-h-[44px] items-center rounded-full px-3 text-sm font-bold text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-4 focus:ring-brand-600/15"
+                      className="focus-ring inline-flex h-11 w-11 items-center justify-center rounded-lg text-brand-700 transition hover:bg-brand-50"
                       aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                      title={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
                     >
-                      {showPassword ? 'ซ่อน' : 'แสดง'}
+                      {showPassword
+                        ? <EyeOff className="h-5 w-5" aria-hidden="true" />
+                        : <Eye className="h-5 w-5" aria-hidden="true" />}
                     </button>
                   </div>
                   <input
@@ -238,7 +241,7 @@ export default function Login() {
                   <div
                     role="alert"
                     aria-live="polite"
-                    className={`rounded-2xl border px-4 py-3 text-sm motion-safe:animate-fade-in ${errStyle.wrap}`}
+                    className={`rounded-lg border px-4 py-3 text-sm motion-safe:animate-fade-in ${errStyle.wrap}`}
                   >
                     <p className="inline-flex items-center gap-1.5 font-semibold">
                       <errStyle.Icon className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden="true" />
@@ -253,25 +256,40 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-brand-600 px-5 py-3 text-lg font-black text-white shadow-lg shadow-brand-600/25 transition-[background-color,transform] duration-150 hover:bg-brand-700 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-600/30"
+                  className="focus-ring inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-3 text-lg font-black text-white shadow-soft transition-[background-color,transform] duration-150 hover:bg-brand-700 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                   {loading ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
                 </button>
               </form>
 
-              <div className="mt-6 flex flex-col gap-3 border-t border-surface-border pt-5 text-sm text-ink-muted sm:flex-row sm:items-center sm:justify-between">
-                <span>ลืมรหัสผ่านหรือเข้าใช้งานไม่ได้</span>
+              <div className="mt-4 border-t border-surface-border pt-3 text-sm text-ink-muted">
                 <button
                   type="button"
-                  onClick={() => toast.info('กรุณาติดต่อผู้ดูแลระบบประจำโรงเรียนหรือต้นสังกัด')}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full border border-brand-200 px-4 font-bold text-brand-700 transition hover:bg-brand-50 focus:outline-none focus:ring-4 focus:ring-brand-600/15"
+                  onClick={() => setShowHelp((value) => !value)}
+                  className="focus-ring flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg px-2 font-bold text-brand-700 transition hover:bg-brand-50"
+                  aria-expanded={showHelp}
+                  aria-controls="login-support-help"
                 >
-                  ติดต่อผู้ดูแลระบบ
+                  <span className="inline-flex items-center gap-2">
+                    <CircleHelp className="h-5 w-5" aria-hidden="true" />
+                    ลืมรหัสผ่านหรือเข้าใช้งานไม่ได้
+                  </span>
+                  <ChevronDown
+                    className={`h-5 w-5 transition-transform ${showHelp ? 'rotate-180' : ''}`}
+                    aria-hidden="true"
+                  />
                 </button>
+                {showHelp && (
+                  <div id="login-support-help" className="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-3 leading-6 text-ink motion-safe:animate-fade-in">
+                    <p className="font-bold">ช่องทางขอความช่วยเหลือ</p>
+                    <p className="mt-1">โรงเรียนและคนขับ: ติดต่อผู้ดูแลบัญชีของโรงเรียน</p>
+                    <p>ต้นสังกัด ขนส่ง และจังหวัด: ติดต่อผู้ดูแลระบบระดับจังหวัด</p>
+                  </div>
+                )}
               </div>
 
-              <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-ink-muted">
+              <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-ink-muted">
                 <ShieldCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
                 ระบบกำกับความปลอดภัยรถรับส่งนักเรียน
               </p>

@@ -76,6 +76,58 @@
     text-wrap: pretty;
   }
 
+  /* Quiet, high-contrast scrollbars for the app's intentional scroll regions.
+     Keeping this opt-in avoids changing third-party map controls and native
+     form widgets. */
+  .app-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #94A3B8 transparent;
+  }
+  .app-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .app-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .app-scrollbar::-webkit-scrollbar-thumb {
+    min-height: 44px;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-color: #CBD5E1;
+    background-clip: content-box;
+  }
+  .app-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #94A3B8;
+  }
+
+  .app-scrollbar-dark {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.34) transparent;
+  }
+  .app-scrollbar-dark::-webkit-scrollbar {
+    width: 10px;
+  }
+  .app-scrollbar-dark::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .app-scrollbar-dark::-webkit-scrollbar-thumb {
+    min-height: 44px;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-color: rgb(255 255 255 / 0.28);
+    background-clip: content-box;
+  }
+  .app-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(255 255 255 / 0.46);
+  }
+
+  @media (min-width: 768px) {
+    .scrollbar-gutter-stable {
+      scrollbar-gutter: stable;
+    }
+  }
+
   /* Staggered entrance — "content arriving" motion (DESIGN.md: motion explains
      a state change, never decoration). Direct children fade-in-up in sequence
      on mount; reduced-motion users land on the final state immediately via the

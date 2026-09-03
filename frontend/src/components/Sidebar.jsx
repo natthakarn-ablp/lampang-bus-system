@@ -323,7 +323,7 @@ export default function Sidebar({ onClose, collapsed = false }) {
       </div>
 
       {/* Navigation — the only scroll container in the shell besides <main> */}
-      <nav className={`flex-1 overflow-y-auto overscroll-contain py-3 ${collapsed ? 'px-2' : 'px-3'}`}>
+      <nav className={`app-scrollbar-dark flex-1 overflow-y-auto overscroll-contain py-3 ${collapsed ? 'px-2' : 'px-3'}`}>
         {groups.map((group, gi) => {
           const key = group.section || `__g${gi}`;
           const hasHeader = !!group.section;

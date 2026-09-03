@@ -4,9 +4,9 @@
 import { CheckCircle2, XCircle, AlertTriangle, Clock } from 'lucide-react';
 
 const INSPECTION_MAP = {
-  PASSED:    { label: 'ผ่าน',     cls: 'bg-success-soft text-success border-success/20',   Icon: CheckCircle2 },
-  FAILED:    { label: 'ไม่ผ่าน',  cls: 'bg-danger-soft text-danger border-danger/20',       Icon: XCircle },
-  NEEDS_FIX: { label: 'ต้องแก้ไข', cls: 'bg-warn-soft text-warn border-warn/20',           Icon: AlertTriangle },
+  PASSED:    { label: 'ผ่าน',     cls: 'bg-success-soft text-success-ink border-success/20', Icon: CheckCircle2 },
+  FAILED:    { label: 'ไม่ผ่าน',  cls: 'bg-danger-soft text-danger-ink border-danger/20',    Icon: XCircle },
+  NEEDS_FIX: { label: 'ต้องแก้ไข', cls: 'bg-warn-soft text-warn-ink border-warn/20',         Icon: AlertTriangle },
   PENDING:   { label: 'รอตรวจ',    cls: 'bg-surface text-ink-muted border-surface-border',  Icon: Clock },
 };
 

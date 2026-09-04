@@ -18,6 +18,8 @@
 
 scripts/*.js         text eol=lf
 scripts/**/*.js      text eol=lf
+scripts/*.mjs        text eol=lf
+scripts/**/*.mjs     text eol=lf
 backend/scripts/*.js text eol=lf
 backend/tests/*.js   text eol=lf
 

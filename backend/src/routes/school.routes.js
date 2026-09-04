@@ -49,7 +49,7 @@ function resolveSchoolId(req) {
 // Phase 7.11.5 — extracted into shared util so admin.routes.js can
 // use the same whitelist.
 const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents } = require('../utils/gradeScope');
-const { todayBangkok } = require('../utils/thaiTime');
+const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
 
 /**
  * Resolve grade scope for a school-scoped request.
@@ -1213,6 +1213,27 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// CS5-02 — normalise a client-supplied value into a Bangkok calendar date
+// before it reaches a DATE column.
+//
+// The two shapes are NOT interchangeable and must not be collapsed by
+// slicing. A bare 'YYYY-MM-DD' is already a calendar date, and re-parsing it
+// would reinterpret it as UTC midnight and shift it back a day. Anything else
+// is an instant — including the '2026-08-04T17:00:00.000Z' that a stale
+// frontend bundle still sends for 2026-08-05 — and the Bangkok date of that
+// instant is what belongs in the column. `toBangkokDate` is not enough on its
+// own here: its date-prefix rule slices an instant string rather than
+// converting it, which is the very off-by-one this route is fixing.
+// Returns undefined for input that is neither, so the caller can answer 400
+// rather than silently storing a wrong or NULL date.
+function toCalendarDate(value) {
+  const s = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const parsed = new Date(s);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return toBangkokDate(parsed);
+}
+
 // ─── PUT /vehicles/:id — แก้ไขข้อมูลรถในขอบเขตโรงเรียน (ลดการพึ่งแอดมิน) ─────────
 // School self-service: edit vehicle type / owner / insurance for a vehicle that
 // serves this school. Does NOT touch plate identity or driver assignment (Tier 3).
@@ -1247,7 +1268,10 @@ router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
     strField('insurance_status', 50);
     strField('insurance_type', 50);
     if (b.insurance_expiry !== undefined) {
-      const v = b.insurance_expiry || null;
+      // CS5-02 — pin the write boundary to a Bangkok calendar date so the
+      // round trip through the edit form cannot walk the date backwards.
+      const v = b.insurance_expiry ? toCalendarDate(b.insurance_expiry) : null;
+      if (v === undefined) return sendError(res, 'รูปแบบวันหมดอายุประกันไม่ถูกต้อง', [{ field: 'insurance_expiry', message: 'ต้องเป็นวันที่ในรูปแบบ YYYY-MM-DD' }], 400);
       sets.push('insurance_expiry = ?'); params.push(v); newVal.insurance_expiry = v;
     }
     if (!sets.length) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
@@ -1259,7 +1283,10 @@ router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
       userId: req.user.id, action: 'UPDATE', entityType: 'vehicle', entityId: vehicleId,
       oldValue: {
         vehicle_type: old.vehicle_type, owner_name: old.owner_name, owner_phone: old.owner_phone,
-        insurance_status: old.insurance_status, insurance_type: old.insurance_type, insurance_expiry: old.insurance_expiry,
+        // CS5-02 — the audit row is the record of what the value HAD been;
+        // storing the instant made it read one day early.
+        insurance_status: old.insurance_status, insurance_type: old.insurance_type,
+        insurance_expiry: toBangkokDate(old.insurance_expiry),
       },
       newValue: newVal, ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });

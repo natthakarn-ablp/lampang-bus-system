@@ -3,6 +3,7 @@
 const { pool } = require('../config/database');
 const { gradeEquivalents } = require('../utils/gradeScope');
 const { logAudit } = require('../utils/audit');
+const { toBangkokDate } = require('../utils/thaiTime');
 
 /**
  * Phase 7.11.3 — every school.service read accepts an optional
@@ -314,13 +315,26 @@ async function getVehicles(schoolId, { gradeFilter = null } = {}) {
     params
   );
 
+  // CS5-02 — emit DATE columns as Bangkok calendar dates, not instants.
+  // mysql2 parses a DATE against the connection timezone (+07:00), so
+  // 2026-08-05 arrives as the instant 2026-08-04T17:00:00.000Z and
+  // JSON.stringify hands that shape to the client. The edit form prefills
+  // itself with the first ten characters of what it is given, so an instant
+  // walks the date back one day on every save. Same guard as the driver
+  // profile route (driver.routes.js dateOnly()).
+  const dated = vehicles.map((v) => ({
+    ...v,
+    insurance_expiry: toBangkokDate(v.insurance_expiry),
+    latest_inspection_date: toBangkokDate(v.latest_inspection_date),
+  }));
+
   // Phase 7.11.3 — strip vehicle-side phone fields for teacher
   // accounts. Full school account still gets owner_phone /
   // driver_phone / attendant_phone (parent-contact loop).
   if (gradeFilter) {
-    return vehicles.map(({ owner_phone, driver_phone, attendant_phone, ...rest }) => rest);
+    return dated.map(({ owner_phone, driver_phone, attendant_phone, ...rest }) => rest);
   }
-  return vehicles;
+  return dated;
 }
 
 /**

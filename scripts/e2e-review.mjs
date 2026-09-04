@@ -13,6 +13,11 @@
  * reachable by keyboard, and does a role that reaches for another role's route
  * get a refusal rather than a crash or a blank screen.
  *
+ * It also checks the four things a walk of the menu never touches: a deep link
+ * opened in a fresh tab that already holds the session, the browser Back
+ * button, one real form submit that has to survive a reload and then be undone
+ * again, and the same protected URLs with no session at all.
+ *
  * What it CANNOT decide, and must never be presented as: task completion rate,
  * time on task, error rate or help requests for REAL users, and the signature of
  * a role representative. Phase 8's exit gate is people; this only clears defects
@@ -322,6 +327,369 @@ async function crossRoleProbe(browser, roleResults) {
   return out;
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * Session-shape checks: deep link, browser back, a real write, and the
+ * unauthenticated case.
+ *
+ * The route walk above always arrives at a page from the page before it, in
+ * one long-lived context that logged in through the form. That is the one path
+ * a real user almost never takes first. The probes below cover the ones they
+ * do take: a bookmarked URL opened in a fresh tab that already holds the
+ * session, the Back button, a form that actually writes, and the same URLs
+ * with no session at all.
+ *
+ * All of them reuse the storageState saved by reviewRole. loginLimiter
+ * (backend/src/routes/auth.routes.js:55-57) allows 20 attempts per IP per 15
+ * minutes with no test skip, so a probe that logged in again would push a full
+ * sweep past the limit and turn every later check into a false 429 failure.
+ *
+ * Two things measured the hard way, on a sweep that came back with four
+ * roles "unable to log in" and every one of those a 429: an attempt that is
+ * already rate-limited still counts, so retrying after the first 429 only digs
+ * the hole deeper; and the budget left is readable without guessing, from the
+ * RateLimit-Remaining header on any POST to /api/auth/login. One form login
+ * costs exactly one attempt, so a full sweep costs six - which leaves room for
+ * one sweep per window and nothing else worth spending it on.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+function pathOf(u) {
+  try {
+    return new URL(u).pathname;
+  } catch {
+    return String(u);
+  }
+}
+
+/**
+ * A protected route renders <RouteFallback/> until AuthProvider has read
+ * localStorage and the lazy chunk has arrived, so measuring the body straight
+ * after domcontentloaded reads "blank page" for a page that had simply not
+ * mounted yet - the mistake behind several of the previous round's false
+ * findings. This waits for real content and then gives up quietly, so a page
+ * that genuinely renders nothing is still measured rather than skipped.
+ */
+async function settle(page, timeout = 10000) {
+  await page.waitForLoadState('networkidle').catch(() => null);
+  await page.waitForFunction(
+    () => Boolean(document.body) && document.body.innerText.trim().length >= 40,
+    null,
+    { timeout },
+  ).catch(() => null);
+}
+
+/**
+ * Picks the role's home plus one route below it, considering only hrefs the
+ * walk already observed settling on themselves. Several nav entries are
+ * <Navigate> redirects (/school/status -> /school, /driver/leaves -> /driver),
+ * and calling a correct redirect "deep link landed on the wrong page" would be
+ * a harness bug, not an application defect.
+ */
+function pickRoutes(result) {
+  const stable = (result.routes || []).filter((r) => {
+    const seen = r.viewports && r.viewports.desktop && r.viewports.desktop.url;
+    return seen && pathOf(seen) === r.href;
+  });
+  if (stable.length === 0) return null;
+  const home = stable[0].href;
+  const deeper = stable.find((r) => r.href !== home && r.href.startsWith(`${home}/`))
+    || stable.find((r) => r.href !== home);
+  return deeper ? { home, deep: deeper.href } : null;
+}
+
+/**
+ * 1. Deep link - a fresh context that already holds the role's session opens
+ *    the role's own inner route directly. It must land on that page, not
+ *    bounce to /login and not render an empty shell.
+ * 2. Browser back - after A -> B, goBack() must return to A with the session
+ *    intact and no console error. The forward hop is taken by clicking the
+ *    in-app link when one is on screen, so the history entry is the pushState
+ *    one a real user creates, and falls back to a direct load when that link
+ *    cannot be clicked - which is the driver's case, because /driver opens the
+ *    pre-trip inspection dialog over the sidebar on arrival. A modal that
+ *    blocks the page behind it is the modal working, not a defect in Back, so
+ *    the fallback is recorded in `back.mode` rather than raised.
+ */
+async function deepLinkAndBackProbe(browser, roleResults) {
+  const out = [];
+  for (const r of roleResults) {
+    if (!r.loggedIn || !r.storageState) continue;
+    const picked = pickRoutes(r);
+    if (!picked) {
+      finding('info', r.role, 'deep-link', 'ไม่มีเส้นทางย่อยที่นิ่งพอจะใช้ทดสอบ deep link',
+        `routes=${(r.routes || []).length}`);
+      continue;
+    }
+    const { home, deep } = picked;
+    const context = await browser.newContext({
+      viewport: VIEWPORTS[2], locale: 'th-TH', storageState: r.storageState,
+    });
+    const page = await context.newPage();
+    const noise = watch(page);
+    const row = { role: r.role, home, deep };
+
+    // ── deep link ──
+    await page.goto(`${BASE}${deep}`, { waitUntil: 'domcontentloaded' }).catch(() => null);
+    await settle(page);
+    let text = await bodyText(page);
+    let drained = noise.drain();
+    const landed = pathOf(page.url());
+    row.deepLink = {
+      url: page.url(), landed, textLength: text.length,
+      consoleErrors: drained.consoleErrors.length,
+      failedRequests: drained.failedRequests.length,
+    };
+    if (landed === '/login') {
+      finding('high', r.role, deep, 'deep link ทั้งที่มี session อยู่ แต่ถูกเด้งไปหน้า login', `url=${page.url()}`);
+    } else if (landed !== deep) {
+      finding('high', r.role, deep, 'deep link ไม่ได้อยู่ที่เส้นทางที่ขอ', `ปลายทาง=${landed}`);
+    } else if (text.length < 40) {
+      finding('high', r.role, deep, 'deep link ได้หน้าเปล่าหรือเชลล์ว่าง', `textLength=${text.length}`);
+    } else if (/ไม่มีสิทธิ์เข้าถึง/.test(text)) {
+      finding('high', r.role, deep, 'deep link เข้าหน้าของบทบาทตัวเองแล้วถูกปฏิเสธ', `url=${page.url()}`);
+    }
+    if (drained.consoleErrors.length > 0) {
+      finding('medium', r.role, `${deep} (deep link)`, 'console error', drained.consoleErrors.slice(0, 3).join(' | '));
+    }
+    if (drained.failedRequests.length > 0) {
+      finding('high', r.role, `${deep} (deep link)`, 'request ของระบบเองล้มเหลวหรือ 5xx', drained.failedRequests.slice(0, 3).join(' | '));
+    }
+
+    // ── back ──
+    await page.goto(`${BASE}${home}`, { waitUntil: 'domcontentloaded' }).catch(() => null);
+    await settle(page);
+    noise.drain();
+
+    let mode = 'link';
+    const link = page.locator(`a[href="${deep}"]:visible`).first();
+    const clicked = await link.click({ timeout: 4000 }).then(() => true).catch(() => false);
+    if (clicked) {
+      await page.waitForURL((u) => pathOf(u.toString()) === deep, { timeout: 8000 }).catch(() => null);
+    }
+    if (!clicked || pathOf(page.url()) !== deep) {
+      mode = 'goto';
+      await page.goto(`${BASE}${deep}`, { waitUntil: 'domcontentloaded' }).catch(() => null);
+    }
+    await settle(page);
+    // The forward hop is already judged by the route walk; only what Back does
+    // is this probe's business.
+    noise.drain();
+
+    await page.goBack().catch(() => null);
+    await page.waitForURL((u) => pathOf(u.toString()) === home, { timeout: 8000 }).catch(() => null);
+    await settle(page);
+    text = await bodyText(page);
+    drained = noise.drain();
+    const backTo = pathOf(page.url());
+    row.back = {
+      mode, url: page.url(), backTo, textLength: text.length,
+      consoleErrors: drained.consoleErrors.length,
+    };
+    if (backTo === '/login') {
+      finding('high', r.role, `${deep} -> back`, 'กด back แล้วหลุด session ไปหน้า login', `url=${page.url()}`);
+    } else if (backTo !== home) {
+      finding('high', r.role, `${deep} -> back`, 'กด back แล้วไม่ได้กลับไปหน้าก่อนหน้า', `ควรเป็น ${home} แต่ได้ ${backTo}`);
+    } else if (text.length < 40) {
+      finding('high', r.role, `${deep} -> back`, 'กด back แล้วได้หน้าเปล่า', `textLength=${text.length}`);
+    }
+    if (drained.consoleErrors.length > 0) {
+      finding('medium', r.role, `${deep} -> back`, 'console error ตอนกด back', drained.consoleErrors.slice(0, 3).join(' | '));
+    }
+
+    out.push(row);
+    await context.close();
+  }
+  return out;
+}
+
+/**
+ * A real write, through the UI, by the role that owns it.
+ *
+ * /admin/pickup-points was chosen out of the writes this sandbox actually
+ * offers because it is the only one that is both verifiable and undoable from
+ * the same screen: create is POST /api/admin/pickup-points, the row is listed
+ * back, and the row's own delete is a soft delete
+ * (backend/src/routes/admin.routes.js:483) that hides it again. Nothing else
+ * on the write list undoes itself - an inspection result, an emergency report
+ * and a check-in are all append-only, and a teacher account is a credential.
+ * The geofence editor would have been the cleaner subject, but /api/geofences
+ * is behind FEATURE_GEOFENCE and is not mounted on this stack.
+ *
+ * The vehicle is picked from one that already has points, so that "the row is
+ * gone after deleting it" cannot be confused with "the filter returned an
+ * empty list".
+ */
+async function formSubmitProbe(browser, roleResults) {
+  const admin = roleResults.find((r) => r.role === 'admin');
+  const route = '/admin/pickup-points';
+  if (!admin || !admin.loggedIn || !admin.storageState) {
+    finding('info', 'admin', route, 'ข้ามการทดสอบ form submit เพราะไม่มี session ของ admin', '');
+    return null;
+  }
+  const label = `E2E ทดสอบอัตโนมัติ ${stamp()}`;
+  const result = { role: 'admin', route, label, created: false, visibleAfterReload: null, undone: null };
+
+  const context = await browser.newContext({
+    viewport: VIEWPORTS[2], locale: 'th-TH', storageState: admin.storageState,
+  });
+  const page = await context.newPage();
+  const noise = watch(page);
+
+  const openList = async () => {
+    await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded' }).catch(() => null);
+    await settle(page);
+  };
+  // Re-applies the vehicle filter after a reload (it is component state, not a
+  // query parameter) and reports whether our row is on screen.
+  const rowVisible = async (vehicleId) => {
+    await page.getByLabel('รถ', { exact: true }).selectOption(vehicleId).catch(() => null);
+    await page.waitForLoadState('networkidle').catch(() => null);
+    const visible = await page.locator(`button[aria-label="ลบจุด ${label}"]:visible`).first()
+      .waitFor({ state: 'visible', timeout: 6000 }).then(() => true).catch(() => false);
+    const rows = await page.locator('table tbody tr').count().catch(() => 0);
+    return { visible, rows };
+  };
+
+  try {
+    await openList();
+    noise.drain();
+
+    const options = await page.getByLabel('รถ', { exact: true })
+      .evaluate((el) => Array.from(el.options).map((o) => [o.value, (o.textContent || '').trim()]))
+      .catch(() => []);
+    const firstRowText = await page.locator('table tbody tr').first().innerText().catch(() => '');
+    const withPoints = options.find(([v, l]) => v && l && firstRowText.includes(l));
+    const vehicle = withPoints || options.find(([v]) => v);
+    if (!vehicle) {
+      finding('info', 'admin', route, 'ข้ามการทดสอบ form submit เพราะไม่มีรถให้เลือกใน sandbox', '');
+      return result;
+    }
+    result.vehicleId = vehicle[0];
+    result.vehiclePlate = vehicle[1];
+    result.vehicleAlreadyHadPoints = Boolean(withPoints);
+
+    // ── submit ──
+    await page.getByRole('button', { name: 'เพิ่มกรณีพิเศษ' }).click({ timeout: 8000 });
+    const dialog = page.locator('div[role="dialog"]');
+    await dialog.waitFor({ state: 'visible', timeout: 8000 });
+    await page.getByLabel('ทะเบียนรถ').selectOption(vehicle[0]);
+    await page.getByLabel('ป้ายชื่อจุด').fill(label);
+    await page.getByLabel('Latitude').fill('18.287300');
+    await page.getByLabel('Longitude').fill('99.492700');
+    await page.locator('button[form="admin-pickup-form"]').click();
+    const closed = await dialog.waitFor({ state: 'detached', timeout: 15000 })
+      .then(() => true).catch(() => false);
+    result.created = closed;
+    if (!closed) {
+      const why = await dialog.innerText().catch(() => '');
+      finding('high', 'admin', route, 'ส่งฟอร์มสร้างจุดรับส่งแล้ว dialog ไม่ปิด (บันทึกไม่สำเร็จ)',
+        why.replace(/\s+/g, ' ').slice(0, 240));
+      return result;
+    }
+    let drained = noise.drain();
+    if (drained.consoleErrors.length > 0) {
+      finding('medium', 'admin', route, 'console error ตอนส่งฟอร์ม', drained.consoleErrors.slice(0, 3).join(' | '));
+    }
+    if (drained.failedRequests.length > 0) {
+      finding('high', 'admin', route, 'request ของระบบเองล้มเหลวหรือ 5xx ตอนส่งฟอร์ม', drained.failedRequests.slice(0, 3).join(' | '));
+    }
+
+    // ── the write has to survive a reload, not just a re-render ──
+    await openList();
+    const after = await rowVisible(vehicle[0]);
+    result.visibleAfterReload = after.visible;
+    result.rowsAfterCreate = after.rows;
+    if (!after.visible) {
+      finding('high', 'admin', route, 'บันทึกแล้วแต่ไม่พบรายการหลังโหลดหน้าใหม่',
+        `label=${label} รถ=${vehicle[1]} rowsInFilteredList=${after.rows}`);
+    }
+
+    // ── undo ──
+    const del = page.locator(`button[aria-label="ลบจุด ${label}"]:visible`).first();
+    if ((await del.count()) > 0) {
+      await del.click({ timeout: 8000 }).catch(() => null);
+      await page.locator('div[role="alertdialog"] button', { hasText: 'ลบจุดรับส่ง' }).first()
+        .click({ timeout: 8000 }).catch(() => null);
+      await page.waitForLoadState('networkidle').catch(() => null);
+      await openList();
+      const gone = await rowVisible(vehicle[0]);
+      result.undone = !gone.visible;
+      result.rowsAfterDelete = gone.rows;
+      if (gone.visible) {
+        finding('medium', 'admin', route, 'ลบรายการทดสอบไม่สำเร็จ เหลือข้อมูลค้างใน sandbox', `label=${label}`);
+      }
+    } else {
+      result.undone = false;
+      finding('medium', 'admin', route, 'หาปุ่มลบของรายการทดสอบไม่เจอ อาจเหลือข้อมูลค้างใน sandbox', `label=${label}`);
+    }
+    drained = noise.drain();
+    if (drained.consoleErrors.length > 0) {
+      finding('medium', 'admin', route, 'console error ตอนลบรายการทดสอบ', drained.consoleErrors.slice(0, 3).join(' | '));
+    }
+  } catch (err) {
+    finding('high', 'admin', route, 'การทดสอบ form submit ล้มกลางคัน',
+      String(err && err.message ? err.message : err).replace(/\s+/g, ' ').slice(0, 240));
+  } finally {
+    await context.close();
+  }
+  return result;
+}
+
+/**
+ * The same protected URLs with no session at all. A miss here is not a menu
+ * that shows too much - it is the page shell rendering for someone who never
+ * authenticated, so the bar is a redirect to /login with the login form on it.
+ */
+async function unauthDeepLinkProbe(browser, roleResults) {
+  const targets = [];
+  const seen = new Set();
+  for (const r of roleResults) {
+    const picked = pickRoutes(r);
+    if (!picked) continue;
+    for (const href of [picked.home, picked.deep]) {
+      if (seen.has(href)) continue;
+      seen.add(href);
+      targets.push({ role: r.role, href });
+    }
+  }
+
+  const context = await browser.newContext({ viewport: VIEWPORTS[2], locale: 'th-TH' });
+  const out = [];
+  for (const t of targets) {
+    // A page per target, so one target's history or tab-scoped state cannot
+    // colour the next one.
+    const page = await context.newPage();
+    const noise = watch(page);
+    await page.goto(`${BASE}${t.href}`, { waitUntil: 'domcontentloaded' }).catch(() => null);
+    await page.waitForURL((u) => pathOf(u.toString()) === '/login', { timeout: 10000 }).catch(() => null);
+    await settle(page);
+    const landed = pathOf(page.url());
+    const text = await bodyText(page);
+    const hasLoginForm = (await page.locator('#login-username').count()) > 0;
+    const hadToken = await page.evaluate(() => {
+      try { return Boolean(localStorage.getItem('access_token')); } catch { return false; }
+    }).catch(() => false);
+    const drained = noise.drain();
+    out.push({ ...t, landed, textLength: text.length, hasLoginForm, hadToken });
+
+    if (hadToken) {
+      // Would mean the "no session" context was not one - a harness fault, and
+      // it has to be visible rather than silently making the check pass.
+      finding('high', 'anon', t.href, 'context ที่ควรไม่มี session กลับมี token ผลการตรวจนี้เชื่อไม่ได้', '');
+    } else if (landed !== '/login') {
+      finding('critical', 'anon', t.href, 'เข้าเส้นทางที่ต้อง login ได้โดยไม่มี session และไม่ถูก redirect',
+        `ปลายทาง=${landed} textLength=${text.length}`);
+    } else if (!hasLoginForm) {
+      finding('medium', 'anon', t.href, 'redirect ไป /login แล้วแต่ไม่พบฟอร์มเข้าสู่ระบบ', `textLength=${text.length}`);
+    }
+    if (drained.consoleErrors.length > 0) {
+      finding('low', 'anon', t.href, 'console error ตอน redirect ไป login', drained.consoleErrors.slice(0, 2).join(' | '));
+    }
+    await page.close();
+  }
+  await context.close();
+  return out;
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch({ headless: HEADLESS });
@@ -333,6 +701,11 @@ async function main() {
     roleResults.push(await reviewRole(browser, r));
   }
   const crossRole = await crossRoleProbe(browser, roleResults);
+  // Order matters only in that all of these reuse the sessions reviewRole
+  // saved; none of them logs in, so a full sweep stays at 6 login attempts.
+  const sessionRoutes = await deepLinkAndBackProbe(browser, roleResults);
+  const formSubmit = await formSubmitProbe(browser, roleResults);
+  const unauthDeepLink = await unauthDeepLinkProbe(browser, roleResults);
   await browser.close();
 
   const counts = findings.reduce((acc, f) => {
@@ -353,6 +726,9 @@ async function main() {
     ],
     roles: roleResults,
     cross_role: crossRole,
+    session_routes: sessionRoutes,
+    form_submit: formSubmit,
+    unauth_deep_link: unauthDeepLink,
     findings,
     counts,
   };
@@ -361,6 +737,8 @@ async function main() {
   writeFileSync(path.join(OUT, 'summary.md'), markdown(report));
   process.stdout.write(`[e2e] output: ${OUT}\n`);
   const defects = findings.filter((f) => f.severity !== 'info').length;
+  process.stdout.write(`[e2e] session-route probes=${sessionRoutes.length} unauth probes=${unauthDeepLink.length} `
+    + `form-submit=${formSubmit ? `created=${formSubmit.created} visibleAfterReload=${formSubmit.visibleAfterReload} undone=${formSubmit.undone}` : 'skipped'}\n`);
   process.stdout.write(`[e2e] summary roles=${roleResults.length} defects=${defects} info=${counts.info || 0} `
     + `critical=${counts.critical || 0} high=${counts.high || 0} medium=${counts.medium || 0} low=${counts.low || 0}\n`);
 
@@ -371,6 +749,19 @@ function markdown(report) {
   const rows = report.findings.length > 0
     ? report.findings.map((f) => `| ${f.severity} | ${f.role} | ${f.where} | ${String(f.what).replace(/\|/g, '\\|')} | ${String(f.detail).replace(/\|/g, '\\|').slice(0, 160)} |`).join('\n')
     : '| — | — | — | ไม่พบปัญหาในขอบเขตที่ตรวจ | — |';
+  const sessionRows = (report.session_routes || []).length > 0
+    ? report.session_routes.map((s) => `| ${s.role} | \`${s.deep}\` | ${s.deepLink.landed === s.deep ? 'ถึงหน้าที่ขอ' : `ไปที่ ${s.deepLink.landed}`} | \`${s.back.backTo}\` | ${s.back.backTo === s.home ? `กลับถูก (${s.back.mode})` : 'ไม่กลับที่เดิม'} |`).join('\n')
+    : '| — | — | — | — | ไม่ได้ตรวจ |';
+  const f = report.form_submit;
+  const formRow = f
+    ? `- บทบาท: \`admin\` · หน้า: \`${f.route}\` · รถ: ${f.vehiclePlate || '—'}\n`
+      + `- สร้างผ่านฟอร์ม: ${f.created ? 'สำเร็จ' : 'ไม่สำเร็จ'}\n`
+      + `- เห็นข้อมูลหลังโหลดหน้าใหม่: ${f.visibleAfterReload === null ? 'ไม่ได้ตรวจ' : f.visibleAfterReload ? 'เห็น' : 'ไม่เห็น'}\n`
+      + `- ย้อนกลับ (soft delete ผ่าน UI): ${f.undone === null ? 'ไม่ได้ตรวจ' : f.undone ? 'ย้อนแล้ว ไม่มีข้อมูลค้าง' : `ย้อนไม่สำเร็จ ข้อมูลค้างชื่อ "${f.label}"`}\n`
+    : '- ไม่ได้ตรวจ (ไม่มี session ของ admin)\n';
+  const unauthRows = (report.unauth_deep_link || []).length > 0
+    ? report.unauth_deep_link.map((u) => `| \`${u.href}\` | \`${u.landed}\` | ${u.hasLoginForm ? 'มี' : 'ไม่มี'} | ${u.landed === '/login' && u.hasLoginForm ? 'redirect ถูกต้อง' : 'ไม่เป็นไปตามที่ควร'} |`).join('\n')
+    : '| — | — | — | ไม่ได้ตรวจ |';
   const roleRows = report.roles.map((r) => `| ${r.role} | ${r.username} | ${r.loggedIn ? 'ผ่าน' : 'ไม่ผ่าน'} | ${r.linkCount ?? 0} | ${r.keyboard ? `${r.keyboard.stops} stops / ${r.keyboard.withVisibleFocus} มี focus` : '—'} |`).join('\n');
 
   return `# E2E UI Review (sandbox)
@@ -394,6 +785,22 @@ function markdown(report) {
 | บทบาท | บัญชี | Login | ลิงก์ที่เดินได้ | Keyboard |
 |---|---|---|---:|---|
 ${roleRows}
+
+## Deep link + ปุ่ม Back (ต่อบทบาท)
+
+| บทบาท | เส้นทางที่เปิดตรง | ผล deep link | Back กลับไป | ผล Back |
+|---|---|---|---|---|
+${sessionRows}
+
+## Form submit จริง (เขียนแล้วย้อนกลับ)
+
+${formRow}
+
+## เปิดเส้นทางที่ต้อง login โดยไม่มี session
+
+| เส้นทาง | ปลายทาง | มีฟอร์ม login | ผล |
+|---|---|---|---|
+${unauthRows}
 
 ## Findings
 

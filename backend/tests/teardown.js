@@ -116,10 +116,14 @@ function computeDeleteOrder(tables, edges) {
  * mode this file exists to prevent.
  */
 const SUBQUERY_EDGES = [
-  { child: 'audit_logs',    parent: 'users' },
-  { child: 'audit_logs',    parent: 'students' },
-  { child: 'daily_status',  parent: 'students' },
-  { child: 'notifications', parent: 'students' },
+  { child: 'audit_logs',      parent: 'users' },
+  // revoked_tokens.user_id carries no foreign key either: a revocation has to
+  // outlive the account it belonged to, or deleting a user would resurrect
+  // every token they had ever revoked.
+  { child: 'revoked_tokens',  parent: 'users' },
+  { child: 'audit_logs',      parent: 'students' },
+  { child: 'daily_status',    parent: 'students' },
+  { child: 'notifications',   parent: 'students' },
 ];
 
 /** Read the foreign-key graph of the connected database. */
@@ -176,6 +180,7 @@ const CLEANUP = [
   ['user_recovery_codes', `DELETE FROM user_recovery_codes WHERE user_id IN (SELECT id FROM users WHERE username LIKE '${TEST_USER_PREFIX}')`, []],
   ['import_batches', 'DELETE FROM import_batches WHERE school_id = ?', [TEST_SCHOOL]],
   ['students', 'DELETE FROM students WHERE school_id = ? OR id = 99999', [TEST_SCHOOL]],
+  ['revoked_tokens', `DELETE FROM revoked_tokens WHERE user_id IN (SELECT id FROM users WHERE username LIKE '${TEST_USER_PREFIX}')`, []],
   ['users', `DELETE FROM users WHERE username LIKE '${TEST_USER_PREFIX}'`, []],
   ['drivers', 'DELETE FROM drivers WHERE name = ?', [TEST_DRIVER_NAME]],
   ['vehicles', 'DELETE FROM vehicles WHERE id = ?', [TEST_VEHICLE]],

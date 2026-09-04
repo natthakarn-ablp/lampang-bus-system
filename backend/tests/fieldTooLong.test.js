@@ -25,16 +25,23 @@
 
 require('dotenv').config();
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 const httpMocks = { };
 
 const app = require('../src/app');
+const env = require('../src/config/env');
 const { pool } = require('../src/config/database');
 const errorHandler = require('../src/middleware/errorHandler');
 
 const SCHOOL = { username: '__test_school', password: 'testpass123' };
 const TEST_STUDENT_ID = 99999;
+// Signed rather than logged in: loginLimiter is 20 per 15 minutes per IP with no
+// test skip, and the whole run shares it.
+const ADMIN_USER = '__test_admin_toolong';
+const CREATED_USER = '__test_created_toolong';
 
 let token = '';
+let adminToken = '';
 
 const thaiChars = (n) => 'ก'.repeat(n);
 
@@ -42,6 +49,21 @@ beforeAll(async () => {
   const res = await request(app).post('/api/auth/login').send(SCHOOL);
   expect(`login -> ${res.status}`).toBe('login -> 200');
   token = res.body.data.access_token;
+
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, scope_type, scope_id, display_name)
+     VALUES (?, '$2b$12$0000000000000000000000000000000000000000000000000000', 'admin', NULL, NULL, ?)
+     ON DUPLICATE KEY UPDATE role = 'admin', is_active = TRUE, is_deleted = FALSE`,
+    [ADMIN_USER, ADMIN_USER]
+  );
+  const [[a]] = await pool.query('SELECT id, username, role FROM users WHERE username = ?', [ADMIN_USER]);
+  adminToken = jwt.sign(
+    {
+      sub: a.id, username: a.username, role: a.role, scopeType: null, scopeId: null,
+      gradeScope: null, displayName: a.username, mustChangePassword: false,
+    },
+    env.jwt.secret, { expiresIn: '1h' }
+  );
 });
 
 afterAll(async () => {
@@ -50,6 +72,7 @@ afterAll(async () => {
     `DELETE ps FROM parent_student ps JOIN parents p ON p.id = ps.parent_id WHERE p.phone = '0899999999'`
   );
   await pool.query(`DELETE FROM parents WHERE phone = '0899999999'`);
+  await pool.query('DELETE FROM users WHERE username IN (?, ?)', [ADMIN_USER, CREATED_USER]);
 });
 
 const putStudent = (body) => request(app)
@@ -138,6 +161,33 @@ describe('the global handler turns a column overflow into a 400', () => {
     const out = run(err);
     expect(JSON.stringify(out.body)).not.toContain('column');
     expect(JSON.stringify(out.body)).not.toContain('Data too long');
+  });
+
+  it('answers 400 on a real route that has no length check of its own', async () => {
+    // The synthetic tests above prove the mapping; this proves the mapping is
+    // actually reached. POST /api/admin/users writes display_name into
+    // users.display_name (varchar 200) and validates nothing about its length —
+    // one of sixteen routes in src/routes that take a string from req.body and
+    // write it without a check of their own. Before the handler learned this
+    // error code, every one of them answered 500.
+    const res = await request(app)
+      .post('/api/admin/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        username: CREATED_USER,
+        password: 'Abcd1234!x',
+        role: 'school',
+        scope_type: 'SCHOOL',
+        scope_id: '__TSCH',
+        display_name: thaiChars(300),
+      });
+
+    expect(`status ${res.status}`).toBe('status 400');
+    expect(res.body.errors).toEqual([{ code: 'FIELD_TOO_LONG' }]);
+
+    const [[created]] = await pool.query(
+      'SELECT COUNT(*) AS n FROM users WHERE username = ?', [CREATED_USER]);
+    expect(`user created anyway: ${created.n > 0}`).toBe('user created anyway: false');
   });
 
   it('leaves an unclassified error as a 500', () => {

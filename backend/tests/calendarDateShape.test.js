@@ -27,14 +27,21 @@
 
 require('dotenv').config();
 const request = require('supertest');
+const jwt = require('jsonwebtoken');
 
 const app = require('../src/app');
+const env = require('../src/config/env');
 const { pool } = require('../src/config/database');
 
 const SCHOOL = { username: '__test_school', password: 'testpass123' };
 const DRIVER = { username: '__TEST PLATE 9999', password: 'testpass123' };
 const PROVINCE = { username: '__test_province', password: 'testpass123' };
 const AFFILIATION = { username: '__test_affiliation', password: 'testpass123' };
+// setup.js seeds no transport or admin account, so this file makes its own.
+// Signed rather than logged in: loginLimiter is 20 per 15 minutes per IP with no
+// test skip, and it is shared by every suite in the run.
+const TRANSPORT_USER = '__test_transport_dates';
+const ADMIN_USER = '__test_admin_dates';
 const TEST_STUDENT_ID = 99999;
 const TEST_VEHICLE = 'V-test000000ab';
 const LEAVE_DATE = '2026-08-05';
@@ -55,6 +62,8 @@ let driverToken = '';
 let vehicleBefore = null;
 let provinceToken = '';
 let affiliationToken = '';
+let transportToken = '';
+let adminToken = '';
 
 /** A well-formed calendar date. Counted so the probe cannot pass vacuously. */
 const CALENDAR_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -83,11 +92,35 @@ async function login(creds) {
   return res.body.data.access_token;
 }
 
+/** Create (or revive) a user and return a token for it, without a login. */
+async function tokenFor(username, role) {
+  await pool.query(
+    `INSERT INTO users (username, password_hash, role, scope_type, scope_id, display_name)
+     VALUES (?, '$2b$12$0000000000000000000000000000000000000000000000000000', ?, NULL, NULL, ?)
+     ON DUPLICATE KEY UPDATE role = VALUES(role), is_active = TRUE, is_deleted = FALSE`,
+    [username, role, username]
+  );
+  const [[u]] = await pool.query(
+    'SELECT id, username, role, scope_type, scope_id FROM users WHERE username = ? LIMIT 1', [username]
+  );
+  return jwt.sign(
+    {
+      sub: u.id, username: u.username, role: u.role,
+      scopeType: u.scope_type, scopeId: u.scope_id,
+      gradeScope: null, displayName: u.username, mustChangePassword: false,
+    },
+    env.jwt.secret,
+    { expiresIn: '1h' }
+  );
+}
+
 beforeAll(async () => {
   schoolToken = await login(SCHOOL);
   driverToken = await login(DRIVER);
   provinceToken = await login(PROVINCE);
   affiliationToken = await login(AFFILIATION);
+  transportToken = await tokenFor(TRANSPORT_USER, 'transport');
+  adminToken = await tokenFor(ADMIN_USER, 'admin');
 
   await pool.query('DELETE FROM student_leaves WHERE student_id = ?', [TEST_STUDENT_ID]);
   await pool.query(
@@ -117,6 +150,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query('DELETE FROM student_leaves WHERE student_id = ?', [TEST_STUDENT_ID]);
+  await pool.query('DELETE FROM users WHERE username IN (?, ?)', [TRANSPORT_USER, ADMIN_USER]);
   // Every column this file touched, directly or through
   // refreshVehicleEligibility, which deleteInspection calls and which rewrites
   // verification_status from whatever the expiry columns say at that moment.
@@ -138,7 +172,8 @@ afterAll(async () => {
 });
 
 const TOKENS = () => ({
-  school: schoolToken, driver: driverToken, province: provinceToken, affiliation: affiliationToken,
+  school: schoolToken, driver: driverToken, province: provinceToken,
+  affiliation: affiliationToken, transport: transportToken, admin: adminToken,
 });
 const get = (path, token) => request(app).get(path).set('Authorization', `Bearer ${token}`);
 
@@ -201,6 +236,22 @@ describe('DATE columns leave the API as calendar dates', () => {
       ['affiliation', '/api/affiliation/school-accounts'],
       ['affiliation', '/api/affiliation/transfer-requests'],
       ['affiliation', '/api/affiliation/vehicle-requests'],
+      // transport is the role whose whole job is expiry dates, and admin reads
+      // across every table that has one.
+      ['transport', '/api/transport/dashboard'],
+      ['transport', '/api/transport/vehicles?per_page=20'],
+      ['transport', '/api/transport/vehicles/pending'],
+      ['transport', '/api/transport/vehicles/expiring'],
+      ['transport', '/api/transport/inspections'],
+      ['transport', '/api/transport/schools'],
+      ['admin', '/api/admin/users?per_page=20'],
+      ['admin', '/api/admin/pickup-points'],
+      ['admin', '/api/admin/audit-logs'],
+      ['admin', '/api/admin/student-transfer-requests'],
+      ['admin', '/api/admin/vehicle-requests'],
+      ['admin', '/api/admin/emergencies'],
+      ['admin', '/api/admin/terms'],
+      ['admin', '/api/admin/driver-integrity'],
     ];
 
     const offenders = [];
@@ -217,7 +268,8 @@ describe('DATE columns leave the API as calendar dates', () => {
     // An asserted invariant over responses that contain no dates is not an
     // assertion. The fixture seeds four vehicle expiry columns and a leave date,
     // each of which several of these endpoints return.
-    expect(`calendar dates observed: ${datesSeen >= 5}`).toBe('calendar dates observed: true');
+    expect(`calendar dates observed (${datesSeen}): ${datesSeen >= 12}`)
+      .toBe(`calendar dates observed (${datesSeen}): true`);
   });
 
   it('records the deleted inspection in audit_logs with the day it was stored', async () => {

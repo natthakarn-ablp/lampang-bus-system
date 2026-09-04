@@ -801,11 +801,29 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
     }
     // Audit 2026-06-18 (limitations): reject over-length values with a clean 400
     // instead of letting MySQL raise a 500 on column overflow.
-    const LEN_LIMITS = { prefix: 20, first_name: 100, last_name: 100, grade: 20, classroom: 20 };
+    //
+    // parent_name was missing from this list, and it is the one field here that
+    // writes to a different table: this handler inserts it into parents.name
+    // (varchar 100) further down. A 150-character ผู้ปกครอง reached MySQL and
+    // came back as a 500 — an opaque "Internal server error" in production, and
+    // logged as a server fault rather than the bad input it is.
+    //
+    // Lengths are counted in code points, not UTF-16 units, because
+    // VARCHAR(n) counts characters: String(v).length reports 2 for a character
+    // outside the BMP and would reject a name MySQL would have accepted.
+    const LEN_LIMITS = {
+      prefix: 20, first_name: 100, last_name: 100, grade: 20, classroom: 20, parent_name: 100,
+    };
+    const FIELD_LABEL_TH = {
+      prefix: 'คำนำหน้า', first_name: 'ชื่อ', last_name: 'นามสกุล',
+      grade: 'ระดับชั้น', classroom: 'ห้อง', parent_name: 'ชื่อผู้ปกครอง',
+    };
     for (const [field, max] of Object.entries(LEN_LIMITS)) {
       const v = req.body[field];
-      if (v != null && String(v).length > max) {
-        return sendError(res, `ข้อมูล "${field}" ยาวเกินกำหนด (ไม่เกิน ${max} ตัวอักษร)`, [], 400);
+      if (v != null && Array.from(String(v)).length > max) {
+        const label = FIELD_LABEL_TH[field] || field;
+        return sendError(res, `${label}ยาวเกินกำหนด (ไม่เกิน ${max} ตัวอักษร)`,
+          [{ field, message: `ไม่เกิน ${max} ตัวอักษร` }], 400);
       }
     }
 

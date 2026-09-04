@@ -1385,7 +1385,33 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
       [...params, per_page, offset]
     );
 
-    return sendSuccess(res, rows, 'OK', { page, per_page, total });
+    // Redact PII in old_value/new_value before returning JSON, matching the CSV
+    // branch above and the province, affiliation and admin handlers — school was
+    // the only one of the four still returning them raw. Verified against the
+    // sandbox: an audit row carrying parent_phone and line_user_id came back as
+    // "0812345678" and "U1234567890abcdef" here, and as "081****678" and
+    // "U1234567…[redacted]" everywhere else.
+    //
+    // A school does see its own students' guardian phones through
+    // /api/school/students, so the phone is not new exposure there — but
+    // line_user_id is not surfaced to this role anywhere else, and the scope
+    // filter admits transfer and roster rows whose values describe another
+    // school's record.
+    //
+    // redactAuditValue is imported at module scope. Do NOT re-declare it inside
+    // this handler: a function-scoped const shadows it for the whole function and
+    // puts the CSV branch above into a temporal dead zone, which is how the same
+    // change turned ?format=csv into a 500 in admin.routes.js.
+    const redactVal = (v) => {
+      if (v === null || v === undefined) return v;
+      const t = redactAuditValue(v);
+      try { return JSON.parse(t); } catch { return t; }
+    };
+    const safeRows = rows.map((r) => ({
+      ...r, old_value: redactVal(r.old_value), new_value: redactVal(r.new_value),
+    }));
+
+    return sendSuccess(res, safeRows, 'OK', { page, per_page, total });
   } catch (err) { next(err); }
 });
 

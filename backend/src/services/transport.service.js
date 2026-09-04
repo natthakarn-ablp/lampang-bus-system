@@ -4,36 +4,10 @@ const { pool } = require('../config/database');
 const { normalizePlate } = require('../utils/vehiclePlate');
 const { logAudit } = require('../utils/audit');
 const { validateInspectionDates } = require('../utils/inspectionDates');
-const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
-
-// A DATE column must leave this service as a Bangkok calendar date, never as
-// an instant. mysql2 parses DATE against the connection timezone (+07:00), so
-// the stored 2026-08-05 arrives as 2026-08-04T17:00:00.000Z and JSON.stringify
-// ships that shape; any client that takes the first ten characters — or simply
-// prints the value — reads the day before. Same guard as school.service.js
-// (CS5-02) and driver.routes.js dateOnly().
-//
-// `created_at` and `verification_updated_at` are TIMESTAMP columns — genuine
-// instants — and are deliberately NOT in this list.
-const VEHICLE_DATE_FIELDS = [
-  'insurance_expiry',
-  'registration_expiry',
-  'compulsory_insurance_expiry',
-  'tax_expiry',
-  'latest_inspection_date',
-  'inspection_expiry',
-];
-
-const INSPECTION_DATE_FIELDS = ['inspection_date', 'expiry_date'];
-
-function withCalendarDates(row, fields) {
-  if (!row) return row;
-  const out = { ...row };
-  for (const field of fields) {
-    if (field in out) out[field] = toBangkokDate(out[field]);
-  }
-  return out;
-}
+const { todayBangkok } = require('../utils/thaiTime');
+const {
+  VEHICLE_DATE_FIELDS, INSPECTION_DATE_FIELDS, withCalendarDates,
+} = require('../utils/vehicleDates');
 
 // Thrown validation/authorization error carrying an HTTP status + machine code,
 // surfaced by the global errorHandler in the standard response shape.

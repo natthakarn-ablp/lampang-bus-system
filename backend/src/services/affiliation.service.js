@@ -2,6 +2,8 @@
 
 const { pool } = require('../config/database');
 const { gradeEquivalents } = require('../utils/gradeScope');
+const { VEHICLE_DATE_FIELDS, mapCalendarDates } = require('../utils/vehicleDates');
+const { toBangkokDate } = require('../utils/thaiTime');
 
 // Phase 10.7C-1 — match province.service.js window so "ยังไม่เริ่มใช้ระบบ"
 // means the same thing at both scopes. School is "used recently" if it has
@@ -342,7 +344,7 @@ async function getVehicles(affiliationId) {
     [affiliationId, affiliationId, affiliationId]
   );
 
-  return vehicles;
+  return mapCalendarDates(vehicles, VEHICLE_DATE_FIELDS);
 }
 
 /**
@@ -523,8 +525,12 @@ async function getVehiclesAtRisk(affiliationId, { limit = 10 } = {}) {
       driver_name: v.driver_name || '-',
       student_count: v.student_count || 0,
       latest_inspection_result: insp,
-      latest_inspection_date: v.latest_inspection_date,
-      insurance_expiry: v.insurance_expiry,
+      // Converted here, at the output, and not in the scoring above: `expiry`
+      // there is compared against a local midnight that is already Bangkok
+      // midnight, so that comparison is right as it stands and rewriting it
+      // would be a change with no defect behind it.
+      latest_inspection_date: toBangkokDate(v.latest_inspection_date),
+      insurance_expiry: toBangkokDate(v.insurance_expiry),
       risk_score: score,
       risk_reasons: reasons,
     };

@@ -8,6 +8,8 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const reportSvc = require('../services/report.service');
 const { logAudit } = require('../utils/audit');
+const { Readable } = require('stream');
+const { pipeline } = require('stream/promises');
 const { csvCell, neutralizeSpreadsheetCell } = require('../utils/exportSecurity');
 const { abbreviateGrade } = require('../utils/gradeDisplay');
 const { DECISION_LOG_ROLES, validateDecisionLog } = require('../utils/decisionLog');
@@ -214,40 +216,65 @@ function monthlyRowValues(row) {
 /**
  * GET /api/reports/export/csv
  */
+/** One CSV line per row, in the column order of CSV_HEADERS. */
+function csvLine(r) {
+  // Phase 10.12G — every cell neutralised against CSV formula injection.
+  return [
+    csvCell(r.student_id),
+    csvCell(r.student_name),
+    csvCell(abbreviateGrade(r.grade)),
+    csvCell(r.classroom || ''),
+    csvCell(r.school_name),
+    csvCell(r.affiliation_name),
+    csvCell(r.plate_no),
+    csvCell(r.morning_service),
+    csvCell(r.evening_service),
+    csvCell(r.morning_status),
+    csvCell(r.morning_time || ''),
+    csvCell(r.evening_status),
+    csvCell(r.evening_time || ''),
+  ].join(',') + '\n';
+}
+
+/**
+ * A failure after the first byte is on the wire cannot be answered with a JSON
+ * error — the client is already receiving a file. Destroying the response
+ * aborts the chunked body, which browsers and curl report as a failed download.
+ * The alternative is worse: a 200 and a file that looks complete and is not.
+ */
+function abortStreamedExport(res, err, next) {
+  if (res.headersSent) {
+    // eslint-disable-next-line no-console
+    console.error('[export] failed after headers were sent:', err && err.message);
+    res.destroy(err);
+    return;
+  }
+  next(err);
+}
+
 router.get('/export/csv', async (req, res, next) => {
   try {
-    const { date, rows } = await reportSvc.getExportRows(req.user, req.filters);
+    // Resolved before any header goes out, so a bad filter still answers JSON.
+    const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
     const filename = `report-${date}.csv`;
-
-    const BOM = '\uFEFF';
-    let csv = BOM + CSV_HEADERS.join(',') + '\n';
-    for (const r of rows) {
-      // Phase 10.12G — every cell neutralised against CSV formula injection.
-      const line = [
-        csvCell(r.student_id),
-        csvCell(r.student_name),
-        csvCell(abbreviateGrade(r.grade)),
-        csvCell(r.classroom || ''),
-        csvCell(r.school_name),
-        csvCell(r.affiliation_name),
-        csvCell(r.plate_no),
-        csvCell(r.morning_service),
-        csvCell(r.evening_service),
-        csvCell(r.morning_status),
-        csvCell(r.morning_time || ''),
-        csvCell(r.evening_status),
-        csvCell(r.evening_time || ''),
-      ].join(',');
-      csv += line + '\n';
-    }
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_csv', entityId: date,
       newValue: { format: 'csv', role: req.user.role, scope: req.user.scopeId },
       ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
-    return res.send(csv);
-  } catch (err) { next(err); }
+
+    async function* body() {
+      yield '\uFEFF' + CSV_HEADERS.join(',') + '\n';
+      for await (const r of reportSvc.streamExportRows(req.user, req.filters)) {
+        yield csvLine(r);
+      }
+    }
+
+    // pipeline handles backpressure and, on failure, destroys both ends — which
+    // is what closes the connection rather than sending a truncated file.
+    await pipeline(Readable.from(body()), res);
+  } catch (err) { abortStreamedExport(res, err, next); }
 });
 
 /**
@@ -255,10 +282,23 @@ router.get('/export/csv', async (req, res, next) => {
  */
 router.get('/export/excel', async (req, res, next) => {
   try {
-    const { date, rows } = await reportSvc.getExportRows(req.user, req.filters);
+    const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
     const filename = `report-${date}.xlsx`;
 
-    const workbook = new ExcelJS.Workbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_excel', entityId: date,
+      newValue: { format: 'excel', role: req.user.role, scope: req.user.scopeId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
+
+    // WorkbookWriter writes each row to the response as it is committed, so the
+    // whole workbook is never held in memory. useStyles keeps the header format
+    // the buffered writer produced; shared strings stay off because they would
+    // require holding every distinct string until the end, which is the thing
+    // being avoided.
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream: res, useStyles: true, useSharedStrings: false,
+    });
     workbook.creator = 'ระบบรถรับส่งนักเรียนจังหวัดลำปาง';
     const sheet = workbook.addWorksheet('รายงานประจำวัน');
 
@@ -275,8 +315,10 @@ router.get('/export/excel', async (req, res, next) => {
     headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
+    headerRow.commit();
+
     // Data rows
-    for (const r of rows) {
+    for await (const r of reportSvc.streamExportRows(req.user, req.filters)) {
       // Phase 10.12G — neutralise user-sourced text cells (defense-in-depth).
       sheet.addRow({
         col0: r.student_id,
@@ -292,17 +334,12 @@ router.get('/export/excel', async (req, res, next) => {
         col10: neutralizeSpreadsheetCell(r.morning_time || ''),
         col11: r.evening_status,
         col12: neutralizeSpreadsheetCell(r.evening_time || ''),
-      });
+      }).commit();
     }
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_excel', entityId: date,
-      newValue: { format: 'excel', role: req.user.role, scope: req.user.scopeId },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (err) { next(err); }
+    await sheet.commit();
+    await workbook.commit();
+  } catch (err) { abortStreamedExport(res, err, next); }
 });
 
 /**

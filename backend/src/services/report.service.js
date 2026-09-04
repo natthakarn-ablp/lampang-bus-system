@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { todayBangkok } = require('../utils/thaiTime');
 const { gradeEquivalents } = require('../utils/gradeScope');
 
 /**
@@ -438,12 +439,20 @@ async function getSummaryReport(user, filters) {
 /**
  * Build flat rows for CSV/Excel export from a daily report date.
  */
-async function getExportRows(user, filters) {
-  const date = filters.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+/**
+ * The export query, built once and shared by both readers below.
+ *
+ * getExportRows and streamExportRows must agree on the WHERE clause exactly:
+ * it is the scope boundary that keeps a school out of another school's data,
+ * and reportGradeScope.unit.test.js asserts it through getExportRows only. A
+ * second copy of this SQL for the streaming path would be a security boundary
+ * with no test on it, free to drift.
+ */
+function exportRowsQuery(user, filters) {
+  const date = filters.date || todayBangkok();
   const { where, params } = buildScopeFilter(user, filters);
 
-  const [rows] = await pool.query(
-    `SELECT s.id AS student_id,
+  const sql = `SELECT s.id AS student_id,
             CONCAT(IFNULL(s.prefix,''), s.first_name, ' ', s.last_name) AS student_name,
             s.grade, s.classroom,
             sc.name AS school_name,
@@ -461,11 +470,42 @@ async function getExportRows(user, filters) {
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
      LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
      WHERE ${where}
-     ORDER BY sc.name, v.plate_no, s.first_name`,
-    [date, ...params]
-  );
+     ORDER BY sc.name, v.plate_no, s.first_name`;
 
+  return { date, sql, params: [date, ...params] };
+}
+
+async function getExportRows(user, filters) {
+  const { date, sql, params } = exportRowsQuery(user, filters);
+  const [rows] = await pool.query(sql, params);
   return { date, rows };
+}
+
+/**
+ * The same rows, one at a time, for exports that write as they read.
+ *
+ * A province-scope export is every student in the province; loading that into
+ * an array and then building the whole file from it holds the dataset twice in
+ * memory at once, and there is no LIMIT on this query to bound it.
+ *
+ * The connection is DESTROYED rather than released when iteration stops early —
+ * a client that cancels a download, or a write that fails. Returning a
+ * connection to the pool while its result set is still arriving would hand the
+ * next borrower rows from this query.
+ */
+async function* streamExportRows(user, filters) {
+  const { sql, params } = exportRowsQuery(user, filters);
+  const conn = await pool.getConnection();
+  let drained = false;
+  try {
+    for await (const row of conn.connection.query(sql, params).stream()) {
+      yield row;
+    }
+    drained = true;
+  } finally {
+    if (drained) conn.release();
+    else conn.destroy();
+  }
 }
 
 /**
@@ -536,6 +576,8 @@ module.exports = {
   getDailyReport,
   getMonthlyReport,
   getSummaryReport,
+  exportRowsQuery,
   getExportRows,
+  streamExportRows,
   getPolicyReport,
 };

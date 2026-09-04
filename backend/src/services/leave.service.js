@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { toBangkokDate } = require('../utils/thaiTime');
 const { logAudit } = require('../utils/audit');
 const { gradeEquivalents } = require('../utils/gradeScope');
 
@@ -113,6 +114,17 @@ async function cancelLeaveBySchool(leaveId, userId, schoolId) {
   return { id: leaveId, cancelled: true };
 }
 
+// leave_date is a DATE column. mysql2 parses it against the +07:00 connection
+// timezone, so a leave stored as 2026-08-05 arrives as a Date at
+// 2026-08-04T17:00:00.000Z and JSON.stringify ships exactly that. A client that
+// prints it, or slices the first ten characters, shows the day before — a
+// student marked absent on the 5th listed under the 4th. Verified against the
+// sandbox before this change. created_at is a TIMESTAMP, a real instant, and is
+// deliberately left alone.
+function withCalendarLeaveDate(row) {
+  return { ...row, leave_date: toBangkokDate(row.leave_date) };
+}
+
 /**
  * Get leaves for a vehicle on a date.
  */
@@ -128,7 +140,7 @@ async function getLeavesForVehicle(vehicleId, date) {
      ORDER BY sl.created_at DESC`,
     [vehicleId, date]
   );
-  return rows;
+  return rows.map(withCalendarLeaveDate);
 }
 
 /**
@@ -153,7 +165,7 @@ async function getLeavesForSchool(schoolId, date, { gradeFilter = null } = {}) {
      ORDER BY v.plate_no, sl.created_at DESC`,
     params
   );
-  return rows;
+  return rows.map(withCalendarLeaveDate);
 }
 
 /**

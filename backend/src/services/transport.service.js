@@ -526,12 +526,18 @@ async function deleteInspection({ inspectionId, userId, isAdmin = false }) {
   if (!isAdmin && row.inspected_by !== userId) {
     const e = new Error('ลบได้เฉพาะผลตรวจที่คุณเป็นผู้บันทึก'); e.statusCode = 403; throw e;
   }
+
+  // The caller writes this row into audit_logs.old_value as JSON. Raw DATE
+  // columns would be recorded a day early there, which is worse than in a
+  // response: the response is transient, the audit row is the record of what
+  // was deleted.
+  const audited = withCalendarDates(row, INSPECTION_DATE_FIELDS);
   await pool.query(`DELETE FROM vehicle_inspections WHERE id = ?`, [inspectionId]);
   try {
     const { refreshVehicleEligibility } = require('./vehicleVerification.service');
     await refreshVehicleEligibility(pool, row.vehicle_id);
   } catch (e) { /* non-fatal: eligibility recompute is best-effort */ }
-  return row;
+  return audited;
 }
 
 module.exports = {

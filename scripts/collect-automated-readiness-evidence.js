@@ -212,11 +212,31 @@ function recordSecretScan(id, category, text) {
 }
 
 function secretMatches(text) {
-  const pattern = /(DB_PASSWORD|PASSWORD=|SECRET=|TOKEN=|Bearer |LINE_CHANNEL_SECRET|CHANNEL_ACCESS_TOKEN|mysql:\/\/|JWT_SECRET|[A-Za-z0-9_]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})/;
+  const pattern = /(DB_PASSWORD|PASSWORD=|SECRET=|TOKEN=|LINE_CHANNEL_SECRET|CHANNEL_ACCESS_TOKEN|mysql:\/\/|JWT_SECRET|[A-Za-z0-9_]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})/;
   return String(text || '').split(/\r?\n/).filter((line) => {
     if (isScannerPatternSourceLine(line)) return false;
-    return pattern.test(line);
+    if (pattern.test(line)) return true;
+    return hasLiteralBearerToken(line);
   });
+}
+
+/**
+ * `Bearer ` used to match on its own, which flagged every line that BUILDS an
+ * Authorization header — `Bearer ${token}`, `startsWith('Bearer ')` — as a
+ * leaked credential. A scanner that cries wolf on ordinary header code gets
+ * ignored, which is worse than one narrow rule.
+ *
+ * A real leak is `Bearer ` followed by an actual token: a long run of token
+ * characters, with no interpolation, placeholder or quote in between. A
+ * template expression or a short/angle-bracketed placeholder is not one.
+ */
+function hasLiteralBearerToken(line) {
+  const match = /Bearer\s+([^\s'"`)}\]]+)/.exec(line);
+  if (!match) return false;
+  const candidate = match[1];
+  if (candidate.startsWith('${') || candidate.startsWith('<') || candidate.startsWith('$')) return false;
+  if (candidate.includes('${')) return false;
+  return /^[A-Za-z0-9._-]{16,}$/.test(candidate);
 }
 
 function isScannerPatternSourceLine(line) {

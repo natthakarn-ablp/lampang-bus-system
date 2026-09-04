@@ -455,6 +455,8 @@ node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<
 
 ## 13. ลำดับเริ่มงานทันที
 
+> แผนปฏิบัติรายสัปดาห์ (Wave 0–4, rollout, closure) พร้อม owner/dependency/evidence ต่อข้อ อยู่ที่ `execution-plan-to-completion-2026-09-04.md` — เอกสารนี้คงเป็นกรอบ Phase/Exit gate
+
 1. Owner/Research lead/DPO ยืนยัน Phase 0: Logic, research protocol, population, menu target และผู้รับผิดชอบ
 2. Technical team ทำ Phase 1 rebaseline จาก release candidate เดียว
 3. แก้ research integrity ใน Phase 2 ก่อนเก็บ baseline/post รอบใหม่

@@ -62,9 +62,46 @@ describe('toBangkokDate', () => {
 
   it('returns null rather than a wrong date for absent or unparseable input', () => {
     expect(toBangkokDate(null)).toBeNull();
-    expect(toBangkokDate(undefined)).not.toBeNull(); // undefined defaults to now
     expect(toBangkokDate('not a date')).toBeNull();
     expect(toBangkokDate(new Date('nope'))).toBeNull();
+  });
+
+  /**
+   * `toBangkokDate` used to declare `(value = new Date())`, so an absent value
+   * silently became TODAY. Every call site that passes a possibly-absent
+   * column — `toBangkokDate(row.insurance_expiry)` where the SELECT omitted
+   * the column, or a row that simply is not there — was one missing value away
+   * from displaying or storing today's date as if it were real data. The
+   * default is gone: `undefined` now answers exactly what `null` answers.
+   */
+  describe('an absent value must not become today', () => {
+    it('undefined returns null, like null', () => {
+      expect(toBangkokDate(undefined)).toBeNull();
+      expect(toBangkokDate()).toBeNull();
+    });
+
+    it('a column missing from the row returns null, not today', () => {
+      const rowWithoutTheColumn = { id: 'V-1' };
+      expect(toBangkokDate(rowWithoutTheColumn.insurance_expiry)).toBeNull();
+      // Stated as the failure it replaces: this is what used to come back.
+      expect(toBangkokDate(rowWithoutTheColumn.insurance_expiry))
+        .not.toBe(todayBangkok());
+    });
+
+    it('todayBangkok still answers today — the deliberate way to ask', () => {
+      expect(todayBangkok()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(todayBangkok(EARLY_MORNING_BKK)).toBe('2026-09-04');
+    });
+
+    it('bangkokDateStamp keeps its own default and is unaffected', () => {
+      expect(bangkokDateStamp()).toMatch(/^\d{8}$/);
+      expect(bangkokDateStamp(undefined)).toMatch(/^\d{8}$/);
+    });
+
+    it('daysBetweenBangkok treats an absent endpoint as unknown, not as today', () => {
+      expect(daysBetweenBangkok(undefined, '2026-06-20')).toBeNull();
+      expect(daysBetweenBangkok('2026-06-20', undefined)).toBeNull();
+    });
   });
 });
 

@@ -29,8 +29,15 @@ const BANGKOK_TZ = 'Asia/Bangkok';
  * The Bangkok calendar date of an instant, as 'YYYY-MM-DD'.
  * `en-CA` formats as ISO-style year-month-day, which is why it is used here
  * rather than assembling parts by hand.
+ *
+ * There is deliberately NO default for `value`. It used to default to
+ * `new Date()`, which meant an absent column — `toBangkokDate(row.expiry)`
+ * where the SELECT did not include `expiry` — silently produced TODAY and
+ * carried it into a response or an UPDATE as if it were real data. `undefined`
+ * now answers `null`, the same as `null`, so a missing value stays missing.
+ * Callers that genuinely want "today" have `todayBangkok()`.
  */
-function toBangkokDate(value = new Date()) {
+function toBangkokDate(value) {
   if (value == null) return null;
 
   // A 'YYYY-MM-DD' string is already a calendar date; re-parsing it through

@@ -18,7 +18,7 @@
 ## Gaps And Dependencies
 
 - UAT/sign-off ฉบับ 2026-08 ยังเป็น template และไม่มีหลักฐานครบทุกบทบาท
-- ยังไม่มี load-test suite ที่พิสูจน์การใช้งานพร้อมกัน 1,000 คน; มีเพียง environment helper สำหรับ test
+- มี load-test suite (`backend/scripts/load-test.js` พร้อม unit test) แต่ยังไม่มีผลรันจาก environment ที่ใช้ปิด capacity gate จึงยังพิสูจน์การใช้งานพร้อมกัน 1,000 คนไม่ได้
 - ระบบ production เป็น single backend instance และ lockout/dedup/linking state บางส่วนอยู่ใน memory; ต้องย้าย state ไป Redis/DB ก่อน scale หลาย instance
 - Security residuals ที่ต้อง fix หรือมี risk acceptance: refresh-token rotation/replay, localStorage token, export rate-limit coverage, export streaming และ legacy weak-password rotation
 - ต้องยืนยัน PDPA/consent/QR/LINE policy โดย DPO/ผู้มีอำนาจจริงก่อนเปิด feature ที่เกี่ยวข้อง

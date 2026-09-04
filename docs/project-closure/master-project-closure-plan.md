@@ -41,7 +41,7 @@
 | Advanced flags | ส่วนใหญ่ unset/ปิด | shift, ETA, geofence, deviation, QR, consent และ admin recovery |
 | Admin recovery | deploy แบบ dark launch | รอ UAT ด้วย admin และ LINE จริง |
 | Manuals | มี HTML/PDF และภาพแยกบทบาท; PDF ล่าสุด 31 ส.ค. 2569 | ต้องตรวจความตรงกับ release ปิดโครงการ |
-| Capacity 1,000 users | ยังไม่พิสูจน์ | ไม่มี load-test suite/result ที่ใช้ปิด gate ได้ |
+| Capacity 1,000 users | ยังไม่พิสูจน์ | มี load-test suite (`backend/scripts/load-test.js` + `backend/tests/loadTest.unit.test.js`) แต่ยังไม่มีผลรันจาก environment ที่ใช้ปิด capacity gate |
 | Human sign-off | ยังไม่ครบ | ห้ามตีความ technical PASS เป็นการอนุมัติแทนคน |
 | Menu/IA | Admin ประมาณ 23, School 13, Affiliation 12, Province 11 เมนู | ต้องลดทางเข้าซ้ำตาม role-menu audit ก่อน final UAT |
 | Research metrics | ready 9, partial 4, missing evidence 11 จาก 24 | ห้ามใช้ raw action count หรือ hardcoded readiness เป็นผลวิจัย |

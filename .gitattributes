@@ -1,0 +1,26 @@
+# Line endings for the file types this repository's tooling actually reads.
+#
+# Scoped on purpose. A blanket `* text=auto` would renormalize files that are
+# already stored with mixed or binary-detected content
+# (backend/src/utils/studentImportClassifier.js is stored mixed,
+# backend/tests/driverDocuments.unit.test.js is stored as -text), turning an
+# unrelated whole-file rewrite into part of every future diff.
+#
+# Shell scripts are the reason this file exists: production-readiness-gate.sh,
+# restore-drill-db.sh and the backup scripts are executed by /bin/sh on the
+# server, where a CR at the end of a shebang or a `then` is a syntax error.
+# JS, JSON and Markdown follow so evidence bundles, manifests and closure
+# reports hash the same way on every machine that regenerates them.
+
+*.sh    text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+
+scripts/*.js         text eol=lf
+scripts/**/*.js      text eol=lf
+backend/scripts/*.js text eol=lf
+backend/tests/*.js   text eol=lf
+
+# Already stored as binary-detected content; leave it exactly as git has it
+# rather than renormalizing a file this work never touched.
+backend/tests/driverDocuments.unit.test.js -text

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
 
 function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'; }
@@ -27,11 +28,13 @@ const ROLES = [
   { id: 'admin', code: 'AD', name: 'แอดมิน', color: 'bg-purple-600' },
 ];
 
-function roleStatus(actions, hasSnap) {
-  const t = actions?.total || 0;
-  if (!hasSnap || t < 5) return { label: 'ยังต้องเพิ่มหลักฐาน', cls: 'bg-red-100 text-red-700', level: 0 };
-  if (t >= 20) return { label: 'พร้อมประเมิน', cls: 'bg-green-100 text-green-700', level: 2 };
-  return { label: 'ประเมินได้บางส่วน', cls: 'bg-amber-100 text-amber-700', level: 1 };
+/**
+ * Status comes from server-computed metric coverage. The previous rule awarded
+ * "พร้อมประเมิน" at 20 raw audit actions, so login and import volume could
+ * make a role look evaluable (audit 2026-09-04, Major 1).
+ */
+function roleStatus(roleCoverage) {
+  return roleEvidenceMeta(roleCoverage);
 }
 
 export default function ExecutiveSummary() {
@@ -52,18 +55,23 @@ export default function ExecutiveSummary() {
   const { baseline, latest, role_actions, role_exports } = data;
   const bD = baseline?.data || {};
   const lD = latest?.data || {};
-  const hasSnap = !!baseline && !!latest;
 
-  // Compute role readiness
+  const readiness = data.evidence_readiness || null;
+  const roleCoverage = readiness?.roles || {};
+  const freshness = readiness?.snapshot_freshness || null;
+  const blockingReasons = readiness?.blocking_reasons || [];
+
+  // Compute role readiness from evidence coverage, not action volume.
   const roleStats = ROLES.map(r => ({
     ...r,
     actions: role_actions[r.id] || { total: 0 },
     exports: role_exports[r.id] || 0,
-    status: roleStatus(role_actions[r.id], hasSnap),
+    coverage: roleCoverage[r.id] || null,
+    status: roleStatus(roleCoverage[r.id]),
   }));
-  const readyCount = roleStats.filter(r => r.status.level === 2).length;
-  const partialCount = roleStats.filter(r => r.status.level === 1).length;
-  const missingCount = roleStats.filter(r => r.status.level === 0).length;
+  const readyCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.SYSTEM_EVIDENCE).length;
+  const partialCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.PARTIAL).length;
+  const missingCount = roleStats.length - readyCount - partialCount;
 
   // Compute metric changes
   const metricChanges = METRICS.map(m => {
@@ -103,9 +111,26 @@ export default function ExecutiveSummary() {
         </div>
       </div>
 
+      {/* A summary that leads with readiness has to say what readiness means
+          here, and what it still cannot claim. */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-sm text-amber-900">
+        <p className="font-semibold">สถานะนี้เป็นความพร้อมของหลักฐาน ไม่ใช่ผลการวิจัย</p>
+        <p className="mt-1">จำนวน action ไม่ใช่เกณฑ์ความพร้อมประเมิน สถานะรายสิทธิ์คำนวณจากความครอบคลุมของตัวชี้วัดที่มีหลักฐานจริง</p>
+        {freshness && (
+          <p className="mt-1">
+            Snapshot ล่าสุด {freshness.latest_snapshot_date || 'ยังไม่มี'}
+            {freshness.age_days != null && ` (อายุ ${freshness.age_days} วัน, เกณฑ์ ${freshness.max_age_days} วัน)`}
+            {freshness.fresh ? ' — อยู่ในเกณฑ์' : ' — เก่าเกินเกณฑ์'}
+          </p>
+        )}
+        {blockingReasons.length > 0 && (
+          <p className="mt-1">ยังอ้างผลวิจัยไม่ได้ เพราะ: {blockingReasons.map(describeBlockingReason).join(' · ')}</p>
+        )}
+      </div>
+
       {/* KPI strip */}
       <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-5">
-        <MiniKpi label="พร้อมประเมิน" value={readyCount} color="green" />
+        <MiniKpi label="หลักฐานระบบครบ" value={readyCount} color="green" />
         <MiniKpi label="บางส่วน" value={partialCount} color="amber" />
         <MiniKpi label="ยังต้องเพิ่ม" value={missingCount} color="red" />
         <MiniKpi label="ดีขึ้น" value={improvements.length} color="green" />
@@ -124,7 +149,10 @@ export default function ExecutiveSummary() {
                 <span className="font-semibold text-gray-800 text-sm">{r.name}</span>
               </div>
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.status.cls}`}>{r.status.label}</span>
-              <p className="text-xs text-gray-400 mt-1">{r.actions.total} actions · {r.exports} exports</p>
+              <p className="text-xs text-gray-400 mt-1">
+                หลักฐานครบ {r.coverage ? `${r.coverage.system_evidence}/${r.coverage.metric_total}` : '-'} ตัวชี้วัด ·
+                {' '}{r.actions.total} actions (ปริมาณการใช้งาน) · {r.exports} exports
+              </p>
             </div>
           ))}
         </div>

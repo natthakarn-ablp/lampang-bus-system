@@ -15,6 +15,69 @@ const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ExcelJS = require('exceljs');
 const { csvCell, neutralizeSpreadsheetCell, redactAuditValue } = require('../utils/exportSecurity');
+const researchReadinessSvc = require('../services/researchReadiness.service');
+const { RESEARCH_PROTOCOL, EXTERNAL_EVIDENCE_REGISTRY } = require('../config/researchProtocol');
+const { METRICS: RESEARCH_METRICS } = require('../config/researchMetrics');
+
+/**
+ * Audit entity types that stand in for the named events each metric requires.
+ * Kept next to the query that reads them so a new required_event in the metric
+ * registry fails loudly here instead of silently counting as "no evidence".
+ */
+const RESEARCH_EVENT_ENTITY_TYPES = [
+  ...new Set(RESEARCH_METRICS.flatMap((m) => m.required_events || [])),
+];
+
+/**
+ * Builds the evidence context for the readiness service from live data.
+ * Read-only: it counts rows, it never asserts a readiness value itself.
+ */
+async function loadResearchEvidenceContext() {
+  const [[snapAgg]] = await pool.query(
+    `SELECT MAX(snapshot_date) AS latest_date,
+            MAX(CASE WHEN is_baseline = TRUE THEN snapshot_date END) AS baseline_date,
+            COUNT(*) AS snapshot_count
+       FROM daily_snapshots`
+  );
+
+  let auditEventCounts = {};
+  let auditEventLatestDate = {};
+  if (RESEARCH_EVENT_ENTITY_TYPES.length) {
+    const placeholders = RESEARCH_EVENT_ENTITY_TYPES.map(() => '?').join(',');
+    const [eventRows] = await pool.query(
+      `SELECT entity_type, COUNT(*) AS cnt, MAX(created_at) AS latest
+         FROM audit_logs WHERE entity_type IN (${placeholders})
+        GROUP BY entity_type`,
+      RESEARCH_EVENT_ENTITY_TYPES
+    );
+    for (const row of eventRows) {
+      auditEventCounts[row.entity_type] = Number(row.cnt) || 0;
+      auditEventLatestDate[row.entity_type] = row.latest
+        ? new Date(row.latest).toISOString().slice(0, 10)
+        : null;
+    }
+  }
+
+  const [roleTotals] = await pool.query(
+    `SELECT u.role AS role, COUNT(*) AS cnt
+       FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id
+      WHERE u.role IS NOT NULL
+      GROUP BY u.role`
+  );
+  const roleActionTotals = {};
+  for (const r of roleTotals) roleActionTotals[r.role] = Number(r.cnt) || 0;
+
+  return {
+    latestSnapshotDate: snapAgg?.latest_date || null,
+    baselineSnapshotDate: snapAgg?.baseline_date || null,
+    snapshotCount: Number(snapAgg?.snapshot_count) || 0,
+    auditEventCounts,
+    auditEventLatestDate,
+    roleActionTotals,
+    externalEvidence: EXTERNAL_EVIDENCE_REGISTRY,
+    protocol: RESEARCH_PROTOCOL,
+  };
+}
 
 function calcDelta(baseline, latest, numField, denField) {
   const bPct = baseline[denField] > 0 ? (baseline[numField] / baseline[denField]) * 100 : 0;
@@ -881,12 +944,33 @@ router.get('/evaluation-summary', async (req, res, next) => {
     const exportMap = {};
     for (const e of exportsByRole) exportMap[e.role || 'unknown'] = e.cnt;
 
+    // Evidence coverage is computed here so no client can re-derive readiness
+    // from action volume. `role_actions` stays for the usage breakdown the
+    // dashboard still shows, but it no longer decides any status.
+    const evidenceCtx = await loadResearchEvidenceContext();
+    const evidenceReadiness = researchReadinessSvc.buildEvidenceReadiness(evidenceCtx);
+
     return sendSuccess(res, {
       baseline: baseline ? { id: baseline.id, date: baseline.snapshot_date, note: baseline.baseline_note, research_phase: baseline.research_phase, data: baseline } : null,
       latest: latest ? { id: latest.id, date: latest.snapshot_date, data: latest } : null,
       snapshot_count: snaps.length,
       role_actions: roleMap,
       role_exports: exportMap,
+      evidence_readiness: {
+        schema_version: evidenceReadiness.schema_version,
+        snapshot_freshness: evidenceReadiness.snapshot_freshness,
+        baseline_pair: evidenceReadiness.baseline_pair,
+        protocol: evidenceReadiness.protocol,
+        summary: evidenceReadiness.summary,
+        roles: evidenceReadiness.roles,
+        metrics: evidenceReadiness.metrics.map((m) => ({
+          key: m.key, role: m.role, title_th: m.title_th, category: m.category,
+          status: m.status, status_label_th: m.status_label_th,
+          blocking_reasons: m.blocking_reasons, latest_evidence_date: m.latest_evidence_date,
+        })),
+        research_claims_allowed: evidenceReadiness.research_claims_allowed,
+        blocking_reasons: evidenceReadiness.blocking_reasons,
+      },
     });
   } catch (err) { next(err); }
 });
@@ -900,13 +984,21 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
     const to = req.query.to || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     const include = (req.query.include || 'snapshots,audit,exports,summary').split(',');
 
+    // Evidence readiness is derived per metric from data that exists. The old
+    // `dme_mie_ready: true` constant is gone: it asserted the dataset was fit
+    // for evaluation while 11 of 24 metrics still had no evidence at all.
+    const evidenceCtx = await loadResearchEvidenceContext();
+    const evidenceReadiness = researchReadinessSvc.buildEvidenceReadiness(evidenceCtx);
+
     const result = { meta: {
       generated_at: new Date().toISOString(),
       generated_by: req.user.username,
       date_range: { from, to },
       included: include,
-      format_version: '2.0',
-      dme_mie_ready: true,
+      format_version: '3.0',
+      evidence_readiness: evidenceReadiness,
+      research_claims_allowed: evidenceReadiness.research_claims_allowed,
+      readiness_note: 'ชุดข้อมูลนี้เป็นหลักฐานเชิงระบบ ไม่ใช่ผลการวิจัย และยังไม่ผ่านการรับรองโดย Research lead',
     }};
 
     if (include.includes('snapshots')) {
@@ -1025,14 +1117,45 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
           evening_completion: calcDelta(baselineSnap, latestSnap, 'evening_done', 'evening_total'),
         } : null,
 
+        // Snapshot age travels with the numbers it qualifies. Percentages
+        // computed from a stale snapshot describe the day it was taken, not
+        // today, and the reader has no way to know that from the value alone.
+        snapshot_freshness: evidenceReadiness.snapshot_freshness,
+        baseline_pair: evidenceReadiness.baseline_pair,
+
         _notes: {
           dme: 'DME fields are computed from system snapshots and audit logs — fully automated',
           mie: 'MIE fields require external evidence (surveys, interviews, financial data) — return null until collected',
           delta: 'Delta values show percentage point change from baseline to current snapshot',
+          freshness: `ค่าที่คำนวณจาก snapshot ใช้ได้เมื่อ snapshot ใหม่กว่า ${evidenceReadiness.snapshot_freshness.max_age_days} วัน; ปัจจุบันอายุ ${evidenceReadiness.snapshot_freshness.age_days ?? 'ไม่ทราบ'} วัน`,
+          delta_validity: evidenceReadiness.baseline_pair.usable
+            ? 'baseline/post pair อยู่ในช่วง protocol ที่ freeze แล้ว'
+            : `ห้ามตีความ delta เป็นผลวิจัย เหตุผล: ${evidenceReadiness.baseline_pair.reason}`,
         },
       };
 
       result.summary = { counts, action_breakdown: actionBreakdown, role_breakdown: roleBreakdown, dme_mie: dmeFields };
+
+      // Data dictionary ships with the dataset so every metric can be traced to
+      // its formula, denominator and missing-data rule without a second file.
+      result.data_dictionary = {
+        schema_version: '1.0',
+        categories: {
+          operational_kpi: 'ตัวชี้วัดการดำเนินงาน คำนวณจากระบบได้โดยตรง',
+          participation_kpi: 'ตัวชี้วัดการมีส่วนร่วม ต้องมีเหตุการณ์เสนอ/พิจารณา/มติ/แจ้งผลกลับ',
+          research_outcome: 'ผลลัพธ์เชิงวิจัย ต้องมี protocol, baseline และช่วงสังเกตที่กำหนด',
+          external_evidence: 'ต้องใช้เครื่องมือภายนอก เช่น แบบสอบถาม สัมภาษณ์ บันทึกประชุม',
+        },
+        metrics: evidenceReadiness.metrics.map((m) => ({
+          key: m.key, role: m.role, title: m.title, title_th: m.title_th,
+          category: m.category, formula: m.formula,
+          numerator: m.numerator, denominator: m.denominator,
+          missing_data_rule: m.missing_data_rule, sources: m.sources,
+          instrument: m.instrument, evidence_status: m.status,
+          blocking_reasons: m.blocking_reasons,
+          latest_evidence_date: m.latest_evidence_date,
+        })),
+      };
     }
 
     const format = (req.query.format || 'json').toLowerCase();
@@ -1093,10 +1216,31 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         if (s.dme_mie) {
           csv += '\n=== DME Metrics ===\n';
           csv += 'metric,value\n';
+          // Nested objects would serialise as "[object Object]"; they get their
+          // own sections below instead of a meaningless cell.
+          const NESTED = new Set(['_notes', 'delta', 'role_adoption', 'snapshot_freshness', 'baseline_pair']);
           for (const [k, v] of Object.entries(s.dme_mie)) {
-            if (k === '_notes' || k === 'delta' || k === 'role_adoption') continue;
+            if (NESTED.has(k)) continue;
             csv += `${esc(k)},${esc(v)}\n`;
           }
+        }
+      }
+
+      // Readiness travels with the CSV so a spreadsheet copy cannot be read as
+      // a clean dataset when 11 of 24 metrics still lack evidence.
+      if (result.meta?.evidence_readiness) {
+        const er = result.meta.evidence_readiness;
+        csv += '\n=== Evidence Readiness ===\n';
+        csv += `research_claims_allowed,${esc(er.research_claims_allowed)}\n`;
+        csv += `blocking_reasons,${esc((er.blocking_reasons || []).join(' | '))}\n`;
+        csv += `snapshot_latest,${esc(er.snapshot_freshness?.latest_snapshot_date)}\n`;
+        csv += `snapshot_age_days,${esc(er.snapshot_freshness?.age_days)}\n`;
+        csv += `snapshot_fresh,${esc(er.snapshot_freshness?.fresh)}\n`;
+        csv += `protocol_frozen,${esc(er.protocol?.frozen)}\n`;
+        csv += '\nmetric_key,category,evidence_status,blocking_reasons,latest_evidence_date\n';
+        for (const m of er.metrics || []) {
+          csv += [m.key, m.category, m.status, (m.blocking_reasons || []).join(' | '), m.latest_evidence_date]
+            .map(esc).join(',') + '\n';
         }
       }
 
@@ -1232,7 +1376,24 @@ router.get('/research-export/preview', async (req, res, next) => {
       [from, to, from, to, from, to, from, to]
     );
 
-    return sendSuccess(res, { from, to, ...counts });
+    // Row counts alone read as "the dataset is this big"; the limits belong in
+    // the same answer so nobody exports first and reads the caveats later.
+    const evidenceCtx = await loadResearchEvidenceContext();
+    const readiness = researchReadinessSvc.buildEvidenceReadiness(evidenceCtx);
+
+    return sendSuccess(res, {
+      from,
+      to,
+      ...counts,
+      evidence_readiness: {
+        snapshot_freshness: readiness.snapshot_freshness,
+        baseline_pair: readiness.baseline_pair,
+        protocol: readiness.protocol,
+        summary: readiness.summary,
+        research_claims_allowed: readiness.research_claims_allowed,
+        blocking_reasons: readiness.blocking_reasons,
+      },
+    });
   } catch (err) { next(err); }
 });
 

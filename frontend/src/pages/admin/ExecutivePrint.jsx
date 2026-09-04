@@ -4,6 +4,7 @@ import api from '../../api/axios';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
+import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
 
 function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'; }
@@ -29,11 +30,13 @@ const ROLES = [
   { id: 'admin', name: 'แอดมิน', focus: 'สุขภาพระบบ' },
 ];
 
-function roleStatus(actions, hasSnap) {
-  const t = actions?.total || 0;
-  if (!hasSnap || t < 5) return 'ยังต้องเพิ่มหลักฐาน';
-  if (t >= 20) return 'พร้อมประเมิน';
-  return 'ประเมินได้บางส่วน';
+/**
+ * A printed briefing outlives the screen it came from, so the status it prints
+ * has to be the one the evidence supports. The old rule promoted a role to
+ * "พร้อมประเมิน" at 20 raw audit actions (audit 2026-09-04, Major 1).
+ */
+function roleStatus(roleCoverage) {
+  return roleEvidenceMeta(roleCoverage).label;
 }
 
 export default function ExecutivePrint() {
@@ -70,16 +73,22 @@ export default function ExecutivePrint() {
   const role_exports = data.role_exports || {};
   const bD = baseline?.data || {};
   const lD = latest?.data || {};
-  const hasSnap = !!baseline && !!latest;
+
+  const readiness = data.evidence_readiness || null;
+  const roleCoverage = readiness?.roles || {};
+  const freshness = readiness?.snapshot_freshness || null;
+  const baselinePair = readiness?.baseline_pair || null;
+  const blockingReasons = readiness?.blocking_reasons || [];
 
   const roleStats = ROLES.map(r => ({
     ...r,
-    status: roleStatus(role_actions[r.id], hasSnap),
+    coverage: roleCoverage[r.id] || null,
+    status: roleStatus(roleCoverage[r.id]),
     actions: role_actions[r.id]?.total || 0,
     exports: role_exports[r.id] || 0,
   }));
-  const readyCount = roleStats.filter(r => r.status === 'พร้อมประเมิน').length;
-  const partialCount = roleStats.filter(r => r.status === 'ประเมินได้บางส่วน').length;
+  const readyCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.SYSTEM_EVIDENCE).length;
+  const partialCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.PARTIAL).length;
 
   const metricChanges = METRICS.map(m => {
     const bv = pct(bD[m.num] || 0, bD[m.den] || 0);
@@ -128,15 +137,35 @@ export default function ExecutivePrint() {
         {/* 2. Executive summary box */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm">
           <p className="font-semibold text-blue-800 mb-1">สรุปสำหรับผู้บริหาร</p>
-          <p>จาก 6 สิทธิ์ในระบบ มี <strong>{readyCount} สิทธิ์</strong>ที่พร้อมประเมินผล, <strong>{partialCount} สิทธิ์</strong>ประเมินได้บางส่วน
+          <p>จาก 6 สิทธิ์ในระบบ มี <strong>{readyCount} สิทธิ์</strong>ที่มีหลักฐานระบบครบทุกตัวชี้วัด, <strong>{partialCount} สิทธิ์</strong>มีหลักฐานบางส่วน
             {improvements.length > 0 ? ` — มี ${improvements.length} ตัวชี้วัดที่ดีขึ้นจาก baseline` : ' — ยังไม่มีการเปลี่ยนแปลงจาก baseline (อาจเพิ่งเริ่มเก็บข้อมูล)'}
             {lowCoverage.length > 0 ? ` · ${lowCoverage.length} ตัวชี้วัดที่ยังต่ำกว่า 50%` : ''}.
           </p>
         </div>
 
+        {/* A printed page is quoted out of context, so its limits are printed
+            on it rather than left to the reader to remember. */}
+        <div className="border border-amber-300 bg-amber-50 rounded-lg p-3 mb-4 text-xs text-amber-900">
+          <p className="font-semibold">ข้อจำกัดของรายงานฉบับนี้</p>
+          <p className="mt-0.5">สถานะรายสิทธิ์คือความพร้อมของหลักฐานเชิงระบบ ไม่ใช่ผลการวิจัย และจำนวน action ไม่ใช่เกณฑ์ความพร้อมประเมิน</p>
+          {freshness && (
+            <p className="mt-0.5">
+              Snapshot ล่าสุด {freshness.latest_snapshot_date || 'ยังไม่มี'}
+              {freshness.age_days != null && ` อายุ ${freshness.age_days} วัน (เกณฑ์ ${freshness.max_age_days} วัน)`}
+              {freshness.fresh ? '' : ' — เก่าเกินเกณฑ์ ตัวเลขในรายงานอธิบายวันที่เก็บ ไม่ใช่สถานะปัจจุบัน'}
+            </p>
+          )}
+          {baselinePair && !baselinePair.usable && (
+            <p className="mt-0.5">ห้ามตีความคอลัมน์ “เปลี่ยนแปลง” เป็นผลการวิจัย: {describeBlockingReason(baselinePair.reason)}</p>
+          )}
+          {blockingReasons.length > 0 && (
+            <p className="mt-0.5">ยังอ้างผลวิจัยไม่ได้ เพราะ: {blockingReasons.map(describeBlockingReason).join(' · ')}</p>
+          )}
+        </div>
+
         {/* 3. KPI strip */}
         <div className="grid grid-cols-6 gap-2 mb-4">
-          <KpiCell label="พร้อมประเมิน" value={readyCount} />
+          <KpiCell label="หลักฐานระบบครบ" value={readyCount} />
           <KpiCell label="บางส่วน" value={partialCount} />
           <KpiCell label="ยังต้องเพิ่ม" value={6 - readyCount - partialCount} />
           <KpiCell label="ดีขึ้น" value={improvements.length} />
@@ -152,8 +181,9 @@ export default function ExecutivePrint() {
               <tr className="bg-gray-100">
                 <th className="border border-gray-300 px-2 py-1 text-left">สิทธิ์</th>
                 <th className="border border-gray-300 px-2 py-1 text-left">เน้นวัด</th>
-                <th className="border border-gray-300 px-2 py-1 text-center">สถานะ</th>
-                <th className="border border-gray-300 px-2 py-1 text-center">Actions</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">สถานะหลักฐาน</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">ตัวชี้วัดที่มีหลักฐานครบ</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">Actions (ปริมาณใช้งาน)</th>
                 <th className="border border-gray-300 px-2 py-1 text-center">Exports</th>
               </tr>
             </thead>
@@ -163,6 +193,9 @@ export default function ExecutivePrint() {
                   <td className="border border-gray-300 px-2 py-1 font-medium">{r.name}</td>
                   <td className="border border-gray-300 px-2 py-1 text-gray-600">{r.focus}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{r.status}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">
+                    {r.coverage ? `${r.coverage.system_evidence}/${r.coverage.metric_total}` : '-'}
+                  </td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{r.actions}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{r.exports}</td>
                 </tr>

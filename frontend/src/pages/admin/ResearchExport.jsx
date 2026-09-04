@@ -7,6 +7,7 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { AppCard, AlertBanner, StatusBadge, FormField, SectionTitle } from '../../components/ui';
+import { describeBlockingReason } from '../../utils/evidenceStatus';
 
 const DATASETS = [
   { key: 'snapshots', label: 'Snapshots',       desc: 'daily_snapshots' },
@@ -37,6 +38,10 @@ export default function ResearchExport() {
   const [exporting, setExporting] = useState(null); // null | 'json' | 'csv' | 'excel'
 
   const [included, setIncluded] = useState(() => new Set(DATASETS.map(d => d.key)));
+
+  // Server-computed. Absent from an older backend, in which case no readiness
+  // claim is rendered at all rather than an assumed-good one.
+  const readiness = preview?.evidence_readiness || null;
 
   const fetchPreview = useCallback(async () => {
     setLoading(true);
@@ -162,6 +167,38 @@ export default function ResearchExport() {
           </div>
         ) : (
           <EmptyState title="ไม่มีข้อมูลในช่วงที่เลือก" description="ลองขยายช่วงวันที่" />
+        )}
+
+        {/* Row counts read as "the dataset is this big". What the dataset can
+            and cannot support belongs next to them, not in a separate doc. */}
+        {readiness && (
+          <div className="mt-4">
+            <AlertBanner
+              variant={readiness.research_claims_allowed ? 'info' : 'warn'}
+              title={readiness.research_claims_allowed
+                ? 'ชุดข้อมูลนี้อยู่ในช่วง protocol ที่ freeze แล้ว'
+                : 'ชุดข้อมูลนี้ยังใช้อ้างผลวิจัยไม่ได้'}
+            >
+              {readiness.snapshot_freshness && (
+                <p>
+                  Snapshot ล่าสุด {readiness.snapshot_freshness.latest_snapshot_date || 'ยังไม่มี'}
+                  {readiness.snapshot_freshness.age_days != null
+                    && ` (อายุ ${readiness.snapshot_freshness.age_days} วัน, เกณฑ์ ${readiness.snapshot_freshness.max_age_days} วัน)`}
+                  {readiness.snapshot_freshness.fresh ? ' — อยู่ในเกณฑ์' : ' — เก่าเกินเกณฑ์'}
+                </p>
+              )}
+              {readiness.summary?.by_status && (
+                <p className="mt-1">
+                  ตัวชี้วัด: มีหลักฐานระบบเบื้องต้น {readiness.summary.by_status.system_evidence} ·
+                  {' '}มีหลักฐานบางส่วน {readiness.summary.by_status.partial_evidence} ·
+                  {' '}ยังไม่มีหลักฐานพอ {readiness.summary.by_status.evidence_missing} จาก {readiness.summary.total}
+                </p>
+              )}
+              {readiness.blocking_reasons?.length > 0 && (
+                <p className="mt-1">เหตุผล: {readiness.blocking_reasons.map(describeBlockingReason).join(' · ')}</p>
+              )}
+            </AlertBanner>
+          </div>
         )}
       </AppCard>
 

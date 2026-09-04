@@ -10,6 +10,7 @@ const reportSvc = require('../services/report.service');
 const { logAudit } = require('../utils/audit');
 const { csvCell, neutralizeSpreadsheetCell } = require('../utils/exportSecurity');
 const { abbreviateGrade } = require('../utils/gradeDisplay');
+const { DECISION_LOG_ROLES, validateDecisionLog } = require('../utils/decisionLog');
 
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
@@ -649,16 +650,30 @@ router.get('/export/monthly/pdf', async (req, res, next) => {
 });
 
 // ─── POST /decision-log — Log province decision before export ────────────────
+// Validation rules and rationale live in utils/decisionLog.js.
 router.post('/decision-log', async (req, res, next) => {
   try {
-    const { decision_type, decision_note, report_type, report_date } = req.body;
+    if (!DECISION_LOG_ROLES.includes(req.user.role)) {
+      return sendError(res, 'บทบาทนี้ไม่มีสิทธิ์บันทึกการตัดสินใจ', [], 403);
+    }
+
+    const parsed = validateDecisionLog(req.body || {});
+    if (parsed.error) return sendError(res, parsed.error, [], 400);
+    const { decisionType, reportType, reportDate, note } = parsed.value;
 
     await logAudit({
       userId: req.user.id,
       action: 'CREATE',
       entityType: 'decision_log',
-      entityId: `${report_type || 'report'}_${report_date || 'unknown'}`,
-      newValue: { decision_type, decision_note, report_type, report_date, role: req.user.role },
+      entityId: `${reportType}_${reportDate}`,
+      newValue: {
+        decision_type: decisionType,
+        decision_note: note,
+        report_type: reportType,
+        report_date: reportDate,
+        role: req.user.role,
+        scope_id: req.user.scopeId ?? null,
+      },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -666,5 +681,6 @@ router.post('/decision-log', async (req, res, next) => {
     return sendSuccess(res, { logged: true }, 'บันทึกการตัดสินใจสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
+
 
 module.exports = router;

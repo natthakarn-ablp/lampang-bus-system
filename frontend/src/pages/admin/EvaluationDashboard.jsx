@@ -9,6 +9,7 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { AppCard, AlertBanner, StatusBadge, DataTable } from '../../components/ui';
+import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
 
 function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function delta(c, b) { return Math.round((c - b) * 100) / 100; }
@@ -69,11 +70,15 @@ const CODE_BG = {
   blue:   'bg-brand-600', indigo: 'bg-brand-700', purple: 'bg-navy-800',
 };
 
-function evalStatus(actions, snapHas) {
-  const total = actions?.total || 0;
-  if (!snapHas || total < 5) return { label: 'ยังต้องเพิ่มหลักฐาน', variant: 'danger' };
-  if (total >= 20) return { label: 'พร้อมประเมิน', variant: 'success' };
-  return { label: 'ประเมินได้บางส่วน', variant: 'warn' };
+/**
+ * Role status now comes from server-computed metric coverage. The previous
+ * rule — any snapshot plus 20 raw audit actions equals "พร้อมประเมิน" — let
+ * 1,757 logins and 3,257 student creates stand in for evaluability, which is
+ * the exact error the 2026-09-04 audit flagged as Major 1.
+ */
+function evalStatus(roleCoverage) {
+  const meta = roleEvidenceMeta(roleCoverage);
+  return { label: meta.label, variant: meta.variant };
 }
 
 /**
@@ -132,9 +137,15 @@ export default function EvaluationDashboard() {
   const lData = latest?.data || {};
   const hasSnap = Boolean(baseline) && Boolean(latest);
 
-  const statuses = ROLE_DEFS.map(r => evalStatus(roleActions[r.id], hasSnap).label);
-  const readyCount = statuses.filter(l => l === 'พร้อมประเมิน').length;
-  const partialCount = statuses.filter(l => l === 'ประเมินได้บางส่วน').length;
+  // Coverage comes from the server; an older backend that omits it yields
+  // "unknown", never an optimistic default.
+  const readiness = data.evidence_readiness || null;
+  const roleCoverage = readiness?.roles || {};
+  const coverageList = ROLE_DEFS.map(r => roleCoverage[r.id] || null);
+  const readyCount = coverageList.filter(c => c?.status === EVIDENCE_STATUS.SYSTEM_EVIDENCE).length;
+  const partialCount = coverageList.filter(c => c?.status === EVIDENCE_STATUS.PARTIAL).length;
+  const freshness = readiness?.snapshot_freshness || null;
+  const blockingReasons = readiness?.blocking_reasons || [];
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto pb-10">
@@ -149,15 +160,37 @@ export default function EvaluationDashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <SummaryPill label="Baseline" value={baseline ? fmtDate(baseline.date) : 'ยังไม่มี'} tone={baseline ? 'brand' : 'muted'} />
         <SummaryPill label="Snapshot ล่าสุด" value={latest ? fmtDate(latest.date) : 'ยังไม่มี'} tone={latest ? 'brand' : 'muted'} />
-        <SummaryPill label="พร้อมประเมิน" value={`${readyCount} / ${ROLE_DEFS.length} role`} tone={readyCount >= 4 ? 'success' : 'warn'} />
+        <SummaryPill label="มีหลักฐานระบบเบื้องต้น" value={`${readyCount} / ${ROLE_DEFS.length} role`} tone={readyCount >= 4 ? 'success' : 'warn'} />
         <SummaryPill label="ยังต้องเพิ่ม" value={`${ROLE_DEFS.length - readyCount - partialCount} role`} tone="muted" />
       </div>
+
+      {/* Readiness is a claim about evidence, so its limits travel with it
+          rather than sitting in a document nobody opens next to the numbers. */}
+      <AlertBanner variant={readiness?.research_claims_allowed ? 'info' : 'warn'} className="mb-5"
+        title="สถานะนี้เป็นความพร้อมของหลักฐาน ไม่ใช่ผลการวิจัย">
+        <p>
+          จำนวน action ไม่ใช่เกณฑ์ความพร้อมประเมิน สถานะแต่ละบทบาทคำนวณจากความครอบคลุมของตัวชี้วัดที่มีหลักฐานจริง
+        </p>
+        {freshness && (
+          <p className="mt-1">
+            Snapshot ล่าสุด {freshness.latest_snapshot_date || 'ยังไม่มี'}
+            {freshness.age_days != null && ` (อายุ ${freshness.age_days} วัน, เกณฑ์ ${freshness.max_age_days} วัน)`}
+            {freshness.fresh ? ' — อยู่ในเกณฑ์' : ' — เก่าเกินเกณฑ์ ห้ามตีความว่าเป็นสถานะปัจจุบัน'}
+          </p>
+        )}
+        {blockingReasons.length > 0 && (
+          <p className="mt-1">
+            ยังอ้างผลวิจัยไม่ได้ เพราะ: {blockingReasons.map(describeBlockingReason).join(' · ')}
+          </p>
+        )}
+      </AlertBanner>
 
       <div className="space-y-3">
         {ROLE_DEFS.map(role => {
           const actions = roleActions[role.id] || { actions: {}, total: 0 };
           const exports = roleExports[role.id] || 0;
-          const status = evalStatus(actions, hasSnap);
+          const coverage = roleCoverage[role.id] || null;
+          const status = evalStatus(coverage);
           const isOpen = expanded === role.id;
           const panelId = `eval-panel-${role.id}`;
 
@@ -187,7 +220,8 @@ export default function EvaluationDashboard() {
                       <StatusBadge variant={status.variant} size="sm">{status.label}</StatusBadge>
                     </span>
                     <span className="block text-caption text-ink-muted">
-                      {role.focus} · {actions.total || 0} actions · {exports} exports
+                      {role.focus} · หลักฐานครบ {coverage ? `${coverage.system_evidence}/${coverage.metric_total}` : '-'} ตัวชี้วัด ·
+                      {' '}{actions.total || 0} actions (ปริมาณการใช้งาน) · {exports} exports
                     </span>
                   </span>
                   <span className="hidden sm:flex gap-2 shrink-0">

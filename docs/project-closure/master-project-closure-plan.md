@@ -43,6 +43,9 @@
 | Manuals | มี HTML/PDF และภาพแยกบทบาท; PDF ล่าสุด 31 ส.ค. 2569 | ต้องตรวจความตรงกับ release ปิดโครงการ |
 | Capacity 1,000 users | ยังไม่พิสูจน์ | ไม่มี load-test suite/result ที่ใช้ปิด gate ได้ |
 | Human sign-off | ยังไม่ครบ | ห้ามตีความ technical PASS เป็นการอนุมัติแทนคน |
+| Menu/IA | Admin ประมาณ 23, School 13, Affiliation 12, Province 11 เมนู | ต้องลดทางเข้าซ้ำตาม role-menu audit ก่อน final UAT |
+| Research metrics | ready 9, partial 4, missing evidence 11 จาก 24 | ห้ามใช้ raw action count หรือ hardcoded readiness เป็นผลวิจัย |
+| Participatory evidence | มี request/approval/audit บางส่วน | ยังขาดการร่วมเสนอ/ปรึกษา/มติ/มอบหมาย/แจ้งผลกลับแบบครบวงจร |
 
 ## 4. ขอบเขตผลิตภัณฑ์ที่จะรับรอง
 
@@ -52,9 +55,10 @@
 - Dashboard จังหวัด ต้นสังกัด โรงเรียน ขนส่ง คนขับ และผู้ดูแลระบบตาม scope
 - จัดการ/ตรวจสอบข้อมูลโรงเรียน นักเรียน ผู้ปกครอง รถ และคนขับ
 - Import preview, validation, apply/rollback ใน sandbox และประวัติ import
-- กระบวนการ Phase 1 ที่โรงเรียนเป็นผู้เช็กนักเรียนก่อน
+- กระบวนการ rollout ระยะแรกที่โรงเรียนเป็นผู้เช็กนักเรียนก่อน
 - รายงานรายวัน รายเดือน สรุป และเชิงนโยบาย พร้อม export/audit
 - Audit log และการตรวจสอบย้อนหลังตามสิทธิ์
+- Participation case/event สำหรับข้อเสนอ การรับทราบ การปรึกษา มติ การมอบหมาย การปิดงาน และการแจ้งผลกลับใน workflow ที่รับรอง
 - การตรวจรถ/เอกสาร/คิวรับรองของขนส่งและโรงเรียน
 - Parent LINE binding/status/notification เฉพาะ policy ที่อนุมัติให้เปิด
 - การลืมรหัสผ่านด้วยตนเองครบ 6 login roles และการกู้คืนการผูก LINE ของผู้ปกครอง
@@ -64,7 +68,7 @@
 
 | Feature | สถานะตั้งต้น | Decision ที่ต้องมี |
 |---|---|---|
-| Driver shift selection | ปิด | เปิด Phase 2 หรือ defer พร้อมเหตุผล |
+| Driver shift selection | ปิด | พิจารณาเปิด Phase 12B หรือ defer พร้อมเหตุผล |
 | ETA | ปิด | ต้องมี GPS/data quality และ UAT |
 | Geofence | ปิด | ต้องมีจุดรับส่ง/notification policy |
 | Route deviation | ปิด | ต้องมี baseline เส้นทางอย่างน้อยตามเงื่อนไขระบบ |
@@ -86,185 +90,268 @@
 
 ทุก defect ต้องมีรหัส, severity, route/role, steps, expected/actual, evidence, owner, fix commit และผล retest
 
-## 6. แผนดำเนินงานเป็นเฟส
+## 6. แผนดำเนินงานฉบับเต็ม
 
-### Phase 0 - Project Control And Scope Freeze
+ลำดับนี้แทนลำดับ Phase เดิม โดยอ้างอิงผลตรวจ `docs/role-menu-participatory-research-audit-2026-09-04.md` แผนแต่ละ Phase ต้องผ่าน Exit gate ก่อนนำผลไปอ้างว่าเสร็จ แต่ Phase ที่ระบุว่างานคู่ขนานสามารถเริ่มพร้อมกันได้
 
-ระยะเวลาเป้าหมาย: 2-3 วันทำการ
+### รูปแบบการดำเนินงาน
 
-- [ ] แต่งตั้ง Project owner, Product owner, Technical owner, Operator, Data owner และ DPO/contact
-- [ ] ยืนยัน Core scope และรายการ feature ที่ defer
-- [ ] ยืนยัน logic Phase 1: โรงเรียนเป็นผู้เช็กเด็กก่อน พร้อมนิยามเวลา/เหตุการณ์เช็กอินและเช็กเอาต์
-- [ ] กำหนดช่องทาง issue, severity, change approval และ maintenance window
-- [ ] กำหนด release candidate commit และห้ามเพิ่ม feature หลัง scope freeze เว้นแต่เป็น defect fix
+| ประเภท | ทำได้โดย | ตัวอย่าง | กติกา |
+|---|---|---|---|
+| A - Automated | Codex/Technical team | audit source, code/test, schema ใน sandbox, reports, validators, docs | ทำต่อเนื่องได้เมื่อ Logic ถูกยืนยัน และต้องเก็บ evidence |
+| B - Sandbox/External | Technical team + Operator/provider | LINE test, load test, uptime alert, restore/reboot, staging | ห้ามใช้ production data เขียนทดสอบ และต้องมี rollback |
+| C - Human decision | Owner/Research lead/DPO/UAT representatives | Logic, lawful basis, research protocol, UAT/sign-off, risk acceptance | ห้ามปลอม approval หรือใช้ automated PASS แทนลายเซ็น |
 
-Exit gate: มี scope/version/owner/decision register ที่ผู้มีอำนาจยืนยัน
+Critical path โดยประมาณ: 8-12 สัปดาห์สำหรับ system acceptance บวก hypercare 30 วัน โดยไม่รวมระยะเก็บข้อมูลวิจัยที่ต้องเป็นไปตาม protocol จริง ระยะเวลาอาจเพิ่มเมื่อรอ DPO, sandbox, LINE provider, load environment หรือผู้แทน UAT
 
-### Phase 1 - Rebaseline And Evidence Reset
+Dependency หลัก:
+
+1. Phase 0 ต้องผ่านก่อนแก้ Logic, เมนู หรือเครื่องมือวิจัย
+2. Phase 2 ต้องผ่านก่อนสร้าง baseline/post dataset รอบใหม่
+3. Phase 3-5 ทำคู่ขนานได้หลัง design review แต่รวม release เดียวกันก่อน Phase 8
+4. Phase 6-7 ต้องผ่านก่อนเปิด parent/LINE/consent หรือส่งออกข้อมูลวิจัย
+5. Phase 8 ต้องผ่านก่อน capacity/production rollout
+6. Phase 9-10 ต้องผ่านก่อนกล่าวอ้าง capacity และ operational readiness
+7. Phase 13 เริ่มเก็บผลได้เมื่อ intervention/version และ baseline ถูก freeze แล้วเท่านั้น
+
+### Phase 0 - Governance, Logic And Research Protocol Freeze
+
+ระยะเวลาเป้าหมาย: 3-5 วันทำการ
+
+- [ ] แต่งตั้ง Project owner, Product owner, Technical owner, Operator, Data owner, UAT lead, Research lead และ DPO/contact
+- [ ] ยืนยัน Core scope, pilot scope และ feature ที่ `accept`, `pilot` หรือ `defer`
+- [ ] ยืนยัน Logic ของ rollout ระยะแรกว่าบัญชีโรงเรียนเต็มหรือครู grade scope เป็นผู้เช็กเด็ก พร้อมนิยาม check-in/out, absent, leave, override และ void
+- [ ] ยืนยันเจ้าของการอนุมัติ transfer, vehicle request, roster/registration และ vehicle inspection ไม่ให้ queue ซ้ำหลายระดับ
+- [ ] ยืนยันนิยาม "การบริหารแบบมีส่วนร่วม", กรอบทฤษฎี, คำถามวิจัย, ประชากร/กลุ่มตัวอย่าง, ตัวแปร, เครื่องมือ และช่วง pre/post กับอาจารย์ที่ปรึกษา/Research lead
+- [ ] ตัดสินว่าผู้ปกครอง นักเรียน ครูบัญชีย่อย และผู้เข้าประชุมอยู่ใน research population หรือเป็น external evidence
+- [ ] อนุมัติ target information architecture ต่อบทบาทตาม audit ล่าสุด โดยยังไม่ลบ route/API เดิม
+- [ ] กำหนด issue workflow, severity, change approval, maintenance window และ release freeze
+
+งานที่ Codex ทำได้: สร้าง decision register/template, route/menu matrix และ impact analysis
+
+Human gate: เจ้าของ Logic, Research lead, DPO และผู้มีอำนาจต้องยืนยันจริง ห้าม Codex ลงชื่อแทน
+
+Exit gate: decision register ครบ ไม่มี Logic/นิยามวิจัยที่ยังคลุมเครือก่อนเริ่มแก้ระบบ
+
+### Phase 1 - Technical Rebaseline And Evidence Reset
 
 ระยะเวลาเป้าหมาย: 2-4 วันทำการ
 
-- [ ] Archive เอกสาร snapshot เก่าที่ขัดกับสถานะปัจจุบันและสร้าง Current Status หน้าเดียว
-- [ ] ตรวจ production แบบ read-only: commit, PM2, health, DB timezone, migration, cron, disk/memory
+- [ ] สร้าง Current Status จาก production commit เดียว และติดป้ายเอกสารเก่าที่เป็น historical
+- [ ] ตรวจ production แบบ read-only: commit, PM2, health, DB timezone, migration, cron, disk, RAM, swap และ certificate
 - [ ] ตรวจ feature flags แบบ whitelist โดยไม่แสดง secrets
-- [ ] รัน unit tests, integration tests ที่มี, frontend build, label/hybrid guard และ dependency audit
-- [ ] สร้าง evidence folders ชุดใหม่สำหรับ release candidate เดียวกัน
+- [ ] รัน unit/integration tests, frontend build, UI label/hybrid guard, migration baseline และ dependency/security audit
+- [ ] สร้าง evidence folders ใหม่สำหรับ release candidate พร้อม timestamp/checksum
 - [ ] ตรวจ secret/PII scan ของ source, diff, reports และ evidence
+- [ ] บันทึก baseline menu counts, API inventory และข้อมูลการใช้งานแบบ aggregate
 
-Exit gate: baseline ทุกเอกสารอ้าง commit เดียวกันและไม่มีข้อมูลขัดแย้งที่ยังไม่ติดป้าย historical
+Exit gate: source/runtime/report อ้าง commit เดียวกัน และไม่มี baseline ที่ขัดกันโดยไม่ติดป้าย
 
-### Phase 2 - Core Logic And Product Closure
+### Phase 2 - Research Integrity Remediation
+
+ระยะเวลาเป้าหมาย: 3-5 วันทำการ
+
+- [ ] เปลี่ยนคำว่า "พร้อมประเมิน" ที่อิง raw action count เป็น "มีหลักฐานระบบเบื้องต้น" จนกว่า metric coverage จะครบ
+- [ ] ยกเลิก `dme_mie_ready: true` แบบ hardcode และส่งออก readiness แยก metric พร้อมเหตุผล/วันที่หลักฐาน
+- [ ] เพิ่ม validation/allowlist/length limit ให้ decision-log และกำหนดว่าบังคับในเหตุการณ์ใด
+- [ ] แยก operational KPI, participation KPI, research outcome และ external evidence ไม่ให้ปะปน
+- [ ] สร้าง data dictionary, metric formula, denominator, missing-data rule, research period และ version ของเครื่องมือ
+- [ ] เพิ่ม freshness rule ให้ snapshot และห้ามเปรียบเทียบ baseline/post ที่อยู่นอก protocol
+- [ ] เพิ่ม test ป้องกัน readiness เกินหลักฐานและ export metadata ผิด
+
+Exit gate: ไม่มีข้อความ PASS/พร้อมวิจัยจาก heuristic ที่ไม่ได้รับรอง และชุดข้อมูลอธิบายแหล่ง/ข้อจำกัดได้ทุก metric
+
+### Phase 3 - Menu And Information Architecture Simplification
 
 ระยะเวลาเป้าหมาย: 1-2 สัปดาห์
 
-- [ ] ทำ role-to-route/API matrix จากโค้ดปัจจุบันใหม่
-- [ ] ทบทวน business logic กับเจ้าของงาน: โรงเรียน, ต้นสังกัด, จังหวัด, ขนส่ง, คนขับ และผู้ปกครอง
-- [ ] ทดสอบ school import, transfer, vehicle request, driver assignment, inspection และ report calculation ใน sandbox
-- [ ] ยืนยันทุก query ใช้ scope ฝั่ง server ไม่พึ่งการซ่อนเมนูอย่างเดียว
-- [ ] ปิด Critical/Major logic conflict และเพิ่ม regression test
-- [ ] ตัดสินใจ feature flags ทุกตัวว่า `accept`, `pilot` หรือ `defer`
-- [ ] ทำ Admin technical pilot แล้วขยาย account recovery ครบทุกสิทธิ์ตาม `docs/password-recovery-all-roles-roadmap.md`
+- [ ] เพิ่ม page/action telemetry แบบ data-minimized และกำหนด retention เพื่อใช้ตัดสินเมนูจากหลักฐาน ไม่เก็บ PII
+- [ ] Driver รวม registration/application และคงงานวันนี้/แผนที่/ฉุกเฉิน/โปรไฟล์ให้เข้าถึงเร็ว
+- [ ] School รวมรถ+เพิ่มรถ, legacy roster+registration, vehicle workflow และ map/live โดยใช้ tabs/action ในหน้าเดิม
+- [ ] Affiliation รวมโรงเรียน+บัญชี, request queues และ map/risk
+- [ ] Province รวมเครือข่ายข้อมูลและแผนที่ ย้าย readiness ไป secondary governance
+- [ ] Transport รวม verification/inspection เป็น end-to-end queue
+- [ ] Admin ลดทางเข้าหลักจากประมาณ 23 เป็น 8 กลุ่ม และรวมหน้าวิจัยเป็น module เดียว
+- [ ] เก็บ old routes เป็น redirect/compatibility อย่างน้อยหนึ่ง release และซ่อนด้วย feature flag ก่อนลบ
+- [ ] ทดสอบ keyboard, focus, mobile navigation, deep link, browser back และ permission-denied state
 
-Exit gate: Core scope ไม่มี Critical/Major defect และ logic decision ลงนามครบ
+Exit gate: ผู้แทนแต่ละบทบาททำ top tasks ได้โดยไม่หลง context, ไม่มี dead link และ old bookmark ยังไปจุดที่ถูกต้อง
 
-### Phase 3 - Data Readiness And Ownership
+### Phase 4 - Participatory Administration Workflow MVP
+
+ระยะเวลาเป้าหมาย: 1-2 สัปดาห์
+
+- [ ] ออกแบบ `participation_cases` และ append-only `participation_case_events` แบบ additive migration พร้อม rollback
+- [ ] รองรับ event ขั้นต่ำ: `SUBMITTED`, `ACKNOWLEDGED`, `COMMENTED`, `CONSULTED`, `DECIDED`, `ASSIGNED`, `COMPLETED`, `FEEDBACK_SENT`
+- [ ] ฝัง event ใน emergency, vehicle request, transfer, roster/registration, inspection และ policy decision เดิม
+- [ ] เก็บผู้ริเริ่ม ผู้เข้าร่วม ทางเลือก มติ เหตุผล ผู้รับผิดชอบ SLA ผลลัพธ์ และการแจ้งผลกลับ โดยไม่เก็บข้อมูลเกินจำเป็น
+- [ ] เพิ่ม inbox "งานที่ต้องมีส่วนร่วม" แบบรวม ไม่สร้างเมนูใหม่ต่อ action
+- [ ] เพิ่ม parent/teacher feedback channel ตาม scope ที่ owner/DPO อนุมัติ
+- [ ] เพิ่ม aggregate participation dashboard แยกจาก operational dashboard
+- [ ] ทดสอบ cross-scope, append-only audit, duplicate submission, reassignment และ closed feedback loop
+
+Exit gate: มีอย่างน้อยหนึ่ง workflow ต่อ role ที่พิสูจน์เส้นทางเสนอ-พิจารณา-ตัดสินใจ-ดำเนินการ-แจ้งผลกลับได้ใน sandbox
+
+### Phase 5 - Core Logic And Product Closure
+
+ระยะเวลาเป้าหมาย: 1-2 สัปดาห์ ทำคู่ขนาน Phase 3-4 หลัง Phase 0 ผ่าน
+
+- [ ] สร้าง role-to-route/API/write-action matrix ฉบับ release candidate
+- [ ] ปิด logic conflict ของ school first check-in, teacher grade scope, transfer, vehicle request, registration, assignment และ inspection
+- [ ] ทดสอบ import preview/apply/rollback, reports, Thai date/time และ audit ใน sandbox
+- [ ] ยืนยัน server-side scope ทุก query/write action ไม่พึ่งการซ่อนเมนู
+- [ ] ปิด Critical/Major defect และเพิ่ม regression/negative tests
+- [ ] ทำ Admin recovery pilot แล้วขยายครบทุกสิทธิ์ตาม `docs/password-recovery-all-roles-roadmap.md`
+- [ ] Feature ขั้นสูงที่ไม่อยู่ accepted scope ต้องซ่อนทั้ง menu/API อย่างปลอดภัย
+
+Exit gate: Core scope ไม่มี Critical/Major และ Logic decision ทุกข้อมี test/evidence เชื่อมกลับได้
+
+### Phase 6 - Data Readiness, Ownership And Certification
 
 ระยะเวลาเป้าหมาย: 1 สัปดาห์ จากนั้นติดตามต่อเนื่อง
 
 - [ ] สร้าง aggregate data-quality score โดยไม่ export PII
-- [ ] ตรวจ school-affiliation mapping, active/inactive status, student/vehicle/driver ownership และ duplicate/orphan
-- [ ] ให้แต่ละโรงเรียนยืนยันข้อมูลของตนเอง; ต้นสังกัดยืนยัน coverage; จังหวัดยืนยันภาพรวม
-- [ ] แก้ข้อมูลผ่านหน้าระบบและ audit trail เท่านั้น ห้ามแก้ SQL ตรงโดยไม่มี change record
-- [ ] Freeze master data ชั่วคราวในช่วง final UAT หรือบันทึก delta ที่เกิดระหว่างทดสอบ
-- [ ] ระบุกระบวนการ correction, transfer, retention และสิทธิ์เจ้าของข้อมูล
+- [ ] ตรวจ school-affiliation mapping, active/inactive, ownership, duplicate/orphan และข้อมูลที่จำเป็นต่อ LINE/check-in
+- [ ] โรงเรียนรับรองข้อมูลตนเอง ต้นสังกัดรับรอง coverage จังหวัดรับรองภาพรวม และขนส่งรับรองผลตรวจ
+- [ ] ผูก certification กับ term/batch/report/hash/exception ตาม `docs/pdpa-consent-and-data-confirmation-plan.md`
+- [ ] แก้ข้อมูลผ่าน UI/audit trail เท่านั้น และบันทึก delta ระหว่าง UAT
+- [ ] กำหนด correction, transfer, retention, archival และ data-subject request workflow
 
-Exit gate: Critical data integrity = 0, Major = 0 และ Data owner sign-off ครบตามหน่วยงานที่อยู่ใน rollout
+Exit gate: Critical/Major data defect = 0 และ Data owner certification ครบ rollout scope
 
-### Phase 4 - Security, Privacy And Legal Closure
+### Phase 7 - Security, PDPA, Consent And Legal Closure
 
-ระยะเวลาเป้าหมาย: 1-2 สัปดาห์ ทำคู่ขนาน Phase 2-3
+ระยะเวลาเป้าหมาย: 1-2 สัปดาห์ ทำคู่ขนาน Phase 5-6
 
-- [ ] ทำ threat/RBAC review รอบ release candidate และทดสอบ IDOR/cross-scope ทุกบทบาท
-- [ ] แก้หรือรับรองความเสี่ยง refresh-token rotation, localStorage token, export rate limits และ export memory buffering
-- [ ] หมุน secrets/credentials ที่ครบกำหนด โดยไม่บันทึกค่าในเอกสาร
-- [ ] ตรวจ default/legacy weak passwords และกำหนด force rotation
-- [ ] รับรอง data inventory, purpose, minimization, retention, access request และ breach response
-- [ ] DPO/legal ตัดสินใจ LINE, consent, QR และข้อมูลระดับสูง
-- [ ] ดำเนินการตาม `docs/pdpa-consent-and-data-confirmation-plan.md` โดยแยก Consent, Acknowledgement และ Data Certification ห้ามใช้กล่องยินยอมรวมทุกวัตถุประสงค์
-- [ ] เพิ่มกล่องรับทราบทุกบทบาทและการรับรองข้อมูลก่อน import/รับรองสถานะ พร้อมหลักฐานแบบ append-only
-- [ ] ปิดช่องว่าง parent consent UI/API และพิสูจน์ withdrawal cascade ครบ QR, ParentStatus, LIFF, LINE, report และ export ก่อนเปิด feature flag
-- [ ] ทดสอบ incident playbook กรณีข้อมูลข้ามสิทธิ์, LINE ผิดคน และไฟล์ export หลุด
+- [ ] ทำ threat/RBAC/IDOR/cross-scope review ทุกบทบาทรวม research export และ participation workflow
+- [ ] ปิดหรือรับรอง refresh-token rotation, localStorage token, export rate limit/streaming และ legacy password risks
+- [ ] หมุน secrets ที่ครบกำหนดโดยไม่บันทึกค่าใน git/evidence
+- [ ] DPO/legal รับรอง data inventory, purpose, lawful basis, minimization, retention, LINE, QR และข้อมูลอ่อนไหว
+- [ ] แยก Consent, Acknowledgement และ Data Certification พร้อม version/snapshot/withdrawal
+- [ ] ปิดช่องว่าง ParentStatus consent, parent endpoint gate, feature dependency และ withdrawal cascade ทุกช่องทาง
+- [ ] ทำ DPIA/incident playbook สำหรับข้อมูลเด็ก, LINE ผิดคน, export หลุด และ participation comments
 
-Exit gate: ไม่มี Critical/Major security finding, DPO decision ครบ และ residual risk มีผู้มีอำนาจลงนาม
+Exit gate: ไม่มี Critical/Major security/privacy finding, DPO decision ครบ และ residual risk ลงนามจริง
 
-### Phase 5 - Full Role UAT And Accessibility
+### Phase 8 - Full Role UAT, Usability And Accessibility
 
 ระยะเวลาเป้าหมาย: 1-2 สัปดาห์
 
-- [ ] สร้าง sandbox/test accounts แยก admin, province, affiliation, school full, school teacher, driver และ transport
-- [ ] ใช้ LINE test account สำหรับ parent และ admin recovery โดยไม่ใช้ข้อมูลเด็กจริง
-- [ ] ทดสอบ login/logout/wrong password/blocked route/mobile ทุกบทบาท
-- [ ] ทดสอบ workflow หลักและ negative path ตาม `docs/UAT_SIGNOFF_2026-08.md`
-- [ ] ทดสอบ export, audit, Thai date/time, grade labels และ error/empty/loading states
-- [ ] ตรวจ WCAG ระดับใช้งานจริง: keyboard, focus, contrast, target size, screen reader labels และ responsive 390/768/1440 px
-- [ ] เก็บภาพ redacted และ audit IDs แล้วรัน UAT evidence validator แบบ strict
+- [ ] สร้าง sandbox/test accounts: admin, province, affiliation, school full, school teacher, driver, transport และ LINE parent
+- [ ] ใช้ synthetic data และ LINE test account ห้ามเขียนทดสอบกับข้อมูลเด็กจริง
+- [ ] ทดสอบ top tasks, negative paths, refusal/consent, cross-scope, recovery และ old-route redirects
+- [ ] วัด task completion, time-on-task, error, help request และความสับสนของเมนูก่อน/หลังปรับ
+- [ ] ทดสอบ participation case ตั้งแต่เสนอจน feedback sent
+- [ ] ตรวจ responsive 390/768/1440, keyboard, focus, contrast, target size และ screen reader labels
+- [ ] เก็บภาพ redacted/audit IDs และรัน evidence validator แบบ strict
 
-Exit gate: ทุก role ใน accepted scope PASS, validator ผ่านโดยไม่ใช้ `--allow-pending`, Critical/Major = 0 และตัวแทนผู้ใช้ลงนาม
+Exit gate: accepted role/workflow PASS, Critical/Major = 0, usability target ผ่าน และผู้แทนจริงลงนาม
 
-### Phase 6 - Capacity 1,000 Users And Infrastructure
+### Phase 9 - Capacity 1,000 Users And Infrastructure
 
 ระยะเวลาเป้าหมาย: 1 สัปดาห์เตรียม + 1 สัปดาห์ปรับแก้
 
-หลักสำคัญ: ห้ามทดสอบ write load 1,000 คนกับ production และห้ามอ้างว่ารองรับจนมีผลทดสอบจริง
+ห้ามทดสอบ write load บน production และห้ามกล่าวว่ารองรับ 1,000 concurrent users จนมีหลักฐานจริง
 
-- [ ] สร้าง staging ที่ขนาดใกล้ production ใช้ข้อมูลสังเคราะห์หรือ masked dataset
-- [ ] สร้าง load-test suite สำหรับ login, dashboards, school check-in/out, reports, GPS และ parent status
-- [ ] ยืนยัน workload model กับหน่วยงาน; ค่าเริ่มต้นสำหรับออกแบบคือเพิ่มระดับ 50, 200, 500, 1,000 concurrent users
-- [ ] รัน ramp test, peak test และ soak test อย่างน้อย 60 นาที
-- [ ] เก็บ p50/p95/p99, throughput, error rate, DB connections/slow queries, CPU, RAM, swap, event-loop lag และ LINE queue
-- [ ] เกณฑ์เริ่มต้น: error <1%, ไม่มีข้อมูลซ้ำ/หาย, read API p95 <=1 วินาที, write API p95 <=2 วินาที และระบบฟื้นหลัง peak โดยไม่ restart ผิดปกติ
-- [ ] หากต้อง scale หลาย instance ให้ย้าย lockout/dedup/link state จาก memory ไป Redis/DB ก่อน
-- [ ] ปรับ indexes, connection pool, caching, report streaming/queue และ VPS size ตามผลจริง
-- [ ] รันทดสอบซ้ำจนผ่าน แล้วกำหนด capacity limit และ degradation policy ที่ประกาศได้
+- [ ] สร้าง staging ใกล้ production ด้วย synthetic/masked data
+- [ ] สร้าง workload สำหรับ login, dashboards, school check-in, reports, participation events, GPS และ parent status
+- [ ] รัน ramp 50/200/500/1,000, peak และ soak อย่างน้อย 60 นาที
+- [ ] เก็บ p50/p95/p99, throughput, error, DB pool/slow query, CPU/RAM/swap, event-loop lag และ LINE queue
+- [ ] เกณฑ์เริ่มต้น: error <1%, ไม่มีข้อมูลซ้ำ/หาย, read p95 <=1 วินาที, write p95 <=2 วินาที และฟื้นหลัง peak ได้
+- [ ] ย้าย shared state ไป Redis/DB ก่อน scale หลาย instance และปรับ index/pool/cache/report streaming ตามผล
+- [ ] ประกาศ capacity limit/degradation policy ตามผลจริง
 
-Exit gate: มีรายงาน load test ที่ทำซ้ำได้และลงนามโดย Technical owner/Operator; ถ้าไม่ผ่าน 1,000 ต้องประกาศ limit จริงและมีแผน scale ห้ามกล่าวเกินผลทดสอบ
+Exit gate: รายงานทำซ้ำได้และ Technical owner/Operator ลงนาม ถ้าไม่ผ่านต้องประกาศ limit จริง
 
-### Phase 7 - Resilience, DR And Operations
+### Phase 10 - Resilience, DR And Production Operations
 
 ระยะเวลาเป้าหมาย: 3-5 วันทำการ + maintenance window
 
-- [ ] กำหนด RPO/RTO, backup retention, off-host owner และ restore frequency
-- [ ] ทำ restore drill จาก backup ล่าสุดใน scratch DB และพิสูจน์ production aggregate ไม่เปลี่ยน
-- [ ] ทำ controlled reboot แล้วตรวจ PM2/systemd/nginx/MySQL/cron กลับมาภายใน RTO
-- [ ] เปิด external uptime alert และทดสอบ notification ไปยัง on-call
-- [ ] ทดสอบ rollback code, frontend, feature flag และ migration ที่รองรับ rollback
-- [ ] ตรวจ log rotation, disk threshold, clock/timezone และ certificate/domain expiry monitoring
-- [ ] ทำ operator gate และ monitor 30-60 นาทีโดยเก็บ redacted logs
+- [ ] กำหนด RPO/RTO, retention, off-host backup owner, on-call และ restore frequency
+- [ ] ทำ scratch restore และพิสูจน์ production aggregate ไม่เปลี่ยน
+- [ ] ทำ controlled reboot แล้วตรวจ PM2/nginx/MySQL/cron กลับมาภายใน RTO
+- [ ] เปิดและทดสอบ external uptime/disk/certificate/backup alerts
+- [ ] ทดสอบ rollback code, frontend, feature flags และ migration
+- [ ] ตรวจ log rotation, timezone, disk threshold และ incident escalation
+- [ ] ทำ operator gate และ monitor 30-60 นาทีด้วย redacted evidence
 
-Exit gate: production/postdeploy/restore/operator validators ผ่าน, RPO/RTO พิสูจน์แล้ว และ operator ลงนาม
+Exit gate: production/postdeploy/restore/operator validators ผ่าน และ Operator ลงนาม
 
-### Phase 8 - Manuals, Training And Communication
+### Phase 11 - Manuals, Training And Change Management
 
 ระยะเวลาเป้าหมาย: 1 สัปดาห์
 
-- [ ] Reconcile screenshot inventory กับภาพจริงและลบสถานะ tracker ที่ล้าสมัย
-- [ ] ตรวจคู่มือทุกบทบาทกับ release candidate และ feature flags ที่จะเปิดจริง
-- [ ] Regenerate HTML/PDF/เว็บไซต์และตรวจ rendering ภาษาไทยทุกไฟล์
-- [ ] เพิ่ม quick guide, troubleshooting, support contact และขั้นตอนข้อมูลผิด/บัญชีถูกล็อก
-- [ ] อบรม admin, จังหวัด, ต้นสังกัด, โรงเรียน, ขนส่ง, คนขับ และผู้ปกครองตามหน้าที่
-- [ ] เก็บ attendance, แบบประเมิน, คำถามค้าง และผลแบบฝึกปฏิบัติ
-- [ ] จัดทำประกาศใช้งาน ข้อจำกัด capacity/privacy และช่องทางแจ้งเหตุ
+- [ ] Regenerate คู่มือ/ภาพ/PDF/เว็บไซต์ตามเมนูและ feature flags รุ่นจริง
+- [ ] ทำ quick guide แยก role โดยสอน top tasks ไม่สอนทุกหน้าที่ซ่อนอยู่
+- [ ] เพิ่ม troubleshooting, support, recovery, privacy, feedback และ incident channels
+- [ ] อบรม admin, จังหวัด, สังกัด, โรงเรียน, ครู, ขนส่ง, คนขับ และผู้ปกครอง
+- [ ] เก็บ attendance, competency exercise, feedback และคำถามค้าง
+- [ ] จัดทำประกาศ scope, capacity, privacy และ change freeze
 
-Exit gate: คู่มือตรงกับ production, ผู้รับผิดชอบแต่ละกลุ่มผ่านแบบฝึก และมี Training sign-off
+Exit gate: คู่มือตรง production, ผู้แทนผ่านแบบฝึก และ Training sign-off ครบ
 
-### Phase 9 - Rollout ตามปีการศึกษา
+### Phase 12 - Controlled Rollout ตามปีการศึกษา
 
-#### Phase 9A: เทอม 2 ปีการศึกษา 2569
+#### Phase 12A: เทอม 2 ปีการศึกษา 2569
 
-- โรงเรียนเป็นผู้เช็กนักเรียนก่อนตาม policy ที่ยืนยันใน Phase 0
-- โรงเรียนนำเข้า/ตรวจข้อมูลนักเรียน รถ คนขับ และผู้ปกครอง
-- ต้นสังกัดติดตามความครบถ้วนและโรงเรียนที่ยังไม่ดำเนินการ
-- จังหวัดดูภาพรวม รายงาน และประเด็นเชิงนโยบาย
-- ขนส่งตรวจรถ/เอกสารและสถานะรับรอง
-- เปิด LINE เฉพาะ workflow ที่ผ่าน UAT/DPO; feature ขั้นสูงที่ยังไม่ผ่านให้คงปิด
-- เริ่ม pilot กลุ่มเล็ก แล้วขยายเป็นลำดับโรงเรียนหลังแต่ละ wave ผ่าน gate
+- โรงเรียนเป็นผู้เช็กเด็กตาม Logic ที่รับรองใน Phase 0
+- เปิด data/import/check-in/report/requests/inspection และ participatory workflow เฉพาะส่วนที่ผ่าน UAT
+- สังกัดติดตามความครบถ้วน รับทราบ มอบหมาย และปิด feedback loop กับโรงเรียน
+- จังหวัดใช้ aggregate dashboard/report และบันทึกมติที่มีหลักฐาน
+- ขนส่งตรวจ/รับรองรถโดยไม่เห็น PII เกินจำเป็น
+- เปิด LINE เฉพาะ workflow ที่ผ่าน DPO/UAT และคง advanced flags ที่ยังไม่ผ่านไว้เป็น off
+- pilot กลุ่มเล็กก่อน แล้วขยายทีละ wave หลัง monitor/gate ผ่าน
 
-#### Phase 9B: เทอม 1 ปีการศึกษา 2570
+#### Phase 12B: เทอม 1 ปีการศึกษา 2570
 
-- ขยายบทบาทคนขับให้ทำ check-in/out/shift ตาม logic ที่ยืนยัน
-- ขยาย Parent LINE adoption และ notification policy
-- พิจารณา ETA/geofence/route deviation/QR ทีละ feature flag หลังข้อมูลและ UAT พร้อม
-- เปรียบเทียบ KPI, incident, response time และภาระงานกับ Phase 9A
+- ขยายคนขับให้ check-in/out/shift ตาม Logic และผล Phase 12A
+- ขยาย Parent LINE adoption/feedback/notification ตาม policy
+- พิจารณา ETA/geofence/deviation/QR ทีละ feature ไม่เปิดรวมกัน
+- เปรียบเทียบ KPI, incident, response, workload และ participation closure กับ Phase 12A
 
-Exit gate ของแต่ละ wave: ไม่มี Critical, Major ที่กระทบ wave ถูกแก้, monitoring ปกติ และ owner อนุมัติขยาย wave ถัดไป
+Exit gate ต่อ wave: Critical = 0, Major ที่กระทบ wave = 0, monitoring ปกติ และ owner อนุมัติขยาย
 
-### Phase 10 - Hypercare, Handover And Formal Closure
+### Phase 13 - Research Data Collection And Evaluation
+
+ระยะเวลาเป้าหมาย: ตาม protocol ที่ Research lead อนุมัติ ไม่ผูกกับการ deploy เพียงวันเดียว
+
+- [ ] Freeze baseline ก่อน intervention ตามวัน/กลุ่มที่กำหนด และบันทึก contamination/confounders
+- [ ] รัน snapshot ตาม schedule พร้อม freshness/completeness checks
+- [ ] เก็บ external evidence: แบบสอบถาม สัมภาษณ์ บันทึกประชุม และ workload diary ตาม consent/ethics approval
+- [ ] เชื่อมหลักฐานระบบกับ participation case โดยใช้ pseudonymous IDs
+- [ ] วิเคราะห์แยก operational outcome, participation process, perceived benefit และ equity
+- [ ] ทำ missing-data/sensitivity/triangulation review และไม่อ้าง causal effect เกิน design
+- [ ] สร้าง reproducible export พร้อม data dictionary, version, query/checksum และ disclosure review
+
+Exit gate: Research lead รับรอง protocol adherence, dataset freeze และข้อจำกัดก่อนนำเสนอผล
+
+### Phase 14 - Hypercare, Handover And Formal Closure
 
 ระยะเวลาเป้าหมาย: 30 วันหลัง rollout wave สุดท้าย
 
 - [ ] เฝ้าระวังรายวันสัปดาห์แรกและรายสัปดาห์จนจบ hypercare
-- [ ] สรุป incident, support tickets, adoption, data completeness, uptime และ capacity
-- [ ] ปิด Critical/Major ทั้งหมด; Minor ย้ายเข้า maintenance backlog พร้อม owner/date
-- [ ] ส่งมอบ repository, deployment access, secret ownership, DB/backup, LINE Console, domain/DNS และ monitoring โดยไม่ส่ง secret ผ่าน git
-- [ ] ส่งมอบ architecture, schema, API/RBAC matrix, runbook, DR, manuals และ training records
-- [ ] Tag final release และสร้าง immutable closure bundle/checksums
-- [ ] ยืนยันงบ/ผู้ดูแล/รอบบำรุงรักษาหลังโครงการ รวมถึง renewal ของ domain/server/LINE-related services
-- [ ] ลงนาม System Acceptance และ Project Closure
+- [ ] สรุป incident, support, adoption, data quality, participation closure, uptime และ capacity
+- [ ] ปิด Critical/Major; Minor เข้า maintenance backlog พร้อม owner/date
+- [ ] ส่งมอบ repository, deployment, secret ownership, DB/backup, LINE Console, domain/DNS และ monitoring โดยไม่ส่ง secret ผ่าน git
+- [ ] ส่งมอบ architecture, schema, API/RBAC, research dictionary, runbook, DR, manuals และ training records
+- [ ] Tag final release และสร้าง immutable closure/research evidence bundle พร้อม checksums
+- [ ] ยืนยัน operator, SLA, งบ/renewal และผู้ดูแลหลังส่งมอบ
+- [ ] ลงนาม System Acceptance, Dataset Freeze และ Project Closure ตามขอบเขตจริง
 
-Exit gate: ผ่าน Definition of Done ทั้งหมดและผู้มีอำนาจลงนามจริง
+Exit gate: Definition of Done ผ่านทุกข้อและผู้มีอำนาจลงนามจริง
 
 ## 7. Role Acceptance Matrix
 
 | กลุ่ม | งานขั้นต่ำที่ต้องพิสูจน์ | ผู้รับรอง |
 |---|---|---|
-| Admin | users, recovery, audit, system health, readiness, term/settings | System owner |
-| Province | dashboard, affiliations/schools, reports/policy, audit, readiness | ตัวแทนจังหวัด |
-| Affiliation | scope โรงเรียน, accounts, status, requests, reports | ตัวแทนต้นสังกัด |
-| School full | import, students, vehicles, check-in/out Phase 1, approvals, reports, audit | ผู้บริหาร/ผู้รับผิดชอบโรงเรียน |
-| School teacher | เห็นเฉพาะ grade scope และไม่มี write action เกินสิทธิ์ | โรงเรียน |
-| Driver | roster, pretrip, emergency และ workflow ที่เปิดใน Phase 2 | คนขับ/โรงเรียน |
+| Admin | users, recovery, audit, operations, research evidence, term/settings และ unified scope | System owner |
+| Province | dashboard, network/risk, reports/policy, decision evidence, audit และ participation follow-up | ตัวแทนจังหวัด |
+| Affiliation | scope โรงเรียน/accounts, request inbox, follow-up/feedback closure และ reports | ตัวแทนต้นสังกัด |
+| School full | import/certification, students, vehicles, check-in/out ระยะแรก, requests, participation feedback, reports และ audit | ผู้บริหาร/ผู้รับผิดชอบโรงเรียน |
+| School teacher | เห็นเฉพาะ grade scope และทำได้เฉพาะ write action ที่ Phase 0 อนุมัติ | โรงเรียน |
+| Driver | roster, pretrip, emergency และ workflow ที่อนุมัติให้เปิดใน Phase 12B | คนขับ/โรงเรียน |
 | Transport | inspection, verification, documents, pickup map โดยไม่เห็น PII เกินจำเป็น | ตัวแทนขนส่ง |
-| Parent/LINE | bind/status/notification/unbind/rebind เฉพาะบุตรหลาน | ตัวแทนผู้ปกครอง + DPO |
+| Parent/LINE | bind/status/notification/unbind/rebind/privacy/feedback เฉพาะบุตรหลาน | ตัวแทนผู้ปกครอง + DPO |
 | Operator | deploy, monitor, backup, restore, rollback, incident | Technical owner |
 
 ## 8. RACI หลัก
@@ -273,6 +360,9 @@ Exit gate: ผ่าน Definition of Done ทั้งหมดและผู�
 |---|---|---|---|
 | Scope/Go-Live | Project owner | Product owner | ทุกหน่วยงาน |
 | Business logic | Product owner | เจ้าของ workflow | School/Affiliation/Province/Transport |
+| Research protocol/metrics | Research lead | Research team/Developer | อาจารย์ที่ปรึกษา/Product owner/DPO |
+| Information architecture | Product owner | UX/Developer | ตัวแทนทุกบทบาท |
+| Participation workflow | Product owner | Developer/Workflow owners | Province/Affiliation/School/Transport/Driver/Parent |
 | Source/Test/Deploy | Technical owner | Developer/Operator | Project owner |
 | ข้อมูลจริง | Data owner | โรงเรียน/ต้นสังกัด | DPO/Technical owner |
 | PDPA/Consent/LINE | Project owner/DPO | DPO contact | Legal/School/Parent |
@@ -287,9 +377,10 @@ Exit gate: ผ่าน Definition of Done ทั้งหมดและผู�
 
 | หมวด | น้ำหนัก |
 |---|---:|
-| Core functionality และ RBAC | 20% |
-| UAT ทุกบทบาท | 20% |
-| Data readiness | 15% |
+| Core functionality และ RBAC | 15% |
+| UAT/usability ทุกบทบาท | 15% |
+| Data readiness | 10% |
+| Research integrity และ participatory evidence | 15% |
 | Security/PDPA | 15% |
 | Capacity/performance | 10% |
 | Operations/DR | 10% |
@@ -303,6 +394,9 @@ Exit gate: ผ่าน Definition of Done ทั้งหมดและผู�
 
 - [ ] Release candidate commit ตรงกับ `/health.data.commit` และ server worktree สะอาด
 - [ ] Tests/build/dependency/security/migration validators ผ่าน
+- [ ] Research protocol/metric dictionary ถูก freeze และไม่มี hardcoded readiness หรือคำว่า "พร้อมประเมิน" จาก raw action count
+- [ ] Menu/IA ผ่าน role usability UAT และ old routes มี redirect/rollback ที่ตรวจได้
+- [ ] Participation workflow พิสูจน์ closed feedback loop ตาม accepted scope
 - [ ] UAT evidence pack ทุกบทบาทผ่าน strict validator
 - [ ] Account recovery ทุก login role และ parent LINE re-link ผ่าน UAT ตาม policy ของบทบาท
 - [ ] Critical = 0, Major = 0
@@ -323,6 +417,9 @@ Exit gate: ผ่าน Definition of Done ทั้งหมดและผู�
 - Approved scope, decision register และ accepted/deferred feature list
 - Release commit/tag, change log, migration status และ dependency lockfiles
 - Test/build/security/accessibility/load-test reports
+- Approved research protocol, metric/data dictionary, instrument versions และ evidence-readiness matrix
+- Menu inventory ก่อน/หลัง, redirect map, usability results และ feature-flag rollback evidence
+- Participation case/event aggregate และ closed-feedback-loop evidence แบบ redacted
 - UAT evidence/sign-off แยกบทบาท
 - Data-quality report และ Data owner certification
 - DPO/privacy/legal decisions
@@ -358,15 +455,16 @@ node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<
 
 ## 13. ลำดับเริ่มงานทันที
 
-1. Owner ยืนยัน Phase 0: scope, Phase 1 school-check logic และรายชื่อผู้รับผิดชอบ
-2. Technical team ทำ Phase 1 rebaseline และสร้าง evidence pack ชุดใหม่จาก commit เดียว
-3. Product/Data owners ปิด logic และ data gap ใน Phase 2-3
-4. Security/DPO ทำ Phase 4 คู่ขนาน
-5. ทำ Full UAT ใน sandbox ตาม Phase 5
-6. ทำ load test 1,000 คนและ infrastructure remediation ใน Phase 6
-7. ปิด DR/operations แล้ว regenerate คู่มือและอบรม
-8. Rollout เทอม 2/2569 และขยายเทอม 1/2570 ตาม gate
-9. Hypercare 30 วัน ส่งมอบ และลงนามปิดโครงการ
+1. Owner/Research lead/DPO ยืนยัน Phase 0: Logic, research protocol, population, menu target และผู้รับผิดชอบ
+2. Technical team ทำ Phase 1 rebaseline จาก release candidate เดียว
+3. แก้ research integrity ใน Phase 2 ก่อนเก็บ baseline/post รอบใหม่
+4. ทำ Phase 3 menu simplification และ Phase 4 participation workflow โดยรักษา compatibility
+5. ปิด Core/Data/Security ใน Phase 5-7 และทำงานอัตโนมัติที่ทำได้ต่อเนื่อง
+6. ทำ Full Role UAT/usability/accessibility ใน sandbox ตาม Phase 8
+7. พิสูจน์ capacity และ operations/DR ใน Phase 9-10
+8. Regenerate คู่มือ อบรม และ rollout ทีละ wave ใน Phase 11-12
+9. เก็บ/ตรวจ dataset ตาม protocol ใน Phase 13
+10. Hypercare ส่งมอบ และลงนามปิดโครงการใน Phase 14
 
 ## 14. Definition Of Done ระดับโครงการ
 
@@ -376,9 +474,11 @@ node scripts/validate-go-live-closure-status.js outputs/go-live-closure-status/<
 2. ผู้ใช้ทุกบทบาทใน scope ผ่าน UAT และอบรม
 3. ข้อมูลจริงมี owner และผ่านเกณฑ์คุณภาพ
 4. ระบบผ่าน security/privacy/capacity/DR gates
-5. ไม่มี Critical/Major defect ค้าง
-6. มี operator, backup owner, support, SLA และงบดูแลต่อ
-7. เอกสาร/คู่มือ/access/assets ส่งมอบครบ
-8. Final validators ผ่านแบบ strict
-9. ผู้มีอำนาจทุกฝ่ายลงนามจริง
-10. สิ่งที่ defer ถูกย้ายไป maintenance roadmap พร้อม owner/date และไม่แอบรวมเป็นงานที่เสร็จแล้ว
+5. Research readiness อิง metric evidence จริง และ participation closed loop ผ่าน accepted scope
+6. เมนูผ่าน role usability UAT โดยไม่มี workflow ซ้ำที่ทำให้ผู้ใช้ตัดสินใจผิด
+7. ไม่มี Critical/Major defect ค้าง
+8. มี operator, backup owner, support, SLA และงบดูแลต่อ
+9. เอกสาร/คู่มือ/access/assets ส่งมอบครบ
+10. Final validators ผ่านแบบ strict
+11. ผู้มีอำนาจทุกฝ่ายลงนามจริง
+12. สิ่งที่ defer ถูกย้ายไป maintenance roadmap พร้อม owner/date และไม่แอบรวมเป็นงานที่เสร็จแล้ว

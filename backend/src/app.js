@@ -167,7 +167,24 @@ app.use('/api/verification', require('./routes/verification.routes'));
 app.use('/api/parent',    require('./routes/parent.routes'));
 app.use('/api/line',      require('./routes/line.routes'));
 app.use('/api/admin',     require('./routes/admin.routes'));
-app.use('/api/visits',    require('./routes/visits.routes'));
+
+// `/api/visits/track` is public and unauthenticated by design (aggregate
+// counter, no PII, deduped per browser session by the frontend). That also made
+// it the only completely unlimited write path in the API: a curl loop could
+// inflate daily_visits without bound and write a row per request against a
+// single 2 GB instance. It gets its own limiter rather than joining the
+// operator floor, so anonymous public traffic and authenticated operator
+// traffic from one NAT'd school do not share a bucket. The UI fires this about
+// once per browser session, so 30/min per IP is far above real usage.
+const visitsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { success: false, message: 'คำขอถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+});
+app.use('/api/visits', visitsLimiter, require('./routes/visits.routes'));
 app.use('/api/readiness', require('./routes/readiness.routes'));
 app.use('/api/terms',     require('./routes/terms.routes'));
 
@@ -176,7 +193,20 @@ app.use('/api/terms',     require('./routes/terms.routes'));
 // existing system is byte-for-byte unchanged (true dark launch).
 if (env.features.vehicleQr) {
   app.use('/api/qr',      require('./routes/qr.routes'));
-  app.use('/api/consent', require('./routes/consent.routes'));
+  // Every parent-facing consent request costs an outbound LINE id_token
+  // verification, so an unlimited consent router would let anyone spend the
+  // channel's quota. `qr.routes.js` already carries its own limiter; consent
+  // shipped without one and must not stay that way when Phase 7 turns the flag
+  // on. Sized for a real parent session (grant, withdraw, re-read), not a loop.
+  const consentLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => process.env.NODE_ENV === 'test',
+    message: { success: false, message: 'คำขอถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+  });
+  app.use('/api/consent', consentLimiter, require('./routes/consent.routes'));
 }
 
 // ─── Phase 11A — Intelligent Tracking Layer (2026-06-23) ─────────────────────

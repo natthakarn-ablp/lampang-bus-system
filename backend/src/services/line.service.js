@@ -54,13 +54,19 @@ function setLinkState(lineUserId, state) {
 }
 function clearLinkState(lineUserId) { linkingState.delete(lineUserId); }
 
-// Periodic cleanup of expired states (every 5 minutes)
-setInterval(() => {
+// Periodic cleanup of expired states (every 5 minutes).
+//
+// unref()'d: this is housekeeping for an in-memory map, and it should never be
+// the reason a process stays alive. The HTTP server keeps the loop open in
+// production so the sweep still runs; without unref, any script or test that
+// merely imports this module hangs for five minutes at exit.
+const linkingStateSweeper = setInterval(() => {
   const now = Date.now();
   for (const [key, state] of linkingState) {
     if (now - state.createdAt > LINKING_STATE_TTL) linkingState.delete(key);
   }
 }, 5 * 60 * 1000);
+if (typeof linkingStateSweeper.unref === 'function') linkingStateSweeper.unref();
 
 // ─── Phone-based binding (Round 1) ─────────────────────────────────────────
 // Source of truth for parent ⇄ LINE binding is now `line_bindings.phone`.

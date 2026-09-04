@@ -785,6 +785,12 @@ router.get('/system-health', async (req, res, next) => {
       daily_activity: dailyActivity,
       role_activity: roleActivity,
       visits: {
+        // Counted from an unauthenticated public endpoint deduped only by the
+        // browser's sessionStorage. Useful as a rough traffic signal, but it is
+        // not attributable to a person and can be inflated by anyone, so it
+        // must never be used as a research or participation metric.
+        evidence_class: 'non_attributable_traffic_counter',
+        research_usable: false,
         today: { total: Number(visitsToday?.total || 0), public: Number(visitsToday?.public_v || 0), logged_in: Number(visitsToday?.logged_v || 0) },
         last_7d: { total: Number(visits7d?.total || 0), public: Number(visits7d?.public_v || 0), logged_in: Number(visits7d?.logged_v || 0) },
         last_30d: { total: Number(visits30d?.total || 0), public: Number(visits30d?.public_v || 0), logged_in: Number(visits30d?.logged_v || 0) },

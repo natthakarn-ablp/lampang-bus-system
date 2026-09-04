@@ -12,7 +12,7 @@ const { sendError } = require('../utils/response');
  * @returns {import('express').RequestHandler}
  */
 function requireRole(...roles) {
-  return (req, res, next) => {
+  const guard = (req, res, next) => {
     if (!req.user) {
       return sendError(res, 'Unauthenticated', [], 401);
     }
@@ -21,6 +21,16 @@ function requireRole(...roles) {
     }
     return next();
   };
+  /**
+   * Tagged so the RBAC matrix can be generated from the real router graph
+   * rather than by grepping for `requireRole(` — a grep cannot tell a guard
+   * that is mounted from one that is merely written down, which is exactly
+   * the mistake an access-control audit must not make.
+   * See `scripts/generate-rbac-matrix.js`.
+   */
+  guard.guardType = 'requireRole';
+  guard.allowedRoles = Object.freeze([...roles]);
+  return guard;
 }
 
 /**

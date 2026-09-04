@@ -59,6 +59,25 @@ describe('global authenticated API rate limiter wiring', () => {
     }
   });
 
+  test('gives the public visit counter its own limiter, not the operator floor', () => {
+    // `/api/visits/track` is unauthenticated, so it must not share a bucket
+    // with authenticated operator traffic from the same NAT'd school — but it
+    // must not be unlimited either, which is what it was before.
+    expect(app.GLOBAL_API_LIMITED_PREFIXES).not.toContain('/api/visits');
+
+    const limiter = globalLimiterIndex();
+    const visitsLimiter = app._router.stack.findIndex((layer) => (
+      layer.name !== 'router' &&
+      layerText(layer).includes('\\/api\\/visits') &&
+      !layerText(layer).includes('\\/api\\/driver')
+    ));
+    const visitsRouter = indexOfRouter('/api/visits');
+
+    expect(visitsLimiter).toBeGreaterThan(-1);
+    expect(visitsLimiter).toBeGreaterThan(limiter);
+    expect(visitsRouter).toBeGreaterThan(visitsLimiter);
+  });
+
   test('does not replace the dedicated reports limiter', () => {
     const limiter = globalLimiterIndex();
     const reportsLimiter = app._router.stack.findIndex((layer) => (

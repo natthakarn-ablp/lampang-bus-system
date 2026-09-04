@@ -57,6 +57,9 @@ const ORG_SCOPE_TOKENS = [
   'isScopeAllowed',
   'requireFullSchoolScope',
   'resolveGradeScope',
+  // participation.routes.js builds its predicate from the caller's token and
+  // re-applies it inside the write transaction.
+  'scopeClause',
 ];
 
 /**

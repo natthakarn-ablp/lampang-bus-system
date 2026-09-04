@@ -19,6 +19,7 @@ const FLAGS = [
   'FEATURE_GEOFENCE',
   'FEATURE_ROUTE_DEVIATION',
   'FEATURE_DRIVER_SHIFT',
+  'FEATURE_PARTICIPATION_CASES',
 ];
 
 const SCRIPTS = path.join(__dirname, '..', 'scripts');
@@ -83,9 +84,22 @@ describe('RBAC coverage', () => {
     }
   });
 
-  it('does not expose a write action to every role at once', () => {
-    const wideWrites = routes.filter((r) => r.write && r.roles.length === 6);
+  it('does not expose a write action to every role at once without a reason', () => {
+    // A write every role can call is occasionally right — raising a
+    // participation case is the point of participation — but it must be a
+    // recorded decision, not a default. Anything wide without a written reason
+    // fails here.
+    const wideWrites = routes.filter(
+      (r) => r.write && r.roles.length === 6 && !r.accepted_exception
+    );
     expect(wideWrites.map((r) => `${r.method} ${r.path}`)).toEqual([]);
+
+    // And a wide write that IS accepted must still enforce scope in its
+    // handler, since the role guard is no longer doing any narrowing.
+    const acceptedWide = routes.filter((r) => r.write && r.roles.length === 6 && r.accepted_exception);
+    for (const r of acceptedWide) {
+      expect(r.accepted_exception).toMatch(/[Ss]cope/);
+    }
   });
 
   it('keeps province read-mostly, matching the documented RBAC matrix', () => {

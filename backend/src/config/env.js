@@ -219,6 +219,11 @@ const env = {
     // without breaking the live parent experience until consent text + DPO are
     // signed off. Turn on only together with FEATURE_VEHICLE_QR's consent flow.
     parentConsentRequired: process.env.FEATURE_PARENT_CONSENT_REQUIRED === 'true',
+    // Phase 4 — participatory-administration cases + append-only event log.
+    // Dark by default: when false the /api/participation router is not
+    // mounted, so the existing system is byte-for-byte unchanged. Migration
+    // 050 must be applied before flipping this on.
+    participationCases: process.env.FEATURE_PARTICIPATION_CASES === 'true',
   },
   // Phase 11A — tunable thresholds for the intelligent tracking layer.
   // Exposed via env so operators can adjust without code changes.

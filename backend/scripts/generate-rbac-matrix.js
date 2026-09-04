@@ -56,6 +56,14 @@ const ACCEPTED_OPEN_ROUTES = [
     reason: 'Authenticated, any role. Returns the current academic term id and window, which every role needs to label data correctly. No PII and no scoped rows.',
   },
   {
+    method: 'POST', path: '/api/participation/cases',
+    reason: 'Every role may raise a participation case — that is what participation means, and restricting it would defeat the purpose of the table. Scope is still enforced: the case is filed against the caller own scope taken from the token, never from the body, and the list/read predicate pins each role to what it may see.',
+  },
+  {
+    method: 'POST', path: '/api/participation/cases/:id/events',
+    reason: 'Every role may acknowledge, comment on or report back about a case they can already see. Visibility is re-checked inside the transaction with the same scope predicate the list uses, so an id from another scope cannot be advanced, and the event state machine restricts which events each status accepts.',
+  },
+  {
     method: 'POST', path: '/api/visits/track',
     reason: 'Public aggregate visit counter. No PII, no IP, no user-agent stored. Rate-limited via GLOBAL_API_LIMITED_PREFIXES; flagged non_attributable_traffic_counter so it is never used as a research metric.',
   },

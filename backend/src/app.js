@@ -32,6 +32,7 @@ const GLOBAL_API_LIMITED_PREFIXES = [
   '/api/eta',
   '/api/geofences',
   '/api/route-deviations',
+  '/api/participation',
 ];
 
 // ─── Proxy trust ────────────────────────────────────────────────────────────
@@ -187,6 +188,14 @@ const visitsLimiter = rateLimit({
 app.use('/api/visits', visitsLimiter, require('./routes/visits.routes'));
 app.use('/api/readiness', require('./routes/readiness.routes'));
 app.use('/api/terms',     require('./routes/terms.routes'));
+
+// ─── Participatory administration (feature-flagged; dark by default) ─────────
+// One router and one inbox rather than a menu entry per action: the role-menu
+// audit found the system already has too many entry points, and a page per
+// metric is what made the admin area unusable.
+if (env.features.participationCases) {
+  app.use('/api/participation', require('./routes/participation.routes'));
+}
 
 // ─── Vehicle QR + consent (feature-flagged; dark by default) ─────────────────
 // Mounted ONLY when FEATURE_VEHICLE_QR=true. When off, these paths 404 and the

@@ -37,6 +37,7 @@ describe('global authenticated API rate limiter wiring', () => {
       '/api/eta',
       '/api/geofences',
       '/api/route-deviations',
+      '/api/participation',
     ]);
 
     expect(app.GLOBAL_API_LIMITED_PREFIXES).not.toEqual(expect.arrayContaining([

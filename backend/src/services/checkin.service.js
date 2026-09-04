@@ -301,6 +301,36 @@ async function getRoster(pool, vehicleId, session) {
   }));
 }
 
+// ─── beginCheckinTransaction ─────────────────────────────────────────────────
+
+/**
+ * Open a check-in transaction at READ COMMITTED.
+ *
+ * CS5-04. The duplicate guard in _buildCheckinTransaction needs two things: a
+ * per-student mutex (the students row, locked FOR UPDATE) and a read of
+ * checkin_logs that is no older than that mutex. Under the server default
+ * REPEATABLE READ the second is only obtainable with a locking read, and a
+ * locking read that matches no row takes a gap lock — which is what turned one
+ * busload of simultaneous check-ins into deadlock 500s and lost boardings.
+ *
+ * READ COMMITTED gives the freshness without the gap locks: no gap locking, and
+ * every statement gets its own read view, so a waiter sees the winner's row and
+ * a long batch transaction no longer answers this check from a snapshot taken at
+ * its first student. Bare SET TRANSACTION (no SESSION/GLOBAL) applies to the
+ * NEXT transaction only, so the pooled connection reverts to the server default
+ * as soon as this transaction ends and no other code path changes behaviour.
+ *
+ * The cost is real and deliberate: inside these transactions a repeated read can
+ * now see another transaction's commit. Nothing on this path re-reads a row it
+ * has already read, and every write is keyed by the student row it holds locked,
+ * so the non-repeatable read is unobservable today — but any statement added
+ * here later must not assume a stable snapshot.
+ */
+async function beginCheckinTransaction(conn) {
+  await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+  await conn.beginTransaction();
+}
+
 // ─── _buildCheckinTransaction ─────────────────────────────────────────────────
 
 /**
@@ -318,11 +348,16 @@ async function _buildCheckinTransaction(conn, {
   source,
 }) {
   // 1. Verify student belongs to this vehicle
+  // CS5-04 — FOR UPDATE makes this row the per-student mutex for the whole
+  // check-in transaction. Without it the guard below is a bare read-then-write:
+  // three simultaneous taps all read "no log yet" and all insert, producing
+  // three checkin_logs rows and three parent notifications for one boarding.
   const [students] = await conn.query(
     `SELECT id, cid_hash, first_name, last_name
      FROM   students
      WHERE  id = ? AND vehicle_id = ? AND is_deleted = FALSE
-     LIMIT  1`,
+     LIMIT  1
+     FOR    UPDATE`,
     [studentId, vehicleId]
   );
   if (!students.length) {
@@ -335,6 +370,21 @@ async function _buildCheckinTransaction(conn, {
   // duplicate of the same session+status for today so a double-tap or network
   // retry can't create duplicate checkin_logs AND duplicate parent notifications.
   // A different status (board CHECKED_IN → dropoff CHECKED_OUT) is still allowed.
+  // CS5-04 — this read must stay a PLAIN read. Under REPEATABLE READ a
+  // SELECT ... FOR UPDATE that matches nothing takes a gap lock, and when a whole
+  // bus checks in at once every student's gap lock lands in the same empty range
+  // of idx_cl_date_student; the INSERT below then wants an insert-intention lock
+  // inside a gap another transaction is already holding. Measured against the
+  // test database: 33 of 40 concurrent taps across 20 students died with
+  // ER_LOCK_DEADLOCK — HTTP 500 to the driver — and 14 of the 20 children ended
+  // the run with no boarding row at all. A duplicate is visible and correctable;
+  // a lost boarding is silent, so that trade was the wrong way round.
+  // The lock this guard actually needs is the students row above. What the
+  // locking read was additionally buying — a CURRENT read, so a caller that
+  // waited on the student row sees the winner's committed row instead of a stale
+  // snapshot — is supplied instead by running the transaction at READ COMMITTED
+  // (see beginCheckinTransaction), where every statement reads fresh. That also
+  // fixes the batch paths, whose snapshot was taken at their FIRST student.
   const [dupLog] = await conn.query(
     `SELECT id, status FROM checkin_logs
      WHERE student_id = ? AND session = ? AND check_date = CURDATE()
@@ -473,7 +523,7 @@ async function processCheckin(pool, { userId, vehicleId, plateNo, studentId, ses
   const termId = await getCurrentTerm(pool);
 
   const conn = await pool.getConnection();
-  await conn.beginTransaction();
+  await beginCheckinTransaction(conn);
   try {
     const result = await _buildCheckinTransaction(conn, {
       userId, vehicleId, plateNo, studentId, session,
@@ -500,7 +550,7 @@ async function processCheckout(pool, { userId, vehicleId, plateNo, studentId, se
   const termId = await getCurrentTerm(pool);
 
   const conn = await pool.getConnection();
-  await conn.beginTransaction();
+  await beginCheckinTransaction(conn);
   try {
     const result = await _buildCheckinTransaction(conn, {
       userId, vehicleId, plateNo, studentId, session,
@@ -562,7 +612,7 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
   // into the savepoint name.
   const conn = await pool.getConnection();
   try {
-    await conn.beginTransaction();
+    await beginCheckinTransaction(conn);
     for (const { id: studentId } of students) {
       const sp = `ca_${studentId}`;
       try {
@@ -597,13 +647,26 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
  * actually recorded (real data showed checkout was scanned only ~11% of the time,
  * making a "left-behind" signal impossible). Eligibility is computed from
  * checkin_logs directly (CHECKED_IN without a matching CHECKED_OUT) — NOT from
- * daily_status.*_done, which is already TRUE after the morning board. A student
- * who never boarded is never dropped, so this cannot fabricate a checkout.
+ * daily_status.*_done, which is already TRUE after the morning board; the
+ * daily_status flag is consulted only to drop a board that was VOIDED (CS5-01).
+ * A student who never boarded is never dropped, so this cannot fabricate a
+ * checkout.
  * Returns { succeeded: [], failed: [] }.
  */
 async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, source = 'web' }) {
   assertSession(session);
   const termId = await getCurrentTerm(pool);
+
+  // CS5-01 — a board that was voided must never be droppable. voidCheckin keeps
+  // the original CHECKED_IN row (history is append-only) and records the reversal
+  // as a CANCELLED row plus a reset of daily_status.<session>_done. Reading
+  // checkin_logs alone therefore still saw a child whose boarding was cancelled as
+  // "on the bus", and wrote a CHECKED_OUT row plus a checkout notification to the
+  // parent of a child who never rode. Honour the state the void writer resets —
+  // the same state the sibling path processCheckinAll reads. Only a session we
+  // positively know was reset is excluded, so a day with no daily_status row
+  // behaves exactly as before.
+  const doneColumn = session === 'morning' ? 'ds.morning_done' : 'ds.evening_done';
 
   const [students] = await pool.query(
     `SELECT DISTINCT ci.student_id AS id
@@ -613,7 +676,11 @@ async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, s
         AND NOT EXISTS (
           SELECT 1 FROM checkin_logs co
            WHERE co.student_id = ci.student_id AND co.session = ci.session
-             AND co.check_date = CURDATE() AND co.status = 'CHECKED_OUT')`,
+             AND co.check_date = CURDATE() AND co.status = 'CHECKED_OUT')
+        AND NOT EXISTS (
+          SELECT 1 FROM daily_status ds
+           WHERE ds.student_id = ci.student_id AND ds.check_date = ci.check_date
+             AND ${doneColumn} = FALSE)`,
     [vehicleId, session]
   );
 
@@ -621,7 +688,7 @@ async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, s
   const failed = [];
   const conn = await pool.getConnection();
   try {
-    await conn.beginTransaction();
+    await beginCheckinTransaction(conn);
     for (const { id: studentId } of students) {
       const sp = `co_${studentId}`;
       try {
@@ -813,7 +880,7 @@ async function processSchoolOverride(pool, {
 
   // 4. Reuse driver transaction worker
   const conn = await pool.getConnection();
-  await conn.beginTransaction();
+  await beginCheckinTransaction(conn);
   try {
     const result = await _buildCheckinTransaction(conn, {
       userId,
@@ -981,7 +1048,7 @@ async function processSchoolOverrideAll(pool, {
 
   const conn = await pool.getConnection();
   try {
-    await conn.beginTransaction();
+    await beginCheckinTransaction(conn);
 
     for (const student of toConfirm) {
       const sp = `sov_${student.id}`;
@@ -1115,6 +1182,20 @@ async function processSchoolOverrideAll(pool, {
 async function getNoShowStudents(pool, { schoolId, session, date = null, gradeFilter = null }) {
   assertSession(session);
   const enabledCol = session === 'morning' ? 's.morning_enabled' : 's.evening_enabled';
+  // CS5-01 (same root cause as processCheckoutAll): a CHECKED_IN row that was
+  // voided still sits in checkin_logs, so a child whose boarding was cancelled
+  // dropped out of the no-show list while GET /api/school/missing (which reads
+  // daily_status) correctly listed them. Ignore a board whose session flag was
+  // positively reset by the void.
+  //
+  // Known consequence, measured and documented in
+  // docs/audit/core-scope-defect-hunt-2026-09-04.md §10.7: checkin_logs has no
+  // column linking a CANCELLED row to the row it reverses, so "was this boarding
+  // voided" has to be inferred from daily_status.<session>_done — and that one
+  // flag covers BOTH the board and the drop-off. Voiding a CHECK-OUT therefore
+  // resets it too, and this query then lists a pupil who demonstrably did board.
+  // It goes away only when that linkage column exists (§10.4 option B).
+  const doneCol = session === 'morning' ? 'ds.morning_done' : 'ds.evening_done';
   const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
   const gradeAnd = eq ? ` AND s.grade IN (${eq.map(() => '?').join(',')})` : '';
   const [rows] = await pool.query(
@@ -1126,7 +1207,11 @@ async function getNoShowStudents(pool, { schoolId, session, date = null, gradeFi
         AND s.vehicle_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM checkin_logs ci
                          WHERE ci.student_id = s.id AND ci.session = ?
-                           AND ci.check_date = COALESCE(?, CURDATE()) AND ci.status = 'CHECKED_IN')
+                           AND ci.check_date = COALESCE(?, CURDATE()) AND ci.status = 'CHECKED_IN'
+                           AND NOT EXISTS (SELECT 1 FROM daily_status ds
+                                            WHERE ds.student_id = ci.student_id
+                                              AND ds.check_date = ci.check_date
+                                              AND ${doneCol} = FALSE))
         AND NOT EXISTS (SELECT 1 FROM student_leaves sl
                          WHERE sl.student_id = s.id AND sl.leave_date = COALESCE(?, CURDATE())
                            AND sl.cancelled = FALSE AND (sl.session = ? OR sl.session = 'both'))

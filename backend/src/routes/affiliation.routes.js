@@ -8,7 +8,7 @@ const multer = require('multer');
 const ExcelJS = require('exceljs');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
-const { importExportLimiter } = require('../middleware/rateLimiters');
+const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
 const { sendSuccess, sendError } = require('../utils/response');
 const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
@@ -548,7 +548,7 @@ router.post('/school-accounts/import/commit', importExportLimiter, importUpload.
 
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 
-router.get('/audit-logs', async (req, res, next) => {
+router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
   try {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);

@@ -99,7 +99,19 @@ async function requireParentLineAuth(req, res, next) {
 router.get('/children', requireParentLineAuth, async (req, res, next) => {
   try {
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
-    sendSuccess(res, children);
+
+    // This list carries plate_no and driver_name, so leaving it ungated made
+    // the consent gate defeatable by reading the list instead of the detail
+    // endpoints. When the gate is on and consent is missing, those two fields
+    // are redacted and `consent_required` tells the LIFF UI to prompt —
+    // returning an empty list instead would read as "you have no children".
+    const gate = await parentConsent.guardParentView(req.lineUserId);
+    const result = parentConsent.applyChildListGate(children, gate);
+
+    sendSuccess(res, result.children, 'OK', {
+      consent_required: result.consent_required,
+      consent_granted: result.consent_granted,
+    });
   } catch (err) { next(err); }
 });
 

@@ -52,6 +52,17 @@ function validateFeatureDependencies(source = process.env) {
   if (source.FEATURE_QR_LEVEL3 === 'true' && source.FEATURE_VEHICLE_QR !== 'true') {
     throw new Error('FEATURE_QR_LEVEL3 requires FEATURE_VEHICLE_QR=true');
   }
+  // Turning the parent consent gate on blocks a linked parent from their
+  // child's status until they grant consent. The only place a parent CAN
+  // grant it is /api/consent, which is mounted by FEATURE_VEHICLE_QR. Enabling
+  // the gate without that router locks every parent out with no way back in,
+  // so it fails at boot rather than at the parent's phone.
+  if (source.FEATURE_PARENT_CONSENT_REQUIRED === 'true' && source.FEATURE_VEHICLE_QR !== 'true') {
+    throw new Error(
+      'FEATURE_PARENT_CONSENT_REQUIRED requires FEATURE_VEHICLE_QR=true '
+      + '(the /api/consent router is the only way a parent can grant consent)'
+    );
+  }
   if (source.FEATURE_ADMIN_PASSWORD_RECOVERY === 'true') {
     if (!String(source.LINE_LIFF_ID || '').trim()) {
       throw new Error('FEATURE_ADMIN_PASSWORD_RECOVERY requires LINE_LIFF_ID');

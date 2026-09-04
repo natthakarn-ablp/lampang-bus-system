@@ -4,6 +4,7 @@ import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT
 import { getLiffIdToken } from '../../utils/liff';
 import AppCard from '../../components/ui/AppCard';
 import { formatGradeClass } from '../../utils/student';
+import ParentConsentModal from '../../components/consent/ParentConsentModal';
 
 const STATUS_MAP = {
   CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-success-soft text-success-ink border-success/30', icon: '✅' },
@@ -22,6 +23,11 @@ export default function ParentStatus() {
   const [view, setView] = useState('list');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // The API tells us whether this parent still owes consent before the
+  // tracking fields are shown. Absent on an older backend, in which case
+  // nothing is prompted and behaviour is unchanged.
+  const [consentRequired, setConsentRequired] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +48,10 @@ export default function ParentStatus() {
         const res = await axios.get('/api/parent/children', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!cancelled) setChildren(Array.isArray(res.data?.data) ? res.data.data : []);
+        if (!cancelled) {
+          setChildren(Array.isArray(res.data?.data) ? res.data.data : []);
+          setConsentRequired(res.data?.meta?.consent_required === true);
+        }
       } catch (err) {
         if (!cancelled) {
           const code = err.response?.status;
@@ -221,6 +230,26 @@ export default function ParentStatus() {
         {/* ── Children list ── */}
         {view === 'list' && (
           <div className="space-y-4">
+            {/* The parent is linked and school-approved, so the question is not
+                "is this your child" but "may we show you the vehicle and
+                driver". Ask it here rather than letting a 403 appear later
+                with no way to act on it. */}
+            {consentRequired && (
+              <AppCard padding="md" className="border-warn/40 bg-warn-soft">
+                <p className="text-base font-semibold text-ink">ต้องให้ความยินยอมก่อนดูข้อมูลการเดินทาง</p>
+                <p className="text-sm text-ink-muted mt-1">
+                  ระบบจะแสดงทะเบียนรถ ชื่อคนขับ และสถานะการรับ-ส่งของบุตรหลาน เมื่อคุณให้ความยินยอมแล้ว
+                  คุณถอนความยินยอมได้ทุกเมื่อ
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowConsent(true)}
+                  className="focus-ring mt-3 inline-flex items-center justify-center bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold text-base px-5 min-h-[44px] rounded-xl transition"
+                >
+                  อ่านและให้ความยินยอม
+                </button>
+              </AppCard>
+            )}
             <p className="text-base font-semibold text-ink-muted">
               บุตรหลานของคุณ ({children.length} คน)
             </p>
@@ -428,6 +457,16 @@ export default function ParentStatus() {
           </div>
         )}
       </div>
+
+      {/* Consent is collected in the same place the restriction is felt, so a
+          parent never has to find another screen to unblock themselves. */}
+      {showConsent && (
+        <ParentConsentModal
+          idToken={idToken}
+          onConsented={() => { setShowConsent(false); window.location.reload(); }}
+          onClose={() => setShowConsent(false)}
+        />
+      )}
     </div>
   );
 }

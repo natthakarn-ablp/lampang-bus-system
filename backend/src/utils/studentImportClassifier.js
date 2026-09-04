@@ -13,11 +13,31 @@ function maskPhone(p) {
   return d.length >= 6 ? d.slice(0, 3) + '****' + d.slice(-2) : (d ? '****' : '');
 }
 
+// Destination column widths for the students table. This module stays pure, so
+// the service reads the widths from the live schema and passes them in as
+// `limits` ({ column: max_chars }); when they are absent the length check is
+// simply skipped. VARCHAR(n) counts characters, so count code points here.
+const FIELD_LABEL_TH = {
+  student_code: 'รหัสนักเรียน', prefix: 'คำนำหน้า', first_name: 'ชื่อ',
+  last_name: 'นามสกุล', grade: 'ชั้น', classroom: 'ห้อง',
+};
+const charLen = (v) => Array.from(String(v == null ? '' : v).trim()).length;
+function firstOverLimit(values, limits) {
+  if (!limits) return null;
+  for (const field of Object.keys(values)) {
+    const max = Number(limits[field]);
+    if (!Number.isInteger(max) || max <= 0) continue;
+    const len = charLen(values[field]);
+    if (len > max) return { field, len, max };
+  }
+  return null;
+}
+
 // vehicle: null (no plate on the row) OR { matched, code, vehicle_id, display_plate }
 //   matched=true  → resolved (exact/canonical/alias); code may be VEHICLE_PROVINCE_ALIAS_MATCH
 //   matched=false → blocking; code ∈ VEHICLE_NOT_FOUND | VEHICLE_MISSING_PROVINCE | VEHICLE_SOFT_DELETED | PLATE_FORMAT_INVALID
 // existing: null OR { id, is_deleted, parent_name }
-function classifyImportRow({ row, schoolId, existing = null, crossSchool = false, vehicle = null }) {
+function classifyImportRow({ row, schoolId, existing = null, crossSchool = false, vehicle = null, limits = null }) {
   const code = String(row.student_code == null ? (row.id == null ? '' : row.id) : row.student_code).trim();
   const firstName = String(row.first_name || '').trim();
   const lastName = String(row.last_name || '').trim();
@@ -55,6 +75,21 @@ function classifyImportRow({ row, schoolId, existing = null, crossSchool = false
   if (!code) return out('INVALID_STUDENT_CODE', 'ERROR', 'รหัสนักเรียนไม่ถูกต้อง', false, 'แก้ไขรหัสนักเรียนในไฟล์');
   if (!firstName || !lastName) return out('INVALID_REQUIRED_FIELD', 'ERROR', 'ไม่มีชื่อหรือนามสกุลนักเรียน', false, 'กรอกชื่อ-นามสกุลให้ครบ');
   if (phoneDigits && phoneDigits.length !== 10) return out('INVALID_GUARDIAN_PHONE', 'ERROR', 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 10 หลัก', false, 'แก้ไขเบอร์โทรในไฟล์');
+
+  // 1b. Destination column width. Without this a 150-character name previewed as
+  //     READY and then died at apply with ER_DATA_TOO_LONG (MySQL runs in
+  //     STRICT_TRANS_TABLES, so an over-long value is an error, not a truncation).
+  //     Preview exists so that READY means the row will actually go in.
+  const over = firstOverLimit({
+    student_code: code, prefix: row.prefix, first_name: firstName, last_name: lastName,
+    grade: row.grade, classroom: row.classroom,
+  }, limits);
+  if (over) {
+    const label = FIELD_LABEL_TH[over.field] || over.field;
+    return out('FIELD_TOO_LONG', 'ERROR',
+      `${label}ยาวเกินที่ระบบรองรับ (${over.len} ตัวอักษร สูงสุด ${over.max})`,
+      false, `แก้ไข${label}ในไฟล์ให้ไม่เกิน ${over.max} ตัวอักษร`);
+  }
 
   // 2. Blocking vehicle issues (only when a plate is provided).
   if (row.plate_no && vehicle && !vehicle.matched) {

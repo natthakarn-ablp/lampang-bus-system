@@ -124,7 +124,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
   }
 
   function downloadReport() {
-    const cols = ['row_number', 'student_code', 'student_name', 'classification', 'status', 'rollback_status', 'message_th', 'matched_display_plate'];
+    const cols = ['row_number', 'student_code', 'student_name', 'classification', 'status', 'rollback_status', 'message_th', 'error_detail', 'matched_display_plate'];
     const neutralize = (v) => { const s = String(v ?? ''); return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s; };
     const esc = (v) => `"${neutralize(v).replace(/"/g, '""')}"`;
     const lines = [cols.join(',')];
@@ -210,7 +210,13 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
       cell: r => (
         <div>
           <div>{r.message_th}</div>
-          {r.guardian_mismatch && (
+          {r.error_detail && (
+            <div className="text-caption text-danger-ink mt-0.5">สาเหตุจากระบบ: {r.error_detail}</div>
+          )}
+          {/* A row with nothing on either side of the arrow is not a guardian change:
+              batches imported before the backend fix stored the JSON literal null and
+              every one of their rows still reports guardian_mismatch. */}
+          {r.guardian_mismatch && (r.guardian_current || r.guardian_input) && (
             <div className="text-caption text-warn-ink mt-0.5">
               ผู้ปกครอง: <span className="line-through text-ink-muted">{r.guardian_current || '—'}</span>
               {' '}<span aria-hidden="true">→</span>{' '}

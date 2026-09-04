@@ -226,6 +226,7 @@ Phase 12B (เทอม 1/2570) อยู่ในเอกสารนี้เ
 | DPO/Research lead ไม่อนุมัติ หรือยังไม่ตัดสิน D0-* | งานที่ผูกกับข้อนั้นหยุด: D0-3/5/6/7 ค้าง → A1-6 หยุด; D0-4 ค้าง → A1-7 หน้ารับรองหยุด; D0-8 ค้าง → A1-12 และ A2-6 หยุด; feature ที่เกี่ยวข้อง flag = off ตอน rollout และย้ายเป็น defer พร้อม owner/date | เปิด feature โดยไม่มี decision; implement UI ด้วยข้อความ consent ฉบับ draft |
 | ไม่มี LINE test channel/LIFF test account | C3-2 (LINE parent UAT) เลื่อน; parent LINE workflow ทั้งชุดเป็น **defer** ไม่ใช่ PASS; Phase 12A เปิดเฉพาะ workflow ที่ไม่ใช้ LINE; hard gate "Consent/Acknowledgement ผ่าน UAT" ยังไม่ผ่าน | ทดสอบ LINE ด้วยบัญชีผู้ปกครองจริง; ประกาศว่า LINE พร้อมใช้ |
 | staging ไม่มี หรือไม่มีงบประมาณ | B3-1 ทำไม่ได้ → Phase 9 exit gate ไม่ผ่าน → **ห้ามอ้างตัวเลข capacity ใด ๆ** ให้ประกาศเฉพาะผลจาก A1-8 พร้อมป้าย "local, ไม่เทียบเท่า production"; rollout จำกัดที่ pilot ขนาดเล็กจนกว่าจะมี staging | ใช้ผล local staging เป็นหลักฐานปิด capacity gate; ยิง write load ใส่ production |
+| Scenario ใดวัดไม่ได้เพราะ rate limit หรือ consent gate (ดู §13.1) | ระบุในรายงานว่า **ไม่ได้วัด** พร้อมเหตุผล; ถ้า `login` วัดไม่ได้ ให้ประกาศว่า capacity ที่รับรองครอบเฉพาะ authenticated traffic หลัง login ไม่รวม login เอง | นับ error rate ของ scenario ที่ถูก throttle รวมเข้ากับ error rate ทั้งชุด; ปิด limiter เพื่อให้ตัวเลขผ่าน |
 | Load environment ไม่เทียบเท่า production (CPU/RAM/disk/network ต่างชั้น) | ผล load test ใช้ได้เฉพาะเป็น regression trend; ต้องระบุ delta ของ spec ในรายงาน และประกาศ capacity limit ตามผลจริงคูณ margin ที่ Technical owner ลงนาม | อ้าง 1,000 concurrent users |
 | npm registry / `npm audit` ใช้ไม่ได้ | gate แสดง `NOT EVALUATED` และ automated readiness item เป็น **PENDING** ต้องรันซ้ำเมื่อ registry กลับมา ก่อนขึ้น Wave 4 | แก้ผลเป็น PASS; ข้าม dependency audit ในชุดปิดโครงการ |
 | Migration หรือ rollback ล้มเหลวใน drill | หยุด deploy ทันที; กลับ RC ก่อนหน้า; หา root cause + เพิ่ม test ก่อนลองใหม่; Phase 10 exit gate ไม่ผ่าน | deploy ต่อโดยหวังว่า rollback จะไม่ต้องใช้ |
@@ -298,10 +299,27 @@ Phase 12B (เทอม 1/2570) อยู่ในเอกสารนี้เ
 | A1-4 | - | `cd backend && npm run test:unit -- accountRecoveryPolicy decisionLogValidation` | `accountRecoveryPolicy.unit.test.js`, `decisionLogValidation.unit.test.js` | บทบาทที่ยังไม่ตอบ C0-5 ต้องยัง `gatesConfirmed=false` |
 | A1-5 | sandbox MySQL | `cd backend && npm run test:unit -- securityEnv` **และ** `cd backend && npm test -- authSessionHardening securityHardening` | `securityEnv.test.js` (unit) + `authSessionHardening.test.js`, `securityHardening.test.js` (integration) | 0 failing **ทั้งสองคำสั่ง**; jest ต้องรายงานว่ารัน `authSessionHardening.test.js` จริง (ไฟล์นี้ไม่อยู่ใน unit project จึงไม่ถูกรันโดย `test:unit`); `docs/security/residual-risk-register.md` มีรายการ localStorage token |
 | A1-6 | sandbox MySQL | `cd backend && npm run test:unit -- parentConsent` **และ** `cd backend && npm test -- consent parentConsentRoute qrAccess lineBindGuard` | `parentConsentGate.unit.test.js`, `parentConsentListGate.unit.test.js` (unit) + `consent.test.js`, `parentConsentRoute.test.js`, `qrAccess.test.js`, `lineBindGuard.test.js` (integration) | 0 failing ทั้งสองคำสั่ง; ทุกช่องทางใน D0-6 (QR/ParentStatus/LIFF/LINE/report/export) ต้องมี test ที่รันจริง — นับจาก suite ที่ jest รายงาน ไม่ใช่จากชื่อ pattern |
-| A1-8 | local staging (A0-6) | `node backend/scripts/load-test.js --target http://127.0.0.1:3000 --sandbox --users 50,200,500,1000 --duration 60 --out outputs/load-test/local-<ts>/report.json` | `[load] stage users=…` ต่อ stage และ `[load] wrote …/report.json` | ไฟล์ report มี `stages[]` ครบ 4 ระดับพร้อม p50/p95/p99; `max_users_reached=1000`; **`supports_1000_user_claim` ใช้อ้างไม่ได้เพราะรันบน local** ให้ติดป้าย "local, ไม่เทียบเท่า production" ในรายงาน (script exit 1 เมื่อ threshold ไม่ผ่าน ซึ่งเป็นผลลัพธ์ที่ยอมรับได้ในรอบ local) |
+| A1-8 | local staging (A0-6) | `node backend/scripts/load-test.js --target http://127.0.0.1:3000 --sandbox --users 50,200,500,1000 --duration 60 --out outputs/load-test/local-<ts>/report.json` | `[load] stage users=…` ต่อ stage และ `[load] wrote …/report.json` | ไฟล์ report มี `stages[]` ครบ 4 ระดับพร้อม p50/p95/p99; `max_users_reached=1000`; **`supports_1000_user_claim` ใช้อ้างไม่ได้เพราะรันบน local** ให้ติดป้าย "local, ไม่เทียบเท่า production"; **อ่าน §13.1 ก่อนตีความ error rate** — 2 ใน 9 scenario วัดไม่ได้ด้วยเหตุผลที่ไม่เกี่ยวกับ capacity |
 | A1-10 | sandbox MySQL | `cd backend && npm test -- importPreviewWiring importApplyModes importRollback` | `importPreviewWiring.test.js`, `importApplyModes.test.js`, `importRollback.test.js` | 0 failing และ jest รายงาน suite ครบ 3 ไฟล์; rollback คืนสภาพครบทุกแถว |
 | A4-2a | - | `node scripts/create-go-live-bundle.js --allow-pending` → `node scripts/validate-go-live-bundle.js <bundle> --allow-pending` → `node scripts/summarize-go-live-closure.js --bundle <bundle> --allow-pending` → `node scripts/validate-go-live-closure-status.js <closure> --allow-pending` | `owner-actions.json` | `fail=0` และทุก `id` ที่เหลืออยู่ในชุด `signoff-*` / `approval-*` / `readiness-go-live-signoff` / `readiness-scorecard-overall` เท่านั้น |
 | A4-2b | - | คำสั่งชุดเดียวกัน **ไม่ใส่ `--allow-pending`** และ `node scripts/verify-100-readiness.js` | `[ready-100] PASS`, `[go-live-bundle] PASS`, `[closure-status] PASS` | exit code 0 ทุกคำสั่ง; action rows = 0 |
+
+### 13.1 ข้อจำกัดของการวัดใน load-test suite (วัดจริงแล้ว ไม่ใช่ข้อสันนิษฐาน)
+
+รันจริงบน sandbox (50 users / 30 วินาที / 264,454 requests, commit `4b80b4b`) ผลคือ **7 ใน 9 scenario error = 0 (p95 = 13ms, 8,814 rps) แต่อีก 2 scenario error เกือบ 100% ด้วยเหตุผลที่ไม่เกี่ยวกับ capacity เลย**
+
+| scenario | error rate ที่วัดได้ | สาเหตุจริง | ใช้ตัวเลขนี้อ้าง capacity ได้ไหม |
+|---|---:|---|---|
+| `login` | **99.98%** (31,675/31,680) | `loginLimiter` ที่ `backend/src/routes/auth.routes.js:55-57` = 20 ครั้ง/15 นาที/IP และ **ไม่มี `skip` สำหรับ test** ต่างจาก limiter อีก 5 ตัวในแอปที่ skip ทั้งหมด — generator ยิงจาก IP เดียว จึงถูกตัดทิ้งตั้งแต่ครั้งที่ 21 | **ไม่ได้** |
+| `parent_status` | **99.77%** (26,390/26,450) | consent gate ปฏิเสธเพราะ sandbox ไม่มี `consent_records` ซึ่งรอ D0-5/D0-7 อยู่ (`seed-synthetic-staging.js` เตือนไว้เองตอน seed) | **ไม่ได้** |
+| อีก 7 scenario | 0% | — | ได้ ภายใต้ข้อจำกัดของ environment |
+
+**ผลต่อ B3-1 บน staging** ข้อจำกัดทั้งสองข้อ **ไม่หายไปเองเมื่อย้ายไป staging**:
+
+- `loginLimiter` นับต่อ IP ถ้า load generator ยิงจากเครื่องเดียว scenario `login` จะถูก throttle เหมือนเดิมไม่ว่าเซิร์ฟเวอร์จะแรงแค่ไหน → ต้องเลือกอย่างใดอย่างหนึ่ง: กระจาย generator หลาย IP, หรือประกาศไว้ชัดว่า **ไม่ได้วัด login throughput** ห้ามยกเลิก limiter เพื่อให้ตัวเลขสวยขึ้น เพราะนั่นคือการวัดระบบที่ไม่ใช่ระบบที่จะ deploy
+- `parent_status` วัดไม่ได้จนกว่า D0-5/D0-7 จะตอบและมี consent record จริงในชุดข้อมูลทดสอบ
+
+**กติกา** ถ้ารายงาน capacity ยังมี 2 scenario นี้ error ~100% ให้ระบุในรายงานว่า **ไม่ได้วัด** ห้ามนับรวมใน error rate รวม และห้ามตีความว่า capacity ไม่ผ่าน — ทั้งสองอย่างทำให้ Phase 9 exit gate ตัดสินผิดคนละทาง
 
 ## 14. งานที่เป็น human / external gate — ห้ามอ้าง automated evidence
 

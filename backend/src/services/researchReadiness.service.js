@@ -12,6 +12,7 @@
  * module decides what the context is allowed to claim.
  */
 
+const { toBangkokDate } = require('../utils/thaiTime');
 const {
   METRICS,
   METRIC_CATEGORIES,
@@ -59,7 +60,9 @@ function evaluateSnapshotFreshness(latestSnapshotDate, referenceDate = new Date(
   return {
     has_snapshot: true,
     fresh,
-    latest_snapshot_date: snap.toISOString().slice(0, 10),
+    // Bangkok calendar date: mysql2 returns a DATE column as an instant at
+    // 17:00Z the previous day, so an ISO slice would report it a day early.
+    latest_snapshot_date: toBangkokDate(snap),
     age_days: age,
     max_age_days: SNAPSHOT_FRESHNESS_MAX_AGE_DAYS,
     reason: fresh ? null : 'snapshot_stale',

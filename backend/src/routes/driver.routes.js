@@ -44,10 +44,11 @@ const emergencySvc      = require('../services/emergency.service');
 const etaSvc  = env.features.eta           ? require('../services/eta.service')           : null;
 const gfSvc   = env.features.geofence      ? require('../services/geofence.service')      : null;
 const devSvc  = env.features.routeDeviation ? require('../services/routeDeviation.service') : null;
+const { toBangkokDate, todayBangkok, toBangkokSqlDateTime } = require('../utils/thaiTime');
 
 function dateOnly(value) {
   if (!value) return null;
-  if (value instanceof Date) return value.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  if (value instanceof Date) return toBangkokDate(value);
   return String(value).slice(0, 10);
 }
 
@@ -213,7 +214,7 @@ router.get('/roster', async (req, res, next) => {
         plate_no: vehicle.plate_no,
       },
       session:  session || 'all',
-      date:     new Date().toISOString().split('T')[0],
+      date:     todayBangkok(),
       students,
     });
   } catch (err) {
@@ -715,7 +716,7 @@ router.get('/status-today', async (req, res, next) => {
         id:       vehicle.vehicle_id,
         plate_no: vehicle.plate_no,
       },
-      date: new Date().toISOString().split('T')[0],
+      date: todayBangkok(),
       ...status,
     });
   } catch (err) {
@@ -1174,9 +1175,11 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
     const driverId = await vllSvc.getActiveDriverIdForVehicle(vehicle.vehicle_id);
     if (!driverId) return sendError(res, 'ไม่พบการมอบหมายคนขับสำหรับรถคันนี้', [], 400);
 
-    const recordedAtSql = recorded_at
-      ? new Date(recorded_at).toISOString().slice(0, 23).replace('T', ' ')
-      : new Date().toISOString().slice(0, 23).replace('T', ' ');
+    // The pooled connection runs at +07:00, so MySQL reads a DATETIME literal
+    // as Bangkok wall-clock time. Passing a UTC wall clock stored every GPS
+    // fix seven hours behind the instant it happened — verified in production,
+    // where recorded_at trailed received_at by exactly 420 minutes.
+    const recordedAtSql = toBangkokSqlDateTime(recorded_at ? new Date(recorded_at) : new Date());
 
     await vllSvc.upsertLocation({
       vehicleId: vehicle.vehicle_id,

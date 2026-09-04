@@ -11,6 +11,7 @@ import Pagination from '../../components/Pagination';
 import {
   AlertBanner, ConfirmDialog, DataTable, TableAction, FilterBar, FormField,
 } from '../../components/ui';
+import { todayBangkok } from '../../utils/thaiTime';
 
 // Shared by the selects on this form; FormField supplies the label wiring.
 const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition';
@@ -65,7 +66,7 @@ export default function InspectionForm() {
   const [resultFilter, setResultFilter] = useState('');
 
   const [form, setForm] = useState({
-    vehicle_id: prefillVehicleId || '', inspection_date: new Date().toISOString().slice(0, 10),
+    vehicle_id: prefillVehicleId || '', inspection_date: todayBangkok(),
     expiry_date: '', result: 'PASSED', notes: '', certifying_school_id: '',
   });
 
@@ -149,7 +150,7 @@ export default function InspectionForm() {
       toast.success('บันทึกผลตรวจสำเร็จ');
       const savedVehicleId = form.vehicle_id;
       setShowForm(false);
-      setForm({ vehicle_id: '', inspection_date: new Date().toISOString().slice(0, 10), expiry_date: '', result: 'PASSED', notes: '', certifying_school_id: '' });
+      setForm({ vehicle_id: '', inspection_date: todayBangkok(), expiry_date: '', result: 'PASSED', notes: '', certifying_school_id: '' });
       setVehicleSearch('');
       setSchoolSearch('');
       setCustomSchoolName('');

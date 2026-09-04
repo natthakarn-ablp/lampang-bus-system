@@ -23,6 +23,7 @@ const env = require('../config/env');
 const { getCurrentTermCachedSync } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { suggestMatch, evaluateEligibility, normalizePickup } = require('../utils/registrationMatch');
+const { bangkokDateStamp } = require('../utils/thaiTime');
 
 function appError(message, statusCode = 400, code = null, extra = null) {
   const error = new Error(message);
@@ -32,7 +33,7 @@ function appError(message, statusCode = 400, code = null, extra = null) {
 }
 
 function makeRequestNo(now = new Date()) {
-  const date = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const date = bangkokDateStamp(now);
   return `VIA-${date}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 }
 

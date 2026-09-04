@@ -49,6 +49,7 @@ function resolveSchoolId(req) {
 // Phase 7.11.5 — extracted into shared util so admin.routes.js can
 // use the same whitelist.
 const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents } = require('../utils/gradeScope');
+const { todayBangkok } = require('../utils/thaiTime');
 
 /**
  * Resolve grade scope for a school-scoped request.
@@ -1312,7 +1313,7 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
       const truncated = rows.length > 5000;
       const csv = auditRowsToCsv(rows.slice(0, 5000));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=audit_school_${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader('Content-Disposition', `attachment; filename=audit_school_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
       return res.send('\uFEFF' + csv +
         (truncated ? '\n"# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14"' : ''));

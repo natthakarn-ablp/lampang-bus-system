@@ -12,6 +12,7 @@ const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
 const { logAudit } = require('../utils/audit');
+const { todayBangkok } = require('../utils/thaiTime');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
@@ -211,7 +212,7 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
       const truncated = rows.length > 5000;
       const csv = auditRowsToCsv(rows.slice(0, 5000));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=audit_province_${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader('Content-Disposition', `attachment; filename=audit_province_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
       logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'audit_csv', entityId: 'province',
         newValue: { role: req.user.role, truncated }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});

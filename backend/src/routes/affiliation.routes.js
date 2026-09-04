@@ -20,6 +20,7 @@ const { isOle2, isAllowedImport } = require('../utils/fileType');
 const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
 const { parseCsvRecords } = require('../utils/csv');
 const { readWorkbookSafely } = require('../utils/xlsxPreflight');
+const { todayBangkok } = require('../utils/thaiTime');
 
 // ─── Bulk-import upload (Phase 10.2A) ────────────────────────────────────────
 // Disk-backed multer config mirroring backend/src/routes/school.routes.js.
@@ -587,7 +588,7 @@ router.get('/audit-logs', async (req, res, next) => {
       const truncated = rows.length > 5000;
       const csv = auditRowsToCsv(rows.slice(0, 5000));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=audit_affiliation_${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader('Content-Disposition', `attachment; filename=audit_affiliation_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
       logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'audit_csv', entityId: 'affiliation',
         newValue: { role: req.user.role, truncated }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});

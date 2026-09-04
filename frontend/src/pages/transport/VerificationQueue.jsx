@@ -22,6 +22,7 @@ import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { CommandHero, StatusStepRail, AlertBanner, ConfirmDialog, FilterBar, FormField} from '../../components/ui';
 import DocumentReviewPanel from '../../components/DocumentReviewPanel';
+import { todayBangkok } from '../../utils/thaiTime';
 
 const STATUS = {
   DRAFT: ['ฉบับร่าง', 'neutral'],
@@ -620,7 +621,7 @@ export default function VerificationQueue() {
     setBusy(true);
     try {
       const res = await api.post(`/verification/transport/applications/${detail.id}/start`, {
-        inspection_date: new Date().toISOString().slice(0, 10),
+        inspection_date: todayBangkok(),
         provider_type: 'DLT_OFFICER',
       });
       setAttemptId(res.data.data.attempt_id);

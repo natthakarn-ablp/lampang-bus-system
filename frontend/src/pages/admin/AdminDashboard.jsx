@@ -13,6 +13,7 @@ import {
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import { PageTransition } from '../../lib/motion';
+import { todayBangkok, bangkokDateDaysAgo } from '../../utils/thaiTime';
 
 const EMPTY_SIGNAL = { total: 0, rows: [] };
 
@@ -27,11 +28,11 @@ export default function AdminDashboard() {
   const [failed, setFailed] = useState([]);
   const [loadedAt, setLoadedAt] = useState(null);
 
-  const yesterday = new Date(Date.now() - 86400_000).toISOString().split('T')[0];
+  const yesterday = bangkokDateDaysAgo(1);
 
   const load = useCallback(() => {
     setLoading(true);
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayBangkok();
     const failures = [];
     const track = (label, p) => p.catch(() => { failures.push(label); return null; });
 

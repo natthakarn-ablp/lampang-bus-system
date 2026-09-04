@@ -18,6 +18,7 @@ const { csvCell, neutralizeSpreadsheetCell, redactAuditValue } = require('../uti
 const researchReadinessSvc = require('../services/researchReadiness.service');
 const { RESEARCH_PROTOCOL, EXTERNAL_EVIDENCE_REGISTRY } = require('../config/researchProtocol');
 const { METRICS: RESEARCH_METRICS } = require('../config/researchMetrics');
+const { todayBangkok } = require('../utils/thaiTime');
 
 /**
  * Audit entity types that stand in for the named events each metric requires.
@@ -52,9 +53,7 @@ async function loadResearchEvidenceContext() {
     );
     for (const row of eventRows) {
       auditEventCounts[row.entity_type] = Number(row.cnt) || 0;
-      auditEventLatestDate[row.entity_type] = row.latest
-        ? new Date(row.latest).toISOString().slice(0, 10)
-        : null;
+      auditEventLatestDate[row.entity_type] = row.latest ? todayBangkok(row.latest) : null;
     }
   }
 
@@ -640,7 +639,7 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
       if (truncated) lines.push(esc('# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14'));
       const csv = [header, ...lines].join('\n');
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=audit_admin_${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader('Content-Disposition', `attachment; filename=audit_admin_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
       return res.send('\uFEFF' + csv);
     }

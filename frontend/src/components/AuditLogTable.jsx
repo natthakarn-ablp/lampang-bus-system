@@ -8,6 +8,7 @@ import PageHeader from './PageHeader';
 import { FilterBar } from './ui';
 import { ClipboardList, Download } from 'lucide-react';
 import { abbreviateGrade, formatGradeClass } from '../utils/student';
+import { todayBangkok } from '../utils/thaiTime';
 
 const ACTION_OPTIONS = [
   { value: '', label: 'ทุกการกระทำ' },
@@ -120,7 +121,7 @@ export default function AuditLogTable({ apiPath, title = 'ประวัติ�
       const url = URL.createObjectURL(res.data);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `audit_${new Date().toISOString().split('T')[0]}.csv`;
+      link.download = `audit_${todayBangkok()}.csv`;
       link.click();
       URL.revokeObjectURL(url);
     } catch {

@@ -2,6 +2,7 @@
 
 const { logAudit } = require('../utils/audit');
 const { refreshVehicleEligibility } = require('./vehicleVerification.service');
+const { toBangkokDate } = require('../utils/thaiTime');
 
 function shiftError(message, statusCode, code) {
   const error = new Error(message);
@@ -10,9 +11,10 @@ function shiftError(message, statusCode, code) {
   return error;
 }
 
+// Bangkok calendar date. A UTC slice made a licence expiring today read as
+// yesterday, blocking a driver on the last day their licence is valid.
 function dateOnly(value = new Date()) {
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
+  return toBangkokDate(value);
 }
 
 function availability(row, at) {

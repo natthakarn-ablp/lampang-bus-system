@@ -6,6 +6,7 @@ import PlateSearchInput from '../../components/PlateSearchInput';
 import PageHeader from '../../components/PageHeader';
 import Pagination from '../../components/Pagination';
 import { StatusBadge, DataTable, FilterBar } from '../../components/ui';
+import { toBangkokDate } from '../../utils/thaiTime';
 
 const RESULT_BADGE = {
   PASSED:   { label: 'ผ่าน',      variant: 'success' },
@@ -40,7 +41,7 @@ function docExpiryStatus(v) {
     else if (t <= limit) anyExpiring = true;
   }
   return {
-    earliest: earliest != null ? new Date(earliest).toISOString().slice(0, 10) : null,
+    earliest: earliest != null ? toBangkokDate(new Date(earliest)) : null,
     status: anyExpired ? 'expired' : anyExpiring ? 'expiring' : 'ok',
   };
 }

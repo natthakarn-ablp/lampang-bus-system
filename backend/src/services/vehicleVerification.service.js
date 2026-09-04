@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { getCurrentTermCachedSync, getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { validateInspectionDates } = require('../utils/inspectionDates');
+const { toBangkokDate, todayBangkok, bangkokDateStamp } = require('../utils/thaiTime');
 
 const ACTIVE_APPLICATION_STATUSES = [
   'DRAFT', 'READY_TO_PRINT', 'SUBMITTED', 'INSPECTION_PENDING', 'NEEDS_FIX',
@@ -24,10 +25,12 @@ function appError(message, statusCode = 400, code = null, extra = null) {
   return error;
 }
 
+// Bangkok calendar date. mysql2 hands back a DATE column as an instant at
+// 17:00Z the previous day, so slicing its ISO string read every expiry one day
+// early — in the eligibility decision AND in what the UI displayed.
 function isoDate(value) {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
+  return toBangkokDate(value);
 }
 
 function daysBetween(from, to) {
@@ -44,7 +47,7 @@ function computeEligibility({
   peakRiders = 0,
   validDriverCount = 0,
   suspended = false,
-  today = new Date().toISOString().slice(0, 10),
+  today = todayBangkok(),
 } = {}) {
   const reasons = [];
   let expiring = false;
@@ -129,7 +132,7 @@ function buildTransportSnapshot({ vehicle = {}, schools = [], drivers = [], rout
 }
 
 async function refreshVehicleEligibility(executor, vehicleId, {
-  today = new Date().toISOString().slice(0, 10), currentTerm = getCurrentTermCachedSync(),
+  today = todayBangkok(), currentTerm = getCurrentTermCachedSync(),
 } = {}) {
   const [[vehicle]] = await executor.query(
     `SELECT id, certified_capacity, insurance_expiry, registration_expiry,
@@ -198,7 +201,7 @@ async function refreshVehicleEligibility(executor, vehicleId, {
 }
 
 function makeRequestNo(now = new Date()) {
-  const date = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const date = bangkokDateStamp(now);
   return `VIA-${date}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 }
 
@@ -701,7 +704,7 @@ async function listChecklistTemplates(pool) {
 }
 
 async function startInspection(pool, {
-  applicationId, inspectorUserId, inspectionDate = new Date().toISOString().slice(0, 10),
+  applicationId, inspectorUserId, inspectionDate = todayBangkok(),
   providerType = 'DLT_OFFICER', providerReference = null,
 }) {
   if (!applicationId || !inspectorUserId) {

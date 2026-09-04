@@ -4,6 +4,7 @@ import axios from 'axios'; // raw axios — public page, no JWT auth
 import { getLiffIdToken } from '../../utils/liff';
 import ParentConsentModal from '../../components/consent/ParentConsentModal';
 import PublicPrivacyNotice from '../../components/consent/PublicPrivacyNotice';
+import { toBangkokDate } from '../../utils/thaiTime';
 
 // Phase QR-1 — public vehicle QR page. Renders Level-1 (anyone), then
 // progressively escalates to Level-2 if opened inside LINE by a verified parent
@@ -67,7 +68,7 @@ function formatThaiDate(value) {
   try {
     return new Intl.DateTimeFormat('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }).format(d);
   } catch {
-    return d.toISOString().slice(0, 10);
+    return toBangkokDate(d);
   }
 }
 

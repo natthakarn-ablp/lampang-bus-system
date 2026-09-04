@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { normalizePlate } = require('../utils/vehiclePlate');
 const { logAudit } = require('../utils/audit');
 const { validateInspectionDates } = require('../utils/inspectionDates');
+const { todayBangkok } = require('../utils/thaiTime');
 
 // Thrown validation/authorization error carrying an HTTP status + machine code,
 // surfaced by the global errorHandler in the standard response shape.
@@ -24,7 +25,7 @@ function svcError(message, statusCode = 400, code = null) {
  */
 
 async function getDashboard() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayBangkok();
 
   const [[{ total_vehicles }]] = await pool.query(
     'SELECT COUNT(*) AS total_vehicles FROM vehicles WHERE is_deleted = FALSE'

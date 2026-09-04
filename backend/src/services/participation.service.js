@@ -210,7 +210,10 @@ function validateEventInput(currentCase, input = {}) {
   if (eventType === 'FEEDBACK_SENT' && !note) {
     return { error: 'ต้องระบุสิ่งที่แจ้งกลับผู้เสนอใน note' };
   }
-  if (eventType === 'ASSIGNED' && !input.assigned_to) {
+  // Explicit null check rather than truthiness: `!input.assigned_to` would
+  // also reject a numeric 0, and "is this id falsy" is never the question
+  // being asked about a foreign key.
+  if (eventType === 'ASSIGNED' && (input.assigned_to === undefined || input.assigned_to === null || input.assigned_to === '')) {
     return { error: 'ต้องระบุผู้รับผิดชอบใน assigned_to' };
   }
 

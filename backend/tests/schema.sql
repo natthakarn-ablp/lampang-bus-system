@@ -1247,6 +1247,66 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
   CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+--
+-- Migration 050 — participatory-administration cases.
+-- Added here so the disposable test database matches the repository's
+-- migration set: without it, integration tests could never exercise the
+-- participation workflow that migration 050 introduces. Kept byte-compatible
+-- with migrations/050_participation_cases.sql.
+--
+DROP TABLE IF EXISTS `participation_case_events`;
+DROP TABLE IF EXISTS `participation_cases`;
+CREATE TABLE `participation_cases` (
+  id                 BIGINT NOT NULL AUTO_INCREMENT,
+  case_no            VARCHAR(32) NOT NULL,
+  case_type          ENUM('POLICY_PROPOSAL','SERVICE_ISSUE','SAFETY_CONCERN','DATA_QUALITY','RESOURCE_REQUEST','OTHER') NOT NULL,
+  subject            VARCHAR(200) NOT NULL,
+  body               TEXT NULL,
+  scope_type         ENUM('SCHOOL','AFFILIATION','PROVINCE','TRANSPORT') NOT NULL,
+  scope_id           VARCHAR(20) NULL,
+  initiated_by       INT NULL,
+  initiated_role     ENUM('driver','school','affiliation','province','transport','admin','parent') NOT NULL,
+  linked_entity_type VARCHAR(50) NULL,
+  linked_entity_id   VARCHAR(64) NULL,
+  status             ENUM('SUBMITTED','ACKNOWLEDGED','IN_CONSULTATION','DECIDED','ASSIGNED','COMPLETED','CLOSED','WITHDRAWN') NOT NULL DEFAULT 'SUBMITTED',
+  decision           ENUM('APPROVED','REJECTED','DEFERRED','NO_ACTION_NEEDED') NULL,
+  decision_rationale TEXT NULL,
+  decided_by         INT NULL,
+  decided_at         TIMESTAMP NULL,
+  assigned_to        INT NULL,
+  due_at             TIMESTAMP NULL,
+  completed_at       TIMESTAMP NULL,
+  feedback_sent_at   TIMESTAMP NULL,
+  created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_participation_case_no (case_no),
+  KEY idx_participation_case_scope (scope_type, scope_id, status),
+  KEY idx_participation_case_status (status, created_at),
+  KEY idx_participation_case_assigned (assigned_to, status),
+  KEY idx_participation_case_linked (linked_entity_type, linked_entity_id),
+  CONSTRAINT fk_participation_case_initiator FOREIGN KEY (initiated_by) REFERENCES users (id),
+  CONSTRAINT fk_participation_case_decider FOREIGN KEY (decided_by) REFERENCES users (id),
+  CONSTRAINT fk_participation_case_assignee FOREIGN KEY (assigned_to) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `participation_case_events` (
+  id            BIGINT NOT NULL AUTO_INCREMENT,
+  case_id       BIGINT NOT NULL,
+  event_type    ENUM('SUBMITTED','ACKNOWLEDGED','COMMENTED','CONSULTED','DECIDED','ASSIGNED','COMPLETED','FEEDBACK_SENT','WITHDRAWN') NOT NULL,
+  actor_user_id INT NULL,
+  actor_role    ENUM('driver','school','affiliation','province','transport','admin','parent') NOT NULL,
+  note          TEXT NULL,
+  evidence_ref  VARCHAR(200) NULL,
+  occurred_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_participation_event_case (case_id, occurred_at),
+  KEY idx_participation_event_type (event_type, occurred_at),
+  KEY idx_participation_event_actor (actor_user_id, occurred_at),
+  CONSTRAINT fk_participation_event_case FOREIGN KEY (case_id) REFERENCES participation_cases (id),
+  CONSTRAINT fk_participation_event_actor FOREIGN KEY (actor_user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

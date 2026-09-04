@@ -92,22 +92,27 @@ if (result.status === 'PENDING' && !allowPending) {
 
 function buildStatus() {
   if (!selectedBundle) {
+    // The owner board must be derived from the same action list the report
+    // prints, never hardcoded. An empty ownerTotals here printed "none | 0"
+    // in the Owner Board while Next Actions carried a P0 for technical-owner,
+    // so the one person who had to act did not appear on the board.
+    const actionItems = [{
+      id: 'bundle-missing',
+      category: 'go-live-bundle',
+      owner: 'technical-owner',
+      priority: 'P0',
+      pending_count: 1,
+      source: 'outputs/go-live-bundle',
+      evidence: `${rel(DEFAULT_BUNDLE_ROOT)}/`,
+      action: 'Create a go-live bundle before running final closure review.',
+    }];
     return {
       status: 'FAIL',
       bundleGitHead: '',
       checks: [],
-      actionItems: [{
-        id: 'bundle-missing',
-        category: 'go-live-bundle',
-        owner: 'technical-owner',
-        priority: 'P0',
-        pending_count: 1,
-        source: 'outputs/go-live-bundle',
-        evidence: 'outputs/go-live-bundle/<timestamp>/summary.md',
-        action: 'Create a go-live bundle before running final closure review.',
-      }],
+      actionItems,
       totals: { pass: 0, pending: 0, fail: 1 },
-      ownerTotals: {},
+      ownerTotals: summarizeOwners(actionItems),
     };
   }
 

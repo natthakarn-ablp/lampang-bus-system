@@ -29,7 +29,7 @@ FAIL=0
 SKIP=0
 
 cleanup() {
-  rm -f "$TMP_BODY" "$TMP_HEALTH_BODY" "$TMP_BACKEND_AUDIT" "$TMP_FRONTEND_AUDIT" 2>/dev/null || true
+  rm -f "$TMP_BODY" "$TMP_HEALTH_BODY" "$TMP_BACKEND_AUDIT" "$TMP_FRONTEND_AUDIT" "$TMP_BACKEND_AUDIT.err" "$TMP_FRONTEND_AUDIT.err" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -51,6 +51,47 @@ run_check() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+# `npm audit --json >file` alone conflated three different outcomes into one
+# [fail]: real vulnerabilities, an unreachable registry, and a clean audit that
+# still exited non-zero. The captured JSON was never read, so a gate operator
+# could not tell "you have a critical CVE" from "npm could not reach
+# registry.npmjs.org". Parse the report and say which one happened.
+#
+# An unevaluated audit is a WARN, not a PASS: the gate does not fail on a
+# network outage, but the summary line never claims the dependencies were
+# checked when they were not.
+check_npm_audit() {
+  local label="$1"
+  local dir="$2"
+  local out="$3"
+  local summary
+  echo "[gate] $label"
+  (cd "$dir" && npm audit --json) >"$out" 2>"$out.err"
+  summary="$(node -e '
+const fs = require("fs");
+let report;
+try { report = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch (err) { process.exit(1); }
+const counts = report && report.metadata && report.metadata.vulnerabilities;
+if (!counts) process.exit(1);
+const total = Number(counts.total || 0);
+const detail = ["critical", "high", "moderate", "low", "info"]
+  .map((level) => `${level}=${Number(counts[level] || 0)}`)
+  .join(" ");
+process.stdout.write(total > 0 ? `vulnerable total=${total} ${detail}` : "clean total=0");
+' "$out" 2>/dev/null)"
+  case "$summary" in
+    clean*)
+      pass "$label ($summary)"
+      ;;
+    vulnerable*)
+      fail "$label ($summary)"
+      ;;
+    *)
+      warn "$label NOT EVALUATED: npm audit produced no report (registry unreachable or npm error); dependencies were not checked"
+      ;;
+  esac
 }
 
 check_http() {
@@ -155,8 +196,8 @@ check_git_clean() {
 run_local_mode() {
   echo "[gate] mode=local root=$ROOT"
   run_check "backend unit tests" bash -c "cd '$ROOT/backend' && npm run test:unit"
-  run_check "backend npm audit" bash -c "cd '$ROOT/backend' && npm audit --json >'$TMP_BACKEND_AUDIT'"
-  run_check "frontend npm audit" bash -c "cd '$ROOT/frontend' && npm audit --json >'$TMP_FRONTEND_AUDIT'"
+  check_npm_audit "backend npm audit" "$ROOT/backend" "$TMP_BACKEND_AUDIT"
+  check_npm_audit "frontend npm audit" "$ROOT/frontend" "$TMP_FRONTEND_AUDIT"
   run_check "frontend production build" bash -c "cd '$ROOT/frontend' && npm run build"
   run_check "frontend UI labels" bash -c "cd '$ROOT/frontend' && npm run check:labels"
   run_check "frontend hybrid UI guard" bash -c "cd '$ROOT/frontend' && npm run check:hybrid-ui"

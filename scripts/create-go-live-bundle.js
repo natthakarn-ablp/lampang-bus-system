@@ -786,7 +786,7 @@ function actionItems() {
       owner: readinessOwner(pending),
       priority: 'P0',
       pending_count: 1,
-      source: selectedPhase9 || 'outputs/phase9-evidence/<timestamp>',
+      source: readinessSource(pending, selectedPhase9),
       evidence: readinessValidation.log ? rel(readinessValidation.log) : '',
       action: pending,
     });
@@ -808,6 +808,31 @@ function approvalOwner(scope) {
   if (/deploy|postdeploy|monitor/i.test(scope)) return 'technical-owner';
   if (/production read-only gate/i.test(scope)) return 'operator';
   return 'project-owner';
+}
+
+/**
+ * Every readiness row used to carry the phase9-evidence directory as its
+ * source, so the restore-drill, operator-gate, UAT and sign-off gaps all
+ * pointed an owner at a directory that has nothing to do with their gap.
+ * Classify the source the same way readinessOwner() classifies the owner.
+ *
+ * When the pack does not exist yet there is no timestamped directory to name,
+ * so point at the root the pack must land in rather than a `<timestamp>`
+ * placeholder the bundle validator rejects as an unresolved path.
+ */
+function readinessSource(pending, selectedPhase9) {
+  if (/uat-evidence/i.test(pending)) {
+    return selectedUatEvidence ? rel(selectedUatEvidence) : `${rel(UAT_EVIDENCE_ROOT)}/`;
+  }
+  if (/restore-drill/i.test(pending)) {
+    return selectedRestoreDrillEvidence ? rel(selectedRestoreDrillEvidence) : `${rel(RESTORE_DRILL_EVIDENCE_ROOT)}/`;
+  }
+  if (/operator-gate|production\/postdeploy|monitor/i.test(pending)) {
+    return selectedOperatorGateEvidence ? rel(selectedOperatorGateEvidence) : `${rel(OPERATOR_GATE_EVIDENCE_ROOT)}/`;
+  }
+  if (/signoff|approval/i.test(pending)) return 'docs/UAT_SIGNOFF_2026-08.md';
+  if (/scorecard/i.test(pending)) return 'docs/READINESS_SCORECARD_2026-08.md';
+  return selectedPhase9 || `${rel(PHASE9_EVIDENCE_ROOT)}/`;
 }
 
 function readinessOwner(pending) {

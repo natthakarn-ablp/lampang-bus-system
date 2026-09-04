@@ -4,18 +4,25 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const schema = require('./lib/closure-report-schema');
 
 const ROOT = path.resolve(__dirname, '..');
 const DEFAULT_BUNDLE_ROOT = path.join(ROOT, 'outputs', 'go-live-bundle');
 const DEFAULT_OUTPUT_ROOT = path.join(ROOT, 'outputs', 'go-live-closure-status');
+// The action-row schema and the evidence-existence rule are shared with the
+// go-live bundle, both validators and the automated readiness collector.
+const { ACTION_COLUMNS, TIMESTAMPED_RUN_DIR } = schema;
 
 let bundlePath = null;
+// Overridable so the no-bundle branch can be exercised against an empty root
+// without deleting real bundles from outputs/go-live-bundle.
+let bundleRoot = DEFAULT_BUNDLE_ROOT;
 let outputRoot = DEFAULT_OUTPUT_ROOT;
 let runId = timestampBangkok();
 let allowPending = false;
 
 function usage() {
-  console.error('Usage: node scripts/summarize-go-live-closure.js [--bundle <dir|manifest.json>] [--out-dir <dir>] [--run-id <id>] [--allow-pending]');
+  console.error('Usage: node scripts/summarize-go-live-closure.js [--bundle <dir|manifest.json>] [--bundle-root <dir>] [--out-dir <dir>] [--run-id <id>] [--allow-pending]');
 }
 
 const args = process.argv.slice(2);
@@ -23,6 +30,9 @@ for (let i = 0; i < args.length; i += 1) {
   const arg = args[i];
   if (arg === '--bundle' && args[i + 1]) {
     bundlePath = path.resolve(args[i + 1]);
+    i += 1;
+  } else if (arg === '--bundle-root' && args[i + 1]) {
+    bundleRoot = path.resolve(args[i + 1]);
     i += 1;
   } else if (arg === '--out-dir' && args[i + 1]) {
     outputRoot = path.resolve(args[i + 1]);
@@ -38,7 +48,7 @@ for (let i = 0; i < args.length; i += 1) {
   }
 }
 
-const selectedBundle = normalizeBundlePath(bundlePath) || latestPack(DEFAULT_BUNDLE_ROOT);
+const selectedBundle = normalizeBundlePath(bundlePath) || latestPack(bundleRoot);
 const outDir = path.join(outputRoot, runId);
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -65,6 +75,7 @@ writeFile('manifest.json', `${JSON.stringify({
   allow_pending: allowPending,
   totals: result.totals,
   owner_totals: result.ownerTotals,
+  action_columns: ACTION_COLUMNS,
   safety: {
     calls_apis: false,
     runs_deploy: false,
@@ -96,16 +107,24 @@ function buildStatus() {
     // prints, never hardcoded. An empty ownerTotals here printed "none | 0"
     // in the Owner Board while Next Actions carried a P0 for technical-owner,
     // so the one person who had to act did not appear on the board.
-    const actionItems = [{
+    //
+    // The source here is the scan, not the directory. `outputs/go-live-bundle`
+    // may not exist at all, and naming a directory that has never been created
+    // as the "source" of a status is precisely the confusion this schema splits
+    // apart: the scan is what produced FAIL, the root is only where the bundle
+    // has to appear.
+    const actionItems = [actionRow({
       id: 'bundle-missing',
       category: 'go-live-bundle',
       owner: 'technical-owner',
       priority: 'P0',
       pending_count: 1,
-      source: 'outputs/go-live-bundle',
-      evidence: `${rel(DEFAULT_BUNDLE_ROOT)}/`,
+      source: `scan of ${rel(bundleRoot)} found no run directory containing manifest.json`,
+      source_type: 'command',
+      expected_evidence_root: rel(bundleRoot),
+      evidence_instruction: `run node scripts/create-go-live-bundle.js; it will ${TIMESTAMPED_RUN_DIR}`,
       action: 'Create a go-live bundle before running final closure review.',
-    }];
+    })];
     return {
       status: 'FAIL',
       bundleGitHead: '',
@@ -117,54 +136,102 @@ function buildStatus() {
   }
 
   const manifestPath = path.join(selectedBundle.dir, 'manifest.json');
-  const manifest = readJson(manifestPath) || {};
+  const parsedManifest = readJson(manifestPath);
+  const manifest = parsedManifest || {};
   const checks = Array.isArray(manifest.checks) ? manifest.checks : [];
   const actionItems = readActionItems(selectedBundle.dir);
   const syntheticActions = [];
 
+  // A bundle whose manifest cannot be read, or carries no checks, used to fall
+  // straight through to PASS: `readJson(...) || {}` produced zero checks, zero
+  // totals and zero action rows, so a corrupt bundle on a clean worktree read as
+  // "nothing left to do". A closure board that cannot see the checks has not
+  // reviewed them, and the only honest verdict is FAIL.
+  let manifestFailures = 0;
+  let checksProblem = '';
+  if (!parsedManifest) {
+    manifestFailures += 1;
+    checksProblem = `bundle manifest is not readable JSON: ${rel(manifestPath)}`;
+    syntheticActions.push(actionRow({
+      id: 'bundle-manifest-unreadable',
+      category: 'go-live-bundle',
+      owner: 'technical-owner',
+      priority: 'P0',
+      pending_count: 1,
+      source: rel(manifestPath),
+      source_type: 'report',
+      expected_evidence_root: rel(bundleRoot),
+      evidence_instruction: `regenerate the bundle; it will ${TIMESTAMPED_RUN_DIR}`,
+      action: `Regenerate the go-live bundle: ${rel(manifestPath)} is not readable JSON, so no check result in it can be trusted.`,
+    }));
+  } else if (checks.length === 0) {
+    manifestFailures += 1;
+    checksProblem = `bundle manifest records no checks: ${rel(manifestPath)}`;
+    syntheticActions.push(actionRow({
+      id: 'bundle-manifest-has-no-checks',
+      category: 'go-live-bundle',
+      owner: 'technical-owner',
+      priority: 'P0',
+      pending_count: 1,
+      source: rel(manifestPath),
+      source_type: 'report',
+      expected_evidence_root: rel(bundleRoot),
+      evidence_instruction: `regenerate the bundle; it will ${TIMESTAMPED_RUN_DIR}`,
+      action: `Regenerate the go-live bundle: ${rel(manifestPath)} lists no checks, so this board would review nothing.`,
+    }));
+  }
+
   if (gitStatusLines.length > 0) {
-    syntheticActions.push({
+    syntheticActions.push(actionRow({
       id: 'source-worktree-not-clean',
       category: 'source-state',
       owner: 'technical-owner',
       priority: 'P0',
       pending_count: gitStatusLines.length,
       source: 'git status --short',
-      evidence: rel(path.join(selectedBundle.dir, 'SOURCE_STATE.md')),
+      source_type: 'command',
+      expected_evidence_root: rel(path.join(selectedBundle.dir, 'SOURCE_STATE.md')),
+      evidence_instruction: 'review the source candidates listed here, then commit them or record an explicit approval of the deployed source state',
       action: 'Commit, ignore, or explicitly approve every source-state change before final go-live review.',
-    });
+    }));
   }
 
   if (gitHead && manifest.git_head && gitHead !== manifest.git_head) {
-    syntheticActions.push({
+    syntheticActions.push(actionRow({
       id: 'bundle-stale-git-head',
       category: 'go-live-bundle',
       owner: 'technical-owner',
       priority: 'P0',
       pending_count: 1,
-      source: rel(selectedBundle.dir),
-      evidence: rel(path.join(selectedBundle.dir, 'SOURCE_STATE.md')),
+      source: rel(manifestPath),
+      source_type: 'report',
+      expected_evidence_root: rel(bundleRoot),
+      evidence_instruction: `regenerate the bundle at the current HEAD; it will ${TIMESTAMPED_RUN_DIR}`,
       action: `Regenerate the go-live bundle because current HEAD ${gitHead} differs from bundle HEAD ${manifest.git_head}.`,
-    });
+    }));
   }
 
   for (const check of checks) {
     if (check.status === 'FAIL') {
-      syntheticActions.push({
+      const checkLog = check.log || rel(path.join(selectedBundle.dir, 'summary.md'));
+      syntheticActions.push(actionRow({
         id: `check-fail-${safeName(check.id).toLowerCase()}`,
         category: 'failed-check',
         owner: ownerForCheck(check.id),
         priority: 'P0',
         pending_count: 1,
-        source: check.log || rel(selectedBundle.dir),
-        evidence: check.log || rel(path.join(selectedBundle.dir, 'summary.md')),
+        source: checkLog,
+        source_type: 'log',
+        expected_evidence_root: checkLog,
+        evidence_instruction: `fix the cause recorded in this log, then regenerate the bundle so ${check.id} is no longer FAIL`,
         action: `Fix failing go-live bundle check: ${check.id}. ${check.detail || ''}`.trim(),
-      });
+      }));
     }
   }
 
   const mergedActions = sortActions([...syntheticActions, ...actionItems]);
   const totals = summarizeChecks(checks, syntheticActions);
+  totals.fail += manifestFailures;
   const status = totals.fail > 0
     ? 'FAIL'
     : totals.pending > 0 || mergedActions.length > 0
@@ -175,6 +242,7 @@ function buildStatus() {
     status,
     bundleGitHead: manifest.git_head || '',
     checks,
+    checksProblem,
     actionItems: mergedActions,
     totals,
     ownerTotals: summarizeOwners(mergedActions),
@@ -186,16 +254,32 @@ function readActionItems(bundleDir) {
   const actionPath = path.join(bundleDir, 'ACTION_ITEMS.json');
   const parsed = readJson(actionPath);
   if (!Array.isArray(parsed)) return [];
-  return parsed.map((item, index) => ({
-    id: text(item.id) || `action-${index + 1}`,
-    category: text(item.category) || 'unknown',
-    owner: text(item.owner) || 'project-owner',
-    priority: text(item.priority) || 'P1',
-    pending_count: Number(item.pending_count || 1),
-    source: text(item.source) || rel(bundleDir),
-    evidence: text(item.evidence) || rel(path.join(bundleDir, 'summary.md')),
-    action: text(item.action) || 'Review pending action item.',
-  }));
+  return parsed.map((item, index) => {
+    const expectedRoot = text(item.expected_evidence_root) || rel(path.join(bundleDir, 'summary.md'));
+    return {
+      id: text(item.id) || `action-${index + 1}`,
+      category: text(item.category) || 'unknown',
+      owner: text(item.owner) || 'project-owner',
+      priority: text(item.priority) || 'P1',
+      pending_count: Number(item.pending_count || 1),
+      source: text(item.source) || rel(actionPath),
+      source_type: text(item.source_type) || 'report',
+      expected_evidence_root: expectedRoot,
+      // Re-derived here rather than copied: the closure board is generated later
+      // than the bundle, and evidence may have appeared or been removed since.
+      evidence_status: evidenceStatus(expectedRoot),
+      evidence_instruction: text(item.evidence_instruction) || 'supply the evidence this row is waiting for',
+      action: text(item.action) || 'Review pending action item.',
+    };
+  });
+}
+
+function actionRow(item) {
+  return schema.actionRow(ROOT, item);
+}
+
+function evidenceStatus(expectedRoot) {
+  return schema.evidenceStatus(ROOT, expectedRoot);
 }
 
 function summarizeChecks(checks, syntheticActions) {
@@ -209,7 +293,10 @@ function summarizeChecks(checks, syntheticActions) {
   }, { pass: 0, pending: 0, fail: 0 });
 
   for (const action of syntheticActions) {
+    // Rows that stand for a failure are counted as failures by the caller, not
+    // a second time here as pending.
     if (action.id.startsWith('check-fail-')) continue;
+    if (action.id.startsWith('bundle-manifest-')) continue;
     totals.pending += 1;
   }
   return totals;
@@ -264,11 +351,11 @@ function summary(result) {
 
   const checkRows = result.checks.length > 0
     ? result.checks.map((check) => `| ${check.id || ''} | ${check.status || ''} | ${escapeCell(check.detail || '')} | ${check.log ? `\`${check.log}\`` : ''} |`).join('\n')
-    : '| go-live-bundle | FAIL | no bundle available | |';
+    : `| go-live-bundle | FAIL | ${escapeCell(result.checksProblem || 'no bundle available')} | |`;
 
   const nextRows = result.actionItems.length > 0
-    ? result.actionItems.slice(0, 30).map((item) => `| ${item.priority} | ${item.owner} | ${item.category} | ${item.pending_count} | ${escapeCell(item.action)} | \`${item.evidence}\` |`).join('\n')
-    : '| PASS | none | none | 0 | No remaining action item in the selected bundle. | |';
+    ? result.actionItems.slice(0, 30).map((item) => `| ${item.priority} | ${item.owner} | ${item.category} | ${item.pending_count} | ${escapeCell(item.action)} | \`${item.source}\` | \`${item.expected_evidence_root}\` | ${item.evidence_status} |`).join('\n')
+    : '| PASS | none | none | 0 | No remaining action item in the selected bundle. | | | |';
 
   return `# Go-live Closure Status
 
@@ -301,8 +388,8 @@ ${checkRows}
 
 ## Next Actions
 
-| Priority | Owner | Category | Pending | Action | Evidence |
-|---|---|---|---:|---|---|
+| Priority | Owner | Category | Pending | Action | Status source | Expected evidence root | Evidence |
+|---|---|---|---:|---|---|---|---|
 ${nextRows}
 
 ## Final Commands
@@ -323,12 +410,7 @@ This report reads local bundle files and writes local summary files only. It doe
 }
 
 function actionItemsCsv(items) {
-  const columns = ['id', 'category', 'owner', 'priority', 'pending_count', 'source', 'evidence', 'action'];
-  const rows = [
-    columns.join(','),
-    ...items.map((item) => columns.map((column) => csvCell(item[column])).join(',')),
-  ];
-  return `${rows.join('\n')}\n`;
+  return schema.actionRowsCsv(items);
 }
 
 function normalizeBundlePath(targetPath) {
@@ -399,11 +481,6 @@ function rel(filePath) {
 
 function text(value) {
   return String(value == null ? '' : value).trim();
-}
-
-function csvCell(value) {
-  const content = String(value == null ? '' : value);
-  return `"${content.replace(/"/g, '""')}"`;
 }
 
 function escapeCell(value) {

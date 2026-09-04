@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const schema = require('./lib/closure-report-schema');
 
 const ROOT = path.resolve(__dirname, '..');
 const DEFAULT_BUNDLE_ROOT = path.join(ROOT, 'outputs', 'go-live-bundle');
@@ -12,6 +13,18 @@ const PHASE9_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'phase9-evidence');
 const UAT_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'uat-evidence');
 const RESTORE_DRILL_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'restore-drill');
 const OPERATOR_GATE_EVIDENCE_ROOT = path.join(ROOT, 'outputs', 'operator-gates');
+// The action-row schema, the evidence-existence rule and the shared document
+// paths live in scripts/lib/closure-report-schema.js, so the closure board, the
+// validators and the automated readiness collector all read the same columns
+// with the same meaning.
+const {
+  ACTION_COLUMNS,
+  UAT_SIGNOFF_DOC,
+  OWNER_APPROVAL_DOC,
+  SCORECARD_DOC,
+  SIGNOFF_DOCS,
+  TIMESTAMPED_RUN_DIR,
+} = schema;
 
 let allowPending = false;
 let evidencePath = null;
@@ -175,6 +188,7 @@ const scripts = [
   'scripts/summarize-go-live-closure.js',
   'scripts/validate-go-live-closure-status.js',
   'scripts/collect-automated-readiness-evidence.js',
+  'scripts/lib/closure-report-schema.js',
 ];
 
 const referencedFiles = [
@@ -215,7 +229,6 @@ const totals = checks.reduce((acc, check) => {
 }, { pass: 0, pending: 0, fail: 0 });
 
 const readinessDecision = decisionFromReadiness(readinessSummary, readinessValidation.status);
-const pendingActionItems = actionItems();
 const safety = {
   calls_apis: false,
   runs_restore_drill: false,
@@ -231,6 +244,12 @@ writeFile('EXECUTIVE_BRIEF.md', executiveBrief(readinessDecision, readinessSumma
 writeFile('OPERATOR_COMMANDS.md', operatorCommands());
 writeFile('SIGNOFF_INDEX.md', signoffIndex());
 writeFile('SOURCE_STATE.md', sourceState());
+
+// Built after SOURCE_STATE.md exists: `evidence_status` is read off the
+// filesystem, so a row must not be asked whether its evidence exists before the
+// file it points at has been written.
+const pendingActionItems = actionItems();
+
 writeFile('ACTION_PLAN.md', actionPlan());
 writeFile('ACTION_ITEMS.csv', actionItemsCsv(pendingActionItems));
 writeFile('ACTION_ITEMS.json', `${JSON.stringify(pendingActionItems, null, 2)}\n`);
@@ -267,6 +286,8 @@ writeFile('manifest.json', `${JSON.stringify({
     detail: check.detail,
   })),
   totals,
+  action_columns: ACTION_COLUMNS,
+  action_items: pendingActionItems.length,
   referenced_files: fileHashes,
 }, null, 2)}\n`);
 
@@ -636,7 +657,7 @@ Do not deploy until the approved commit hash is recorded in the owner/operator a
 function actionPlan() {
   const uatRoles = summarizeUatPending(uatValidation.output);
   const signoffSections = summarizeSignoffPending(signoffValidation.output);
-  const readinessPending = extractPending(readinessValidation.output, '[ready-100]');
+  const readinessPending = extractPendingChecks(readinessValidation.output, '[ready-100]').map((entry) => entry.raw);
   const approvalScopes = extractMatchingPending(signoffValidation.output, /^\[go-live-signoff\] PENDING: Approval scope (.+?) approval missing$/);
 
   const uatRows = uatRoles.length > 0
@@ -721,78 +742,155 @@ All final commands must pass without \`--allow-pending\` before the system can b
 
 function actionItems() {
   const items = [];
-  const selectedUat = selectedUatEvidence ? rel(selectedUatEvidence) : '';
-  const selectedPhase9 = selectedEvidence ? rel(selectedEvidence) : '';
+  const selectedUat = selectedUatEvidence ? rel(selectedUatEvidence) : rel(UAT_EVIDENCE_ROOT);
+  const readinessLog = readinessValidation.log ? rel(readinessValidation.log) : '';
 
   if (gitStatus.status === 'PENDING') {
-    items.push({
+    items.push(actionRow({
       id: 'source-state-approval',
       category: 'source-state',
       owner: 'technical-owner',
       priority: 'P1',
       pending_count: 1,
       source: 'git status --short',
-      evidence: 'SOURCE_STATE.md',
+      source_type: 'command',
+      expected_evidence_root: rel(path.join(bundleDir, 'SOURCE_STATE.md')),
+      evidence_instruction: 'review every source candidate listed here, then commit or record an explicit approval of the exact deployed source state',
       action: 'Commit or otherwise approve the exact source state that will be deployed.',
-    });
+    }));
   }
 
   for (const role of summarizeUatPending(uatValidation.output)) {
-    items.push({
+    const roleFile = `${selectedUat}/${role.role}.md`;
+    items.push(actionRow({
       id: `uat-${role.role}`,
       category: 'uat-evidence',
       owner: role.role,
       priority: 'P1',
       pending_count: role.total,
-      source: `${selectedUat}/${role.role}.md`,
-      evidence: `${selectedUat}/${role.role}.md`,
+      source: selectedUatEvidence ? roleFile : readinessLog,
+      source_type: selectedUatEvidence ? 'document' : 'log',
+      expected_evidence_root: selectedUatEvidence ? roleFile : rel(UAT_EVIDENCE_ROOT),
+      evidence_instruction: selectedUatEvidence
+        ? 'fill tester info, route smoke, role checks and sign-off in this file from a real UAT session'
+        : `${TIMESTAMPED_RUN_DIR}; it must hold one completed file per role`,
       action: `Complete tester info, route smoke, role checks, and sign-off for ${role.role}.`,
-    });
+    }));
   }
 
   for (const section of summarizeSignoffPending(signoffValidation.output)) {
-    const source = section.section === 'Approval scope' || section.section === 'Owner/operator approval'
-      ? 'docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md'
-      : 'docs/UAT_SIGNOFF_2026-08.md';
-    items.push({
+    const doc = section.section === 'Approval scope' || section.section === 'Owner/operator approval'
+      ? OWNER_APPROVAL_DOC
+      : UAT_SIGNOFF_DOC;
+    items.push(actionRow({
       id: `signoff-${safeName(section.section).toLowerCase()}`,
       category: 'signoff',
       owner: sectionOwner(section.section),
       priority: 'P1',
       pending_count: section.total,
-      source,
-      evidence: source,
+      source: doc,
+      source_type: 'document',
+      expected_evidence_root: doc,
+      evidence_instruction: `fill the PASS/evidence/date/name/signature fields of "${section.section}" in this document`,
       action: `Fill PASS/evidence/date/name/signature fields for ${section.section}.`,
-    });
+    }));
   }
 
   for (const scope of extractMatchingPending(signoffValidation.output, /^\[go-live-signoff\] PENDING: Approval scope (.+?) approval missing$/)) {
-    items.push({
+    items.push(actionRow({
       id: `approval-${safeName(scope).toLowerCase()}`,
       category: 'approval-scope',
       owner: approvalOwner(scope),
       priority: 'P0',
       pending_count: 1,
-      source: 'docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md',
-      evidence: 'docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md',
+      source: OWNER_APPROVAL_DOC,
+      source_type: 'document',
+      expected_evidence_root: OWNER_APPROVAL_DOC,
+      evidence_instruction: `record a named, dated approval for the scope "${scope}" in this document`,
       action: `Owner/operator must explicitly approve: ${scope}.`,
-    });
+    }));
   }
 
-  for (const pending of extractPending(readinessValidation.output, '[ready-100]')) {
-    items.push({
-      id: `readiness-${safeName(pending).toLowerCase()}`,
+  for (const pending of extractPendingChecks(readinessValidation.output, '[ready-100]')) {
+    const mapped = readinessRow(pending.id, readinessLog);
+    items.push(actionRow({
+      id: `readiness-${safeName(pending.id).toLowerCase()}`,
       category: 'readiness-verifier',
-      owner: readinessOwner(pending),
+      owner: mapped.owner,
       priority: 'P0',
       pending_count: 1,
-      source: readinessSource(pending, selectedPhase9),
-      evidence: readinessValidation.log ? rel(readinessValidation.log) : '',
-      action: pending,
-    });
+      source: mapped.source,
+      source_type: mapped.source_type,
+      expected_evidence_root: mapped.expected_evidence_root,
+      evidence_instruction: mapped.evidence_instruction,
+      action: pending.raw,
+    }));
   }
 
   return items;
+}
+
+function actionRow(item) {
+  return schema.actionRow(ROOT, item);
+}
+
+/**
+ * Route a readiness row by the verifier's own check id rather than by pattern
+ * matching its prose. Every row used to be handed the phase9-evidence directory
+ * as its source, which pointed the restore-drill, operator-gate, UAT and
+ * sign-off owners at a folder that has nothing to do with their gap.
+ *
+ * The sign-off row names BOTH sign-off documents, because
+ * `validate-go-live-signoff.js` reads both and a row that cites only the UAT
+ * sheet hides the owner/operator approval half of the same gate.
+ */
+function readinessRow(checkId, readinessLog) {
+  const packRow = (owner, selected, root, what) => ({
+    owner,
+    source: readinessLog,
+    source_type: 'log',
+    expected_evidence_root: selected ? rel(selected) : rel(root),
+    evidence_instruction: selected
+      ? `complete ${what} in this pack and re-run the validator`
+      : `${TIMESTAMPED_RUN_DIR}; it must hold ${what}`,
+  });
+
+  switch (checkId) {
+    case 'phase9-evidence':
+      return packRow('operator', selectedEvidence, PHASE9_EVIDENCE_ROOT, 'the public Phase 9 evidence pack');
+    case 'uat-evidence-pack':
+      return packRow('uat-lead', selectedUatEvidence, UAT_EVIDENCE_ROOT, 'one completed evidence file per role');
+    case 'uat-evidence-safety':
+      return packRow('uat-lead', selectedUatEvidence, UAT_EVIDENCE_ROOT, 'redacted UAT evidence that passes the safety scan');
+    case 'restore-drill-evidence':
+      return packRow('operator', selectedRestoreDrillEvidence, RESTORE_DRILL_EVIDENCE_ROOT, 'restore-drill-result.md and the redacted drill log');
+    case 'operator-gate-evidence':
+      return packRow('operator', selectedOperatorGateEvidence, OPERATOR_GATE_EVIDENCE_ROOT, 'production, postdeploy and monitor redacted logs');
+    case 'go-live-signoff':
+      return {
+        owner: 'project-owner',
+        source: SIGNOFF_DOCS,
+        source_type: 'document',
+        expected_evidence_root: SIGNOFF_DOCS,
+        evidence_instruction: 'complete the UAT sign-off sheet and the owner/operator approval packet; both documents gate this check',
+      };
+    case 'scorecard-overall':
+      return {
+        owner: 'technical-owner',
+        source: SCORECARD_DOC,
+        source_type: 'document',
+        expected_evidence_root: SCORECARD_DOC,
+        evidence_instruction: 'raise the Overall row to 100% only after every strict validator passes on real evidence',
+      };
+    default:
+      return {
+        owner: 'operator',
+        source: readinessLog,
+        source_type: 'log',
+        expected_evidence_root: readinessLog,
+        evidence_instruction: `resolve the readiness check "${checkId}" named in this log, then re-run the verifier`,
+      };
+  }
 }
 
 function sectionOwner(section) {
@@ -810,52 +908,8 @@ function approvalOwner(scope) {
   return 'project-owner';
 }
 
-/**
- * Every readiness row used to carry the phase9-evidence directory as its
- * source, so the restore-drill, operator-gate, UAT and sign-off gaps all
- * pointed an owner at a directory that has nothing to do with their gap.
- * Classify the source the same way readinessOwner() classifies the owner.
- *
- * When the pack does not exist yet there is no timestamped directory to name,
- * so point at the root the pack must land in rather than a `<timestamp>`
- * placeholder the bundle validator rejects as an unresolved path.
- */
-function readinessSource(pending, selectedPhase9) {
-  if (/uat-evidence/i.test(pending)) {
-    return selectedUatEvidence ? rel(selectedUatEvidence) : `${rel(UAT_EVIDENCE_ROOT)}/`;
-  }
-  if (/restore-drill/i.test(pending)) {
-    return selectedRestoreDrillEvidence ? rel(selectedRestoreDrillEvidence) : `${rel(RESTORE_DRILL_EVIDENCE_ROOT)}/`;
-  }
-  if (/operator-gate|production\/postdeploy|monitor/i.test(pending)) {
-    return selectedOperatorGateEvidence ? rel(selectedOperatorGateEvidence) : `${rel(OPERATOR_GATE_EVIDENCE_ROOT)}/`;
-  }
-  if (/signoff|approval/i.test(pending)) return 'docs/UAT_SIGNOFF_2026-08.md';
-  if (/scorecard/i.test(pending)) return 'docs/READINESS_SCORECARD_2026-08.md';
-  return selectedPhase9 || `${rel(PHASE9_EVIDENCE_ROOT)}/`;
-}
-
-function readinessOwner(pending) {
-  if (/uat-evidence/i.test(pending)) return 'uat-lead';
-  if (/restore-drill/i.test(pending)) return 'operator';
-  if (/operator-gate|production\/postdeploy|monitor/i.test(pending)) return 'operator';
-  if (/signoff|approval/i.test(pending)) return 'project-owner';
-  if (/scorecard/i.test(pending)) return 'technical-owner';
-  return 'operator';
-}
-
 function actionItemsCsv(items) {
-  const columns = ['id', 'category', 'owner', 'priority', 'pending_count', 'source', 'evidence', 'action'];
-  const rows = [
-    columns.join(','),
-    ...items.map((item) => columns.map((column) => csvCell(item[column])).join(',')),
-  ];
-  return `${rows.join('\n')}\n`;
-}
-
-function csvCell(value) {
-  const text = String(value == null ? '' : value);
-  return `"${text.replace(/"/g, '""')}"`;
+  return schema.actionRowsCsv(items);
 }
 
 function summary(decision, ready, checksForSummary, fileHashRecords) {
@@ -913,6 +967,21 @@ function extractPending(output, prefix) {
     .filter((line) => line.startsWith(marker))
     .map((line) => line.slice(marker.length).trim())
     .filter(Boolean);
+}
+
+/**
+ * `[ready-100] PENDING: <check-id> - <detail> (<evidence>)` - keep the check id,
+ * which is a stable key, instead of re-deriving meaning from the prose.
+ */
+function extractPendingChecks(output, prefix) {
+  return extractPending(output, prefix).map((raw) => {
+    const separator = raw.indexOf(' - ');
+    return {
+      id: separator === -1 ? raw.trim() : raw.slice(0, separator).trim(),
+      detail: separator === -1 ? '' : raw.slice(separator + 3).trim(),
+      raw,
+    };
+  }).filter((entry) => entry.id);
 }
 
 function extractMatchingPending(output, pattern) {

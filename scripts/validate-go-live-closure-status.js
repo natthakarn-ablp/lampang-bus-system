@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const schema = require('./lib/closure-report-schema');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -45,6 +46,11 @@ function fail(message) {
   console.error(`[closure-status] FAIL: ${message}`);
 }
 
+// The action-row schema and its rules are defined once, in
+// scripts/lib/closure-report-schema.js, and shared with every program that
+// emits or reads these rows.
+const { ACTION_CSV_HEADER, validateActionRows } = schema;
+
 const target = path.resolve(targetArg);
 const stat = fs.existsSync(target) ? fs.statSync(target) : null;
 if (!stat) {
@@ -75,10 +81,10 @@ if (Array.isArray(actions)) {
   fail('owner-actions.json must be an array');
 }
 
-if (csvInfo.header === 'id,category,owner,priority,pending_count,source,evidence,action') {
+if (csvInfo.header === ACTION_CSV_HEADER) {
   ok('owner-actions.csv header is valid');
 } else if (files['owner-actions.csv']) {
-  fail('owner-actions.csv header mismatch');
+  fail(`owner-actions.csv header mismatch: expected "${ACTION_CSV_HEADER}"`);
 }
 
 if (Array.isArray(actions) && csvInfo.rows === actions.length) {
@@ -138,6 +144,16 @@ function validateManifest(manifestObject, actionsList) {
     }
   } else {
     fail('manifest.files must be an array');
+  }
+
+  if (Array.isArray(manifestObject.action_columns)) {
+    if (manifestObject.action_columns.join(',') === ACTION_CSV_HEADER) {
+      ok('manifest.action_columns matches the shared action-row schema');
+    } else {
+      fail(`manifest.action_columns does not match the shared action-row schema: ${manifestObject.action_columns.join(',')}`);
+    }
+  } else {
+    fail('manifest.action_columns must list the shared action-row schema');
   }
 
   const totals = manifestObject.totals || {};
@@ -202,6 +218,19 @@ function validateBundleLink(bundleDir, actionsList) {
   } else {
     fail(`closure actions ${actionsList.length} fewer than bundle actions ${bundleActions.length}`);
   }
+
+  // Counting rows is not coverage. The closure board adds synthetic rows of its
+  // own, so a board could carry more rows than the bundle while having silently
+  // dropped one of the bundle's - which is the row an owner is waiting on.
+  const closureIds = new Set(actionsList.map((item) => String(item.id)));
+  const dropped = bundleActions
+    .map((item) => String(item.id))
+    .filter((id) => id && !closureIds.has(id));
+  if (dropped.length > 0) {
+    fail(`closure board dropped ${dropped.length} bundle action id(s): ${dropped.join(', ')}`);
+  } else {
+    ok(`closure board carries every bundle action id (${bundleActions.length})`);
+  }
 }
 
 function validateOwnerTotals(ownerTotals, actionsList) {
@@ -237,30 +266,9 @@ function validateOwnerTotals(ownerTotals, actionsList) {
 }
 
 function validateActionItems(actionsList) {
-  const requiredKeys = ['id', 'category', 'owner', 'priority', 'pending_count', 'source', 'evidence', 'action'];
-  for (const [index, item] of actionsList.entries()) {
-    for (const key of requiredKeys) {
-      if (item[key] == null || String(item[key]).trim() === '') {
-        fail(`owner-actions.json row ${index + 1} missing ${key}`);
-      }
-    }
-    const priority = String(item.priority || '').trim();
-    if (!['P0', 'P1', 'P2'].includes(priority)) {
-      fail(`owner-actions.json row ${index + 1} invalid priority: ${priority}`);
-    }
-    const pendingCount = Number(item.pending_count);
-    if (!Number.isFinite(pendingCount) || pendingCount < 0) {
-      fail(`owner-actions.json row ${index + 1} invalid pending_count: ${item.pending_count}`);
-    }
-    const combined = requiredKeys.map((key) => String(item[key] || '')).join(' ');
-    if (combined.includes('<timestamp>')) {
-      fail(`owner-actions.json row ${index + 1} contains placeholder path`);
-    }
-    if (/password|token|secret|bearer/i.test(combined)) {
-      fail(`owner-actions.json row ${index + 1} contains a high-risk secret keyword`);
-    }
-  }
+  validateActionRows(actionsList, 'owner-actions.json', ROOT, { ok, pending, fail });
 }
+
 
 function requireFile(root, relPath) {
   const filePath = path.join(root, relPath);

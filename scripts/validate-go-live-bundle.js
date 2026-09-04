@@ -3,6 +3,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const schema = require('./lib/closure-report-schema');
+
+const ROOT = path.resolve(__dirname, '..');
 
 let allowPending = false;
 
@@ -51,6 +54,12 @@ function readJson(filePath) {
     return null;
   }
 }
+
+
+// The action-row schema and its rules are defined once, in
+// scripts/lib/closure-report-schema.js, and shared with every program that
+// emits or reads these rows.
+const { ACTION_CSV_HEADER, validateActionRows } = schema;
 
 function countCsvRows(csv) {
   const lines = String(csv || '').split(/\r?\n/).filter((line) => line.trim());
@@ -133,22 +142,13 @@ if (filePaths['ACTION_ITEMS.json']) {
   const items = readJson(filePaths['ACTION_ITEMS.json']);
   if (Array.isArray(items) && items.length > 0) {
     ok(`ACTION_ITEMS.json rows=${items.length}`);
-    for (const [index, item] of items.entries()) {
-      for (const key of ['id', 'category', 'owner', 'priority', 'pending_count', 'source', 'evidence', 'action']) {
-        if (item[key] == null || String(item[key]).trim() === '') {
-          fail(`ACTION_ITEMS.json row ${index + 1} missing ${key}`);
-        }
-      }
-      if (String(item.evidence || '').includes('<timestamp>') || String(item.source || '').includes('<timestamp>')) {
-        fail(`ACTION_ITEMS.json row ${index + 1} contains placeholder path`);
-      }
-    }
+    validateActionRows(items, 'ACTION_ITEMS.json', ROOT, { ok, pending, fail });
 
     if (filePaths['ACTION_ITEMS.csv']) {
       const csv = fs.readFileSync(filePaths['ACTION_ITEMS.csv'], 'utf8');
       const csvInfo = countCsvRows(csv);
-      if (csvInfo.header !== 'id,category,owner,priority,pending_count,source,evidence,action') {
-        fail('ACTION_ITEMS.csv header mismatch');
+      if (csvInfo.header !== ACTION_CSV_HEADER) {
+        fail(`ACTION_ITEMS.csv header mismatch: expected "${ACTION_CSV_HEADER}"`);
       } else {
         ok('ACTION_ITEMS.csv header is valid');
       }
@@ -158,7 +158,7 @@ if (filePaths['ACTION_ITEMS.json']) {
         ok(`ACTION_ITEMS.csv rows match JSON (${items.length})`);
       }
       if (csv.includes('<timestamp>')) {
-        fail('ACTION_ITEMS.csv contains placeholder path');
+        fail('ACTION_ITEMS.csv contains an unresolved <timestamp> placeholder');
       }
     }
   } else {
@@ -184,6 +184,16 @@ if (manifest) {
     }
   }
   if (state.fail === 0) ok('safety flags are non-mutating');
+
+  if (Array.isArray(manifest.action_columns)) {
+    if (manifest.action_columns.join(',') === ACTION_CSV_HEADER) {
+      ok('manifest.action_columns matches the shared action-row schema');
+    } else {
+      fail(`manifest.action_columns does not match the shared action-row schema: ${manifest.action_columns.join(',')}`);
+    }
+  } else {
+    fail('manifest.action_columns must list the shared action-row schema');
+  }
 
   const bundleFiles = Array.isArray(manifest.bundle_files) ? manifest.bundle_files : [];
   for (const relPath of requiredFiles) {

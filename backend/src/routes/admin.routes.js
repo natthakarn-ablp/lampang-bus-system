@@ -16,6 +16,7 @@ const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ExcelJS = require('exceljs');
 const { csvCell, neutralizeSpreadsheetCell, redactAuditValue } = require('../utils/exportSecurity');
+const { rejectOverLongFields } = require('../utils/fieldLength');
 const researchReadinessSvc = require('../services/researchReadiness.service');
 const { RESEARCH_PROTOCOL, EXTERNAL_EVIDENCE_REGISTRY } = require('../config/researchProtocol');
 const { METRICS: RESEARCH_METRICS } = require('../config/researchMetrics');
@@ -144,6 +145,10 @@ router.post('/users', async (req, res, next) => {
     if (!VALID_ROLES.includes(role)) {
       return sendError(res, `role ไม่ถูกต้อง ต้องเป็น: ${VALID_ROLES.join(', ')}`, [], 400);
     }
+    // users.username varchar(100), display_name varchar(200), scope_id varchar(20).
+    if (rejectOverLongFields(res, req.body, {
+      username: 100, display_name: 200, scope_id: 20,
+    })) return;
     const pwCheck = validatePassword(password, { username: String(username).trim() });
     if (!pwCheck.ok) {
       return sendError(res, pwCheck.message, [], 400);
@@ -206,6 +211,7 @@ router.put('/users/:id', async (req, res, next) => {
     const userId = readIdParam(req, res, 'id');
     if (userId === null) return;
     const { display_name, is_active, role, scope_id } = req.body;
+    if (rejectOverLongFields(res, req.body, { display_name: 200, scope_id: 20 })) return;
 
     const [[user]] = await pool.query('SELECT id, username, role, scope_type, scope_id, display_name, is_active, driver_id FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);

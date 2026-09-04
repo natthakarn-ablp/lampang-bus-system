@@ -134,6 +134,7 @@ function normalizePhone(raw) {
 }
 
 const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
+const { rejectOverLongFields } = require('../utils/fieldLength');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
@@ -800,32 +801,12 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
       return sendError(res, 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก (รองรับรูปแบบ 0XX-XXXXXXX)', [], 400);
     }
     // Audit 2026-06-18 (limitations): reject over-length values with a clean 400
-    // instead of letting MySQL raise a 500 on column overflow.
-    //
-    // parent_name was missing from this list, and it is the one field here that
-    // writes to a different table: this handler inserts it into parents.name
-    // (varchar 100) further down. A 150-character ผู้ปกครอง reached MySQL and
-    // came back as a 500 — an opaque "Internal server error" in production, and
-    // logged as a server fault rather than the bad input it is.
-    //
-    // Lengths are counted in code points, not UTF-16 units, because
-    // VARCHAR(n) counts characters: String(v).length reports 2 for a character
-    // outside the BMP and would reject a name MySQL would have accepted.
-    const LEN_LIMITS = {
+    // instead of letting MySQL raise a 500 on column overflow. parent_name is in
+    // the list because this handler inserts it into parents.name (varchar 100)
+    // further down — a different table from the rest.
+    if (rejectOverLongFields(res, req.body, {
       prefix: 20, first_name: 100, last_name: 100, grade: 20, classroom: 20, parent_name: 100,
-    };
-    const FIELD_LABEL_TH = {
-      prefix: 'คำนำหน้า', first_name: 'ชื่อ', last_name: 'นามสกุล',
-      grade: 'ระดับชั้น', classroom: 'ห้อง', parent_name: 'ชื่อผู้ปกครอง',
-    };
-    for (const [field, max] of Object.entries(LEN_LIMITS)) {
-      const v = req.body[field];
-      if (v != null && Array.from(String(v)).length > max) {
-        const label = FIELD_LABEL_TH[field] || field;
-        return sendError(res, `${label}ยาวเกินกำหนด (ไม่เกิน ${max} ตัวอักษร)`,
-          [{ field, message: `ไม่เกิน ${max} ตัวอักษร` }], 400);
-      }
-    }
+    })) return;
 
     const conn = await pool.getConnection();
     try {
@@ -2055,6 +2036,8 @@ router.post('/teacher-accounts', requireFullSchoolScope, async (req, res, next) 
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
     const { username, password, display_name, grade_scope } = req.body || {};
+    // users.username is varchar(100), users.display_name varchar(200).
+    if (rejectOverLongFields(res, req.body, { username: 100, display_name: 200 })) return;
     const errors = [];
     if (!username || !String(username).trim()) errors.push({ field: 'username', message: 'จำเป็นต้องระบุชื่อผู้ใช้' });
     if (!password) errors.push({ field: 'password', message: 'จำเป็นต้องระบุรหัสผ่าน' });

@@ -15,6 +15,11 @@ const { logAudit } = require('../utils/audit');
 const { validatePassword } = require('../utils/passwordPolicy');
 const { sendSuccess, sendError } = require('../utils/response');
 const {
+  enabledRecoveryRoles,
+  isRecoveryEnabledForRole,
+  recoveryPolicySummary,
+} = require('../config/accountRecoveryPolicy');
+const {
   generateResetToken,
   generateRecoveryCodes,
   hashResetToken,
@@ -56,8 +61,43 @@ const adminActionLimiter = rateLimit({
   message: { success: false, message: 'ดำเนินการถี่เกินไป กรุณาลองใหม่ภายหลัง', errors: [], data: null },
 });
 
+/**
+ * Policy input.
+ *
+ * Role flags are read from the environment, except admin's, which comes from
+ * `env.features.adminPasswordRecovery` — the value the rest of the app already
+ * reads and the seam the existing tests toggle. Keeping one authority per role
+ * avoids the class of bug where a flag looks on in one module and off in
+ * another.
+ */
+function recoveryEnvSource() {
+  return {
+    ...process.env,
+    FEATURE_ADMIN_PASSWORD_RECOVERY: env.features.adminPasswordRecovery ? 'true' : 'false',
+  };
+}
+
+/**
+ * Gate for the shared, unauthenticated endpoints (`/request`, `/complete`).
+ * Open only while at least one role is enabled; with none enabled these paths
+ * 404 exactly as they did before recovery existed, so the surface an attacker
+ * can probe does not grow when the mechanism ships dark.
+ */
 function requireFeature(_req, res, next) {
-  if (!env.features.adminPasswordRecovery) {
+  if (enabledRecoveryRoles(recoveryEnvSource()).length === 0) {
+    return sendError(res, 'ไม่พบหน้าที่ต้องการ', [], 404);
+  }
+  return next();
+}
+
+/**
+ * Gate for the authenticated self-service endpoints. A role whose decision
+ * gates are unconfirmed gets 404, not 403: an operator with a valid token for
+ * a not-yet-launched role should not be able to tell the difference between
+ * "off" and "does not exist".
+ */
+function requireRecoveryRole(req, res, next) {
+  if (!req.user || !isRecoveryEnabledForRole(req.user.role, recoveryEnvSource())) {
     return sendError(res, 'ไม่พบหน้าที่ต้องการ', [], 404);
   }
   return next();
@@ -82,11 +122,15 @@ async function replaceRecoveryCodes(executor, userId) {
 router.get('/config', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   return sendSuccess(res, {
-    admin_password_recovery: env.features.adminPasswordRecovery,
+    // Kept for the existing frontend, which reads this key.
+    admin_password_recovery: isRecoveryEnabledForRole('admin', recoveryEnvSource()),
+    // Per-role status, so an operator can see WHY a role is closed rather than
+    // inferring it from a 404.
+    policy: recoveryPolicySummary(recoveryEnvSource()),
   });
 });
 
-router.get('/admin/status', requireFeature, authenticate, requireRole('admin'), async (req, res, next) => {
+async function handleStatus(req, res, next) {
   try {
     const [[channel]] = await pool.query(
       `SELECT is_verified, verified_at
@@ -107,9 +151,9 @@ router.get('/admin/status', requireFeature, authenticate, requireRole('admin'), 
   } catch (error) {
     return next(error);
   }
-});
+}
 
-router.post('/admin/link-line', adminActionLimiter, requireFeature, authenticate, requireRole('admin'), async (req, res, next) => {
+async function handleLinkLine(req, res, next) {
   const { current_password: currentPassword, id_token: idToken } = req.body || {};
   if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 256 ||
       typeof idToken !== 'string' || !idToken || idToken.length > 10000) {
@@ -121,9 +165,9 @@ router.post('/admin/link-line', adminActionLimiter, requireFeature, authenticate
     const [[user]] = await pool.query(
       `SELECT id, username, display_name, password_hash
          FROM users
-        WHERE id = ? AND role = 'admin' AND is_active = TRUE AND is_deleted = FALSE
+        WHERE id = ? AND role = ? AND is_active = TRUE AND is_deleted = FALSE
         LIMIT 1`,
-      [req.user.id]
+      [req.user.id, req.user.role]
     );
     if (!user || !(await bcrypt.compare(String(currentPassword), user.password_hash))) {
       return sendError(res, 'รหัสผ่านปัจจุบันไม่ถูกต้อง', [], 400);
@@ -179,9 +223,9 @@ router.post('/admin/link-line', adminActionLimiter, requireFeature, authenticate
   } finally {
     if (conn) conn.release();
   }
-});
+}
 
-router.post('/admin/regenerate-codes', adminActionLimiter, requireFeature, authenticate, requireRole('admin'), async (req, res, next) => {
+async function handleRegenerateCodes(req, res, next) {
   const { current_password: currentPassword } = req.body || {};
   if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 256) {
     return sendError(res, 'กรุณากรอกรหัสผ่านปัจจุบัน', [], 400);
@@ -190,8 +234,8 @@ router.post('/admin/regenerate-codes', adminActionLimiter, requireFeature, authe
   try {
     const [[user]] = await pool.query(
       `SELECT id, password_hash FROM users
-        WHERE id = ? AND role = 'admin' AND is_active = TRUE AND is_deleted = FALSE LIMIT 1`,
-      [req.user.id]
+        WHERE id = ? AND role = ? AND is_active = TRUE AND is_deleted = FALSE LIMIT 1`,
+      [req.user.id, req.user.role]
     );
     if (!user || !(await bcrypt.compare(String(currentPassword), user.password_hash))) {
       return sendError(res, 'รหัสผ่านปัจจุบันไม่ถูกต้อง', [], 400);
@@ -225,9 +269,9 @@ router.post('/admin/regenerate-codes', adminActionLimiter, requireFeature, authe
   } finally {
     if (conn) conn.release();
   }
-});
+}
 
-router.delete('/admin/line', adminActionLimiter, requireFeature, authenticate, requireRole('admin'), async (req, res, next) => {
+async function handleUnlinkLine(req, res, next) {
   const { current_password: currentPassword } = req.body || {};
   if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 256) {
     return sendError(res, 'กรุณากรอกรหัสผ่านปัจจุบัน', [], 400);
@@ -236,8 +280,8 @@ router.delete('/admin/line', adminActionLimiter, requireFeature, authenticate, r
   try {
     const [[user]] = await pool.query(
       `SELECT id, password_hash FROM users
-        WHERE id = ? AND role = 'admin' AND is_active = TRUE AND is_deleted = FALSE LIMIT 1`,
-      [req.user.id]
+        WHERE id = ? AND role = ? AND is_active = TRUE AND is_deleted = FALSE LIMIT 1`,
+      [req.user.id, req.user.role]
     );
     if (!user || !(await bcrypt.compare(String(currentPassword), user.password_hash))) {
       return sendError(res, 'รหัสผ่านปัจจุบันไม่ถูกต้อง', [], 400);
@@ -261,13 +305,39 @@ router.delete('/admin/line', adminActionLimiter, requireFeature, authenticate, r
   } finally {
     if (conn) conn.release();
   }
-});
+}
+
+// ─── Authenticated self-service ─────────────────────────────────────────────
+//
+// The roadmap (Phase 2) asks for the self-service endpoints to be separated
+// from per-role policy. The handlers above are role-agnostic: they read the
+// caller's own role from the token and never accept one from the request, so
+// the same code serves every role that policy opens.
+//
+// `/self/*` is the general form. `/admin/*` stays as it was so the shipped
+// admin UI keeps working, and keeps its explicit admin role guard rather than
+// inheriting whatever policy later enables.
+const selfServiceGate = [requireFeature, authenticate, requireRecoveryRole];
+const adminGate = [requireFeature, authenticate, requireRole('admin'), requireRecoveryRole];
+
+router.get('/self/status', ...selfServiceGate, handleStatus);
+router.post('/self/link-line', adminActionLimiter, ...selfServiceGate, handleLinkLine);
+router.post('/self/regenerate-codes', adminActionLimiter, ...selfServiceGate, handleRegenerateCodes);
+router.delete('/self/line', adminActionLimiter, ...selfServiceGate, handleUnlinkLine);
+
+router.get('/admin/status', ...adminGate, handleStatus);
+router.post('/admin/link-line', adminActionLimiter, ...adminGate, handleLinkLine);
+router.post('/admin/regenerate-codes', adminActionLimiter, ...adminGate, handleRegenerateCodes);
+router.delete('/admin/line', adminActionLimiter, ...adminGate, handleUnlinkLine);
 
 router.post('/request', requestLimiter, requireFeature, async (req, res, next) => {
   const username = String(req.body?.username || '').trim();
   if (!username || username.length > 100) {
     return sendSuccess(res, null, GENERIC_REQUEST_MESSAGE);
   }
+  // Snapshot the allowlist once so the lookup and the locking re-read agree
+  // even if a flag is flipped mid-request.
+  const enabledRoles = enabledRecoveryRoles(recoveryEnvSource());
   let conn;
   let committed = false;
   try {
@@ -276,14 +346,14 @@ router.post('/request', requestLimiter, requireFeature, async (req, res, next) =
          FROM users u
          JOIN user_recovery_channels rc ON rc.user_id = u.id
           AND rc.provider = 'LINE' AND rc.is_verified = TRUE
-        WHERE u.username = ? AND u.role = 'admin'
+        WHERE u.username = ? AND u.role IN (?)
           AND u.is_active = TRUE AND u.is_deleted = FALSE
           AND EXISTS (
             SELECT 1 FROM user_recovery_codes crc
              WHERE crc.user_id = u.id AND crc.used_at IS NULL
           )
         LIMIT 1`,
-      [username]
+      [username, enabledRoles]
     );
 
     if (row) {
@@ -296,14 +366,14 @@ router.post('/request', requestLimiter, requireFeature, async (req, res, next) =
            FROM users u
            JOIN user_recovery_channels rc ON rc.user_id = u.id
             AND rc.provider = 'LINE' AND rc.is_verified = TRUE
-          WHERE u.id = ? AND u.role = 'admin'
+          WHERE u.id = ? AND u.role IN (?)
             AND u.is_active = TRUE AND u.is_deleted = FALSE
             AND EXISTS (
               SELECT 1 FROM user_recovery_codes crc
                WHERE crc.user_id = u.id AND crc.used_at IS NULL
             )
           LIMIT 1 FOR UPDATE`,
-        [row.id]
+        [row.id, enabledRoles]
       );
       if (!lockedChannel) {
         await conn.rollback();
@@ -372,9 +442,9 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
         WHERE pr.token_hash = ? AND pr.delivery_status = 'SENT'
           AND pr.used_at IS NULL AND pr.expires_at > NOW()
           AND pr.failed_attempts < 5
-          AND u.role = 'admin' AND u.is_active = TRUE AND u.is_deleted = FALSE
+          AND u.role IN (?) AND u.is_active = TRUE AND u.is_deleted = FALSE
         LIMIT 1 FOR UPDATE`,
-      [hashResetToken(rawToken)]
+      [hashResetToken(rawToken), enabledRecoveryRoles(recoveryEnvSource())]
     );
     if (!reset) {
       await conn.rollback();
@@ -449,4 +519,4 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
 });
 
 module.exports = router;
-module.exports._test = { resetUrl, isDelivered, replaceRecoveryCodes, requireFeature };
+module.exports._test = { resetUrl, isDelivered, replaceRecoveryCodes, requireFeature, requireRecoveryRole };

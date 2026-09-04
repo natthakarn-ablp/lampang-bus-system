@@ -26,6 +26,7 @@ const { authenticate }  = require('../middleware/auth');
 const { requireRole }   = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit }      = require('../utils/audit');
+const { readIdParam } = require('../utils/pathParams');
 const { validatePassword } = require('../utils/passwordPolicy');
 const { isAllowedImage } = require('../utils/fileType');
 const checkinSvc        = require('../services/checkin.service');
@@ -185,9 +186,12 @@ router.post('/shifts/start', async (req, res, next) => {
 
 router.post('/shifts/:id/end', async (req, res, next) => {
   try {
+    const shiftId = readIdParam(req, res);
+    if (shiftId === null) return;
+
     const data = await driverShiftSvc.endShift(pool, {
       driverId: req.user.driver_id,
-      shiftId: Number(req.params.id),
+      shiftId,
       userId: req.user.id,
       note: req.body.note || null,
     });
@@ -337,8 +341,8 @@ router.post('/pickup-points', async (req, res, next) => {
 // Driver self-service cleanup. Scoped to the driver's own active vehicle.
 router.delete('/pickup-points/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res);
+    if (id === null) return;
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
@@ -366,8 +370,8 @@ router.delete('/pickup-points/:id', async (req, res, next) => {
 // in conflict with another point's session.
 router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res);
+    if (pointId === null) return;
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
@@ -390,8 +394,8 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
 // OTHER points (this point is excluded from the conflict check).
 router.put('/pickup-points/:id/students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res);
+    if (pointId === null) return;
 
     if (!Array.isArray(req.body.student_ids)) {
       return sendError(res, 'student_ids must be an array', [], 400);
@@ -943,8 +947,13 @@ router.delete('/leave/:id', async (req, res, next) => {
   try {
     // Phase 10.12E — scope cancellation to the driver's active vehicle (H4):
     // a driver may only cancel a leave belonging to their own vehicle.
+    const leaveId = readIdParam(req, res);
+    if (leaveId === null) return;
+
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
-    const result = await leaveSvc.cancelLeave(parseInt(req.params.id, 10), req.user.id, vehicle.vehicle_id);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    const result = await leaveSvc.cancelLeave(leaveId, req.user.id, vehicle.vehicle_id);
     return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
   } catch (err) { return next(err); }
 });
@@ -1279,9 +1288,12 @@ router.get('/applications', async (req, res, next) => {
 
 router.get('/applications/:id', async (req, res, next) => {
   try {
+    const applicationId = readIdParam(req, res);
+    if (applicationId === null) return;
+
     const verification = require('../services/vehicleVerification.service');
     const data = await verification.getApplication(pool, {
-      applicationId: Number(req.params.id),
+      applicationId,
       viewer: { role: 'driver', schoolId: null, userId: req.user.id },
     });
     return res.json({ success: true, data });

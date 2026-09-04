@@ -7,6 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit } = require('../utils/audit');
+const { readIdParam } = require('../utils/pathParams');
 const transportSvc = require('../services/transport.service');
 const ppSvc = require('../services/pickupPoint.service');
 
@@ -239,8 +240,8 @@ router.post('/inspections', async (req, res, next) => {
 // ─── PUT /api/transport/inspections/:id ─────────────────────────────────────
 router.put('/inspections/:id', async (req, res, next) => {
   try {
-    const inspectionId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(inspectionId) || inspectionId <= 0) return sendError(res, 'invalid id', [], 400);
+    const inspectionId = readIdParam(req, res);
+    if (inspectionId === null) return;
 
     const { expiry_date, result, notes } = req.body;
     if (!result) return sendError(res, 'result is required', [], 400);
@@ -269,8 +270,8 @@ router.put('/inspections/:id', async (req, res, next) => {
 // ─── DELETE /api/transport/inspections/:id — ลบผลตรวจที่ลงผิด (แก้เอง) ────────
 router.delete('/inspections/:id', async (req, res, next) => {
   try {
-    const inspectionId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(inspectionId) || inspectionId <= 0) return sendError(res, 'invalid id', [], 400);
+    const inspectionId = readIdParam(req, res);
+    if (inspectionId === null) return;
 
     const old = await transportSvc.deleteInspection({
       inspectionId, userId: req.user.id, isAdmin: req.user.role === 'admin',

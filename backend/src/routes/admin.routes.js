@@ -6,6 +6,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const adminSvc = require('../services/admin.service');
@@ -202,7 +203,8 @@ router.post('/users', async (req, res, next) => {
 // ─── PUT /api/admin/users/:id ───────────────────────────────────────────────
 router.put('/users/:id', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id, 10);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
     const { display_name, is_active, role, scope_id } = req.body;
 
     const [[user]] = await pool.query('SELECT id, username, role, scope_type, scope_id, display_name, is_active, driver_id FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
@@ -278,7 +280,8 @@ router.put('/users/:id', async (req, res, next) => {
 // ─── POST /api/admin/users/:id/reset-password ───────────────────────────────
 router.post('/users/:id/reset-password', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id, 10);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
     const { password } = req.body;
 
     if (!password) {
@@ -316,7 +319,8 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
 // ─── DELETE /api/admin/users/:id ────────────────────────────────────────────
 router.delete('/users/:id', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id, 10);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
     if (userId === req.user.id) return sendError(res, 'ไม่สามารถลบตัวเองได้', [], 400);
 
     const [[user]] = await pool.query('SELECT id, username FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
@@ -340,8 +344,8 @@ router.delete('/users/:id', async (req, res, next) => {
 // 23C-guarded driver lifecycle restore (duplicate-reactivation guard).
 router.post('/users/:id/restore', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
 
     const [[u]] = await pool.query('SELECT id, role FROM users WHERE id = ?', [userId]);
     if (!u) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
@@ -456,8 +460,8 @@ router.post('/pickup-points', async (req, res, next) => {
 // PUT /api/admin/pickup-points/:id
 router.put('/pickup-points/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
 
     const errors = validatePickupPointInput(req.body, { partial: true });
     if (errors.length > 0) return sendError(res, 'ข้อมูลจุดรับส่งไม่ถูกต้อง', errors, 400);
@@ -482,8 +486,8 @@ router.put('/pickup-points/:id', async (req, res, next) => {
 // DELETE /api/admin/pickup-points/:id (soft-delete)
 router.delete('/pickup-points/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
 
     const oldRow = await ppSvc.getPickupPointById(id);
     if (!oldRow) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
@@ -501,9 +505,9 @@ router.delete('/pickup-points/:id', async (req, res, next) => {
 // POST /api/admin/pickup-points/:id/students  { student_id }
 router.post('/pickup-points/:id/students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
     const studentId = parseInt(req.body.student_id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid pickup point id', [], 400);
     if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid student_id', [], 400);
 
     const point = await ppSvc.getPickupPointById(pointId);
@@ -526,10 +530,10 @@ router.post('/pickup-points/:id/students', async (req, res, next) => {
 // DELETE /api/admin/pickup-points/:id/students/:studentId
 router.delete('/pickup-points/:id/students/:studentId', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    const studentId = parseInt(req.params.studentId, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid pickup point id', [], 400);
-    if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid student id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
+    const studentId = readIdParam(req, res, 'studentId');
+    if (studentId === null) return;
 
     const removed = await ppSvc.unassignStudentFromPoint(pointId, studentId);
     if (!removed) return sendError(res, 'ไม่พบการผูกนักเรียนกับจุดนี้', [], 404);
@@ -551,8 +555,8 @@ router.delete('/pickup-points/:id/students/:studentId', async (req, res, next) =
 // the modal pre-checks them.
 router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
 
     const point = await ppSvc.getPickupPointById(pointId);
     if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
@@ -569,8 +573,8 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
 // excluded from the duplicate check).
 router.put('/pickup-points/:id/students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
 
     if (!Array.isArray(req.body.student_ids)) {
       return sendError(res, 'student_ids must be an array', [], 400);
@@ -1442,17 +1446,21 @@ router.get('/student-transfer-requests', async (req, res, next) => {
 
 router.get('/student-transfer-requests/:id', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const transfer = require('../services/studentTransfer.service');
-    const out = await transfer.getDetailForAdmin(pool, { requestId: parseInt(req.params.id, 10) });
+    const out = await transfer.getDetailForAdmin(pool, { requestId });
     return sendSuccess(res, out);
   } catch (err) { next(err); }
 });
 
 router.post('/student-transfer-requests/:id/approve', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const transfer = require('../services/studentTransfer.service');
-    const out = await transfer.approveAndApply(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+    const out = await transfer.approveAndApply(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(requestId),
       newValue: { result: out.status, applied_student_id: out.applied_student_id || null }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     const msg = out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
       : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
@@ -1464,9 +1472,11 @@ router.post('/student-transfer-requests/:id/approve', async (req, res, next) => 
 
 router.post('/student-transfer-requests/:id/reject', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const transfer = require('../services/studentTransfer.service');
-    const out = await transfer.reject(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(req.params.id), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    const out = await transfer.reject(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }
 });
@@ -1480,15 +1490,19 @@ router.get('/vehicle-requests', async (req, res, next) => {
 });
 router.get('/vehicle-requests/:id', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    return sendSuccess(res, await vr.getAdminVehicleRequest(pool, { requestId: parseInt(req.params.id, 10) }));
+    return sendSuccess(res, await vr.getAdminVehicleRequest(pool, { requestId }));
   } catch (err) { next(err); }
 });
 router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    const out = await vr.approveVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(req.params.id),
+    const out = await vr.approveVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(requestId),
       newValue: { result: out.status, vehicle_id: out.vehicle_id || null }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     const msg = out.status === 'APPLIED' ? (out.informational ? 'อนุมัติคำขอแล้ว' : 'อนุมัติและกู้คืนรถสำเร็จ')
       : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
@@ -1499,9 +1513,11 @@ router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
 });
 router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    const out = await vr.rejectVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(req.params.id), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    const out = await vr.rejectVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(requestId), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }
 });
@@ -1530,29 +1546,35 @@ router.post('/drivers/preflight', async (req, res, next) => {
 });
 router.post('/drivers/:userId/restore', async (req, res, next) => {
   try {
+    const driverUserId = readIdParam(req, res, 'userId');
+    if (driverUserId === null) return;
     const reason = (req.body || {}).reason;
     if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
     const dl = require('../services/driverLifecycle.service');
-    const out = await dl.restoreDriver(pool, { userId: parseInt(req.params.userId, 10), reason, actorId: req.user.id });
+    const out = await dl.restoreDriver(pool, { userId: driverUserId, reason, actorId: req.user.id });
     return sendSuccess(res, out, out.status === 'RESTORED' ? 'กู้คืนบัญชีคนขับสำเร็จ' : 'บัญชีนี้ใช้งานอยู่แล้ว');
   } catch (err) { next(err); }
 });
 router.post('/drivers/:userId/deactivate', async (req, res, next) => {
   try {
+    const driverUserId = readIdParam(req, res, 'userId');
+    if (driverUserId === null) return;
     const reason = (req.body || {}).reason;
     if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
     const dl = require('../services/driverLifecycle.service');
-    const out = await dl.deactivateDriver(pool, { userId: parseInt(req.params.userId, 10), reason, actorId: req.user.id });
+    const out = await dl.deactivateDriver(pool, { userId: driverUserId, reason, actorId: req.user.id });
     return sendSuccess(res, out, out.status === 'DEACTIVATED' ? 'ปิดใช้งานบัญชีคนขับแล้ว' : 'บัญชีนี้ถูกปิดใช้งานอยู่แล้ว');
   } catch (err) { next(err); }
 });
 router.post('/drivers/:userId/reassign-vehicle', async (req, res, next) => {
   try {
+    const driverUserId = readIdParam(req, res, 'userId');
+    if (driverUserId === null) return;
     const b = req.body || {};
     if (!b.vehicle_id) return sendError(res, 'กรุณาระบุรถปลายทาง', [], 400);
     if (!String(b.reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
     const dl = require('../services/driverLifecycle.service');
-    const out = await dl.reassignDriverVehicle(pool, { userId: parseInt(req.params.userId, 10), vehicleId: b.vehicle_id, endTargetExisting: !!b.end_target_existing, reason: b.reason, actorId: req.user.id });
+    const out = await dl.reassignDriverVehicle(pool, { userId: driverUserId, vehicleId: b.vehicle_id, endTargetExisting: !!b.end_target_existing, reason: b.reason, actorId: req.user.id });
     const msg = out.status === 'REASSIGNED' ? 'ย้ายคนขับไปยังรถใหม่สำเร็จ'
       : out.status === 'TARGET_VEHICLE_HAS_ACTIVE_DRIVER' ? 'รถคันนี้มีคนขับที่ใช้งานอยู่แล้ว กรุณายืนยันการสิ้นสุดงานเดิม'
       : out.status === 'DRIVER_ALREADY_ASSIGNED' ? 'คนขับนี้อยู่กับรถคันนี้อยู่แล้ว' : 'ดำเนินการแล้ว';
@@ -1561,8 +1583,10 @@ router.post('/drivers/:userId/reassign-vehicle', async (req, res, next) => {
 });
 router.post('/driver-assignments/:assignmentId/end', async (req, res, next) => {
   try {
+    const assignmentId = readIdParam(req, res, 'assignmentId');
+    if (assignmentId === null) return;
     const dl = require('../services/driverLifecycle.service');
-    const out = await dl.endAssignment(pool, { assignmentId: parseInt(req.params.assignmentId, 10), reason: (req.body || {}).reason, actorId: req.user.id });
+    const out = await dl.endAssignment(pool, { assignmentId, reason: (req.body || {}).reason, actorId: req.user.id });
     return sendSuccess(res, out, out.status === 'ENDED' ? 'สิ้นสุดงานมอบหมายแล้ว' : 'งานนี้สิ้นสุดไปแล้ว');
   } catch (err) { next(err); }
 });
@@ -1574,9 +1598,11 @@ router.post('/driver-assignments/:assignmentId/end', async (req, res, next) => {
 // Operators previously had to hand-edit the DB to clear a stuck application.
 router.post('/verification/applications/:id/cancel', async (req, res, next) => {
   try {
+    const applicationId = readIdParam(req, res, 'id');
+    if (applicationId === null) return;
     const verification = require('../services/vehicleVerification.service');
     const data = await verification.cancelApplication(pool, {
-      applicationId: Number(req.params.id),
+      applicationId,
       schoolId: null,
       userId: req.user.id,
       reason: (req.body || {}).reason || null,
@@ -1654,6 +1680,8 @@ router.post('/vehicles/:id/merge', async (req, res, next) => {
 // date, in one transaction. Reason required; never hard-deletes the original log.
 router.post('/checkin/:logId/void', async (req, res, next) => {
   try {
+    const logId = readIdParam(req, res, 'logId');
+    if (logId === null) return;
     const checkinSvc = require('../services/checkin.service');
     const reason = (req.body || {}).reason;
     if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
@@ -1664,7 +1692,7 @@ router.post('/checkin/:logId/void', async (req, res, next) => {
       userDisplayName: req.user.displayName || req.user.username || null,
       ipAddress:       req.ip,
       userAgent:       req.headers['user-agent'],
-      logId:           req.params.logId,
+      logId,
       reason,
       scope:           { kind: 'admin' },
     });
@@ -1707,8 +1735,8 @@ router.get('/emergencies', async (req, res, next) => {
 
 router.patch('/emergencies/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
     const { result, note } = req.body || {};
     if (result !== undefined && result !== null && !VALID_EMERGENCY_RESULTS.includes(result)) {
       return sendError(res, `result ต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_EMERGENCY_RESULTS.join(', ')}`, [], 400);
@@ -1728,8 +1756,8 @@ router.patch('/emergencies/:id', async (req, res, next) => {
 
 router.delete('/emergencies/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
     const emSvc = require('../services/emergencyAdmin.service');
     const out = await emSvc.softDeleteEmergency(pool, {
       id, reason: (req.body || {}).reason || null,

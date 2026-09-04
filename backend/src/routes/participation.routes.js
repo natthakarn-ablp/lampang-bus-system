@@ -26,6 +26,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit } = require('../utils/audit');
+const { readIdParam } = require('../utils/pathParams');
 const svc = require('../services/participation.service');
 
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'transport', 'driver', 'admin'));
@@ -135,8 +136,8 @@ router.get('/cases', async (req, res, next) => {
 // ─── GET /api/participation/cases/:id ───────────────────────────────────────
 router.get('/cases/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res);
+    if (id === null) return;
 
     const scope = scopeClause(req.user);
     const [[row]] = await pool.query(
@@ -189,8 +190,8 @@ router.post('/cases', async (req, res, next) => {
 
 // ─── POST /api/participation/cases/:id/events ───────────────────────────────
 router.post('/cases/:id/events', async (req, res, next) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+  const id = readIdParam(req, res);
+  if (id === null) return;
 
   const conn = await pool.getConnection();
   try {

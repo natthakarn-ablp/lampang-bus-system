@@ -10,6 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { importExportLimiter } = require('../middleware/rateLimiters');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
 const affAdminSvc = require('../services/affiliationAdmin.service');
@@ -371,11 +372,13 @@ router.post('/school-accounts/:id/reset-password', async (req, res, next) => {
   try {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
     const { password } = req.body;
     if (!password) return sendError(res, 'password จำเป็น', [], 400);
 
     const result = await affAdminSvc.resetSchoolPassword({
-      affiliationId: affId, accountId: parseInt(req.params.id, 10),
+      affiliationId: affId, accountId,
       newPassword: password, userId: req.user.id,
     });
     return sendSuccess(res, result, 'รีเซ็ตรหัสผ่านสำเร็จ');
@@ -386,10 +389,12 @@ router.put('/school-accounts/:id', async (req, res, next) => {
   try {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
     const { is_active } = req.body;
 
     const result = await affAdminSvc.toggleSchoolAccount({
-      affiliationId: affId, accountId: parseInt(req.params.id, 10),
+      affiliationId: affId, accountId,
       isActive: is_active, userId: req.user.id,
     });
     return sendSuccess(res, result, 'อัปเดตสำเร็จ');
@@ -743,7 +748,9 @@ router.get('/transfer-requests/:id', async (req, res, next) => {
     const transfer = require('../services/studentTransfer.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    const data = await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    const data = await transfer.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
     return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
@@ -753,10 +760,12 @@ router.post('/transfer-requests/:id/approve', async (req, res, next) => {
     const transfer = require('../services/studentTransfer.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     // Verify the request belongs to this affiliation
-    await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
-    const out = await transfer.approveAndApply(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+    await transfer.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
+    const out = await transfer.approveAndApply(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(requestId),
       newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     const msg = out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
       : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
@@ -771,9 +780,11 @@ router.post('/transfer-requests/:id/reject', async (req, res, next) => {
     const transfer = require('../services/studentTransfer.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
-    const out = await transfer.reject(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    await transfer.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
+    const out = await transfer.reject(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId),
       newValue: { result: 'REJECTED', rejected_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }
@@ -795,7 +806,9 @@ router.get('/vehicle-requests/:id', async (req, res, next) => {
     const vr = require('../services/vehicleRequest.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    const data = await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    const data = await vr.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
     return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
@@ -805,9 +818,11 @@ router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
     const vr = require('../services/vehicleRequest.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
-    const out = await vr.approveVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(req.params.id),
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    await vr.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
+    const out = await vr.approveVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(requestId),
       newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }
@@ -818,9 +833,11 @@ router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
     const vr = require('../services/vehicleRequest.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
-    const out = await vr.rejectVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(req.params.id),
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    await vr.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
+    const out = await vr.rejectVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(requestId),
       newValue: { result: 'REJECTED', rejected_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }

@@ -19,6 +19,7 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { readIdParam } = require('../utils/pathParams');
 const checkinSvc = require('../services/checkin.service');
 const docSvc = require('../services/driverDocuments.service');
 
@@ -30,8 +31,10 @@ const NOT_FOUND = (res) => sendError(res, 'ไม่พบเอกสาร ห
 router.get('/:docType/:id/file', async (req, res, next) => {
   try {
     const { docType } = req.params;
-    const id = Number(req.params.id);
     if (docType !== 'vehicle' && docType !== 'driver') return NOT_FOUND(res);
+
+    const id = readIdParam(req, res);
+    if (id === null) return;
 
     // Resolve the driver's active vehicle once (used only by the driver scope
     // branch). Best-effort: a driver with no resolvable vehicle gets null and

@@ -9,6 +9,7 @@ const router  = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const env     = require('../config/env');
@@ -395,8 +396,8 @@ router.delete('/pickup-points/:id', requireFullSchoolScope, async (req, res, nex
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
 
     const point = await ppSvc.getPickupPointById(id);
     if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
@@ -427,8 +428,8 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
 
     const point = await ppSvc.getPickupPointById(pointId);
     if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
@@ -455,8 +456,8 @@ router.put('/pickup-points/:id/students', requireFullSchoolScope, async (req, re
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
 
     if (!Array.isArray(req.body.student_ids)) {
       return sendError(res, 'student_ids must be an array', [], 400);
@@ -600,8 +601,8 @@ router.delete('/leaves/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
     const result = await leaveSvc.cancelLeaveBySchool(id, req.user.id, schoolId);
     return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
   } catch (err) { next(err); }
@@ -752,11 +753,13 @@ router.put('/roster-requests/:id', requireFullSchoolScope, async (req, res, next
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const { status, review_note } = req.body;
     if (!['approved', 'rejected'].includes(status)) return sendError(res, "status ต้องเป็น 'approved' หรือ 'rejected'", [], 400);
 
     const result = await rosterReqSvc.reviewRequest({
-      requestId: parseInt(req.params.id, 10),
+      requestId,
       schoolId, status, reviewNote: review_note, userId: req.user.id,
     });
     return sendSuccess(res, result, status === 'approved' ? 'อนุมัติสำเร็จ' : 'ปฏิเสธสำเร็จ');
@@ -769,7 +772,8 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const studentId = parseInt(req.params.id, 10);
+    const studentId = readIdParam(req, res, 'id');
+    if (studentId === null) return;
 
     // Verify student belongs to this school + fetch old values for audit
     const [[st]] = await pool.query(
@@ -976,7 +980,8 @@ router.delete('/students/:id', requireFullSchoolScope, async (req, res, next) =>
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const studentId = parseInt(req.params.id, 10);
+    const studentId = readIdParam(req, res, 'id');
+    if (studentId === null) return;
 
     const [[st]] = await pool.query(
       `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
@@ -1015,8 +1020,8 @@ router.post('/students/:id/restore', requireFullSchoolScope, async (req, res, ne
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const studentId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid id', [], 400);
+    const studentId = readIdParam(req, res, 'id');
+    if (studentId === null) return;
 
     const result = await schoolSvc.restoreStudent(pool, {
       schoolId, studentId, actorId: req.user.id,
@@ -1753,8 +1758,10 @@ router.get('/students/import/batches', requireFullSchoolScope, async (req, res, 
 router.get('/students/import/:batchId', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
+    const batchId = readIdParam(req, res, 'batchId');
+    if (batchId === null) return;
     const importPreview = require('../services/studentImportPreview.service');
-    const out = await importPreview.getBatchDetail(pool, { batchId: parseInt(req.params.batchId, 10), schoolId });
+    const out = await importPreview.getBatchDetail(pool, { batchId, schoolId });
     return sendSuccess(res, out);
   } catch (err) { next(err); }
 });
@@ -1792,7 +1799,8 @@ router.post('/students/import/preview', importExportLimiter, requireFullSchoolSc
 router.post('/students/import/:batchId/apply', importExportLimiter, requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
-    const batchId = parseInt(req.params.batchId, 10);
+    const batchId = readIdParam(req, res, 'batchId');
+    if (batchId === null) return;
     // Phase 10.13B-4 — explicit apply modes; risky modes act only on selected rows.
     const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate, auto_create_vehicle } = req.body || {};
     const VALID_MODES = ['insert_ready', 'update_guardian_confirmed', 'reactivate_student_confirmed', 'mixed_confirmed'];
@@ -1826,7 +1834,8 @@ router.post('/students/import/:batchId/apply', importExportLimiter, requireFullS
 router.get('/students/import/:batchId/report', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
-    const batchId = parseInt(req.params.batchId, 10);
+    const batchId = readIdParam(req, res, 'batchId');
+    if (batchId === null) return;
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.getReport(pool, { batchId, schoolId });
     return sendSuccess(res, out);
@@ -1838,7 +1847,8 @@ router.get('/students/import/:batchId/report', requireFullSchoolScope, async (re
 router.post('/students/import/:batchId/rollback', importExportLimiter, requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
-    const batchId = parseInt(req.params.batchId, 10);
+    const batchId = readIdParam(req, res, 'batchId');
+    if (batchId === null) return;
     const { selected_row_ids, reason } = req.body || {};
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.rollbackBatch(pool, {
@@ -1873,18 +1883,22 @@ router.get('/students/transfer-requests', requireFullSchoolScope, async (req, re
 
 router.post('/students/transfer-requests/:id/cancel', requireFullSchoolScope, async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const transfer = require('../services/studentTransfer.service');
-    const out = await transfer.cancelRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req), userId: req.user.id });
+    const out = await transfer.cancelRequest(pool, { requestId, schoolId: resolveSchoolId(req), userId: req.user.id });
     return sendSuccess(res, out, 'ยกเลิกคำขอแล้ว');
   } catch (err) { next(err); }
 });
 
 router.post('/students/:studentId/transfer-request', requireFullSchoolScope, async (req, res, next) => {
   try {
+    const studentId = readIdParam(req, res, 'studentId');
+    if (studentId === null) return;
     const transfer = require('../services/studentTransfer.service');
     const { destination_school_id, reason, evidence_note, request_type } = req.body || {};
     const out = await transfer.createRequest(pool, {
-      studentId: parseInt(req.params.studentId, 10), schoolId: resolveSchoolId(req), userId: req.user.id,
+      studentId, schoolId: resolveSchoolId(req), userId: req.user.id,
       destinationSchoolId: destination_school_id, reason, evidenceNote: evidence_note, requestType: request_type || 'TRANSFER_TO_SCHOOL',
     });
     return sendSuccess(res, out, 'ส่งคำขอโอนย้ายแล้ว · รอผู้ดูแลระบบตรวจสอบ', null, 201);
@@ -1901,14 +1915,18 @@ router.get('/vehicles/requests', requireFullSchoolScope, async (req, res, next) 
 });
 router.get('/vehicles/requests/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    return sendSuccess(res, await vr.getSchoolVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req) }));
+    return sendSuccess(res, await vr.getSchoolVehicleRequest(pool, { requestId, schoolId: resolveSchoolId(req) }));
   } catch (err) { next(err); }
 });
 router.post('/vehicles/requests/:id/cancel', requireFullSchoolScope, async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    return sendSuccess(res, await vr.cancelVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req), userId: req.user.id }), 'ยกเลิกคำขอแล้ว');
+    return sendSuccess(res, await vr.cancelVehicleRequest(pool, { requestId, schoolId: resolveSchoolId(req), userId: req.user.id }), 'ยกเลิกคำขอแล้ว');
   } catch (err) { next(err); }
 });
 router.post('/vehicles/requests', requireFullSchoolScope, async (req, res, next) => {
@@ -2039,8 +2057,8 @@ router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, asyn
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const userId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
 
     const { password } = req.body || {};
     if (!password) {
@@ -2089,8 +2107,8 @@ router.delete('/teacher-accounts/:id', requireFullSchoolScope, async (req, res, 
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const userId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
 
     const [[target]] = await pool.query(
       `SELECT id, username, grade_scope FROM users
@@ -2135,6 +2153,9 @@ router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, nex
       );
     }
 
+    const logId = readIdParam(req, res, 'logId');
+    if (logId === null) return;
+
     const reason = (req.body || {}).reason;
     if (!String(reason || '').trim()) {
       return sendError(res, 'กรุณาระบุเหตุผล', [{ field: 'reason', message: 'จำเป็นต้องระบุเหตุผล' }], 400);
@@ -2146,7 +2167,7 @@ router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, nex
       userDisplayName: req.user.displayName || req.user.username || null,
       ipAddress:       req.ip,
       userAgent:       req.headers['user-agent'],
-      logId:           req.params.logId,
+      logId,
       reason,
       scope:           { kind: 'school', schoolId },
     });

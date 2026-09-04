@@ -7,6 +7,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const lineSvc = require('../services/line.service');
 const idTokenSvc = require('../services/lineIdToken.service');
 const tpl = require('../services/lineFlexTemplates.service');
@@ -119,13 +120,16 @@ router.get('/children', requireParentLineAuth, async (req, res, next) => {
 // Returns today's checkin/checkout status for a specific child.
 router.get('/children/:id/status', requireParentLineAuth, async (req, res, next) => {
   try {
+    const studentId = readIdParam(req, res);
+    if (studentId === null) return;
+
     // Verify the verified LINE user is linked to this student.
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
-    const child = children.find(c => c.id === parseInt(req.params.id));
+    const child = children.find(c => c.id === studentId);
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
     if (!(await ensureParentConsent(req, res))) return;
 
-    const status = await lineSvc.getChildStatusToday(parseInt(req.params.id));
+    const status = await lineSvc.getChildStatusToday(studentId);
     sendSuccess(res, { ...child, ...status });
   } catch (err) { next(err); }
 });
@@ -134,9 +138,12 @@ router.get('/children/:id/status', requireParentLineAuth, async (req, res, next)
 // Returns recent checkin/checkout history for a child (last 7 days).
 router.get('/children/:id/history', requireParentLineAuth, async (req, res, next) => {
   try {
+    const studentId = readIdParam(req, res);
+    if (studentId === null) return;
+
     // Verify linkage to the verified LINE user.
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
-    const child = children.find(c => c.id === parseInt(req.params.id));
+    const child = children.find(c => c.id === studentId);
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
     if (!(await ensureParentConsent(req, res))) return;
 
@@ -149,7 +156,7 @@ router.get('/children/:id/history', requireParentLineAuth, async (req, res, next
        WHERE student_id = ? AND check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
        ORDER BY check_date DESC, checked_at DESC
        LIMIT 500`,
-      [parseInt(req.params.id), days]
+      [studentId, days]
     );
 
     sendSuccess(res, { student: child, history: rows });
@@ -164,13 +171,16 @@ router.get('/children/:id/history', requireParentLineAuth, async (req, res, next
 // distance, and confidence.
 router.get('/children/:id/eta', requireParentLineAuth, async (req, res, next) => {
   try {
+    const studentId = readIdParam(req, res);
+    if (studentId === null) return;
+
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
-    const child = children.find(c => c.id === parseInt(req.params.id));
+    const child = children.find(c => c.id === studentId);
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
     if (!(await ensureParentConsent(req, res))) return;
 
     const etaSvc = require('../services/eta.service');
-    const eta = await etaSvc.getForStudent(parseInt(req.params.id));
+    const eta = await etaSvc.getForStudent(studentId);
     return sendSuccess(res, eta);
   } catch (err) { next(err); }
 });

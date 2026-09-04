@@ -5,6 +5,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const verification = require('../services/vehicleVerification.service');
 const driverShift = require('../services/driverShift.service');
@@ -68,8 +69,10 @@ router.get(
   requireRole('school', 'transport', 'province', 'admin'),
   async (req, res, next) => {
     try {
+      const applicationId = readIdParam(req, res, 'id');
+      if (applicationId === null) return;
       const data = await verification.getApplication(pool, {
-        applicationId: Number(req.params.id),
+        applicationId,
         viewer: {
           role: req.user.role,
           schoolId: req.user.role === 'school' ? req.user.scopeId : null,
@@ -88,8 +91,10 @@ router.post(
     try {
       const schoolId = schoolIdFor(req);
       if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', [{ code: 'SCHOOL_SCOPE_REQUIRED' }], 400);
+      const applicationId = readIdParam(req, res, 'id');
+      if (applicationId === null) return;
       const data = await verification.markReadyToPrint(pool, {
-        applicationId: Number(req.params.id), schoolId, userId: req.user.id,
+        applicationId, schoolId, userId: req.user.id,
       });
       return sendSuccess(res, data, 'คำขอพร้อมพิมพ์และนำรถเข้าตรวจ');
     } catch (error) { return next(error); }
@@ -104,8 +109,10 @@ router.post(
     try {
       const schoolId = schoolIdFor(req);
       if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', [{ code: 'SCHOOL_SCOPE_REQUIRED' }], 400);
+      const applicationId = readIdParam(req, res, 'id');
+      if (applicationId === null) return;
       const data = await verification.cancelApplication(pool, {
-        applicationId: Number(req.params.id), schoolId, userId: req.user.id,
+        applicationId, schoolId, userId: req.user.id,
         reason: req.body.reason || null,
       });
       return sendSuccess(res, data, 'ยกเลิกคำขอแล้ว');
@@ -122,8 +129,10 @@ router.post(
     try {
       const schoolId = schoolIdFor(req);
       if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', [{ code: 'SCHOOL_SCOPE_REQUIRED' }], 400);
+      const applicationId = readIdParam(req, res, 'id');
+      if (applicationId === null) return;
       const data = await verification.reviewApplication(pool, {
-        applicationId: Number(req.params.id),
+        applicationId,
         schoolId,
         userId: req.user.id,
         approved: req.body.approved !== false,
@@ -157,6 +166,8 @@ router.get(
       // detail route answers 404 for exactly this case; the timeline did not.
       //
       // Fails closed: a school account with no scopeId matches nothing.
+      const applicationId = readIdParam(req, res, 'id');
+      if (applicationId === null) return;
       const isDriver = req.user.role === 'driver';
       const isSchool = req.user.role === 'school';
       const driverGuard = isDriver
@@ -167,10 +178,10 @@ router.get(
                       WHERE aps.application_id = al.entity_id AND aps.school_id = ?)`
           : 'TRUE';
       const params = isDriver
-        ? [String(req.params.id), req.user.id]
+        ? [String(applicationId), req.user.id]
         : isSchool
-          ? [String(req.params.id), req.user.scopeId || null]
-          : [String(req.params.id)];
+          ? [String(applicationId), req.user.scopeId || null]
+          : [String(applicationId)];
       const [rows] = await pool.query(
         `SELECT al.id, al.action, al.entity_type, al.old_value, al.new_value,
                 al.created_at, u.display_name AS actor_name, u.role AS actor_role
@@ -226,8 +237,10 @@ router.post(
   requireRole('transport', 'admin'),
   async (req, res, next) => {
     try {
+      const driverId = readIdParam(req, res, 'id');
+      if (driverId === null) return;
       const data = await driverShift.verifyDriverQualification(pool, {
-        driverId: Number(req.params.id),
+        driverId,
         licenseNo: req.body.license_no,
         licenseType: req.body.license_type || null,
         licenseExpiry: req.body.license_expiry,
@@ -251,8 +264,10 @@ router.post(
   requireRole('transport', 'admin'),
   async (req, res, next) => {
     try {
+      const applicationId = readIdParam(req, res, 'id');
+      if (applicationId === null) return;
       const data = await verification.startInspection(pool, {
-        applicationId: Number(req.params.id),
+        applicationId,
         inspectorUserId: req.user.id,
         inspectionDate: req.body.inspection_date,
         providerType: req.body.provider_type || 'DLT_OFFICER',
@@ -268,8 +283,10 @@ router.post(
   requireRole('transport', 'admin'),
   async (req, res, next) => {
     try {
+      const attemptId = readIdParam(req, res, 'id');
+      if (attemptId === null) return;
       const data = await verification.finalizeInspection(pool, {
-        attemptId: Number(req.params.id),
+        attemptId,
         inspectorUserId: req.user.id,
         result: req.body.result,
         inspectionDate: req.body.inspection_date || null,
@@ -292,8 +309,10 @@ router.delete(
   requireRole('transport', 'admin'),
   async (req, res, next) => {
     try {
+      const attemptId = readIdParam(req, res, 'id');
+      if (attemptId === null) return;
       const data = await verification.abortInspectionAttempt(pool, {
-        attemptId: Number(req.params.id),
+        attemptId,
         actorUserId: req.user.id,
         isAdmin: req.user.role === 'admin',
         reason: req.body.reason || null,
@@ -321,15 +340,19 @@ router.get('/transport/documents/vehicle/:vehicleId', requireDocFeature, require
 
 router.get('/transport/documents/driver/:driverId', requireDocFeature, requireRole('transport', 'admin'), async (req, res, next) => {
   try {
-    return sendSuccess(res, await docSvc.listDriverDocuments(pool, Number(req.params.driverId)));
+    const driverId = readIdParam(req, res, 'driverId');
+    if (driverId === null) return;
+    return sendSuccess(res, await docSvc.listDriverDocuments(pool, driverId));
   } catch (error) { return next(error); }
 });
 
 router.post('/transport/documents/:kind/:id/review', requireDocFeature, requireRole('transport', 'admin'), async (req, res, next) => {
   try {
+    const documentId = readIdParam(req, res, 'id');
+    if (documentId === null) return;
     const kind = req.params.kind === 'driver' ? 'driver' : 'vehicle';
     return sendSuccess(res, await docSvc.reviewDocument(pool, {
-      kind, id: Number(req.params.id),
+      kind, id: documentId,
       decision: req.body.decision, note: req.body.note, reviewerUserId: req.user.id,
     }), 'บันทึกผลการตรวจเอกสารแล้ว');
   } catch (error) { return next(error); }

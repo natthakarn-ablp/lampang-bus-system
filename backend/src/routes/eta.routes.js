@@ -28,6 +28,7 @@ const { pool } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const etaSvc = require('../services/eta.service');
 
 router.use(authenticate);
@@ -101,10 +102,8 @@ router.get('/vehicle/:vehicleId', requireRole('admin', 'province', 'affiliation'
 // Parents use /api/parent/children/:id/eta (LINE-verified).
 router.get('/student/:studentId', requireRole('admin', 'province', 'affiliation', 'school'), async (req, res, next) => {
   try {
-    const studentId = parseInt(req.params.studentId, 10);
-    if (!Number.isInteger(studentId) || studentId <= 0) {
-      return sendError(res, 'รหัสนักเรียนไม่ถูกต้อง', [], 400);
-    }
+    const studentId = readIdParam(req, res, 'studentId');
+    if (studentId === null) return;
 
     // Scope check for school / affiliation.
     if (req.user.role === 'school') {

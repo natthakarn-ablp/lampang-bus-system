@@ -2,7 +2,7 @@
 
 const { logAudit } = require('../utils/audit');
 const { refreshVehicleEligibility } = require('./vehicleVerification.service');
-const { toBangkokDate } = require('../utils/thaiTime');
+const { toBangkokDate, todayBangkok } = require('../utils/thaiTime');
 
 function shiftError(message, statusCode, code) {
   const error = new Error(message);
@@ -13,7 +13,14 @@ function shiftError(message, statusCode, code) {
 
 // Bangkok calendar date. A UTC slice made a licence expiring today read as
 // yesterday, blocking a driver on the last day their licence is valid.
-function dateOnly(value = new Date()) {
+//
+// No default. `dateOnly()` used to answer today, which is the same trap that was
+// removed from toBangkokDate: an absent value — a column the SELECT did not
+// include — became today's date and was compared as if it were real. Every call
+// site here already passes a value it has checked, so nothing depended on the
+// default; keeping it only left the trap armed for the next caller. Where today
+// is genuinely meant, todayBangkok() says so.
+function dateOnly(value) {
   return toBangkokDate(value);
 }
 
@@ -214,7 +221,7 @@ async function authorizeDriverForVehicle(pool, {
   if (!driverId || !vehicleId || !userId || !['PRIMARY', 'BACKUP'].includes(assignmentRole)) {
     throw shiftError('ข้อมูลการมอบหมายคนขับไม่ถูกต้อง', 400, 'INVALID_DRIVER_ASSIGNMENT');
   }
-  const start = validFrom || dateOnly(new Date());
+  const start = validFrom || todayBangkok();
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();

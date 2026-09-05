@@ -53,6 +53,22 @@ migration ใช้เวลาไม่ถึงวินาที แต่ช
 ### 3.1 รัน migration ก่อน (ไม่กระทบผู้ใช้)
 
 ```bash
+cd /home/schoolbus/apps/lampang-bus-system
+git pull origin feat/tracking-security-hardening
+DRY_RUN=1 bash scripts/apply-migration-051.sh   # ดูก่อน ไม่เปลี่ยนอะไร
+bash scripts/apply-migration-051.sh             # ลงจริง
+```
+
+สคริปต์อ่าน credential จาก `backend/.env` แบบเดียวกับ `backup-db.sh` และส่งผ่าน
+defaults-file สิทธิ์ 600 ที่ลบทิ้งเมื่อจบ — ไม่มีรหัสผ่านโผล่ใน argv หรือ environment
+จะปฏิเสธถ้าไม่มี backup ที่ใหม่กว่า 48 ชม. และรันซ้ำได้ไม่พัง (บอกว่า "already applied")
+
+ซ้อมกับ MySQL 8 จริงแล้วทั้ง 6 กรณี: dry-run, ลงจริง, รันซ้ำ, ไม่มี backup,
+backup เก่าเกิน, และไฟล์ไม่ครบ — ทุกกรณีให้ผลตามที่ตั้งใจ
+
+ถ้าอยากรันเองแบบไม่ผ่านสคริปต์:
+
+```bash
 mysql -u <user> -p <db_name> < backend/migrations/051_shared_security_state.sql
 ```
 

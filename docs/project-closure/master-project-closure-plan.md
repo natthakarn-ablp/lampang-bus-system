@@ -33,8 +33,8 @@
 |---|---|---|
 | Production source | commit `0060c3e`, worktree สะอาด | ตรวจหลัง deploy เอกสารล่าสุด |
 | Runtime | PM2 backend online, public site/health ใช้งานได้ | ต้องเก็บหลักฐานใหม่ทุก release |
-| Database migration | 43 files, 0 untracked, 0 checksum drift | migration 049 ถูก apply แบบ additive |
-| Unit tests | 43 suites / 445 tests ผ่าน | ยังไม่แทน role UAT และ load test |
+| Database migration | 43 files ณ 3 ก.ย. 2569; ที่ HEAD 5 ก.ย. 2569 = 45 files | migration 049 และ 051 ถูก apply แบบ additive แล้ว; **050 ยังไม่ลง production** (`handoff-2026-09-05.md` §0.1) — แก้ 5 ก.ย. 2569 ตาม `current-status-2026-09-04.md` §5 #14 |
+| Unit tests | 43 suites / 445 tests ผ่าน ณ `1cccee8`; 144 suites / 1,695 tests ที่ `71cc3a5` (5 ก.ย. 2569) | ยังไม่แทน role UAT และ load test; ต้องรันใหม่บน commit ที่จะใช้จริง |
 | Build/gates | frontend build ผ่าน; postdeploy 13/13; public 5/5 | ผลจาก release ล่าสุด |
 | Backup/restore | local backup, checksum/gzip, scratch restore และ off-host sync ผ่าน | ต้องทำตามรอบและแนบ operator evidence ตอนปิดงาน |
 | Driver registration | เปิดใช้งานบน production | `FEATURE_DRIVER_REGISTRATION=true` |
@@ -45,7 +45,7 @@
 | Human sign-off | ยังไม่ครบ | ห้ามตีความ technical PASS เป็นการอนุมัติแทนคน |
 | Menu/IA | Admin ประมาณ 23, School 13, Affiliation 12, Province 11 เมนู | ต้องลดทางเข้าซ้ำตาม role-menu audit ก่อน final UAT |
 | Research metrics | ready 9, partial 4, missing evidence 11 จาก 24 | ห้ามใช้ raw action count หรือ hardcoded readiness เป็นผลวิจัย |
-| Participatory evidence | มี request/approval/audit บางส่วน | ยังขาดการร่วมเสนอ/ปรึกษา/มติ/มอบหมาย/แจ้งผลกลับแบบครบวงจร |
+| Participatory evidence | มี request/approval/audit บางส่วน; โครง participation case + append-only event log เข้ามาแล้ว (`1cccee8`, frontend `c077f03`) | ยังปิดด้วย `FEATURE_PARTICIPATION_CASES` และ migration 050 ยังไม่ลง production จึงยังไม่มีหลักฐานเสนอ/ปรึกษา/มติ/มอบหมาย/แจ้งผลกลับจากการใช้จริง |
 
 ## 4. ขอบเขตผลิตภัณฑ์ที่จะรับรอง
 

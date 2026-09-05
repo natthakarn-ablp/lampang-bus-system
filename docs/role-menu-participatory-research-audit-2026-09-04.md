@@ -27,9 +27,9 @@
 | รายการ | ผล |
 |---|---|
 | Production backend | online |
-| Production commit | `0060c3e`; ต่างจาก source ปัจจุบันเฉพาะเอกสาร |
+| Production commit | `0060c3e` ณ วันที่ตรวจ — *แก้ 5 ก.ย. 2569 (§5 #10):* ณ HEAD ขณะนั้นต่างกัน 18 commits ซึ่ง 10 commit แก้ backend/frontend/schema (`current-status-2026-09-04.md` §2.2–2.3) และ production runtime ณ 5 ก.ย. 2569 คือ `208e883` (`handoff-2026-09-05.md` §3) |
 | Feature ที่เปิด | `FEATURE_DRIVER_REGISTRATION` เท่านั้น |
-| Backend unit tests | 43 suites / 445 tests ผ่าน |
+| Backend unit tests | 43 suites / 445 tests ผ่าน ณ วันที่ตรวจ — *แก้ 5 ก.ย. 2569 (§5 #11):* ตัวเลขนั้นผูกกับ `1cccee8`; ที่ `71cc3a5` (5 ก.ย. 2569) `npm run test:ci` = 144 suites / 1,695 tests ให้รันใหม่บน commit ที่จะใช้จริง |
 | Frontend build | ผ่าน |
 | UI label strict check | ผ่าน 155 files, violation 0 |
 

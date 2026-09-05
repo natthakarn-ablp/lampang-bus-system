@@ -1,5 +1,8 @@
 # Phase 10.3C — Screenshot Capture Status
 
+> **Historical snapshot (ติดป้าย 5 ก.ย. 2569):** "Captured = 0" และ "`docs/manual/screenshots/` was not created" เป็นสถานะ 2026-05-14; ปัจจุบันมีไฟล์ภาพจริง 83 ไฟล์ใต้ `docs/manual-html/screenshots/` แยกโฟลเดอร์ตามบทบาท ห้ามใช้ tracker นี้เป็นสถานะปัจจุบันจนกว่าจะ reconcile
+> สถานะจริงล่าสุด: `docs/project-closure/handoff-2026-09-05.md` · เหตุผลที่ติดป้าย: `docs/project-closure/current-status-2026-09-04.md` §5 (#29)
+
 *Status date: 2026-05-14*
 *Source commit: `5eaa00f`*
 

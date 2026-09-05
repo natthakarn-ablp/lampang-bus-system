@@ -7,6 +7,7 @@
 > `docs/PRODUCTION_GOVERNANCE_CHECKLIST_2026-08.md`,
 > `docs/UAT_SIGNOFF_2026-08.md`, `docs/TRAINING_PACK_2026-08.md`,
 > และ `docs/OPERATOR_RUNBOOK.md`
+> สถานะจริงล่าสุด (ติดป้ายเพิ่ม 5 ก.ย. 2569): `docs/project-closure/handoff-2026-09-05.md` · เหตุผล: `docs/project-closure/current-status-2026-09-04.md` §5 (#20)
 
 ---
 
@@ -20,7 +21,7 @@
 | Historical readiness (2026-06) | 🟢 **READY FOR CONTROLLED GO-LIVE WITH OFF-HOST BACKUP PENDING** |
 | Closeout date | 2026-06-02 |
 | Latest documentation commit | `67e5966` (`docs: add final UAT and handoff documentation`) |
-| Latest application commit serving production | `cdc0ec0` (`feat(line): switch notification resolver to phone-based binding`) |
+| Latest application commit serving production | `cdc0ec0` (`feat(line): switch notification resolver to phone-based binding`) — *historical 2026-06; ณ 5 ก.ย. 2569 production runtime คือ `208e883` (`handoff-2026-09-05.md` §3)* |
 | Latest frontend bundle | built from `2a802b2` (`fix(parent): make LIFF bind route tolerant of endpoint config`) — subsequent commits are scripts/docs only |
 | Main caveat (historical 2026-06) | 🟡 Off-host backup destination not yet configured (Phase 10.10F-2 pending operator decision) |
 

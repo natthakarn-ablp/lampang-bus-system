@@ -1,5 +1,8 @@
 # รายงานการตรวจสอบระบบระดับ Production Readiness
 
+> **Historical snapshot (ติดป้าย 5 ก.ย. 2569):** ตรวจที่ commit `9a64efc` (27 ส.ค. 2569) ซึ่งอยู่ก่อน HEAD ปัจจุบันหลายสิบ commit; AUD-025 (วันที่ปฏิทินจาก UTC), AUD-033 (`/api/parent/children` ไม่มี consent gate) และ AUD-034 (feature dependency / consent UI) ถูกแก้ในโค้ดแล้ว (`897ed39`, `dbc19a5`) ส่วน AUD-045 (frontend ไม่มี test runner) ยังเป็นจริง อ่านทั้งฉบับเป็นบันทึกของ commit นั้น ไม่ใช่สถานะปัจจุบัน
+> สถานะจริงล่าสุด: `docs/project-closure/handoff-2026-09-05.md` · เหตุผลที่ติดป้าย: `docs/project-closure/current-status-2026-09-04.md` §5 (#4–#7)
+
 **ระบบรถรับส่งนักเรียนจังหวัดลำปาง** (Lampang School Bus System)
 
 | | |

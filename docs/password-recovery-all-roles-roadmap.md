@@ -4,7 +4,7 @@
 
 เป้าหมายสุดท้าย: รองรับผู้ใช้ทุกสิทธิ์ โดยใช้ `admin` เป็น technical pilot ก่อน rollout กลุ่มอื่น
 
-สถานะ production: deploy แบบ dark launch ที่ commit `01da4cb` โดย `FEATURE_ADMIN_PASSWORD_RECOVERY=false`
+สถานะ production: deploy แบบ dark launch ที่ commit `01da4cb` โดย `FEATURE_ADMIN_PASSWORD_RECOVERY=false` *(แก้ 5 ก.ย. 2569 ตาม `current-status-2026-09-04.md` §5 #15: `01da4cb` เป็น ancestor ของ `0060c3e` ที่เอกสารปิดโครงการถือเป็น production ณ 3 ก.ย.; runtime ณ 5 ก.ย. 2569 คือ `208e883` — flag ยังปิดอยู่)*
 
 ขอบเขตบังคับก่อนปิดโครงการคือ `admin`, `province`, `affiliation`, `school`, บัญชีย่อยครู, `driver`, `transport` และกระบวนการกู้คืนการผูก LINE ของผู้ปกครอง ห้ามข้าม phase, ห้ามเปิดใช้กับบทบาทใหม่ก่อนผ่าน gate และห้ามถือว่า UAT ผ่านหากยังไม่มีหลักฐานจากผู้ใช้จริง
 
@@ -18,7 +18,7 @@
 - [x] เพิ่ม audit events สำหรับการผูก LINE, ขอรีเซ็ต และเปลี่ยนรหัส
 - [x] สำรองฐานข้อมูลและทดสอบ restore/migration ใน scratch database
 - [x] Apply migration บน production โดยข้อมูล recovery ยังเป็น 0 แถว
-- [x] Unit tests ผ่าน 445 รายการ, postdeploy gate 13/13 และ public gate 5/5
+- [x] Unit tests ผ่าน 445 รายการ, postdeploy gate 13/13 และ public gate 5/5 *(ตัวเลข ณ วันที่เขียน — แก้ 5 ก.ย. 2569 ตาม §5 #16: public gate ที่รันล่าสุด `pass=5 warn=0 fail=0` เป็นของ HEAD `4b80b4b` ไม่ใช่ commit ของ roadmap นี้ และ unit tests ล่าสุด 144 suites / 1,695 tests ที่ `71cc3a5`)*
 - [x] Deploy frontend/backend แล้ว แต่ซ่อนฟีเจอร์ด้วย feature flag
 
 ## รูปแบบการกู้คืนของแต่ละสิทธิ์

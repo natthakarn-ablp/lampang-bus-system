@@ -1,5 +1,8 @@
 # สรุปงานวันที่ 24 มิถุนายน 2569 — Full Test + Capacity + UX/UI
 
+> **Historical snapshot (ติดป้าย 5 ก.ย. 2569):** "Capacity Analysis: รับได้ 500-1000 users/day" เป็นการประเมินโดยไม่มีผลรัน — capacity ยังไม่พิสูจน์ (load test local 5 ก.ย. 2569 วัดได้ว่า pool 10 เส้นอิ่มตัวตั้งแต่ 20 concurrent users บนเครื่องพัฒนา; `docs/performance/load-test-local-2026-09-05.md`) และข้อเสนอ PM2 cluster mode `instances: max` ขัดกับ state ที่ยังอยู่ใน memory ของ process เดียว (`docs/project-closure/notes.md`)
+> สถานะจริงล่าสุด: `docs/project-closure/handoff-2026-09-05.md` · เหตุผลที่ติดป้าย: `docs/project-closure/current-status-2026-09-04.md` §5 (#30)
+
 > **สถานะ:** เสร็จครบทั้ง 4 ข้อ — ระบบ localhost พร้อมใช้งาน
 > **Final Test:** 50/50 PASS (6 roles × ทุก feature)
 

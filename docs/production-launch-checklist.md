@@ -1,5 +1,8 @@
 # Production Launch Checklist — Lampang Bus System
 
+> **Historical snapshot (ติดป้าย 5 ก.ย. 2569):** "วันที่ UAT ผ่าน 2026-04-05 (56/56)" และ "สถานะ: Go-Live Ready" เป็นของรอบเมษายน 2569 — UAT รอบปิดโครงการ (`docs/UAT_SIGNOFF_2026-08.md`) ยังเป็นแบบฟอร์มที่ไม่มีผลกรอก และรายงานเชิงนโยบายที่บรรทัดท้าย ๆ ระบุว่ายังไม่ implement มี handler แล้วที่ `GET /api/reports/policy` (`backend/src/routes/report.routes.js`)
+> สถานะจริงล่าสุด: `docs/project-closure/handoff-2026-09-05.md` · เหตุผลที่ติดป้าย: `docs/project-closure/current-status-2026-09-04.md` §5 (#22–#23)
+
 **วันที่ UAT ผ่าน:** 2026-04-05 (56/56 checks passed)
 **สถานะ:** Go-Live Ready
 

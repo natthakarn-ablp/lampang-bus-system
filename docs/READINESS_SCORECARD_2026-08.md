@@ -1,5 +1,8 @@
 # Readiness Scorecard 2026-08 — School Safe Connect ลำปาง
 
+> **Historical snapshot (ติดป้าย 5 ก.ย. 2569):** ตัวเลขทั้งฉบับ (Overall 80%, "36 suites / 374 tests", npm audit 0 vulnerabilities) เป็นค่าของ 25 ส.ค. 2569 ก่อนมี evidence tooling ชุดปัจจุบัน ห้ามนำไปอ้างเป็นความพร้อมปัจจุบัน — ความพร้อมต้องอ่านจาก validator ที่รันจริง (`outputs/automated-readiness/<ts>/summary.md` ซึ่งรายงานเป็นจำนวน PASS/PENDING/FAIL ไม่ใช่เปอร์เซ็นต์)
+> สถานะจริงล่าสุด: `docs/project-closure/handoff-2026-09-05.md` · เหตุผลที่ติดป้าย: `docs/project-closure/current-status-2026-09-04.md` §5 (#1–#3)
+
 วันที่ปรับปรุง: 2026-08-25
 สถานะ: controlled rollout ready after approval; not yet 100% production green
 

@@ -1,5 +1,8 @@
 # Logic Confirmation Register
 
+> **Historical snapshot (ติดป้าย 5 ก.ย. 2569):** ผูกกับ commit `9a64efc` (27 ส.ค. 2569); ข้อสังเกตว่า `.env.example` มีเพียง 4 flags และ dependency ระหว่าง flag ไม่ถูกบังคับ (บรรทัด 559, 563) ไม่จริงแล้ว — ปัจจุบัน `.env.example` มี 6 flags และ `backend/src/config/env.js` บังคับ dependency ส่วนที่ยังจริงคือ `FEATURE_PARENT_CONSENT_REQUIRED` ยังไม่ถูกลิสต์ใน `.env.example`
+> สถานะจริงล่าสุด: `docs/project-closure/handoff-2026-09-05.md` · เหตุผลที่ติดป้าย: `docs/project-closure/current-status-2026-09-04.md` §5 (#8–#9)
+
 ระบบรถรับส่งนักเรียนจังหวัดลำปาง · commit `9a64efc` · 27 ส.ค. 2569
 
 รายการในเอกสารนี้ **ยังไม่ถือว่าเป็นข้อบกพร่อง** จนกว่าเจ้าของระบบจะยืนยันว่ากติกาที่ถูกต้อง

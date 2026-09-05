@@ -1,9 +1,10 @@
 # Deploy Readiness Report — Lampang Bus System
 
 > ⚠️ **เอกสารนี้เป็น snapshot วันที่ 2026-04-03 (ก่อน go-live)** เก็บไว้เป็น
-> ประวัติเท่านั้น สถานะจริงปัจจุบันอยู่ใน
-> [`docs/production-readiness.md`](production-readiness.md) และ
-> [`docs/STATUS-2026-06-23.md`](STATUS-2026-06-23.md)
+> ประวัติเท่านั้น สถานะจริงล่าสุดดู
+> [`docs/project-closure/handoff-2026-09-05.md`](project-closure/handoff-2026-09-05.md) และ
+> [`docs/project-closure/current-status-2026-09-04.md`](project-closure/current-status-2026-09-04.md)
+> (ปลายทางเดิม `production-readiness.md` และ `STATUS-2026-06-23.md` เป็น historical แล้วเช่นกัน — แก้ปลายทาง 5 ก.ย. 2569 ตาม `current-status-2026-09-04.md` §5 #31)
 >
 > สรุปการเปลี่ยนแปลงหลังเอกสารนี้เขียน:
 > - ระบบขึ้น production แล้วที่ https://schoolbuslampang.com (nginx + Cloudflare + PM2 + systemd)

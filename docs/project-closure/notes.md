@@ -7,7 +7,7 @@
 - Production source อยู่ที่ commit `0060c3e` และ server worktree สะอาดเมื่อ 3 กันยายน 2569
 - PM2 backend online, public site และ health endpoint ทำงานหลัง deploy ล่าสุด
 - Migration 43 ไฟล์ถูก track ครบ ไม่มี untracked หรือ checksum drift
-- Backend unit tests ล่าสุดผ่าน 43 suites / 445 tests
+- Backend unit tests ล่าสุดผ่าน 43 suites / 445 tests *(ตัวเลข ณ 3 ก.ย. 2569 ผูกกับ `1cccee8`; ที่ `71cc3a5` 5 ก.ย. 2569 = 144 suites / 1,695 tests — แก้ 5 ก.ย. 2569 ตาม `current-status-2026-09-04.md` §5 #13; ต้องรันใหม่บน commit ที่จะใช้จริง)*
 - Frontend production build ผ่าน และ postdeploy/public gates ล่าสุดผ่าน 13/13 และ 5/5
 - Local backup, checksum/gzip, scratch restore drill และ off-host sync ผ่านในรอบล่าสุด
 - ข้อมูล production เป็นข้อมูลจริง ต้องใช้ read-only aggregate ในการ audit และห้ามใช้เป็น UAT ที่เขียนข้อมูล
@@ -22,7 +22,7 @@
 - ระบบ production เป็น single backend instance และ lockout/dedup/linking state บางส่วนอยู่ใน memory; ต้องย้าย state ไป Redis/DB ก่อน scale หลาย instance
 - Security residuals ที่ต้อง fix หรือมี risk acceptance: refresh-token rotation/replay, localStorage token, export rate-limit coverage, export streaming และ legacy weak-password rotation
 - ต้องยืนยัน PDPA/consent/QR/LINE policy โดย DPO/ผู้มีอำนาจจริงก่อนเปิด feature ที่เกี่ยวข้อง
-- มี consent ledger และ UI สำหรับ Parent Vehicle QR/Driver แล้ว แต่ ParentStatus ยังไม่มี consent UI, `/api/parent/children` ยังไม่ใช้ consent gate และ feature dependency ยังไม่ป้องกันการเปิด parent consent โดยไม่มีช่องทางให้ consent
+- มี consent ledger และ UI สำหรับ Parent Vehicle QR/Driver แล้ว *(แก้ 5 ก.ย. 2569 ตาม §5 #12: สามข้อที่เคยค้าง — ParentStatus consent UI, consent gate ของ `/api/parent/children`, และ feature dependency — ปิดใน repo แล้วที่ `dbc19a5`; ที่ยังค้างคือข้อความ consent ที่ต้องผ่าน **รอ D0-5** และ canonical consent type **รอ D0-7**)*
 - Consent, privacy acknowledgement และ data certification ต้องแยกความหมาย/ตารางหลักฐานตาม `docs/pdpa-consent-and-data-confirmation-plan.md`; ปัจจุบัน acknowledgement/certification ข้ามบทบาทยังไม่ implement
 - ต้องทดสอบว่าการถอน driver/parent consent มีผลสอดคล้องกันใน QR, ParentStatus, LIFF, LINE message, report และ export ก่อนเปิด production
 - Account recovery ทุกสิทธิ์เป็น accepted scope; ต้องตัดสินใจ business logic ของบัญชีกลางโรงเรียน/ต้นสังกัด/ขนส่ง และบัญชีคนขับที่ login ด้วยทะเบียนรถก่อนเปิดแต่ละกลุ่ม

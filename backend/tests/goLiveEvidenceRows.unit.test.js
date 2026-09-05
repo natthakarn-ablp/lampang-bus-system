@@ -60,13 +60,44 @@ function writeRows(dir, jsonName, csvName, rows) {
 let bundleRows;
 let closureRows;
 
+/**
+ * Both generators use the same exit convention:
+ *   2  could not run — bad arguments (create-go-live-bundle.js:66,
+ *      summarize-go-live-closure.js:47)
+ *   1  ran, and reported a failing or pending gate
+ *      (create-go-live-bundle.js:298-303, summarize-go-live-closure.js:97-102)
+ *   0  ran, nothing failing
+ *
+ * This suite is about the ROWS, not about whether the machine running it is
+ * ready to go live. Requiring exit 0 made it a readiness check by accident,
+ * and readiness depends on `outputs/`, which is gitignored and therefore
+ * different on every machine: absent on CI and on a dev checkout, real on the
+ * production host — which carries a phase9-evidence pack from 2026-08-26 that
+ * does not satisfy the current schema, so the script correctly exits 1 there.
+ *
+ * That difference stopped a deploy: deploy-backend.sh runs this suite before
+ * pm2 reload. It stopped safely, and for the wrong reason. (Not caused by this
+ * branch — 0060c3e's own copy of the bundle script also exits 1 on that host.)
+ *
+ * So the bar here is "the generator ran and produced rows", which is what
+ * every assertion below actually needs. A machine with a failing gate must
+ * still emit rows that say so, and those rows are exactly what gets checked.
+ */
+function expectGeneratorRan(label, result, outputFile) {
+  // 2 or a null status means it never got as far as producing anything.
+  expect(`${label} exit code: ${result.status}`).not.toBe(`${label} exit code: 2`);
+  expect(`${label} ran (status <= 1): ${result.status <= 1}`).toBe(`${label} ran (status <= 1): true`);
+  expect(`${label} wrote ${path.basename(outputFile)}: ${fs.existsSync(outputFile)}`)
+    .toBe(`${label} wrote ${path.basename(outputFile)}: true`);
+}
+
 beforeAll(() => {
   const bundle = run('create-go-live-bundle.js', [
     '--allow-pending',
     '--out-dir', path.join(TMP, 'bundles'),
     '--run-id', 'test-run',
   ]);
-  expect(bundle.status).toBe(0);
+  expectGeneratorRan('bundle', bundle, path.join(BUNDLE_DIR, 'ACTION_ITEMS.json'));
 
   const closure = run('summarize-go-live-closure.js', [
     '--allow-pending',
@@ -74,7 +105,7 @@ beforeAll(() => {
     '--out-dir', path.join(TMP, 'closure'),
     '--run-id', 'test-run',
   ]);
-  expect(closure.status).toBe(0);
+  expectGeneratorRan('closure', closure, path.join(CLOSURE_DIR, 'owner-actions.json'));
 
   bundleRows = readJson(path.join(BUNDLE_DIR, 'ACTION_ITEMS.json'));
   closureRows = readJson(path.join(CLOSURE_DIR, 'owner-actions.json'));
@@ -252,6 +283,56 @@ describe('closure board action rows', () => {
     expect(result.output).toContain('[closure-status] PASS (pending allowed)');
     expect(result.status).toBe(0);
   }, 60000);
+});
+
+describe('a machine with a failing gate still produces checkable rows', () => {
+  // The production host carries an outputs/phase9-evidence pack from
+  // 2026-08-26 that does not satisfy the current schema, so the phase9 check
+  // is FAIL and the generator exits 1 there. CI and a dev checkout have no
+  // outputs/ at all and exit 0. This reproduces the host's situation with a
+  // deliberately-bad pack in a temp directory — outputs/ is never touched —
+  // and pins what has to remain true in it: the tool still writes its rows,
+  // and the failing gate is named rather than swallowed.
+  //
+  // Without this, tightening beforeAll back to `expect(status).toBe(0)` looks
+  // harmless on a dev machine and silently stops every deploy on the server,
+  // because deploy-backend.sh runs this suite before pm2 reload.
+  const BAD = fs.mkdtempSync(path.join(os.tmpdir(), 'lampang-bad-evidence-'));
+  const PACK = path.join(BAD, '20260826-034158');
+  let failing;
+
+  beforeAll(() => {
+    fs.mkdirSync(PACK, { recursive: true });
+    fs.writeFileSync(path.join(PACK, 'manifest.json'), JSON.stringify({
+      gates: [], modes: ['local'], totals: { failed_gates: 2 },
+    }, null, 2));
+    fs.writeFileSync(path.join(PACK, 'summary.md'), 'references manifest.json\n');
+
+    failing = run('create-go-live-bundle.js', [
+      '--allow-pending',
+      '--evidence', BAD,
+      '--out-dir', path.join(BAD, 'bundles'),
+      '--run-id', 'test-run',
+    ]);
+  });
+
+  it('reports the failure through the exit code, not by refusing to run', () => {
+    // 1 means "ran and something failed". 2 would mean it never ran.
+    expect(`status: ${failing.status}`).toBe('status: 1');
+  });
+
+  it('still writes the rows, so the failure is describable', () => {
+    const rows = readJson(path.join(BAD, 'bundles', 'test-run', 'ACTION_ITEMS.json'));
+    expect(`rows written: ${rows.length > 0}`).toBe('rows written: true');
+    for (const row of rows) {
+      expect(row.expected_evidence_root).not.toContain('<timestamp>');
+    }
+  });
+
+  it('names the failing gate in its output rather than summarising it away', () => {
+    expect(failing.output).toContain('readiness=FAIL');
+    expect(failing.output).toMatch(/fail=[1-9]/);
+  });
 });
 
 describe('the closure validator refuses rows that cannot be checked', () => {

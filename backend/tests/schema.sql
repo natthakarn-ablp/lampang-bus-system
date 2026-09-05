@@ -1307,6 +1307,42 @@ CREATE TABLE `participation_case_events` (
   CONSTRAINT fk_participation_event_actor FOREIGN KEY (actor_user_id) REFERENCES users (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+--
+-- Migration 051 — shared security state (task A1-9).
+-- The test database is built from THIS file, not from migrations/, so a new
+-- table has to be added here too or every login in the suite queries a table
+-- that does not exist.
+--
+DROP TABLE IF EXISTS `login_lockouts`;
+CREATE TABLE login_lockouts (
+  key_hash      CHAR(64) NOT NULL,
+  fail_count    INT NOT NULL DEFAULT 0,
+  window_start  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (key_hash),
+  KEY idx_ll_window (window_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `line_webhook_events_seen`;
+CREATE TABLE line_webhook_events_seen (
+  event_id   VARCHAR(64) NOT NULL,
+  seen_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id),
+  KEY idx_lwes_seen (seen_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `line_bind_lockouts`;
+CREATE TABLE line_bind_lockouts (
+  lock_type     ENUM('phone','student','pair','sub') NOT NULL,
+  key_hash      CHAR(64) NOT NULL,
+  attempt_count INT NOT NULL DEFAULT 0,
+  window_start  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  locked_until  TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (lock_type, key_hash),
+  KEY idx_lbl_window (window_start),
+  KEY idx_lbl_locked (locked_until)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

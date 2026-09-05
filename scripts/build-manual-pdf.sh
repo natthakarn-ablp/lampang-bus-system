@@ -16,16 +16,39 @@
 #     libxshmfence1 libxss1 libasound2t64 libnss3 libxcomposite1 libxdamage1 libxfixes3
 #   (Without these the chromium binary fails: "libcairo.so.2: cannot open ...")
 #
-# Run:  bash scripts/build-manual-pdf.sh
+# Run:  bash scripts/build-manual-pdf.sh            # render, from any checkout
+#       bash scripts/build-manual-pdf.sh --dry-run  # list what would be rendered; no chromium needed
+#
+# Paths are derived from where this script lives, so the same command works on
+# the production checkout, a sandbox clone and a developer machine. The
+# production path used to be hard-coded here, which meant the manuals could
+# only ever be regenerated on the server (closure handoff 2026-09-05 §2 #5).
+# Override when the guides live elsewhere:
+#   MANUAL_HTML_DIR   directory holding user-guide-*.html and index.html
+#   MANUAL_PDF_DIR    directory the Thai-named PDFs are written to
+#   CHROME            chromium binary (default: the newest Playwright-cached one)
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-MANUAL="/home/schoolbus/apps/lampang-bus-system/docs/manual-html"
-PDF_DIR="$MANUAL/pdf"
-CHROME="$(find "$HOME/.cache/ms-playwright" -maxdepth 3 -type f -name chrome 2>/dev/null | sort | tail -1)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MANUAL="${MANUAL_HTML_DIR:-$ROOT/docs/manual-html}"
+# docs/manual-html/pdf is a symlink to ../manual-pdf. Render into the real
+# directory, not through the link: a Windows checkout has the link as a plain
+# file, and the web serves the same files either way.
+PDF_DIR="${MANUAL_PDF_DIR:-$ROOT/docs/manual-pdf}"
+# || true: with set -e and pipefail, a host without the Playwright cache made
+# find fail and the whole script exit here with no message — before the check
+# below could say what was missing.
+CHROME="${CHROME:-$(find "$HOME/.cache/ms-playwright" -maxdepth 3 -type f -name chrome 2>/dev/null | sort | tail -1 || true)}"
 
-[ -n "$CHROME" ] && [ -x "$CHROME" ] || { echo "ERROR: chromium not found under ~/.cache/ms-playwright"; exit 1; }
-[ -d "$MANUAL" ] || { echo "ERROR: manual dir not found: $MANUAL"; exit 1; }
+DRY_RUN=0
+[ "${1:-}" = "--dry-run" ] && DRY_RUN=1
+
+[ -d "$MANUAL" ] || { echo "ERROR: manual dir not found: $MANUAL (set MANUAL_HTML_DIR)"; exit 1; }
+if [ "$DRY_RUN" -eq 0 ]; then
+  [ -n "$CHROME" ] && [ -x "$CHROME" ] || { echo "ERROR: chromium not found under ~/.cache/ms-playwright (set CHROME)"; exit 1; }
+  [ -d "$PDF_DIR" ] || { echo "ERROR: pdf dir not found: $PDF_DIR (set MANUAL_PDF_DIR)"; exit 1; }
+fi
 
 # This host lacks chromium's libcairo/libpango. Rather than a root apt-get, the
 # closure was extracted (no sudo) to ~/.cache/manual-pdf-libs via:
@@ -45,6 +68,13 @@ declare -A TH=(
 )
 
 render() { # <html-basename> <out.pdf>
+  # A missing guide is an error in both modes: rendering a 404 page into the
+  # distribution PDF is worse than stopping.
+  [ -f "$MANUAL/$1" ] || { echo "ERROR: source not found: $MANUAL/$1"; exit 1; }
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "would render: $MANUAL/$1 -> $PDF_DIR/$2"
+    return 0
+  fi
   "$CHROME" --headless=new --no-sandbox --disable-gpu --no-pdf-header-footer \
     --print-to-pdf="$PDF_DIR/$2" "file://$MANUAL/$1" >/dev/null 2>&1
 }
@@ -60,5 +90,9 @@ done
 echo "==> คู่มือ-สารบัญหลัก.pdf  (index)"
 render "index.html" "คู่มือ-สารบัญหลัก.pdf"
 
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "dry run — nothing written. MANUAL=$MANUAL PDF_DIR=$PDF_DIR CHROME=${CHROME:-<not found>}"
+  exit 0
+fi
 echo "done — PDFs regenerated in $PDF_DIR (same filenames = same links)."
 echo "Next: commit the updated PDFs; the web serves them in-place via the dist/manual symlink (no rebuild needed)."

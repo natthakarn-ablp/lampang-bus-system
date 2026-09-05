@@ -339,7 +339,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
                 type="button"
                 onClick={() => setConfirming(true)}
                 disabled={busy || (canApplyCount === 0 && selGuardian.size === 0 && selReactivate.size === 0)}
-                className="focus-ring text-sm bg-success hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
+                className="focus-ring text-sm bg-success-ink hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
               >
                 ยืนยันนำเข้า
               </button>

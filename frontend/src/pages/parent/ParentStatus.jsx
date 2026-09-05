@@ -156,7 +156,7 @@ export default function ParentStatus() {
       <div className="min-h-screen bg-surface flex items-center justify-center p-4">
         <AppCard padding="lg" className="max-w-sm w-full text-center border-danger/30">
           <p className="text-4xl mb-3">⚠️</p>
-          <p className="text-base text-red-600 font-medium mb-4">{error}</p>
+          <p className="text-base text-danger-ink font-medium mb-4">{error}</p>
           <button type="button" onClick={() => window.location.reload()}
             className="bg-red-50 hover:bg-red-100 text-red-700 font-medium px-6 py-3 rounded-xl transition border border-red-200">
             ลองใหม่อีกครั้ง
@@ -435,10 +435,10 @@ export default function ParentStatus() {
                       ? `${Math.max(1, Math.round(eta.eta_seconds / 60))} นาที`
                       : '—'}
                   </p>
-                  <p className="text-sm text-amber-600 mt-1">
+                  <p className="text-sm text-warn-ink mt-1">
                     ระยะทาง {eta.distance_meters != null ? `${(eta.distance_meters / 1000).toFixed(1)} กม.` : 'ไม่ทราบ'}
                   </p>
-                  <p className="text-xs text-amber-500 mt-1">
+                  <p className="text-xs text-warn-ink mt-1">
                     ความมั่นใจ: {eta.confidence === 'HIGH' ? 'สูง' : eta.confidence === 'MEDIUM' ? 'ปานกลาง' : eta.confidence === 'LOW' ? 'ต่ำ' : 'ไม่ทราบ'}
                   </p>
                 </div>

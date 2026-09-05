@@ -77,7 +77,7 @@ export default function SystemHealth() {
                 max={data.top_features[0]?.cnt || 1} color="bg-green-500" />
             ))}
             {(!data.top_features || data.top_features.length === 0) && (
-              <p className="text-sm text-gray-400">ยังไม่มีข้อมูล</p>
+              <p className="text-sm text-ink-muted">ยังไม่มีข้อมูล</p>
             )}
           </div>
         </div>
@@ -91,7 +91,7 @@ export default function SystemHealth() {
                 max={data.top_features?.[0]?.cnt || 1} color="bg-gray-400" />
             ))}
             {(!data.bottom_features || data.bottom_features.length === 0) && (
-              <p className="text-sm text-gray-400">ยังไม่มีข้อมูล</p>
+              <p className="text-sm text-ink-muted">ยังไม่มีข้อมูล</p>
             )}
           </div>
         </div>
@@ -117,7 +117,7 @@ export default function SystemHealth() {
           {data.role_activity?.map(r => (
             <div key={r.role} className="bg-gray-50 rounded-lg px-4 py-2 text-center">
               <p className="text-lg font-semibold text-gray-700">{r.cnt}</p>
-              <p className="text-xs text-gray-500">{r.role || 'ไม่ระบุ'}</p>
+              <p className="text-xs text-ink-muted">{r.role || 'ไม่ระบุ'}</p>
             </div>
           ))}
         </div>
@@ -133,7 +133,7 @@ export default function SystemHealth() {
               const pct = maxCnt > 0 ? Math.round((d.cnt / maxCnt) * 100) : 0;
               return (
                 <div key={d.date} className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-500 w-20 shrink-0">
+                  <span className="text-ink-muted w-20 shrink-0">
                     {new Date(d.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
                   </span>
                   <div className="flex-1 bg-gray-100 rounded-full h-4">
@@ -145,11 +145,11 @@ export default function SystemHealth() {
             })}
           </div>
         ) : (
-          <p className="text-sm text-gray-400">ยังไม่มีข้อมูล</p>
+          <p className="text-sm text-ink-muted">ยังไม่มีข้อมูล</p>
         )}
       </div>
 
-      <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-500">
+      <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-ink-muted">
         <p><strong>หมายเหตุ:</strong> Error count ประมาณจากล็อกอินล้มเหลว — ระบบยังไม่มี persistent error log ที่แยกเก็บ (partial)</p>
       </div>
     </div>
@@ -176,7 +176,7 @@ function FeatureBar({ rank, label, count, max, color }) {
   const pct = max > 0 ? Math.round((count / max) * 100) : 0;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-400 w-5">{rank}.</span>
+      <span className="text-xs text-ink-muted w-5">{rank}.</span>
       <span className="text-sm text-gray-700 w-32 truncate">{label}</span>
       <div className="flex-1 bg-gray-100 rounded-full h-3">
         <div className={`h-3 rounded-full ${color}`} style={{ width: `${pct}%` }} />

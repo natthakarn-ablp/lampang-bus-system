@@ -142,7 +142,7 @@ export default function ResearchExport() {
             })}
           </div>
           {included.size === 0 && (
-            <p className="mt-2 text-caption text-danger">เลือกอย่างน้อย 1 ชุดข้อมูลจึงจะส่งออกได้</p>
+            <p className="mt-2 text-caption text-danger-ink">เลือกอย่างน้อย 1 ชุดข้อมูลจึงจะส่งออกได้</p>
           )}
         </fieldset>
       </AppCard>
@@ -215,7 +215,7 @@ export default function ResearchExport() {
               className="focus-ring flex flex-col items-center justify-center gap-0.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold py-3 min-h-[56px] rounded-xl transition disabled:opacity-50 disabled:pointer-events-none"
             >
               <span className="text-base">{exporting === f.key ? 'กำลังสร้าง…' : f.label}</span>
-              <span className="text-caption font-normal text-white/80">{f.hint}</span>
+              <span className="text-caption font-normal text-white">{f.hint}</span>
             </button>
           ))}
         </div>

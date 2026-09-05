@@ -124,12 +124,12 @@ export default function MonthlyReport() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {weeks.map((w, i) => (
                     <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-                      <p className="text-xs font-semibold text-gray-500 mb-2">{w.label}</p>
+                      <p className="text-xs font-semibold text-ink-muted mb-2">{w.label}</p>
                       <div className="space-y-2">
                         <div>
                           <div className="flex justify-between text-xs mb-0.5">
-                            <span className="text-gray-500">เช้า</span>
-                            <span className={`font-bold ${w.mAvg >= 95 ? 'text-green-600' : w.mAvg >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{w.mAvg}%</span>
+                            <span className="text-ink-muted">เช้า</span>
+                            <span className={`font-bold ${w.mAvg >= 95 ? 'text-success-ink' : w.mAvg >= 80 ? 'text-warn-ink' : 'text-danger-ink'}`}>{w.mAvg}%</span>
                           </div>
                           <div className="w-full bg-gray-100 rounded-full h-2.5">
                             <div className={`h-2.5 rounded-full ${w.mAvg >= 95 ? 'bg-green-500' : w.mAvg >= 80 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${w.mAvg}%` }} />
@@ -137,15 +137,15 @@ export default function MonthlyReport() {
                         </div>
                         <div>
                           <div className="flex justify-between text-xs mb-0.5">
-                            <span className="text-gray-500">เย็น</span>
-                            <span className={`font-bold ${w.eAvg >= 95 ? 'text-green-600' : w.eAvg >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{w.eAvg}%</span>
+                            <span className="text-ink-muted">เย็น</span>
+                            <span className={`font-bold ${w.eAvg >= 95 ? 'text-success-ink' : w.eAvg >= 80 ? 'text-warn-ink' : 'text-danger-ink'}`}>{w.eAvg}%</span>
                           </div>
                           <div className="w-full bg-gray-100 rounded-full h-2.5">
                             <div className={`h-2.5 rounded-full ${w.eAvg >= 95 ? 'bg-green-500' : w.eAvg >= 80 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${w.eAvg}%` }} />
                           </div>
                         </div>
                       </div>
-                      <p className="text-xs text-gray-400 mt-1">{w.days} วัน</p>
+                      <p className="text-xs text-ink-muted mt-1">{w.days} วัน</p>
                     </div>
                   ))}
                 </div>
@@ -289,7 +289,7 @@ export default function MonthlyReport() {
           )}
 
           {/* ── SECTION 9 — หมายเหตุ KPI ───────────────────── */}
-          <details className="mt-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500">
+          <details className="mt-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-ink-muted">
             <summary className="px-4 py-3 cursor-pointer font-semibold text-gray-600 hover:text-gray-800 select-none">
               หมายเหตุ KPI
             </summary>
@@ -315,7 +315,7 @@ export default function MonthlyReport() {
               queryParams={`month=${month}`}
               filenamePrefix={`monthly-report-${month}`}
             />
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-ink-muted">
               สร้างจากระบบรถรับส่งนักเรียนจังหวัดลำปาง · {new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
             </p>
           </div>

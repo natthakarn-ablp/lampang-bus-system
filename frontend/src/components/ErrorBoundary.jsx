@@ -20,7 +20,7 @@ export default class ErrorBoundary extends Component {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
           <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
-            <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-warn" strokeWidth={1.6} />
+            <AlertTriangle className="w-12 h-12 mx-auto mb-4 text-warn-ink" strokeWidth={1.6} />
             <h1 className="text-xl font-bold text-gray-800 mb-2">เกิดข้อผิดพลาด</h1>
             <p className="text-gray-600 mb-6">ระบบพบปัญหาที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง</p>
             <div className="flex gap-3 justify-center">

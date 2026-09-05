@@ -126,8 +126,8 @@ export default function ExecutivePrint() {
         {/* 1. Header */}
         <div className="border-b-4 border-blue-800 pb-3 mb-4">
           <h1 className="text-xl font-semibold text-blue-800">สรุปผลการประเมินระบบรถรับส่งนักเรียน</h1>
-          <p className="text-sm text-gray-500">ระบบรถรับส่งนักเรียนจังหวัดลำปาง — สำหรับการประชุมผู้บริหาร</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-xs text-gray-500">
+          <p className="text-sm text-ink-muted">ระบบรถรับส่งนักเรียนจังหวัดลำปาง — สำหรับการประชุมผู้บริหาร</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-xs text-ink-muted">
             <span>Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
             <span>Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
             <span>จัดทำเมื่อ: {fmtNow()}</span>
@@ -247,7 +247,7 @@ export default function ExecutivePrint() {
               <ul className="text-xs space-y-0.5">
                 {improvements.map(m => <li key={m.label}>• {m.label}: +{m.delta}%</li>)}
               </ul>
-            ) : <p className="text-xs text-gray-500">ยังไม่มีการเปลี่ยนแปลงจาก baseline</p>}
+            ) : <p className="text-xs text-ink-muted">ยังไม่มีการเปลี่ยนแปลงจาก baseline</p>}
           </div>
           <div className="border border-gray-300 rounded-lg p-3">
             <p className="font-semibold text-sm text-danger-ink mb-1 inline-flex items-center gap-1.5">
@@ -257,7 +257,7 @@ export default function ExecutivePrint() {
             <ul className="text-xs space-y-0.5">
               {risks.map(m => <li key={m.label}>• {m.label}: {m.delta}%</li>)}
               {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {m.current}%</li>)}
-              {risks.length === 0 && lowCoverage.length === 0 && <li className="text-gray-500">ไม่พบจุดเสี่ยงจากข้อมูลปัจจุบัน</li>}
+              {risks.length === 0 && lowCoverage.length === 0 && <li className="text-ink-muted">ไม่พบจุดเสี่ยงจากข้อมูลปัจจุบัน</li>}
             </ul>
           </div>
         </div>
@@ -275,12 +275,12 @@ export default function ExecutivePrint() {
         </div>
 
         {/* Footer */}
-        <div className="border-t-2 border-gray-300 pt-3 mt-4 text-xs text-gray-400">
+        <div className="border-t-2 border-gray-300 pt-3 mt-4 text-xs text-ink-muted">
           <p><strong>หมายเหตุ:</strong> รายงานนี้สรุปจาก snapshot, logs และ export evidence ในระบบ — บางตัวชี้วัดยังต้องใช้หลักฐานภายนอก (แบบสอบถาม, สัมภาษณ์, บันทึกประชุม) ร่วมด้วยจึงจะประเมินได้ครบถ้วน</p>
           <div className="flex justify-between mt-4">
             <div>
-              <p className="text-gray-500">ผู้จัดทำ: .......................................</p>
-              <p className="text-gray-500 mt-3">ผู้ตรวจสอบ: .......................................</p>
+              <p className="text-ink-muted">ผู้จัดทำ: .......................................</p>
+              <p className="text-ink-muted mt-3">ผู้ตรวจสอบ: .......................................</p>
             </div>
             <div className="text-right">
               <p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง</p>
@@ -308,7 +308,7 @@ function KpiCell({ label, value }) {
   return (
     <div className="border border-gray-300 rounded p-2 text-center">
       <p className="text-lg font-semibold text-gray-800">{value}</p>
-      <p className="text-[10px] text-gray-500">{label}</p>
+      <p className="text-[10px] text-ink-muted">{label}</p>
     </div>
   );
 }

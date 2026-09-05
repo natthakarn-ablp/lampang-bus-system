@@ -21,7 +21,7 @@ function TeacherDeniedCard() {
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       <AppCard padding="lg">
         <div className="flex items-start gap-3">
-          <ShieldAlert className="w-6 h-6 text-warn shrink-0" strokeWidth={2} />
+          <ShieldAlert className="w-6 h-6 text-warn-ink shrink-0" strokeWidth={2} />
           <div>
             <h1 className="text-lg font-semibold text-ink mb-1">ไม่สามารถเข้าถึงหน้านี้ได้</h1>
             <p className="text-sm text-ink-muted">
@@ -300,7 +300,7 @@ export default function SchoolBulkVehicles() {
               <fieldset>
                 <legend className="block text-sm font-medium text-ink mb-1">
                   ทะเบียนรถ
-                  <span className="text-danger ml-0.5" aria-hidden="true">*</span>
+                  <span className="text-danger-ink ml-0.5" aria-hidden="true">*</span>
                   <span className="sr-only"> (จำเป็น)</span>
                 </legend>
                 <div className="grid grid-cols-3 gap-2">
@@ -334,8 +334,8 @@ export default function SchoolBulkVehicles() {
                 </div>
               </fieldset>
               {plate
-                ? <p className="mt-1 text-xs text-gray-500">ทะเบียนที่จะบันทึก: <span className="font-medium text-gray-700">{plate}</span> · ชื่อเข้าระบบ: <span className="font-mono text-gray-600">{normalizedLoginPlate(plate)}</span></p>
-                : <p className="mt-1 text-xs text-gray-400">กรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน</p>}
+                ? <p className="mt-1 text-xs text-ink-muted">ทะเบียนที่จะบันทึก: <span className="font-medium text-gray-700">{plate}</span> · ชื่อเข้าระบบ: <span className="font-mono text-gray-600">{normalizedLoginPlate(plate)}</span></p>
+                : <p className="mt-1 text-xs text-ink-muted">กรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน</p>}
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                 <FormField label="ประเภทรถ">
@@ -395,7 +395,7 @@ export default function SchoolBulkVehicles() {
                   <div className="mt-0.5 font-medium">มีอยู่แล้ว: {warnings[i].candidates.map((c) => c.plate_no).join(', ')}</div>
                 </div>
               ) : warnings[i]?.status === 'CLEAR' && plate && !rowErrors[i] ? (
-                <div className="mt-2 text-xs text-green-600">ยังไม่พบทะเบียนนี้ในระบบ</div>
+                <div className="mt-2 text-xs text-success-ink">ยังไม่พบทะเบียนนี้ในระบบ</div>
               ) : null}
               {rowErrors[i] && !restoreInfo && (
                 <div className="mt-2 text-xs bg-red-50 border border-red-300 text-red-700 rounded-lg px-3 py-2">{rowErrors[i]}</div>

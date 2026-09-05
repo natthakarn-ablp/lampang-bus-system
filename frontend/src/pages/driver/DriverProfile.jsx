@@ -237,7 +237,7 @@ export default function DriverProfile() {
           {uploading ? 'กำลังอัปโหลด…' : 'เปลี่ยนรูป'}
           <input type="file" accept=".jpg,.jpeg,.png,.webp" onChange={handlePhotoUpload} className="hidden" disabled={uploading} />
         </label>
-        <p className="text-xs text-gray-400">JPG, PNG, WebP ไม่เกิน 2 MB</p>
+        <p className="text-xs text-ink-muted">JPG, PNG, WebP ไม่เกิน 2 MB</p>
       </div>
 
       {/* Info display (read-only mode) */}
@@ -246,12 +246,12 @@ export default function DriverProfile() {
           {infoSections.map(section => (
             <div key={section.title} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-2.5 bg-gray-50 border-b border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{section.title}</p>
+                <p className="text-xs font-semibold text-ink-muted uppercase tracking-wide">{section.title}</p>
               </div>
               <div className="divide-y divide-gray-100">
                 {section.rows.map(({ label, value, highlight }) => (
                   <div key={label} className="flex justify-between px-5 py-3 text-sm">
-                    <span className="text-gray-500">{label}</span>
+                    <span className="text-ink-muted">{label}</span>
                     <span className={`font-medium ${highlight ? 'text-blue-700' : 'text-gray-800'}`}>{value || '-'}</span>
                   </div>
                 ))}
@@ -270,11 +270,11 @@ export default function DriverProfile() {
       {editing && (
         <div className="bg-surface-raised rounded-xl border border-surface-border p-5 space-y-5">
           <h2 className="text-sm font-semibold text-ink">แก้ไขข้อมูลทั้งหมด</h2>
-          <p className="text-xs text-gray-400">ทะเบียนรถไม่สามารถแก้ไขได้จากหน้านี้</p>
+          <p className="text-xs text-ink-muted">ทะเบียนรถไม่สามารถแก้ไขได้จากหน้านี้</p>
 
           {/* Driver */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ข้อมูลคนขับ</legend>
+            <legend className="text-xs font-semibold text-ink-muted uppercase tracking-wide">ข้อมูลคนขับ</legend>
             <div className="grid grid-cols-2 gap-3">
               <FormField label="ชื่อคนขับ" value={form.name} required
                 onChange={(v) => setForm({ ...form, name: v })} />
@@ -285,7 +285,7 @@ export default function DriverProfile() {
 
           {/* Vehicle */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ข้อมูลรถ</legend>
+            <legend className="text-xs font-semibold text-ink-muted uppercase tracking-wide">ข้อมูลรถ</legend>
             <div>
               <label className="block text-sm text-gray-600 mb-1">ประเภทรถ</label>
               <select
@@ -318,7 +318,7 @@ export default function DriverProfile() {
 
           {/* Attendant */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ผู้ดูแลรถ</legend>
+            <legend className="text-xs font-semibold text-ink-muted uppercase tracking-wide">ผู้ดูแลรถ</legend>
             <div className="grid grid-cols-2 gap-3">
               <FormField label="ชื่อผู้ดูแลรถ" value={form.attendant_name}
                 onChange={(v) => setForm({ ...form, attendant_name: v })} />
@@ -329,7 +329,7 @@ export default function DriverProfile() {
 
           {/* Owner */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ผู้ครอบครองรถ</legend>
+            <legend className="text-xs font-semibold text-ink-muted uppercase tracking-wide">ผู้ครอบครองรถ</legend>
             <div className="grid grid-cols-2 gap-3">
               <FormField label="ชื่อผู้ครอบครอง" value={form.owner_name}
                 onChange={(v) => setForm({ ...form, owner_name: v })} />
@@ -340,7 +340,7 @@ export default function DriverProfile() {
 
           {/* Insurance */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ประกันภัย</legend>
+            <legend className="text-xs font-semibold text-ink-muted uppercase tracking-wide">ประกันภัย</legend>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm text-gray-600 mb-1">สถานะประกันภัย</label>
@@ -392,7 +392,7 @@ export default function DriverProfile() {
             <FormField label="ยืนยันรหัสผ่านใหม่" value={pwdForm.confirm_password} type="password" required minLength={4}
               onChange={(v) => setPwdForm({ ...pwdForm, confirm_password: v })} />
             {pwdForm.confirm_password && pwdForm.new_password !== pwdForm.confirm_password && (
-              <p className="text-xs text-red-500 mt-1">รหัสผ่านใหม่ไม่ตรงกัน</p>
+              <p className="text-xs text-danger-ink mt-1">รหัสผ่านใหม่ไม่ตรงกัน</p>
             )}
           </div>
           <div className="flex gap-3">
@@ -417,7 +417,7 @@ export default function DriverProfile() {
 function FormField({ label, value, onChange, type = 'text', required, minLength, maxLength }) {
   return (
     <div>
-      <label className="block text-sm text-gray-600 mb-1">{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>
+      <label className="block text-sm text-gray-600 mb-1">{label}{required && <span className="text-danger-ink ml-0.5">*</span>}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
         required={required} minLength={minLength} maxLength={maxLength}
         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />

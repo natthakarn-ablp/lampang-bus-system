@@ -197,7 +197,7 @@ export default function PlateSearchInput({
                 className={`px-3 py-2 text-sm cursor-pointer ${isHighlighted ? 'bg-blue-50' : ''}`}
               >
                 <p className="font-medium text-gray-800 truncate">{v.plate_no}</p>
-                {meta && <p className="text-xs text-gray-500 truncate">{meta}</p>}
+                {meta && <p className="text-xs text-ink-muted truncate">{meta}</p>}
               </li>
             );
           })}

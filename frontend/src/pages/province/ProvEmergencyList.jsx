@@ -64,7 +64,7 @@ export default function ProvEmergencyList() {
                       {em.channel === 'line' ? 'LINE' : 'เว็บ'}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-ink-muted">
                     {new Date(em.reported_at).toLocaleString('th-TH', {
                       year: 'numeric', month: 'short', day: 'numeric',
                       hour: '2-digit', minute: '2-digit',
@@ -73,13 +73,13 @@ export default function ProvEmergencyList() {
                 </div>
                 <p className="text-sm text-gray-700 mb-2">{em.detail}</p>
                 {em.note && (
-                  <p className="text-xs text-gray-500"><span className="font-medium">หมายเหตุ:</span> {em.note}</p>
+                  <p className="text-xs text-ink-muted"><span className="font-medium">หมายเหตุ:</span> {em.note}</p>
                 )}
                 {em.result && (
-                  <p className="text-xs text-gray-500 mt-1"><span className="font-medium">ผลลัพธ์:</span> {em.result}</p>
+                  <p className="text-xs text-ink-muted mt-1"><span className="font-medium">ผลลัพธ์:</span> {em.result}</p>
                 )}
                 {em.reported_by_name && (
-                  <p className="text-xs text-gray-400 mt-2">รายงานโดย: {em.reported_by_name}</p>
+                  <p className="text-xs text-ink-muted mt-2">รายงานโดย: {em.reported_by_name}</p>
                 )}
               </div>
             ))}

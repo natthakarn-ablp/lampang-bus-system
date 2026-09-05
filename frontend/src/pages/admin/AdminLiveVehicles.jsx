@@ -352,11 +352,11 @@ function VehicleRow({ vehicle, selected, onClick }) {
         {/* Last-seen — admin gets BOTH absolute (for support) + relative */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted tabular-nums">
           <span>{formatRelativeTime(vehicle.seconds_since_seen)}</span>
-          <span className="text-ink-muted/70">·</span>
+          <span className="text-ink-muted">·</span>
           <span className="font-mono">{formatAbsoluteThaiDateTime(vehicle.received_at)}</span>
           {vehicle.accuracy_meters != null && (
             <>
-              <span className="text-ink-muted/70">·</span>
+              <span className="text-ink-muted">·</span>
               <span>±{vehicle.accuracy_meters} ม.</span>
             </>
           )}

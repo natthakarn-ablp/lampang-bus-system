@@ -96,18 +96,18 @@ export default function ProvDailyStatus() {
                   className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition">
                   <div>
                     <h3 className="font-semibold text-gray-800">{aff.affiliation_name}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-ink-muted mt-0.5">
                       {aff.schools.length} โรงเรียน · {allStudents.length} คน
                     </p>
                   </div>
                   <div className="flex items-center gap-4 text-sm">
-                    <span className={mDone === mTotal && mTotal > 0 ? 'text-green-600' : 'text-orange-600'}>
+                    <span className={mDone === mTotal && mTotal > 0 ? 'text-success-ink' : 'text-orange-600'}>
                       เช้า {mDone}/{mTotal}
                     </span>
-                    <span className={eDone === eTotal && eTotal > 0 ? 'text-green-600' : 'text-indigo-600'}>
+                    <span className={eDone === eTotal && eTotal > 0 ? 'text-success-ink' : 'text-indigo-600'}>
                       เย็น {eDone}/{eTotal}
                     </span>
-                    <span className="text-gray-400 text-xs">{isAffExpanded ? '▲' : '▼'}</span>
+                    <span className="text-ink-muted text-xs">{isAffExpanded ? '▲' : '▼'}</span>
                   </div>
                 </button>
 
@@ -126,16 +126,16 @@ export default function ProvDailyStatus() {
                             <div className="flex items-center gap-2">
                               <Building2 className="w-4 h-4 text-ink-muted shrink-0" strokeWidth={2} aria-hidden="true" />
                               <span className="text-sm font-medium text-gray-700">{school.school_name}</span>
-                              <span className="text-xs text-gray-400">({sStudents.length} คน)</span>
+                              <span className="text-xs text-ink-muted">({sStudents.length} คน)</span>
                             </div>
                             <div className="flex items-center gap-3 text-xs">
-                              <span className={ss.mDone === ss.mTotal && ss.mTotal > 0 ? 'text-green-600' : 'text-orange-500'}>
+                              <span className={ss.mDone === ss.mTotal && ss.mTotal > 0 ? 'text-success-ink' : 'text-orange-500'}>
                                 เช้า {ss.mDone}/{ss.mTotal}
                               </span>
-                              <span className={ss.eDone === ss.eTotal && ss.eTotal > 0 ? 'text-green-600' : 'text-indigo-500'}>
+                              <span className={ss.eDone === ss.eTotal && ss.eTotal > 0 ? 'text-success-ink' : 'text-indigo-500'}>
                                 เย็น {ss.eDone}/{ss.eTotal}
                               </span>
-                              <span className="text-gray-400">{isSchoolExpanded ? '▲' : '▼'}</span>
+                              <span className="text-ink-muted">{isSchoolExpanded ? '▲' : '▼'}</span>
                             </div>
                           </button>
 
@@ -153,16 +153,16 @@ export default function ProvDailyStatus() {
                                       <div className="flex items-center gap-2">
                                         <Bus className="w-4 h-4 text-ink-muted shrink-0" strokeWidth={2} aria-hidden="true" />
                                         <span className="text-sm text-gray-600">{vehicle.plate_no}</span>
-                                        <span className="text-xs text-gray-400">({vehicle.students.length})</span>
+                                        <span className="text-xs text-ink-muted">({vehicle.students.length})</span>
                                       </div>
                                       <div className="flex items-center gap-3 text-xs">
-                                        <span className={vs.mDone === vs.mTotal && vs.mTotal > 0 ? 'text-green-600' : 'text-orange-500'}>
+                                        <span className={vs.mDone === vs.mTotal && vs.mTotal > 0 ? 'text-success-ink' : 'text-orange-500'}>
                                           {vs.mDone}/{vs.mTotal}
                                         </span>
-                                        <span className={vs.eDone === vs.eTotal && vs.eTotal > 0 ? 'text-green-600' : 'text-indigo-500'}>
+                                        <span className={vs.eDone === vs.eTotal && vs.eTotal > 0 ? 'text-success-ink' : 'text-indigo-500'}>
                                           {vs.eDone}/{vs.eTotal}
                                         </span>
-                                        <span className="text-gray-400">{isVehicleExpanded ? '▲' : '▼'}</span>
+                                        <span className="text-ink-muted">{isVehicleExpanded ? '▲' : '▼'}</span>
                                       </div>
                                     </button>
 

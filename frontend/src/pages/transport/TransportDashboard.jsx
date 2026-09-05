@@ -405,9 +405,9 @@ export default function TransportDashboard() {
             ]}
           />
           <div className="flex flex-wrap justify-center gap-3 mt-3 text-sm">
-            <span className="text-success font-medium">● ผ่าน {data.passed}</span>
-            <span className="text-warn">● แก้ไข {data.needs_fix}</span>
-            <span className="text-danger">● ไม่ผ่าน {data.failed}</span>
+            <span className="text-success-ink font-medium">● ผ่าน {data.passed}</span>
+            <span className="text-warn-ink">● แก้ไข {data.needs_fix}</span>
+            <span className="text-danger-ink">● ไม่ผ่าน {data.failed}</span>
             <span className="text-ink-muted">● ยังไม่ตรวจ {data.not_inspected}</span>
           </div>
         </AppCard>

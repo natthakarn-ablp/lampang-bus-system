@@ -84,7 +84,7 @@ export function PageLoading({ label = 'กำลังโหลด…' }) {
     <div className="flex items-center justify-center py-20">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 rounded-full border-4 border-blue-100 border-t-blue-600 animate-spin" />
-        <p className="text-sm text-gray-500">{label}</p>
+        <p className="text-sm text-ink-muted">{label}</p>
       </div>
     </div>
   );
@@ -93,7 +93,7 @@ export function PageLoading({ label = 'กำลังโหลด…' }) {
 /** Inline centered spinner (smaller, for within-card loading) */
 export function InlineLoading({ label = 'กำลังโหลด…' }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-6 text-gray-500 text-sm">
+    <div className="flex items-center justify-center gap-2 py-6 text-ink-muted text-sm">
       <span className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-blue-600 animate-spin" />
       <span>{label}</span>
     </div>

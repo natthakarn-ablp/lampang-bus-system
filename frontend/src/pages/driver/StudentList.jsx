@@ -96,7 +96,7 @@ export default function StudentList() {
   const allDone  = !loading && students.length > 0 && pending.length === 0;
 
   if (!session) {
-    return <div className="p-6 text-center text-lg text-gray-400">กำลังตรวจสอบโหมด…</div>;
+    return <div className="p-6 text-center text-lg text-ink-muted">กำลังตรวจสอบโหมด…</div>;
   }
 
   return (
@@ -125,7 +125,7 @@ export default function StudentList() {
           <button
             onClick={handleBulkAction}
             disabled={bulkLoading || pending.length === 0}
-            className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 disabled:opacity-50 text-white text-lg font-semibold px-5 py-4 rounded-xl transition"
+            className="w-full bg-green-700 hover:bg-green-800 active:bg-green-900 disabled:opacity-50 text-white text-lg font-semibold px-5 py-4 rounded-xl transition"
           >
             {bulkLoading
               ? 'กำลังดำเนินการ…'
@@ -163,7 +163,7 @@ export default function StudentList() {
       {/* Done students */}
       {!loading && done.length > 0 && (
         <section className="mb-6">
-          <h2 className="text-base font-semibold text-green-600 mb-3">
+          <h2 className="text-base font-semibold text-success-ink mb-3">
             เสร็จแล้ว ({done.length})
           </h2>
           <div className="space-y-2">
@@ -175,7 +175,7 @@ export default function StudentList() {
       )}
 
       {!loading && students.length === 0 && (
-        <p className="text-center text-gray-400 py-10 text-lg">ไม่มีนักเรียนในรถ</p>
+        <p className="text-center text-ink-muted py-10 text-lg">ไม่มีนักเรียนในรถ</p>
       )}
 
       <p className="text-center text-xs text-gray-300 mt-8">

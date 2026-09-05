@@ -149,7 +149,7 @@ export default function ExecutiveSummary() {
                 <span className="font-semibold text-gray-800 text-sm">{r.name}</span>
               </div>
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.status.cls}`}>{r.status.label}</span>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-ink-muted mt-1">
                 หลักฐานครบ {r.coverage ? `${r.coverage.system_evidence}/${r.coverage.metric_total}` : '-'} ตัวชี้วัด ·
                 {' '}{r.actions.total} actions (ปริมาณการใช้งาน) · {r.exports} exports
               </p>
@@ -172,7 +172,7 @@ export default function ExecutiveSummary() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-green-600">ยังไม่มีการเปลี่ยนแปลงจาก baseline (อาจเพิ่งเริ่มเก็บข้อมูล)</p>
+            <p className="text-sm text-success-ink">ยังไม่มีการเปลี่ยนแปลงจาก baseline (อาจเพิ่งเริ่มเก็บข้อมูล)</p>
           )}
         </div>
 
@@ -193,7 +193,7 @@ export default function ExecutiveSummary() {
               </li>
             ))}
             {risks.length === 0 && lowCoverage.length === 0 && (
-              <li className="text-sm text-gray-500">ไม่พบ metric ที่ลดลงหรือต่ำกว่า 50%</li>
+              <li className="text-sm text-ink-muted">ไม่พบ metric ที่ลดลงหรือต่ำกว่า 50%</li>
             )}
           </ul>
         </div>
@@ -224,7 +224,7 @@ export default function ExecutiveSummary() {
       </div>
 
       {/* Evidence honesty note */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-500">
+      <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-ink-muted">
         <p><strong>หมายเหตุ:</strong> การประเมินนี้ใช้ข้อมูลจากระบบ (snapshot, audit logs, export evidence) เป็นหลัก — บาง metric ของบาง role ต้องใช้หลักฐานภายนอก (แบบสอบถาม, สัมภาษณ์, บันทึกประชุม) ร่วมด้วย จึงจะประเมินได้ครบถ้วน</p>
       </div>
     </div>

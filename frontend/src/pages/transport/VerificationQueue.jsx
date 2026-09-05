@@ -36,8 +36,8 @@ const STATUS = {
 };
 
 const RESULT_STYLE = {
-  PASS: 'bg-success text-white border-success',
-  FAIL: 'bg-danger text-white border-danger',
+  PASS: 'bg-success-ink text-white border-success',
+  FAIL: 'bg-danger-ink text-white border-danger',
   NOT_APPLICABLE: 'bg-ink text-white border-ink',
 };
 
@@ -257,7 +257,7 @@ function InspectionChecklistPanel({
           <button
             type="button"
             onClick={passAll}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-success-ink px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
           >
             <CheckCheck className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
             ผ่านทั้งหมด
@@ -394,7 +394,7 @@ function InspectionChecklistPanel({
               ยืนยันผลตรวจ
             </button>
             {disabledReason && (
-              <span className="inline-flex items-center gap-1.5 text-sm text-danger">
+              <span className="inline-flex items-center gap-1.5 text-sm text-danger-ink">
                 <AlertTriangle className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
                 {disabledReason}
               </span>

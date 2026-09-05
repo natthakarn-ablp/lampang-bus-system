@@ -80,16 +80,16 @@ export default function SummaryReport() {
       <div className="flex flex-col gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-800">สรุปภาพรวม</h1>
-          <p className="text-sm text-gray-500 mt-0.5">ภาพรวมผลการดำเนินงานรถรับส่งนักเรียน</p>
+          <p className="text-sm text-ink-muted mt-0.5">ภาพรวมผลการดำเนินงานรถรับส่งนักเรียน</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           {data?.date && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-ink-muted">
               ข้อมูล ณ {new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
           )}
           <button onClick={() => window.location.reload()}
-            className="focus-ring-inverse text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
+            className="focus-ring text-sm text-ink px-3 min-h-[44px] border border-surface-border rounded-lg bg-surface-raised hover:bg-surface active:bg-surface-border transition">
             รีเฟรชข้อมูล
           </button>
           {data && (
@@ -291,7 +291,7 @@ export default function SummaryReport() {
           )}
 
           {/* ── SECTION 9 — หมายเหตุ KPI ──────────────────── */}
-          <details className="mt-6 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-500">
+          <details className="mt-6 bg-gray-50 border border-gray-200 rounded-xl text-xs text-ink-muted">
             <summary className="px-4 py-3 cursor-pointer font-semibold text-gray-600 hover:text-gray-800 select-none">
               หมายเหตุ KPI
             </summary>

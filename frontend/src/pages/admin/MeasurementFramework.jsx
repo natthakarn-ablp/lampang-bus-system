@@ -53,7 +53,7 @@ export default function MeasurementFramework() {
         <h3 className="text-sm font-semibold text-gray-700 mb-3">คำอธิบายสัญลักษณ์</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">แหล่งข้อมูล (Source Tags)</p>
+            <p className="text-xs font-semibold text-ink-muted mb-1.5">แหล่งข้อมูล (Source Tags)</p>
             <div className="flex flex-wrap gap-1.5">
               {Object.values(SOURCE_TAGS).map(s => (
                 <span key={s.label} className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.cls}`} title={s.full}>
@@ -63,7 +63,7 @@ export default function MeasurementFramework() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">ความพร้อมในการวัด (Readiness)</p>
+            <p className="text-xs font-semibold text-ink-muted mb-1.5">ความพร้อมในการวัด (Readiness)</p>
             <div className="flex flex-wrap gap-1.5">
               {Object.values(READINESS).map(r => (
                 <span key={r.label} className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.cls}`}>{r.label}</span>
@@ -91,7 +91,7 @@ function RoleAccordion({ role, isOpen, onToggle }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-800">{role.name}</p>
-          <p className="text-xs text-gray-500">{role.subtitle}</p>
+          <p className="text-xs text-ink-muted">{role.subtitle}</p>
         </div>
         <ChevronDown
           className={`w-5 h-5 text-ink-muted shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -170,10 +170,10 @@ function MetricCard({ metric, index }) {
       <div className="flex items-start justify-between gap-2 mb-1">
         <div>
           <p className="text-sm font-semibold text-gray-800">
-            <span className="text-gray-400 mr-1">{index}.</span>
+            <span className="text-ink-muted mr-1">{index}.</span>
             {metric.title}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">{metric.desc}</p>
+          <p className="text-xs text-ink-muted mt-0.5">{metric.desc}</p>
         </div>
         <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${r.cls}`}>{r.label}</span>
       </div>
@@ -198,7 +198,7 @@ function MetricCard({ metric, index }) {
           ) : null;
         })}
         {metric.forms?.length > 0 && metric.forms.map(f => (
-          <span key={f} className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{f}</span>
+          <span key={f} className="text-xs text-ink-muted bg-gray-100 px-1.5 py-0.5 rounded">{f}</span>
         ))}
       </div>
     </div>

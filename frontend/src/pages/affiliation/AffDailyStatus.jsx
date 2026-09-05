@@ -132,15 +132,15 @@ export default function AffDailyStatus() {
                 >
                   <div>
                     <h3 className="font-semibold text-gray-800">{school.school_name}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className="text-xs text-ink-muted mt-0.5">
                       {allStudents.length} คน · {school.vehicles.length} คัน
                     </p>
                   </div>
                   <div className="flex items-center gap-4 text-sm">
-                    <span className={morningDone === morningTotal && morningTotal > 0 ? 'text-green-600' : 'text-orange-600'}>
+                    <span className={morningDone === morningTotal && morningTotal > 0 ? 'text-success-ink' : 'text-orange-600'}>
                       เช้า {morningDone}/{morningTotal}
                     </span>
-                    <span className={eveningDone === eveningTotal && eveningTotal > 0 ? 'text-green-600' : 'text-indigo-600'}>
+                    <span className={eveningDone === eveningTotal && eveningTotal > 0 ? 'text-success-ink' : 'text-indigo-600'}>
                       เย็น {eveningDone}/{eveningTotal}
                     </span>
                     <ChevronDown
@@ -171,13 +171,13 @@ export default function AffDailyStatus() {
                             <div className="flex items-center gap-2">
                               <Bus className="w-4 h-4 text-ink-muted shrink-0" strokeWidth={2} aria-hidden="true" />
                               <span className="text-sm font-medium text-gray-700">{vehicle.plate_no}</span>
-                              <span className="text-xs text-gray-400">({vehicle.students.length} คน)</span>
+                              <span className="text-xs text-ink-muted">({vehicle.students.length} คน)</span>
                             </div>
                             <div className="flex items-center gap-3 text-xs">
-                              <span className={vMorningDone === vMorningTotal && vMorningTotal > 0 ? 'text-green-600' : 'text-orange-500'}>
+                              <span className={vMorningDone === vMorningTotal && vMorningTotal > 0 ? 'text-success-ink' : 'text-orange-500'}>
                                 เช้า {vMorningDone}/{vMorningTotal}
                               </span>
-                              <span className={vEveningDone === vEveningTotal && vEveningTotal > 0 ? 'text-green-600' : 'text-indigo-500'}>
+                              <span className={vEveningDone === vEveningTotal && vEveningTotal > 0 ? 'text-success-ink' : 'text-indigo-500'}>
                                 เย็น {vEveningDone}/{vEveningTotal}
                               </span>
                               <ChevronDown

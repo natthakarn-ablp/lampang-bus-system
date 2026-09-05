@@ -363,11 +363,11 @@ export default function StudentSearch() {
                 </div>
                 <div className="flex gap-2">
                   <button onClick={handleImport} disabled={importing || !importFile}
-                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium py-3 rounded-lg transition">
+                    className="flex-1 bg-green-700 hover:bg-green-800 disabled:opacity-40 text-white text-sm font-medium py-3 rounded-lg transition">
                     {importing ? 'กำลังนำเข้า…' : 'นำเข้าข้อมูล'}
                   </button>
                   <button onClick={() => setShowImport(false)}
-                    className="px-4 text-gray-500 hover:text-gray-700 text-sm py-3 transition">ยกเลิก</button>
+                    className="px-4 text-ink-muted hover:text-gray-700 text-sm py-3 transition">ยกเลิก</button>
                 </div>
                 <button onClick={handleDownloadTemplate}
                   className="w-full text-sm text-blue-600 hover:text-blue-800 py-1">
@@ -503,7 +503,7 @@ export default function StudentSearch() {
               </button>
               {selectedVehicle !== (editStudent.vehicle_id || '') && (
                 <button onClick={handleSaveVehicle} disabled={saving}
-                  className="focus-ring w-full bg-success hover:bg-success/90 disabled:opacity-40 disabled:pointer-events-none text-white font-medium min-h-[48px] rounded-lg transition">
+                  className="focus-ring w-full bg-success-ink hover:bg-success-ink/90 disabled:opacity-40 disabled:pointer-events-none text-white font-medium min-h-[48px] rounded-lg transition">
                   {saving ? 'กำลังบันทึก…' : selectedVehicle ? (editStudent.vehicle_id ? 'เปลี่ยนรถ' : 'เพิ่มเข้ารถ') : 'ลบออกจากรถ'}
                 </button>
               )}

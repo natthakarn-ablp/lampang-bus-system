@@ -264,9 +264,9 @@ export default function SchoolOverrideModal({ vehicles = [], onClose, onSaved })
                   are in view while ticking, not only at submit time. */}
               <div className="rounded-lg border border-surface-border bg-surface-2 px-3 py-2.5">
                 <p className="text-sm text-ink">
-                  จะยืนยันว่า<strong className="text-success"> ขึ้นรถ {confirmCount} คน</strong>
+                  จะยืนยันว่า<strong className="text-success-ink"> ขึ้นรถ {confirmCount} คน</strong>
                   {' · '}
-                  <strong className="text-warn">ไม่ยืนยัน {absentEligibleCount} คน</strong>
+                  <strong className="text-warn-ink">ไม่ยืนยัน {absentEligibleCount} คน</strong>
                 </p>
                 <p className="text-xs text-ink-muted mt-1">
                   ติ๊กเฉพาะคนที่<strong>ไม่ได้ขึ้นรถ</strong> — ที่ไม่ติ๊กถือว่ามาตามปกติ
@@ -362,7 +362,7 @@ export default function SchoolOverrideModal({ vehicles = [], onClose, onSaved })
                     {selectedStudent.plate_no ? ` · ${selectedStudent.plate_no}` : ''}
                   </p>
                   {ineligibleReason(selectedStudent) && (
-                    <p className="text-xs text-warn mt-1">
+                    <p className="text-xs text-warn-ink mt-1">
                       หมายเหตุ: {ineligibleReason(selectedStudent)} — ระบบจะตรวจสอบและอาจปฏิเสธคำขอ
                     </p>
                   )}
@@ -425,8 +425,8 @@ export default function SchoolOverrideModal({ vehicles = [], onClose, onSaved })
           {/* Reason */}
           <label className="block">
             <span className="block text-xs font-medium text-ink-muted mb-1">
-              เหตุผล <span className="text-danger">*</span>
-              <span className="ml-2 text-ink-muted/70 tabular-nums">{reasonTrimmed.length}/500</span>
+              เหตุผล <span className="text-danger-ink">*</span>
+              <span className="ml-2 text-ink-muted tabular-nums">{reasonTrimmed.length}/500</span>
             </span>
             <textarea
               value={reason}

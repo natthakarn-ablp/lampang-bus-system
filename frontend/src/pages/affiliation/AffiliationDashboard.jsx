@@ -201,13 +201,13 @@ export default function AffiliationDashboard() {
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted">มีข้อมูลเช็กชื่อใน 14 วัน</span>
-                  <span className={`text-base font-semibold tabular-nums ${(data.school_used_recently ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
+                  <span className={`text-base font-semibold tabular-nums ${(data.school_used_recently ?? 0) > 0 ? 'text-success-ink' : 'text-ink-muted'}`}>
                     {data.school_used_recently ?? 0}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted">ยังไม่มีข้อมูลเช็กชื่อ</span>
-                  <span className={`text-base font-semibold tabular-nums ${(data.school_not_using_recently ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
+                  <span className={`text-base font-semibold tabular-nums ${(data.school_not_using_recently ?? 0) > 0 ? 'text-warn-ink' : 'text-ink-muted'}`}>
                     {data.school_not_using_recently ?? 0}
                   </span>
                 </div>
@@ -223,13 +223,13 @@ export default function AffiliationDashboard() {
               <div className="space-y-1.5">
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted">มีข้อมูลรถแล้ว</span>
-                  <span className={`text-base font-semibold tabular-nums ${(data.schools_with_vehicle_data ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
+                  <span className={`text-base font-semibold tabular-nums ${(data.schools_with_vehicle_data ?? 0) > 0 ? 'text-success-ink' : 'text-ink-muted'}`}>
                     {data.schools_with_vehicle_data ?? 0}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted">ข้อมูลไม่ครบ</span>
-                  <span className={`text-2xl font-bold tabular-nums ${(data.schools_missing_vehicle_data ?? 0) > 0 ? 'text-warn' : 'text-success'}`}>
+                  <span className={`text-2xl font-bold tabular-nums ${(data.schools_missing_vehicle_data ?? 0) > 0 ? 'text-warn-ink' : 'text-success-ink'}`}>
                     {data.schools_missing_vehicle_data ?? 0}
                   </span>
                 </div>
@@ -246,7 +246,7 @@ export default function AffiliationDashboard() {
               <div className="space-y-1.5">
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted inline-flex items-center gap-1">
-                    <Sunrise className="w-3.5 h-3.5 text-warn" strokeWidth={2} /> ส่งเช้า
+                    <Sunrise className="w-3.5 h-3.5 text-warn-ink" strokeWidth={2} /> ส่งเช้า
                   </span>
                   <span className="text-base font-semibold text-ink tabular-nums">
                     {data.morning_done ?? 0}
@@ -255,7 +255,7 @@ export default function AffiliationDashboard() {
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted inline-flex items-center gap-1">
-                    <Sunset className="w-3.5 h-3.5 text-info" strokeWidth={2} /> รับเย็น
+                    <Sunset className="w-3.5 h-3.5 text-info-ink" strokeWidth={2} /> รับเย็น
                   </span>
                   <span className="text-base font-semibold text-ink tabular-nums">
                     {data.evening_done ?? 0}
@@ -276,14 +276,14 @@ export default function AffiliationDashboard() {
             >
               <div className="flex items-start gap-2 mb-2">
                 <AlertTriangle
-                  className={`w-5 h-5 shrink-0 ${(data.at_risk_schools ?? 0) > 0 ? 'text-warn' : 'text-success'}`}
+                  className={`w-5 h-5 shrink-0 ${(data.at_risk_schools ?? 0) > 0 ? 'text-warn-ink' : 'text-success-ink'}`}
                   strokeWidth={2}
                 />
                 <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนเสี่ยงวันนี้</p>
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-xs text-ink-muted">โรงเรียนที่ต้องติดตาม</span>
-                <span className={`text-2xl font-bold tabular-nums ${(data.at_risk_schools ?? 0) > 0 ? 'text-warn' : 'text-success'}`}>
+                <span className={`text-2xl font-bold tabular-nums ${(data.at_risk_schools ?? 0) > 0 ? 'text-warn-ink' : 'text-success-ink'}`}>
                   {data.at_risk_schools ?? problemSchools.length}
                 </span>
               </div>
@@ -299,7 +299,7 @@ export default function AffiliationDashboard() {
             <AppCard padding="md">
               <div className="flex items-start gap-2 mb-2">
                 <BellRing
-                  className={`w-5 h-5 shrink-0 ${((data.emergency_7d ?? data.recent_emergencies ?? 0) > 0) ? 'text-danger' : 'text-brand'}`}
+                  className={`w-5 h-5 shrink-0 ${((data.emergency_7d ?? data.recent_emergencies ?? 0) > 0) ? 'text-danger-ink' : 'text-brand'}`}
                   strokeWidth={2}
                 />
                 <p className="text-sm font-semibold text-ink leading-tight">เหตุแจ้งเตือน</p>
@@ -307,13 +307,13 @@ export default function AffiliationDashboard() {
               <div className="space-y-1.5">
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted">เหตุฉุกเฉิน 7 วัน</span>
-                  <span className={`text-2xl font-bold tabular-nums ${(data.emergency_7d ?? data.recent_emergencies ?? 0) > 0 ? 'text-danger' : 'text-ink-muted'}`}>
+                  <span className={`text-2xl font-bold tabular-nums ${(data.emergency_7d ?? data.recent_emergencies ?? 0) > 0 ? 'text-danger-ink' : 'text-ink-muted'}`}>
                     {data.emergency_7d ?? data.recent_emergencies ?? 0}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between">
                   <span className="text-xs text-ink-muted">นักเรียนลา</span>
-                  <span className={`text-base font-semibold tabular-nums ${(data.leave_today ?? data.leave_count ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
+                  <span className={`text-base font-semibold tabular-nums ${(data.leave_today ?? data.leave_count ?? 0) > 0 ? 'text-warn-ink' : 'text-ink-muted'}`}>
                     {data.leave_today ?? data.leave_count ?? 0}
                   </span>
                 </div>
@@ -424,7 +424,10 @@ function SchoolReadinessSection({ schools }) {
       title="สถานะโรงเรียนในสังกัด"
       description={`ครบ ${schools.length} โรงเรียน · มีข้อมูล ${withData} · เข้าระบบแล้วรอนำเข้า ${loggedInWaiting} · ยังไม่เข้าใช้ ${notStarted}`}
       action={(
-        <Link to="/affiliation/schools" className="text-sm font-medium text-brand hover:text-brand-700 focus-ring rounded">
+        // tap-target extends the hit box to 44px without changing the layout —
+        // the link itself renders 75x18, the one WCAG 2.5.8 failure capture.mjs
+        // still reported on this dashboard.
+        <Link to="/affiliation/schools" className="tap-target text-sm font-medium text-brand hover:text-brand-700 focus-ring rounded">
           ดูรายละเอียด
         </Link>
       )}
@@ -532,9 +535,9 @@ function SessionDonut({ title, done, total, pending, leave, segments, doneLabel 
           <span className="text-ink-muted">ยังไม่เริ่ม</span>
         ) : (
           <>
-            <span className="text-success font-medium">{doneLabel} {done}</span>
-            <span className="text-warn">ลา {leave}</span>
-            <span className="text-danger font-medium">รอ {pending}</span>
+            <span className="text-success-ink font-medium">{doneLabel} {done}</span>
+            <span className="text-warn-ink">ลา {leave}</span>
+            <span className="text-danger-ink font-medium">รอ {pending}</span>
           </>
         )}
       </div>
@@ -613,8 +616,8 @@ function SessionBar({ icon: Icon, label, done, total, pending, pct }) {
         {pending > 0 && <div className="bg-danger/80 h-full" style={{ width: `${100 - pct}%` }} />}
       </div>
       <div className="flex justify-between text-xs mt-0.5">
-        <span className="text-success font-medium">ส่งแล้ว {done}</span>
-        <span className="text-danger font-medium">รอ {pending}</span>
+        <span className="text-success-ink font-medium">ส่งแล้ว {done}</span>
+        <span className="text-danger-ink font-medium">รอ {pending}</span>
       </div>
     </div>
   );

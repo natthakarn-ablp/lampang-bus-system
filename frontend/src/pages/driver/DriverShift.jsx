@@ -91,7 +91,7 @@ function ActiveShiftCard({ active, busy, onEnd }) {
     <AppCard className="border-success/30 bg-success-soft motion-safe:animate-fade-in-up motion-reduce:animate-none">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-success">กำลังปฏิบัติงาน</p>
+          <p className="text-sm font-semibold text-success-ink">กำลังปฏิบัติงาน</p>
           <h2 className="mt-1 text-3xl font-bold leading-tight text-ink">{active.plate_no}</h2>
           <p className="mt-2 text-sm leading-6 text-ink-muted">
             รอบ {sessionLabel(active.session)} · เริ่ม {new Date(active.started_at).toLocaleString('th-TH')}
@@ -100,7 +100,7 @@ function ActiveShiftCard({ active, busy, onEnd }) {
             {roleLabel(active.assignment_role)}
           </StatusBadge>
         </div>
-        <CheckCircle2 className="h-12 w-12 shrink-0 text-success" strokeWidth={2.2} aria-hidden="true" />
+        <CheckCircle2 className="h-12 w-12 shrink-0 text-success-ink" strokeWidth={2.2} aria-hidden="true" />
       </div>
 
       <button

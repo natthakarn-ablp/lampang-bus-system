@@ -35,16 +35,16 @@ export default function PolicyReport() {
       <div className="flex flex-col gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-800">รายงานเชิงนโยบาย</h1>
-          <p className="text-sm text-gray-500 mt-0.5">ภาพรวมระดับจังหวัดสำหรับผู้บริหาร</p>
+          <p className="text-sm text-ink-muted mt-0.5">ภาพรวมระดับจังหวัดสำหรับผู้บริหาร</p>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           {data?.date && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-ink-muted">
               ข้อมูล ณ {new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
           )}
           <button onClick={() => window.location.reload()}
-            className="focus-ring-inverse text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
+            className="focus-ring text-sm text-ink px-3 min-h-[44px] border border-surface-border rounded-lg bg-surface-raised hover:bg-surface active:bg-surface-border transition">
             รีเฟรชข้อมูล
           </button>
         </div>

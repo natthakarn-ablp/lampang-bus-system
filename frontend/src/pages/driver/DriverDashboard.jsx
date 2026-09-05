@@ -300,14 +300,14 @@ export default function DriverDashboard() {
         <div className="flex items-center justify-between mb-2">
           <span className="inline-flex items-center gap-2 text-lg font-semibold text-ink">
             {session === 'morning'
-              ? <Sunrise className="w-5 h-5 text-warn" strokeWidth={2} />
-              : <Sunset className="w-5 h-5 text-info" strokeWidth={2} />}
+              ? <Sunrise className="w-5 h-5 text-warn-ink" strokeWidth={2} />
+              : <Sunset className="w-5 h-5 text-info-ink" strokeWidth={2} />}
             {session === 'morning' ? 'โหมดส่งเช้า' : 'โหมดรับเย็น'}
           </span>
           <button
             type="button"
             onClick={() => navigate('/driver/emergency')}
-            className="focus-ring inline-flex items-center justify-center gap-1.5 bg-danger hover:bg-danger/90 active:bg-danger text-white font-semibold text-sm px-4 min-h-[44px] rounded-xl transition"
+            className="focus-ring inline-flex items-center justify-center gap-1.5 bg-danger-ink hover:bg-danger-ink/90 active:bg-danger-ink text-white font-semibold text-sm px-4 min-h-[44px] rounded-xl transition"
           >
             <AlertTriangle className="w-4 h-4" strokeWidth={2.2} />
             ฉุกเฉิน
@@ -377,14 +377,14 @@ export default function DriverDashboard() {
                   <span className="text-lg font-semibold text-ink">
                     {session === 'morning' ? 'ส่งแล้ว' : 'รับแล้ว'} {done.length}/{total} คน
                   </span>
-                  <span className={`text-2xl font-bold tabular-nums ${pct === 100 ? 'text-success' : pct >= 50 ? 'text-warn' : 'text-danger'}`}>{pct}%</span>
+                  <span className={`text-2xl font-bold tabular-nums ${pct === 100 ? 'text-success-ink' : pct >= 50 ? 'text-warn-ink' : 'text-danger-ink'}`}>{pct}%</span>
                 </div>
                 <div className="flex w-full h-4 rounded-full overflow-hidden bg-surface">
                   {done.length > 0 && <div className="bg-success h-full transition-all" style={{ width: `${pct}%` }} />}
                   {pending.length > 0 && <div className="bg-danger/80 h-full" style={{ width: `${100 - pct}%` }} />}
                 </div>
                 {onLeave.length > 0 && (
-                  <p className="text-sm text-warn mt-1">ลาวันนี้ {onLeave.length} คน</p>
+                  <p className="text-sm text-warn-ink mt-1">ลาวันนี้ {onLeave.length} คน</p>
                 )}
               </div>
             );
@@ -421,7 +421,7 @@ export default function DriverDashboard() {
                 <button
                   onClick={handleBulkAction}
                   disabled={bulkLoading || pending.length === 0}
-                  className="inline-flex w-full items-center justify-center gap-2 bg-success hover:bg-success/90 active:bg-success/80 disabled:opacity-50 text-white text-xl font-semibold px-5 py-5 rounded-2xl shadow-soft transition"
+                  className="inline-flex w-full items-center justify-center gap-2 bg-success-ink hover:bg-success-ink/90 active:bg-success-ink/80 disabled:opacity-50 text-white text-xl font-semibold px-5 py-5 rounded-2xl shadow-soft transition"
                 >
                   {bulkLoading ? (
                     'กำลังดำเนินการ…'
@@ -446,7 +446,7 @@ export default function DriverDashboard() {
                 <button
                   onClick={handleBulkAction}
                   disabled={bulkLoading || pending.length === 0}
-                  className="bg-success hover:bg-success/90 disabled:opacity-50 text-white text-base font-semibold px-5 py-3 rounded-xl transition"
+                  className="bg-success-ink hover:bg-success-ink/90 disabled:opacity-50 text-white text-base font-semibold px-5 py-3 rounded-xl transition"
                 >
                   {bulkLoading ? '...' : `${BULK_LABEL[session]} (${pending.length} คน)`}
                 </button>
@@ -458,7 +458,7 @@ export default function DriverDashboard() {
             )}
             {bulkMsg && (
               <div className="bg-success-soft border border-success/30 rounded-xl px-4 py-3 mt-2 text-center">
-                <p className="text-sm text-success font-medium">{bulkMsg}</p>
+                <p className="text-sm text-success-ink font-medium">{bulkMsg}</p>
               </div>
             )}
           </div>
@@ -499,7 +499,7 @@ export default function DriverDashboard() {
           {/* ── Done students ── */}
           {done.length > 0 && (
             <section className="mb-6">
-              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-success mb-3">
+              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-success-ink mb-3">
                 <CheckCircle2 className="w-4 h-4" strokeWidth={2.2} />
                 เสร็จแล้ว ({done.length})
               </h2>
@@ -515,7 +515,7 @@ export default function DriverDashboard() {
           {/* ── On leave ── */}
           {onLeave.length > 0 && (
             <section className="mb-6">
-              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-warn mb-3">
+              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-warn-ink mb-3">
                 <ClipboardList className="w-4 h-4" strokeWidth={2.2} />
                 ลาวันนี้ ({onLeave.length})
               </h2>
@@ -675,7 +675,7 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
             <button
               onClick={() => { onLeave('both'); setShowLeave(false); }}
               disabled={leaveLoading}
-              className="bg-warn/15 hover:bg-warn/25 active:bg-warn/30 text-warn font-semibold text-sm py-3 rounded-xl transition border border-warn/40 disabled:opacity-50"
+              className="bg-warn/15 hover:bg-warn/25 active:bg-warn/30 text-warn-ink font-semibold text-sm py-3 rounded-xl transition border border-warn/40 disabled:opacity-50"
             >
               ลาทั้งวัน
             </button>
@@ -777,7 +777,7 @@ function PretripModal({ onComplete }) {
               <ul className="space-y-1.5">
                 {PRETRIP_ITEMS.map(c => (
                   <li key={c.id} className="flex items-center gap-2 text-base text-ink">
-                    <Check className="w-4 h-4 text-success" strokeWidth={2.4} />
+                    <Check className="w-4 h-4 text-success-ink" strokeWidth={2.4} />
                     <span>{c.label}</span>
                   </li>
                 ))}
@@ -785,7 +785,7 @@ function PretripModal({ onComplete }) {
             </div>
 
             <button onClick={() => handleSubmit(true)} disabled={submitting}
-              className="inline-flex w-full items-center justify-center gap-2 bg-success hover:bg-success/90 active:bg-success/80 text-white font-semibold text-xl py-5 rounded-2xl shadow-soft transition disabled:opacity-50 mb-3">
+              className="inline-flex w-full items-center justify-center gap-2 bg-success-ink hover:bg-success-ink/90 active:bg-success-ink/80 text-white font-semibold text-xl py-5 rounded-2xl shadow-soft transition disabled:opacity-50 mb-3">
               {submitting ? 'กำลังบันทึก…' : (
                 <>
                   <CheckCircle2 className="w-6 h-6" strokeWidth={2.2} />
@@ -817,8 +817,8 @@ function PretripModal({ onComplete }) {
                       : 'bg-danger-soft border-danger/50 text-danger-ink'
                   }`}>
                   {item.ok
-                    ? <CheckCircle2 className="w-6 h-6 shrink-0 text-success" strokeWidth={2.2} />
-                    : <X className="w-6 h-6 shrink-0 text-danger" strokeWidth={2.4} />}
+                    ? <CheckCircle2 className="w-6 h-6 shrink-0 text-success-ink" strokeWidth={2.2} />
+                    : <X className="w-6 h-6 shrink-0 text-danger-ink" strokeWidth={2.4} />}
                   <span>{item.label}</span>
                 </button>
               ))}
@@ -841,7 +841,7 @@ function PretripModal({ onComplete }) {
 
             {failedItems.length > 0 ? (
               <button onClick={() => handleSubmit(false)} disabled={submitting}
-                className="inline-flex w-full items-center justify-center gap-2 bg-danger hover:bg-danger/90 text-white font-semibold text-lg py-4 rounded-2xl shadow-soft transition disabled:opacity-50 mb-3">
+                className="inline-flex w-full items-center justify-center gap-2 bg-danger-ink hover:bg-danger-ink/90 text-white font-semibold text-lg py-4 rounded-2xl shadow-soft transition disabled:opacity-50 mb-3">
                 {submitting ? 'กำลังบันทึก…' : (
                   <>
                     <AlertTriangle className="w-5 h-5" strokeWidth={2.2} />
@@ -851,7 +851,7 @@ function PretripModal({ onComplete }) {
               </button>
             ) : (
               <button onClick={() => handleSubmit(true)} disabled={submitting}
-                className="inline-flex w-full items-center justify-center gap-2 bg-success hover:bg-success/90 text-white font-semibold text-lg py-4 rounded-2xl shadow-soft transition disabled:opacity-50 mb-3">
+                className="inline-flex w-full items-center justify-center gap-2 bg-success-ink hover:bg-success-ink/90 text-white font-semibold text-lg py-4 rounded-2xl shadow-soft transition disabled:opacity-50 mb-3">
                 {submitting ? 'กำลังบันทึก…' : (
                   <>
                     <CheckCircle2 className="w-5 h-5" strokeWidth={2.2} />

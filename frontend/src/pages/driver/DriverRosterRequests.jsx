@@ -237,7 +237,7 @@ export default function DriverRosterRequests() {
 
               {/* Parent info */}
               <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs font-medium text-gray-500 mb-3">ข้อมูลผู้ปกครอง</p>
+                <p className="text-xs font-medium text-ink-muted mb-3">ข้อมูลผู้ปกครอง</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm text-gray-600 mb-1">ชื่อผู้ปกครอง</label>
@@ -254,7 +254,7 @@ export default function DriverRosterRequests() {
                       }}
                       placeholder="0812345678"
                       className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${phoneError ? 'border-red-300' : 'border-gray-300'}`} />
-                    {phoneError && <p className="text-xs text-red-500 mt-1">{phoneError}</p>}
+                    {phoneError && <p className="text-xs text-danger-ink mt-1">{phoneError}</p>}
                   </div>
                 </div>
               </div>
@@ -263,7 +263,7 @@ export default function DriverRosterRequests() {
 
           {/* Reason */}
           <div>
-            <label className="block text-sm text-gray-600 mb-1.5">เหตุผล <span className="text-gray-400">(ไม่บังคับ)</span></label>
+            <label className="block text-sm text-gray-600 mb-1.5">เหตุผล <span className="text-ink-muted">(ไม่บังคับ)</span></label>
             <input type="text" value={reason} onChange={(e) => setReason(e.target.value)}
               placeholder="เช่น ย้ายบ้าน, เปลี่ยนรถ, ผิดรถ ฯลฯ"
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
@@ -297,7 +297,7 @@ export default function DriverRosterRequests() {
           )}
           {resolved.length > 0 && (
             <div>
-              <h2 className="text-sm font-semibold text-gray-500 mb-2">สำเร็จแล้ว ({resolved.length})</h2>
+              <h2 className="text-sm font-semibold text-ink-muted mb-2">สำเร็จแล้ว ({resolved.length})</h2>
               <div className="space-y-2">
                 {resolved.map(r => <RequestCard key={r.id} r={r} typeLabel={TYPE_LABEL} />)}
               </div>
@@ -328,16 +328,16 @@ function RequestCard({ r, typeLabel }) {
               {typeLabel[r.request_type]}
             </span>
             {' — '}{displayName}
-            {isNew && <span className="text-xs text-amber-600 ml-1">(ใหม่)</span>}
+            {isNew && <span className="text-xs text-warn-ink ml-1">(ใหม่)</span>}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-ink-muted mt-0.5">
             {formatGradeClass(r.grade, r.classroom, '')}
             {r.reason && <>{r.grade ? ' · ' : ''}{r.reason}</>}
             {!r.grade && !r.reason && '-'}
           </p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-ink-muted mt-1">
             {new Date(r.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-            {r.review_note && <> · <span className="text-gray-500">หมายเหตุ: {r.review_note}</span></>}
+            {r.review_note && <> · <span className="text-ink-muted">หมายเหตุ: {r.review_note}</span></>}
           </p>
         </div>
         <ApprovalBadge status={r.status} />

@@ -259,7 +259,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
                 type="button"
                 onClick={runContinue}
                 disabled={busy}
-                className="focus-ring text-sm bg-success hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
+                className="focus-ring text-sm bg-success-ink hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
               >
                 {busy ? 'กำลังดำเนินการ…' : 'นำเข้ารายการที่ค้าง/ที่เลือก'}
               </button>
@@ -273,7 +273,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
                   else setConfirmRollback(true);
                 }}
                 disabled={busy}
-                className="focus-ring text-sm bg-danger hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
+                className="focus-ring text-sm bg-danger-ink hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
               >
                 ย้อนกลับรายการที่เลือก
               </button>

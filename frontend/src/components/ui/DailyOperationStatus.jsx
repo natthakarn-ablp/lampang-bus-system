@@ -15,10 +15,10 @@ import AppCard from './AppCard';
 
 function tone(pct, notStarted) {
   if (notStarted)  return { text: 'text-ink-muted', bar: 'bg-surface-border', Icon: Clock,        word: 'ยังไม่เริ่มรอบ' };
-  if (pct >= 100)  return { text: 'text-success',   bar: 'bg-success',        Icon: CheckCircle2, word: 'ครบแล้ว' };
+  if (pct >= 100)  return { text: 'text-success-ink',   bar: 'bg-success',        Icon: CheckCircle2, word: 'ครบแล้ว' };
   if (pct >= 80)   return { text: 'text-ink',       bar: 'bg-brand-600',      Icon: null,         word: 'กำลังดำเนินการ' };
-  if (pct >= 50)   return { text: 'text-warn',      bar: 'bg-warn',           Icon: null,         word: 'ต้องติดตาม' };
-  return             { text: 'text-danger',   bar: 'bg-danger',         Icon: null,         word: 'ล่าช้า' };
+  if (pct >= 50)   return { text: 'text-warn-ink',      bar: 'bg-warn',           Icon: null,         word: 'ต้องติดตาม' };
+  return             { text: 'text-danger-ink',   bar: 'bg-danger',         Icon: null,         word: 'ล่าช้า' };
 }
 
 function SessionTile({ icon: Icon, label, done, total }) {
@@ -96,10 +96,10 @@ export default function DailyOperationStatus({
             <ShieldAlert className="w-4 h-4 text-ink-muted" strokeWidth={2} aria-hidden="true" />
             เหตุฉุกเฉินวันนี้
           </span>
-          <span className={`text-2xl font-bold tabular-nums leading-none ${hasEmergency ? 'text-danger' : 'text-ink'}`}>
+          <span className={`text-2xl font-bold tabular-nums leading-none ${hasEmergency ? 'text-danger-ink' : 'text-ink'}`}>
             {emergencies.toLocaleString('th-TH')}
           </span>
-          <p className={`text-caption inline-flex items-center gap-1 ${hasEmergency ? 'text-danger' : 'text-success'}`}>
+          <p className={`text-caption inline-flex items-center gap-1 ${hasEmergency ? 'text-danger-ink' : 'text-success-ink'}`}>
             {hasEmergency
               ? <><ShieldAlert className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />ต้องตรวจสอบ</>
               : <><CheckCircle2 className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />ไม่มีเหตุ</>}

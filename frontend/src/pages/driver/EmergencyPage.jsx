@@ -115,9 +115,9 @@ export default function EmergencyPage() {
   if (success) {
     return (
       <div className="p-3 sm:p-6 max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-        <CheckCircle2 className="w-16 h-16 mx-auto mb-5 text-success" strokeWidth={2} aria-hidden="true" />
+        <CheckCircle2 className="w-16 h-16 mx-auto mb-5 text-success-ink" strokeWidth={2} aria-hidden="true" />
         <h2 className="text-xl font-bold text-gray-800 mb-2">แจ้งเหตุฉุกเฉินแล้ว</h2>
-        <p className="text-gray-500 text-sm mb-8">ทีมงานจะดำเนินการโดยเร็ว</p>
+        <p className="text-ink-muted text-sm mb-8">ทีมงานจะดำเนินการโดยเร็ว</p>
         <button
           onClick={() => navigate('/driver', { replace: true })}
           className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-8 py-2.5 rounded-lg transition"

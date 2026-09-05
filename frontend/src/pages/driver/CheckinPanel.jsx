@@ -37,9 +37,9 @@ export default function CheckinPanel({ student, session, onDone }) {
             <p className="text-base font-bold text-gray-900 leading-snug">
               {student.first_name} {student.last_name}
             </p>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-sm text-ink-muted mt-0.5">
               {formatGradeClass(student.grade, student.classroom)}
-              {student.school_name && <span className="text-gray-400"> · {student.school_name}</span>}
+              {student.school_name && <span className="text-ink-muted"> · {student.school_name}</span>}
             </p>
           </div>
 

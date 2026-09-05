@@ -80,14 +80,14 @@ export default function DocumentReviewPanel({ apiBase, vehicleId, driverId, canR
   return (
     <div className="mt-6">
       <div className="flex items-center gap-1.5 mb-2">
-        <FileText className="w-4 h-4 text-gray-500" />
+        <FileText className="w-4 h-4 text-ink-muted" />
         <h2 className="text-sm font-semibold text-gray-700">{title}</h2>
       </div>
 
       {loading ? (
-        <p className="text-xs text-gray-400 py-2">กำลังโหลดเอกสาร…</p>
+        <p className="text-xs text-ink-muted py-2">กำลังโหลดเอกสาร…</p>
       ) : docs.length === 0 ? (
-        <p className="text-xs text-gray-400 py-2">ยังไม่มีเอกสารแนบ</p>
+        <p className="text-xs text-ink-muted py-2">ยังไม่มีเอกสารแนบ</p>
       ) : (
         <div className="space-y-2">
           {docs.map((d) => (
@@ -95,15 +95,15 @@ export default function DocumentReviewPanel({ apiBase, vehicleId, driverId, canR
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-800">{DOC_LABEL[d.doc_type] || 'เอกสาร'}</p>
-                  <p className="text-xs text-gray-500 truncate">{d.original_name || '-'}</p>
+                  <p className="text-xs text-ink-muted truncate">{d.original_name || '-'}</p>
                   <div className="mt-1.5 flex items-center gap-2">
                     <DocReviewPill status={d.review_status} />
                     {d.expiry_date && (
-                      <span className="text-xs text-gray-400">หมดอายุ {String(d.expiry_date).split('T')[0]}</span>
+                      <span className="text-xs text-ink-muted">หมดอายุ {String(d.expiry_date).split('T')[0]}</span>
                     )}
                   </div>
                   {d.review_status === 'REJECTED' && d.review_note && (
-                    <p className="text-xs text-red-600 mt-1">เหตุผล: {d.review_note}</p>
+                    <p className="text-xs text-danger-ink mt-1">เหตุผล: {d.review_note}</p>
                   )}
                 </div>
                 <button onClick={() => view(d.kind, d.id)} disabled={busyId === d.id}
@@ -119,7 +119,7 @@ export default function DocumentReviewPanel({ apiBase, vehicleId, driverId, canR
                     <Check className="w-3.5 h-3.5 inline -mt-0.5" /> ผ่าน
                   </button>
                   <button onClick={() => { setRejectNote(''); setRejectTarget(d); }} disabled={busyId === d.id}
-                    className="text-xs font-medium text-gray-500 hover:text-red-600 disabled:opacity-50">
+                    className="text-xs font-medium text-ink-muted hover:text-danger-ink disabled:opacity-50">
                     <X className="w-3.5 h-3.5 inline -mt-0.5" /> ไม่ผ่าน
                   </button>
                 </div>

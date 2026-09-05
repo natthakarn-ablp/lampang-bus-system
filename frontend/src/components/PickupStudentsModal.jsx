@@ -180,7 +180,7 @@ export default function PickupStudentsModal({ apiBase, point, title, onClose, on
                             <span className="text-xs text-ink-muted ml-2">· {cls}</span>
                           )}
                           {s.currently_assigned && (
-                            <span className="text-xs text-success ml-2">· อยู่ในจุดนี้</span>
+                            <span className="text-xs text-success-ink ml-2">· อยู่ในจุดนี้</span>
                           )}
                         </span>
                       </label>

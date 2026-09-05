@@ -137,7 +137,7 @@ export default function DailyReport() {
                 setShowDecision(true);
               }) : undefined}
             />
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-ink-muted">
               สร้างจากระบบรถรับส่งนักเรียนจังหวัดลำปาง · {new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
             </p>
           </div>
@@ -175,7 +175,7 @@ function DecisionLogModal({ onSubmit, onSkip, onCancel }) {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-elevate max-w-md w-full p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-2">บันทึกการตัดสินใจ</h3>
-        <p className="text-sm text-gray-500 mb-4">บันทึกสั้นๆ ก่อนดาวน์โหลด PDF (ไม่บังคับ)</p>
+        <p className="text-sm text-ink-muted mb-4">บันทึกสั้นๆ ก่อนดาวน์โหลด PDF (ไม่บังคับ)</p>
         <div className="mb-3">
           <label className="block text-xs font-medium text-gray-600 mb-1">ประเภทการตัดสินใจ</label>
           <div className="flex flex-wrap gap-2">
@@ -194,7 +194,7 @@ function DecisionLogModal({ onSubmit, onSkip, onCancel }) {
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
         </div>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="flex-1 text-sm text-gray-500 border border-gray-200 py-2 rounded-lg hover:bg-gray-50">ยกเลิก</button>
+          <button onClick={onCancel} className="flex-1 text-sm text-ink-muted border border-gray-200 py-2 rounded-lg hover:bg-gray-50">ยกเลิก</button>
           <button onClick={onSkip} className="flex-1 text-sm text-gray-600 border border-gray-200 py-2 rounded-lg hover:bg-gray-50">ข้าม</button>
           <button onClick={() => onSubmit(type, note)} className="flex-1 text-sm bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-medium">บันทึก + ดาวน์โหลด</button>
         </div>

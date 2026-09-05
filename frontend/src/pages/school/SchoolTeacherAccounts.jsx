@@ -37,7 +37,7 @@ function TeacherDeniedCard() {
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       <AppCard padding="lg">
         <div className="flex items-start gap-3">
-          <ShieldAlert className="w-6 h-6 text-warn shrink-0" strokeWidth={2} />
+          <ShieldAlert className="w-6 h-6 text-warn-ink shrink-0" strokeWidth={2} />
           <div>
             <h1 className="text-lg font-semibold text-ink mb-1">
               ไม่มีสิทธิ์เข้าถึงข้อมูลนี้
@@ -259,7 +259,7 @@ export default function SchoolTeacherAccounts() {
             <button
               type="button"
               onClick={() => setModal('bulkDelete')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-danger hover:bg-danger/90 text-white"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-danger-ink hover:bg-danger-ink/90 text-white"
             >
               <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} />
               ลบบัญชีที่เลือก
@@ -503,7 +503,7 @@ function BulkDeleteConfirmModal({ items, totalSelected, onClose, onDone, toast }
           type="button"
           onClick={handleConfirm}
           disabled={busy || totalSelected === 0}
-          className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60 min-h-[40px]"
+          className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-danger-ink hover:bg-danger-ink/90 text-white disabled:opacity-60 min-h-[40px]"
         >
           {busy ? 'กำลังลบ…' : `ยืนยันลบ ${totalSelected} รายการ`}
         </button>

@@ -112,7 +112,7 @@ export default function SchoolRegistrationReview() {
                 <p className="text-sm font-medium text-ink">รถ {r.plate_no || '-'}</p>
                 <p className="text-caption text-ink-muted">
                   {r.roster_count} คน · เช้า {r.morning_rider_count} · เย็น {r.evening_rider_count}
-                  {Number(r.unmatched_count) > 0 && <span className="text-amber-600"> · ยังไม่ตรวจ {r.unmatched_count}</span>}
+                  {Number(r.unmatched_count) > 0 && <span className="text-warn-ink"> · ยังไม่ตรวจ {r.unmatched_count}</span>}
                 </p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
@@ -227,14 +227,14 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
 
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 mb-4">
+      <button onClick={onBack} className="flex items-center gap-1 text-sm text-ink-muted hover:text-gray-800 mb-4">
         <ArrowLeft className="w-4 h-4" /> กลับ
       </button>
 
       {loading ? (
         <LoadingState />
       ) : !detail ? (
-        <p className="text-gray-400 py-10 text-center">ไม่พบข้อมูล</p>
+        <p className="text-ink-muted py-10 text-center">ไม่พบข้อมูล</p>
       ) : (
         <>
           <div className="flex items-center justify-between mb-4">
@@ -252,13 +252,13 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-ink">
                       {r.raw_student_name}
-                      {r.raw_grade ? <span className="text-gray-400 font-normal"> · {abbreviateGrade(r.raw_grade)}</span> : null}
-                      {r.raw_student_code ? <span className="text-gray-400 font-normal"> · เลข {r.raw_student_code}</span> : null}
+                      {r.raw_grade ? <span className="text-ink-muted font-normal"> · {abbreviateGrade(r.raw_grade)}</span> : null}
+                      {r.raw_student_code ? <span className="text-ink-muted font-normal"> · เลข {r.raw_student_code}</span> : null}
                     </p>
                     <p className="text-caption text-ink-muted">{PICKUP_LABEL[r.pickup_type] || '-'}</p>
                   </div>
-                  {r.match_status === 'MATCHED' && <span className="text-xs text-green-600 shrink-0">จับคู่แล้ว</span>}
-                  {r.match_status === 'NOT_FOUND' && <span className="text-xs text-gray-400 shrink-0">ไม่ใช่เด็กที่นี่</span>}
+                  {r.match_status === 'MATCHED' && <span className="text-xs text-success-ink shrink-0">จับคู่แล้ว</span>}
+                  {r.match_status === 'NOT_FOUND' && <span className="text-xs text-ink-muted shrink-0">ไม่ใช่เด็กที่นี่</span>}
                 </div>
 
                 {r.match_status === 'UNMATCHED' && (
@@ -269,7 +269,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                         <p className="text-xs text-gray-600">
                           ระบบแนะนำ: <span className="font-medium text-gray-800">{r.suggestion.student.full_name}</span>
                           {r.suggestion.student.grade ? ` (${abbreviateGrade(r.suggestion.student.grade)})` : ''}
-                          <span className="text-gray-400"> · {r.suggestion.confidence === 'high' ? 'ตรงเลขประจำตัว' : 'ใกล้เคียง'}</span>
+                          <span className="text-ink-muted"> · {r.suggestion.confidence === 'high' ? 'ตรงเลขประจำตัว' : 'ใกล้เคียง'}</span>
                         </p>
                         {canAct && (
                           <button onClick={() => doMatch(r.id, r.suggestion.student.id)} disabled={busyId === r.id}
@@ -283,7 +283,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                     {/* ambiguous → choose from candidates */}
                     {r.suggestion && r.suggestion.confidence === 'ambiguous' && (
                       <div>
-                        <p className="text-xs text-gray-500 mb-1.5">มีหลายคนใกล้เคียง เลือกคนที่ถูกต้อง:</p>
+                        <p className="text-xs text-ink-muted mb-1.5">มีหลายคนใกล้เคียง เลือกคนที่ถูกต้อง:</p>
                         <div className="space-y-1.5">
                           {(r.suggestion.candidates || []).map((c) => (
                             <div key={c.id} className="flex items-center justify-between gap-2">
@@ -300,7 +300,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
 
                     {/* none */}
                     {(!r.suggestion || r.suggestion.confidence === 'none') && (
-                      <p className="text-xs text-gray-400 mb-2">ไม่พบนักเรียนที่ตรงกันอัตโนมัติ</p>
+                      <p className="text-xs text-ink-muted mb-2">ไม่พบนักเรียนที่ตรงกันอัตโนมัติ</p>
                     )}
 
                     {canAct && searchFor === r.id ? (
@@ -308,7 +308,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                         <input autoFocus value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
                           placeholder="พิมพ์ชื่อหรือรหัสนักเรียน…"
                           className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                        {searching && <p className="text-xs text-gray-400 mt-1">กำลังค้นหา…</p>}
+                        {searching && <p className="text-xs text-ink-muted mt-1">กำลังค้นหา…</p>}
                         <div className="space-y-1 mt-1.5 max-h-40 overflow-auto">
                           {searchResults.map((s) => (
                             <div key={s.id} className="flex items-center justify-between gap-2">
@@ -321,10 +321,10 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                             </div>
                           ))}
                           {searchQ.trim().length >= 2 && !searching && searchResults.length === 0 && (
-                            <p className="text-xs text-gray-400">ไม่พบนักเรียน</p>
+                            <p className="text-xs text-ink-muted">ไม่พบนักเรียน</p>
                           )}
                         </div>
-                        <button onClick={closeSearch} className="text-xs text-gray-400 mt-1">ยกเลิกค้นหา</button>
+                        <button onClick={closeSearch} className="text-xs text-ink-muted mt-1">ยกเลิกค้นหา</button>
                       </div>
                     ) : canAct && (
                       <div className="mt-2 flex items-center gap-4">
@@ -333,7 +333,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
                           <Search className="w-3.5 h-3.5 inline -mt-0.5" /> ค้นหาเอง
                         </button>
                         <button onClick={() => markNotFound(r.id)} disabled={busyId === r.id}
-                          className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-50">
+                          className="text-xs text-ink-muted hover:text-danger-ink disabled:opacity-50">
                           <X className="w-3.5 h-3.5 inline -mt-0.5" /> ไม่ใช่เด็กของโรงเรียนนี้
                         </button>
                       </div>
@@ -352,7 +352,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
           {canAct && (
             <div className="flex gap-3 mt-6 sticky bottom-0 bg-gradient-to-t from-white pt-4">
               <button onClick={approve} disabled={approving || unmatched > 0}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-3 rounded-lg transition flex items-center justify-center gap-1">
+                className="flex-1 bg-green-700 hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-3 rounded-lg transition flex items-center justify-center gap-1">
                 <ClipboardCheck className="w-4 h-4" />
                 {unmatched > 0 ? `ตรวจให้ครบก่อน (เหลือ ${unmatched})` : 'อนุมัติทั้งหมด'}
               </button>
@@ -363,7 +363,7 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
             </div>
           )}
           {isTeacher && (
-            <p className="text-xs text-gray-400 text-center mt-6">บัญชีครูประจำสายชั้นดูได้อย่างเดียว</p>
+            <p className="text-xs text-ink-muted text-center mt-6">บัญชีครูประจำสายชั้นดูได้อย่างเดียว</p>
           )}
         </>
       )}

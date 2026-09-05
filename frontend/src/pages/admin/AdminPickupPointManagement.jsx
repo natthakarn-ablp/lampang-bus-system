@@ -268,7 +268,7 @@ export default function AdminPickupPointManagement() {
             <button
               type="button"
               onClick={() => setBulkConfirmOpen(true)}
-              className="focus-ring inline-flex items-center gap-1.5 px-3 min-h-[44px] text-sm font-medium rounded-lg bg-danger hover:bg-danger/90 text-white transition"
+              className="focus-ring inline-flex items-center gap-1.5 px-3 min-h-[44px] text-sm font-medium rounded-lg bg-danger-ink hover:bg-danger-ink/90 text-white transition"
             >
               <Trash2 className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
               ลบรายการที่เลือก

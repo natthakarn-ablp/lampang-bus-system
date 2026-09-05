@@ -160,7 +160,7 @@ export default function AffVehicleRequests() {
                     <XCircle className="w-4 h-4" aria-hidden="true" /> ไม่อนุมัติ
                   </button>
                   <button onClick={() => setAction('approve')} disabled={busy}
-                    className="focus-ring inline-flex items-center justify-center gap-1.5 bg-success hover:opacity-90 disabled:opacity-50 text-white text-sm font-semibold px-4 min-h-[44px] rounded-lg transition">
+                    className="focus-ring inline-flex items-center justify-center gap-1.5 bg-success-ink hover:opacity-90 disabled:opacity-50 text-white text-sm font-semibold px-4 min-h-[44px] rounded-lg transition">
                     <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> อนุมัติ
                   </button>
                   {action && (

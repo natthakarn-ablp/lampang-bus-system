@@ -297,7 +297,7 @@ export default function LiveLocationToggle() {
             <span>
               ความแม่นยำ ±{accuracy} เมตร
               {accuracy > 200 && (
-                <span className="ml-1 text-warn font-medium">· ความแม่นยำต่ำ</span>
+                <span className="ml-1 text-warn-ink font-medium">· ความแม่นยำต่ำ</span>
               )}
             </span>
           )}
@@ -354,7 +354,7 @@ export default function LiveLocationToggle() {
         <button
           type="button"
           onClick={stop}
-          className="w-full inline-flex items-center justify-center gap-2 bg-danger hover:bg-danger/90 active:bg-danger/90 text-white font-semibold text-base rounded-xl py-3 transition"
+          className="w-full inline-flex items-center justify-center gap-2 bg-danger-ink hover:bg-danger-ink/90 active:bg-danger-ink/90 text-white font-semibold text-base rounded-xl py-3 transition"
         >
           <OctagonAlert className="w-5 h-5" strokeWidth={2.2} />
           หยุดส่งตำแหน่ง

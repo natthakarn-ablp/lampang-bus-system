@@ -30,7 +30,7 @@ const ERROR_STYLE = {
 
 const FIELD_CLASS =
   'w-full min-h-[48px] rounded-lg border border-surface-border bg-surface-raised px-4 py-3 ' +
-  'text-lg font-semibold text-ink placeholder:text-ink-muted/70 shadow-sm transition-colors duration-150 ' +
+  'text-lg font-semibold text-ink placeholder:text-ink-muted shadow-sm transition-colors duration-150 ' +
   'focus:border-brand-600 focus:outline-none focus:ring-4 focus:ring-brand-600/15';
 
 const BRAND_LOGO = '/brand/school-safe-logo.webp';

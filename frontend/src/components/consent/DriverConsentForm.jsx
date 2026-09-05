@@ -95,7 +95,7 @@ export default function DriverConsentForm() {
                     {c.label}
                     {c.required && (
                       <>
-                        <span className="text-danger ml-1" aria-hidden="true">*</span>
+                        <span className="text-danger-ink ml-1" aria-hidden="true">*</span>
                         <span className="sr-only"> (จำเป็น)</span>
                       </>
                     )}

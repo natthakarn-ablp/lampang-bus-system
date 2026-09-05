@@ -191,13 +191,13 @@ export default function ProvinceDashboard() {
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-xs text-ink-muted">ติดตามได้</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_trackable ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_trackable ?? 0) > 0 ? 'text-success-ink' : 'text-ink-muted'}`}>
                 {data.vehicle_trackable ?? 0}
               </span>
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-xs text-ink-muted">ยังไม่มีข้อมูล</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_no_location ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_no_location ?? 0) > 0 ? 'text-warn-ink' : 'text-ink-muted'}`}>
                 {data.vehicle_no_location ?? 0}
               </span>
             </div>
@@ -214,19 +214,19 @@ export default function ProvinceDashboard() {
           <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
             <div className="flex items-baseline justify-between">
               <span className="text-xs text-ink-muted">ออนไลน์</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_online ?? 0) > 0 ? 'text-success' : 'text-ink-muted'}`}>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_online ?? 0) > 0 ? 'text-success-ink' : 'text-ink-muted'}`}>
                 {data.vehicle_online ?? 0}
               </span>
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-xs text-ink-muted">สัญญาณเก่า</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_stale ?? 0) > 0 ? 'text-warn' : 'text-ink-muted'}`}>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_stale ?? 0) > 0 ? 'text-warn-ink' : 'text-ink-muted'}`}>
                 {data.vehicle_stale ?? 0}
               </span>
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-xs text-ink-muted">ออฟไลน์</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_offline_smart ?? 0) > 0 ? 'text-danger' : 'text-ink-muted'}`}>
+              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_offline_smart ?? 0) > 0 ? 'text-danger-ink' : 'text-ink-muted'}`}>
                 {data.vehicle_offline_smart ?? 0}
               </span>
             </div>
@@ -247,7 +247,7 @@ export default function ProvinceDashboard() {
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between">
               <span className="text-xs text-ink-muted inline-flex items-center gap-1">
-                <Sunrise className="w-3.5 h-3.5 text-warn" strokeWidth={2} /> ส่งเช้า
+                <Sunrise className="w-3.5 h-3.5 text-warn-ink" strokeWidth={2} /> ส่งเช้า
               </span>
               <span className="text-base font-semibold text-ink tabular-nums">
                 {data.morning_done ?? 0}
@@ -256,7 +256,7 @@ export default function ProvinceDashboard() {
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-xs text-ink-muted inline-flex items-center gap-1">
-                <Sunset className="w-3.5 h-3.5 text-info" strokeWidth={2} /> รับเย็น
+                <Sunset className="w-3.5 h-3.5 text-info-ink" strokeWidth={2} /> รับเย็น
               </span>
               <span className="text-base font-semibold text-ink tabular-nums">
                 {data.evening_done ?? 0}
@@ -283,7 +283,7 @@ export default function ProvinceDashboard() {
             </div>
             <div className="flex items-baseline justify-between">
               <span className="text-xs text-ink-muted">ยังไม่เริ่ม</span>
-              <span className={`text-2xl font-bold tabular-nums ${(data.school_not_using_recently ?? 0) > 0 ? 'text-warn' : 'text-success'}`}>
+              <span className={`text-2xl font-bold tabular-nums ${(data.school_not_using_recently ?? 0) > 0 ? 'text-warn-ink' : 'text-success-ink'}`}>
                 {data.school_not_using_recently ?? 0}
               </span>
             </div>
@@ -301,14 +301,14 @@ export default function ProvinceDashboard() {
         >
           <div className="flex items-start gap-2 mb-2">
             <AlertTriangle
-              className={`w-5 h-5 shrink-0 ${problemSchools.length > 0 ? 'text-warn' : 'text-success'}`}
+              className={`w-5 h-5 shrink-0 ${problemSchools.length > 0 ? 'text-warn-ink' : 'text-success-ink'}`}
               strokeWidth={2}
             />
             <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนเสี่ยงวันนี้</p>
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-xs text-ink-muted">รายการค้าง</span>
-            <span className={`text-2xl font-bold tabular-nums ${problemSchools.length > 0 ? 'text-warn' : 'text-success'}`}>
+            <span className={`text-2xl font-bold tabular-nums ${problemSchools.length > 0 ? 'text-warn-ink' : 'text-success-ink'}`}>
               {problemSchools.length}
             </span>
           </div>
@@ -454,9 +454,9 @@ export default function ProvinceDashboard() {
           <li>รถรับส่ง <strong>{data.total_vehicles} คัน</strong> ให้บริการ <strong>{data.total_students} คน</strong> ใน <strong>{data.total_schools} โรงเรียน</strong></li>
           <li>KPI ส่งเช้า <strong className={kpiColor(data.morning_kpi)}>{safePct(data.morning_kpi)}</strong> · รับเย็น <strong className={kpiColor(data.evening_kpi)}>{safePct(data.evening_kpi)}</strong></li>
           {problemSchools.length > 0
-            ? <li><strong className="text-danger">{problemSchools.length} โรงเรียน</strong>ยังมีรายการค้าง</li>
-            : <li><strong className="text-success">ทุกโรงเรียนดำเนินการครบ</strong></li>}
-          {hasEmergency && <li>เหตุฉุกเฉิน <strong className="text-danger">{data.recent_emergencies} ครั้ง</strong></li>}
+            ? <li><strong className="text-danger-ink">{problemSchools.length} โรงเรียน</strong>ยังมีรายการค้าง</li>
+            : <li><strong className="text-success-ink">ทุกโรงเรียนดำเนินการครบ</strong></li>}
+          {hasEmergency && <li>เหตุฉุกเฉิน <strong className="text-danger-ink">{data.recent_emergencies} ครั้ง</strong></li>}
         </ul>
       </AlertBanner>
     </div>
@@ -474,9 +474,9 @@ function SessionProgress({ label, icon: Icon, done, total, pending, leave, kpi }
 
   // Neutral when nothing has happened yet — never danger for "0% before day started."
   const kpiTone = notStarted ? 'text-ink-muted'
-                : isComplete ? 'text-success'
-                : pct >= 80  ? 'text-warn'
-                : 'text-danger';
+                : isComplete ? 'text-success-ink'
+                : pct >= 80  ? 'text-warn-ink'
+                : 'text-danger-ink';
 
   return (
     <AppCard padding="md" className={isComplete ? 'border-success/40 bg-success-soft/40' : ''}>
@@ -494,12 +494,12 @@ function SessionProgress({ label, icon: Icon, done, total, pending, leave, kpi }
         {pending > 0 && <div className="bg-danger/80 h-full" style={{ width: `${pendingPct}%` }} />}
       </div>
       <div className="flex justify-between text-xs">
-        <span className={notStarted ? 'text-ink-muted tabular-nums' : 'text-success font-medium tabular-nums'}>
+        <span className={notStarted ? 'text-ink-muted tabular-nums' : 'text-success-ink font-medium tabular-nums'}>
           {notStarted ? 'รอเริ่มรอบ' : `${done}/${total}`}
         </span>
         <div className="flex gap-3">
-          {pending > 0 && <span className="text-danger font-medium">รอ {pending}</span>}
-          {leave > 0   && <span className="text-warn">ลา {leave}</span>}
+          {pending > 0 && <span className="text-danger-ink font-medium">รอ {pending}</span>}
+          {leave > 0   && <span className="text-warn-ink">ลา {leave}</span>}
         </div>
       </div>
     </AppCard>
@@ -515,7 +515,7 @@ function IncidentEntry({ em }) {
     : '-';
   return (
     <AppCard padding="sm" className="flex items-start gap-3">
-      <AlertTriangle className="w-4 h-4 text-danger shrink-0 mt-0.5" strokeWidth={2.2} />
+      <AlertTriangle className="w-4 h-4 text-danger-ink shrink-0 mt-0.5" strokeWidth={2.2} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center flex-wrap gap-2 mb-0.5">
           <span className="font-semibold text-ink">{em.plate_no || '-'}</span>

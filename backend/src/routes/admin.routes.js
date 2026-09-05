@@ -81,11 +81,13 @@ async function loadResearchEvidenceContext() {
   };
 }
 
-function calcDelta(baseline, latest, numField, denField) {
-  const bPct = baseline[denField] > 0 ? (baseline[numField] / baseline[denField]) * 100 : 0;
-  const cPct = latest[denField] > 0 ? (latest[numField] / latest[denField]) * 100 : 0;
-  return Math.round((cPct - bPct) * 100) / 100;
-}
+// Snapshot percentages, baseline deltas and their dictionary rows come from
+// one registry so the JSON, CSV and Excel exports cannot disagree about a
+// formula or a missing-data rule. utils/researchSnapshotFields.js explains
+// why a delta is null (never 0) when either side has a zero denominator.
+const {
+  snapshotPercentages, snapshotDeltas, derivedFieldDictionary, DESCRIPTIVE_STATISTIC,
+} = require('../utils/researchSnapshotFields');
 
 const BCRYPT_COST = 12;
 const VALID_ROLES = ['driver', 'school', 'affiliation', 'province', 'transport', 'admin'];
@@ -1119,14 +1121,10 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
 
       const dmeFields = {
         // DME: Digital Maturity Evaluation — system-derivable
-        data_completeness_pct: latestSnap && latestSnap.total_students > 0 ? Math.round((latestSnap.students_with_vehicle / latestSnap.total_students) * 10000) / 100 : null,
-        parent_coverage_pct: latestSnap && latestSnap.total_students > 0 ? Math.round((latestSnap.students_with_parent / latestSnap.total_students) * 10000) / 100 : null,
-        insurance_coverage_pct: latestSnap && latestSnap.total_vehicles > 0 ? Math.round((latestSnap.vehicles_with_insurance / latestSnap.total_vehicles) * 10000) / 100 : null,
-        inspection_coverage_pct: latestSnap && latestSnap.total_vehicles > 0 ? Math.round((latestSnap.vehicles_inspected / latestSnap.total_vehicles) * 10000) / 100 : null,
-        inspection_pass_pct: latestSnap && latestSnap.total_vehicles > 0 ? Math.round((latestSnap.vehicles_passed / latestSnap.total_vehicles) * 10000) / 100 : null,
-        morning_completion_pct: latestSnap && latestSnap.morning_total > 0 ? Math.round((latestSnap.morning_done / latestSnap.morning_total) * 10000) / 100 : null,
-        evening_completion_pct: latestSnap && latestSnap.evening_total > 0 ? Math.round((latestSnap.evening_done / latestSnap.evening_total) * 10000) / 100 : null,
-        active_user_pct: latestSnap && latestSnap.total_users > 0 ? Math.round((latestSnap.active_users / latestSnap.total_users) * 10000) / 100 : null,
+        // One entry per field in utils/researchSnapshotFields.js — null on a
+        // zero denominator, per that field's missing-data rule, and described
+        // in data_dictionary.derived_fields below.
+        ...snapshotPercentages(latestSnap),
         total_audit_actions: Number(counts.audit_count) || 0,
         total_exports: Number(counts.export_count) || 0,
         role_adoption: roleBreakdown,
@@ -1144,15 +1142,10 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         current_snapshot_id: latestSnap?.id || null,
         current_date: latestSnap?.snapshot_date || null,
 
-        // Delta from baseline (if both exist)
-        delta: baselineSnap && latestSnap ? {
-          data_completeness: calcDelta(baselineSnap, latestSnap, 'students_with_vehicle', 'total_students'),
-          parent_coverage: calcDelta(baselineSnap, latestSnap, 'students_with_parent', 'total_students'),
-          insurance_coverage: calcDelta(baselineSnap, latestSnap, 'vehicles_with_insurance', 'total_vehicles'),
-          inspection_coverage: calcDelta(baselineSnap, latestSnap, 'vehicles_inspected', 'total_vehicles'),
-          morning_completion: calcDelta(baselineSnap, latestSnap, 'morning_done', 'morning_total'),
-          evening_completion: calcDelta(baselineSnap, latestSnap, 'evening_done', 'evening_total'),
-        } : null,
+        // Delta from baseline (if both exist). A field whose denominator is
+        // 0 on either side is null here as well: "+85 pp" against a baseline
+        // of zero students is not an improvement, it is a missing baseline.
+        delta: snapshotDeltas(baselineSnap, latestSnap),
 
         // Snapshot age travels with the numbers it qualifies. Percentages
         // computed from a stale snapshot describe the day it was taken, not
@@ -1163,7 +1156,8 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         _notes: {
           dme: 'DME fields are computed from system snapshots and audit logs — fully automated',
           mie: 'MIE fields require external evidence (surveys, interviews, financial data) — return null until collected',
-          delta: 'Delta values show percentage point change from baseline to current snapshot',
+          delta: 'Delta values show percentage point change from baseline to current snapshot; ' +
+            'null (never 0) when either snapshot has a zero denominator for that field — see data_dictionary.derived_fields',
           freshness: `ค่าที่คำนวณจาก snapshot ใช้ได้เมื่อ snapshot ใหม่กว่า ${evidenceReadiness.snapshot_freshness.max_age_days} วัน; ปัจจุบันอายุ ${evidenceReadiness.snapshot_freshness.age_days ?? 'ไม่ทราบ'} วัน`,
           delta_validity: evidenceReadiness.baseline_pair.usable
             ? 'baseline/post pair อยู่ในช่วง protocol ที่ freeze แล้ว'
@@ -1182,6 +1176,7 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
           participation_kpi: 'ตัวชี้วัดการมีส่วนร่วม ต้องมีเหตุการณ์เสนอ/พิจารณา/มติ/แจ้งผลกลับ',
           research_outcome: 'ผลลัพธ์เชิงวิจัย ต้องมี protocol, baseline และช่วงสังเกตที่กำหนด',
           external_evidence: 'ต้องใช้เครื่องมือภายนอก เช่น แบบสอบถาม สัมภาษณ์ บันทึกประชุม',
+          [DESCRIPTIVE_STATISTIC]: 'สถิติเชิงบรรยายจาก snapshot ที่ export แต่ไม่มี metric ใน registry — ห้ามใช้เป็นผลวิจัยหรือ KPI',
         },
         metrics: evidenceReadiness.metrics.map((m) => ({
           key: m.key, role: m.role, title: m.title, title_th: m.title_th,
@@ -1192,6 +1187,10 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
           blocking_reasons: m.blocking_reasons,
           latest_evidence_date: m.latest_evidence_date,
         })),
+        // The snapshot-derived fields in summary.dme_mie, each with its own
+        // formula and missing-data rule, and a pointer to the registry metric
+        // it reads for — or a descriptive_statistic label when there is none.
+        derived_fields: derivedFieldDictionary(),
       };
     }
 
@@ -1260,6 +1259,13 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
             if (NESTED.has(k)) continue;
             csv += `${esc(k)},${esc(v)}\n`;
           }
+          // Deltas get their own section so a null (zero denominator on either
+          // side) is an empty cell, not a 0.
+          if (s.dme_mie.delta) {
+            csv += '\n=== Delta From Baseline (percentage points) ===\n';
+            csv += 'field,delta_pp\n';
+            for (const [k, v] of Object.entries(s.dme_mie.delta)) csv += `${esc(k)},${esc(v)}\n`;
+          }
         }
       }
 
@@ -1277,6 +1283,25 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         csv += '\nmetric_key,category,evidence_status,blocking_reasons,latest_evidence_date\n';
         for (const m of er.metrics || []) {
           csv += [m.key, m.category, m.status, (m.blocking_reasons || []).join(' | '), m.latest_evidence_date]
+            .map(esc).join(',') + '\n';
+        }
+      }
+
+      // The dictionary travels with the CSV for the same reason readiness
+      // does: a spreadsheet copy has to carry the formula, denominator and
+      // missing-data rule of every number in it, or the number is unsourced.
+      if (result.data_dictionary) {
+        const dd = result.data_dictionary;
+        csv += '\n=== Data Dictionary (metrics) ===\n';
+        csv += 'key,role,category,formula,numerator,denominator,missing_data_rule,instrument,evidence_status\n';
+        for (const m of dd.metrics || []) {
+          csv += [m.key, m.role, m.category, m.formula, m.numerator, m.denominator, m.missing_data_rule, m.instrument, m.evidence_status]
+            .map(esc).join(',') + '\n';
+        }
+        csv += '\n=== Data Dictionary (snapshot-derived fields in dme_mie) ===\n';
+        csv += 'key,delta_key,category,formula,numerator,denominator,missing_data_rule,delta_rule,registry_metric,note\n';
+        for (const f of dd.derived_fields || []) {
+          csv += [f.key, f.delta_key, f.category, f.formula, f.numerator, f.denominator, f.missing_data_rule, f.delta_rule, f.registry_metric, f.note]
             .map(esc).join(',') + '\n';
         }
       }
@@ -1374,7 +1399,73 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
             if (k === '_notes' || k === 'delta' || k === 'role_adoption') continue;
             ws.addRow({ label: k, value: v != null ? v : 'pending' });
           }
+          if (s.dme_mie.delta) {
+            ws.addRow({ label: '', value: '' });
+            ws.addRow({ label: '--- Delta from baseline (percentage points) ---', value: '' });
+            for (const [k, v] of Object.entries(s.dme_mie.delta)) {
+              // null means a zero denominator on one side; say so, never 0.
+              ws.addRow({ label: `delta.${k}`, value: v != null ? v : 'null (ตัวส่วนเป็น 0 ฝั่งใดฝั่งหนึ่ง)' });
+            }
+          }
         }
+        styleHeader(ws);
+      }
+
+      // Readiness and the dictionary travel with the workbook for the same
+      // reason they travel with the CSV: without them a sheet of percentages
+      // reads as a clean dataset. The JSON had both; the CSV had readiness
+      // only; the workbook had neither.
+      if (result.meta?.evidence_readiness) {
+        const er = result.meta.evidence_readiness;
+        const ws = wb.addWorksheet('Evidence Readiness');
+        ws.columns = [
+          { header: 'รายการ', key: 'label', width: 34 },
+          { header: 'ค่า', key: 'value', width: 70 },
+        ];
+        ws.addRow({ label: 'research_claims_allowed', value: String(er.research_claims_allowed) });
+        ws.addRow({ label: 'blocking_reasons', value: (er.blocking_reasons || []).join(' | ') });
+        ws.addRow({ label: 'snapshot_latest', value: er.snapshot_freshness?.latest_snapshot_date ?? '' });
+        ws.addRow({ label: 'snapshot_age_days', value: er.snapshot_freshness?.age_days ?? '' });
+        ws.addRow({ label: 'snapshot_fresh', value: String(er.snapshot_freshness?.fresh) });
+        ws.addRow({ label: 'protocol_frozen', value: String(er.protocol?.frozen) });
+        ws.addRow({ label: 'note', value: er.note || '' });
+        styleHeader(ws);
+
+        const wm = wb.addWorksheet('Readiness by Metric');
+        wm.columns = [
+          { header: 'metric_key', key: 'key', width: 36 },
+          { header: 'category', key: 'category', width: 20 },
+          { header: 'evidence_status', key: 'status', width: 20 },
+          { header: 'blocking_reasons', key: 'blocking_reasons', width: 50 },
+          { header: 'latest_evidence_date', key: 'latest_evidence_date', width: 20 },
+        ];
+        for (const m of er.metrics || []) {
+          wm.addRow({ ...m, blocking_reasons: (m.blocking_reasons || []).join(' | ') });
+        }
+        styleHeader(wm);
+      }
+
+      if (result.data_dictionary) {
+        const dd = result.data_dictionary;
+        const ws = wb.addWorksheet('Data Dictionary');
+        ws.columns = [
+          { header: 'kind', key: 'kind', width: 10 },
+          { header: 'key', key: 'key', width: 36 },
+          { header: 'role', key: 'role', width: 12 },
+          { header: 'category', key: 'category', width: 22 },
+          { header: 'formula', key: 'formula', width: 50 },
+          { header: 'numerator', key: 'numerator', width: 36 },
+          { header: 'denominator', key: 'denominator', width: 36 },
+          { header: 'missing_data_rule', key: 'missing_data_rule', width: 60 },
+          { header: 'instrument', key: 'instrument', width: 12 },
+          { header: 'evidence_status', key: 'evidence_status', width: 20 },
+          { header: 'delta_key', key: 'delta_key', width: 22 },
+          { header: 'delta_rule', key: 'delta_rule', width: 60 },
+          { header: 'registry_metric', key: 'registry_metric', width: 32 },
+          { header: 'note', key: 'note', width: 80 },
+        ];
+        for (const m of dd.metrics || []) ws.addRow({ kind: 'metric', ...m });
+        for (const f of dd.derived_fields || []) ws.addRow({ kind: 'derived', ...f });
         styleHeader(ws);
       }
 

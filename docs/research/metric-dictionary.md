@@ -689,6 +689,13 @@
 
 ข้อบรรเทาที่มีอยู่แล้ว: ค่า delta ถูกส่งพร้อม `baseline_pair` และข้อความห้ามตีความเป็นผลวิจัยเมื่อคู่ baseline/post ใช้ไม่ได้ (`admin.routes.js:1136-1138`) และ meta ทั้งชุดมี `readiness_note` (`:1006`)
 
+**อัปเดต 5 กันยายน 2569 (commit เดียวกับที่เพิ่มย่อหน้านี้ — closure handoff §2 ข้อ 2, 3, 4):**
+
+- `calcDelta` ย้ายไป `backend/src/utils/researchSnapshotFields.js` และคืน `null` เมื่อตัวส่วนฝั่งใดฝั่งหนึ่งเป็น 0 ตาม missing-data rule แล้ว **ไม่คืน 0 อีก** — ข้อขัดแย้งในแถว `delta.*` ข้างบนปิดแล้ว (เทสต์: `backend/tests/researchSnapshotFields.unit.test.js`, `backend/tests/researchExportFormats.test.js` ซึ่ง seed baseline ที่ `total_students = 0` แล้วยืนยันว่า JSON ได้ `null`, CSV ได้ช่องว่าง, Excel ได้ข้อความ `null`)
+- ฟิลด์ `_pct` ทั้ง 8 มี dictionary entry แล้วใน `data_dictionary.derived_fields` (formula, numerator, denominator, missing_data_rule, delta_rule, registry_metric) — ฟิลด์ 4 ตัวที่ไม่มี metric ใน registry (`parent_coverage_pct`, `insurance_coverage_pct`, `inspection_coverage_pct`, `inspection_pass_pct`) ถูกติดป้าย `category = descriptive_statistic` พร้อม note ห้ามใช้เป็นผลวิจัย **ไม่ได้เพิ่มเข้า registry 24 ตัว** เพราะยังไม่มีนิยามระดับ research claim — คอลัมน์ "ช่องว่าง" ของตารางข้างบนจึงยังถูกต้องในความหมาย "ไม่มี metric ใน registry" แต่ตัวเลขไม่ได้ออกไปโดยไม่มีนิยามอีกแล้ว
+- CSV และ Excel มี evidence readiness และ data dictionary ติดไปด้วยแล้ว (เดิมครบเฉพาะ JSON; CSV มี readiness แต่ไม่มี dictionary; Excel ไม่มีทั้งสอง) — Excel เพิ่ม sheet `Evidence Readiness`, `Readiness by Metric`, `Data Dictionary` และแถว `delta.*` ใน `Summary`
+- เลขบรรทัด `admin.routes.js` ในตารางข้างบนเป็นของ commit `4b80b4b` และเลื่อนไปแล้วหลังการแก้นี้ ให้ค้นด้วยชื่อ (`snapshotPercentages`, `snapshotDeltas`, `derivedFieldDictionary`) แทนเลขบรรทัด
+
 ---
 
 ## 8. ตัวชี้วัดที่ยังไม่มีนิยามระดับ dictionary ในโค้ด

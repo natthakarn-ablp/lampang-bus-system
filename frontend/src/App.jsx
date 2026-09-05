@@ -115,6 +115,9 @@ const SystemHealth         = lazy(() => import('./pages/admin/SystemHealth'));
 const TermSettings         = lazy(() => import('./pages/admin/TermSettings'));
 const AdminLiveVehicles    = lazy(() => import('./pages/admin/AdminLiveVehicles'));
 const AdminAccountSecurity = lazy(() => import('./pages/admin/AdminAccountSecurity'));
+const ParticipationCases      = lazy(() => import('./pages/participation/ParticipationCases'));
+const ParticipationCaseDetail = lazy(() => import('./pages/participation/ParticipationCaseDetail'));
+const ParticipationNewCase    = lazy(() => import('./pages/participation/ParticipationNewCase'));
 
 export const ROLE_HOME = {
   driver:      '/driver',
@@ -437,6 +440,29 @@ export default function App() {
           <Route path="/admin/executive-print" element={
             <PrivateRoute allowedRoles={['admin']}>
               <ExecutivePrint />
+            </PrivateRoute>
+          } />
+
+          {/* Participation cases — the roles here match the router's own
+              requireRole list (participation.routes.js:32). Scope is enforced
+              in SQL from the token, so being allowed in is not being allowed
+              to see everything. The router is only mounted when
+              FEATURE_PARTICIPATION_CASES is on; with it off these pages load
+              and every call 404s, which the list page names explicitly rather
+              than showing an empty table. */}
+          <Route path="/participation" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+              <Layout><ParticipationCases /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/participation/new" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+              <Layout><ParticipationNewCase /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/participation/cases/:id" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+              <Layout><ParticipationCaseDetail /></Layout>
             </PrivateRoute>
           } />
 

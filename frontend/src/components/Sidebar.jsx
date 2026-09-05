@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState , Inbox} from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
@@ -23,6 +23,7 @@ import { PAGE_TITLES } from '../constants/uiLabels';
 // Only the GROUPING changed; every `to` from the previous menu is still here.
 
 const DRIVER_NAV = [
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/driver',             icon: BarChart3,      label: PAGE_TITLES.DRIVER_DASHBOARD },
   { section: 'งานดำเนินการ' },
@@ -37,6 +38,7 @@ const DRIVER_NAV = [
 ];
 
 const SCHOOL_NAV = [
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/school',               icon: BarChart3,     label: PAGE_TITLES.SCHOOL_DASHBOARD },
   { section: 'งานดำเนินการ' },
@@ -58,6 +60,7 @@ const SCHOOL_NAV = [
 ];
 
 const AFFILIATION_NAV = [
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/affiliation',             icon: BarChart3,     label: PAGE_TITLES.AFFILIATION_DASHBOARD },
   { section: 'งานดำเนินการ' },
@@ -78,6 +81,7 @@ const AFFILIATION_NAV = [
 ];
 
 const PROVINCE_NAV = [
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/province',              icon: BarChart3,     label: PAGE_TITLES.PROVINCE_DASHBOARD },
   { section: 'ข้อมูลหลัก' },
@@ -97,6 +101,7 @@ const PROVINCE_NAV = [
 ];
 
 const TRANSPORT_NAV = [
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/transport',              icon: BarChart3,    label: 'ภาพรวมตรวจสภาพรถ' },
   { section: 'งานดำเนินการ' },
@@ -107,6 +112,7 @@ const TRANSPORT_NAV = [
 ];
 
 const ADMIN_NAV = [
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/admin',                 icon: Home,        label: 'ศูนย์ควบคุมระบบ' },
   { section: 'งานดำเนินการ' },
@@ -175,6 +181,10 @@ function navItemsForUser(user, features) {
     '/driver/vehicle-registration': 'driverRegistration',
     '/driver/applications': 'driverRegistration',
     '/school/registration-review': 'driverRegistration',
+    // Same treatment as the other dark features: with the flag off the router
+    // is not mounted, so the page would load and every call would 404. Hidden
+    // until it is switched on.
+    '/participation': 'participationCases',
   };
   const filtered = base.filter(item => {
     if (!item.to) return true;

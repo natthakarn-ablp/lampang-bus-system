@@ -1,7 +1,7 @@
 # แผนที่การเปลี่ยนเส้นทาง (Redirect Map)
 
 > สถานะ: บันทึกสิ่งที่โค้ด **ทำอยู่จริง** ณ 2026-09-05 — ไม่ใช่สิ่งที่ตั้งใจจะทำ
-> ที่มาของทุกแถว: `frontend/src/App.jsx` (102 `<Route>`) และ `frontend/src/components/Sidebar.jsx`
+> ที่มาของทุกแถว: `frontend/src/App.jsx` (105 `<Route>`) และ `frontend/src/components/Sidebar.jsx`
 > ตรวจซ้ำได้ด้วย `grep -n 'path=' frontend/src/App.jsx` และ `grep -n 'Navigate' frontend/src/App.jsx`
 
 เอกสารนี้มีไว้เพื่อสองอย่าง
@@ -59,10 +59,11 @@
 '/driver/vehicle-registration'  → driverRegistration
 '/driver/applications'          → driverRegistration
 '/school/registration-review'   → driverRegistration
+'/participation'                → participationCases   (เพิ่ม 2026-09-05)
 ```
 
 แต่ `App.jsx` **ไม่ได้อ้างถึง `features` เลยแม้แต่ครั้งเดียว** (`grep -c features frontend/src/App.jsx` = 0)
-แปลว่าทั้ง 6 path ยัง `<Route>` อยู่เสมอ ไม่ว่า flag จะเปิดหรือปิด
+แปลว่าทั้ง 7 path ยัง `<Route>` อยู่เสมอ ไม่ว่า flag จะเปิดหรือปิด
 
 ผลที่ตามมาเมื่อ flag ปิด แล้วผู้ใช้เข้าถึง path ตรง ๆ (bookmark, ลิงก์ที่เคยส่งกันไว้, พิมพ์เอง):
 
@@ -70,8 +71,12 @@
 - แต่ path ยังเข้าได้ → หน้าโหลดขึ้นมา แล้วยิง API ที่ `app.js` ไม่ได้ mount (`app.js:196-197` mount `/api/participation` ต่อเมื่อ flag เปิด — โมดูลอื่นก็รูปแบบเดียวกัน)
 - ผู้ใช้เห็นหน้าเปล่าหรือ error state โดยไม่มีคำอธิบายว่า "ฟีเจอร์นี้ยังไม่เปิด"
 
+**สิ่งที่หน้า participation ทำไปก่อนแล้วครึ่งทาง:** หน้ารายการตรวจข้อความ 404 ที่ได้กลับมา
+แล้วขึ้นกล่องบอกว่า "ยังไม่ได้เปิดใช้งานส่วนนี้" แทนที่จะแสดงตารางว่างซึ่งอ่านได้ว่า "ไม่มีเรื่อง"
+เป็นการแก้อาการที่แย่ที่สุด (เข้าใจผิดว่าไม่มีข้อมูล) แต่ยังไม่ได้แก้ต้นเหตุ (path ยังเข้าได้)
+
 **ข้อเสนอ (ยังไม่ได้ทำ — ต้องรอ decision C0-3 เรื่องโครงเมนู):**
-ให้ `App.jsx` อ่าน `features` จาก `useAuth()` แล้ว redirect 6 path นี้ไป `ROLE_HOME` ของผู้ใช้เมื่อ flag ปิด
+ให้ `App.jsx` อ่าน `features` จาก `useAuth()` แล้ว redirect ทั้ง 7 path นี้ไป `ROLE_HOME` ของผู้ใช้เมื่อ flag ปิด
 จะได้พฤติกรรมเดียวกับเมนู คือ "ยังไม่เปิด = ไม่มีอยู่" แทนที่จะเป็น "มีอยู่แต่พัง"
 
 ที่มาของ `features`: มาจาก response ตอน login (`backend/src/routes/auth.routes.js:226` ส่ง `env.features`)

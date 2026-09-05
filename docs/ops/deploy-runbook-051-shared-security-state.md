@@ -1,7 +1,7 @@
 # Runbook: นำรุ่นนี้ขึ้น production โดยไม่กระทบผู้ใช้
 
-> ใช้กับ branch `feat/tracking-security-hardening` (44 commit นับจากที่อยู่บน origin เดิม)
-> เขียน 2026-09-05 · **ยังไม่มีใครรันบน production** — เอกสารนี้คือลำดับที่ปลอดภัย ไม่ใช่บันทึกว่าทำแล้ว
+> ใช้กับ branch `feat/tracking-security-hardening`
+> เขียน 2026-09-05 · **รันบน production แล้วเมื่อ 2026-09-05** ตามลำดับในเอกสารนี้ — ดูหัวข้อ 7 สำหรับผลจริง
 
 ## สรุปหนึ่งบรรทัด
 
@@ -128,24 +128,63 @@ pm2 reload ecosystem.config.js
 
 ---
 
-## 5. งานประจำที่ต้องตั้งเพิ่ม (ทำภายหลังได้)
+## 5. งานประจำ — ตั้งแล้ว 2026-09-05
 
-สามตารางนี้โตขึ้นเรื่อย ๆ ถ้าไม่ล้าง ใช้รูปแบบเดียวกับ `cleanup-revoked-tokens.js`:
+สามตารางนี้โตขึ้นเรื่อย ๆ ถ้าไม่ล้าง บรรทัดที่ติดตั้งจริงใน crontab ของ `schoolbus`:
 
 ```
-15 3 * * *  cd /home/schoolbus/apps/lampang-bus-system/backend && node scripts/cleanup-shared-security-state.js --apply
+0 4 * * * cd /home/schoolbus/apps/lampang-bus-system/backend && /usr/bin/node scripts/cleanup-shared-security-state.js --apply >> /home/schoolbus/logs/cleanup-shared-security-state.log 2>&1
 ```
 
-รันแบบ dry-run ก่อนได้โดยตัด `--apply` ออก
-ไม่ตั้งก็ไม่พัง แต่ตารางจะโตไปเรื่อย ๆ
+รันแบบ dry-run ได้โดยตัด `--apply` ออก
+
+**ฉบับร่างแรกของ runbook นี้เขียนบรรทัดนี้ผิดสามจุด** บันทึกไว้เพราะเป็นกับดักเดิม ๆ
+ที่ crontab ของเครื่องนี้มีอยู่แล้วและคนเขียนใหม่มักพลาดซ้ำ:
+
+| เขียนผิดเป็น | ทำไมผิด |
+|---|---|
+| `15 3` | ชนกับ `integrity-monitor.js` ที่ตั้งไว้แล้ว · ช่วง 02:30 / 02:50 / 03:00 / 03:15 / 03:30 / 03:45 เต็มหมด จึงใช้ 04:00 |
+| `node` | cron มี PATH น้อยมาก งานอื่นทุกตัวในไฟล์นี้ใช้ `/usr/bin/node` แบบเต็ม path |
+| ไม่มี redirect | งานอื่นทุกตัว append ลง `/home/schoolbus/logs/*.log` ถ้าไม่ทำ output จะหายไปเงียบ ๆ |
+
+`CRON_TZ=Asia/Bangkok` ตั้งไว้ที่หัวไฟล์อยู่แล้ว เวลาทั้งหมดจึงเป็นเวลาไทย
+
+ตรวจแล้วว่าใช้ได้จริง ไม่ใช่แค่ syntax ถูก: รันคำสั่งเดียวกันเป๊ะ ๆ บนเซิร์ฟเวอร์ได้ exit 0
+และเขียน log ออกมา · สำรอง crontab เดิมไว้ก่อนแก้ที่
+`/home/schoolbus/logs/crontab-backup-<ts>.txt` และ diff ยืนยันว่าอีก 18 บรรทัดเหมือนเดิมทุกตัว
 
 ---
 
 ## 6. สิ่งที่ runbook นี้ **ไม่** ครอบคลุม
 
-- **ยังไม่เคยรันบน production หรือ staging จริง** ทดสอบมาจาก local staging
-  (`lampang_bus_staging` บน docker) เท่านั้น — ดู `backend/scripts/LOCAL_STAGING.md`
+- ไม่ครอบคลุม staging จริง (B2-2) — ก่อนขึ้น production ทดสอบมาจาก local staging
+  (`lampang_bus_staging` บน docker) เท่านั้น ดู `backend/scripts/LOCAL_STAGING.md`
 - ไม่ครอบคลุมการ deploy frontend (build ใหม่แล้วเสิร์ฟไฟล์ static — ไม่ขึ้นกับ migration นี้)
 - ตัวเลข capacity จาก local ใช้อ้างกับ production ไม่ได้ ดู `docs/performance/load-test-local-2026-09-05.md`
 - ฟีเจอร์ participation ยังปิดอยู่ (`FEATURE_PARTICIPATION_CASES` ไม่ได้ตั้ง = false)
   หน้าจอใหม่จะยังไม่ปรากฏในเมนูของใครจนกว่าจะเปิด flag ซึ่งเป็นการตัดสินใจแยกต่างหาก (C0-4)
+
+---
+
+## 7. ผลจริงจากการรัน 2026-09-05
+
+เวลาเซิร์ฟเวอร์ตอนทำ: วันเสาร์ 13:12 น. ตามเวลาไทย — ไม่มีรถรับส่ง ไม่มีเช็กอิน
+
+| ขั้น | ผล |
+|---|---|
+| backup ก่อนเริ่ม | `lampang_bus_20260905_023001.sql.gz` อายุ 3 ชม. |
+| migration (ขั้น 3.1) | 0 → 3 ตาราง · ระหว่างนั้น `/health` 200 ตลอด และ pm2 restarts ไม่ขยับ (คงที่ 17) |
+| deploy (ขั้น 3.2) | unit 67 suites / 811 tests ผ่าน → `pm2 reload` → restarts 17 → 18 → `[deploy] Health check OK` |
+| ด่านบูต | `[app] Shared security state check passed (migration 051 tables present)` |
+| error เรื่องตาราง | 0 |
+| ทดสอบเส้นทาง login | ยิงด้วยบัญชีที่ไม่มีจริง `__postdeploy_check_051` → **HTTP 401** ไม่ใช่ 500 และ `login_lockouts` เกิด 1 แถว `fail_count=1` ทันที |
+
+แถว lockout จากการทดสอบถูกลบออกแล้ว (เหลือ 0) ส่วน audit row คงไว้ — audit เป็นบันทึกที่ไม่ควรลบ
+และชื่อผู้ใช้ที่ใช้ทดสอบบอกที่มาชัดเจนอยู่แล้ว
+
+**สะดุดหนึ่งครั้งระหว่างทาง ที่ไม่ได้เกิดจาก migration:** `deploy-backend.sh` รันชุด unit
+ก่อน reload และครั้งแรกไม่ผ่าน เพราะ `goLiveEvidenceRows.unit.test.js` ยืนยันว่าเครื่องที่รันต้องมี
+readiness ผ่าน ซึ่งอ่านจาก `outputs/` ที่อยู่ใน gitignore จึงต่างกันทุกเครื่อง — เซิร์ฟเวอร์มี
+phase9-evidence ชุด 26 ส.ค. ที่ตกเกณฑ์จริง deploy จึง**หยุดเองก่อน reload** โปรเซสเดิมให้บริการต่อ
+ไม่มีผู้ใช้กระทบ แก้ที่เทสต์ (commit `93e7b41`, `208e883`) ไม่ได้แตะ evidence pack
+และไม่ได้ทำให้ gate ผ่าน — ทั้งสองอย่างนั้นไม่ใช่การแก้

@@ -54,9 +54,15 @@ describe('percentiles', () => {
 
 describe('summary', () => {
   it('counts errors and computes a rate', () => {
+    // Samples carry a status now. summarise() used to grade on the `ok`
+    // boolean, which folded 401/403/404 in with 200 — a scenario pointed at a
+    // route that does not exist reported a clean, fast result. classify()
+    // splits served / rejected / rate_limited / failed instead, so a fixture
+    // has to say what the server actually answered.
+    // See tests/loadTestMeasurement.unit.test.js for that rule on its own.
     const s = summarise([
-      { ms: 10, ok: true }, { ms: 20, ok: true },
-      { ms: 30, ok: false }, { ms: 40, ok: true },
+      { ms: 10, ok: true, status: 200 }, { ms: 20, ok: true, status: 200 },
+      { ms: 30, ok: false, status: 500 }, { ms: 40, ok: true, status: 200 },
     ]);
     expect(s.requests).toBe(4);
     expect(s.errors).toBe(1);
@@ -68,21 +74,24 @@ describe('summary', () => {
 describe('thresholds', () => {
   it('applies the read limit to reads and the write limit to writes', () => {
     // 1,500ms is a failure for a read and a pass for a write, per the plan.
+    // `measured: true` says these requests were served. Without it the
+    // scenario is NOT MEASURED and would fail for that reason instead of the
+    // latency one this case is about.
     const readFail = evaluateThresholds({
-      school_dashboard: { requests: 10, errors: 0, error_rate: 0, p95_ms: 1500 },
+      school_dashboard: { requests: 10, errors: 0, error_rate: 0, p95_ms: 1500, measured: true },
     });
     expect(readFail.passed).toBe(false);
     expect(readFail.failures[0]).toMatch(/read/);
 
     const writeOk = evaluateThresholds({
-      driver_gps: { requests: 10, errors: 0, error_rate: 0, p95_ms: 1500 },
+      driver_gps: { requests: 10, errors: 0, error_rate: 0, p95_ms: 1500, measured: true },
     });
     expect(writeOk.passed).toBe(true);
   });
 
   it('fails a run whose error rate exceeds one percent', () => {
     const r = evaluateThresholds({
-      login: { requests: 1000, errors: 20, error_rate: 0.02, p95_ms: 100 },
+      login: { requests: 1000, errors: 20, error_rate: 0.02, p95_ms: 100, measured: true },
     });
     expect(r.passed).toBe(false);
     expect(r.failures[0]).toMatch(/error rate/);

@@ -61,7 +61,12 @@ const SCENARIOS = Object.freeze([
     weight: 0.20,
     writes: false,
     method: 'GET',
-    path: '/api/school/daily-status',
+    // status-today, not daily-status. school.routes.js:243 is the only
+    // definition, every other role uses the same name, and so does the
+    // frontend. CLAUDE.md 5.3 still says daily-status; the code is what runs.
+    // Probed against local staging with a school token: daily-status 404,
+    // status-today 200.
+    path: '/api/school/status-today',
   },
   {
     key: 'school_students',
@@ -148,14 +153,48 @@ function percentile(sortedAsc, p) {
   return sortedAsc[Math.min(rank, sortedAsc.length) - 1];
 }
 
+/**
+ * Classify one response.
+ *
+ * The distinction that matters is not 2xx-vs-not. It is "the server did the
+ * work this scenario is meant to measure" versus "the server answered without
+ * doing it". A 404 is fast and cheap and would drag a p95 down while proving
+ * nothing — which is exactly what happened while school_dashboard pointed at a
+ * path that does not exist.
+ *
+ * @param {number} status  HTTP status, or 0 for a transport-level failure
+ * @returns {'served'|'rate_limited'|'rejected'|'failed'}
+ */
+function classify(status) {
+  if (status >= 200 && status < 400) return 'served';
+  if (status === 429) return 'rate_limited';          // the limiter working
+  if (status >= 400 && status < 500) return 'rejected'; // auth/scope/not-found
+  return 'failed';                                     // 5xx, or never answered
+}
+
 function summarise(samples) {
-  const durations = samples.map((s) => s.ms).sort((a, b) => a - b);
-  const errors = samples.filter((s) => !s.ok).length;
+  const served = samples.filter((s) => classify(s.status) === 'served');
+  // Latency is reported over the requests that actually did the work. Mixing
+  // in 401s and 404s reports the speed of the rejection, not of the feature.
+  const durations = served.map((s) => s.ms).sort((a, b) => a - b);
   const total = samples.length;
+  const counts = { served: 0, rate_limited: 0, rejected: 0, failed: 0 };
+  for (const s of samples) counts[classify(s.status)] += 1;
+  const statuses = {};
+  for (const s of samples) statuses[s.status] = (statuses[s.status] || 0) + 1;
   return {
     requests: total,
-    errors,
-    error_rate: total > 0 ? Math.round((errors / total) * 100000) / 100000 : null,
+    served: counts.served,
+    rejected: counts.rejected,
+    rate_limited: counts.rate_limited,
+    errors: counts.failed,
+    // Rejections are not server errors, so they stay out of the error budget —
+    // but they are also not successes, so they cannot silence it either. A
+    // scenario that was only ever rejected reports measured=false below.
+    error_rate: total > 0 ? Math.round((counts.failed / total) * 100000) / 100000 : null,
+    // The flag every threshold and every claim has to consult first.
+    measured: counts.served > 0,
+    status_counts: statuses,
     p50_ms: percentile(durations, 50),
     p95_ms: percentile(durations, 95),
     p99_ms: percentile(durations, 99),
@@ -169,6 +208,13 @@ function evaluateThresholds(summaryByScenario) {
   for (const [key, s] of Object.entries(summaryByScenario)) {
     const scenario = SCENARIOS.find((x) => x.key === key);
     if (!scenario || s.requests === 0) continue;
+    // Requests were sent and none of them was served. Whatever the p95 says,
+    // this scenario was not measured, and silence here would read as a pass.
+    if (!s.measured) {
+      const seen = Object.keys(s.status_counts || {}).join('/') || 'unknown';
+      failures.push(`${key}: NOT MEASURED — ${s.requests} requests, none served (status ${seen})`);
+      continue;
+    }
     if (s.error_rate > THRESHOLDS.error_rate_max) {
       failures.push(`${key}: error rate ${(s.error_rate * 100).toFixed(2)}% exceeds ${(THRESHOLDS.error_rate_max * 100).toFixed(0)}%`);
     }
@@ -264,12 +310,14 @@ async function runStage({ target, scenarios, users, durationSec, headers }) {
       try {
         const res = await fetch(url, init);
         status = res.status;
-        // A 429 is the rate limiter working, not a server failure; it is
-        // counted separately so it cannot be laundered into an error budget.
+        // Kept for the raw sample only. Every aggregate goes through
+        // classify(), which separates served / rejected / rate_limited /
+        // failed rather than folding the middle two into "not an error".
         ok = res.status < 500 && res.status !== 429;
         await res.arrayBuffer();
       } catch {
         ok = false;
+        status = 0;
       }
       samples.push({ scenario: scenario.key, ms: Math.round(performance.now() - t0), ok, status });
     }
@@ -290,6 +338,11 @@ async function runStage({ target, scenarios, users, durationSec, headers }) {
     duration_sec: Math.round(wallSec * 100) / 100,
     throughput_rps: Math.round((samples.length / wallSec) * 100) / 100,
     rate_limited: samples.filter((s) => s.status === 429).length,
+    // Named here so a reader of the report does not have to open every
+    // scenario to find out which parts of the mix never ran.
+    scenarios_not_measured: scenarios
+      .map((sc) => sc.key)
+      .filter((k) => byScenario[k].requests > 0 && !byScenario[k].measured),
     overall: all,
     by_scenario: byScenario,
     event_loop_delay_ms: {
@@ -357,7 +410,8 @@ async function main() {
     // support a 1,000-user claim, however good its numbers look.
     max_users_reached: Math.max(...stages),
     supports_1000_user_claim: stages.includes(1000)
-      && results.every((r) => r.threshold_result.passed),
+      && results.every((r) => r.threshold_result.passed)
+      && results.every((r) => r.scenarios_not_measured.length === 0),
   };
 
   const outFile = args.out;
@@ -381,6 +435,7 @@ module.exports = {
   THRESHOLDS,
   PRODUCTION_HOSTS,
   percentile,
+  classify,
   summarise,
   evaluateThresholds,
   checkTarget,

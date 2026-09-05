@@ -165,10 +165,10 @@ backend ที่ใช้รันรอบนี้ขึ้นด้วย `.
 | 1 | ~~`EXPLAIN` query ของ `/api/reports/daily`~~ **ทำแล้ว** — ทุก join ใช้ index อยู่แล้ว ไม่มี index ที่ขาด ดูข้อ 2.2 | เสร็จ |
 | 2 | ทดลองเพิ่ม `connectionLimit` แล้ววัดซ้ำ พร้อมดู `max_connections` ฝั่ง MySQL | ไม่ติด แต่ค่าที่จะใช้จริงต้องรู้สเปกเซิร์ฟเวอร์ production (B2-2) |
 | 3 | รันซ้ำด้วย `NODE_ENV=staging` เพื่อวัดภายใต้ global limiter | ไม่ติด |
-| 4 | ทำให้ `school_checkin_override` วัดได้ — ต้องจับคู่ token กับโรงเรียนของนักเรียน | ไม่ติด (เป็นงาน harness) |
-| 5 | บันทึก `parentLimiter` ต่อ IP ลง residual-risk register | ไม่ติด |
+| 4 | ทำให้ `school_checkin_override` วัดได้ — ต้องจับคู่ token กับโรงเรียนของนักเรียน | **harness แก้แล้ว 5 ก.ย. ค่ำ (`19a74c9`: อ่าน roster ของโรงเรียนเจ้าของ token)** แต่บน staging ที่ `daily_status` ของวันนี้ครบแล้ว endpoint ตอบ 409 ทุกครั้งตาม idempotency — วัดได้เมื่อ reset สถานะวันของโรงเรียนสังเคราะห์ (`phase9-rehearsal-2026-09-05.md` §1) |
+| 5 | บันทึก `parentLimiter` ต่อ IP ลง residual-risk register | **ทำแล้ว** — RR-09 ใน `docs/security/residual-risk-register.md` |
 | 6 | วัด `participation_event` | **ติด C0-4** (flag ปิด และ decision อาจยกเลิก feature ทั้งก้อน) |
-| 7 | วัด `driver_*` และ `parent_status` | ต้องรองรับหลาย token ต่อรอบ + LINE id_token ปลอมสำหรับ LIFF |
+| 7 | วัด `driver_*` และ `parent_status` | **`driver_*` วัดได้แล้ว** (`19a74c9`: `--token-file` หนึ่ง JWT ต่อบทบาท + แก้ body `latitude/longitude`; ผลใน `phase9-rehearsal-2026-09-05.md`) · `parent_status` ยังต้อง LINE id_token (B2-1) |
 | 8 | load test บน staging จริง | **ติด B2-2** |
 
 ### 5.1 สิ่งที่ harness ทำได้เพิ่มตั้งแต่ 5 ก.ย. 2569 (handoff §2 ข้อ 6, 7)

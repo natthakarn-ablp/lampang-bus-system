@@ -69,6 +69,7 @@ log ของแต่ละก้อนอยู่ใน scratchpad ของ�
 | 6 | รัน Phase 9 จริง: ramp 1,000 / peak / soak ≥ 60 นาที บน Linux staging พร้อม `--admin-token` | ติด B2-2 (staging จริง) · บน Windows ค่า swap/load เป็น `null` · scenario 6 ใน 9 ยังวัดไม่ได้ด้วย token เดียว (`load-test-local-2026-09-05.md` §3) |
 | 7 | บันทึก `parentLimiter` 60/นาที/IP ลง residual-risk register | ยังค้างจาก `load-test-local-2026-09-05.md` §2.3 |
 | 8 | render คู่มือ PDF จริงด้วยสคริปต์ที่แก้แล้ว | เครื่องนี้ไม่มี chromium ใต้ `~/.cache/ms-playwright` — ตรวจได้แค่ `--dry-run` |
+| 10 | ~~`deploy-backend.sh` ใช้ `git pull \|\| true`~~ | **แก้แล้ว** หลัง `d889530` — ดู `docs/ops/deploy-2026-09-05-c0b0d49.md` §6 และ `backend/tests/deployBackendScript.unit.test.js` |
 | 9 | CS5-03, CS5-05 (Phase 5) | ต้องเป็นข้อเสนอพร้อม DDL ไม่ใช่แก้เอง — ไม่ได้อยู่ใน 9 ข้อนี้ |
 
 ---

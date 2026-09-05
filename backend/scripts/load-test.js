@@ -23,8 +23,30 @@
  * Usage:
  *   node scripts/load-test.js --target https://staging.example --sandbox \
  *     --profile ramp --users 50,200,500,1000 --duration 60
+ *   node scripts/load-test.js --target https://staging.example --sandbox \
+ *     --profile peak --users 1000 --baseline-users 50 --duration 60 --peak-duration 120
+ *   node scripts/load-test.js --target https://staging.example --sandbox \
+ *     --profile soak --users 200 --duration 3600
  *   node scripts/load-test.js --target http://127.0.0.1:3000 --read-only --profile smoke
  *   node scripts/load-test.js --dry-run     # validate scenarios + metrics only
+ *
+ * Profiles (closure plan Phase 9: "รัน ramp 50/200/500/1,000, peak และ soak
+ * อย่างน้อย 60 นาที"):
+ *   ramp   one stage per --users entry, each --duration seconds
+ *   peak   baseline → burst at max(--users) → back to baseline, and a
+ *          recovery verdict: did p95 come back down after the burst?
+ *   soak   one stage at --users for --duration, which must be >= 3600 s;
+ *          --allow-short-soak permits a rehearsal that is marked as NOT a soak
+ *   smoke  four read-only scenarios; the only profile allowed at production
+ *
+ * Server-side metrics (the same plan line: "DB pool/slow query, CPU/RAM/swap
+ * … และ LINE queue"): pass --admin-token <admin JWT> and every stage polls
+ * GET /api/admin/operations/capacity-sample every --sample-interval seconds
+ * (default 5). Without it the report says so in `server_note` rather than
+ * leaving the section out.
+ *
+ * One run is one profile. `phase9_evidence.missing_for_phase9` in the report
+ * lists what the plan still needs beyond this run.
  */
 
 const fs = require('fs');
@@ -135,6 +157,45 @@ const THRESHOLDS = Object.freeze({
   duplicate_or_lost_writes: 0,
 });
 
+/** Phase 9 asks for a soak of at least this long; a shorter run is not a soak. */
+const SOAK_MIN_SEC = 60 * 60;
+
+/**
+ * Stage plan per profile. `ramp` and `smoke` are what existed; `peak` and
+ * `soak` are the two the plan names that had no implementation. Pure, so the
+ * plan a report was built from can be tested without a target.
+ *
+ * @returns {Array<{label:string, users:number, durationSec:number}>}
+ */
+function buildStages({
+  profile = 'ramp', users, durationSec = 60, peakDurationSec, baselineUsers = 50, allowShortSoak = false,
+} = {}) {
+  const list = (Array.isArray(users) ? users : String(users || '').split(','))
+    .map((n) => parseInt(n, 10)).filter((n) => Number.isFinite(n) && n > 0);
+
+  if (profile === 'peak') {
+    const peakUsers = list.length ? Math.max(...list) : 1000;
+    return [
+      { label: 'baseline', users: baselineUsers, durationSec },
+      { label: 'peak', users: peakUsers, durationSec: peakDurationSec || durationSec },
+      { label: 'recovery', users: baselineUsers, durationSec },
+    ];
+  }
+  if (profile === 'soak') {
+    const soakUsers = list.length ? list[0] : 200;
+    const sec = durationSec || SOAK_MIN_SEC;
+    if (sec < SOAK_MIN_SEC && !allowShortSoak) {
+      throw new Error(
+        `soak requires --duration >= ${SOAK_MIN_SEC} (60 minutes); got ${sec}. `
+        + 'Pass --allow-short-soak for a rehearsal — the report will say it is not a soak.'
+      );
+    }
+    return [{ label: 'soak', users: soakUsers, durationSec: sec, short_soak: sec < SOAK_MIN_SEC }];
+  }
+  const stageUsers = list.length ? list : [50, 200, 500, 1000];
+  return stageUsers.map((u) => ({ label: `${profile}-${u}`, users: u, durationSec }));
+}
+
 // ─── Metrics ────────────────────────────────────────────────────────────────
 
 /**
@@ -226,6 +287,189 @@ function evaluateThresholds(summaryByScenario) {
   return { passed: failures.length === 0, failures };
 }
 
+// ─── Server-side samples ────────────────────────────────────────────────────
+
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const present = (vals) => vals.filter((v) => v != null);
+const maxOf = (vals) => (present(vals).length ? Math.max(...present(vals)) : null);
+const minOf = (vals) => (present(vals).length ? Math.min(...present(vals)) : null);
+const p95Of = (vals) => percentile(present(vals).sort((a, b) => a - b), 95);
+const delta = (a, b) => (num(a) != null && num(b) != null ? b - a : null);
+
+/**
+ * Collapse the capacity samples taken during one stage into the numbers the
+ * report carries. Cumulative counters (slow_queries, cpu_*_ms) become deltas
+ * first-to-last; gauges become max / p95 / min. Pure, for the same reason as
+ * summarise(): the report's numbers must be testable without a server.
+ */
+function aggregateServerSamples(samples) {
+  const ok = (samples || []).filter((x) => x && x.sample);
+  if (!ok.length) return null;
+  const first = ok[0].sample;
+  const last = ok[ok.length - 1].sample;
+  const pool = ok.map((x) => x.sample.db_pool || {});
+  const db = ok.map((x) => x.sample.db_server || {});
+  const proc = ok.map((x) => x.sample.process || {});
+  const host = ok.map((x) => x.sample.host || {});
+  const lq = ok.map((x) => x.sample.line_queue || {});
+
+  const cpuMs = (sm) => (num(sm.process && sm.process.cpu_user_ms) || 0) + (num(sm.process && sm.process.cpu_system_ms) || 0);
+  const cpuDeltaMs = cpuMs(last) - cpuMs(first);
+  const cores = num(last.host && last.host.cpu_count) || 1;
+  const spanMs = ok.length > 1 ? Date.parse(last.sampled_at) - Date.parse(first.sampled_at) : 0;
+  const queuedMax = maxOf(pool.map((x) => num(x.queued)));
+
+  return {
+    samples: ok.length,
+    failed_samples: (samples || []).length - ok.length,
+    span_sec: Math.round(spanMs / 100) / 10,
+    db_pool: {
+      limit: num(last.db_pool && last.db_pool.limit),
+      utilisation_max: maxOf(pool.map((x) => num(x.utilisation))),
+      utilisation_p95: p95Of(pool.map((x) => num(x.utilisation))),
+      in_use_max: maxOf(pool.map((x) => num(x.in_use))),
+      queued_max: queuedMax,
+      // The plan's question in one flag: did requests wait for a connection?
+      saturated: (queuedMax || 0) > 0,
+    },
+    db_server: {
+      threads_connected_max: maxOf(db.map((x) => num(x.threads_connected))),
+      threads_running_max: maxOf(db.map((x) => num(x.threads_running))),
+      slow_queries_delta: delta(first.db_server && first.db_server.slow_queries, last.db_server && last.db_server.slow_queries),
+      slow_query_log: (last.db_server && last.db_server.slow_query_log) || null,
+      long_query_time_sec: num(last.db_server && last.db_server.long_query_time_sec),
+      max_used_connections: num(last.db_server && last.db_server.max_used_connections),
+      max_connections: num(last.db_server && last.db_server.max_connections),
+    },
+    process: {
+      rss_mb_max: maxOf(proc.map((x) => num(x.rss_mb))),
+      heap_used_mb_max: maxOf(proc.map((x) => num(x.heap_used_mb))),
+      // CPU time the backend process used across the sampled span, as a share
+      // of one core. It can exceed 100: GC and libuv threads run alongside the
+      // event loop, so the process is more than one thread.
+      cpu_pct_of_one_core: spanMs > 0 ? Math.round((cpuDeltaMs / spanMs) * 1000) / 10 : null,
+      cpu_pct_of_host: spanMs > 0 ? Math.round((cpuDeltaMs / (spanMs * cores)) * 1000) / 10 : null,
+    },
+    host: {
+      cpu_count: cores,
+      load_avg_1m_max: maxOf(host.map((x) => num(x.load_avg_1m))),
+      mem_free_mb_min: minOf(host.map((x) => num(x.mem_free_mb))),
+      mem_available_mb_min: minOf(host.map((x) => num(x.mem_available_mb))),
+      swap_used_mb_max: maxOf(host.map((x) => num(x.swap_used_mb))),
+      swap_note: (last.host && last.host.swap_note) || null,
+    },
+    line_queue: {
+      pending_max: maxOf(lq.map((x) => num(x.pending))),
+      pending_delta: delta(first.line_queue && first.line_queue.pending, last.line_queue && last.line_queue.pending),
+      exhausted_max: maxOf(lq.map((x) => num(x.exhausted))),
+      oldest_pending_age_sec_max: maxOf(lq.map((x) => num(x.oldest_pending_age_sec))),
+    },
+  };
+}
+
+async function fetchSample(target, adminToken) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 3000);
+  try {
+    const res = await fetch(`${target}/api/admin/operations/capacity-sample`, {
+      headers: { authorization: `Bearer ${adminToken}` },
+      signal: ctl.signal,
+    });
+    if (res.status !== 200) { await res.arrayBuffer(); return { status: res.status, sample: null }; }
+    const body = await res.json();
+    return { status: 200, sample: body.data || null };
+  } catch (err) {
+    return { status: 0, sample: null, error: err.name };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Polls capacity-sample until stop() is called; stop() resolves to the samples. */
+function startSampler({ target, adminToken, intervalSec }) {
+  const samples = [];
+  let stopped = false;
+  const loop = (async () => {
+    while (!stopped) {
+      samples.push(await fetchSample(target, adminToken));
+      const t0 = Date.now();
+      while (!stopped && Date.now() - t0 < intervalSec * 1000) await new Promise((r) => setTimeout(r, 100));
+    }
+  })();
+  return {
+    stop: async () => {
+      stopped = true;
+      await loop;
+      // One last sample so the deltas cover the end of the stage.
+      samples.push(await fetchSample(target, adminToken));
+      return samples;
+    },
+  };
+}
+
+/**
+ * "ฟื้นหลัง peak ได้" (plan Phase 9 acceptance line). After the burst, the
+ * recovery stage — same load as the baseline stage that preceded the burst —
+ * must be within thresholds AND not materially slower than that baseline. A
+ * system that stays slow after the burst has a queue that never drained, or a
+ * leak; either way it has not recovered, whatever the peak numbers were.
+ */
+function evaluateRecovery(stages) {
+  const baseline = (stages || []).find((x) => x.label === 'baseline');
+  const peak = (stages || []).find((x) => x.label === 'peak');
+  const recovery = (stages || []).find((x) => x.label === 'recovery');
+  if (!baseline || !peak || !recovery) return null;
+  const b = num(baseline.overall && baseline.overall.p95_ms);
+  const r = num(recovery.overall && recovery.overall.p95_ms);
+  const ratio = b != null && b > 0 && r != null ? Math.round((r / b) * 100) / 100 : null;
+  const withinThresholds = recovery.threshold_result ? Boolean(recovery.threshold_result.passed) : false;
+  return {
+    baseline_p95_ms: b,
+    peak_p95_ms: num(peak.overall && peak.overall.p95_ms),
+    recovery_p95_ms: r,
+    recovery_to_baseline_ratio: ratio,
+    recovery_error_rate: num(recovery.overall && recovery.overall.error_rate),
+    recovery_within_thresholds: withinThresholds,
+    // Why a recovery stage failed thresholds, so "not recovered" can be told
+    // apart from "not measured": a scenario that only ever got 403 fails the
+    // stage without saying anything about how the system recovered.
+    recovery_threshold_failures: recovery.threshold_result ? recovery.threshold_result.failures : [],
+    // The 1.5× is a starting rule, not a measured one; say so in the report.
+    recovered: withinThresholds && ratio != null && ratio <= 1.5,
+    rule: 'recovery stage within thresholds AND recovery p95 <= 1.5 × baseline p95',
+  };
+}
+
+/**
+ * What this run contributes to Phase 9, and what the plan still needs. One
+ * run is one profile, so `missing_for_phase9` is never empty for a single
+ * report — it tells the person assembling the evidence which runs to add.
+ */
+function phase9Evidence({ profile, stages, recovery, serverMetricsCollected }) {
+  const maxUsers = stages.length ? Math.max(...stages.map((x) => x.users)) : 0;
+  const soak = stages.find((x) => x.label === 'soak');
+  const soakMinutes = soak ? Math.round(soak.duration_sec / 60) : 0;
+  const ev = {
+    ramp_reached_1000: profile === 'ramp' && maxUsers >= 1000,
+    peak_run: profile === 'peak',
+    peak_recovered: recovery ? recovery.recovered : null,
+    soak_minutes: soakMinutes,
+    soak_60min: soakMinutes >= SOAK_MIN_SEC / 60,
+    server_metrics_collected: Boolean(serverMetricsCollected),
+  };
+  const missing = [];
+  if (!ev.ramp_reached_1000) missing.push('ramp to 1,000 users (--profile ramp --users 50,200,500,1000)');
+  if (!ev.peak_run) missing.push('peak profile (--profile peak)');
+  else if (!ev.peak_recovered) missing.push('recovery after peak (this peak run did not recover)');
+  if (!ev.soak_60min) missing.push('soak >= 60 minutes (--profile soak --duration 3600)');
+  if (!ev.server_metrics_collected) missing.push('server-side metrics (--admin-token so capacity-sample is polled)');
+  return {
+    ...ev,
+    missing_for_phase9: missing,
+    note: 'Phase 9 needs ramp, peak and soak, each with server metrics. One run provides one profile; combine reports.',
+  };
+}
+
 // ─── Target safety ──────────────────────────────────────────────────────────
 
 /**
@@ -277,8 +521,9 @@ function parseArgs(argv) {
   return args;
 }
 
-async function runStage({ target, scenarios, users, durationSec, headers }) {
+async function runStage({ target, scenarios, users, durationSec, headers, adminToken = null, sampleIntervalSec = 5 }) {
   const samples = [];
+  const sampler = adminToken ? startSampler({ target, adminToken, intervalSec: sampleIntervalSec }) : null;
   const loopDelay = monitorEventLoopDelay({ resolution: 10 });
   loopDelay.enable();
   const startedAt = performance.now();
@@ -325,6 +570,7 @@ async function runStage({ target, scenarios, users, durationSec, headers }) {
 
   await Promise.all(workers);
   loopDelay.disable();
+  const serverSamples = sampler ? await sampler.stop() : null;
 
   const wallSec = (performance.now() - startedAt) / 1000;
   const byScenario = {};
@@ -351,6 +597,12 @@ async function runStage({ target, scenarios, users, durationSec, headers }) {
       p99: Math.round(loopDelay.percentile(99) / 1e6 * 100) / 100,
       max: Math.round(loopDelay.max / 1e6 * 100) / 100,
     },
+    // Server-side numbers from capacity-sample, or an explicit statement that
+    // they were not collected — never a silently absent section.
+    server: serverSamples ? aggregateServerSamples(serverSamples) : null,
+    server_note: serverSamples
+      ? (serverSamples.some((x) => x.sample) ? null : `capacity-sample never answered 200 (statuses: ${[...new Set(serverSamples.map((x) => x.status))].join('/')}); is --admin-token an admin JWT?`)
+      : 'no --admin-token; server-side metrics (DB pool, slow queries, CPU/RAM/swap, LINE queue) not collected',
   };
 }
 
@@ -364,6 +616,7 @@ async function main() {
     process.stdout.write(`[load] dry run: ${SCENARIOS.length} scenarios, weight sum=${weight.toFixed(2)}\n`);
     process.stdout.write(`[load] writes: ${SCENARIOS.filter((s) => s.writes).map((s) => s.key).join(', ')}\n`);
     process.stdout.write(`[load] thresholds: ${JSON.stringify(THRESHOLDS)}\n`);
+    process.stdout.write(`[load] profiles: ramp, peak, soak (>= ${SOAK_MIN_SEC}s), smoke\n`);
     return;
   }
 
@@ -377,42 +630,93 @@ async function main() {
     return;
   }
 
-  const stages = String(args.users || '50,200,500,1000').split(',').map((n) => parseInt(n, 10)).filter(Boolean);
-  const durationSec = parseInt(args.duration, 10) || 60;
+  let plan;
+  try {
+    plan = buildStages({
+      profile,
+      users: args.users,
+      durationSec: parseInt(args.duration, 10) || (profile === 'soak' ? SOAK_MIN_SEC : 60),
+      peakDurationSec: parseInt(args['peak-duration'], 10) || undefined,
+      baselineUsers: parseInt(args['baseline-users'], 10) || 50,
+      allowShortSoak: Boolean(args['allow-short-soak']),
+    });
+  } catch (err) {
+    process.stderr.write(`[load] refusing to run: ${err.message}\n`);
+    process.exitCode = 2;
+    return;
+  }
   const scenarios = selectScenarios({ readOnly, profile });
   const headers = args.token ? { authorization: `Bearer ${args.token}` } : {};
+  const adminToken = args['admin-token'] || null;
+  const sampleIntervalSec = parseInt(args['sample-interval'], 10) || 5;
 
-  process.stdout.write(`[load] target=${check.host} profile=${profile} read_only=${readOnly} scenarios=${scenarios.length}\n`);
+  process.stdout.write(
+    `[load] target=${check.host} profile=${profile} read_only=${readOnly} scenarios=${scenarios.length} `
+    + `stages=${plan.map((x) => `${x.label}:${x.users}x${x.durationSec}s`).join(',')} `
+    + `server_metrics=${adminToken ? `every ${sampleIntervalSec}s` : 'off (no --admin-token)'}\n`
+  );
 
   const results = [];
-  for (const users of stages) {
-    process.stdout.write(`[load] stage users=${users} duration=${durationSec}s\n`);
-    const stage = await runStage({ target: args.target, scenarios, users, durationSec, headers });
+  for (const st of plan) {
+    process.stdout.write(`[load] stage ${st.label} users=${st.users} duration=${st.durationSec}s\n`);
+    const stage = await runStage({
+      target: args.target, scenarios, users: st.users, durationSec: st.durationSec, headers, adminToken, sampleIntervalSec,
+    });
     const verdict = evaluateThresholds(stage.by_scenario);
-    results.push({ ...stage, threshold_result: verdict });
+    results.push({ label: st.label, ...stage, threshold_result: verdict });
+    const srv = stage.server;
     process.stdout.write(
       `[load]   rps=${stage.throughput_rps} errors=${stage.overall.errors}/${stage.overall.requests} `
       + `p95=${stage.overall.p95_ms}ms p99=${stage.overall.p99_ms}ms loop_p99=${stage.event_loop_delay_ms.p99}ms `
+      + (srv
+        ? `pool_util_max=${srv.db_pool.utilisation_max} pool_queued_max=${srv.db_pool.queued_max} slow_q=${srv.db_server.slow_queries_delta} `
+          + `cpu%=${srv.process.cpu_pct_of_one_core} rss_max=${srv.process.rss_mb_max}MB swap_used_max=${srv.host.swap_used_mb_max} line_pending_max=${srv.line_queue.pending_max} `
+        : '')
       + `${verdict.passed ? 'within thresholds' : 'THRESHOLD FAILURES: ' + verdict.failures.join('; ')}\n`
     );
+    if (stage.server_note) process.stdout.write(`[load]   note: ${stage.server_note}\n`);
   }
 
+  const recovery = profile === 'peak' ? evaluateRecovery(results) : null;
+  if (recovery) {
+    process.stdout.write(
+      `[load] recovery: baseline p95=${recovery.baseline_p95_ms}ms peak p95=${recovery.peak_p95_ms}ms `
+      + `recovery p95=${recovery.recovery_p95_ms}ms ratio=${recovery.recovery_to_baseline_ratio} → ${recovery.recovered ? 'RECOVERED' : 'NOT RECOVERED'}\n`
+    );
+    if (!recovery.recovered && recovery.recovery_threshold_failures.length) {
+      process.stdout.write(`[load]   recovery stage threshold failures: ${recovery.recovery_threshold_failures.join('; ')}\n`);
+    }
+  }
+  const serverMetricsCollected = results.length > 0 && results.every((r) => r.server && r.server.samples > 0);
+  const evidence = phase9Evidence({ profile, stages: results, recovery, serverMetricsCollected });
+  const stageUsers = plan.map((x) => x.users);
+
   const report = {
-    schema_version: '1.0',
+    schema_version: '1.1',
     generated_at: new Date().toISOString(),
     target_host: check.host,
     profile,
+    stage_plan: plan,
     read_only: readOnly,
     production_smoke: Boolean(check.productionSmoke),
     thresholds: THRESHOLDS,
     stages: results,
+    recovery,
+    // What this run adds to Phase 9 and what the plan still needs beyond it.
+    phase9_evidence: evidence,
     // Stated rather than inferred: a run that never reached 1,000 users cannot
-    // support a 1,000-user claim, however good its numbers look.
-    max_users_reached: Math.max(...stages),
-    supports_1000_user_claim: stages.includes(1000)
+    // support a 1,000-user claim, however good its numbers look. This is the
+    // per-run threshold verdict only; the plan's full claim also needs the
+    // peak and soak runs listed in phase9_evidence.missing_for_phase9.
+    max_users_reached: Math.max(...stageUsers),
+    supports_1000_user_claim: stageUsers.includes(1000)
       && results.every((r) => r.threshold_result.passed)
-      && results.every((r) => r.scenarios_not_measured.length === 0),
+      && results.every((r) => r.scenarios_not_measured.length === 0)
+      && (recovery ? recovery.recovered : true),
   };
+  if (evidence.missing_for_phase9.length) {
+    process.stdout.write(`[load] still needed for Phase 9: ${evidence.missing_for_phase9.join(' | ')}\n`);
+  }
 
   const outFile = args.out;
   if (outFile) {
@@ -434,10 +738,15 @@ module.exports = {
   SCENARIOS,
   THRESHOLDS,
   PRODUCTION_HOSTS,
+  SOAK_MIN_SEC,
   percentile,
   classify,
   summarise,
   evaluateThresholds,
   checkTarget,
   selectScenarios,
+  buildStages,
+  aggregateServerSamples,
+  evaluateRecovery,
+  phase9Evidence,
 };

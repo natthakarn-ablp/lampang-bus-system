@@ -136,6 +136,42 @@ curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
 
 ---
 
+## 5.1 peak / soak และค่าฝั่ง server (เพิ่ม 5 ก.ย. 2569 — handoff §2 ข้อ 6, 7)
+
+แผน Phase 9 ขอ ramp 50/200/500/1,000 **และ** peak **และ** soak ≥ 60 นาที พร้อมค่าฝั่ง server
+(DB pool/slow query, CPU/RAM/swap, คิว LINE) เดิม `load-test.js` มีแต่ ramp และเก็บได้แต่ค่าฝั่ง client
+
+ค่าฝั่ง server มาจาก `GET /api/admin/operations/capacity-sample` (admin เท่านั้น ไม่มี PII ราคาถูกพอจะ poll ทุก 5 วินาที)
+ต้องส่ง **token ของ admin แยกต่างหาก** ด้วย `--admin-token` — token ของโรงเรียนใน §5 ใช้ยิง scenario
+ส่วน token admin ใช้ poll เท่านั้น staging ที่ seed ไว้ **ไม่มีบัญชี admin** ให้สร้างชั่วคราวแล้วลบทิ้ง:
+
+```sql
+INSERT INTO lampang_bus_staging.users (username, password_hash, role, display_name, is_active)
+VALUES ('__loadtest_admin', '$2b$12$0000000000000000000000000000000000000000000000000000', 'admin', '__loadtest_admin', 1);
+-- mint token ด้วย sub = id ที่ได้, role 'admin', scopeType/scopeId = null (วิธีเดียวกับ §5)
+-- เสร็จแล้ว: DELETE FROM users WHERE username = '__loadtest_admin';
+```
+
+```bash
+# peak: baseline 50 → burst 1,000 → กลับมา 50 แล้วตัดสินว่า "ฟื้นหลัง peak" หรือไม่
+node scripts/load-test.js --target http://127.0.0.1:3000 --sandbox --profile peak \
+  --users 1000 --baseline-users 50 --duration 60 --peak-duration 120 \
+  --token "$TOKEN" --admin-token "$ADMIN_TOKEN" --out ../outputs/load-test/local-peak-<ts>/report.json
+
+# soak: stage เดียว >= 3600 วินาที (สั้นกว่านั้นสคริปต์ปฏิเสธ; --allow-short-soak = ซ้อม และรายงานจะบอกว่าไม่ใช่ soak)
+node scripts/load-test.js --target http://127.0.0.1:3000 --sandbox --profile soak \
+  --users 200 --duration 3600 --token "$TOKEN" --admin-token "$ADMIN_TOKEN" --out ../outputs/load-test/local-soak-<ts>/report.json
+```
+
+อ่านผล: ทุก stage มี `server` (pool utilisation max/p95, `queued_max`, `saturated`, slow_queries delta, CPU % ของ process,
+RSS, swap, คิว LINE) หรือ `server_note` บอกว่าทำไมไม่มี · profile peak มี `recovery` พร้อม `recovery_threshold_failures`
+เพื่อแยก "ช้าหลัง peak" ออกจาก "scenario วัดไม่ได้" · ทุกรายงานมี `phase9_evidence.missing_for_phase9` บอกว่า Phase 9
+ยังต้องการ run แบบไหนอีก (หนึ่ง run = หนึ่ง profile จึงไม่มีทางว่างจาก run เดียว)
+
+> ผลจากเครื่องนี้ยังเป็น **local, ไม่เทียบเท่า production** เหมือน §0 — ใช้หา bottleneck ได้ ใช้อ้าง capacity ไม่ได้
+> และ `os.loadavg()`/swap บน Windows เป็น `null` พร้อมเหตุผลใน `swap_note` ค่าสองตัวนี้ได้เฉพาะเมื่อ backend รันบน Linux
+
+---
 ## 6. ลบทิ้ง
 
 ```bash

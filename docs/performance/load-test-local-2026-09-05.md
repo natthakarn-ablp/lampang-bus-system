@@ -170,3 +170,35 @@ backend ที่ใช้รันรอบนี้ขึ้นด้วย `.
 | 6 | วัด `participation_event` | **ติด C0-4** (flag ปิด และ decision อาจยกเลิก feature ทั้งก้อน) |
 | 7 | วัด `driver_*` และ `parent_status` | ต้องรองรับหลาย token ต่อรอบ + LINE id_token ปลอมสำหรับ LIFF |
 | 8 | load test บน staging จริง | **ติด B2-2** |
+
+### 5.1 สิ่งที่ harness ทำได้เพิ่มตั้งแต่ 5 ก.ย. 2569 (handoff §2 ข้อ 6, 7)
+
+ตอนที่เขียนเอกสารนี้ `load-test.js` มีแต่ ramp 4×60 วิ และเก็บได้แต่ค่าฝั่ง client ตอนนี้:
+
+- **profile `peak`** (baseline → burst → recovery) พร้อมคำตัดสิน `recovery.recovered` ตามกฎ
+  "recovery stage อยู่ในเกณฑ์ และ p95 ≤ 1.5 × baseline" และ **profile `soak`** ที่ปฏิเสธ `--duration < 3600`
+  (`--allow-short-soak` = ซ้อม รายงานจะระบุ `short_soak: true` และไม่นับเป็น soak)
+- **ค่าฝั่ง server ทั้ง 4 กลุ่มที่ Phase 9 ขอ** ผ่าน `--admin-token` ซึ่งทำให้ทุก stage poll
+  `GET /api/admin/operations/capacity-sample` (ใหม่, admin-only, ไม่มี PII): DB pool utilisation/queued,
+  `Slow_queries` delta, CPU/RSS ของ process + load/swap ของ host (Linux), และคิว LINE จาก `notifications`
+- `phase9_evidence.missing_for_phase9` ในทุกรายงาน บอกว่ายังขาด run แบบไหนก่อนจะอ้าง Phase 9 ได้
+
+วิธีใช้อยู่ใน `backend/scripts/LOCAL_STAGING.md` §5.1
+
+**ซ้อมบนเครื่องนี้ (ไม่ใช่ผล Phase 9 — 5 และ 20 users, stage ละ 6–10 วินาที):**
+`outputs/load-test/local-peak-rehearsal-20260905-152242/report.json` และ `local-soak-rehearsal-20260905-152417/report.json`
+
+| stage | users | p95 | pool utilisation max | pool queued max | CPU % ของ process (1 core) | slow_queries Δ | คิว LINE |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| baseline | 5 | 30 ms | 0.4 | 0 | 179 | 0 | 0 |
+| peak | 20 | 87 ms | **1.0** | **1** | 125 | 0 | 0 |
+| recovery | 5 | 26 ms | 0.4 | 0 | 94 | 0 | 0 |
+
+สองข้อสังเกตที่การวัดฝั่ง server ให้เพิ่มจากที่ §2.1 เคย *อนุมาน* จากรูปกราฟ:
+
+1. pool 10 เส้น **อิ่มตัวจริงตั้งแต่ 20 users** (utilisation 1.0 และมีคำขอรอคิวใน mysql2) — เป็นการยืนยันสมมติฐาน §2.1 ด้วยตัวเลขตรง ๆ ไม่ใช่จากรูปของ p95
+2. ratio ฟื้นตัว = 0.87 (p95 หลัง peak ต่ำกว่าก่อน peak) แต่รายงานตัดสิน **NOT RECOVERED** เพราะ stage recovery มี scenario
+   ที่ "วัดไม่ได้" (`login` 429, `school_checkin_override` 404 — ข้อ 3 ของเอกสารนี้) จึงตกเกณฑ์ตามกติกาเดิมของ harness
+   `recovery_threshold_failures` ในรายงานแยกกรณีนี้ออกจาก "ช้าหลัง peak" ให้แล้ว การจะได้คำตัดสิน recovered ต้องแก้ข้อ 4 และ 7 ของตารางข้างบนก่อน
+
+ค่า swap และ load average เป็น `null` เพราะ backend รันบน Windows (`swap_note` บอกไว้ในรายงาน) — สองค่านี้จะได้เมื่อรันบน Linux staging (ข้อ 8)

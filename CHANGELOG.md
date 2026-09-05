@@ -5,6 +5,93 @@
 
 ---
 
+## [Unreleased · `feat/tracking-security-hardening`] — 2026-09-05
+
+**ยังไม่ push และยังไม่ merge** — 69 commit นำหน้า `origin/main` (`3cab155`)
+ส่วนนี้บันทึกว่าอะไรอยู่บนกิ่งนี้ ไม่ได้แปลว่าพร้อม deploy และไม่ใช่คำประกาศว่าระบบผ่าน UAT
+หรือ PDPA — สถานะเหล่านั้นยังรอหลักฐานและลายเซ็นตามแผนปิดโครงการ
+
+> **หมายเหตุถึงผู้อ่านแผน:** งาน A0-1 ในแผนปิดโครงการเขียนไว้ว่า "push `cef4bd1`;
+> ทำ release note จาก diff `0060c3e..cef4bd1`" ซึ่งเป็นช่วง 15 commit
+> ตอนนี้ `cef4bd1` เป็นบรรพบุรุษของ HEAD ไปแล้วและมีอีก 38 commit ต่อจากนั้น
+> ช่วงที่แผนระบุจึงล้าสมัย — ส่วนนี้เขียนจากช่วงจริง `origin/main..HEAD`
+> ตามบทเรียนว่าถ้าเอกสารกับสภาพจริงไม่ตรงกัน ให้ตรวจก่อนว่าฝั่งไหนผิด
+
+### 🔐 Security & privacy
+
+- **Refresh-token replay detection** — refresh token ที่ถูก revoke ไปแล้วและถูกนำมาใช้ซ้ำ
+  หลังพ้นช่วงผ่อนผัน 10 วินาที ถือว่ามีสองฝ่ายถือ token ใบเดียวกัน ระบบจะยุติทุก session
+  ของบัญชีนั้นและบันทึก audit (`9379495`) ทำโดยไม่แก้ schema — ใช้แถว sentinel ใน
+  `revoked_tokens` (มี DDL proposal สำหรับทางที่สะอาดกว่าใน `9f929cd`)
+- **Web client เก็บ refresh token ใบใหม่แล้ว** (`4f754ae`) — interceptor เดิมเก็บเฉพาะ
+  access token ทิ้งใบที่ rotation ออกให้ เมื่อรวมกับ replay detection ข้างบน ผู้ใช้เว็บ
+  ทุกคนจะถูกบังคับออกจากระบบทุกอุปกรณ์ตั้งแต่การ refresh ครั้งที่สอง — พบจากการอ่าน
+  residual-risk register (RR-02/RR-03) ก่อนที่จะถึงมือผู้ใช้
+- **Path parameter ที่เป็นตัวเลข ตรวจจากสตริงดิบ ไม่ใช่ค่าที่ถูกแปลงแล้ว** (`f5375dc`) —
+  `parseInt('1e5')`, `'1abc'`, `'1.9'`, `' 1'`, `'+1'`, `'01'` ล้วนได้ `1` ทั้งหมด
+  92 จุดเรียกใน 10 ไฟล์ route ย้ายมาใช้ guard เดียวกัน
+- **PDPA: `/api/school/audit-logs` ฝั่ง JSON เป็นตัวเดียวในสี่บทบาทที่ยังคืน
+  `parent_phone` และ `line_user_id` ดิบ** (`241a542`) ฝั่ง CSV redact อยู่แล้ว
+- **`/api/affiliation/audit-logs` เป็นตัวเดียวในสี่ที่ไม่มี `exportFormatLimiter`** (`21325cd`)
+- **RBAC / scope**: ตรวจจาก router graph จริง (`b35bbf1`), grade boundary
+  (`516da32`), consent gate ของรายชื่อบุตรหลาน (`dbc19a5`)
+- **`from`/`to` ของ research export ต้องเป็นวันที่ที่มีอยู่จริง** (A1-11 S6) — ค่าสองตัวนี้
+  ไหลไปอยู่ใน `meta.date_range` ของชุดข้อมูล ใน `entity_id` ของ audit row `EXPORT`
+  ที่ชุดข้อมูลอ้างเป็นหลักฐานของตัวเอง และในชื่อไฟล์ header ทั้งหมดนี้ไม่เคยถูกตรวจ
+  พร้อมกันนี้รวม `isValidDate` ห้าสำเนาในห้า router ให้เหลือหนึ่ง
+  (`utils/calendarDate.js`) — สี่ในห้าเป็น regex ที่รับ `2026-13-45`
+
+### 🐛 Fixed — พบจากการทดสอบกับฐานข้อมูลจริง
+
+- **DATE เดินถอยหลังหนึ่งวัน** ใน 6 จุด: วันหมดอายุประกันของ transport (`ca8c9ae`),
+  การลาและ audit row ของการตรวจสภาพ (`46e4fdf`), รถของ province และ affiliation
+  (`be807d7`) — mysql2 แปลง DATE เทียบกับ timezone +07:00 ของ connection
+- **การขึ้นรถที่ถูกยกเลิกยังถูกนับว่ามาเรียน และ duplicate guard ไม่รอด concurrency** (`6aabf2d`)
+- **รายงานผลนำเข้าไม่ได้บอกว่าเกิดอะไรกับแต่ละแถวจริง ๆ** (`840b15a`, `ccbd8df`)
+- **ฟิลด์ยาวเกินคืน 500 แทนที่จะเป็น 400** และไม่บอกว่าฟิลด์ไหน (`622fe41`, `99e7734`)
+- **Export CSV/Excel สร้างทั้งก้อนในหน่วยความจำ** → เปลี่ยนเป็น stream (`e6e06f2`)
+
+### 🧪 เครื่องมือวัดผล — หยุดรายงานว่า "ผ่าน" ทั้งที่ยังไม่ได้ตรวจ
+
+รูปแบบเดียวกันปรากฏสี่ครั้งบนกิ่งนี้ ทุกครั้งคือ "รันไม่ได้" ถูกรายงานเป็น "ตรวจแล้วไม่พบปัญหา"
+
+- npm audit รายงานว่าสะอาดจาก report ที่ parse ไม่ได้ (`307c28e`, `53641e6`)
+- `git()` ใน readiness collector คืน `''` เมื่อล้มเหลว ทำให้ worktree ที่อ่านไม่ได้กลายเป็น
+  "worktree clean" และ diff ที่อ่านไม่ได้กลายเป็น "ไม่พบ secret" (`b0d8d2a`)
+- teardown ของชุดทดสอบไล่ลำดับ FK จาก `information_schema` แทนรายการที่เขียนด้วยมือ
+  และรายงานแถวที่เหลือค้างเป็นความล้มเหลวของรอบนั้น (`9a1b720`)
+- **load test นับ 404 ว่าเป็นคำขอที่ทำงานสำเร็จ** — scenario ที่มีน้ำหนักมากที่สุด (0.20)
+  ชี้ไปที่ path ที่ไม่มีอยู่จริง จึงได้ p95 สวยงามจาก 404 handler ตอนนี้แยก
+  served / rate_limited / rejected / failed และ scenario ที่ไม่เคยถูก served
+  รายงานเป็น `NOT MEASURED` (`cb3f4a2`)
+
+### ♿ Accessibility
+
+- **วัด contrast จริงใน `capture.mjs`** (`8ff4cdf`) — เดิมวัดเฉพาะ target size 44×44
+  และ focus ring ส่วน contrast เป็นข้อความในเอกสารรีวิว รอบแรกที่วัด: 307 จุดตกเกณฑ์
+  บน 75 จาก 136 หน้า
+- **ย้ายทุกสีตัวอักษรไปโทนที่ผ่าน 4.5:1** (`9337933`) — ตอนนี้ 136 หน้า, ตัวอักษรที่ถูกวัด
+  7,443 จุด, ตกเกณฑ์ 0, วัดไม่ได้ 0 รวมถึงปุ่ม "รีเฟรชข้อมูล" ที่อยู่ที่ 1.2:1
+  (แทบมองไม่เห็นจนกว่าจะเอาเมาส์ไปวาง) บนสองหน้า
+
+### 🧰 Infrastructure & staging
+
+- **Sandbox ที่ทดสอบ end-to-end ได้โดยไม่แตะ production** (`b64034a`)
+- **Local staging ขึ้นจริงครั้งแรก** — seeder เขียนไว้ตั้งแต่ 4 ก.ย. แต่ header ของมันระบุเองว่า
+  "ยังไม่เคยรันจริง" ตอนนี้รันแล้ว: 58 ตาราง, 50 โรงเรียน, 1,800 นักเรียน,
+  64,440 checkin_logs พร้อม README (`backend/scripts/LOCAL_STAGING.md`)
+- **Load test บน local staging** — วัดได้ 3 จาก 9 scenario, `supports_1000_user_claim`
+  = false, คอขวดคือ pool 10 connection กับ 8 round-trip เรียงกันใน `getDailyReport()`
+  ไม่ใช่ index (`docs/performance/load-test-local-2026-09-05.md`)
+
+### 📄 เอกสารที่เพิ่มขึ้นและยัง**ไม่ใช่**การอนุมัติ
+
+`docs/project-closure/`, `docs/security/threat-rbac-idor-review-2026-09-04.md`,
+`docs/security/residual-risk-register.md` (RR-01…RR-09), `docs/ui/redirect-map.md`,
+`docs/performance/` — ทุกฉบับมีช่องตัดสินใจที่ยังว่าง และช่องเหล่านั้นต้องให้คนกรอก
+
+---
+
 ## [Unreleased] — 2026-07-07
 
 ชุดการเปลี่ยนแปลงบน branch `feat/date-derived-term` ที่ยังไม่ได้ merge เข้า main

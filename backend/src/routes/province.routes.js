@@ -6,6 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { exportFormatLimiter } = require('../middleware/rateLimiters');
 const { sendSuccess, sendError } = require('../utils/response');
+const { isCalendarDate } = require('../utils/calendarDate');
 const { pool } = require('../config/database');
 const provSvc = require('../services/province.service');
 const vllSvc = require('../services/vehicleLocation.service');
@@ -192,7 +193,9 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
 
-    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // Shared with /api/reports and admin: a shape-only regex accepted
+    // 2026-13-45. Ignore-if-invalid behaviour below is unchanged.
+    const isValidDate = isCalendarDate;
     let where = '1=1';
     const params = [];
     if (action) { where += ' AND al.action = ?'; params.push(action); }

@@ -17,6 +17,7 @@ const vllSvc = require('../services/vehicleLocation.service');
 const ExcelJS = require('exceljs');
 const { csvCell, neutralizeSpreadsheetCell, redactAuditValue } = require('../utils/exportSecurity');
 const { rejectOverLongFields } = require('../utils/fieldLength');
+const { isCalendarDate } = require('../utils/calendarDate');
 const researchReadinessSvc = require('../services/researchReadiness.service');
 const { RESEARCH_PROTOCOL, EXTERNAL_EVIDENCE_REGISTRY } = require('../config/researchProtocol');
 const { METRICS: RESEARCH_METRICS } = require('../config/researchMetrics');
@@ -618,7 +619,10 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
 
-    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // Was /^\d{4}-\d{2}-\d{2}$/, which accepts 2026-13-45. Same predicate as
+     // /api/reports uses, so the four routers no longer disagree. The
+     // ignore-if-invalid behaviour below is unchanged.
+    const isValidDate = isCalendarDate;
     let where = '1=1';
     const params = [];
     if (action) { where += ' AND al.action = ?'; params.push(action); }
@@ -995,8 +999,26 @@ router.get('/evaluation-summary', async (req, res, next) => {
 // Privacy: excludes ip_address, user_agent, old_value; includes user_id (admin-only access).
 router.get('/research-export', importExportLimiter, async (req, res, next) => {
   try {
+    // A1-11 S6. These two values are not only filters: they are written into
+    // the dataset's own meta.date_range, into the entity_id of the EXPORT
+    // audit row (`${from}_to_${to}`) that the dataset later cites as evidence
+    // of its own export, and into the Content-Disposition filename. An
+    // unchecked value therefore makes the dataset and its audit trail
+    // impossible to reconcile, and a value containing a quote malforms the
+    // header. /api/reports has validated its dates since it was written; this
+    // route was the one that did not.
     const from = req.query.from || '2020-01-01';
     const to = req.query.to || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    for (const [field, value] of [['from', from], ['to', to]]) {
+      if (!isCalendarDate(value)) {
+        return sendError(res, 'รูปแบบวันที่ไม่ถูกต้อง',
+          [{ field, message: 'ต้องเป็นรูปแบบ YYYY-MM-DD และเป็นวันที่ที่มีอยู่จริง' }], 400);
+      }
+    }
+    if (from > to) {
+      return sendError(res, 'ช่วงวันที่ไม่ถูกต้อง',
+        [{ field: 'from', message: 'วันเริ่มต้นต้องไม่อยู่หลังวันสิ้นสุด' }], 400);
+    }
     const include = (req.query.include || 'snapshots,audit,exports,summary').split(',');
 
     // Evidence readiness is derived per metric from data that exists. The old

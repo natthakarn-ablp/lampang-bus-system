@@ -9,6 +9,7 @@ const router  = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
+const { isCalendarDate } = require('../utils/calendarDate');
 const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
@@ -1310,7 +1311,9 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 30));
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
-    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // Shared with /api/reports and the other three routers: a shape-only
+    // regex accepted 2026-13-45. Ignore-if-invalid behaviour is unchanged.
+    const isValidDate = isCalendarDate;
 
     // Match each entity_type against its OWN id space: 'student' ids live in
     // students, 'roster_request' ids live in roster_change_requests (a separate

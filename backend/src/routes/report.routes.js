@@ -17,29 +17,10 @@ const { DECISION_LOG_ROLES, validateDecisionLog } = require('../utils/decisionLo
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
 
-const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/;
-const MONTH_RE = /^\d{4}-\d{2}$/;
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-function isLeapYear(year) {
-  return (year % 400 === 0) || (year % 4 === 0 && year % 100 !== 0);
-}
-
-function isValidMonth(value) {
-  if (!MONTH_RE.test(value)) return false;
-  const month = Number(value.slice(5, 7));
-  return month >= 1 && month <= 12;
-}
-
-function isValidDate(value) {
-  if (!DATE_RE.test(value)) return false;
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  if (month < 1 || month > 12) return false;
-  const maxDay = month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
-  return day >= 1 && day <= maxDay;
-}
+// Moved to utils/calendarDate.js so admin, affiliation and province stop
+// carrying a weaker shape-only copy of the same idea. Behaviour here is
+// unchanged — this was the implementation the others are now adopting.
+const { isCalendarDate: isValidDate, isCalendarMonth: isValidMonth } = require('../utils/calendarDate');
 
 /**
  * Extract and validate common filter params from query string.

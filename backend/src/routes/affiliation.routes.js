@@ -10,6 +10,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
 const { sendSuccess, sendError } = require('../utils/response');
+const { isCalendarDate } = require('../utils/calendarDate');
 const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
@@ -574,7 +575,9 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
     )`;
     const params = [affId, affId, affId, affId];
 
-    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // Shared with /api/reports and admin: a shape-only regex accepted
+    // 2026-13-45. Ignore-if-invalid behaviour below is unchanged.
+    const isValidDate = isCalendarDate;
     if (action) { scopeWhere += ' AND al.action = ?'; params.push(action); }
     if (date_from && isValidDate(date_from)) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
     if (date_to && isValidDate(date_to)) { scopeWhere += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }

@@ -67,6 +67,58 @@ async function assertDriverShiftMigrationPresent() {
   console.log('[app] Driver-shift migration check passed (migration 039 tables present)');
 }
 
+// ─── A1-9 — shared security state guard (migration 051) ──────────────────────
+// Unlike the guards above, this one has no feature flag to hide behind. The
+// login lockout is read on EVERY login attempt for every role
+// (utils/sharedSecurityState.js), the LINE webhook claims each event before
+// handling it, and the account-binding lockout gates the parent bind flow. If
+// migration 051 has not run, the first symptom is that nobody can sign in, as
+// a 500 that names ER_NO_SUCH_TABLE and nothing else.
+//
+// deploy-backend.sh is `git pull` + `pm2 reload` and does not apply migrations,
+// so this is a realistic ordering mistake rather than a theoretical one. Exiting
+// at boot means pm2 keeps the previous process serving and the deploy fails
+// visibly — a failed deploy instead of an outage.
+//
+// Same resilience rule as the guards above: a table that is genuinely absent is
+// fatal, but a probe that fails for an unrelated reason only warns.
+const REQUIRED_SHARED_STATE_TABLES = [
+  'login_lockouts', 'line_webhook_events_seen', 'line_bind_lockouts',
+];
+
+async function assertSharedSecurityStateMigrationPresent() {
+  let presentTables;
+  try {
+    const [rows] = await pool.query(
+      `SELECT table_name AS table_name
+         FROM information_schema.tables
+        WHERE table_schema = ?
+          AND table_name IN (?, ?, ?)`,
+      [env.db.name, ...REQUIRED_SHARED_STATE_TABLES]
+    );
+    presentTables = new Set(rows.map((r) => String(r.table_name).toLowerCase()));
+  } catch (err) {
+    console.warn(
+      `[app] WARNING: could not verify shared-security-state migration presence (${err.message}). ` +
+      'Continuing startup; verify migration 051 was applied.'
+    );
+    return;
+  }
+
+  const missing = REQUIRED_SHARED_STATE_TABLES.filter((t) => !presentTables.has(t));
+  if (missing.length > 0) {
+    console.error(
+      '[app] FATAL: this build requires migration 051 — ' +
+      `missing table(s): ${missing.join(', ')}. ` +
+      'Apply backend/migrations/051_shared_security_state.sql BEFORE starting this ' +
+      'version; without it every login fails. To go back instead, deploy the ' +
+      'previous release — the schema change is additive and safe to leave in place.'
+    );
+    process.exit(1);
+  }
+  console.log('[app] Shared security state check passed (migration 051 tables present)');
+}
+
 // ─── Phase 11A — Intelligent Tracking migration guard (2026-06-23) ───────────
 // Same pattern as the driver-shift guard: if any of FEATURE_ETA /
 // FEATURE_GEOFENCE / FEATURE_ROUTE_DEVIATION is on, migration 040 must have
@@ -152,6 +204,7 @@ async function assertTrackingMigrationPresent() {
 // ─── Start ───────────────────────────────────────────────────────────────────
 async function start() {
   await testConnection();
+  await assertSharedSecurityStateMigrationPresent();
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();
   await assertAdminRecoveryMigrationPresent();

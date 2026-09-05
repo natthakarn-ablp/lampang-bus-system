@@ -348,3 +348,52 @@ cd backend && set -a && . ./.env.test.example && set +a \
 ---
 
 ตัวเลขเมนูและ API inventory จัดทำจาก source ที่ commit `4b80b4b` รอบตรวจทานแก้ไขเพิ่มการอ่านอย่างเดียวจาก sandbox ในเครื่อง (HTTP status จาก backend `localhost:3000` และ `SELECT` จาก `lampang_bus_sandbox`) ตามที่ระบุไว้ใน §2 · ไม่มีการเข้าถึง production, ไม่มีการ deploy, ไม่มี migration และไม่มีการเขียนฐานข้อมูลใด ๆ ในการจัดทำเอกสารนี้
+
+## 12. Re-audit ที่ `a0e783e` (5 กันยายน 2569 ค่ำ) — ตัวเลขข้างบนยังใช้ได้หรือไม่
+
+§1 บอกไว้ว่าถ้า `Sidebar.jsx` หรือ `backend/src/app.js` เปลี่ยน ต้องรัน baseline ใหม่ ทั้งสองไฟล์เปลี่ยนแล้วตั้งแต่ `4b80b4b`
+(`git diff --stat 4b80b4b..a0e783e -- frontend/src backend/src` = 120+ ไฟล์: participation frontend `c077f03`, shared security state 051 `26dbde4`/`1366af8`,
+research export `c3989d4`, capacity-sample `e8e168f`, boot guard 050 `bc0bbd6`, frontend delta `d1449dc`) จึงรันเครื่องมือชุดเดิมซ้ำที่ `a0e783e`
+ซึ่งเป็น commit ที่ production รันอยู่ ณ เวลาที่รัน (`docs/ops/deploy-2026-09-05-a0e783e.md`) ผลดิบอยู่ที่ `outputs/rbac-matrix/20260905-215630/`
+
+### 12.1 เมนู (นับจาก `Sidebar.jsx` ด้วยกติกาเดียวกับ `navItemsForUser()`: FLAG_GATED, dedupe `/driver/requests` เมื่อ `driverRegistration` เปิด, TEACHER_BLOCKED_PATHS)
+
+| บทบาท | defined (เดิม → ใหม่) | visible: flag ปิดทั้งหมด | visible: production (`driverRegistration` เท่านั้น) | visible: flag เมนูเปิดครบ (**5 ตัว** ตอนนี้) |
+|---|---:|---:|---:|---:|
+| Driver | 8 → **9** | 5 | **6** | 8 |
+| School (บัญชีเต็ม) | 13 → **14** | 12 | **13** | 14 |
+| School (ครูประจำสายชั้น) | 13 → 14 | 9 | **9** | 10 |
+| Affiliation | 12 → **13** | 12 | **12** | 13 |
+| Province | 12 → **13** | 11 | **11** | 13 |
+| Transport | 4 → **5** | 4 | **4** | 5 |
+| Admin | 25 → **26** | 23 | **23** | 26 |
+| **รวม 6 บทบาท** | 74 → **80** | 67 | **69** | 79 |
+
+สิ่งเดียวที่เปลี่ยน: ทุกบทบาทได้รายการ `/participation` ("เรื่องที่ต้องมีส่วนร่วม") เพิ่ม 1 รายการ ซึ่งถูกซ่อนด้วย `participationCases` (`Sidebar.jsx` FLAG_GATED)
+ดังนั้น **จำนวนเมนูที่ผู้ใช้เห็นจริงในสถานะ flag แบบ production ยังเท่าเดิมทุกบทบาท (รวม 69)** และตัวเลข "flag เมนูเปิดครบ" ตอนนี้หมายถึง 5 flag (เพิ่ม `participationCases`)
+ตารางใน §3.1 จึงยังใช้เทียบ like-for-like ได้ในสองคอลัมน์แรก ส่วนคอลัมน์สุดท้ายให้ใช้ค่าใหม่ข้างบน
+
+### 12.2 Route ของ frontend (`App.jsx`)
+
+`path=` = **95** รายการ (เดิม 92) — เพิ่ม 3 รายการจาก participation frontend (`c077f03`) ข้อสังเกตใน §7 ข้อ 1 (route ไม่ถูกกรองด้วย flag) ยังเป็นจริง
+
+### 12.3 API inventory (`generate-rbac-matrix.js` ที่ `a0e783e`)
+
+| สถานะ flag | route ทั้งหมด (เดิม → ใหม่) | write | มี role guard | findings |
+|---|---:|---:|---:|---:|
+| flag ทุกตัวปิด | 249 → **250** | 120 | 226 → 227 | 0 |
+| เทียบเท่า production (`FEATURE_DRIVER_REGISTRATION=true`) | 266 → **267** | 130 | 243 → 244 | 0 |
+| flag ทั้ง 10 ตัวเปิด | 292 → **293** | 142 | 263 → 264 | 0 |
+
+route ที่เพิ่ม 1 รายการในทุกสถานะคือ `GET /api/admin/operations/capacity-sample` (`e8e168f`, admin-only read; ดู RR-10 ใน residual-risk register)
+รายบทบาท (production): driver 45/26/19 · school 79/36/43 · affiliation 39/12/27 · province 27/1/26 · transport 27/10/17 · **admin 201/90/111** (เดิม 200/90/110) — ตัวอื่นเท่าเดิมทุกตัว
+route ที่ไม่มี role guard ยัง 23 รายการ prefix เดิม (`/api/auth` 12, `/api/parent` 6, `/api/line` 2, `/api/terms` 1, `/api/visits` 1, `/health` 1)
+
+### 12.4 Scope enforcement (`audit-scope-enforcement.js`, production flags)
+
+`id-addressed writes=75 scoped-role-reachable=37 org=30 self=6 actor-only=1 gaps=0 unmounted=5` — **เท่ากับ §9.5 ทุกค่า** actor-scoped only ยังเป็น `DELETE /api/driver/registrations/documents/:kind/:id` รายการเดิม
+
+### 12.5 สรุป
+
+baseline นี้ **re-pin ได้ที่ `a0e783e`** สำหรับ §3 (เมนูที่มองเห็นในสถานะ production), §9 และ §9.5 โดยมีส่วนต่างที่บันทึกไว้ข้างบนครบ · สิ่งที่ยังไม่ได้ทำซ้ำ: การเปิดหน้าใน browser จริงตาม §10 และการนับ mobile bottom nav (§6) ด้วยตา
+

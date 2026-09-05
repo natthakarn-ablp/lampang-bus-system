@@ -435,3 +435,21 @@ cd backend && set -a && . ./.env.test.example && set +a \
 1. รันเครื่องมือทั้งสองในบล็อกด้านบนซ้ำด้วย flag ชุดเดิม — ผลตรงกับตัวเลขเดิมทุกตัว (`249 routes, 0 findings` · `writes=75 scoped-role-reachable=30 org=25 self=5 actor-only=0 gaps=0 unmounted=12`)
 2. `curl` สอง request แบบไม่ยืนยันตัวตนไปยัง `http://localhost:3000` ของ sandbox (ผลอยู่ใน §3.1)
 3. สคริปต์ `node` สั้น ๆ บนเครื่องนี้เพื่อสังเกตพฤติกรรมของ `res.setHeader` กับอักขระ CR/LF/`"` (ผลอยู่ใน S6)
+
+## 7. สถานะ findings เมื่ออ่านซ้ำที่ `a0e783e` (5 กันยายน 2569 ค่ำ)
+
+อ่านโค้ดที่ commit ที่ production รันอยู่ (`docs/ops/deploy-2026-09-05-a0e783e.md`) เฉพาะจุดที่ finding แต่ละข้อชี้ **ยังเป็นการอ่านโค้ด ไม่ใช่การทดสอบเจาะระบบ** และเกณฑ์ความรุนแรงยังรอ C0-13
+
+| finding | สถานะที่ `a0e783e` | หลักฐานที่อ่าน |
+|---|---|---|
+| S1 participation ไม่ผูกประเภทเหตุการณ์กับบทบาท | **ยังเปิด** | `participation.service.js` `ALLOWED_EVENTS` ยังคีย์ด้วย status ของ case เท่านั้น ไม่มีตารางบทบาท→event |
+| S2 `/api/school/audit-logs` JSON ไม่ redact | **แก้แล้ว** | `school.routes.js` มี `redactVal` ครอบทั้งสาขา JSON ใต้ route `/audit-logs` (ราวบรรทัด 1385–1392) พร้อมคอมเมนต์อธิบายว่าห้ามประกาศซ้ำในฟังก์ชัน |
+| S3 verification timeline อ่านข้าม scope ได้ | **แก้แล้ว** | `verification.routes.js` `/applications/:id/timeline` เพิ่ม correlated EXISTS ต่อบทบาท (driver = ผู้ยื่น, school = โรงเรียนที่ผูกกับคำขอ; fail-closed เมื่อไม่มี scopeId) |
+| S4 participation รับ `scope_id` โดยไม่ตรวจว่ามีอยู่จริง | **ยังเปิด** | `participation.service.js` ตรวจแค่ว่ามีค่าเมื่อ scope ไม่ใช่ PROVINCE (ราวบรรทัด 131–135) ไม่ได้ตรวจกับตาราง schools/affiliations และไม่ได้เทียบกับ scope ของผู้เรียก |
+| S5 `/api/documents/:docType/:id/file` ไม่กันครูประจำสายชั้น | **ยังเปิด** | `documents.routes.js:27` มีเพียง `requireRole('driver','school','transport','admin')` — โมดูล registration กันครูแล้ว (`registration.routes.js:196-208`) แต่ documents ไม่ |
+| S6 research export ไม่ validate `from`/`to` | **แก้แล้ว** | `4271531` + `backend/tests/researchExportDateValidation.test.js` |
+| S7 RBAC matrix รายงานบทบาทกว้างกว่าจริง 2 route | **ยังไม่ได้ตรวจซ้ำ** | ต้องเทียบ route ทั้งสองกับ handler ด้วยตา ยังไม่ได้ทำในรอบนี้ |
+
+ฐานตัวเลข: matrix ที่ `a0e783e` = 250/267/293 route ตามสถานะ flag (เดิม 249/266/292; +1 = `GET /api/admin/operations/capacity-sample`) findings 0 ทุกสถานะ; scope audit เท่าเดิมทุกค่า (ดู `docs/audit/menu-baseline-2026-09-04.md` §12)
+สิ่งที่ยังไม่มีในเอกสารนี้และควรอยู่ในรอบทบทวนถัดไป: endpoint `capacity-sample` (RR-10) และ frontend participation (`c077f03`) ซึ่งเข้ามาหลังฐาน `4b80b4b`
+

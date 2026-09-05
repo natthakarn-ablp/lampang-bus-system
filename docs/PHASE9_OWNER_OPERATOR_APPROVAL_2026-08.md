@@ -91,6 +91,17 @@ tail -n 100 /home/schoolbus/logs/offhost-sync.log > outputs/operator-gates/<time
 node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 ```
 
+## บันทึกการเปลี่ยนแปลง production ที่เกิดขึ้นก่อนการลงนาม (อ้างอิงเท่านั้น — ไม่ใช่การอนุมัติ)
+
+เพิ่ม 5 ก.ย. 2569 เพื่อให้ผู้ลงนามเห็นว่ามีการเปลี่ยนแปลง production เกิดขึ้นแล้วสามครั้งโดยอนุมัติในเซสชัน/ด้วยวาจา ก่อนที่เอกสารนี้จะถูกกรอก
+ช่องอนุมัติและลายเซ็นด้านล่าง **ยังว่าง** และต้องเป็นบุคคลตามบทบาทกรอกเอง แบบฟอร์มรับรองย้อนหลังอยู่ที่ `docs/ops/retrospective-attestation-2026-09-05.md`
+
+| เหตุการณ์ | วันเกิดเหตุ | บันทึก | สถานะการรับรอง |
+|---|---|---|---|
+| migration 051 ลง `lampang_bus` | 5 ก.ย. 2569 13:12 น. | `docs/ops/deploy-runbook-051-shared-security-state.md` §7 | รอรับรองย้อนหลัง |
+| deploy `208e883` → `c0b0d49` | 5 ก.ย. 2569 20:38–20:40 น. | `docs/ops/deploy-2026-09-05-c0b0d49.md` | รอรับรองย้อนหลัง |
+| deploy `c0b0d49` → `a0e783e` (รวม frontend rebuild) | 5 ก.ย. 2569 21:58–22:04 น. | `docs/ops/deploy-2026-09-05-a0e783e.md` | รอรับรองย้อนหลัง |
+
 ## Sign-off
 
 | ผู้อนุมัติ | บทบาท | ผล | วันที่/เวลา | ลายเซ็น | หมายเหตุ |

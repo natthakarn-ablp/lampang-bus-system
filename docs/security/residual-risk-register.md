@@ -25,6 +25,7 @@
 | Branch / commit ที่อ่านโค้ด | `feat/tracking-security-hardening` @ `4b80b4b` — `git status --short` ไม่มีรายการ ` M` เลย (ไม่มีไฟล์ tracked ใดถูกแก้ค้างไว้ขณะอ่าน) มีเพียงไฟล์ใหม่ที่ยังไม่ track หนึ่งไฟล์ใต้ `backend/` คือ `backend/scripts/seed-synthetic-staging.js` ซึ่งเอกสารนี้ไม่ได้อ้างอิงบรรทัดใดจากไฟล์นั้น |
 | ความสัมพันธ์กับ RC ในแผน | `git diff --stat cef4bd1..4b80b4b` ไม่มีไฟล์ใดใน `backend/src/` หรือ `frontend/src/` เปลี่ยน (เปลี่ยนเฉพาะ `scripts/`, `docs/`, `backend/tests/`, `.gitattributes`) — บรรทัดที่อ้างในเอกสารนี้จึงตรงกับ RC `cef4bd1` ตาม §1 ของ execution plan; §5 อ้างบรรทัดใน `backend/tests/` ซึ่งเป็น directory ที่เปลี่ยนในช่วงนี้ — ตรวจ `git diff --name-status cef4bd1..4b80b4b` แล้วไฟล์ทดสอบที่เปลี่ยนมีสามไฟล์ ขึ้นต้นด้วย `A` (ไฟล์ใหม่) ทั้งหมด คือ `closureReportSchema.unit.test.js`, `goLiveEvidenceRows.unit.test.js`, `readinessGateNpmAudit.unit.test.js` ไม่ใช่ไฟล์ทดสอบที่ §5 อ้างถึง |
 | วิธีตรวจ | อ่าน source ในเครื่องนี้เท่านั้น |
+| อ่านซ้ำ 5 ก.ย. 2569 ค่ำ | ที่ `a0e783e` (commit ที่ production รันอยู่) — เลขบรรทัดในตารางด้านล่างเป็นของ `4b80b4b`; จุดที่เลื่อนแล้วระบุไว้ในแถว "ตำแหน่งในโค้ด (ที่ `a0e783e`)" ของแต่ละรายการ และ RR-10 เพิ่มใหม่ |
 | สิ่งที่ **ไม่ได้** ทำระหว่างจัดทำเอกสารนี้ | ไม่ได้รันชุดทดสอบ ไม่ได้ deploy ไม่ได้ต่อ production ไม่ได้แตะ database ไม่ได้เปลี่ยน feature flag |
 | ผลที่ตามมา | ทุกข้อความในทะเบียนนี้เป็น **ข้อความจากการอ่านโค้ด** ไม่ใช่ผลการทดสอบ — สิ่งที่ยืนยันจากเครื่องนี้ไม่ได้อยู่ใน §6 |
 
@@ -64,7 +65,8 @@
 | หัวข้อ | เนื้อหา |
 |---|---|
 | คำอธิบาย | `/api/auth/refresh-token` หมุน token ทุกครั้งที่ใช้ (เพิกถอน jti เดิม ออกใบใหม่) แต่เมื่อมีการนำ token ที่ถูกหมุนไปแล้วกลับมาใช้ซ้ำ ระบบตอบ 401 เฉย ๆ ไม่ได้ถือว่าเป็นสัญญาณการขโมยและไม่ได้เพิกถอนสายของ token ที่ออกต่อจากนั้น |
-| ตำแหน่งในโค้ด | route: `backend/src/routes/auth.routes.js:319`; ตรวจ revocation list: `:334-339`; rotation: `:366-374`; `jti` ของใบใหม่ถูก destructure ที่ `:369` แต่ **ไม่ถูกบันทึกที่ใดเลย** (`grep -rn "newJti"` พบที่บรรทัด 369 บรรทัดเดียวในทั้ง repository) จึงไม่มี lineage/family id ให้เพิกถอนเป็นชุด; ตาราง `revoked_tokens` เป็น blacklist ราย jti ตาม `CLAUDE.md:711-717` |
+| ตำแหน่งในโค้ด (ที่ `a0e783e`) | ไฟล์เดิม แต่บรรทัดเลื่อนหลัง `26dbde4` (A1-9): การออก `jti` ใหม่อยู่ราว `:95-101`, การเพิกถอนใบเดิมลง `revoked_tokens` ราว `:293-295` — ประเด็นของ RR-02 (ไม่มี replay detection) ยังคงอยู่ |
+| ตำแหน่งในโค้ด (ที่ `4b80b4b`) | route: `backend/src/routes/auth.routes.js:319`; ตรวจ revocation list: `:334-339`; rotation: `:366-374`; `jti` ของใบใหม่ถูก destructure ที่ `:369` แต่ **ไม่ถูกบันทึกที่ใดเลย** (`grep -rn "newJti"` พบที่บรรทัด 369 บรรทัดเดียวในทั้ง repository) จึงไม่มี lineage/family id ให้เพิกถอนเป็นชุด; ตาราง `revoked_tokens` เป็น blacklist ราย jti ตาม `CLAUDE.md:711-717` |
 | เหตุที่ยังเปิด | replay detection ต้องเก็บสายของ token (family/lineage) ซึ่งเป็นการเพิ่มโครงสร้างข้อมูล ไม่ใช่การแก้บรรทัดเดียว; อยู่ในขอบเขต A1-5 (บรรทัด 128) ซึ่งยังไม่ได้ทำในโค้ดที่อ่าน |
 | มาตรการที่มีอยู่ | rotation ทุกครั้งที่ใช้ (`:366-374`) จำกัด refresh token ที่ถูกขโมยให้ใช้ได้ครั้งเดียวแทนที่จะใช้ได้ตลอด 7 วัน; blacklist ตรวจก่อนออก token ใหม่ (`:334-339`); rate limit เฉพาะ endpoint นี้ 30 ครั้ง/5 นาที/IP (`:63-69`); logout เขียน jti ลง blacklist (`:393,409-412`); เปลี่ยนรหัสผ่านทำให้ refresh token เดิมใช้ไม่ได้ (`:355-362`); runbook กำหนด cron ล้าง `revoked_tokens` 03:00 (`docs/OPERATOR_RUNBOOK.md:15`) |
 | ความเสี่ยงคงเหลือหลังมาตรการ | ถ้าผู้โจมตีได้ refresh token ไปและใช้ **ก่อน** ผู้ใช้จริง ผู้โจมตีจะได้ token ใบใหม่ ส่วนผู้ใช้จริงจะได้ 401 และถูกบังคับ login ใหม่ — ระบบไม่ตีความเหตุการณ์นี้ว่าเป็นการขโมยและไม่เพิกถอนใบที่ผู้โจมตีถืออยู่ ไม่มี audit event เฉพาะสำหรับการใช้ token ที่ถูกเพิกถอนแล้ว (ไม่พบ `logAudit` ในสาขา `:338-339`) จึงไม่มีร่องรอยให้ตรวจย้อนหลัง นอกจากนี้ `:372` เป็น `INSERT` ธรรมดา (ไม่ใช่ `ON DUPLICATE KEY UPDATE` แบบที่ logout ใช้ที่ `:409-411`) ถ้ามีการเรียกซ้ำสองครั้งที่ผ่านการตรวจ `:334-339` ไปพร้อมกัน ใบที่แพ้จะชน `ER_DUP_ENTRY` แล้วถูกส่งต่อด้วย `return next(err)` (`:386-387`) ไปยัง error handler ซึ่ง map `ER_DUP_ENTRY` เป็น **409** (`backend/src/middleware/errorHandler.js:30` ต่อไว้ท้ายสุดที่ `backend/src/app.js:253`) ไม่ใช่ 401 อย่างที่ client คาด — **ข้อนี้อ่านจาก source ยังไม่ได้ทดสอบ runtime** (ความพยายาม login บน sandbox เมื่อ 4 ก.ย. ถูก rate limit ตอบ 429 จึงยังไม่ได้ยิงจริง) |
@@ -91,7 +93,8 @@
 | หัวข้อ | เนื้อหา |
 |---|---|
 | คำอธิบาย | `GET /api/affiliation/audit-logs` รองรับ `?format=csv` แต่ไม่ได้ผูก `exportFormatLimiter` ต่างจาก route เทียบเท่าของ school/province/admin |
-| ตำแหน่งในโค้ด | ไม่มี limiter: `backend/src/routes/affiliation.routes.js:546` (สาขา CSV อยู่ที่ `:578-596`) และไฟล์นี้ import เฉพาะ `importExportLimiter` ที่ `:11`; เทียบกับ route ที่มี limiter แล้ว: `backend/src/routes/school.routes.js:1273`, `backend/src/routes/province.routes.js:188`, `backend/src/routes/admin.routes.js:604`; `GET /api/admin/research-export/preview` (route นิยามที่ `admin.routes.js:1368`; `:1367` เป็น comment หัวข้อ) ก็ไม่มี limiter แต่คืนเฉพาะตัวนับและสถานะ `evidence_readiness` (`:1386-1400`) ไม่ใช่ชุดข้อมูลรายบุคคล |
+| ตำแหน่งในโค้ด (ที่ `a0e783e`) | **ปิดแล้ว** — `affiliation.routes.js:552` ผูก `exportFormatLimiter` กับ `GET /audit-logs` แล้ว (สาขา CSV `:586`) และไฟล์ import ทั้ง `importExportLimiter` และ `exportFormatLimiter` (`:11`) — RR-04 จึงเหลือเฉพาะข้อสังเกตว่ายังไม่มีเทสต์ยืนยันรายตัว (§5) |
+| ตำแหน่งในโค้ด (ที่ `4b80b4b`) | ไม่มี limiter: `backend/src/routes/affiliation.routes.js:546` (สาขา CSV อยู่ที่ `:578-596`) และไฟล์นี้ import เฉพาะ `importExportLimiter` ที่ `:11`; เทียบกับ route ที่มี limiter แล้ว: `backend/src/routes/school.routes.js:1273`, `backend/src/routes/province.routes.js:188`, `backend/src/routes/admin.routes.js:604`; `GET /api/admin/research-export/preview` (route นิยามที่ `admin.routes.js:1368`; `:1367` เป็น comment หัวข้อ) ก็ไม่มี limiter แต่คืนเฉพาะตัวนับและสถานะ `evidence_readiness` (`:1386-1400`) ไม่ใช่ชุดข้อมูลรายบุคคล |
 | เหตุที่ยังเปิด | เป็นช่องที่หลงเหลือจากการไล่ผูก limiter รอบ audit 2026-06-18 (`docs/SECURITY_FOLLOWUP_BACKLOG_2026_06_18.md:56-57`) ยังไม่มีใครไล่ปิดรอบสุดท้าย; อยู่ในขอบเขต A1-5 (บรรทัด 128) |
 | มาตรการที่มีอยู่ | 1) global floor 120 request/นาที/IP ครอบ `/api/affiliation` อยู่แล้ว (`backend/src/app.js:21-33,115-127`) 2) CSV ของ audit log ถูกจำกัดที่ 5,000 แถวต่อครั้ง พร้อมแจ้ง truncation (`affiliation.routes.js:581-596`) 3) ทุกครั้งที่ export มีการเขียน audit log (`affiliation.routes.js:593-594`) 4) เนื้อหาถูก neutralise กัน formula injection และ redact ค่าที่อ่อนไหวผ่าน `backend/src/utils/exportSecurity.js:25-40,66-76` |
 | ความเสี่ยงคงเหลือหลังมาตรการ | ผู้ใช้ที่ authenticate แล้วในบทบาท affiliation ดึง audit log ได้สูงสุด 5,000 แถวต่อ request ที่อัตราถึง 120 request/นาที ซึ่งสูงกว่าเพดาน 40 request/5 นาที ที่ใช้กับ route ประเภทเดียวกัน — เป็นทั้งภาระ DB (pool = 10 ตาม `backend/src/app.js:114`) และการดึงข้อมูลออกจำนวนมากในเวลาสั้น |
@@ -172,6 +175,24 @@
 
 ---
 
+### RR-10 — `GET /api/admin/operations/capacity-sample` เปิดเผยค่าภายในของ server ให้ผู้ดูแลระบบ และอ่านตาราง `notifications` ทั้งตารางเมื่อถูกเรียก
+
+| หัวข้อ | เนื้อหา |
+|---|---|
+| คำอธิบาย | endpoint ใหม่ (`e8e168f`, deploy 5 ก.ย. 2569) คืนค่า pool ของ mysql2 (limit/open/free/queued), `SHOW GLOBAL STATUS` (threads, `Slow_queries`, `Max_used_connections`), `SHOW VARIABLES` (`max_connections`, `long_query_time`), RSS/heap/CPU ของ process, RAM/swap ของ host และจำนวนแถวรอส่งใน `notifications` — สร้างไว้ให้ `backend/scripts/load-test.js --admin-token` poll ทุก 5 วินาที |
+| ตำแหน่งในโค้ด | `backend/src/routes/admin.routes.js` (`/operations/capacity-sample`, ใต้ `router.use(authenticate, requireRole('admin'))`), `backend/src/services/capacitySample.service.js` |
+| สิทธิ์ | admin เท่านั้น (router-level guard; `rbacMatrix.unit.test.js` และ `capacitySample.test.js` ยืนยัน 401/403) — ไม่มี PII: เทสต์สแกน payload ว่าไม่มี line_user_id/student/phone/cid/username |
+| ต้นทุนต่อคำขอ | 1 `SHOW GLOBAL STATUS WHERE …` + 1 `SHOW VARIABLES WHERE …` + 1 `SELECT SUM(...) FROM notifications WHERE sent = FALSE` — ตาราง `notifications` **ไม่มี index บน `sent`** (schema มีเฉพาะ `fk_notif_target_line`) จึงเป็น full scan ที่โตตามจำนวนแถว; วันนี้เล็ก (หลักสิบ–ร้อยแถว) แต่ถ้า LINE dispatcher หยุดนานตารางจะโต |
+| rate limiting | อยู่ใต้ `globalApiLimiter` (`/api/admin` เป็นหนึ่งใน prefix) = 120 คำขอ/นาที/IP บน production; ไม่มี limiter เฉพาะ endpoint |
+| ที่มาของการค้นพบ | เพิ่มเองในงาน handoff §2 ข้อ 6 และบันทึกที่นี่ตามข้อ D ของคำสั่ง 5 ก.ย. 2569 เพื่อไม่ให้ endpoint ที่เปิดเผยค่าภายในเข้ามาโดยไม่มีรายการในทะเบียน |
+| มาตรการที่มีอยู่ | admin-only + global limiter + ไม่มี PII + poll เฉพาะช่วง load test |
+| ความเสี่ยงคงเหลือหลังมาตรการ | (1) ผู้ดูแลระบบเห็นขนาด pool/`max_connections`/RSS ซึ่งเป็นข้อมูล capacity ไม่ใช่ข้อมูลส่วนบุคคล — ยอมรับได้ในระดับ admin แต่ต้องอยู่ในทะเบียน; (2) full scan `notifications` ถ้าถูกเรียกถี่บนตารางใหญ่ — ทางแก้ที่ **ไม่แก้ในรอบนี้** เพราะเป็น schema: index `(sent, retry_count)` ผ่าน migration ในอนาคต หรือจำกัดคำขอต่อผู้ใช้ |
+| ผู้ต้องรับความเสี่ยง | Technical owner + Operator (ชื่อจริง **รอ C0-7**) |
+| ระดับความรุนแรงตาม severity scheme | **รอ C0-13** |
+| สถานะ | **รอ owner ตัดสิน** |
+
+---
+
 ## 4. รายการใน backlog เดิมที่ไม่ตรงกับโค้ดปัจจุบันแล้ว
 
 `docs/SECURITY_FOLLOWUP_BACKLOG_2026_06_18.md` เขียนขึ้นเมื่อ 18 มิถุนายน 2569 ข้อความบางส่วนไม่ตรงกับโค้ดที่อ่านในวันนี้ บันทึกไว้เพื่อไม่ให้มีใครหยิบไปทำซ้ำหรืออ้างเป็นความเสี่ยงที่ยังเปิดอยู่ **ข้อความด้านล่างมาจากการอ่านโค้ด ไม่ใช่ผลการทดสอบ**
@@ -240,5 +261,6 @@ execution plan บรรทัด 299 กำหนด exit evidence ของ A1
 | RR-07 | ☐ ยอมรับ ☐ ไม่ยอมรับ ☐ ให้แก้ก่อน | | | | |
 | RR-08 | ☐ ยอมรับ ☐ ไม่ยอมรับ ☐ ให้แก้ก่อน | | | | |
 | RR-09 | ☐ ยอมรับ ☐ ไม่ยอมรับ ☐ ให้แก้ก่อน | | | | |
+| RR-10 | ☐ ยอมรับ ☐ ไม่ยอมรับ ☐ ให้แก้ก่อน | | | | |
 
 การตัดสินของ DPO/legal ต่อ RR-01 อยู่ในขอบเขตของ C2-2 (execution plan บรรทัด 164) และลายเซ็นรับความเสี่ยงอยู่ใน C3-4 (บรรทัด 181) — เอกสารฉบับนี้เป็นข้อมูลประกอบการตัดสินเท่านั้น ไม่ใช่ตัวลายเซ็น

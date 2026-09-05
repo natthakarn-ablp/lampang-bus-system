@@ -57,6 +57,31 @@ function writeRows(dir, jsonName, csvName, rows) {
   fs.writeFileSync(path.join(dir, csvName), schema.actionRowsCsv(rows));
 }
 
+/**
+ * Assert what a validator's own exit rules say, on whatever board this machine
+ * produced.
+ *
+ * Both validators exit 1 when anything FAILED, exit 1 when something is PENDING
+ * and --allow-pending was not given, and PASS otherwise. The interesting half
+ * is that --allow-pending forgives PENDING and never forgives FAIL. Asserting
+ * "it printed PASS" instead only holds where the board happens to have no
+ * failing row, which is a fact about the machine, not about the validator.
+ */
+function expectAllowPendingRule(label, lenient) {
+  const sawFailure = lenient.output.includes(`[${label}] FAIL:`);
+  if (sawFailure) {
+    // A failure is never laundered into a pass by --allow-pending. This is the
+    // stronger direction and the one that matters.
+    expect(`${label} allow-pending exit when something failed: ${lenient.status}`)
+      .toBe(`${label} allow-pending exit when something failed: 1`);
+    expect(lenient.output).not.toContain(`[${label}] PASS`);
+  } else {
+    expect(lenient.output).toContain(`[${label}] PASS`);
+    expect(`${label} allow-pending exit with no failure: ${lenient.status}`)
+      .toBe(`${label} allow-pending exit with no failure: 0`);
+  }
+}
+
 let bundleRows;
 let closureRows;
 
@@ -238,12 +263,13 @@ describe('go-live bundle action rows', () => {
   });
 
   test('the bundle validator accepts pending rows only with --allow-pending', () => {
+    // Strict refuses either way — there is always something pending or failing
+    // on a board that still has human actions on it.
     const strict = run('validate-go-live-bundle.js', [BUNDLE_DIR]);
     expect(strict.status).toBe(1);
 
     const lenient = run('validate-go-live-bundle.js', [BUNDLE_DIR, '--allow-pending']);
-    expect(lenient.output).toContain('[go-live-bundle] PASS (pending allowed)');
-    expect(lenient.status).toBe(0);
+    expectAllowPendingRule('go-live-bundle', lenient);
   }, 60000);
 
   test('a missing evidence root is reported as PENDING, never as OK', () => {
@@ -278,10 +304,9 @@ describe('closure board action rows', () => {
     expect(readJson(path.join(CLOSURE_DIR, 'manifest.json')).action_columns).toEqual(schema.ACTION_COLUMNS);
   });
 
-  test('the closure validator passes on the generated board with --allow-pending', () => {
+  test('the closure validator forgives pending and never forgives failure', () => {
     const result = run('validate-go-live-closure-status.js', [CLOSURE_DIR, '--allow-pending']);
-    expect(result.output).toContain('[closure-status] PASS (pending allowed)');
-    expect(result.status).toBe(0);
+    expectAllowPendingRule('closure-status', result);
   }, 60000);
 });
 
@@ -333,6 +358,21 @@ describe('a machine with a failing gate still produces checkable rows', () => {
     expect(failing.output).toContain('readiness=FAIL');
     expect(failing.output).toMatch(/fail=[1-9]/);
   });
+
+  it('--allow-pending does not launder that failure into a pass', () => {
+    // The half of expectAllowPendingRule that a machine with no outputs/ never
+    // reaches. Without this it would only ever be exercised on the production
+    // host, which is where a rule about not laundering failures is least
+    // convenient to discover it does not hold.
+    const lenient = run('validate-go-live-bundle.js', [
+      path.join(BAD, 'bundles', 'test-run'), '--allow-pending',
+    ]);
+    expectAllowPendingRule('go-live-bundle', lenient);
+    // and specifically: it took the failure branch, not the pass branch
+    expect(`saw a FAIL line: ${lenient.output.includes('[go-live-bundle] FAIL:')}`)
+      .toBe('saw a FAIL line: true');
+    expect(`exit: ${lenient.status}`).toBe('exit: 1');
+  }, 60000);
 });
 
 describe('the closure validator refuses rows that cannot be checked', () => {

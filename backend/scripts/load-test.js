@@ -39,6 +39,25 @@
  *          --allow-short-soak permits a rehearsal that is marked as NOT a soak
  *   smoke  four read-only scenarios; the only profile allowed at production
  *
+ * Role-token mix: every scenario declares the role it runs as. Pass
+ *   --token-file <json>   {"school": "<jwt>", "driver": "<jwt>", "admin": "<jwt>", …}
+ * and each scenario uses its own role's token; a scenario whose role has no
+ * token is reported NOT MEASURED with the reason, never run with the wrong
+ * one. --token <jwt> alone is the old single-token mode (school scenarios
+ * measured, the rest 403/404 and NOT MEASURED — docs/performance/
+ * load-test-local-2026-09-05.md §3). With a school token the harness reads
+ * that school's own student ids once before the run so school_checkin_override
+ * targets students the token may touch.
+ *
+ * Stop conditions and resource limits (plan Phase 9: "resource limits และ
+ * stop conditions"): --abort-error-rate 0.2 --abort-p95-ms 5000
+ * --abort-rss-mb 900 (server RSS via capacity-sample) --abort-consecutive 2
+ * --watch-interval 10 end a stage early when the last window breaches a
+ * limit that many times in a row; the stage is reported aborted with the
+ * reason and the run continues to the report. --max-users N refuses a plan
+ * that exceeds N virtual users. These stop a runaway test; they do not make
+ * a passing one.
+ *
  * Server-side metrics (the same plan line: "DB pool/slow query, CPU/RAM/swap
  * … และ LINE queue"): pass --admin-token <admin JWT> and every stage polls
  * GET /api/admin/operations/capacity-sample every --sample-interval seconds
@@ -71,6 +90,7 @@ const PRODUCTION_HOSTS = Object.freeze([
 const SCENARIOS = Object.freeze([
   {
     key: 'login',
+    role: null, // unauthenticated by design
     weight: 0.10,
     writes: true,
     method: 'POST',
@@ -80,6 +100,7 @@ const SCENARIOS = Object.freeze([
   },
   {
     key: 'school_dashboard',
+    role: 'school',
     weight: 0.20,
     writes: false,
     method: 'GET',
@@ -92,6 +113,7 @@ const SCENARIOS = Object.freeze([
   },
   {
     key: 'school_students',
+    role: 'school',
     weight: 0.15,
     writes: false,
     method: 'GET',
@@ -99,6 +121,7 @@ const SCENARIOS = Object.freeze([
   },
   {
     key: 'school_checkin_override',
+    role: 'school',
     weight: 0.15,
     writes: true,
     method: 'POST',
@@ -108,6 +131,7 @@ const SCENARIOS = Object.freeze([
   },
   {
     key: 'reports_daily',
+    role: 'school',
     weight: 0.10,
     writes: false,
     method: 'GET',
@@ -116,6 +140,7 @@ const SCENARIOS = Object.freeze([
   },
   {
     key: 'driver_roster',
+    role: 'driver',
     weight: 0.10,
     writes: false,
     method: 'GET',
@@ -123,15 +148,19 @@ const SCENARIOS = Object.freeze([
   },
   {
     key: 'driver_gps',
+    role: 'driver',
     weight: 0.10,
     writes: true,
     method: 'POST',
     path: '/api/driver/vehicle-location',
-    body: (vu) => ({ lat: 18.29 + vu.jitter, lng: 99.49 + vu.jitter, accuracy_meters: 12 }),
+    // driver.routes.js reads latitude/longitude; lat/lng was rejected with 400
+    // on every request in the 2026-09-05 rehearsal.
+    body: (vu) => ({ latitude: 18.29 + vu.jitter, longitude: 99.49 + vu.jitter, accuracy_meters: 12 }),
     note: 'one upsert per ping, every ~15s per active vehicle',
   },
   {
     key: 'participation_event',
+    role: 'school',
     weight: 0.05,
     writes: true,
     method: 'POST',
@@ -141,6 +170,7 @@ const SCENARIOS = Object.freeze([
   },
   {
     key: 'parent_status',
+    role: 'parent', // LINE id_token, not a JWT — no token file entry can satisfy it
     weight: 0.05,
     writes: false,
     method: 'GET',
@@ -194,6 +224,74 @@ function buildStages({
   }
   const stageUsers = list.length ? list : [50, 200, 500, 1000];
   return stageUsers.map((u) => ({ label: `${profile}-${u}`, users: u, durationSec }));
+}
+
+/**
+ * Refuse a plan that exceeds the resource limit. Separate from buildStages so
+ * the plan itself is still testable; the limit is a run-time decision.
+ */
+function checkUserLimit(plan, maxUsers) {
+  if (!maxUsers) return { ok: true };
+  const over = plan.filter((x) => x.users > maxUsers).map((x) => `${x.label}:${x.users}`);
+  return over.length ? { ok: false, reason: `--max-users ${maxUsers} refuses stage(s) ${over.join(', ')}` } : { ok: true };
+}
+
+/**
+ * Role → JWT. The file is read here and never echoed: the report records
+ * which roles had a token, not the tokens.
+ */
+function readTokenFile(file) {
+  const raw = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
+  const out = {};
+  for (const [role, token] of Object.entries(raw)) {
+    if (typeof token === 'string' && token.length > 0) out[role] = token;
+  }
+  return out;
+}
+
+/** The token a scenario runs with, or null (→ NOT MEASURED, reason reported). */
+function tokenForScenario(scenario, tokens, fallback) {
+  if (scenario.role === null) return null;          // unauthenticated scenario
+  if (scenario.role === 'parent') return null;       // LIFF id_token, never a JWT
+  if (tokens && tokens[scenario.role]) return tokens[scenario.role];
+  return fallback || null;
+}
+
+/**
+ * Which scenarios can run with the tokens at hand. Those without a usable
+ * token are listed with the reason so the report says why, up front.
+ */
+function partitionByToken(scenarios, tokens, fallback) {
+  const runnable = [];
+  const unmeasurable = [];
+  for (const sc of scenarios) {
+    if (sc.role === null) { runnable.push(sc); continue; }
+    if (sc.role === 'parent') { unmeasurable.push({ key: sc.key, reason: 'parent_status needs a LINE id_token (LIFF), not a JWT' }); continue; }
+    if (tokenForScenario(sc, tokens, fallback)) runnable.push(sc);
+    else unmeasurable.push({ key: sc.key, reason: `no token for role '${sc.role}' (pass --token-file)` });
+  }
+  return { runnable, unmeasurable };
+}
+
+/**
+ * Stop-condition check over one watch window. Pure. `window` is a
+ * summarise() of the samples taken during the window; `server` is the last
+ * capacity sample (or null). Returns the breached conditions.
+ */
+function evaluateStopConditions(window, server, cfg) {
+  const breaches = [];
+  if (!cfg) return breaches;
+  if (cfg.abortErrorRate != null && window && window.requests > 0 && window.error_rate > cfg.abortErrorRate) {
+    breaches.push(`error rate ${(window.error_rate * 100).toFixed(1)}% > ${(cfg.abortErrorRate * 100).toFixed(0)}%`);
+  }
+  if (cfg.abortP95Ms != null && window && window.p95_ms != null && window.p95_ms > cfg.abortP95Ms) {
+    breaches.push(`p95 ${window.p95_ms}ms > ${cfg.abortP95Ms}ms`);
+  }
+  const rss = server && server.process && typeof server.process.rss_mb === 'number' ? server.process.rss_mb : null;
+  if (cfg.abortRssMb != null && rss != null && rss > cfg.abortRssMb) {
+    breaches.push(`server rss ${rss}MB > ${cfg.abortRssMb}MB`);
+  }
+  return breaches;
 }
 
 // ─── Metrics ────────────────────────────────────────────────────────────────
@@ -264,8 +362,9 @@ function summarise(samples) {
   };
 }
 
-function evaluateThresholds(summaryByScenario) {
+function evaluateThresholds(summaryByScenario, stage = null) {
   const failures = [];
+  if (stage && stage.aborted) failures.push(`stage aborted by stop condition at ${stage.aborted.at_sec}s: ${stage.aborted.reason}`);
   for (const [key, s] of Object.entries(summaryByScenario)) {
     const scenario = SCENARIOS.find((x) => x.key === key);
     if (!scenario || s.requests === 0) continue;
@@ -397,6 +496,7 @@ function startSampler({ target, adminToken, intervalSec }) {
     }
   })();
   return {
+    latest: () => { for (let i = samples.length - 1; i >= 0; i -= 1) if (samples[i].sample) return samples[i].sample; return null; },
     stop: async () => {
       stopped = true;
       await loop;
@@ -521,13 +621,38 @@ function parseArgs(argv) {
   return args;
 }
 
-async function runStage({ target, scenarios, users, durationSec, headers, adminToken = null, sampleIntervalSec = 5 }) {
+async function runStage({
+  target, scenarios, users, durationSec, headers, adminToken = null, sampleIntervalSec = 5,
+  tokens = null, fallbackToken = null, studentIds = null, caseIds = null, stop = null,
+}) {
   const samples = [];
   const sampler = adminToken ? startSampler({ target, adminToken, intervalSec: sampleIntervalSec }) : null;
   const loopDelay = monitorEventLoopDelay({ resolution: 10 });
   loopDelay.enable();
   const startedAt = performance.now();
-  const deadline = startedAt + durationSec * 1000;
+  let deadline = startedAt + durationSec * 1000;
+  let aborted = null;
+
+  // Watchdog: every watch interval, summarise the samples of that window and
+  // stop the stage when a limit is breached N times in a row. The workers see
+  // the moved deadline on their next loop; nothing is killed mid-request.
+  let watchdog = null;
+  if (stop && (stop.abortErrorRate != null || stop.abortP95Ms != null || stop.abortRssMb != null)) {
+    let consecutive = 0;
+    let windowStart = 0;
+    watchdog = setInterval(() => {
+      const windowSamples = samples.slice(windowStart);
+      windowStart = samples.length;
+      const breaches = evaluateStopConditions(summarise(windowSamples), sampler ? sampler.latest() : null, stop);
+      consecutive = breaches.length ? consecutive + 1 : 0;
+      if (breaches.length) process.stdout.write(`[load]   watchdog: ${breaches.join('; ')} (${consecutive}/${stop.abortConsecutive})\n`);
+      if (consecutive >= stop.abortConsecutive && !aborted) {
+        aborted = { at_sec: Math.round((performance.now() - startedAt) / 100) / 10, reason: breaches.join('; ') };
+        deadline = performance.now();
+        process.stdout.write(`[load]   ABORTING stage: ${aborted.reason}\n`);
+      }
+    }, (stop.watchIntervalSec || 10) * 1000);
+  }
 
   // One async worker per virtual user, each looping until the deadline.
   const workers = Array.from({ length: users }, (_, i) => (async () => {
@@ -535,17 +660,20 @@ async function runStage({ target, scenarios, users, durationSec, headers, adminT
       index: i,
       username: `loadtest_user_${i}`,
       password: 'loadtest-only',
-      studentId: 1 + (i % 100),
-      caseId: 1 + (i % 10),
+      // With a school token the ids come from that school's own roster, so the
+      // override scenario targets students the token is allowed to touch.
+      studentId: studentIds && studentIds.length ? studentIds[i % studentIds.length] : 1 + (i % 100),
+      caseId: caseIds && caseIds.length ? caseIds[i % caseIds.length] : 1 + (i % 10),
       date: new Date().toISOString().slice(0, 10),
       jitter: (i % 100) / 10000,
     };
     while (performance.now() < deadline) {
       const scenario = scenarios[i % scenarios.length];
       const url = target + (typeof scenario.path === 'function' ? scenario.path(vu) : scenario.path);
+      const bearer = tokenForScenario(scenario, tokens, fallbackToken);
       const init = {
         method: scenario.method,
-        headers: { 'content-type': 'application/json', ...headers },
+        headers: { 'content-type': 'application/json', ...headers, ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
       };
       if (scenario.body) init.body = JSON.stringify(scenario.body(vu));
 
@@ -570,6 +698,7 @@ async function runStage({ target, scenarios, users, durationSec, headers, adminT
 
   await Promise.all(workers);
   loopDelay.disable();
+  if (watchdog) clearInterval(watchdog);
   const serverSamples = sampler ? await sampler.stop() : null;
 
   const wallSec = (performance.now() - startedAt) / 1000;
@@ -581,6 +710,7 @@ async function runStage({ target, scenarios, users, durationSec, headers, adminT
 
   return {
     users,
+    aborted,
     duration_sec: Math.round(wallSec * 100) / 100,
     throughput_rps: Math.round((samples.length / wallSec) * 100) / 100,
     rate_limited: samples.filter((s) => s.status === 429).length,
@@ -645,15 +775,69 @@ async function main() {
     process.exitCode = 2;
     return;
   }
-  const scenarios = selectScenarios({ readOnly, profile });
-  const headers = args.token ? { authorization: `Bearer ${args.token}` } : {};
-  const adminToken = args['admin-token'] || null;
+  const limit = checkUserLimit(plan, parseInt(args['max-users'], 10) || 0);
+  if (!limit.ok) {
+    process.stderr.write(`[load] refusing to run: ${limit.reason}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  const tokens = args['token-file'] ? readTokenFile(args['token-file']) : null;
+  const fallbackToken = args.token || null;
+  const selected = selectScenarios({ readOnly, profile });
+  const { runnable: scenarios, unmeasurable } = partitionByToken(selected, tokens, fallbackToken);
+  const headers = {};
+  const adminToken = args['admin-token'] || (tokens && tokens.admin) || null;
   const sampleIntervalSec = parseInt(args['sample-interval'], 10) || 5;
+  const stop = {
+    abortErrorRate: args['abort-error-rate'] != null ? parseFloat(args['abort-error-rate']) : null,
+    abortP95Ms: args['abort-p95-ms'] != null ? parseInt(args['abort-p95-ms'], 10) : null,
+    abortRssMb: args['abort-rss-mb'] != null ? parseInt(args['abort-rss-mb'], 10) : null,
+    abortConsecutive: parseInt(args['abort-consecutive'], 10) || 2,
+    watchIntervalSec: parseInt(args['watch-interval'], 10) || 10,
+  };
+  for (const u of unmeasurable) process.stdout.write(`[load] not measurable this run: ${u.key} — ${u.reason}\n`);
+  if (!scenarios.length) {
+    process.stderr.write('[load] refusing to run: no scenario has a usable token\n');
+    process.exitCode = 2;
+    return;
+  }
+
+  // Open participation cases the school token may append to, read once.
+  let caseIds = null;
+  const schoolTokenForCases = tokens && tokens.school ? tokens.school : (fallbackToken || null);
+  if (schoolTokenForCases && scenarios.some((sc) => sc.key === 'participation_event')) {
+    try {
+      const res = await fetch(args.target + '/api/participation/cases?per_page=50', { headers: { authorization: 'Bearer ' + schoolTokenForCases } });
+      const body = res.status === 200 ? await res.json() : null;
+      const rows = (body && body.data && (body.data.items || body.data.cases || body.data)) || [];
+      caseIds = Array.isArray(rows) ? rows.filter((r) => !['CLOSED', 'WITHDRAWN'].includes(r.status)).map((r) => r.id).filter((id) => Number.isFinite(Number(id))) : [];
+      process.stdout.write('[load] participation cases for event scenario: ' + caseIds.length + ' open case ids (HTTP ' + res.status + ')\n');
+    } catch (err) {
+      process.stdout.write('[load] could not list participation cases (' + err.message + '); event scenario keeps ids 1..10\n');
+    }
+  }
+
+  // School-scoped student ids for the override scenario, read once.
+  let studentIds = null;
+  const schoolToken = tokens && tokens.school ? tokens.school : (fallbackToken || null);
+  if (schoolToken && scenarios.some((sc) => sc.key === 'school_checkin_override')) {
+    try {
+      const res = await fetch(`${args.target}/api/school/students?per_page=100`, { headers: { authorization: `Bearer ${schoolToken}` } });
+      const body = await res.json();
+      const rows = (body && body.data && (body.data.items || body.data.students || body.data)) || [];
+      studentIds = Array.isArray(rows) ? rows.map((r) => r.id).filter((id) => Number.isFinite(Number(id))) : [];
+      process.stdout.write(`[load] school roster for override scenario: ${studentIds.length} student ids (HTTP ${res.status})\n`);
+    } catch (err) {
+      process.stdout.write(`[load] could not read the school roster (${err.message}); override scenario keeps ids 1..100\n`);
+    }
+  }
 
   process.stdout.write(
     `[load] target=${check.host} profile=${profile} read_only=${readOnly} scenarios=${scenarios.length} `
     + `stages=${plan.map((x) => `${x.label}:${x.users}x${x.durationSec}s`).join(',')} `
-    + `server_metrics=${adminToken ? `every ${sampleIntervalSec}s` : 'off (no --admin-token)'}\n`
+    + `server_metrics=${adminToken ? `every ${sampleIntervalSec}s` : 'off (no --admin-token)'} `
+    + `tokens=${tokens ? Object.keys(tokens).sort().join('+') : (fallbackToken ? 'single' : 'none')} `
+    + `stop=${stop.abortErrorRate != null || stop.abortP95Ms != null || stop.abortRssMb != null ? JSON.stringify({ err: stop.abortErrorRate, p95: stop.abortP95Ms, rss: stop.abortRssMb, n: stop.abortConsecutive, every: stop.watchIntervalSec }) : 'off'}\n`
   );
 
   const results = [];
@@ -661,8 +845,9 @@ async function main() {
     process.stdout.write(`[load] stage ${st.label} users=${st.users} duration=${st.durationSec}s\n`);
     const stage = await runStage({
       target: args.target, scenarios, users: st.users, durationSec: st.durationSec, headers, adminToken, sampleIntervalSec,
+      tokens, fallbackToken, studentIds, caseIds, stop,
     });
-    const verdict = evaluateThresholds(stage.by_scenario);
+    const verdict = evaluateThresholds(stage.by_scenario, stage);
     results.push({ label: st.label, ...stage, threshold_result: verdict });
     const srv = stage.server;
     process.stdout.write(
@@ -700,6 +885,12 @@ async function main() {
     read_only: readOnly,
     production_smoke: Boolean(check.productionSmoke),
     thresholds: THRESHOLDS,
+    // Which roles ran with their own token, and what could not be measured
+    // before a single request was sent. Tokens themselves are never written.
+    token_roles: tokens ? Object.keys(tokens).sort() : (fallbackToken ? ['(single --token)'] : []),
+    not_measurable: unmeasurable,
+    stop_conditions: stop,
+    max_users_limit: parseInt(args['max-users'], 10) || null,
     stages: results,
     recovery,
     // What this run adds to Phase 9 and what the plan still needs beyond it.
@@ -746,6 +937,10 @@ module.exports = {
   checkTarget,
   selectScenarios,
   buildStages,
+  checkUserLimit,
+  tokenForScenario,
+  partitionByToken,
+  evaluateStopConditions,
   aggregateServerSamples,
   evaluateRecovery,
   phase9Evidence,

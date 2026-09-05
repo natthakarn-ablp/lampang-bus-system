@@ -13,6 +13,9 @@
 # Optional env:
 #   RESTORE_DB=lampang_bus_restore_drill
 #   CLEAN_RESTORE_DRILL=1   # drop test DB after the drill
+#   APP_DIR / BACKUP_DIR / ENV_FILE  # override the server paths, e.g. to rehearse
+#                                     # the drill against a synthetic dump in an
+#                                     # isolated database (2026-09-05)
 #
 # Safety:
 #   - Refuses to target lampang_bus, mysql, information_schema,
@@ -22,9 +25,9 @@
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
-APP_DIR="/home/schoolbus/apps/lampang-bus-system"
-BACKUP_DIR="/home/schoolbus/backups/lampang-bus"
-ENV_FILE="${APP_DIR}/backend/.env"
+APP_DIR="${APP_DIR:-/home/schoolbus/apps/lampang-bus-system}"
+BACKUP_DIR="${BACKUP_DIR:-/home/schoolbus/backups/lampang-bus}"
+ENV_FILE="${ENV_FILE:-${APP_DIR}/backend/.env}"
 RESTORE_DB="${RESTORE_DB:-lampang_bus_restore_drill}"
 
 FORBIDDEN_DBS=(

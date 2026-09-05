@@ -1648,6 +1648,19 @@ router.get('/operations/health', async (req, res, next) => {
     return sendSuccess(res, await computeOperationsHealth(pool));
   } catch (err) { next(err); }
 });
+// ─── Phase 9 — capacity sample (admin-only, read-only, no PII) ─────────────
+// Polled by backend/scripts/load-test.js every few seconds during a run so the
+// report can carry the server-side numbers the closure plan asks for: DB pool
+// utilisation, slow queries, CPU/RAM/swap, LINE queue depth. Cheap on purpose
+// (SHOW STATUS, one indexed COUNT, in-process counters) — it runs under load.
+// operations/health above is the wrong tool for that: a dozen integrity
+// COUNTs and a backup hash every five seconds would be its own load test.
+router.get('/operations/capacity-sample', async (req, res, next) => {
+  try {
+    const { computeCapacitySample } = require('../services/capacitySample.service');
+    return sendSuccess(res, await computeCapacitySample(pool));
+  } catch (err) { next(err); }
+});
 
 // ─── Phase 10.13B-8 — Driver lifecycle & assignment wizard (admin-only) ──────
 router.get('/driver-integrity', async (req, res, next) => {

@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const schema = require('./lib/closure-report-schema');
+const { runCommand, gradeScan, gradeWorktreeStatus } = require('./lib/command-result');
 
 const ROOT = path.resolve(__dirname, '..');
 const DEFAULT_OUT_ROOT = path.join(ROOT, 'outputs', 'automated-readiness');
@@ -100,10 +101,13 @@ fs.mkdirSync(logsDir, { recursive: true });
 const generatedAt = new Date().toISOString();
 const automated = [];
 const humanActions = [];
-const gitHead = git(['rev-parse', '--short', 'HEAD']).trim();
-const gitStatus = git(['status', '--short']);
+const headResult = git(['rev-parse', '--short', 'HEAD']);
+const gitHead = headResult.ok ? headResult.text.trim() : '(git unavailable)';
+const statusResult = git(['status', '--short']);
+const gitStatus = statusResult.text;
+const statusGrade = gradeWorktreeStatus(statusResult);
+recordInline('git-status', 'source-state', statusGrade.status, statusGrade.detail, statusGrade.output);
 
-recordInline('git-status', 'source-state', gitStatus.trim() ? 'PENDING' : 'PASS', gitStatus.trim() ? 'worktree has source changes' : 'worktree clean', gitStatus || '(clean)');
 recordSecretScan('secret-scan-head', 'git show --format= --patch HEAD', git(['show', '--format=', '--patch', 'HEAD']));
 recordSecretScan('secret-scan-staged', 'git diff --cached', git(['diff', '--cached']));
 
@@ -267,9 +271,15 @@ function runBashGate(id, category, commandArgs, env) {
   });
 }
 
-function recordSecretScan(id, category, text) {
-  const matches = secretMatches(text);
-  recordInline(id, category, matches.length > 0 ? 'FAIL' : 'PASS', matches.length > 0 ? `${matches.length} secret-like lines found` : 'no secret patterns found', matches.join('\n'));
+/**
+ * A scan that could not read its input is PENDING, never PASS. "no secret
+ * patterns found" has to mean the patterns were looked for.
+ *
+ * @param {{ok: boolean, text: string, reason: string}} result  the git() output
+ */
+function recordSecretScan(id, category, result) {
+  const grade = gradeScan(result, secretMatches);
+  recordInline(id, category, grade.status, grade.detail, grade.output);
 }
 
 function secretMatches(text) {
@@ -469,7 +479,7 @@ function summary(totals) {
 
 - Generated: ${generatedAt}
 - Git HEAD: \`${gitHead || 'unknown'}\`
-- Git status clean: ${gitStatus.trim() ? 'no' : 'yes'}
+- Git status clean: ${statusResult.ok ? (gitStatus.trim() ? 'no' : 'yes') : 'NOT EVALUATED'}
 - Base URL: \`${baseUrl}\`
 - PASS: ${totals.pass}
 - PENDING: ${totals.pending}
@@ -523,9 +533,17 @@ function findBash() {
   return '';
 }
 
+/**
+ * Run git and keep whether it ran, separate from what it printed.
+ *
+ * This used to return '' on failure, which every caller read as a real, empty
+ * answer: an unreadable worktree became "worktree clean" and an unreadable diff
+ * became "no secret patterns found". Both PASS, both having checked nothing.
+ * The grading now lives in scripts/lib/command-result.js, where it is unit
+ * tested without paying 35 seconds to run this whole collector.
+ */
 function git(argsForGit) {
-  const result = spawnSync('git', argsForGit, { cwd: ROOT, encoding: 'utf8' });
-  return result.status === 0 ? String(result.stdout || '') : '';
+  return runCommand(spawnSync, 'git', argsForGit, { cwd: ROOT });
 }
 
 function timestampBangkok() {

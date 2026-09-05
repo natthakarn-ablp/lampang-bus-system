@@ -55,7 +55,26 @@
 
 ### 2.3 soak 100 users × 3,600 s — เริ่ม 22:31 น. (ลดจาก 200 users เพราะ RAM ว่างของเครื่องไม่ถึง 500 MB หลัง backend ถูกฆ่าหนึ่งครั้ง)
 
-**กำลังรันอยู่ขณะเขียนเอกสารนี้** — ผลจะอยู่ที่ `outputs/load-test/local-soak-rehearsal-<ts>/report.json` และ `scratchpad` log ของเซสชัน เมื่อจบให้เติมตาราง (rps, error rate, p95 ต้นชั่วโมงเทียบท้ายชั่วโมง, RSS ต้น/ท้าย = สัญญาณ leak, pool queued, LINE queue) และ `phase9_evidence.soak_60min` ถ้าถูก stop condition หยุดก่อน 60 นาที ให้บันทึกเหตุผลและ**ไม่นับเป็น soak**
+`outputs/load-test/local-soak-rehearsal-20260905-223127/report.json` — จบครบ 3,600.2 s โดยไม่ถูก stop condition หยุด (`aborted: null`, `phase9_evidence.soak_60min = true`)
+
+| | ค่า |
+|---|---|
+| requests / served | 7,419,582 / 951,920 (ที่เหลือคือ `login` 429 ตาม limiter และ `school_checkin_override` 400/409) |
+| errors | **0** (error rate 0) |
+| rps | 2,061 |
+| p50 / p95 / p99 / max (ms, เฉพาะ served) | 224 / **707** / 863 / 2,836 |
+| event-loop p99 | 22.6 ms |
+| pool | utilisation 1.0 ตลอด, queued สูงสุด 77 (saturated) |
+| `Slow_queries` เพิ่ม | 0 · `Threads_connected` สูงสุด 10 |
+| CPU ของ process | ~97% ของ core เดียว |
+| RSS สูงสุด | 359 MB (เท่ากับหลัง peak 360 MB — **ไม่เห็นสัญญาณ memory leak** ใน 60 นาที) · heap สูงสุด 154 MB |
+| RAM ว่างของเครื่องต่ำสุด | **74 MB** — เครื่องพัฒนาถึงขีดจำกัด ไม่ใช่ backend |
+| คิว LINE | 0 ตลอด (staging ไม่มี line_users) |
+| ตัวอย่างฝั่ง server | 680 ตัวอย่าง / 0 ล้มเหลว ตลอดชั่วโมง |
+
+ต่อ scenario (p95 ms): `school_dashboard` 234 · `school_students` 341 · `driver_roster` 341 · `driver_gps` 843 · `participation_event` 285 (เขียน event 204,127 แถวลง staging — ลบออกหลังรัน) · `reports_daily` 922 · ไม่ได้วัด: `login` (80 served / 6.3M × 429), `school_checkin_override` (409 idempotency + 400 บางส่วน)
+
+**อ่านอย่างไร:** ที่ 100 users ระบบเสถียรตลอดชั่วโมง (0 error, p95 คงที่ใต้ 1 s ทั้ง read/write, RSS ไม่โต) โดยมี pool 10 เส้นเป็นตัวจำกัด throughput ตลอด — ยืนยันข้อสรุปของ ramp ว่าคอขวดคือ pool/single process ไม่ใช่ query · ตัวเลขนี้ยังเป็นของเครื่องพัฒนา (`NODE_ENV=test`, MySQL ในเครื่องเดียวกัน, RAM ว่างเหลือ 74 MB) จึงใช้บอกได้แค่ว่า **ไม่มี leak และไม่มี error สะสมภายใต้ภาระคงที่** ใช้อ้าง capacity ไม่ได้
 
 ## 3. Restore drill แบบแยก (ข้อ G) — ซ้อมกลไก ไม่ใช่ drill จริง
 

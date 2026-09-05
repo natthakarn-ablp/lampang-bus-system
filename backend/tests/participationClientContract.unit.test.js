@@ -59,9 +59,19 @@ function loadClientConstants() {
              SCOPE_TYPE_LABEL, ROLE_LABEL, ALLOWED_EVENTS, LIMITS, NOTE_REQUIRED };`)();
 }
 
-// Loaded in beforeAll, not at module scope. Reading a file outside the jest
-// root while the module graph is still being built is a side effect at
-// collection time, and this suite does not need it until a test runs.
+// Loaded in beforeAll, not at module scope: reading a file outside the jest root
+// while the module graph is still being built is a side effect at collection
+// time, and this suite does not need it until a test runs.
+//
+// It was moved here for a second reason that turned out to be WRONG, recorded
+// so nobody re-derives it. With the read at module scope the full suite died
+// after one suite with exit 127 and no FAIL line, 0 of 4 runs, while the same
+// suite without this file passed 2 of 2 — which looked conclusive. After the
+// move the suite went green, then died again on the next run, then went green
+// twice more. This machine kills the runner that way about half the time
+// anyway (see the exit-127 flake), and under a 50% rate an 0-of-4 streak is a
+// 6% coincidence. The move is still right on its own merits; it did not fix the
+// kill, and nothing here should be read as claiming it did.
 let client;
 beforeAll(() => { client = loadClientConstants(); });
 

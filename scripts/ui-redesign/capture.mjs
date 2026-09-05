@@ -678,7 +678,17 @@ async function newPage(browser, user, viewport, scenario) {
   return { ctx, page, errors, renderLoops };
 }
 
+// The arithmetic lives in scripts/lib/contrast-math.js so it can be checked
+// against the WCAG reference values without a browser — page code reaches
+// Playwright as a string, which `node --check` does not look inside. The exact
+// module source is injected here, so the unit test and the capture run grade
+// with one implementation rather than two copies that can drift.
+const CONTRAST_MATH = readFileSync(resolve(root, 'scripts', 'lib', 'contrast-math.js'), 'utf8')
+  .replace(/^\s*'use strict';\s*$/m, '')
+  .replace(/^module\.exports[\s\S]*$/m, '');
+
 const MEASURE = `(() => {
+${CONTRAST_MATH}
   const de = document.documentElement;
   // The .tap-target utility extends the hit box to 44px with a centred
   // ::after, which getBoundingClientRect cannot see. Exclude those rather
@@ -730,6 +740,69 @@ const MEASURE = `(() => {
     const s = getComputedStyle(e);
     return /auto|scroll/.test(s.overflowY) && e.scrollHeight > e.clientHeight + 4;
   }).length;
+  // WCAG 1.4.3 — text must reach 4.5:1 against its background (3:1 when large).
+  // The other two accessibility numbers here (44px targets, focus ring) were
+  // measured; contrast was the one being asserted in review prose instead, so
+  // a palette edit could drop below the threshold without any run noticing.
+  //
+  // A ratio computed against a background we could not actually determine is
+  // worse than no ratio, so anything sitting on a background image, a gradient
+  // or a partly transparent ancestor is counted as UNMEASURABLE rather than
+  // quietly passing. 'checked' exists for the same reason: a run that measured
+  // nothing must not read as a run that found nothing.
+  // Walk to the first fully opaque background, compositing the translucent
+  // layers found on the way down onto it. Returns null when the answer would
+  // be a guess.
+  const effectiveBackground = (el) => {
+    const layers = [];
+    for (let node = el; node && node !== document.documentElement.parentNode; node = node.parentElement) {
+      const cs = getComputedStyle(node);
+      if (cs.backgroundImage && cs.backgroundImage !== 'none') return null;
+      if (parseFloat(cs.opacity) < 1) return null;
+      const bg = parseColor(cs.backgroundColor);
+      if (!bg || bg.a === 0) continue;
+      layers.push(bg);
+      if (bg.a === 1) {
+        let out = layers.pop();
+        while (layers.length) out = composite(layers.pop(), out);
+        return out;
+      }
+    }
+    return null;
+  };
+  const hasOwnText = (el) => [...el.childNodes]
+    .some(n => n.nodeType === 3 && n.textContent.trim().length > 0);
+  // 1.4.3 exempts inactive controls and text that is part of a logo. Leaflet's
+  // attribution strip is third-party map chrome, exempted here for the same
+  // reason it is exempted from the target-size measurement above.
+  const contrastExempt = (el) => el.closest('.leaflet-control-attribution, [aria-hidden=true]') !== null
+    || el.closest('button,input,select,textarea,fieldset,[aria-disabled=true]') !== null
+       && el.closest('button,input,select,textarea,fieldset,[aria-disabled=true]').matches(':disabled, [aria-disabled=true]');
+  let contrastChecked = 0;
+  let contrastUnmeasurable = 0;
+  const lowContrast = [];
+  for (const el of document.querySelectorAll('body *')) {
+    if (!hasOwnText(el)) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+    const box = el.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) continue;
+    if (contrastExempt(el)) continue;
+    const bg = effectiveBackground(el);
+    const size = parseFloat(cs.fontSize);
+    const weight = parseInt(cs.fontWeight, 10) || 400;
+    const graded = gradeContrast(cs.color, bg, size, weight);
+    if (graded.status === 'unmeasurable') { contrastUnmeasurable++; continue; }
+    contrastChecked++;
+    if (graded.status === 'fail') {
+      lowContrast.push({
+        tag: el.tagName.toLowerCase(),
+        text: el.textContent.trim().slice(0, 32),
+        ratio: graded.ratio, need: graded.need, size, weight,
+        fg: cs.color, bg: 'rgb(' + Math.round(bg.r) + ',' + Math.round(bg.g) + ',' + Math.round(bg.b) + ')',
+      });
+    }
+  }
   return {
     viewport: innerWidth + 'x' + innerHeight,
     overflowPx: Math.max(0, de.scrollWidth - innerWidth),
@@ -742,6 +815,7 @@ const MEASURE = `(() => {
     keyboardScrollRegions: [...document.querySelectorAll('[role=region][tabindex="0"]')].length,
     unnamedScrollRegions: [...document.querySelectorAll('[role=region][tabindex="0"]')]
       .filter(e => !e.getAttribute('aria-label') && !e.getAttribute('aria-labelledby')).length,
+    contrast: { checked: contrastChecked, unmeasurable: contrastUnmeasurable, low: lowContrast.slice(0, 20) },
   };
 })()`;
 
@@ -1103,6 +1177,13 @@ if (IS_MAIN) await (async () => {
   const invisibleFocus = report.filter(r => (
     r.metrics?.focusRing?.hasFocusRingClass && !r.metrics.focusRing.visible
   ));
+  const lowContrast = report.filter(r => r.metrics?.contrast?.low?.length);
+  // A capture that rendered text but graded none of it is not a pass. Without
+  // this the contrast gate reports clean on a page whose backgrounds all defeat
+  // the walk — the same false green npm audit and git produced elsewhere in
+  // this pipeline.
+  const contrastNotMeasured = report.filter(r => r.metrics && !r.failed
+    && !(r.metrics.contrast?.checked > 0));
   console.log(`\n── ${TAG} summary ──`);
   console.log(`  captures: ${report.length}`);
   console.log(`  horizontal overflow: ${overflow.length}${overflow.length ? ' → ' + overflow.map(r => r.name).join(', ') : ''}`);
@@ -1113,6 +1194,8 @@ if (IS_MAIN) await (async () => {
   console.log(`  mobile inputs <16px: ${tinyInputs.length}${tinyInputs.length ? ' → ' + tinyInputs.map(r => r.name).join(', ') : ''}`);
   console.log(`  unnamed regions:     ${unnamedRegions.length}${unnamedRegions.length ? ' → ' + unnamedRegions.map(r => r.name).join(', ') : ''}`);
   console.log(`  invisible focus:     ${invisibleFocus.length}${invisibleFocus.length ? ' → ' + invisibleFocus.map(r => r.name).join(', ') : ''}`);
+  console.log(`  text below 4.5:1:    ${lowContrast.length}${lowContrast.length ? ' → ' + lowContrast.map(r => r.name + '(' + r.metrics.contrast.low.length + ')').join(', ') : ''}`);
+  console.log(`  contrast not graded: ${contrastNotMeasured.length}${contrastNotMeasured.length ? ' → ' + contrastNotMeasured.map(r => r.name).join(', ') : ''}`);
   console.log(`  → ${OUT}`);
 
   // The report is written before this point so failed runs still leave useful
@@ -1126,6 +1209,8 @@ if (IS_MAIN) await (async () => {
     tinyInputs,
     unnamedRegions,
     invisibleFocus,
+    lowContrast,
+    contrastNotMeasured,
   ];
   if (gateFailures.some(rows => rows.length > 0)) process.exitCode = 1;
 })();

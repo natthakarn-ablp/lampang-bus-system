@@ -94,6 +94,19 @@ async function ensureUser(username, role, scopeType, scopeId) {
 }
 
 beforeAll(async () => {
+  // Start from a clean slate for this probe id. The suite asserts that a
+  // rejected request wrote NO audit row for student 99777, which only holds if
+  // no earlier row survives — and one does whenever a run is killed between
+  // writing a row and reaching teardown. That happens regularly here: the jest
+  // runner on this machine is killed mid-run with exit 127 and no FAIL line
+  // roughly half the time, and the next run then fails on a count it did not
+  // cause. Deleting our own rows up front makes the assertion depend on this
+  // run only.
+  await pool.query(
+    "DELETE FROM audit_logs WHERE entity_type = 'student' AND entity_id = ?",
+    [String(PROBE_STUDENT_ID)]
+  );
+
   tokens.school = mint(await ensureUser('__test_school', 'school', 'SCHOOL', PROBE_SCHOOL));
   tokens.affiliation = mint(await ensureUser('__test_affiliation', 'affiliation', 'AFFILIATION', '__TAFF'));
   tokens.admin = mint(await ensureUser('__test_admin_cs507', 'admin', null, null));
@@ -114,6 +127,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Audit rows first: teardown reaches a student's audit rows through the
+  // students table, so deleting the student before its rows leaves them
+  // unreachable for good.
+  await pool.query(
+    "DELETE FROM audit_logs WHERE entity_type = 'student' AND entity_id = ?",
+    [String(PROBE_STUDENT_ID)]
+  );
   await pool.query('DELETE FROM students WHERE id = ?', [PROBE_STUDENT_ID]);
   await pool.query('DELETE FROM users WHERE username IN (?, ?)', [
     '__test_admin_cs507',

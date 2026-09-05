@@ -29,28 +29,21 @@ const JWT_ALG = 'HS256';
 // is a constant that no real password equals.
 const DUMMY_BCRYPT_HASH = bcrypt.hashSync('lampang-login-timing-equaliser', BCRYPT_COST);
 
-// In-process per-(username+IP) failed-login lockout, layered on top of the
-// per-IP rate limiter. Stops sustained guessing against a single account even
-// when the attacker stays under the IP limit. Single-instance (pm2 fork); for a
-// multi-instance deployment move this to a shared store (Redis / DB table).
-const LOGIN_FAILS = new Map();
-const LOGIN_LOCK = { THRESHOLD: 10, WINDOW_MS: 15 * 60 * 1000 };
-function loginKey(username, ip) {
-  return `${String(username || '').trim().toLowerCase()}|${ip || ''}`;
-}
-function isLoginLocked(key) {
-  const e = LOGIN_FAILS.get(key);
-  if (!e) return false;
-  if (Date.now() - e.first > LOGIN_LOCK.WINDOW_MS) { LOGIN_FAILS.delete(key); return false; }
-  return e.count >= LOGIN_LOCK.THRESHOLD;
-}
-function noteLoginFail(key) {
-  const now = Date.now();
-  const e = LOGIN_FAILS.get(key);
-  if (!e || now - e.first > LOGIN_LOCK.WINDOW_MS) LOGIN_FAILS.set(key, { count: 1, first: now });
-  else e.count += 1;
-}
-function clearLoginFails(key) { LOGIN_FAILS.delete(key); }
+// Per-(username+IP) failed-login lockout, layered on top of the per-IP rate
+// limiter. Stops sustained guessing against a single account even when the
+// attacker stays under the IP limit.
+//
+// A1-9: this used to be a Map in this process, with a comment saying it had to
+// move before running more than one instance. It has. The counter now lives in
+// login_lockouts (migration 051) so N instances enforce one ceiling of 10
+// rather than N ceilings of 10, and it survives a restart — a deploy no longer
+// releases every account an attacker was working on.
+const {
+  loginLockKey: loginKey,
+  isLoginLocked,
+  noteLoginFail,
+  clearLoginFails,
+} = require('../utils/sharedSecurityState');
 
 // ─── Rate limiters ──────────────────────────────────────────────────────────
 const loginLimiter = rateLimit({
@@ -137,7 +130,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     }
 
     const lockKey = loginKey(username, req.ip);
-    if (isLoginLocked(lockKey)) {
+    if (await isLoginLocked(lockKey)) {
       return sendError(res, 'มีการพยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 15 นาที', [], 429);
     }
 
@@ -155,7 +148,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
       // Run a dummy bcrypt compare so the not-found path costs the same as a real
       // one — removes the timing oracle for username enumeration (auth-crypto).
       await bcrypt.compare(String(password), DUMMY_BCRYPT_HASH);
-      noteLoginFail(lockKey);
+      await noteLoginFail(lockKey);
       await logAudit({ userId: null, action: 'LOGIN', entityType: 'user', entityId: null,
         newValue: { username: String(username).trim(), result: 'failed', reason: 'user_not_found' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
@@ -166,7 +159,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     if (!user.is_active) {
       await bcrypt.compare(String(password), DUMMY_BCRYPT_HASH); // equalise timing
-      noteLoginFail(lockKey);
+      await noteLoginFail(lockKey);
       await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
         newValue: { username: user.username, result: 'failed', reason: 'account_disabled' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
@@ -178,14 +171,14 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     const passwordMatch = await bcrypt.compare(String(password), user.password_hash);
     if (!passwordMatch) {
-      noteLoginFail(lockKey);
+      await noteLoginFail(lockKey);
       await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
         newValue: { username: user.username, result: 'failed', reason: 'wrong_password' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
       return sendError(res, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', [], 401);
     }
 
-    clearLoginFails(lockKey);
+    await clearLoginFails(lockKey);
 
     // Update last_login
     await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);

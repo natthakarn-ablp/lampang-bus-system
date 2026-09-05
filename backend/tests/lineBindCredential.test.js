@@ -7,6 +7,14 @@
  * runs WITHOUT globalSetup (no production DB). Run with an isolated jest config:
  *   npx jest --config '{"testEnvironment":"node"}' --testPathPattern lineBind --runInBand
  *
+ * A1-9 NOTE. The pool mock used to answer [[]] to every statement, which was
+ * harmless while lineBindGuard counted failures in a Map. The counters now live
+ * in line_bind_lockouts, so the guard asks the pool — and a pool that always
+ * says "no rows" can never report a lock, which turned test 8/10's 429 into a
+ * 404. The mock below models the three statements the guard sends, so this file
+ * keeps testing the ROUTE (does a locked credential get 429 and an audit row)
+ * while lineBindGuard.test.js tests the counting itself against real MySQL.
+ *
  * Proves the LINE bind endpoints treat (phone + student credential) as a credential:
  * generic failure, no studentId-only path, duplicate handling, credential lockout,
  * and that every outcome is audited.
@@ -18,7 +26,45 @@ jest.mock('../src/services/lineFlexTemplates.service', () => ({
   maskPhone: (p) => { const d = String(p || '').replace(/\D/g, ''); return d.length < 7 ? '****' : `${d.slice(0, 3)}****${d.slice(-3)}`; },
   buildParentBindSuccessCard: () => ({}), fallbackBindSuccess: () => 'ok',
 }));
-jest.mock('../src/config/database', () => ({ pool: { query: jest.fn().mockResolvedValue([[]]) } }));
+// A minimal stand-in for line_bind_lockouts. Only three shapes ever reach it
+// from lineBindGuard — the SELECT that reads a live lock, the upsert that
+// counts a failure, and the DELETE that clears a pair — and every other
+// statement keeps the old empty answer.
+jest.mock('../src/config/database', () => {
+  const rows = new Map(); // `${lock_type}:${key_hash}` -> {count, lockedUntilMs}
+  const POLICY_MAX = { pair: 5, phone: 10, student: 10, sub: 12 };
+  const LOCK_MS = 30 * 60 * 1000;
+
+  const query = jest.fn(async (sql, params = []) => {
+    const text = String(sql);
+    // DELETE is matched first: its text also contains "FROM line_bind_lockouts",
+    // so testing the SELECT shape first would swallow every delete and leak
+    // counters from one test into the next.
+    if (text.includes('DELETE FROM line_bind_lockouts')) {
+      if (params.length === 2) rows.delete(`${params[0]}:${params[1]}`);
+      else rows.clear();
+      return [{ affectedRows: 1 }];
+    }
+    if (text.includes('SELECT') && text.includes('FROM line_bind_lockouts')) {
+      const [type, hash] = params;
+      const e = rows.get(`${type}:${hash}`);
+      if (!e || !e.lockedUntilMs || e.lockedUntilMs <= Date.now()) return [[]];
+      return [[{ retry_after: Math.ceil((e.lockedUntilMs - Date.now()) / 1000) }]];
+    }
+    if (text.includes('INSERT INTO line_bind_lockouts')) {
+      const [type, hash] = params;
+      const k = `${type}:${hash}`;
+      const e = rows.get(k) || { count: 0, lockedUntilMs: 0 };
+      e.count += 1;
+      if (e.count >= (POLICY_MAX[type] || 5)) e.lockedUntilMs = Date.now() + LOCK_MS;
+      rows.set(k, e);
+      return [{ affectedRows: 1 }];
+    }
+    return [[]];
+  });
+
+  return { pool: { query } };
+});
 
 const express = require('express');
 const request = require('supertest');
@@ -43,9 +89,11 @@ function makeApp() {
 }
 const app = makeApp();
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
-  bindGuard.__reset();
+  // __reset is async now — the counters are a store, not a Map. Awaited so a
+  // later test cannot start against rows the previous one left behind.
+  await bindGuard.__reset();
   idTokenSvc.verifyIdToken.mockImplementation(async (t) => (t === VALID ? { valid: true, userId: SUB } : { valid: false, error: 'invalid_token' }));
   lineSvc.getLinkedParentId.mockResolvedValue(null);
   lineSvc.auditBind.mockResolvedValue();

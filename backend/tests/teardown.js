@@ -179,8 +179,26 @@ const CLEANUP = [
   ['user_recovery_channels', `DELETE FROM user_recovery_channels WHERE user_id IN (SELECT id FROM users WHERE username LIKE '${TEST_USER_PREFIX}')`, []],
   ['user_recovery_codes', `DELETE FROM user_recovery_codes WHERE user_id IN (SELECT id FROM users WHERE username LIKE '${TEST_USER_PREFIX}')`, []],
   ['import_batches', 'DELETE FROM import_batches WHERE school_id = ?', [TEST_SCHOOL]],
-  ['students', 'DELETE FROM students WHERE school_id = ? OR id = 99999', [TEST_SCHOOL]],
+  // 99777 alongside 99999: numericPathParamValidation.test.js probes with it,
+  // and a run killed before its own afterAll leaves the row behind.
+  ['students', 'DELETE FROM students WHERE school_id = ? OR id IN (99999, 99777)', [TEST_SCHOOL]],
   ['revoked_tokens', `DELETE FROM revoked_tokens WHERE user_id IN (SELECT id FROM users WHERE username LIKE '${TEST_USER_PREFIX}')`, []],
+  // A1-9 moved three security counters out of process memory and into these
+  // tables. That was the point — but it also removed the isolation the Maps
+  // gave the suite for free: jest gives each test FILE its own module registry,
+  // so each file used to get its own empty Map, while every file now shares one
+  // set of rows. Suites run from the same IP against the same fixture
+  // usernames, so wrong-password cases that were three-per-file now accumulate
+  // across files and, past ten in fifteen minutes, a later suite's legitimate
+  // login is answered 429 by a lockout an earlier suite created.
+  //
+  // Cleared wholesale rather than by fixture: the keys are salt-free hashes of
+  // (username, IP) with nothing to scope a WHERE clause to, and this database
+  // is asserted disposable above. Restores exactly the per-file isolation the
+  // Maps used to provide, without weakening what production enforces.
+  ['login_lockouts', 'DELETE FROM login_lockouts', []],
+  ['line_bind_lockouts', 'DELETE FROM line_bind_lockouts', []],
+  ['line_webhook_events_seen', 'DELETE FROM line_webhook_events_seen', []],
   ['users', `DELETE FROM users WHERE username LIKE '${TEST_USER_PREFIX}'`, []],
   ['drivers', 'DELETE FROM drivers WHERE name = ?', [TEST_DRIVER_NAME]],
   ['vehicles', 'DELETE FROM vehicles WHERE id = ?', [TEST_VEHICLE]],
@@ -202,7 +220,15 @@ const CLEANUP = [
             AND entity_id REGEXP '^[0-9]+$'
             AND CAST(entity_id AS UNSIGNED) IN (SELECT id FROM students WHERE school_id = ?))
         OR (entity_type IN ('checkin','emergency','leave','roster_request','driver')
-            AND entity_id IS NOT NULL)`, [TEST_SCHOOL]],
+            AND entity_id IS NOT NULL)
+        -- The probe student ids by value, not through students. An audit row
+        -- about a student is only reachable through the subquery above while
+        -- that student still exists; a run killed between writing the row and
+        -- deleting it leaves a row no predicate here can see, and the NEXT run
+        -- fails on a count it did not cause. Observed: two UPDATE rows for
+        -- 99777 survived two runs killed by the jest exit-127 flake and made
+        -- numericPathParamValidation fail on a clean checkout.
+        OR (entity_type = 'student' AND entity_id IN ('99999', '99777'))`, [TEST_SCHOOL]],
 ];
 
 /**

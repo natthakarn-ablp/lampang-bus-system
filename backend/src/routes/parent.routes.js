@@ -235,7 +235,7 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
     // Phase 10.13C-4A — credential lockout (before the credential lookup), so a
     // brute-force can't be bypassed by rotating IPs.
     const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential });
-    const lock = bindGuard.checkLock(keys);
+    const lock = await bindGuard.checkLock(keys);
     if (lock.locked) {
       await lineSvc.auditBind({ phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
@@ -248,7 +248,7 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
     }
     const lineUserId = verify.userId;
     const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, sub: lineUserId });
-    const subLock = bindGuard.checkLock({ sub: subKeys.sub });
+    const subLock = await bindGuard.checkLock({ sub: subKeys.sub });
     if (subLock.locked) {
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: subLock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
@@ -264,12 +264,12 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
 
     const match = await lineSvc.findLinkableParent(cleanPhone, credential);
     if (!match.found) {
-      bindGuard.noteFailure(subKeys);
+      await bindGuard.noteFailure(subKeys);
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_PREVIEW_FAILED', reason: 'CREDENTIAL_MISMATCH', ...meta });
       return sendError(res, 'ไม่พบข้อมูลที่ตรงกัน กรุณาตรวจสอบรหัสนักเรียนและเบอร์โทรศัพท์', [], 404);
     }
 
-    bindGuard.noteSuccess(subKeys); // valid credential — clear the pair counter
+    await bindGuard.noteSuccess(subKeys); // valid credential — clear the pair counter
     console.log('[LINE_BIND_PREVIEW] ok', { hasStudent: true });
     return sendSuccess(res, {
       student: match.student,
@@ -294,7 +294,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
 
     // Credential lockout before lookup (see bind-preview).
     const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential });
-    const lock = bindGuard.checkLock(keys);
+    const lock = await bindGuard.checkLock(keys);
     if (lock.locked) {
       await lineSvc.auditBind({ phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
@@ -307,7 +307,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
     }
     const lineUserId = verify.userId;
     const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, sub: lineUserId });
-    const subLock = bindGuard.checkLock({ sub: subKeys.sub });
+    const subLock = await bindGuard.checkLock({ sub: subKeys.sub });
     if (subLock.locked) {
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: subLock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
@@ -320,7 +320,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
     }
     const match = await lineSvc.findLinkableParent(cleanPhone, credential);
     if (!match.found) {
-      bindGuard.noteFailure(subKeys);
+      await bindGuard.noteFailure(subKeys);
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_CONFIRM_FAILED', reason: 'CREDENTIAL_MISMATCH', ...meta });
       return sendError(res, 'ไม่พบข้อมูลที่ตรงกัน กรุณาตรวจสอบรหัสนักเรียนและเบอร์โทรศัพท์', [], 404);
     }
@@ -336,7 +336,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
       }
       throw bindErr;
     }
-    bindGuard.noteSuccess(subKeys);
+    await bindGuard.noteSuccess(subKeys);
     await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: match.studentCode || credential, action: 'LINE_BIND_SUCCESS', reason: 'SUCCESS', ...meta });
     await lineSvc.logMessage(lineUserId, 'system', 'bind_success_liff', 'ok', `parent_id=${match.parentId}`);
     console.log('[LINE_BIND_CONFIRM] linked', { parentId: match.parentId });

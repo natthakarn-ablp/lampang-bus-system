@@ -4,8 +4,8 @@ import api from '../../api/axios';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
+import { snapshotPct, pctDelta, fmtSnapshotPct, fmtPctDelta } from '../../utils/kpi';
 
-function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'; }
 
 const METRICS = [
@@ -73,18 +73,22 @@ export default function ExecutiveSummary() {
   const partialCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.PARTIAL).length;
   const missingCount = roleStats.length - readyCount - partialCount;
 
-  // Compute metric changes
+  // Compute metric changes. A side whose denominator is 0 or missing is null
+  // (utils/kpi.js snapshotPct — the backend export's rule), and a null delta
+  // is neither an improvement nor a risk: it is "cannot compare yet".
   const metricChanges = METRICS.map(m => {
-    const bv = pct(bD[m.num] || 0, bD[m.den] || 0);
-    const cv = pct(lD[m.num] || 0, lD[m.den] || 0);
-    const d = Math.round((cv - bv) * 100) / 100;
-    const improved = m.higher ? d > 0 : d < 0;
-    const declined = m.higher ? d < 0 : d > 0;
-    return { ...m, baseline: bv, current: cv, delta: d, improved, declined };
+    const bv = snapshotPct(bD[m.num], bD[m.den]);
+    const cv = snapshotPct(lD[m.num], lD[m.den]);
+    const d = pctDelta(bv, cv);
+    const comparable = d !== null;
+    const improved = comparable && (m.higher ? d > 0 : d < 0);
+    const declined = comparable && (m.higher ? d < 0 : d > 0);
+    return { ...m, baseline: bv, current: cv, delta: d, comparable, improved, declined };
   });
   const improvements = metricChanges.filter(m => m.improved);
   const risks = metricChanges.filter(m => m.declined);
-  const lowCoverage = metricChanges.filter(m => m.current < 50);
+  const lowCoverage = metricChanges.filter(m => m.current !== null && m.current < 50);
+  const notComparable = metricChanges.filter(m => !m.comparable);
 
   // Total actions
   const totalActions = Object.values(role_actions).reduce((s, r) => s + (r.total || 0), 0);
@@ -167,7 +171,7 @@ export default function ExecutiveSummary() {
             <ul className="space-y-1">
               {improvements.map(m => (
                 <li key={m.key} className="text-sm text-green-700">
-                  <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold"><span aria-hidden="true">▲</span> +{m.delta}%</span>
+                  <strong>{m.label}</strong>: {fmtSnapshotPct(m.baseline)} → {fmtSnapshotPct(m.current)} <span className="font-semibold"><span aria-hidden="true">▲</span> {fmtPctDelta(m.delta)}</span>
                 </li>
               ))}
             </ul>
@@ -184,7 +188,7 @@ export default function ExecutiveSummary() {
           <ul className="space-y-1">
             {risks.map(m => (
               <li key={m.key} className="text-sm text-red-700">
-                <strong>{m.label}</strong>: {m.baseline}% → {m.current}% <span className="font-semibold"><span aria-hidden="true">▼</span> {m.delta}%</span>
+                <strong>{m.label}</strong>: {fmtSnapshotPct(m.baseline)} → {fmtSnapshotPct(m.current)} <span className="font-semibold"><span aria-hidden="true">▼</span> {fmtPctDelta(m.delta)}</span>
               </li>
             ))}
             {lowCoverage.map(m => (
@@ -198,6 +202,14 @@ export default function ExecutiveSummary() {
           </ul>
         </div>
       </div>
+
+      {/* Metrics with no denominator on one side cannot be compared. They are
+          listed as such — not as 0%, not as an improvement, not as a risk. */}
+      {notComparable.length > 0 && (
+        <p className="text-sm text-ink-muted mb-5" data-testid="not-comparable">
+          ยังเทียบกับ baseline ไม่ได้ (ตัวส่วนเป็น 0 หรือไม่มีข้อมูล): {notComparable.map(m => m.label).join(', ')}
+        </p>
+      )}
 
       {/* Recommended actions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">

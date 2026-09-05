@@ -9,6 +9,7 @@ import EmptyState from '../../components/EmptyState';
 import {
   AppCard, AlertBanner, StatusBadge, DataTable, FormField, Modal, SectionTitle,
 } from '../../components/ui';
+import { snapshotPct, pctDelta, fmtSnapshotPct, fmtPctDelta } from '../../utils/kpi';
 
 // Metric definitions — edit here to add/change metrics
 const METRICS = [
@@ -22,14 +23,10 @@ const METRICS = [
   { key: 'active_users', label: 'ผู้ใช้ที่ active', num: 'active_users', den: 'total_users', pct: true, higher: true },
 ];
 
-function calcPct(num, den) {
-  if (!den || den === 0) return 0;
-  return Math.round((num / den) * 10000) / 100;
-}
-
-function calcDelta(current, baseline) {
-  return Math.round((current - baseline) * 100) / 100;
-}
+// Percentages and deltas come from utils/kpi.js (snapshotPct / pctDelta), the
+// same rule the backend research export uses: a zero or missing denominator
+// is null — shown as "ไม่มีข้อมูล" — never 0%, and a delta against it is null
+// rather than a trend.
 
 /**
  * The direction of a change was carried by a bare ▲ / ▼ / = glyph in a colour.
@@ -48,10 +45,6 @@ function trendMeta(delta, higher) {
 function fmtDate(d) {
   if (!d) return '-';
   return new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function fmtDelta(delta) {
-  return `${delta > 0 ? '+' : ''}${delta}%`;
 }
 
 export default function ResearchMetrics() {
@@ -117,14 +110,17 @@ export default function ResearchMetrics() {
     const bDen = baseline?.[m.den] ?? 0;
     const cNum = latest?.[m.num] ?? 0;
     const cDen = latest?.[m.den] ?? 0;
-    const bVal = calcPct(bNum, bDen);
-    const cVal = calcPct(cNum, cDen);
-    const delta = baseline && latest ? calcDelta(cVal, bVal) : null;
+    // Raw values go in, so a missing snapshot or a zero denominator is null.
+    const bVal = baseline ? snapshotPct(baseline[m.num], baseline[m.den]) : null;
+    const cVal = latest ? snapshotPct(latest[m.num], latest[m.den]) : null;
+    const delta = pctDelta(bVal, cVal);
     return {
       ...m, bNum, bDen, cNum, cDen, bVal, cVal, delta,
       trend: delta !== null ? trendMeta(delta, m.higher) : null,
       hasBaseline: Boolean(baseline),
       hasLatest: Boolean(latest),
+      // Both snapshots exist but at least one side has no denominator.
+      notComparable: Boolean(baseline && latest) && delta === null,
     };
   });
 
@@ -132,26 +128,30 @@ export default function ResearchMetrics() {
     { key: 'label', header: 'ตัวชี้วัด', primary: true, cell: r => r.label },
     {
       key: 'baseline', header: 'Baseline', align: 'center', numeric: true,
-      cell: r => (r.hasBaseline ? `${r.bVal}% (${r.bNum}/${r.bDen})` : '-'),
+      cell: r => (r.hasBaseline ? `${fmtSnapshotPct(r.bVal)} (${r.bNum}/${r.bDen})` : '-'),
     },
     {
       key: 'current', header: 'ปัจจุบัน', align: 'center', numeric: true,
-      cell: r => (r.hasLatest ? <span className="font-semibold text-ink">{r.cVal}% ({r.cNum}/{r.cDen})</span> : '-'),
+      cell: r => (r.hasLatest ? <span className="font-semibold text-ink">{fmtSnapshotPct(r.cVal)} ({r.cNum}/{r.cDen})</span> : '-'),
     },
     {
       key: 'delta', header: 'เปลี่ยนแปลง', align: 'center', numeric: true,
-      cell: r => (r.delta === null ? '-' : (
-        <span className={`inline-flex items-center gap-1 font-semibold ${r.trend.cls}`}>
-          <r.trend.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
-          {fmtDelta(r.delta)}
-        </span>
-      )),
+      cell: r => (r.delta === null
+        ? <span className="text-ink-muted">{r.notComparable ? fmtPctDelta(null) : '-'}</span>
+        : (
+          <span className={`inline-flex items-center gap-1 font-semibold ${r.trend.cls}`}>
+            <r.trend.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+            {fmtPctDelta(r.delta)}
+          </span>
+        )),
     },
     {
       key: 'status', header: 'สถานะ', align: 'center', badge: true,
       cell: r => (r.trend
         ? <StatusBadge variant={r.trend.tone} size="sm">{r.trend.label}</StatusBadge>
-        : '-'),
+        : r.notComparable
+          ? <StatusBadge variant="neutral" size="sm">ไม่มีข้อมูล</StatusBadge>
+          : '-'),
     },
   ];
 
@@ -244,17 +244,20 @@ export default function ResearchMetrics() {
               <AppCard key={r.key} padding="sm" className="text-center">
                 <p className="text-caption text-ink-muted mb-1">{r.label}</p>
                 <p className="text-2xl font-bold text-ink tabular-nums">
-                  {r.hasLatest ? `${r.cVal}%` : '-'}
+                  {r.hasLatest ? fmtSnapshotPct(r.cVal) : '-'}
                 </p>
                 {r.trend && r.delta !== null && (
                   <p className={`inline-flex items-center gap-1 text-sm font-medium mt-0.5 ${r.trend.cls}`}>
                     <r.trend.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
-                    <span className="tabular-nums">{fmtDelta(r.delta)}</span>
+                    <span className="tabular-nums">{fmtPctDelta(r.delta)}</span>
                     <span className="sr-only">{r.trend.label}</span>
                   </p>
                 )}
+                {r.notComparable && (
+                  <p className="text-sm text-ink-muted mt-0.5">ไม่มีข้อมูล</p>
+                )}
                 {r.hasBaseline && (
-                  <p className="text-caption text-ink-muted mt-0.5 tabular-nums">baseline: {r.bVal}%</p>
+                  <p className="text-caption text-ink-muted mt-0.5 tabular-nums">baseline: {fmtSnapshotPct(r.bVal)}</p>
                 )}
               </AppCard>
             ))}

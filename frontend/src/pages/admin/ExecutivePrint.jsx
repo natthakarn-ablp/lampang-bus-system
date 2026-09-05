@@ -5,8 +5,8 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
+import { snapshotPct, pctDelta, fmtSnapshotPct, fmtPctDelta } from '../../utils/kpi';
 
-function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'; }
 function fmtNow() { return new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'long', timeStyle: 'short' }); }
 
@@ -90,15 +90,21 @@ export default function ExecutivePrint() {
   const readyCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.SYSTEM_EVIDENCE).length;
   const partialCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.PARTIAL).length;
 
+  // Same rule as the screen version and the backend export: a zero or
+  // missing denominator is null, and a null delta is "cannot compare yet",
+  // never 0 and never a trend.
   const metricChanges = METRICS.map(m => {
-    const bv = pct(bD[m.num] || 0, bD[m.den] || 0);
-    const cv = pct(lD[m.num] || 0, lD[m.den] || 0);
-    const d = Math.round((cv - bv) * 100) / 100;
-    return { ...m, baseline: bv, current: cv, delta: d, improved: d > 0, declined: d < 0 };
+    const bv = snapshotPct(bD[m.num], bD[m.den]);
+    const cv = snapshotPct(lD[m.num], lD[m.den]);
+    const d = pctDelta(bv, cv);
+    const comparable = d !== null;
+    return { ...m, baseline: bv, current: cv, delta: d, comparable, improved: comparable && d > 0, declined: comparable && d < 0 };
   });
   const improvements = metricChanges.filter(m => m.improved);
   const risks = metricChanges.filter(m => m.declined);
-  const lowCoverage = metricChanges.filter(m => m.current < 50);
+  const notComparable = metricChanges.filter(m => !m.comparable);
+  // `null < 50` is true in JavaScript; a metric with no denominator is not "low".
+  const lowCoverage = metricChanges.filter(m => m.current !== null && m.current < 50);
 
   return (
     <>
@@ -221,14 +227,18 @@ export default function ExecutivePrint() {
               {metricChanges.map(m => (
                 <tr key={m.label}>
                   <td className="border border-gray-300 px-2 py-1">{m.label}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{m.baseline}%</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center font-medium">{m.current}%</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">{fmtSnapshotPct(m.baseline)}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center font-medium">{fmtSnapshotPct(m.current)}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">
-                    {m.delta > 0 ? '+' : ''}{m.delta}%
+                    {fmtPctDelta(m.delta)}
                   </td>
                   <td className="border border-gray-300 px-2 py-1 text-center">
-                    <span aria-hidden="true">{m.improved ? '▲' : m.declined ? '▼' : '='}</span>
-                    {' '}{m.improved ? 'ดีขึ้น' : m.declined ? 'ลดลง' : 'คงเดิม'}
+                    {m.comparable ? (
+                      <>
+                        <span aria-hidden="true">{m.improved ? '▲' : m.declined ? '▼' : '='}</span>
+                        {' '}{m.improved ? 'ดีขึ้น' : m.declined ? 'ลดลง' : 'คงเดิม'}
+                      </>
+                    ) : <span className="text-ink-muted">ไม่มีข้อมูล</span>}
                   </td>
                 </tr>
               ))}
@@ -245,7 +255,7 @@ export default function ExecutivePrint() {
             </p>
             {improvements.length > 0 ? (
               <ul className="text-xs space-y-0.5">
-                {improvements.map(m => <li key={m.label}>• {m.label}: +{m.delta}%</li>)}
+                {improvements.map(m => <li key={m.label}>• {m.label}: {fmtPctDelta(m.delta)}</li>)}
               </ul>
             ) : <p className="text-xs text-ink-muted">ยังไม่มีการเปลี่ยนแปลงจาก baseline</p>}
           </div>
@@ -255,9 +265,10 @@ export default function ExecutivePrint() {
               ประเด็นที่ต้องติดตาม
             </p>
             <ul className="text-xs space-y-0.5">
-              {risks.map(m => <li key={m.label}>• {m.label}: {m.delta}%</li>)}
-              {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {m.current}%</li>)}
+              {risks.map(m => <li key={m.label}>• {m.label}: {fmtPctDelta(m.delta)}</li>)}
+              {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {fmtSnapshotPct(m.current)}</li>)}
               {risks.length === 0 && lowCoverage.length === 0 && <li className="text-ink-muted">ไม่พบจุดเสี่ยงจากข้อมูลปัจจุบัน</li>}
+              {notComparable.length > 0 && <li className="text-ink-muted">• ยังเทียบไม่ได้ (ตัวส่วนเป็น 0 หรือไม่มีข้อมูล): {notComparable.map(m => m.label).join(', ')}</li>}
             </ul>
           </div>
         </div>

@@ -29,7 +29,9 @@ APP_NAME="${APP_NAME:-schoolbus-backend}"
 REMOTE="${DEPLOY_REMOTE:-origin}"
 EXPECTED_BRANCH="${EXPECTED_BRANCH:-}"
 HEALTH_URL="${HEALTH_URL:-http://localhost:3000/health}"
-DEPLOY_LOG="${DEPLOY_LOG:-$PROJECT_DIR/deploy-history.log}"
+# Outside the checkout on purpose: a log inside it would be an untracked file
+# in the deployed tree. /home/schoolbus/logs is where the other logs live.
+DEPLOY_LOG="${DEPLOY_LOG:-$(dirname "$(dirname "$PROJECT_DIR")")/logs/deploy-history.log}"
 DEPLOY_INSTALL="${DEPLOY_INSTALL:-auto}"
 
 fail() { echo "[deploy] ABORT: $*" >&2; exit 1; }
@@ -45,11 +47,17 @@ BRANCH="$(git symbolic-ref --short -q HEAD || true)"
 if [ -n "$EXPECTED_BRANCH" ] && [ "$BRANCH" != "$EXPECTED_BRANCH" ]; then
   fail "on branch '$BRANCH' but EXPECTED_BRANCH='$EXPECTED_BRANCH'"
 fi
-DIRTY="$(git status --porcelain)"
+# Modified or staged TRACKED files block the deploy: a fast-forward over them
+# would either fail or silently carry a server-side edit into the release.
+# Untracked files (a dist backup, a log) are reported but do not block —
+# the first run of this script stopped on its own backup directory.
+DIRTY="$(git status --porcelain --untracked-files=no)"
 if [ -n "$DIRTY" ]; then
   echo "$DIRTY" | head -10 >&2
-  fail "worktree is not clean — a deploy must start from the committed tree (see above)"
+  fail "worktree has modified tracked files — a deploy must start from the committed tree (see above)"
 fi
+UNTRACKED="$(git status --porcelain --untracked-files=normal | grep '^??' || true)"
+[ -z "$UNTRACKED" ] || echo "[deploy] note: untracked files present (not blocking): $(echo "$UNTRACKED" | sed 's/^?? //' | tr '\n' ' ')"
 BEFORE="$(git rev-parse --short HEAD)"
 echo "[deploy] branch=$BRANCH before=$BEFORE remote=$REMOTE"
 

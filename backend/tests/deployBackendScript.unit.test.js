@@ -174,13 +174,31 @@ describeWithBash('deploy-backend.sh against a throwaway repository', () => {
     expect(r.head).toBe(localHead);
   });
 
-  it('a dirty worktree stops before fetching', () => {
+  it('a modified tracked file stops before fetching', () => {
     write(path.join(fx.server, 'backend', 'src', 'ok.js'), "'use strict';\nmodule.exports = 'edited on the server';\n");
     const r = run(fx);
     expect(r.status).not.toBe(0);
-    expect(r.out).toMatch(/worktree is not clean/);
+    expect(r.out).toMatch(/worktree has modified tracked files/);
     expect(r.out).not.toMatch(/Fetching/);
     expect(pm2Calls(r)).toHaveLength(0);
+  });
+
+  it('an untracked file (a dist backup, a log) is reported but does not block', () => {
+    // The first production run of this script stopped on its own
+    // frontend/dist.prev-<ts>/ backup directory. Untracked files cannot be
+    // carried into a release by a fast-forward, so they must not block one.
+    fs.mkdirSync(path.join(fx.server, 'frontend', 'dist.prev-20260905'), { recursive: true });
+    write(path.join(fx.server, 'frontend', 'dist.prev-20260905', 'index.html'), '<html></html>\n');
+    const r = run(fx);
+    expect(`exit ${r.status}: ${r.out}`).toMatch(/^exit 0:/);
+    // git collapses a wholly-untracked directory to its top level.
+    expect(r.out).toMatch(/untracked files present \(not blocking\): frontend\//);
+    expect(pm2Calls(r)).toHaveLength(1);
+  });
+
+  it('writes its history log outside the checkout by default', () => {
+    const src = fs.readFileSync(SCRIPT, 'utf8');
+    expect(src).toMatch(/DEPLOY_LOG="\$\{DEPLOY_LOG:-\$\(dirname "\$\(dirname "\$PROJECT_DIR"\)"\)\/logs\/deploy-history\.log\}"/);
   });
 
   it('the wrong branch stops when EXPECTED_BRANCH is set', () => {

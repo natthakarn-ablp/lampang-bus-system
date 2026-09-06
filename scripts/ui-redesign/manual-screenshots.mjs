@@ -162,24 +162,20 @@ const SHOTS = [
   // ต้องตอบแบบสอบถามให้ผ่านก่อน ไม่งั้นได้ภาพโมดัลซ้ำกับ 01-dashboard
   { id: 'driver/01c-checkin-top', url: '/driver', user: 'driver', ...MOBILE, act: passPretrip },
   // รายชื่อรายคนซ่อนอยู่หลังปุ่ม "มีข้อยกเว้น" — ค่าเริ่มต้นของหน้าคือปุ่มเดียว
-  // ที่เช็กครบทุกคนรวดเดียว ซึ่งเป็นทางที่คนขับใช้บ่อยที่สุด
+  // ที่เช็กครบทุกคนรวดเดียว ซึ่งเป็นทางที่คนขับใช้บ่อยที่สุด (= ภาพ 15b)
+  { id: 'driver/15b-roster-form', url: '/driver', user: 'driver', ...MOBILE, act: passPretrip },
+  // 15-roster คือภาพที่คู่มืออ้างจริง — คำบรรยายบอกว่าเป็นหน้าหลังกด
+  // "มีข้อยกเว้น — เลือกทีละคน" · 15b เก็บสถานะตั้งต้นแบบรวมไว้ (ยังไม่มีคู่มือใดอ้าง)
   { id: 'driver/15-roster', url: '/driver', user: 'driver', ...MOBILE,
-    act: async (p) => { await passPretrip(p); await act.click(p, 'button:has-text("มีข้อยกเว้น")', 900); } },
-  // ภาพนี้ต้องต่างจาก 15-roster: เลื่อนอย่างเดียวได้ภาพเดียวกันทุกพิกเซล
-  // จึงกดสถานะของเด็กคนแรกให้เห็นผลการเลือกจริงบนรายชื่อ
-  { id: 'driver/15b-roster-form', url: '/driver', user: 'driver', ...MOBILE,
     act: async (p) => {
       await passPretrip(p);
-      await act.click(p, 'button:has-text("มีข้อยกเว้น")', 900);
       // ปุ่มรายคนเปลี่ยนตามรอบ: รอบเช้าเป็น "ขึ้นรถ" รอบเย็นเป็น "รับกลับบ้าน"
-      // (DriverDashboard.jsx) — selector ที่จับได้ทั้งสองรอบเท่านั้นที่ทำให้
-      // ภาพนี้ต่างจาก 15-roster จริง
-      const first = p.locator('button:has-text("ขึ้นรถ"), button:has-text("รับกลับบ้าน")').first();
-      if (await first.count()) {
-        await first.scrollIntoViewIfNeeded().catch(() => {});
-        await first.click({ timeout: 4000 }).catch(() => {});
-        await p.waitForTimeout(900);
-      }
+      // (DriverDashboard.jsx) — เลื่อนให้เห็นทั้งการ์ดของเด็กคนแรก ไม่กดจริง
+      // เพราะการกดไม่เปลี่ยนหน้าตาของรายการภายใต้ fixture
+      await act.click(p, 'button:has-text("มีข้อยกเว้น")', 900);
+      await p.locator('button:has-text("ขึ้นรถ"), button:has-text("รับกลับบ้าน")')
+        .first().scrollIntoViewIfNeeded().catch(() => {});
+      await p.waitForTimeout(400);
     } },
 
   // ── เมนูบัญชีผู้ใช้ (ต้องกดเปิด) ──

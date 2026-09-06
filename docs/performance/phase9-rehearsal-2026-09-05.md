@@ -2,7 +2,8 @@
 
 > **local, ไม่เทียบเท่า production, ไม่ใช่หลักฐานว่ารองรับ 1,000 คน** — เครื่องพัฒนาเครื่องเดียว (Windows, RAM 14 GB ว่างไม่ถึง 1 GB ขณะรัน),
 > MySQL ใน docker บนเครื่องเดียวกัน, generator กับ target แย่ง CPU กัน, backend รันด้วย `NODE_ENV=test` (global limiter ปิด) และ `FEATURE_PARTICIPATION_CASES=true` เฉพาะ staging
-> สิ่งที่รอบนี้พิสูจน์คือ **harness ครบตามที่ Phase 9 ขอ** (scenario mix ตามบทบาท, ค่าฝั่ง server, peak/soak, stop conditions) และ **หา bottleneck** ได้ ตัวเลขใช้อ้าง capacity ไม่ได้
+> สิ่งที่รอบนี้ทำได้คือ **รัน harness ครบทั้ง 3 profile (ramp / peak / soak) พร้อมค่าฝั่ง server และ stop conditions** โดย **วัดได้จริง 6 scenario** (`school_dashboard`, `school_students`, `reports_daily`, `driver_roster`, `driver_gps`, `participation_event`) และ **วัดไม่ได้ 3 scenario** (`login` — 429 ตาม limiter หลัง 20–80 ครั้งแรก, `school_checkin_override` — 409/400 idempotency ของ staging, `parent_status` — ต้องใช้ LINE id_token ไม่ใช่ JWT) และ **ชี้ bottleneck** ได้ ตัวเลขใช้อ้าง capacity ไม่ได้
+> **หมายเหตุ 6 ก.ย. 2569:** harness ที่ `19a74c9` ที่ใช้รันรอบนี้ยังมีข้อบกพร่องซึ่งแก้ในวันถัดมา (`a9dd13a`): runner ไม่ใช้ `weight` ในการกระจายคำขอ (ทุก scenario ได้ส่วนแบ่งเท่ากัน), stop condition แค่เลื่อน deadline ไม่ยกเลิกคำขอค้างและยังรัน stage ถัดไปหลัง abort, คำขอไม่มี timeout, ไม่มี RSS sample แล้ว `--abort-rss-mb` เงียบ, id ของ student/case มี fallback ที่ประดิษฐ์เอง, และ `supports_1000_user_claim` ไม่นับ scenario ที่ถูกตัดออกก่อนรันหรือที่ served เพียงเล็กน้อย — ตัวเลขในเอกสารนี้จึงเป็นของ harness รุ่นก่อนแก้ และไม่ได้รันซ้ำ
 > การรันจริงต้องทำบน Linux staging ที่แยกจาก production (B2-2) ด้วย `NODE_ENV=staging`
 
 ฐาน: harness ที่ `19a74c9` · backend `a0e783e`+ (commit เดียวกับ production ณ วันนั้น) · ฐาน `lampang_bus_staging` (สังเคราะห์: 10 โรงเรียน 360 นักเรียน 60 รถ 66 คนขับ) ตาม `backend/scripts/LOCAL_STAGING.md`
@@ -67,14 +68,15 @@
 | pool | utilisation 1.0 ตลอด, queued สูงสุด 77 (saturated) |
 | `Slow_queries` เพิ่ม | 0 · `Threads_connected` สูงสุด 10 |
 | CPU ของ process | ~97% ของ core เดียว |
-| RSS สูงสุด | 359 MB (เท่ากับหลัง peak 360 MB — **ไม่เห็นสัญญาณ memory leak** ใน 60 นาที) · heap สูงสุด 154 MB |
+| RSS สูงสุด | 359 MB (เท่ากับหลัง peak 360 MB — RSS (aggregate) ไม่โตในช่วง 60 นาที; **ไม่ใช่ข้อพิสูจน์ว่าไม่มี leak**) · heap สูงสุด 154 MB |
 | RAM ว่างของเครื่องต่ำสุด | **74 MB** — เครื่องพัฒนาถึงขีดจำกัด ไม่ใช่ backend |
 | คิว LINE | 0 ตลอด (staging ไม่มี line_users) |
 | ตัวอย่างฝั่ง server | 680 ตัวอย่าง / 0 ล้มเหลว ตลอดชั่วโมง |
 
 ต่อ scenario (p95 ms): `school_dashboard` 234 · `school_students` 341 · `driver_roster` 341 · `driver_gps` 843 · `participation_event` 285 (เขียน event 204,127 แถวลง staging — ลบออกหลังรัน) · `reports_daily` 922 · ไม่ได้วัด: `login` (80 served / 6.3M × 429), `school_checkin_override` (409 idempotency + 400 บางส่วน)
 
-**อ่านอย่างไร:** ที่ 100 users ระบบเสถียรตลอดชั่วโมง (0 error, p95 คงที่ใต้ 1 s ทั้ง read/write, RSS ไม่โต) โดยมี pool 10 เส้นเป็นตัวจำกัด throughput ตลอด — ยืนยันข้อสรุปของ ramp ว่าคอขวดคือ pool/single process ไม่ใช่ query · ตัวเลขนี้ยังเป็นของเครื่องพัฒนา (`NODE_ENV=test`, MySQL ในเครื่องเดียวกัน, RAM ว่างเหลือ 74 MB) จึงใช้บอกได้แค่ว่า **ไม่มี leak และไม่มี error สะสมภายใต้ภาระคงที่** ใช้อ้าง capacity ไม่ได้
+**อ่านอย่างไร:** ที่ 100 users ไม่มี error ตลอดชั่วโมง และ p95 ของ scenario ที่วัดได้อยู่ใต้ 1 s ทั้ง read/write · pool 10 เส้น saturated ตลอด (queued > 0) และ `Slow_queries` +0 ที่ `long_query_time` ปัจจุบัน — **ไม่ตัด query ที่ช้ากว่านั้นออก** · RSS (aggregate) ไม่โตในช่วง 60 นาที — **ไม่ใช่ข้อพิสูจน์ว่าไม่มี leak** · ตัวเลขนี้ยังเป็นของเครื่องพัฒนา (`NODE_ENV=test`, MySQL ในเครื่องเดียวกัน, RAM ว่างเหลือ 74 MB) จึงใช้บอกได้แค่ว่า **ไม่มี error สะสมภายใต้ภาระคงที่ในสภาพแวดล้อมนี้** ใช้อ้าง capacity ไม่ได้
+**หมายเหตุ 6 ก.ย. 2569:** ภายใต้ harness ที่แก้แล้ว (`a9dd13a`) `login` (80 served / 6.3M × 429) จะถูกตัดสินเป็น **UNDER-MEASURED** = ตกเกณฑ์ (MEASUREMENT_RULES: served < 30 หรือ served < 50% ของที่ส่ง) ซึ่งสอดคล้องกับ "ไม่ได้วัด" ที่เขียนไว้ข้างต้น — รายงานเดิมนับ `login` ว่า measured เพราะ served > 0
 
 ## 3. Restore drill แบบแยก (ข้อ G) — ซ้อมกลไก ไม่ใช่ drill จริง
 

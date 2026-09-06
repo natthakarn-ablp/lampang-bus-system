@@ -363,7 +363,13 @@ describeWithBash('deploy-backend.sh against a throwaway repository', () => {
     const paths = fs.readFileSync(`${fx.stubLog}.paths`, 'utf8').trim().split('\n');
     const foreign = paths.filter((l) => !l.split(' ')[1].startsWith(fx.stubs));
     expect(`foreign invocations: ${foreign.join('; ')}`).toBe('foreign invocations: ');
-    expect(new Set(paths.map((l) => l.split(' ')[0]))).toEqual(new Set(['pm2', 'npx', 'curl']));
+    // mv is in the set because the lock's owner-file rename goes through
+    // MV_BIN. It used to be a plain `mv`: on Linux the stub directory on PATH
+    // caught it (the production run of 65d7bfc recorded "mv"), on Git Bash it
+    // resolved to the real mv — the PATH-order hypothesis, observed. Every
+    // stubbed command is now invoked by absolute path on both platforms.
+    expect(new Set(paths.map((l) => l.split(' ')[0]))).toEqual(new Set(['pm2', 'npx', 'curl', 'mv']));
+    expect(paths.filter((l) => l.startsWith('mv ')).length).toBeGreaterThanOrEqual(1);
   });
 
   // ── fetch / fast-forward ─────────────────────────────────────────────────
@@ -926,6 +932,27 @@ describe('deploy-backend.sh source', () => {
     expect(release).toMatch(/rm -f "\$LOCK_DIR\/owner\.\$\$"/);
     expect(release).toMatch(/rmdir "\$LOCK_DIR"/);
     expect(release).not.toMatch(/rm -rf/);
+  });
+
+  it('invokes every stubbed command through its *_BIN variable — no bare mv/curl/pm2/npm/npx in code', () => {
+    // A bare command resolves through PATH, which differs between Linux and
+    // Git Bash (observed on the 65d7bfc production run: the plain `mv` of the
+    // lock rename hit the stub on the server and the real mv locally).
+    // Lines that only BUILD the manual-rollback text for the operator
+    // (manual="… && mv …") are prose, not commands, and are excluded.
+    // Words inside double-quoted strings (fail/echo messages such as "curl
+    // treats 0 as no time limit", "skipping npm ci") are prose too, so the
+    // strings are blanked before matching.
+    const blankStrings = (l) => l.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+    const bare = code.split('\n')
+      .filter((l) => !/^\s*manual=/.test(l))
+      .map(blankStrings)
+      .filter((l) => /(^|[\s;&|(])(mv|curl|pm2|npm|npx)\s/.test(l));
+    expect(bare).toEqual([]);
+    // and the sanity floor: the *_BIN defaults are still declared
+    for (const v of ['CURL_BIN="${DEPLOY_CURL:-curl}"', 'PM2_BIN="${DEPLOY_PM2:-pm2}"', 'NPM_BIN="${DEPLOY_NPM:-npm}"', 'NPX_BIN="${DEPLOY_NPX:-npx}"', 'MV_BIN="${DEPLOY_MV:-mv}"']) {
+      expect(code).toContain(v);
+    }
   });
 
   it('never rm -rf\'s a lock directory, and validates the health timeout', () => {

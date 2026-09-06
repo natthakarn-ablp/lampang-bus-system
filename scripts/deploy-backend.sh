@@ -127,8 +127,9 @@ is_uint() { [[ "$1" =~ ^[0-9]+$ ]]; }
 
 # ── Lock ─────────────────────────────────────────────────────────────────────
 # $DEPLOY_STATE_DIR/deploy-backend.lock/ is the lock (mkdir is atomic). The
-# holder writes owner.<pid> — a temp file renamed into place, so a name that
-# exists is a complete record. Reclaiming a dead holder removes ITS file by
+# holder writes owner.<pid> — a temp file renamed into place (through MV_BIN,
+# like every other stubbed command, so the fixtures see the same commands on
+# Linux and on Git Bash), so a name that exists is a complete record. Reclaiming a dead holder removes ITS file by
 # name and the directory with rmdir, which fails if anyone else has written a
 # file in the meantime; nothing here ever rm -rf's a directory it did not
 # create in this run.
@@ -150,7 +151,7 @@ acquire_lock() {
   for ((attempt = 1; attempt <= LOCK_WAIT_ATTEMPTS + 1; attempt++)); do
     if mkdir "$lock" 2>/dev/null; then
       if ! { printf '%s %s %s\n' "$$" "$(now)" "$(who)" > "$lock/owner.$$.tmp" \
-          && mv -f "$lock/owner.$$.tmp" "$lock/owner.$$"; }; then
+          && "$MV_BIN" -f "$lock/owner.$$.tmp" "$lock/owner.$$"; }; then
         rm -f "$lock/owner.$$.tmp" "$lock/owner.$$" 2>/dev/null || true
         fail "created $lock but could not write its owner file — another run may have reclaimed it; rerun"
       fi

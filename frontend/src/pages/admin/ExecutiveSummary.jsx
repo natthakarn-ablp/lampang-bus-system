@@ -5,6 +5,7 @@ import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
 import { snapshotPct, pctDelta, fmtSnapshotPct, fmtPctDelta } from '../../utils/kpi';
+import { improvementSummary, riskHeading, riskEmptyLine } from '../../utils/summaryWording';
 
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'; }
 
@@ -89,6 +90,10 @@ export default function ExecutiveSummary() {
   const risks = metricChanges.filter(m => m.declined);
   const lowCoverage = metricChanges.filter(m => m.current !== null && m.current < 50);
   const notComparable = metricChanges.filter(m => !m.comparable);
+  // How many metrics could be compared at all. With none, "no change" and
+  // "no risk" are not conclusions — there is nothing to conclude from.
+  const comparableCount = metricChanges.filter(m => m.comparable).length;
+  const wording = { improvements: improvements.length, risks: risks.length, lowCoverage: lowCoverage.length, comparable: comparableCount };
 
   // Total actions
   const totalActions = Object.values(role_actions).reduce((s, r) => s + (r.total || 0), 0);
@@ -176,14 +181,14 @@ export default function ExecutiveSummary() {
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-success-ink">ยังไม่มีการเปลี่ยนแปลงจาก baseline (อาจเพิ่งเริ่มเก็บข้อมูล)</p>
+            <p className={`text-sm ${risks.length > 0 || comparableCount === 0 ? 'text-ink-muted' : 'text-success-ink'}`}>{improvementSummary(wording)}</p>
           )}
         </div>
 
         {/* Risks */}
         <div className={`border rounded-xl p-4 ${risks.length > 0 || lowCoverage.length > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
-          <h2 className={`text-sm font-semibold mb-2 ${risks.length > 0 ? 'text-red-800' : 'text-gray-700'}`}>
-            {risks.length > 0 ? 'จุดเสี่ยง / ต้องติดตาม' : 'ไม่มีจุดเสี่ยงจากข้อมูลปัจจุบัน'}
+          <h2 className={`text-sm font-semibold mb-2 ${risks.length > 0 || lowCoverage.length > 0 ? 'text-red-800' : 'text-gray-700'}`}>
+            {riskHeading(wording)}
           </h2>
           <ul className="space-y-1">
             {risks.map(m => (
@@ -197,7 +202,7 @@ export default function ExecutiveSummary() {
               </li>
             ))}
             {risks.length === 0 && lowCoverage.length === 0 && (
-              <li className="text-sm text-ink-muted">ไม่พบ metric ที่ลดลงหรือต่ำกว่า 50%</li>
+              <li className="text-sm text-ink-muted">{riskEmptyLine(wording)}</li>
             )}
           </ul>
         </div>

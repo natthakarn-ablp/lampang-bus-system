@@ -6,6 +6,7 @@ import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
 import { snapshotPct, pctDelta, fmtSnapshotPct, fmtPctDelta } from '../../utils/kpi';
+import { improvementSummary, riskHeading } from '../../utils/summaryWording';
 
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'; }
 function fmtNow() { return new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'long', timeStyle: 'short' }); }
@@ -105,6 +106,10 @@ export default function ExecutivePrint() {
   const notComparable = metricChanges.filter(m => !m.comparable);
   // `null < 50` is true in JavaScript; a metric with no denominator is not "low".
   const lowCoverage = metricChanges.filter(m => m.current !== null && m.current < 50);
+  // With no comparable metric there is nothing to conclude: the printout
+  // must say "not enough data", never "no change" or "no risk".
+  const comparableCount = metricChanges.filter(m => m.comparable).length;
+  const wording = { improvements: improvements.length, risks: risks.length, lowCoverage: lowCoverage.length, comparable: comparableCount };
 
   return (
     <>
@@ -144,7 +149,7 @@ export default function ExecutivePrint() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm">
           <p className="font-semibold text-blue-800 mb-1">สรุปสำหรับผู้บริหาร</p>
           <p>จาก 6 สิทธิ์ในระบบ มี <strong>{readyCount} สิทธิ์</strong>ที่มีหลักฐานระบบครบทุกตัวชี้วัด, <strong>{partialCount} สิทธิ์</strong>มีหลักฐานบางส่วน
-            {improvements.length > 0 ? ` — มี ${improvements.length} ตัวชี้วัดที่ดีขึ้นจาก baseline` : ' — ยังไม่มีการเปลี่ยนแปลงจาก baseline (อาจเพิ่งเริ่มเก็บข้อมูล)'}
+            {` — ${improvementSummary(wording)}`}
             {lowCoverage.length > 0 ? ` · ${lowCoverage.length} ตัวชี้วัดที่ยังต่ำกว่า 50%` : ''}.
           </p>
         </div>
@@ -257,7 +262,7 @@ export default function ExecutivePrint() {
               <ul className="text-xs space-y-0.5">
                 {improvements.map(m => <li key={m.label}>• {m.label}: {fmtPctDelta(m.delta)}</li>)}
               </ul>
-            ) : <p className="text-xs text-ink-muted">ยังไม่มีการเปลี่ยนแปลงจาก baseline</p>}
+            ) : <p className="text-xs text-ink-muted">{improvementSummary(wording)}</p>}
           </div>
           <div className="border border-gray-300 rounded-lg p-3">
             <p className="font-semibold text-sm text-danger-ink mb-1 inline-flex items-center gap-1.5">
@@ -267,7 +272,7 @@ export default function ExecutivePrint() {
             <ul className="text-xs space-y-0.5">
               {risks.map(m => <li key={m.label}>• {m.label}: {fmtPctDelta(m.delta)}</li>)}
               {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {fmtSnapshotPct(m.current)}</li>)}
-              {risks.length === 0 && lowCoverage.length === 0 && <li className="text-ink-muted">ไม่พบจุดเสี่ยงจากข้อมูลปัจจุบัน</li>}
+              {risks.length === 0 && lowCoverage.length === 0 && <li className="text-ink-muted">{riskHeading(wording)}</li>}
               {notComparable.length > 0 && <li className="text-ink-muted">• ยังเทียบไม่ได้ (ตัวส่วนเป็น 0 หรือไม่มีข้อมูล): {notComparable.map(m => m.label).join(', ')}</li>}
             </ul>
           </div>

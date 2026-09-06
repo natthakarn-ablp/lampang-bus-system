@@ -68,7 +68,17 @@ describe('partitionByToken says up front what cannot be measured', () => {
     // which summarise() reports as NOT MEASURED. Only parent is excluded.
     const { runnable, unmeasurable } = partitionByToken(SCENARIOS, null, 'S');
     expect(runnable.map((s) => s.key)).not.toContain('parent_status');
-    expect(unmeasurable).toEqual([{ key: 'parent_status', reason: expect.stringMatching(/LINE id_token/) }]);
+    expect(unmeasurable).toEqual([{ key: 'parent_status', reason: expect.stringMatching(/LINE id_token/), blocking: false }]);
+  });
+
+  it('marks a missing role token as blocking and the LIFF parent scenario as a non-blocking caveat', () => {
+    // A missing driver token is a gap the operator can close before claiming
+    // anything; the parent scenario can never run here, so it caveats the
+    // JWT-scoped claim and blocks only the full-system one.
+    const { unmeasurable } = partitionByToken(SCENARIOS, { school: 'S' }, null);
+    const byKey = Object.fromEntries(unmeasurable.map((u) => [u.key, u.blocking]));
+    expect(byKey).toEqual({ driver_roster: true, driver_gps: true, parent_status: false });
+    expect(unmeasurable.every((u) => typeof u.blocking === 'boolean')).toBe(true);
   });
 
   it('token file with school only: driver scenarios are unmeasurable with the reason', () => {
@@ -92,7 +102,10 @@ describe('evaluateStopConditions', () => {
 
   it('is empty without a config or without breaches', () => {
     expect(evaluateStopConditions(windowOf([200, 200]), null, null)).toEqual([]);
-    expect(evaluateStopConditions(windowOf([200, 200]), null, { abortErrorRate: 0.2, abortP95Ms: 5000, abortRssMb: 900 })).toEqual([]);
+    // With an RSS limit set, "no breach" needs a server sample to check
+    // against; the case without one is the unknown-RSS breach below.
+    expect(evaluateStopConditions(windowOf([200, 200]), { process: { rss_mb: 300 } }, { abortErrorRate: 0.2, abortP95Ms: 5000, abortRssMb: 900 })).toEqual([]);
+    expect(evaluateStopConditions(windowOf([200, 200]), null, { abortErrorRate: 0.2, abortP95Ms: 5000 })).toEqual([]);
   });
 
   it('flags an error rate over the limit', () => {
@@ -108,7 +121,18 @@ describe('evaluateStopConditions', () => {
   it('flags server RSS over the limit from the latest capacity sample', () => {
     const server = { process: { rss_mb: 950 } };
     expect(evaluateStopConditions(windowOf([200]), server, { abortRssMb: 900 })).toEqual(['server rss 950MB > 900MB']);
-    expect(evaluateStopConditions(windowOf([200]), null, { abortRssMb: 900 })).toEqual([]); // no sample → no claim
+  });
+
+  it('flags an RSS limit it cannot check: no sample is a breach, not a pass', () => {
+    // This used to be "no sample → no claim → []". That made --abort-rss-mb
+    // silently inert whenever capacity-sample was not being polled or its
+    // last sample had gone stale — the limit the operator set never fired,
+    // and the run looked as if it had stayed under it. A limit that cannot
+    // be checked has not been passed.
+    expect(evaluateStopConditions(windowOf([200]), null, { abortRssMb: 900 }))
+      .toEqual(['server rss unknown (no capacity sample) while --abort-rss-mb 900 is set']);
+    expect(evaluateStopConditions(windowOf([200]), { process: {} }, { abortRssMb: 900 }))
+      .toEqual(['server rss unknown (no capacity sample) while --abort-rss-mb 900 is set']);
   });
 
   it('does not count an empty window as an error rate breach', () => {

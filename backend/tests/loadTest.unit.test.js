@@ -11,6 +11,7 @@
 const {
   SCENARIOS,
   THRESHOLDS,
+  MEASUREMENT_RULES,
   PRODUCTION_HOSTS,
   percentile,
   summarise,
@@ -72,26 +73,27 @@ describe('summary', () => {
 });
 
 describe('thresholds', () => {
+  // Hand-built summaries must say how many requests were SERVED: the
+  // measurement gate (MEASUREMENT_RULES) treats a missing `served` as 0, so
+  // a fixture that only says `measured: true` is UNDER-MEASURED and would
+  // fail for that reason instead of the one the case is about.
   it('applies the read limit to reads and the write limit to writes', () => {
     // 1,500ms is a failure for a read and a pass for a write, per the plan.
-    // `measured: true` says these requests were served. Without it the
-    // scenario is NOT MEASURED and would fail for that reason instead of the
-    // latency one this case is about.
     const readFail = evaluateThresholds({
-      school_dashboard: { requests: 10, errors: 0, error_rate: 0, p95_ms: 1500, measured: true },
+      school_dashboard: { requests: 100, served: 100, served_ratio: 1, errors: 0, error_rate: 0, p95_ms: 1500, measured: true },
     });
     expect(readFail.passed).toBe(false);
     expect(readFail.failures[0]).toMatch(/read/);
 
     const writeOk = evaluateThresholds({
-      driver_gps: { requests: 10, errors: 0, error_rate: 0, p95_ms: 1500, measured: true },
+      driver_gps: { requests: 100, served: 100, served_ratio: 1, errors: 0, error_rate: 0, p95_ms: 1500, measured: true },
     });
     expect(writeOk.passed).toBe(true);
   });
 
   it('fails a run whose error rate exceeds one percent', () => {
     const r = evaluateThresholds({
-      login: { requests: 1000, errors: 20, error_rate: 0.02, p95_ms: 100, measured: true },
+      login: { requests: 1000, served: 980, served_ratio: 0.98, errors: 20, error_rate: 0.02, p95_ms: 100, measured: true },
     });
     expect(r.passed).toBe(false);
     expect(r.failures[0]).toMatch(/error rate/);
@@ -105,10 +107,54 @@ describe('thresholds', () => {
     expect(r.failures).toEqual([]);
   });
 
-  it('keeps the plan thresholds', () => {
-    expect(THRESHOLDS.error_rate_max).toBe(0.01);
-    expect(THRESHOLDS.read_p95_ms_max).toBe(1000);
-    expect(THRESHOLDS.write_p95_ms_max).toBe(2000);
+  it('calls a scenario served once in a million UNDER-MEASURED, however good the p95 of the few', () => {
+    // The 2026-09-05 soak: login served 80 times and rate-limited 6.3 million
+    // times. `measured = served > 0` let the 80 stand for the scenario.
+    const r = evaluateThresholds({
+      login: { requests: 6300080, served: 80, served_ratio: 80 / 6300080, rate_limited: 6300000, rejected: 0, errors: 0, error_rate: 0, p95_ms: 120, measured: true, status_counts: { 200: 80, 429: 6300000 } },
+    });
+    expect(r.passed).toBe(false);
+    // 80 clears the minimum-served floor, so it is the served-ratio rule
+    // that names it: the p95 covers 0.0% of what was sent.
+    expect(r.failures[0]).toBe('login: UNDER-MEASURED — 0.0% served (rate_limited 6300000, rejected 0 of 6300080); the p95 covers the served minority only');
+  });
+
+  it('calls ten served of ten UNDER-MEASURED by the minimum-served rule', () => {
+    const r = evaluateThresholds({
+      school_dashboard: { requests: 10, served: 10, served_ratio: 1, errors: 0, error_rate: 0, p95_ms: 50, measured: true },
+    });
+    expect(r.passed).toBe(false);
+    expect(r.failures[0]).toMatch(/UNDER-MEASURED — 10 served of 10 \(need >= 30 served/);
+  });
+
+  it('calls a served minority UNDER-MEASURED by the served-ratio rule, naming the rate-limited and rejected populations', () => {
+    const r = evaluateThresholds({
+      login: { requests: 100, served: 40, served_ratio: 0.4, rate_limited: 55, rejected: 5, errors: 0, error_rate: 0, p95_ms: 50, measured: true },
+    });
+    expect(r.passed).toBe(false);
+    expect(r.failures[0]).toBe('login: UNDER-MEASURED — 40.0% served (rate_limited 55, rejected 5 of 100); the p95 covers the served minority only');
+  });
+
+  it('treats a summary without a served count as unmeasured rather than trusting `measured`', () => {
+    const r = evaluateThresholds({
+      school_dashboard: { requests: 100, errors: 0, error_rate: 0, p95_ms: 50, measured: true },
+    });
+    expect(r.passed).toBe(false);
+    expect(r.failures[0]).toMatch(/UNDER-MEASURED — 0 served of 100/);
+  });
+
+  it('keeps the plan thresholds, and keeps the measurement rules apart from them', () => {
+    expect(THRESHOLDS).toEqual({ error_rate_max: 0.01, read_p95_ms_max: 1000, write_p95_ms_max: 2000, duplicate_or_lost_writes: 0 });
+    expect(MEASUREMENT_RULES).toEqual({ min_served: 30, served_ratio_min: 0.5 });
+    expect(Object.keys(THRESHOLDS)).not.toContain('min_served');
+  });
+});
+
+describe('summarise reports the served share', () => {
+  it('served_ratio is served / requests, and null when nothing was sent', () => {
+    const s = summarise([{ ms: 1, ok: true, status: 200 }, { ms: 1, ok: false, status: 429 }, { ms: 1, ok: false, status: 429 }, { ms: 1, ok: false, status: 404 }]);
+    expect(`served=${s.served} limited=${s.rate_limited} rejected=${s.rejected} ratio=${s.served_ratio}`).toBe('served=1 limited=2 rejected=1 ratio=0.25');
+    expect(summarise([]).served_ratio).toBeNull();
   });
 });
 

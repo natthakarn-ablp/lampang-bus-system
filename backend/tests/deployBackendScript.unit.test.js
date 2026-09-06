@@ -82,7 +82,9 @@ const describeWithBash = hasBash ? describe : describe.skip;
 
 function git(cwd, ...args) {
   const r = spawnSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false', ...args], { cwd, encoding: 'utf8', timeout: 30000 });
-  if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${cwd}: ${r.stderr}`);
+  // A spawn that never ran (ENOMEM/EAGAIN on a loaded machine) has no stderr;
+  // say so, rather than reporting an empty git error.
+  if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${cwd}: status=${r.status} signal=${r.signal} ${r.error ? `spawn error: ${r.error.message}` : ''} ${r.stderr || ''}`.trim());
   return r.stdout.trim();
 }
 
@@ -210,9 +212,34 @@ function publish(fx, files, message) {
   return git(fx.seed, 'rev-parse', '--short', 'HEAD');
 }
 
+/**
+ * The script reads its configuration from the environment, and so do the
+ * stubs. The deploy script runs THIS suite (npx jest) with EXPECTED_BRANCH
+ * exported — the first production run of 9eb49a1 aborted every fixture with
+ * "on branch 'main' but EXPECTED_BRANCH='feat/…'" because the fixture spread
+ * process.env into the child. Nothing the caller exports may reach the
+ * fixture: every variable the script or a stub reads is dropped here and
+ * re-supplied by the fixture itself.
+ */
+const INHERITED_DEPLOY_VARS = [
+  'PROJECT_DIR', 'BACKEND_DIR', 'ECOSYSTEM', 'APP_NAME', 'DEPLOY_REMOTE', 'EXPECTED_BRANCH',
+  'HEALTH_URL', 'HEALTH_SERVICE', 'DEPLOY_LOG', 'DEPLOY_STATE_DIR', 'DEPLOY_INSTALL',
+  'DEPLOY_ROLLBACK', 'DEPLOY_UNKNOWN_RUNNING', 'HEALTH_ATTEMPTS', 'HEALTH_TIMEOUT_SEC',
+  'HEALTH_SLEEP_SEC', 'LOCK_WAIT_ATTEMPTS', 'LOCK_ORPHAN_SEC',
+  'DEPLOY_CURL', 'DEPLOY_PM2', 'DEPLOY_NPM', 'DEPLOY_NPX', 'DEPLOY_NODE', 'DEPLOY_MV',
+];
+function baseEnv() {
+  const out = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (INHERITED_DEPLOY_VARS.includes(k) || k.startsWith('STUB_')) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 function envFor(fx, env = {}) {
   return {
-    ...process.env,
+    ...baseEnv(),
     PATH: `${fx.stubs}${path.delimiter}${process.env.PATH}`,
     PROJECT_DIR: fx.server,
     BACKEND_DIR: `${fx.server}/backend`,
@@ -308,6 +335,26 @@ describeWithBash('deploy-backend.sh against a throwaway repository', () => {
     expect(`exit ${r.status}: ${r.out}`).toMatch(/^exit 0:/);
     expect(r.out).toContain('already up to date');
     expect(pm2Reloads(r)).toHaveLength(1);
+  });
+
+  it('does not inherit the calling deploy\'s environment: EXPECTED_BRANCH and DEPLOY_* set by the parent must not reach the fixture', () => {
+    // The production deploy script runs this suite with EXPECTED_BRANCH
+    // exported. On 2026-09-06 that made every fixture abort on the server
+    // ("on branch 'main' but EXPECTED_BRANCH='feat/…'") and stopped the deploy
+    // — safely, and for the wrong reason.
+    const saved = { EXPECTED_BRANCH: process.env.EXPECTED_BRANCH, DEPLOY_INSTALL: process.env.DEPLOY_INSTALL, STUB_JEST_EXIT: process.env.STUB_JEST_EXIT, HEALTH_TIMEOUT_SEC: process.env.HEALTH_TIMEOUT_SEC };
+    process.env.EXPECTED_BRANCH = 'feat/tracking-security-hardening';
+    process.env.DEPLOY_INSTALL = 'sometimes';
+    process.env.STUB_JEST_EXIT = '1';
+    process.env.HEALTH_TIMEOUT_SEC = '0';
+    try {
+      const r = run(fx);
+      expect(`exit ${r.status}: ${r.out}`).toMatch(/^exit 0:/);
+      expect(r.out).not.toMatch(/EXPECTED_BRANCH/);
+      expect(pm2Reloads(r)).toHaveLength(1);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
   });
 
   it('proves the stubs were what ran: every recorded $0 is under the stub directory, not a PATH lookup', () => {

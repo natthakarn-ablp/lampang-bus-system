@@ -36,6 +36,26 @@ const ONLY = (() => { const i = process.argv.indexOf('--only'); return i === -1 
 const OUT  = resolve(root, 'outputs/ui-redesign', TAG);
 mkdirSync(OUT, { recursive: true });
 
+// Feature flags exactly as production runs them (2026-09-06): only
+// FEATURE_DRIVER_REGISTRATION is on. `useAuth` reads them from
+// localStorage.features (hooks/useAuth.jsx:19) and the menus branch on them
+// (MobileBottomNav.jsx:10-16, Sidebar.jsx). Seeding nothing left features
+// null, so every shot showed the flag-OFF build: the driver's middle tab read
+// "ขึ้นทะเบียน" instead of "รายชื่อเด็ก" — the opposite of what the manual says
+// and of what a driver sees. Keep this in step with the server's .env.
+const PROD_FEATURES = {
+  driverRegistration: true,
+  adminPasswordRecovery: false,
+  vehicleQr: false,
+  driverShiftSelection: false,
+  qrLevel3: false,
+  eta: false,
+  geofence: false,
+  routeDeviation: false,
+  parentConsentRequired: false,
+  participationCases: false,
+};
+
 const FAKE_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.synthetic.fixture';
 const USERS = {
   admin:       { username: 'admin01',       display_name: 'ผู้ดูแลระบบ (ตัวอย่าง)', role: 'admin' },
@@ -376,6 +396,9 @@ const EMERGENCIES = [
   { id: 3, vehicle_id: 2, plate_no: 'กข-2222 ลำปาง', driver_name: 'คนขับ ตัวอย่าง ข', kind: 'breakdown', note: 'ยางรั่วระหว่างทาง (ตัวอย่าง)', created_at: '2026-08-26T07:41:00+07:00', resolved_at: '2026-08-26T08:05:00+07:00' },
 ];
 const AUDIT_ROWS_GENERIC = { data: AUDIT_ROWS, meta: { page: 1, per_page: 30, total: 1284 } };
+// The emergency pages paginate, so their fixture must carry `meta` like the
+// real API does (sendSuccess(res, rows, 'OK', result.meta)).
+const EMERGENCIES_PAGED = { data: EMERGENCIES, meta: { page: 1, per_page: 20, total: EMERGENCIES.length } };
 
 const COMMON = {
   '/api/driver/roster':         { data: DRIVER_ROSTER },
@@ -392,7 +415,7 @@ const COMMON = {
   '/api/school/dashboard':      { data: SCHOOL_DASH },
   '/api/school/status-today':   { data: STATUS_TODAY },
   '/api/school/leaves':         { data: LEAVES },
-  '/api/school/emergencies':    { data: EMERGENCIES },
+  '/api/school/emergencies':    EMERGENCIES_PAGED,
   '/api/school/live-vehicles':  { data: LIVE_VEHICLES },
   '/api/school/audit-logs':     AUDIT_ROWS_GENERIC,
   '/api/school/teacher-accounts': { data: [
@@ -411,7 +434,7 @@ const COMMON = {
 
   '/api/affiliation/dashboard':     { data: AFFILIATION_DASH },
   '/api/affiliation/status-today':  { data: STATUS_TODAY },
-  '/api/affiliation/emergencies':   { data: EMERGENCIES },
+  '/api/affiliation/emergencies':   EMERGENCIES_PAGED,
   '/api/affiliation/live-vehicles': { data: LIVE_VEHICLES },
   '/api/affiliation/pickup-map':    { data: PICKUP_POINTS },
   '/api/affiliation/audit-logs':    AUDIT_ROWS_GENERIC,
@@ -425,7 +448,7 @@ const COMMON = {
   ] },
 
   '/api/province/status-today':  { data: STATUS_TODAY },
-  '/api/province/emergencies':   { data: EMERGENCIES },
+  '/api/province/emergencies':   EMERGENCIES_PAGED,
   '/api/province/live-vehicles': { data: LIVE_VEHICLES },
   '/api/province/pickup-map':    { data: PICKUP_POINTS },
   '/api/province/audit-logs':    AUDIT_ROWS_GENERIC,
@@ -447,13 +470,42 @@ const COMMON = {
     backup: { status: 'ok', last_run: '2026-08-27T02:30:00+07:00', size_mb: 2.5 },
     counters: { users: 1284, students: 4696, vehicles: 481, checkins_today: 1180 },
   } },
+  // Shape must match backend/src/services/deploymentReadiness.service.js
+  // (sections / status_buckets / gaps / hard_gate_count / warning_count).
+  // The old {overall, checks} fixture predated that service, so the page
+  // crashed on data.status_buckets.map and every readiness shot was the
+  // ErrorBoundary screen.
   '/api/readiness': { data: {
-    overall: 'ready',
-    checks: [
-      { key: 'accounts', label: 'บัญชีผู้ใช้พร้อมใช้งาน', status: 'warn', detail: 'ยังไม่เข้าระบบครั้งแรก 467 บัญชี' },
-      { key: 'vehicles', label: 'รถผ่านการตรวจ', status: 'ok', detail: '402 จาก 481 คัน' },
-      { key: 'backup', label: 'สำรองข้อมูลอัตโนมัติ', status: 'ok', detail: 'ล่าสุด 27 ส.ค. 02:30 น.' },
+    policy_mode: 'advisory',
+    generated_at: '2026-09-06T01:30:00.000Z',
+    scope: 'province',
+    sections: {
+      vehicles:    { total: 481, ready: 402, missing: 79, pct: 84,
+                     with_capacity: 455, with_passed_inspection: 402, with_valid_documents: 430,
+                     by_status: { ELIGIBLE: 402, EXPIRING: 34, UNVERIFIED: 31, INELIGIBLE: 9, SUSPENDED: 5 } },
+      drivers:     { total: 476, ready: 431, missing: 45, pct: 91,
+                     linked: 452, unlinked: 24, with_verified_qualification: 431 },
+      assignments: { total: 468, ready: 441, missing: 27, pct: 94,
+                     with_authorized_driver: 441, with_backup_driver: 96, without_backup_driver: 372 },
+    },
+    status_buckets: [
+      { key: 'ready',      label_th: 'พร้อมใช้งาน',   count: 402 },
+      { key: 'needs_data', label_th: 'ต้องเติมข้อมูล', count: 31 },
+      { key: 'at_risk',    label_th: 'มีข้อมูลเสี่ยง',  count: 43 },
+      { key: 'suspended',  label_th: 'ถูกระงับ',      count: 5 },
     ],
+    gaps: [
+      { key: 'vehicle_capacity_missing', label_th: 'รถยังไม่มีความจุรับรอง', owner_role: 'school',
+        count: 26, next_action_th: 'โรงเรียนกรอกความจุรับรองของรถ', hard_gate: true },
+      { key: 'vehicle_inspection_missing', label_th: 'รถยังไม่ผ่านการตรวจสภาพ', owner_role: 'transport',
+        count: 79, next_action_th: 'ขนส่งบันทึกผลตรวจสภาพรถ', hard_gate: true },
+      { key: 'driver_qualification_missing', label_th: 'คนขับยังไม่มีใบอนุญาตรับรอง', owner_role: 'transport',
+        count: 45, next_action_th: 'ขนส่งตรวจและรับรองใบอนุญาตคนขับ', hard_gate: true },
+      { key: 'assignment_backup_driver_missing', label_th: 'รถยังไม่มีคนขับสำรอง', owner_role: 'school',
+        count: 372, next_action_th: 'โรงเรียนกำหนดคนขับสำรองของรถ', hard_gate: false },
+    ],
+    hard_gate_count: 150,
+    warning_count: 372,
   } },
   '/api/reports/monthly': { data: { month: '2026-08', rows: STATUS_TODAY.rows } },
   '/api/reports/summary': { data: { term: '1/2569', rows: STATUS_TODAY.rows, totals: { students: 4696, checkins: 128400 } } },
@@ -638,6 +690,7 @@ async function newPage(browser, user, viewport, scenario) {
     localStorage.setItem('access_token',  ${JSON.stringify(FAKE_TOKEN)});
     localStorage.setItem('refresh_token', ${JSON.stringify(FAKE_TOKEN)});
     localStorage.setItem('user',          ${JSON.stringify(JSON.stringify(user))});
+    localStorage.setItem('features',      ${JSON.stringify(JSON.stringify(PROD_FEATURES))});
   `);
   page.on('console',   m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
   page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));

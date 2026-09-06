@@ -135,8 +135,13 @@ const SHOTS = [
     act: async (p) => { await act.click(p, 'button:has-text("นำเข้า")', 900); } },
   { id: 'school/05-import-history', url: '/school/students', user: 'school', ...DESKTOP,
     act: async (p) => { await act.click(p, 'button:has-text("ประวัติการนำเข้า")', 900); } },
+  // โมดัลโอนย้ายอยู่ "หลัง" โมดัลแก้ไขนักเรียน (StudentSearch.jsx:510) ต้องกด
+  // แก้ไขของแถวแรกก่อน แล้วจึงกด "ขอโอนย้ายนักเรียน" — selector เดิมหาไม่เจอ
   { id: 'school/17-transfer', url: '/school/students', user: 'school', ...DESKTOP,
-    act: async (p) => { await act.click(p, 'button:has-text("ย้ายโรงเรียน")', 900); } },
+    act: async (p) => {
+      await act.click(p, 'button:has-text("แก้ไข")', 900);
+      await act.click(p, 'button:has-text("ขอโอนย้ายนักเรียน")', 900);
+    } },
 
   // ── transport ──
   { id: 'transport/01-dashboard', url: '/transport', user: 'transport', ...DESKTOP },
@@ -160,12 +165,21 @@ const SHOTS = [
   // ที่เช็กครบทุกคนรวดเดียว ซึ่งเป็นทางที่คนขับใช้บ่อยที่สุด
   { id: 'driver/15-roster', url: '/driver', user: 'driver', ...MOBILE,
     act: async (p) => { await passPretrip(p); await act.click(p, 'button:has-text("มีข้อยกเว้น")', 900); } },
+  // ภาพนี้ต้องต่างจาก 15-roster: เลื่อนอย่างเดียวได้ภาพเดียวกันทุกพิกเซล
+  // จึงกดสถานะของเด็กคนแรกให้เห็นผลการเลือกจริงบนรายชื่อ
   { id: 'driver/15b-roster-form', url: '/driver', user: 'driver', ...MOBILE,
     act: async (p) => {
       await passPretrip(p);
       await act.click(p, 'button:has-text("มีข้อยกเว้น")', 900);
-      await p.locator('button:has-text("ขึ้นรถ")').first().scrollIntoViewIfNeeded().catch(() => {});
-      await p.waitForTimeout(400);
+      // ปุ่มรายคนเปลี่ยนตามรอบ: รอบเช้าเป็น "ขึ้นรถ" รอบเย็นเป็น "รับกลับบ้าน"
+      // (DriverDashboard.jsx) — selector ที่จับได้ทั้งสองรอบเท่านั้นที่ทำให้
+      // ภาพนี้ต่างจาก 15-roster จริง
+      const first = p.locator('button:has-text("ขึ้นรถ"), button:has-text("รับกลับบ้าน")').first();
+      if (await first.count()) {
+        await first.scrollIntoViewIfNeeded().catch(() => {});
+        await first.click({ timeout: 4000 }).catch(() => {});
+        await p.waitForTimeout(900);
+      }
     } },
 
   // ── เมนูบัญชีผู้ใช้ (ต้องกดเปิด) ──
@@ -173,8 +187,10 @@ const SHOTS = [
     act: async (p) => { await act.click(p, 'button[aria-haspopup="menu"]', 600); } },
 
   // ── โมดัลของโรงเรียนที่คู่มืออ้างถึง ──
+  // ปุ่มบนหน้าจริงเขียนว่า "แบบเดิม" (คำเต็ม "นำเข้าแบบเดิม (สำรอง)" อยู่ใน title
+  // ซึ่ง has-text ไม่เห็น) — selector เดิมจึงไม่กดอะไรเลย ได้ภาพซ้ำหน้ารายชื่อ
   { id: 'school/06-import-legacy', url: '/school/students', user: 'school', ...DESKTOP,
-    act: async (p) => { await act.click(p, 'button:has-text("นำเข้าแบบเดิม")', 900); } },
+    act: async (p) => { await act.click(p, 'button:has-text("แบบเดิม")', 900); } },
   { id: 'school/13-override', url: '/school', user: 'school', ...DESKTOP,
     act: async (p) => { await act.click(p, 'button:has-text("ยืนยันแทนคนขับ")', 900); } },
 
@@ -236,6 +252,10 @@ for (const shot of wanted) {
       { timeout: 5000 },
     ).catch(() => {});
     if (shot.act) await shot.act(page);
+    // ด่านกันภาพเสีย: ถ้าหน้าตกไปที่ ErrorBoundary ภาพจะเป็นจอ "เกิดข้อผิดพลาด"
+    // ซึ่งเคยหลุดเข้าคู่มือถึง 5 ใบ เพราะสคริปต์ถือว่า "ถ่ายได้" = สำเร็จ
+    const crashed = await page.locator('text=ระบบพบปัญหาที่ไม่คาดคิด').count();
+    if (crashed) throw new Error('ErrorBoundary: หน้าล้มเหลว (fixture ไม่ตรง shape ของ API?)');
     await page.screenshot({ path: join(OUT, `${shot.id}.png`) });
     ok++;
     const note = errors.length ? `  (console ${errors.length})` : '';
@@ -255,6 +275,29 @@ if (failed.length) {
   console.log('  ล้มเหลว:');
   for (const f of failed) console.log(`    ${f.id} — ${f.why}`);
   process.exitCode = 1;
+}
+
+// ด่านกันภาพซ้ำ: ภาพสองใบที่ไบต์ตรงกันแปลว่า act ไม่ได้เปิดโมดัล/โหมดที่ตั้งใจ
+// (เคยเกิดกับ school/06-import-legacy, school/17-transfer, driver/15b-roster-form
+//  เพราะข้อความบนปุ่มเปลี่ยนไป selector เดิมจึงไม่กดอะไรเลย)
+{
+  const { createHash } = await import('node:crypto');
+  const { readFileSync } = await import('node:fs');
+  const byHash = new Map();
+  for (const shot of wanted) {
+    let buf;
+    try { buf = readFileSync(join(OUT, `${shot.id}.png`)); } catch { continue; }
+    const h = createHash('sha256').update(buf).digest('hex');
+    if (!byHash.has(h)) byHash.set(h, []);
+    byHash.get(h).push(shot.id);
+  }
+  const dups = [...byHash.values()].filter(ids => ids.length > 1);
+  if (dups.length) {
+    console.log('');
+    console.log('  ภาพซ้ำ (ไบต์ตรงกัน) — act ไม่ได้เปิดสิ่งที่ตั้งใจ:');
+    for (const ids of dups) console.log(`    ${ids.join(' = ')}`);
+    process.exitCode = 1;
+  }
 }
 
 if (missingFixtures.size) {

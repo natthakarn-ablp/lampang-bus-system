@@ -18,8 +18,12 @@ export default function ProvEmergencyList() {
     setError('');
     try {
       const res = await api.get(`/province/emergencies?page=${page}&per_page=20`);
-      setEmergencies(res.data.data);
-      setMeta(res.data.meta);
+      // A response without `meta` (or without `data`) must not blank the page:
+      // `meta.total` is read on every render, so storing undefined here threw
+      // and the ErrorBoundary replaced the whole list.
+      const rows = Array.isArray(res.data.data) ? res.data.data : [];
+      setEmergencies(rows);
+      setMeta(res.data.meta || { page, per_page: 20, total: rows.length });
     } catch (err) {
       setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
     } finally {

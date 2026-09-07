@@ -51,6 +51,12 @@ const app = makeApp();
 beforeEach(() => {
   jest.clearAllMocks();
   env.features.adminPasswordRecovery = true;
+  // Pin the two-factor flow for these cases. Without this the suite reads
+  // whatever ADMIN_RECOVERY_REQUIRE_CODE the machine's backend/.env happens to
+  // set, so it passed on a developer box and failed on the server the moment
+  // that setting was turned off (2026-09-07). The single-factor behaviour has
+  // its own case at the end of this file.
+  env.features.adminRecoveryRequireCode = true;
   env.jwt.secret = 'unit-test-secret-that-is-longer-than-32-characters';
   mockConn.beginTransaction.mockResolvedValue();
   mockConn.commit.mockResolvedValue();
@@ -196,5 +202,47 @@ describe('admin password recovery routes', () => {
     expect(mockConn.query).toHaveBeenCalledWith(expect.stringContaining('failed_attempts + 1'), ['request-1']);
     expect(mockConn.query.mock.calls.some(([sql]) => sql.includes('UPDATE users SET password_hash'))).toBe(false);
     expect(mockConn.commit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('when this deployment does not require a recovery code', () => {
+  beforeEach(() => {
+    env.features.adminRecoveryRequireCode = false;
+  });
+
+  afterEach(() => {
+    env.features.adminRecoveryRequireCode = true;
+  });
+
+  test('binding issues no codes and writes none', async () => {
+    mockQuery.mockResolvedValueOnce([[
+      { id: 7, username: 'admin-test', display_name: 'Admin', password_hash: '$2b$12$old' },
+    ]]);
+    mockConn.query.mockResolvedValue({ affectedRows: 1 });
+
+    const res = await request(app)
+      .post('/api/auth/recovery/admin/link-line')
+      .send({ current_password: 'current-secret', id_token: 'signed-line-id-token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.recovery_codes).toEqual([]);
+    expect(mockConn.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO user_recovery_channels'),
+      [7, 'U-line-admin']
+    );
+    const codeInsert = mockConn.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO user_recovery_codes'));
+    expect(codeInsert).toBeUndefined();
+  });
+
+  test('status tells the page no code is needed', async () => {
+    mockQuery
+      .mockResolvedValueOnce([[{ is_verified: 1, verified_at: '2026-09-07T04:15:43.000Z' }]])
+      .mockResolvedValueOnce([[{ remaining: 0 }]]);
+
+    const res = await request(app).get('/api/auth/recovery/admin/status');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.requires_recovery_code).toBe(false);
+    expect(res.body.data.line_linked).toBe(true);
   });
 });

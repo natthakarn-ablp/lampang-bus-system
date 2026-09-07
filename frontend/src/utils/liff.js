@@ -44,8 +44,17 @@ export async function resolveLineUserId() {
         _cachedUserId = profile.userId;
         return _cachedUserId;
       } else {
-        // In LIFF browser but not logged in — trigger login
-        liff.login();
+        // Not logged in — trigger login and come BACK to this page.
+        //
+        // Without redirectUri, LIFF returns the user to the LIFF app's
+        // Endpoint URL, which for this project sits under /parent/link. An
+        // admin who started LINE verification on /parent/link/admin-recovery
+        // therefore landed on the PARENT binding page and could never obtain
+        // an id token, so "ผูกบัญชี LINE" stayed disabled forever
+        // (AdminAccountSecurity.jsx disables it while lineIdToken is empty).
+        // window.location.href is always under the endpoint path, which is
+        // what LIFF requires of a redirect target.
+        liff.login({ redirectUri: window.location.href });
         return ''; // Will redirect, so this won't render
       }
     } catch (err) {

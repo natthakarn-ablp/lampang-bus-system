@@ -93,9 +93,21 @@ async function resetUnitAccountPassword({ accountId, newPassword, userId, ip = n
     [hash, accountId]
   );
 
+  // `username` is the key the other audit writers already use for the account
+  // acted on (admin's create path and the school teacher reset both write it),
+  // so a search for "what happened to this account" finds this row too. The
+  // four reset paths still disagree on the action key itself — admin writes
+  // action: 'reset_password', the school path writes action_detail — and that
+  // is not resolved here, because changing a value already in production
+  // rewrites the meaning of historical rows and is a decision of its own.
   await logAudit({
     userId, action: 'UPDATE', entityType: 'user', entityId: accountId,
-    newValue: { action: 'password_reset', by_role: 'province', target_role: account.role },
+    newValue: {
+      action: 'password_reset',
+      username: account.username,
+      by_role: 'province',
+      target_role: account.role,
+    },
     ipAddress: ip, userAgent,
   });
 

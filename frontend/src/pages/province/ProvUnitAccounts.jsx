@@ -166,8 +166,14 @@ export default function ProvUnitAccounts() {
           </>
         }
       >
+        {/* Same three-step fallback as the table cell. affiliation_name is
+            always null for a transport row, because the LEFT JOIN that supplies
+            it is guarded by role = 'affiliation'; and display_name can be null
+            on a row edited through PUT /api/admin/users/:id or migrated from
+            the legacy system, where the column is nullable with no default. Two
+            steps would have left the dialog naming nobody. */}
         <p className="text-sm text-ink-muted mb-4">
-          {resetTarget?.display_name || resetTarget?.affiliation_name} ·{' '}
+          {resetTarget?.display_name || resetTarget?.affiliation_name || resetTarget?.username} ·{' '}
           <span className="font-mono text-xs">{resetTarget?.username}</span>
         </p>
         <form

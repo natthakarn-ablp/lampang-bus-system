@@ -89,7 +89,12 @@ describe('what a reset changes, and what it must not', () => {
 
   it('audits the reset with who did it and to which kind of account', () => {
     expect(service).toMatch(/logAudit\(\{/);
-    expect(service).toMatch(/action: 'password_reset', by_role: 'province', target_role: account\.role/);
+    expect(service).toMatch(/action: 'password_reset'/);
+    expect(service).toMatch(/by_role: 'province'/);
+    expect(service).toMatch(/target_role: account\.role/);
+    // `username` is the key the other audit writers use for the account acted
+    // on, so a search for one account finds this row too.
+    expect(service).toMatch(/username: account\.username/);
   });
 
   it('selects no password material when listing', () => {
@@ -132,7 +137,11 @@ describe('the page a province officer uses', () => {
   it('calls the province endpoints, not the admin ones', () => {
     expect(page).toMatch(/api\.get\('\/province\/unit-accounts'\)/);
     expect(page).toMatch(/api\.post\(`\/province\/unit-accounts\/\$\{resetTarget\.id\}\/reset-password`/);
-    expect(page).not.toMatch(/\/admin\/users/);
+    // Every api call this page makes must be a /province/ one. Matching on the
+    // whole file would also catch a path merely named in a comment.
+    const calls = [...page.matchAll(/api\.(?:get|post|put|delete)\(\s*[`'"]([^`'"]+)/g)].map(m => m[1]);
+    expect(calls.length).toBeGreaterThan(0);
+    for (const path of calls) expect(path.startsWith('/province/')).toBe(true);
   });
 
   it('asks for the password twice and refuses a short one, as the sibling page does', () => {
@@ -142,6 +151,13 @@ describe('the page a province officer uses', () => {
   it('says who resets whom, so nobody comes to the wrong desk', () => {
     expect(page).toContain('บัญชีโรงเรียนให้สังกัดของโรงเรียนนั้นเป็นผู้รีเซ็ต');
     expect(page).toContain('บัญชีครูประจำสายชั้นให้โรงเรียนเป็นผู้รีเซ็ต');
+  });
+
+  it('names the account in the dialog even when display_name is null', () => {
+    // affiliation_name is always null for a transport row (the LEFT JOIN is
+    // guarded by role = 'affiliation'), and display_name is nullable, so the
+    // dialog needs the same three-step fallback the table cell has.
+    expect(page).toMatch(/resetTarget\?\.display_name \|\| resetTarget\?\.affiliation_name \|\| resetTarget\?\.username/);
   });
 
   it('is routed and reachable from the province menu', () => {

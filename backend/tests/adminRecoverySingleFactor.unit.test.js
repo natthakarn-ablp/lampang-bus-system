@@ -106,6 +106,38 @@ describe('the reset page asks only for what will be checked', () => {
   });
 });
 
+describe('a link is still sent when no codes exist', () => {
+  /**
+   * The trap this closes: /request would only send a link to an account that
+   * had at least one unused recovery code, and /request answers the same
+   * generic message whether or not it sent anything. With the requirement
+   * turned off, binding issues no codes, so every newly bound account would
+   * have been silently unable to recover — no error, no link, nothing.
+   */
+  it('the unused-code precondition is conditional, not hard-coded', () => {
+    expect(route).toMatch(/const codeClause = env\.features\.adminRecoveryRequireCode/);
+    expect(route).toMatch(/\? `AND EXISTS \(/);
+    expect(route).toMatch(/: '';/);
+  });
+
+  it('both the lookup and the locking re-read use it', () => {
+    const uses = route.match(/\$\{codeClause\}/g) || [];
+    expect(uses.length).toBe(2);
+  });
+
+  it('the only EXISTS on recovery codes in the request flow is the conditional one', () => {
+    const start = route.indexOf("router.post('/request'");
+    const end = route.indexOf("router.post('/complete'");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const requestFlow = route.slice(start, end);
+    const all = requestFlow.match(/AND EXISTS \(/g) || [];
+    expect(all).toHaveLength(1);
+    // and that one is the branch of the ternary, never inlined in a query
+    expect(requestFlow).toMatch(/adminRecoveryRequireCode\s*\n?\s*\? `AND EXISTS \(/);
+  });
+});
+
 describe('no codes are dangled when the server will not check them', () => {
   it('binding issues codes only when they are required', () => {
     expect(route).toMatch(/const codes = env\.features\.adminRecoveryRequireCode\s*\?\s*await replaceRecoveryCodes\(conn, user\.id\)\s*:\s*\[\]/);

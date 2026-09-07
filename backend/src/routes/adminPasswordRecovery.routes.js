@@ -356,6 +356,18 @@ router.post('/request', requestLimiter, requireFeature, async (req, res, next) =
   // Snapshot the allowlist once so the lookup and the locking re-read agree
   // even if a flag is flipped mid-request.
   const enabledRoles = enabledRecoveryRoles(recoveryEnvSource());
+  // Requiring an unused recovery code before a link is even sent makes sense
+  // only while completing the reset asks for one. With
+  // ADMIN_RECOVERY_REQUIRE_CODE=false, binding issues no codes, so this clause
+  // would silently refuse every newly bound account — and /request answers the
+  // same generic message either way, so the user would see nothing at all.
+  // Found on 2026-09-07, the day the code requirement was turned off.
+  const codeClause = env.features.adminRecoveryRequireCode
+    ? `AND EXISTS (
+            SELECT 1 FROM user_recovery_codes crc
+             WHERE crc.user_id = u.id AND crc.used_at IS NULL
+          )`
+    : '';
   let conn;
   let committed = false;
   try {
@@ -366,10 +378,7 @@ router.post('/request', requestLimiter, requireFeature, async (req, res, next) =
           AND rc.provider = 'LINE' AND rc.is_verified = TRUE
         WHERE u.username = ? AND u.role IN (?)
           AND u.is_active = TRUE AND u.is_deleted = FALSE
-          AND EXISTS (
-            SELECT 1 FROM user_recovery_codes crc
-             WHERE crc.user_id = u.id AND crc.used_at IS NULL
-          )
+          ${codeClause}
         LIMIT 1`,
       [username, enabledRoles]
     );
@@ -386,10 +395,7 @@ router.post('/request', requestLimiter, requireFeature, async (req, res, next) =
             AND rc.provider = 'LINE' AND rc.is_verified = TRUE
           WHERE u.id = ? AND u.role IN (?)
             AND u.is_active = TRUE AND u.is_deleted = FALSE
-            AND EXISTS (
-              SELECT 1 FROM user_recovery_codes crc
-               WHERE crc.user_id = u.id AND crc.used_at IS NULL
-            )
+            ${codeClause}
           LIMIT 1 FOR UPDATE`,
         [row.id, enabledRoles]
       );

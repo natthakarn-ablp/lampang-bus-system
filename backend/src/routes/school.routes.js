@@ -2055,9 +2055,23 @@ router.post('/teacher-accounts', requireFullSchoolScope, async (req, res, next) 
 
     const uname = String(username).trim();
 
-    // Duplicate username check (active users only)
-    const [[existing]] = await pool.query('SELECT id FROM users WHERE username = ? AND is_deleted = FALSE', [uname]);
-    if (existing) return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+    // Duplicate username check. The unique index covers soft-deleted rows too,
+    // so checking only active users pushed the collision down to the database
+    // and back up as an untranslated "Duplicate entry" (fixed 2026-09-07).
+    const [[existing]] = await pool.query(
+      'SELECT id, is_deleted FROM users WHERE username = ?', [uname]
+    );
+    if (existing && !existing.is_deleted) {
+      return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+    }
+    if (existing) {
+      return sendError(
+        res,
+        'ชื่อผู้ใช้นี้เคยถูกใช้โดยบัญชีที่ถูกลบไปแล้ว กรุณาใช้ชื่ออื่น หรือแจ้งผู้ดูแลระบบให้กู้คืนบัญชีเดิม',
+        [{ code: 'USERNAME_TAKEN_BY_DELETED', field: 'username' }],
+        409
+      );
+    }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST_TEACHER);
     const [result] = await pool.query(

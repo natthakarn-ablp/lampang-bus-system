@@ -185,9 +185,29 @@ router.post('/users', async (req, res, next) => {
       gradeScopeValue = String(grade_scope).trim();
     }
 
-    // Check duplicate username
-    const [[existing]] = await pool.query('SELECT id FROM users WHERE username = ? AND is_deleted = FALSE', [username.trim()]);
-    if (existing) return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+    // Check duplicate username.
+    //
+    // `uq_users_username` is a plain UNIQUE index, so it also covers rows that
+    // were soft-deleted. Filtering those out here (as this did until
+    // 2026-09-07) let the INSERT through to the database, which rejected it
+    // and surfaced as the untranslated "Duplicate entry — record already
+    // exists" from the error handler, with no hint of what to do. Production
+    // holds 40 soft-deleted users, so this was reachable simply by reusing the
+    // name of a removed account.
+    const [[existing]] = await pool.query(
+      'SELECT id, is_deleted FROM users WHERE username = ?', [username.trim()]
+    );
+    if (existing && !existing.is_deleted) {
+      return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+    }
+    if (existing) {
+      return sendError(
+        res,
+        `ชื่อผู้ใช้นี้เคยถูกใช้โดยบัญชีที่ถูกลบไปแล้ว (รหัสบัญชี ${existing.id}) ระบบไม่อนุญาตให้ชื่อซ้ำแม้บัญชีจะถูกลบ — กรุณาใช้ชื่ออื่น หรือกู้คืนบัญชีเดิมที่เมนูจัดการผู้ใช้งาน`,
+        [{ code: 'USERNAME_TAKEN_BY_DELETED', field: 'username', deleted_user_id: existing.id }],
+        409
+      );
+    }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST);
     const [result] = await pool.query(

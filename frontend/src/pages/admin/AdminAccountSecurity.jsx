@@ -176,7 +176,9 @@ export default function AdminAccountSecurity() {
               </div>
               <p className="mt-2 text-sm leading-6 text-ink-muted">
                 {status?.line_linked
-                  ? `ยืนยันล่าสุด ${formatThaiDate(status.verified_at)} · เหลือรหัสกู้คืน ${status.recovery_codes_remaining} รหัส`
+                  ? (status.requires_recovery_code === false
+                      ? `ยืนยันล่าสุด ${formatThaiDate(status.verified_at)} · กู้รหัสผ่านผ่านลิงก์ใน LINE ได้ทันที`
+                      : `ยืนยันล่าสุด ${formatThaiDate(status.verified_at)} · เหลือรหัสกู้คืน ${status.recovery_codes_remaining} รหัส`)
                   : 'LINE ที่ผูกต้องเพิ่มเพื่อน LINE OA และรับข้อความทดสอบได้'}
               </p>
             </div>
@@ -240,9 +242,11 @@ export default function AdminAccountSecurity() {
               </button>
               {status?.line_linked && (
                 <>
-                  <button type="button" onClick={regenerateCodes} disabled={Boolean(busy)} className="focus-ring inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-surface-border bg-white px-4 font-bold text-ink hover:bg-surface disabled:opacity-50">
-                    <RefreshCw className="h-4 w-4" aria-hidden="true" /> สร้างรหัสชุดใหม่
-                  </button>
+                  {status?.requires_recovery_code !== false && (
+                    <button type="button" onClick={regenerateCodes} disabled={Boolean(busy)} className="focus-ring inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-surface-border bg-white px-4 font-bold text-ink hover:bg-surface disabled:opacity-50">
+                      <RefreshCw className="h-4 w-4" aria-hidden="true" /> สร้างรหัสชุดใหม่
+                    </button>
+                  )}
                   <button type="button" onClick={unlinkLine} disabled={Boolean(busy)} className="focus-ring inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 font-bold text-danger-ink hover:bg-danger-soft disabled:opacity-50">
                     <Unlink className="h-4 w-4" aria-hidden="true" /> ยกเลิกการผูก
                   </button>
@@ -252,7 +256,9 @@ export default function AdminAccountSecurity() {
           </AppCard>
 
           <AlertBanner variant="info" icon={KeyRound} title="เมื่อจำรหัสผ่านไม่ได้">
-            กรอกชื่อผู้ใช้ที่หน้า “ลืมรหัสผ่าน” ระบบจะส่งลิงก์อายุ 15 นาทีไปยัง LINE จากนั้นกรอกรหัสกู้คืนหนึ่งรหัสและตั้งรหัสผ่านใหม่
+            {status?.requires_recovery_code === false
+              ? 'กรอกชื่อผู้ใช้ที่หน้า “ลืมรหัสผ่าน” ระบบจะส่งลิงก์อายุ 15 นาทีไปยัง LINE ที่ผูกไว้ กดลิงก์แล้วตั้งรหัสผ่านใหม่ได้ทันที ไม่ต้องใช้รหัสกู้คืน — ดูแลไม่ให้ผู้อื่นเข้าถึง LINE ของท่านได้ และทุกครั้งที่รหัสผ่านถูกเปลี่ยน ระบบจะแจ้งกลับไปที่ LINE นี้'
+              : 'กรอกชื่อผู้ใช้ที่หน้า “ลืมรหัสผ่าน” ระบบจะส่งลิงก์อายุ 15 นาทีไปยัง LINE จากนั้นกรอกรหัสกู้คืนหนึ่งรหัสและตั้งรหัสผ่านใหม่'}
           </AlertBanner>
         </div>
       )}

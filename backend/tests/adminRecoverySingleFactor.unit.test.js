@@ -105,3 +105,25 @@ describe('the reset page asks only for what will be checked', () => {
     expect(page).toMatch(/\.\.\.\(requiresCode \? \{ recovery_code: form\.recovery_code \} : \{\}\)/);
   });
 });
+
+describe('no codes are dangled when the server will not check them', () => {
+  it('binding issues codes only when they are required', () => {
+    expect(route).toMatch(/const codes = env\.features\.adminRecoveryRequireCode\s*\?\s*await replaceRecoveryCodes\(conn, user\.id\)\s*:\s*\[\]/);
+  });
+
+  it('records how many were issued', () => {
+    expect(route).toMatch(/recovery_codes_issued: codes\.length/);
+  });
+
+  it('status tells the page which flow is in force', () => {
+    expect(route).toMatch(/requires_recovery_code: env\.features\.adminRecoveryRequireCode/);
+  });
+
+  const security = read('frontend/src/pages/admin/AdminAccountSecurity.jsx');
+
+  it('the security page drops the code count, the regenerate button and the code instruction', () => {
+    expect(security).toMatch(/status\.requires_recovery_code === false/);
+    expect(security).toMatch(/status\?\.requires_recovery_code !== false && \(/);
+    expect(security).toContain('ไม่ต้องใช้รหัสกู้คืน');
+  });
+});

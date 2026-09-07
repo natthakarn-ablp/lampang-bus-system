@@ -149,6 +149,9 @@ async function handleStatus(req, res, next) {
       line_linked: Boolean(channel && channel.is_verified),
       verified_at: channel?.verified_at || null,
       recovery_codes_remaining: Number(codeCount?.remaining || 0),
+      // So the page can drop every mention of codes when the server does not
+      // ask for one, instead of showing a count that means nothing.
+      requires_recovery_code: env.features.adminRecoveryRequireCode,
     });
   } catch (error) {
     return next(error);
@@ -202,13 +205,26 @@ async function handleLinkLine(req, res, next) {
        VALUES (?, 'LINE', ?, TRUE, NOW())`,
       [user.id, verified.userId]
     );
-    const codes = await replaceRecoveryCodes(conn, user.id);
+    // Only issue recovery codes when completing a reset will actually ask for
+    // one. Handing someone eight codes to store, and telling them the account
+    // depends on them, while the server never checks them, is worse than not
+    // showing them: it reads as a second factor that is not there.
+    // Turning ADMIN_RECOVERY_REQUIRE_CODE back on therefore requires each admin
+    // to press "สร้างรหัสชุดใหม่" once before recovery works again — stated in
+    // docs/project-closure/decision-2026-09-07-admin-recovery-single-factor.md
+    const codes = env.features.adminRecoveryRequireCode
+      ? await replaceRecoveryCodes(conn, user.id)
+      : [];
     await logAudit({
       userId: user.id,
       action: 'UPDATE',
       entityType: 'user_recovery_channel',
       entityId: user.id,
-      newValue: { action: 'admin_line_recovery_linked', provider: 'LINE' },
+      newValue: {
+        action: 'admin_line_recovery_linked',
+        provider: 'LINE',
+        recovery_codes_issued: codes.length,
+      },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
       conn,

@@ -95,6 +95,7 @@ const PROVINCE_NAV = [
   { to: '/province/readiness',    icon: ShieldCheck,   label: 'ความพร้อมเปิดใช้งาน' },
   { to: '/admin/route-deviations', icon: Route,        label: 'การเบี่ยงเส้นทาง' },
   { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
+  { to: '/province/unit-accounts', icon: Key,          label: 'บัญชีสังกัดและขนส่ง' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
   { section: 'รายงานและวิจัย' },
   { to: '/reports/daily',         icon: FileText,      label: 'รายงาน' },

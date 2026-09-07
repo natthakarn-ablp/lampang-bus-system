@@ -76,6 +76,7 @@ const ProvVehicleList      = lazy(() => import('./pages/province/ProvVehicleList
 const ProvDailyStatus      = lazy(() => import('./pages/province/ProvDailyStatus'));
 const ProvEmergencyList    = lazy(() => import('./pages/province/ProvEmergencyList'));
 const ProvAuditLog         = lazy(() => import('./pages/province/ProvAuditLog'));
+const ProvUnitAccounts     = lazy(() => import('./pages/province/ProvUnitAccounts'));
 const ProvinceLiveVehicles = lazy(() => import('./pages/province/ProvinceLiveVehicles'));
 const ProvincePickupMap    = lazy(() => import('./pages/province/ProvincePickupMap'));
 const DeploymentReadiness  = lazy(() => import('./pages/province/DeploymentReadiness'));
@@ -294,6 +295,7 @@ export default function App() {
             <Route path="status"       element={<ProvDailyStatus />} />
             <Route path="emergencies"  element={<ProvEmergencyList />} />
             <Route path="audit-log"    element={<ProvAuditLog />} />
+            <Route path="unit-accounts" element={<ProvUnitAccounts />} />
             <Route path="live-vehicles" element={<ProvinceLiveVehicles />} />
             <Route path="pickup-map"   element={<ProvincePickupMap />} />
             <Route path="readiness"    element={<DeploymentReadiness />} />

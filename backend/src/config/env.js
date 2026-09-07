@@ -206,6 +206,19 @@ const env = {
     // Admin-only self-service recovery through server-verified LINE Login plus
     // a one-use recovery code. Migration 049 must exist before enabling.
     adminPasswordRecovery: process.env.FEATURE_ADMIN_PASSWORD_RECOVERY === 'true',
+    // Whether completing an admin password reset also requires one of the
+    // single-use recovery codes, on top of the 15-minute link delivered to the
+    // bound LINE account. Default TRUE: two factors, the second of which does
+    // not live in LINE. Setting it to false makes the LINE link sufficient on
+    // its own — a deliberate trade the owner made on 2026-09-07 because a lost
+    // code sheet otherwise makes recovery impossible; recorded in
+    // docs/project-closure/decision-2026-09-07-admin-recovery-single-factor.md
+    // Compensating controls that remain either way: the link is single-use and
+    // expires in 15 minutes, it can only reach the LINE identity bound to that
+    // account, requests and completions are rate-limited and audited, and a
+    // confirmation message is pushed to that LINE the moment a password is
+    // changed.
+    adminRecoveryRequireCode: process.env.ADMIN_RECOVERY_REQUIRE_CODE !== 'false',
     vehicleQr: process.env.FEATURE_VEHICLE_QR === 'true',
     driverShiftSelection: process.env.FEATURE_DRIVER_SHIFT_SELECTION === 'true',
     qrLevel3: process.env.FEATURE_QR_LEVEL3 === 'true',   // Level-3 sensitive viewer (default off, DPO-gated)

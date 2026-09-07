@@ -13,10 +13,27 @@ export default function ResetPassword() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  // Whether this deployment still asks for a recovery code on top of the link.
+  // Read from the server so the form asks only for what will be checked;
+  // defaults to true so a failed lookup shows the field rather than hiding a
+  // requirement the server will then reject.
+  const [requiresCode, setRequiresCode] = useState(true);
 
   useEffect(() => {
     if (token) window.history.replaceState({}, document.title, '/reset-password');
   }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/auth/recovery/config')
+      .then((res) => {
+        if (cancelled) return;
+        const value = res.data?.data?.requires_recovery_code;
+        if (typeof value === 'boolean') setRequiresCode(value);
+      })
+      .catch(() => { /* keep the safe default */ });
+    return () => { cancelled = true; };
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -27,7 +44,9 @@ export default function ResetPassword() {
     try {
       await api.post('/auth/recovery/complete', {
         token,
-        recovery_code: form.recovery_code,
+        // Send the code only when this deployment asks for one. An empty
+        // string would be treated as "a code was supplied" and rejected.
+        ...(requiresCode ? { recovery_code: form.recovery_code } : {}),
         new_password: form.new_password,
       });
       setDone(true);
@@ -57,16 +76,18 @@ export default function ResetPassword() {
 
         {token && !done && (
           <form onSubmit={submit} className="mt-6 space-y-4">
-            <FormField
-              label="รหัสกู้คืน"
-              value={form.recovery_code}
-              onChange={(value) => setForm({ ...form, recovery_code: value.toUpperCase() })}
-              autoComplete="one-time-code"
-              required
-              maxLength={14}
-              placeholder="XXXX-XXXX-XXXX"
-              helper="ใช้หนึ่งรหัสจากชุดที่บันทึกไว้ตอนผูก LINE"
-            />
+            {requiresCode && (
+              <FormField
+                label="รหัสกู้คืน"
+                value={form.recovery_code}
+                onChange={(value) => setForm({ ...form, recovery_code: value.toUpperCase() })}
+                autoComplete="one-time-code"
+                required
+                maxLength={14}
+                placeholder="XXXX-XXXX-XXXX"
+                helper="ใช้หนึ่งรหัสจากชุดที่บันทึกไว้ตอนผูก LINE"
+              />
+            )}
             <FormField
               label="รหัสผ่านใหม่"
               type="password"

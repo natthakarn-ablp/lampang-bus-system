@@ -124,6 +124,8 @@ router.get('/config', (_req, res) => {
   return sendSuccess(res, {
     // Kept for the existing frontend, which reads this key.
     admin_password_recovery: isRecoveryEnabledForRole('admin', recoveryEnvSource()),
+    // Lets the reset page ask only for what will actually be checked.
+    requires_recovery_code: env.features.adminRecoveryRequireCode,
     // Per-role status, so an operator can see WHY a role is closed rather than
     // inferring it from a 404.
     policy: recoveryPolicySummary(recoveryEnvSource()),
@@ -421,10 +423,19 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
   const rawRecoveryCode = req.body?.recovery_code;
   const recoveryCode = normalizeRecoveryCode(rawRecoveryCode);
   const newPassword = req.body?.new_password;
+  const requireCode = env.features.adminRecoveryRequireCode;
+  // A code that is sent is always checked, even when it is not required, so an
+  // older page or a cached form cannot quietly skip verification.
+  const codeSupplied = typeof rawRecoveryCode === 'string' && rawRecoveryCode.trim() !== '';
   if (!/^[A-Za-z0-9_-]{43}$/.test(rawToken) ||
-      typeof rawRecoveryCode !== 'string' || rawRecoveryCode.length > 32 || recoveryCode.length !== 12 ||
       typeof newPassword !== 'string' || !newPassword) {
     return sendError(res, 'ลิงก์หรือข้อมูลยืนยันไม่ครบถ้วน', [], 400);
+  }
+  if (requireCode && !codeSupplied) {
+    return sendError(res, 'กรุณากรอกรหัสกู้คืน', [], 400);
+  }
+  if (codeSupplied && (rawRecoveryCode.length > 32 || recoveryCode.length !== 12)) {
+    return sendError(res, 'รหัสกู้คืนไม่ถูกต้อง', [], 400);
   }
 
   let conn;
@@ -461,14 +472,18 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
       return sendError(res, 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม', [], 400);
     }
 
-    const codeHash = hashRecoveryCode(recoveryCode, env.jwt.secret);
-    const [[code]] = await conn.query(
-      `SELECT id FROM user_recovery_codes
-        WHERE user_id = ? AND code_hash = ? AND used_at IS NULL
-        LIMIT 1 FOR UPDATE`,
-      [reset.user_id, codeHash]
-    );
-    if (!code) {
+    let code = null;
+    if (codeSupplied) {
+      const codeHash = hashRecoveryCode(recoveryCode, env.jwt.secret);
+      const [[found]] = await conn.query(
+        `SELECT id FROM user_recovery_codes
+          WHERE user_id = ? AND code_hash = ? AND used_at IS NULL
+          LIMIT 1 FOR UPDATE`,
+        [reset.user_id, codeHash]
+      );
+      code = found || null;
+    }
+    if (codeSupplied && !code) {
       await conn.query(
         `UPDATE password_reset_requests
             SET used_at = IF(failed_attempts + 1 >= 5, NOW(), used_at),
@@ -486,7 +501,9 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
       'UPDATE users SET password_hash = ?, must_change_password = FALSE, password_changed_at = NOW() WHERE id = ?',
       [passwordHash, reset.user_id]
     );
-    await conn.query('UPDATE user_recovery_codes SET used_at = NOW() WHERE id = ?', [code.id]);
+    if (code) {
+      await conn.query('UPDATE user_recovery_codes SET used_at = NOW() WHERE id = ?', [code.id]);
+    }
     await conn.query('UPDATE password_reset_requests SET used_at = NOW() WHERE id = ?', [reset.id]);
     await conn.query(
       'UPDATE password_reset_requests SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL',
@@ -494,7 +511,11 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
     );
     await logAudit({
       userId: reset.user_id, action: 'UPDATE', entityType: 'user', entityId: reset.user_id,
-      newValue: { action: 'admin_password_recovered', method: 'LINE_AND_RECOVERY_CODE' },
+      newValue: {
+        action: 'admin_password_recovered',
+        method: code ? 'LINE_AND_RECOVERY_CODE' : 'LINE_LINK_ONLY',
+        recovery_code_required: requireCode,
+      },
       ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
     });
     await conn.commit();

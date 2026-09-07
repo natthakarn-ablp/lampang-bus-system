@@ -344,8 +344,14 @@ export default function App() {
               <Layout><UserManagement /></Layout>
             </PrivateRoute>
           } />
+          {/* Account security (LINE binding for password recovery). Sits under
+              /parent/link because that is the LIFF endpoint path, so LINE
+              returns the user to this page rather than to the parent screen.
+              Open to every role whose recovery CAN be enabled; whether it
+              actually is remains the server's decision, read from
+              /auth/recovery/config, and the page says so when it is not. */}
           <Route path="/parent/link/admin-recovery" element={
-            <PrivateRoute allowedRoles={['admin']}>
+            <PrivateRoute allowedRoles={['admin', 'province', 'affiliation', 'transport']}>
               <Layout><AdminAccountSecurity /></Layout>
             </PrivateRoute>
           } />

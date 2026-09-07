@@ -15,7 +15,13 @@ function formatThaiDate(value) {
 }
 
 export default function AdminAccountSecurity() {
-  const { features } = useAuth();
+  const { user, features } = useAuth();
+  // Whether recovery is open for THIS role is a server decision: a role needs
+  // both its environment flag and its decision gates confirmed in
+  // backend/src/config/accountRecoveryPolicy.js. The login response only
+  // carries the admin flag, so ask the policy endpoint rather than guess, and
+  // fall back to the admin flag while that answer is in flight.
+  const [roleEnabled, setRoleEnabled] = useState(null);
   const toast = useToast();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +34,7 @@ export default function AdminAccountSecurity() {
   async function loadStatus() {
     setLoading(true);
     try {
-      const response = await api.get('/auth/recovery/admin/status');
+      const response = await api.get('/auth/recovery/self/status');
       setStatus(response.data.data);
     } catch (err) {
       setError(err.response?.data?.message || 'ไม่สามารถอ่านสถานะการกู้คืนบัญชีได้');
@@ -38,13 +44,29 @@ export default function AdminAccountSecurity() {
   }
 
   useEffect(() => {
-    if (!features?.adminPasswordRecovery) {
+    let cancelled = false;
+    api.get('/auth/recovery/config')
+      .then((res) => {
+        if (cancelled) return;
+        const roles = res.data?.data?.policy?.roles;
+        const mine = user?.role && roles ? roles[user.role] : null;
+        setRoleEnabled(mine ? Boolean(mine.enabled) : Boolean(features?.adminPasswordRecovery));
+      })
+      .catch(() => { if (!cancelled) setRoleEnabled(Boolean(features?.adminPasswordRecovery)); });
+    return () => { cancelled = true; };
+  }, [user?.role, features?.adminPasswordRecovery]);
+
+  useEffect(() => {
+    // null means the policy answer has not arrived yet — wait rather than
+    // loading a status the server may refuse, or flashing "not available".
+    if (roleEnabled === null) return;
+    if (roleEnabled === false) {
       setLoading(false);
       return;
     }
     loadStatus();
     getLiffIdToken().then(setLineIdToken).catch(() => setLineIdToken(''));
-  }, [features?.adminPasswordRecovery]);
+  }, [roleEnabled, loadStatus]);
 
   async function prepareLine() {
     setError('');
@@ -74,7 +96,7 @@ export default function AdminAccountSecurity() {
         setError('กรุณากดยืนยันตัวตนกับ LINE ก่อน');
         return;
       }
-      const response = await api.post('/auth/recovery/admin/link-line', {
+      const response = await api.post('/auth/recovery/self/link-line', {
         current_password: password,
         id_token: lineIdToken,
       });
@@ -94,7 +116,7 @@ export default function AdminAccountSecurity() {
     if (!password) return setError('กรุณากรอกรหัสผ่านปัจจุบัน');
     setBusy('codes');
     try {
-      const response = await api.post('/auth/recovery/admin/regenerate-codes', {
+      const response = await api.post('/auth/recovery/self/regenerate-codes', {
         current_password: password,
       });
       setCodes(response.data.data?.recovery_codes || []);
@@ -114,7 +136,7 @@ export default function AdminAccountSecurity() {
     if (!window.confirm('ยกเลิกการผูก LINE และรหัสกู้คืนทั้งหมดใช่หรือไม่')) return;
     setBusy('unlink');
     try {
-      await api.delete('/auth/recovery/admin/line', { data: { current_password: password } });
+      await api.delete('/auth/recovery/self/line', { data: { current_password: password } });
       setCodes([]);
       setPassword('');
       toast.success('ยกเลิกการผูก LINE แล้ว');
@@ -160,7 +182,7 @@ export default function AdminAccountSecurity() {
         breadcrumb={[{ label: 'ผู้ดูแลระบบ', to: '/admin' }, { label: 'ความปลอดภัยบัญชี' }]}
       />
 
-      {!features?.adminPasswordRecovery ? (
+      {roleEnabled === false ? (
         <AlertBanner variant="warn" title="ยังไม่เปิดใช้การกู้คืนรหัสผ่าน">
           ผู้ดูแลระบบต้องติดตั้ง migration 049 และเปิด feature flag หลังผ่านการทดสอบ LINE OA จริง
         </AlertBanner>

@@ -235,7 +235,10 @@ async function handleLinkLine(req, res, next) {
   } catch (error) {
     if (conn) try { await conn.rollback(); } catch { /* preserve original error */ }
     if (error && error.code === 'ER_DUP_ENTRY') {
-      return sendError(res, 'บัญชี LINE นี้ถูกผูกกับผู้ดูแลระบบบัญชีอื่นแล้ว', [], 409);
+      // Do not say WHICH account holds it, and do not assume it is an admin:
+      // once more roles can bind, the conflicting holder may be an officer of
+      // any unit, and naming them would leak who uses which LINE.
+      return sendError(res, 'บัญชี LINE นี้ถูกผูกกับบัญชีผู้ใช้อื่นแล้ว หนึ่งบัญชี LINE ผูกได้กับผู้ใช้คนเดียวเท่านั้น', [], 409);
     }
     return next(error);
   } finally {
@@ -562,4 +565,10 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
 });
 
 module.exports = router;
+// recoveryEnvSource is the ONE place that decides what the runtime believes
+// about recovery flags: process.env overlaid with the live admin feature
+// flag. Anything outside this file that asks whether a role is recoverable
+// must pass this source, or it can answer differently from the route that
+// then rejects the caller.
+module.exports.recoveryEnvSource = recoveryEnvSource;
 module.exports._test = { resetUrl, isDelivered, replaceRecoveryCodes, requireFeature, requireRecoveryRole };

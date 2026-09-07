@@ -54,6 +54,13 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const isAdmin = user?.role === 'admin';
+  // Roles that may hold a LINE binding for password recovery. The menu entry
+  // shows for them; the page itself asks the server whether recovery is open
+  // for that role and explains when it is not, so a role whose decision gates
+  // are still unconfirmed sees a clear message instead of a dead end.
+  const RECOVERY_ROLES = ['admin', 'province', 'affiliation', 'transport'];
+  const canBindRecovery = RECOVERY_ROLES.includes(user?.role)
+    && (user?.role !== 'admin' || features?.adminPasswordRecovery);
 
   // Pending-requests bell (admin only) — aggregates transfer + vehicle + roster.
   const [bellOpen, setBellOpen] = useState(false);
@@ -217,7 +224,7 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
                 <KeyRound className="w-4 h-4 text-ink-muted" strokeWidth={2} />
                 เปลี่ยนรหัสผ่าน
               </button>
-              {isAdmin && features?.adminPasswordRecovery && (
+              {canBindRecovery && (
                 <button
                   role="menuitem"
                   onClick={() => { setMenuOpen(false); navigate('/parent/link/admin-recovery'); }}

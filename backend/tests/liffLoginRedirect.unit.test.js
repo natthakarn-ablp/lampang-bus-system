@@ -51,11 +51,19 @@ describe('the admin recovery page stays reachable through the LIFF endpoint', ()
     expect(app).toContain('/parent/link/admin-recovery');
   });
 
-  it('is admin-only', () => {
+  it('is limited to the roles that may hold a LINE binding', () => {
     const idx = app.indexOf('/parent/link/admin-recovery');
     expect(idx).toBeGreaterThan(-1);
-    // The PrivateRoute wrapping this route restricts it to admin.
-    expect(app.slice(idx, idx + 200)).toMatch(/allowedRoles=\{\['admin'\]\}/);
+    const guard = app.slice(idx, idx + 300);
+    // Widened from admin alone on 2026-09-07 so one page can serve every role
+    // whose recovery may be opened. Whether it IS open stays a server decision
+    // — a role needs both its environment flag and its confirmed decision
+    // gates, and the page reads that from /auth/recovery/config. School and
+    // driver are deliberately absent: their questions are unsettled and almost
+    // none of their accounts have ever signed in, so they could not bind.
+    expect(guard).toMatch(/allowedRoles=\{\['admin', 'province', 'affiliation', 'transport'\]\}/);
+    expect(guard).not.toMatch(/'school'/);
+    expect(guard).not.toMatch(/'driver'/);
   });
 
   it('is what the account menu opens', () => {

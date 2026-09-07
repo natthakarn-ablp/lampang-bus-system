@@ -355,15 +355,49 @@ router.delete('/users/:id', async (req, res, next) => {
     const [[user]] = await pool.query('SELECT id, username FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
 
-    await pool.query('UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [userId]);
+    // Deleting the account must also release its account-recovery binding.
+    //
+    // user_recovery_channels has UNIQUE (provider, provider_subject), so one
+    // LINE identity can be bound to one account across the whole system, and
+    // the only way to release it is the owner unbinding it while signed in
+    // (handleUnlinkLine works on req.user and requires is_active AND
+    // NOT is_deleted). A soft-deleted account can never sign in again, so
+    // before 2026-09-07 deleting an admin stranded that LINE identity
+    // permanently: it could not be bound to any other account and nobody
+    // could free it. Removing the channel, the unused codes and any pending
+    // reset request here is the same cleanup the owner's own unlink performs.
+    const conn = await pool.getConnection();
+    let released = 0;
+    try {
+      await conn.beginTransaction();
+      await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
+      await conn.query('DELETE FROM password_reset_requests WHERE user_id = ? AND used_at IS NULL', [userId]);
+      await conn.query('DELETE FROM user_recovery_codes WHERE user_id = ?', [userId]);
+      const [chan] = await conn.query('DELETE FROM user_recovery_channels WHERE user_id = ?', [userId]);
+      released = chan.affectedRows || 0;
+      await conn.query('UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [userId]);
+      await conn.commit();
+    } catch (e) {
+      try { await conn.rollback(); } catch { /* keep the original error */ }
+      throw e;
+    } finally {
+      conn.release();
+    }
 
     await logAudit({
       userId: req.user.id, action: 'DELETE', entityType: 'user', entityId: userId,
       oldValue: { username: user.username },
+      newValue: { recovery_channels_released: released },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
-    return sendSuccess(res, null, 'ลบผู้ใช้สำเร็จ');
+    return sendSuccess(
+      res,
+      { recovery_channels_released: released },
+      released
+        ? 'ลบผู้ใช้สำเร็จ และปลดการผูกบัญชี LINE สำหรับกู้คืนรหัสผ่านแล้ว (บัญชี LINE นี้นำไปผูกกับผู้ใช้อื่นได้)'
+        : 'ลบผู้ใช้สำเร็จ'
+    );
   } catch (err) { next(err); }
 });
 

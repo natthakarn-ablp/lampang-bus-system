@@ -129,6 +129,37 @@ describe('the value rule itself', () => {
   });
 });
 
+describe('the scanner ignores its own two files, and only those', () => {
+  const LEAK = 'DB_PASSWORD=Tr0ub4dor&3xample';
+
+  it('is silent inside its own test file, whose fixtures are meant to look real', () => {
+    const diff = ['+++ b/backend/tests/secretScan.unit.test.js', `+  ${LEAK}`].join('\n');
+    expect(secretMatches(diff)).toEqual([]);
+  });
+
+  it('is silent inside its own source', () => {
+    const diff = ['+++ b/scripts/lib/secret-scan.js', `+  ${LEAK}`].join('\n');
+    expect(secretMatches(diff)).toEqual([]);
+  });
+
+  it('starts reporting again at the next file in the diff', () => {
+    // The exclusion must lapse, or one edit to the scanner would silence the
+    // rest of the commit.
+    const diff = [
+      '+++ b/backend/tests/secretScan.unit.test.js',
+      `+  ${LEAK}`,
+      '+++ b/backend/src/config/database.js',
+      `+  ${LEAK}`,
+    ].join('\n');
+    expect(secretMatches(diff)).toEqual([`+  ${LEAK}`]);
+  });
+
+  it('excludes nothing else, however similarly named', () => {
+    const diff = ['+++ b/backend/tests/secretScanOther.unit.test.js', `+  ${LEAK}`].join('\n');
+    expect(secretMatches(diff)).toHaveLength(1);
+  });
+});
+
 describe('the scanner is wired into the readiness collector', () => {
   const fs = require('fs');
   const path = require('path');

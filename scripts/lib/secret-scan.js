@@ -168,11 +168,42 @@ function isScannerPatternSourceLine(line) {
 }
 
 /**
+ * The two files allowed to contain credential-shaped text, because describing
+ * credentials is their whole job.
+ *
+ * This is a PATH exclusion rather than a pattern one, and the distinction
+ * matters. The test file deliberately holds thirteen strings that would work if
+ * they were real — that is what makes it a test — so no pattern rule could ever
+ * tell them from a leak. Naming two paths is honest about that. Excluding them
+ * by shape would have meant weakening the rule for every file in the repository.
+ *
+ * A diff is a sequence of per-file sections, so the path is known from the
+ * `+++ b/...` header and the exclusion lapses at the next one.
+ */
+const SELF_PATHS = [
+  'scripts/lib/secret-scan.js',
+  'backend/tests/secretScan.unit.test.js',
+];
+
+/** The path a `+++ b/path` diff header names, or null for any other line. */
+function diffTargetPath(line) {
+  const m = /^\+\+\+ [ab]\/(.+?)\s*$/.exec(line);
+  return m ? m[1].replace(/\\/g, '/') : null;
+}
+
+/**
  * @param {string} text a diff, a file, or any block of lines
  * @returns {string[]} the lines that leak a credential
  */
 function secretMatches(text) {
+  let inSelfFile = false;
   return String(text || '').split(/\r?\n/).filter((line) => {
+    const target = diffTargetPath(line);
+    if (target !== null) {
+      inSelfFile = SELF_PATHS.includes(target);
+      return false;
+    }
+    if (inSelfFile) return false;
     if (isScannerPatternSourceLine(line)) return false;
     return hasSecretAssignment(line)
       || hasCredentialInUrl(line)
@@ -184,6 +215,8 @@ function secretMatches(text) {
 
 module.exports = {
   secretMatches,
+  diffTargetPath,
+  SELF_PATHS,
   looksLikeSecretValue,
   hasSecretAssignment,
   hasCredentialInUrl,

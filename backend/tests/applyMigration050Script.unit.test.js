@@ -96,7 +96,10 @@ const ENV_BASE = [
   'DB_NAME=lampang_bus',
   'DB_USER=schoolbus',
   `DB_PASSWORD=${PASSWORD}`,
-  'JWT_SECRET=0123456789abcdef0123456789abcdef',
+  // Says what it is. A 32-character hex string is indistinguishable from a
+  // real signing key, and the readiness gate's secret scan is right to flag
+  // one — a fixture should not make a security check cry wolf.
+  'JWT_SECRET=fixture-jwt-secret-never-real-0000000000',
   '',
 ].join('\n');
 

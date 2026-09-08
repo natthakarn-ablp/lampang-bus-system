@@ -36,6 +36,11 @@
 # Usage (on the app server):
 #   bash scripts/apply-migration-050.sh            # apply
 #   DRY_RUN=1 bash scripts/apply-migration-050.sh  # check only, change nothing
+#
+# Env: APP_DIR, BACKUP_DIR, DRY_RUN, SKIP_BACKUP_CHECK, MIGRATION_MYSQL — the
+#      defaults are the production server's, and are overridden only so the
+#      backup and verification rails can be rehearsed off the server
+#      (backend/tests/applyMigration050Script.unit.test.js).
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -46,6 +51,10 @@ MIGRATION="${APP_DIR}/backend/migrations/050_participation_cases.sql"
 TABLES=(participation_cases participation_case_events)
 EXPECTED="${#TABLES[@]}"
 DRY_RUN="${DRY_RUN:-0}"
+# Overridable so a test can point at a stub by absolute path instead of relying
+# on PATH order, which resolves differently under Git Bash than on the server.
+# Same rule as scripts/deploy-backend.sh. The default is what the server runs.
+MYSQL_BIN="${MIGRATION_MYSQL:-mysql}"
 
 say()  { echo "[050] $*"; }
 fail() { echo "[050] ERROR: $*" >&2; exit 1; }
@@ -89,7 +98,7 @@ user=${DB_USER}
 password=${DB_PASSWORD}
 EOF
 
-mysql_q() { mysql --defaults-extra-file="$DEFAULTS_FILE" -N -B -e "$1"; }
+mysql_q() { "$MYSQL_BIN" --defaults-extra-file="$DEFAULTS_FILE" -N -B -e "$1"; }
 
 count_tables() {
   mysql_q "SELECT COUNT(*) FROM information_schema.tables
@@ -113,7 +122,7 @@ fi
 
 # ── 5. apply ────────────────────────────────────────────────────────────────
 say "applying ${MIGRATION} to ${DB_NAME} ..."
-mysql --defaults-extra-file="$DEFAULTS_FILE" "$DB_NAME" < "$MIGRATION"
+"$MYSQL_BIN" --defaults-extra-file="$DEFAULTS_FILE" "$DB_NAME" < "$MIGRATION"
 
 AFTER="$(count_tables)"
 say "tables present after: ${AFTER} of ${EXPECTED}"

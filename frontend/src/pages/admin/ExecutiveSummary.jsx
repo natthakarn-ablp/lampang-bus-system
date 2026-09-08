@@ -60,7 +60,26 @@ export default function ExecutiveSummary() {
   const readiness = data.evidence_readiness || null;
   const roleCoverage = readiness?.roles || {};
   const freshness = readiness?.snapshot_freshness || null;
+  const baselinePair = readiness?.baseline_pair || null;
   const blockingReasons = readiness?.blocking_reasons || [];
+
+  // Whether these two ends may be compared at all is the server's decision
+  // (researchReadiness.service.js evaluateBaselinePair / evaluateSnapshotFreshness):
+  // the pair needs the minimum gap, a frozen protocol and both ends inside the
+  // protocol window, and a stale snapshot no longer describes the current
+  // period. Without both flags the numbers still stand — the reading of their
+  // difference as an improvement or a decline does not. A missing readiness
+  // block is not permission: unknown gates the claim like a refusal does.
+  const comparisonUsable = baselinePair?.usable === true && freshness?.fresh === true;
+  // The reason shown is the server's own code, translated by the shared map —
+  // the page never invents its own explanation for the block.
+  const blockingCode = baselinePair && !baselinePair.usable
+    ? baselinePair.reason
+    : (freshness && !freshness.fresh ? freshness.reason : null);
+  const comparisonBlockedReason = comparisonUsable
+    ? null
+    : (blockingCode ? describeBlockingReason(blockingCode) : 'ยังไม่ทราบสถานะความพร้อมของข้อมูล');
+  const comparisonBlockedNote = `แสดงค่า baseline และค่าปัจจุบันตามจริง แต่ยังสรุปเป็น “ดีขึ้น” หรือ “ลดลง” ไม่ได้ — ${comparisonBlockedReason}`;
 
   // Compute role readiness from evidence coverage, not action volume.
   const roleStats = ROLES.map(r => ({
@@ -86,8 +105,13 @@ export default function ExecutiveSummary() {
     const declined = comparable && (m.higher ? d < 0 : d > 0);
     return { ...m, baseline: bv, current: cv, delta: d, comparable, improved, declined };
   });
-  const improvements = metricChanges.filter(m => m.improved);
-  const risks = metricChanges.filter(m => m.declined);
+  // Direction is a claim about the pair, so it needs the server's permission as
+  // well as a delta: while the comparison is gated these two lists stay empty
+  // and the page says why instead of listing improvements and risks.
+  const improvements = comparisonUsable ? metricChanges.filter(m => m.improved) : [];
+  const risks = comparisonUsable ? metricChanges.filter(m => m.declined) : [];
+  // Low coverage is a statement about the current snapshot alone, not about the
+  // pair, so it is not gated on the baseline rule.
   const lowCoverage = metricChanges.filter(m => m.current !== null && m.current < 50);
   const notComparable = metricChanges.filter(m => !m.comparable);
   // How many metrics could be compared at all. With none, "no change" and
@@ -132,6 +156,9 @@ export default function ExecutiveSummary() {
             {freshness.fresh ? ' — อยู่ในเกณฑ์' : ' — เก่าเกินเกณฑ์'}
           </p>
         )}
+        {!comparisonUsable && (
+          <p className="mt-1">{comparisonBlockedNote}</p>
+        )}
         {blockingReasons.length > 0 && (
           <p className="mt-1">ยังอ้างผลวิจัยไม่ได้ เพราะ: {blockingReasons.map(describeBlockingReason).join(' · ')}</p>
         )}
@@ -142,8 +169,10 @@ export default function ExecutiveSummary() {
         <MiniKpi label="หลักฐานระบบครบ" value={readyCount} color="green" />
         <MiniKpi label="บางส่วน" value={partialCount} color="amber" />
         <MiniKpi label="ยังต้องเพิ่ม" value={missingCount} color="red" />
-        <MiniKpi label="ดีขึ้น" value={improvements.length} color="green" />
-        <MiniKpi label="ลดลง" value={risks.length} color={risks.length > 0 ? 'red' : 'green'} />
+        {/* A gated comparison has no count of improvements or declines — "0"
+            would be a finding, and this is the absence of one. */}
+        <MiniKpi label="ดีขึ้น" value={comparisonUsable ? improvements.length : '—'} color={comparisonUsable ? 'green' : 'gray'} />
+        <MiniKpi label="ลดลง" value={comparisonUsable ? risks.length : '—'} color={!comparisonUsable ? 'gray' : risks.length > 0 ? 'red' : 'green'} />
         <MiniKpi label="ต่ำ (<50%)" value={lowCoverage.length} color={lowCoverage.length > 0 ? 'amber' : 'green'} />
       </div>
 
@@ -169,10 +198,24 @@ export default function ExecutiveSummary() {
 
       {/* Improvements + Risks side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-        {/* Improvements */}
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-green-800 mb-2">สิ่งที่ดีขึ้นจาก Baseline</h2>
-          {improvements.length > 0 ? (
+        {/* Improvements — while the comparison is gated this box keeps the two
+            values and drops the claim, so the reader still sees the numbers. */}
+        <div className={`border rounded-xl p-4 ${comparisonUsable ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+          <h2 className={`text-sm font-semibold mb-2 ${comparisonUsable ? 'text-green-800' : 'text-gray-700'}`}>
+            {comparisonUsable ? 'สิ่งที่ดีขึ้นจาก Baseline' : 'Baseline เทียบปัจจุบัน — ยังสรุปแนวโน้มไม่ได้'}
+          </h2>
+          {!comparisonUsable ? (
+            <>
+              <p className="text-sm text-ink-muted">{comparisonBlockedNote}</p>
+              <ul className="space-y-1 mt-2">
+                {metricChanges.map(m => (
+                  <li key={m.key} className="text-sm text-ink-muted">
+                    <strong>{m.label}</strong>: {fmtSnapshotPct(m.baseline)} → {fmtSnapshotPct(m.current)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : improvements.length > 0 ? (
             <ul className="space-y-1">
               {improvements.map(m => (
                 <li key={m.key} className="text-sm text-green-700">
@@ -188,10 +231,12 @@ export default function ExecutiveSummary() {
         {/* Risks */}
         <div className={`border rounded-xl p-4 ${risks.length > 0 || lowCoverage.length > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
           <h2 className={`text-sm font-semibold mb-2 ${risks.length > 0 || lowCoverage.length > 0 ? 'text-red-800' : 'text-gray-700'}`}>
-            {riskHeading(wording)}
+            {/* An empty risk list under a gated comparison is not "no risk":
+                the declines were never allowed to be counted. */}
+            {comparisonUsable ? riskHeading(wording) : 'จุดเสี่ยง — ยังประเมินจากการเทียบ baseline ไม่ได้'}
           </h2>
           <ul className="space-y-1">
-            {risks.map(m => (
+            {comparisonUsable && risks.map(m => (
               <li key={m.key} className="text-sm text-red-700">
                 <strong>{m.label}</strong>: {fmtSnapshotPct(m.baseline)} → {fmtSnapshotPct(m.current)} <span className="font-semibold"><span aria-hidden="true">▼</span> {fmtPctDelta(m.delta)}</span>
               </li>
@@ -201,7 +246,10 @@ export default function ExecutiveSummary() {
                 <strong>{m.label}</strong> ยังต่ำ: {m.current}%
               </li>
             ))}
-            {risks.length === 0 && lowCoverage.length === 0 && (
+            {!comparisonUsable && (
+              <li className="text-sm text-ink-muted">{comparisonBlockedNote}</li>
+            )}
+            {comparisonUsable && risks.length === 0 && lowCoverage.length === 0 && (
               <li className="text-sm text-ink-muted">{riskEmptyLine(wording)}</li>
             )}
           </ul>
@@ -232,7 +280,12 @@ export default function ExecutiveSummary() {
           {partialCount > 0 && (
             <li>• ให้ <strong>{partialCount} role</strong> ที่ประเมินได้บางส่วนเพิ่มการใช้งานระบบเพื่อเก็บ log เพิ่มเติม</li>
           )}
-          {improvements.length === 0 && risks.length === 0 && (
+          {/* When the comparison is gated, the action is to clear the block the
+              server named — not to read a trend that is not allowed yet. */}
+          {!comparisonUsable && (
+            <li>• แก้เงื่อนไขที่ทำให้ยังเทียบ baseline กับปัจจุบันไม่ได้: <strong>{comparisonBlockedReason}</strong></li>
+          )}
+          {comparisonUsable && improvements.length === 0 && risks.length === 0 && (
             <li>• ให้รัน snapshot ใหม่หลังจากระบบถูกใช้งานระยะหนึ่ง เพื่อเห็นแนวโน้มการเปลี่ยนแปลง</li>
           )}
           <li>• ดูรายละเอียดแยก role ที่ <strong>"ประเมินผลแยก Role"</strong></li>

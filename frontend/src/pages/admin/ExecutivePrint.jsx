@@ -81,6 +81,22 @@ export default function ExecutivePrint() {
   const baselinePair = readiness?.baseline_pair || null;
   const blockingReasons = readiness?.blocking_reasons || [];
 
+  // A printed page is quoted without its caveats, so the direction of a change
+  // is printed only when the server allows the two ends to be compared:
+  // researchReadiness.service.js requires a usable baseline/post pair (minimum
+  // gap, frozen protocol, both ends inside the protocol window) and a snapshot
+  // that is still fresh. A missing readiness block is not permission either.
+  const comparisonUsable = baselinePair?.usable === true && freshness?.fresh === true;
+  // The printed reason is the server's own code translated by the shared map,
+  // so the paper says exactly what the screen and the export say.
+  const blockingCode = baselinePair && !baselinePair.usable
+    ? baselinePair.reason
+    : (freshness && !freshness.fresh ? freshness.reason : null);
+  const comparisonBlockedReason = comparisonUsable
+    ? null
+    : (blockingCode ? describeBlockingReason(blockingCode) : 'ยังไม่ทราบสถานะความพร้อมของข้อมูล');
+  const comparisonBlockedNote = `แสดงค่า baseline และค่าปัจจุบันตามจริง แต่ยังสรุปเป็น “ดีขึ้น” หรือ “ลดลง” ไม่ได้ — ${comparisonBlockedReason}`;
+
   const roleStats = ROLES.map(r => ({
     ...r,
     coverage: roleCoverage[r.id] || null,
@@ -101,8 +117,11 @@ export default function ExecutivePrint() {
     const comparable = d !== null;
     return { ...m, baseline: bv, current: cv, delta: d, comparable, improved: comparable && d > 0, declined: comparable && d < 0 };
   });
-  const improvements = metricChanges.filter(m => m.improved);
-  const risks = metricChanges.filter(m => m.declined);
+  // Direction needs the server's permission as well as a delta, so while the
+  // comparison is gated these two lists stay empty and the report prints the
+  // values with the reason instead of a trend.
+  const improvements = comparisonUsable ? metricChanges.filter(m => m.improved) : [];
+  const risks = comparisonUsable ? metricChanges.filter(m => m.declined) : [];
   const notComparable = metricChanges.filter(m => !m.comparable);
   // `null < 50` is true in JavaScript; a metric with no denominator is not "low".
   const lowCoverage = metricChanges.filter(m => m.current !== null && m.current < 50);
@@ -149,7 +168,9 @@ export default function ExecutivePrint() {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm">
           <p className="font-semibold text-blue-800 mb-1">สรุปสำหรับผู้บริหาร</p>
           <p>จาก 6 สิทธิ์ในระบบ มี <strong>{readyCount} สิทธิ์</strong>ที่มีหลักฐานระบบครบทุกตัวชี้วัด, <strong>{partialCount} สิทธิ์</strong>มีหลักฐานบางส่วน
-            {` — ${improvementSummary(wording)}`}
+            {/* The one-line verdict is the strongest sentence on the page, so it
+                may not summarise a comparison the server has not allowed. */}
+            {comparisonUsable ? ` — ${improvementSummary(wording)}` : ` — ${comparisonBlockedNote}`}
             {lowCoverage.length > 0 ? ` · ${lowCoverage.length} ตัวชี้วัดที่ยังต่ำกว่า 50%` : ''}.
           </p>
         </div>
@@ -166,8 +187,10 @@ export default function ExecutivePrint() {
               {freshness.fresh ? '' : ' — เก่าเกินเกณฑ์ ตัวเลขในรายงานอธิบายวันที่เก็บ ไม่ใช่สถานะปัจจุบัน'}
             </p>
           )}
-          {baselinePair && !baselinePair.usable && (
-            <p className="mt-0.5">ห้ามตีความคอลัมน์ “เปลี่ยนแปลง” เป็นผลการวิจัย: {describeBlockingReason(baselinePair.reason)}</p>
+          {/* Covers both flags now: a stale snapshot blocks the trend reading
+              exactly as an unusable baseline/post pair does. */}
+          {!comparisonUsable && (
+            <p className="mt-0.5">ห้ามตีความคอลัมน์ “เปลี่ยนแปลง” เป็นแนวโน้มหรือผลการวิจัย: {comparisonBlockedReason}</p>
           )}
           {blockingReasons.length > 0 && (
             <p className="mt-0.5">ยังอ้างผลวิจัยไม่ได้ เพราะ: {blockingReasons.map(describeBlockingReason).join(' · ')}</p>
@@ -179,8 +202,10 @@ export default function ExecutivePrint() {
           <KpiCell label="หลักฐานระบบครบ" value={readyCount} />
           <KpiCell label="บางส่วน" value={partialCount} />
           <KpiCell label="ยังต้องเพิ่ม" value={6 - readyCount - partialCount} />
-          <KpiCell label="ดีขึ้น" value={improvements.length} />
-          <KpiCell label="ลดลง" value={risks.length} />
+          {/* "0 ดีขึ้น / 0 ลดลง" would read as a finding; a gated comparison has
+              no such count, so the cells print a dash. */}
+          <KpiCell label="ดีขึ้น" value={comparisonUsable ? improvements.length : '—'} />
+          <KpiCell label="ลดลง" value={comparisonUsable ? risks.length : '—'} />
           <KpiCell label="ต่ำ (<50%)" value={lowCoverage.length} />
         </div>
 
@@ -238,12 +263,14 @@ export default function ExecutivePrint() {
                     {fmtPctDelta(m.delta)}
                   </td>
                   <td className="border border-gray-300 px-2 py-1 text-center">
-                    {m.comparable ? (
+                    {/* Both columns above keep their numbers; this one carries
+                        the claim, so it is the one the gate empties. */}
+                    {m.comparable && comparisonUsable ? (
                       <>
                         <span aria-hidden="true">{m.improved ? '▲' : m.declined ? '▼' : '='}</span>
                         {' '}{m.improved ? 'ดีขึ้น' : m.declined ? 'ลดลง' : 'คงเดิม'}
                       </>
-                    ) : <span className="text-ink-muted">ไม่มีข้อมูล</span>}
+                    ) : <span className="text-ink-muted">{m.comparable ? 'ยังเทียบไม่ได้' : 'ไม่มีข้อมูล'}</span>}
                   </td>
                 </tr>
               ))}
@@ -256,9 +283,11 @@ export default function ExecutivePrint() {
           <div className="border border-gray-300 rounded-lg p-3">
             <p className="font-semibold text-sm text-success-ink mb-1 inline-flex items-center gap-1.5">
               <Check className="w-4 h-4 shrink-0" strokeWidth={2.5} aria-hidden="true" />
-              ประเด็นที่ดีขึ้น
+              {comparisonUsable ? 'ประเด็นที่ดีขึ้น' : 'Baseline เทียบปัจจุบัน — ยังสรุปแนวโน้มไม่ได้'}
             </p>
-            {improvements.length > 0 ? (
+            {!comparisonUsable ? (
+              <p className="text-xs text-ink-muted">{comparisonBlockedNote}</p>
+            ) : improvements.length > 0 ? (
               <ul className="text-xs space-y-0.5">
                 {improvements.map(m => <li key={m.label}>• {m.label}: {fmtPctDelta(m.delta)}</li>)}
               </ul>
@@ -272,7 +301,10 @@ export default function ExecutivePrint() {
             <ul className="text-xs space-y-0.5">
               {risks.map(m => <li key={m.label}>• {m.label}: {fmtPctDelta(m.delta)}</li>)}
               {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {fmtSnapshotPct(m.current)}</li>)}
-              {risks.length === 0 && lowCoverage.length === 0 && <li className="text-ink-muted">{riskHeading(wording)}</li>}
+              {/* An empty risk list under a gated comparison is not "no risk" —
+                  the declines were never allowed to be counted. */}
+              {!comparisonUsable && <li className="text-ink-muted">• {comparisonBlockedNote}</li>}
+              {comparisonUsable && risks.length === 0 && lowCoverage.length === 0 && <li className="text-ink-muted">{riskHeading(wording)}</li>}
               {notComparable.length > 0 && <li className="text-ink-muted">• ยังเทียบไม่ได้ (ตัวส่วนเป็น 0 หรือไม่มีข้อมูล): {notComparable.map(m => m.label).join(', ')}</li>}
             </ul>
           </div>
@@ -286,6 +318,7 @@ export default function ExecutivePrint() {
             {lowCoverage.length > 0 && <li>• เร่งเพิ่ม coverage ใน: {lowCoverage.map(m => m.label).join(', ')}</li>}
             {risks.length > 0 && <li>• ตรวจสอบ metric ที่ลดลง: {risks.map(m => m.label).join(', ')}</li>}
             {partialCount > 0 && <li>• ให้ {partialCount} สิทธิ์ที่ประเมินได้บางส่วนเพิ่มการใช้งานระบบ</li>}
+            {!comparisonUsable && <li>• แก้เงื่อนไขที่ทำให้ยังเทียบ baseline กับปัจจุบันไม่ได้: {comparisonBlockedReason}</li>}
             <li>• ให้รัน snapshot ใหม่เป็นประจำเพื่อเห็นแนวโน้มการเปลี่ยนแปลง</li>
           </ul>
         </div>

@@ -188,15 +188,22 @@ export default function ParticipationCaseDetail() {
                   <span className="text-sm font-semibold text-ink">
                     {EVENT_LABEL[ev.event_type] || ev.event_type}
                   </span>
+                  {/* occurred_at, not created_at. The events table has no
+                      created_at column (migration 050) and the API selects
+                      occurred_at, so reading created_at here rendered every
+                      single event's time as an em dash — on the one screen whose
+                      entire purpose is to prove when each step happened. Live
+                      since the feature shipped on 7 Sep 2026, found on 8 Sep. */}
                   <span className="text-caption text-ink-muted">
-                    {ROLE_LABEL[ev.actor_role] || ev.actor_role} · {fmtDateTime(ev.created_at)}
+                    {ROLE_LABEL[ev.actor_role] || ev.actor_role} · {fmtDateTime(ev.occurred_at)}
                   </span>
                 </div>
-                {ev.decision && (
-                  <p className="mt-0.5 text-sm text-ink">
-                    มติ: {DECISION_LABEL[ev.decision] || ev.decision}
-                  </p>
-                )}
+                {/* The decision belongs to the case, not to the event: there is no
+                    decision column on participation_case_events and the API never
+                    sent one, so this block could never render. The case-level
+                    decision is already shown above the timeline. What a DECIDED
+                    event does carry is its rationale, in `note`, which the line
+                    below renders. */}
                 {ev.note && <p className="mt-1 text-sm text-ink whitespace-pre-wrap">{ev.note}</p>}
                 {ev.evidence_ref && (
                   <p className="mt-1 text-caption text-ink-muted">อ้างอิง: {ev.evidence_ref}</p>

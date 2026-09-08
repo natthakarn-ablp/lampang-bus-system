@@ -145,7 +145,15 @@ describe('the page a province officer uses', () => {
   });
 
   it('asks for the password twice and refuses a short one, as the sibling page does', () => {
-    expect(page).toMatch(/resetForm\.password\.length < 8 \|\| resetForm\.password !== resetForm\.confirm/);
+    // The length used to be the literal 8 here, matched against the literal 8 in
+    // the page. Both are gone: on 8 Sep 2026 three different minimums were found
+    // live across the frontend while the server enforced one, so the number moved
+    // into frontend/src/utils/passwordPolicy.js and every page imports it. This
+    // asserts the page still refuses a short password and still demands the
+    // confirmation — the behaviour the test was always about — without pinning
+    // the digit in a second place, which is what let the copies drift.
+    expect(page).toMatch(/resetForm\.password\.length < PASSWORD_MIN_LENGTH \|\| resetForm\.password !== resetForm\.confirm/);
+    expect(page).toMatch(/utils\/passwordPolicy/);
   });
 
   it('says who resets whom, so nobody comes to the wrong desk', () => {

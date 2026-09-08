@@ -1,15 +1,49 @@
 /**
- * Measurement & Evaluation Framework — Config-driven content.
- * Edit this file to change metrics, thresholds, cautions, or system changes.
- * UI components read from this config only.
+ * Measurement & Evaluation Framework — the measurement plan this project
+ * intends to carry out, kept as a design record.
+ *
+ * What this file is NOT: it is not the system's evaluation readiness. Nothing
+ * here is derived from data. Every value is written by hand, so nothing here
+ * may be presented as a verdict about whether a metric can be evaluated. The
+ * evidence-derived status lives on the server
+ * (`backend/src/services/researchReadiness.service.js` over the canonical
+ * registry `backend/src/config/researchMetrics.js`) and reaches the UI as
+ * `evidence_readiness` from /api/admin/evaluation-summary.
+ *
+ * Why the vocabulary changed: each metric used to carry `readiness: 'ready'`
+ * and the admin page rendered that as a green 'พร้อมวัด' badge. That is the
+ * exact claim the 2026-09-04 research-integrity audit removed from the
+ * backend — a positive readiness verdict produced by a constant — and this
+ * registry was still making it on a live admin route. The field is now
+ * `data_basis` and says only which data the plan assumes a metric would draw
+ * on, which is a statement about the plan and not about the system.
+ *
+ * The `target` values and the `thresholds` tables are proposals too. They have
+ * no documented source, they are pending owner decision C0-11, and they must
+ * not be quoted as approved criteria in any report or evidence pack — see
+ * docs/research/metric-dictionary.md §6.
+ *
+ * Four metric definitions here contradict the canonical backend registry:
+ * Data Completeness Rate, Timeliness of Data Entry, Non-recurrence Rate and
+ * Completion Consistency. Both definitions of each are set out side by side in
+ * docs/research/metric-dictionary.md §6 "Registry สองชุดที่ยังไม่ตรงกัน".
+ * Picking one definition per metric changes the numbers that get reported, so
+ * it is an owner decision, not a code cleanup — do not reconcile them here.
  */
 
-export const READINESS = {
-  ready:          { label: 'พร้อมวัด',              cls: 'bg-green-100 text-green-700' },
-  partial:        { label: 'วัดได้บางส่วน',          cls: 'bg-amber-100 text-amber-700' },
-  need_event:     { label: 'ต้องเพิ่ม event log',    cls: 'bg-orange-100 text-orange-700' },
-  need_baseline:  { label: 'ต้องเก็บ baseline',      cls: 'bg-blue-100 text-blue-700' },
-  need_external:  { label: 'ต้องใช้หลักฐานภายนอก',   cls: 'bg-purple-100 text-purple-700' },
+/**
+ * What the plan assumes each metric would be computed from. A metric marked
+ * `system_data` only means the plan's author expected existing tables to be
+ * enough; no check was made that the data is there, which is why every label
+ * names the plan out loud. The two `system_data` values are deliberately
+ * neutral grey — a green badge on this page would read as a pass.
+ */
+export const PROPOSED_DATA_BASIS = {
+  system_data:         { label: 'ตามแผน: ใช้ข้อมูลที่ระบบเก็บอยู่แล้ว', cls: 'bg-gray-200 text-gray-700' },
+  system_data_partial: { label: 'ตามแผน: ใช้ข้อมูลระบบได้บางส่วน',      cls: 'bg-gray-200 text-gray-700' },
+  need_event:          { label: 'ตามแผน: ต้องเพิ่ม event log',          cls: 'bg-orange-100 text-orange-700' },
+  need_baseline:       { label: 'ตามแผน: ต้องเก็บ baseline',            cls: 'bg-blue-100 text-blue-700' },
+  need_external:       { label: 'ตามแผน: ต้องใช้หลักฐานภายนอก',         cls: 'bg-purple-100 text-purple-700' },
 };
 
 export const SOURCE_TAGS = {
@@ -53,7 +87,7 @@ export const ROLES = [
         desc: 'จำนวนครั้งที่ผู้ใช้ Province เข้าดู dashboard ภายใน 2 ชม. ก่อนการประชุม/สั่งการ',
         target: '≥ 1 ครั้ง / ประชุม',
         sources: ['SL', 'AL', 'MM'],
-        readiness: 'need_event',
+        data_basis: 'need_event',
         forms: ['DME-6'],
         why: 'ถ้าผู้บริหารตัดสินใจโดยไม่ดูข้อมูลจริง ระบบก็ไม่มีผลต่อคุณภาพนโยบาย',
         evidence: 'audit_logs action=LOGIN + entity_type=dashboard_view ต้องเพิ่ม event ใหม่',
@@ -63,7 +97,7 @@ export const ROLES = [
         desc: '% เหตุการณ์สำคัญที่ Province รับรู้จากระบบก่อนได้รับแจ้งทางโทรศัพท์',
         target: '≥ 60%',
         sources: ['SL', 'OB', 'IL'],
-        readiness: 'need_baseline',
+        data_basis: 'need_baseline',
         forms: ['MIE-6'],
         why: 'วัดว่าระบบช่วยให้ผู้บริหารรู้สถานการณ์ได้เร็วกว่าช่องทางเดิมหรือไม่',
         evidence: 'เปรียบเทียบ timestamp ของ emergency_logs.reported_at กับ audit_logs ที่ province ดู dashboard',
@@ -73,7 +107,7 @@ export const ROLES = [
         desc: 'จำนวนคำสั่ง/การสั่งการที่อ้างอิงข้อมูลจากระบบอย่างชัดเจน ต่อเดือน',
         target: '≥ 2 ครั้ง/เดือน',
         sources: ['IV', 'MM'],
-        readiness: 'need_external',
+        data_basis: 'need_external',
         forms: ['DME-6'],
         why: 'ระบบมีค่าเมื่อข้อมูลถูกใช้ประกอบการตัดสินใจจริง ไม่ใช่แค่ดูแล้วปิด',
         evidence: 'ต้องตรวจจากบันทึกประชุม/คำสั่ง ว่ามีการอ้างอิงข้อมูลจากระบบ',
@@ -83,7 +117,7 @@ export const ROLES = [
         desc: 'เวลาเฉลี่ยที่ Province ใช้ดูรายงานต่อ session (วินาที/นาที)',
         target: '≥ 3 นาที',
         sources: ['SL'],
-        readiness: 'need_event',
+        data_basis: 'need_event',
         forms: [],
         why: 'session ที่สั้นมาก (< 30 วินาที) อาจบ่งบอกว่าไม่ได้อ่านจริง',
         evidence: 'ต้องเพิ่ม session duration tracking ที่ frontend',
@@ -128,7 +162,7 @@ export const ROLES = [
         desc: '% เหตุการณ์/ปัญหาที่สังกัดตรวจพบจาก dashboard ก่อนโรงเรียนแจ้ง',
         target: '≥ 50%',
         sources: ['SL', 'OB', 'IL'],
-        readiness: 'need_baseline',
+        data_basis: 'need_baseline',
         forms: ['MIE-6'],
         why: 'ถ้าสังกัดรู้เรื่องทีหลังโรงเรียนเสมอ แสดงว่าระบบไม่ช่วยเรื่อง early detection',
         evidence: 'เปรียบเทียบ timestamp ที่สังกัดเปิดดู dashboard vs timestamp emergency_logs',
@@ -138,7 +172,7 @@ export const ROLES = [
         desc: 'เวลาเฉลี่ยตั้งแต่เกิด alert จนสังกัดเปิดดู (ชั่วโมง)',
         target: '≤ 4 ชม.',
         sources: ['SL', 'AL'],
-        readiness: 'need_event',
+        data_basis: 'need_event',
         forms: ['DME-6'],
         why: 'ยิ่ง latency ต่ำ ยิ่งแสดงว่าสังกัดติดตามระบบอย่างสม่ำเสมอ',
         evidence: 'ต้องเพิ่ม alert_view event ใน audit_logs',
@@ -148,7 +182,7 @@ export const ROLES = [
         desc: 'จำนวนครั้งที่สังกัดดำเนินการติดตามโรงเรียนโดยใช้ข้อมูลจากระบบ ต่อเดือน',
         target: '≥ 3 ครั้ง/เดือน',
         sources: ['IV', 'AL'],
-        readiness: 'need_external',
+        data_basis: 'need_external',
         forms: ['MIE-6'],
         why: 'การติดตามเชิงรุกลดโอกาสเกิดเหตุ — ระบบต้องเป็นเครื่องมือที่ขับเคลื่อนการติดตาม',
         evidence: 'ต้องเพิ่ม follow-up action button + event log ที่หน้า dashboard',
@@ -158,7 +192,7 @@ export const ROLES = [
         desc: '% โรงเรียนที่มีรายการค้างแล้วสังกัดเริ่มติดตามภายใน SLA (24 ชม.)',
         target: '≥ 80%',
         sources: ['SL', 'AL'],
-        readiness: 'need_event',
+        data_basis: 'need_event',
         forms: [],
         why: 'วัดว่าข้อมูลค้างในระบบถูกใช้เป็น trigger สำหรับ action จริงหรือไม่',
         evidence: 'ต้องเพิ่ม acknowledgment event เมื่อสังกัดเริ่มติดตามโรงเรียนที่ค้าง',
@@ -198,21 +232,28 @@ export const ROLES = [
 
     metrics: [
       {
+        // Conflicts with the canonical registry, which counts a student complete
+        // when they have a vehicle; this counts five fields. Same name, two
+        // numbers — owner decision, docs/research/metric-dictionary.md §6.
         title: 'Data Completeness Rate',
         desc: '% นักเรียนที่มีข้อมูลครบ (ชื่อ, ชั้น, รถ, ผู้ปกครอง, เบอร์โทร)',
         target: '≥ 95%',
         sources: ['SL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: ['DME-6'],
         why: 'ข้อมูลไม่ครบทำให้ check-in/notification ทำงานไม่ได้ ส่งผลต่อความปลอดภัย',
         evidence: 'คำนวณจาก students table: COUNT(vehicle_id IS NOT NULL AND parent fields filled) / total',
       },
       {
+        // Conflicts with the canonical registry, which measures the median hours
+        // from event to record; this measures days from term start to 90%
+        // complete. Different quantity, different unit — owner decision,
+        // docs/research/metric-dictionary.md §6.
         title: 'Timeliness of Data Entry',
         desc: 'จำนวนวันหลังเปิดภาคเรียนที่ข้อมูลนักเรียน ≥ 90% ครบ',
         target: '≤ 3 วัน',
         sources: ['SL', 'AL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: [],
         why: 'ยิ่งกรอกเร็ว ระบบก็เริ่มทำงานได้เร็ว — ล่าช้า = นักเรียนไม่ได้รับการติดตามช่วงแรก',
         evidence: 'audit_logs WHERE action=IMPORT — timestamp ของ import ครั้งแรกเทียบกับวันเปิดเรียน',
@@ -222,7 +263,7 @@ export const ROLES = [
         desc: '% ข้อมูลที่ต้องแก้ไขหลังนำเข้า (ยิ่งน้อยยิ่งดี)',
         target: '≤ 5%',
         sources: ['AL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: ['MIE-6'],
         why: 'อัตราแก้ไขสูง = template/process ไม่ดี หรือ source data คุณภาพต่ำ',
         evidence: 'audit_logs WHERE action=UPDATE AND entity_type=student / total students imported',
@@ -232,7 +273,7 @@ export const ROLES = [
         desc: 'เวลาเฉลี่ยที่ครู/เจ้าหน้าที่ใช้จัดการข้อมูลต่อวัน เทียบก่อน-หลังใช้ระบบ',
         target: 'ลดลง ≥ 30%',
         sources: ['QN', 'IV', 'WL'],
-        readiness: 'need_external',
+        data_basis: 'need_external',
         forms: ['DME-6'],
         why: 'ถ้าระบบเพิ่มภาระแทนที่จะลด = failure ในเชิง efficiency',
         evidence: 'ต้องใช้ questionnaire ก่อน-หลัง + workload diary/log',
@@ -276,17 +317,21 @@ export const ROLES = [
         desc: '% วันที่คนขับเช็กอินนักเรียนทุกคนก่อนออกรถ',
         target: '≥ 90%',
         sources: ['SL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: ['DME-6'],
         why: 'เช็กอินก่อนออกรถ = ยืนยันว่านักเรียนทุกคนขึ้นรถแล้ว ลดการลืมเด็กไว้',
         evidence: 'daily_status.morning_done = TRUE ก่อนเวลา departure (ปัจจุบันวัดได้จาก morning_ts)',
       },
       {
+        // Conflicts with the canonical registry, whose denominator is trips
+        // (morning + evening totals); this one's denominator is working days and
+        // it excludes leave days, a category the backend has no notion of —
+        // owner decision, docs/research/metric-dictionary.md §6.
         title: 'Completion Consistency',
         desc: '% ของเดือนที่คนขับเช็กอินครบ 100% ทุกคนในรถ (ไม่นับวันลา)',
         target: '≥ 85%',
         sources: ['SL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: [],
         why: 'ความสม่ำเสมอสำคัญกว่าค่าเฉลี่ย — วันที่ไม่เช็ก = วันที่เสี่ยง',
         evidence: 'daily_status: COUNT(dates where all students morning_done) / total working days',
@@ -296,7 +341,7 @@ export const ROLES = [
         desc: 'จำนวนวันทำงานต่อเนื่องสูงสุดที่ใช้ระบบโดยไม่ขาด',
         target: '≥ 15 วัน/เดือน',
         sources: ['SL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: ['MIE-6'],
         why: 'streak ยาว = ระบบเป็นส่วนหนึ่งของ routine, streak สั้น = ยังไม่ adopt',
         evidence: 'checkin_logs / daily_status: นับ consecutive dates per driver',
@@ -306,7 +351,7 @@ export const ROLES = [
         desc: 'คะแนนความพึงพอใจด้านความง่ายในการใช้งาน จากแบบสอบถามผู้สูงอายุ',
         target: '≥ 4.0 / 5.0',
         sources: ['QN'],
-        readiness: 'need_external',
+        data_basis: 'need_external',
         forms: ['DME-6'],
         why: 'ถ้าผู้สูงอายุใช้ไม่ได้ = adoption ต่ำ = ระบบล้มเหลว',
         evidence: 'ต้องใช้แบบสอบถาม SUS หรือ custom usability survey',
@@ -351,17 +396,20 @@ export const ROLES = [
         desc: '% ความเสี่ยง (ไม่ผ่านตรวจ, ประกันหมด, ยังไม่ตรวจ) ที่ปิดภายใน 30 วัน',
         target: '≥ 80%',
         sources: ['SL'],
-        readiness: 'partial',
+        data_basis: 'system_data_partial',
         forms: ['MIE-6'],
         why: 'ความเสี่ยงที่ไม่ถูกปิดตามเวลา = นักเรียนเดินทางด้วยรถที่ไม่ปลอดภัย',
         evidence: 'vehicle_inspections: เปรียบเทียบ created_at กับ next inspection ที่ผ่าน (ต้องเพิ่ม risk_cases table เพื่อ lifecycle tracking)',
       },
       {
+        // Conflicts with the canonical registry, which uses a 90-day window;
+        // this uses 30. The window decides the value — owner decision,
+        // docs/research/metric-dictionary.md §6.
         title: 'Non-recurrence Rate',
         desc: '% รถที่แก้ไขแล้วไม่กลับมาเป็นความเสี่ยงซ้ำภายใน 30 วัน',
         target: '≥ 90%',
         sources: ['SL'],
-        readiness: 'partial',
+        data_basis: 'system_data_partial',
         forms: [],
         why: 'ถ้าปิดแล้วกลับมาเสี่ยงซ้ำ = การแก้ไขไม่ยั่งยืน',
         evidence: 'vehicle_inspections: หา pattern PASSED → FAILED/NEEDS_FIX ภายใน 30 วัน',
@@ -371,7 +419,7 @@ export const ROLES = [
         desc: 'จำนวนรถที่ยังมีความเสี่ยงค้างอยู่ ณ สิ้นเดือน',
         target: '≤ 5 คัน',
         sources: ['SL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: ['DME-6'],
         why: 'ยิ่งค้างเยอะ ยิ่งเสี่ยง — ต้องดูแนวโน้มรายเดือน',
         evidence: 'คำนวณจาก vehicles WHERE latest_inspection ≠ PASSED OR insurance_expiry < NOW()',
@@ -381,7 +429,7 @@ export const ROLES = [
         desc: 'เวลาเฉลี่ยตั้งแต่พบความเสี่ยงจนปิด (วัน)',
         target: '≤ 14 วัน',
         sources: ['SL'],
-        readiness: 'partial',
+        data_basis: 'system_data_partial',
         forms: [],
         why: 'เวลาปิดนานเกินไป = กระบวนการแก้ไขมีปัญหา',
         evidence: 'ต้องเพิ่ม risk_cases table สำหรับ opened_at → resolved_at tracking',
@@ -427,7 +475,7 @@ export const ROLES = [
         desc: '% บัญชีที่ is_active=true AND เคย login อย่างน้อย 1 ครั้ง',
         target: '≥ 80%',
         sources: ['SL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: ['DME-6'],
         why: 'บัญชีที่สร้างแต่ไม่เคยใช้ = onboarding ล้มเหลว',
         evidence: 'users table: SUM(is_active AND last_login IS NOT NULL) / COUNT(*)',
@@ -437,7 +485,7 @@ export const ROLES = [
         desc: 'จำนวนครั้งที่ admin ต้อง reset password ให้ผู้ใช้ ต่อเดือน (ยิ่งน้อยยิ่งดี)',
         target: '≤ 5 ครั้ง/เดือน',
         sources: ['AL'],
-        readiness: 'ready',
+        data_basis: 'system_data',
         forms: [],
         why: 'Reset บ่อย = ผู้ใช้ลืมรหัสผ่าน = อาจจำเป็นต้องมีระบบ recovery ดีกว่า',
         evidence: 'audit_logs WHERE action=UPDATE AND new_value LIKE "%reset_password%"',
@@ -447,7 +495,7 @@ export const ROLES = [
         desc: '% ผู้ใช้ใหม่ที่พบปัญหาภายใน 7 วันแรก (ต้อง support จาก admin)',
         target: '≤ 10%',
         sources: ['AL', 'IV'],
-        readiness: 'need_external',
+        data_basis: 'need_external',
         forms: ['MIE-6'],
         why: 'ปัญหา onboarding สูง = UX หรือ training ไม่เพียงพอ',
         evidence: 'ต้องเก็บ support request log หรือ interview admin',
@@ -457,7 +505,7 @@ export const ROLES = [
         desc: 'คะแนนรวมความสมบูรณ์ของข้อมูลหลักในระบบ (นักเรียน, รถ, ผู้ปกครอง, ประกัน)',
         target: '≥ 85%',
         sources: ['SL'],
-        readiness: 'partial',
+        data_basis: 'system_data_partial',
         forms: ['DME-6'],
         why: 'คุณภาพข้อมูลเป็น foundation ของทุก metric อื่น — ถ้า data ไม่ดี ทุกอย่างผิด',
         evidence: 'คำนวณจาก: students มี vehicle + parent / vehicles มี insurance_expiry / parents มี phone',

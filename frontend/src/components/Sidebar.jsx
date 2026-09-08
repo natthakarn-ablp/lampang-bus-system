@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState , Inbox} from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut,
+  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
@@ -24,6 +24,7 @@ import { PAGE_TITLES } from '../constants/uiLabels';
 
 const DRIVER_NAV = [
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/driver',             icon: BarChart3,      label: PAGE_TITLES.DRIVER_DASHBOARD },
   { section: 'งานดำเนินการ' },
@@ -39,6 +40,7 @@ const DRIVER_NAV = [
 
 const SCHOOL_NAV = [
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/school',               icon: BarChart3,     label: PAGE_TITLES.SCHOOL_DASHBOARD },
   { section: 'งานดำเนินการ' },
@@ -61,6 +63,7 @@ const SCHOOL_NAV = [
 
 const AFFILIATION_NAV = [
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/affiliation',             icon: BarChart3,     label: PAGE_TITLES.AFFILIATION_DASHBOARD },
   { section: 'งานดำเนินการ' },
@@ -82,6 +85,7 @@ const AFFILIATION_NAV = [
 
 const PROVINCE_NAV = [
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/province',              icon: BarChart3,     label: PAGE_TITLES.PROVINCE_DASHBOARD },
   { section: 'ข้อมูลหลัก' },
@@ -103,6 +107,7 @@ const PROVINCE_NAV = [
 
 const TRANSPORT_NAV = [
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/transport',              icon: BarChart3,    label: 'ภาพรวมตรวจสภาพรถ' },
   { section: 'งานดำเนินการ' },
@@ -114,6 +119,7 @@ const TRANSPORT_NAV = [
 
 const ADMIN_NAV = [
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
   { section: 'ภาพรวม' },
   { to: '/admin',                 icon: Home,        label: 'ศูนย์ควบคุมระบบ' },
   { section: 'งานดำเนินการ' },
@@ -186,6 +192,8 @@ function navItemsForUser(user, features) {
     // is not mounted, so the page would load and every call would 404. Hidden
     // until it is switched on.
     '/participation': 'participationCases',
+    // The summary reads the same router, so it is dark with the same flag.
+    '/participation/summary': 'participationCases',
   };
   const filtered = base.filter(item => {
     if (!item.to) return true;

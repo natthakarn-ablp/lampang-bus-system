@@ -24,6 +24,11 @@
 #   bash scripts/enable-feature-flag.sh FEATURE_PARTICIPATION_CASES
 #   bash scripts/enable-feature-flag.sh FEATURE_ETA false      # turn one off
 #   DRY_RUN=1 bash scripts/enable-feature-flag.sh FEATURE_ETA  # show only
+#
+# Env: APP_DIR, STATE_DIR, HEALTH_URL, HEALTH_ATTEMPTS, HEALTH_SLEEP_SEC,
+#      DRY_RUN, FLAG_PM2, FLAG_CURL — the defaults are the production
+#      server's, and are overridden only so the rollback path can be
+#      rehearsed off the server (backend/tests/enableFeatureFlagScript.unit.test.js).
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -37,6 +42,13 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/health}"
 HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-12}"
 HEALTH_SLEEP_SEC="${HEALTH_SLEEP_SEC:-2}"
 DRY_RUN="${DRY_RUN:-0}"
+# The two external commands, overridable so a test can point at a stub by
+# absolute path instead of relying on PATH order — PATH order is a hypothesis
+# about how the shell resolves a name, not a guarantee, and it resolves
+# differently under Git Bash than on the server. Same rule as
+# scripts/deploy-backend.sh. The defaults are what the server runs.
+PM2_BIN="${FLAG_PM2:-pm2}"
+CURL_BIN="${FLAG_CURL:-curl}"
 
 # Only flags this application actually reads (backend/src/config/env.js).
 KNOWN_FLAGS="FEATURE_DRIVER_REGISTRATION FEATURE_PARTICIPATION_CASES \
@@ -107,11 +119,11 @@ cat "$TMP" > "$ENV_FILE"
 say "env updated: $(grep -c '^FEATURE_' "$ENV_FILE") feature line(s) now set"
 
 say "reloading (fork mode: this is a stop and start) ..."
-pm2 reload "$ECOSYSTEM" >/dev/null 2>&1 || say "pm2 reload returned non-zero — checking health anyway"
+"$PM2_BIN" reload "$ECOSYSTEM" >/dev/null 2>&1 || say "pm2 reload returned non-zero — checking health anyway"
 
 verdict() {
   local body
-  body="$(curl -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
+  body="$("$CURL_BIN" -fsS --max-time 5 "$HEALTH_URL" 2>/dev/null || true)"
   [ -n "$body" ] || { echo "unreachable"; return; }
   case "$body" in
     *'"success":true'*) : ;;
@@ -140,7 +152,7 @@ fi
 # ── rollback ────────────────────────────────────────────────────────────────
 say "health verdict: ${RESULT} — rolling the flag back"
 cp -a "$BACKUP" "$ENV_FILE"
-pm2 reload "$ECOSYSTEM" >/dev/null 2>&1 || true
+"$PM2_BIN" reload "$ECOSYSTEM" >/dev/null 2>&1 || true
 BACK="unreachable"
 for i in $(seq 1 "$HEALTH_ATTEMPTS"); do
   sleep "$HEALTH_SLEEP_SEC"

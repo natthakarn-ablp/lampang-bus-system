@@ -96,6 +96,24 @@ router.get('/policy', async (req, res, next) => {
 
 // ─── Export endpoints ───────────────────────────────────────────────────────
 
+// Every route below sends a file, and none of them carries a per-route limiter.
+// That is deliberate, not an oversight: app.js mounts this entire router behind
+// its own exportLimiter (40 requests / 5 min / IP, app.js:155-163), so a request
+// to any export here is already counted before it reaches this file.
+//
+// Adding importExportLimiter per route would make things worse, not safer. That
+// limiter is a single module-level instance (middleware/rateLimiters.js), so one
+// bucket per IP is shared by every consumer of it: student imports, the
+// school-account import and the admin research export. Pulling report downloads
+// into that bucket would let forty report downloads lock a school out of its own
+// student import for five minutes, on a school where everyone shares one address.
+//
+// This has been mistaken for a missing limiter twice, most recently on 8 Sep
+// 2026, because the guard is at the mount and not in this file. It is enforced
+// from the outside by tests/exportRateLimitCoverage.unit.test.js, which scans
+// every route file and every mount in app.js and fails if a route that builds an
+// export ends up with neither kind of cap.
+
 const CSV_HEADERS = [
   'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'ระดับชั้น', 'ห้อง',
   'โรงเรียน', 'เขตพื้นที่', 'ทะเบียนรถ',

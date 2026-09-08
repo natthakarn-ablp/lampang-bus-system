@@ -48,6 +48,54 @@ function parseSafetyPolicyConfig(source = process.env) {
   return { mode: raw, enforcementAt };
 }
 
+// ── Database pool sizing (config-infra) ──────────────────────────────────────
+// The pool size and the queue limit were literals in src/config/database.js, so
+// the first knob anyone reaches for under load could only be turned by editing
+// source and redeploying. The local capacity rehearsal measured pool
+// utilisation 1.0, with callers already queueing, at 20 simulated users on a
+// development machine — a rehearsal, not a capacity result
+// (docs/performance/load-test-local-2026-09-05.md §2.1), so this WILL be turned.
+// The defaults below reproduce the previous literals exactly: an unset
+// environment behaves byte-for-byte as it did before.
+const DB_POOL_DEFAULTS = { connectionLimit: 10, queueLimit: 0 };
+
+// The production MySQL reports max_connections = 151 (capacity sample, recorded
+// in docs/performance/phase9-rehearsal-2026-09-05.md §5). A pool larger than the
+// server's entire connection budget cannot serve more traffic — it only converts
+// contention inside mysql2 into connection refusals at the server, including for
+// the operator's own mysql session when they log in to diagnose it. A value above
+// this is a typo, not a tuning decision, so it is refused at boot.
+const DB_POOL_MAX_CONNECTION_LIMIT = 150;
+
+// A finite queue exists to shed load; a five-figure queue is unlimited in every
+// way that matters, so treat it the same way as an over-large pool.
+const DB_POOL_MAX_QUEUE_LIMIT = 10000;
+
+function parseDatabasePoolConfig(source = process.env) {
+  // Deliberately NOT parseInt(): it reads '20x' as 20 and 'abc' as NaN, and a
+  // pool that silently runs at a truncated size — or falls back to the default
+  // an operator thought they had overridden — only shows up as latency under
+  // real load, days after the deploy that introduced it. Refuse instead.
+  const readCount = (key, fallback, min, max) => {
+    const raw = String(source[key] ?? '').trim();
+    if (raw === '') return fallback;
+    if (!/^[0-9]+$/.test(raw) || Number(raw) < min || Number(raw) > max) {
+      throw new Error(`${key} must be a whole number between ${min} and ${max}`);
+    }
+    return Number(raw);
+  };
+  return {
+    connectionLimit: readCount(
+      'DB_POOL_CONNECTION_LIMIT', DB_POOL_DEFAULTS.connectionLimit, 1, DB_POOL_MAX_CONNECTION_LIMIT
+    ),
+    // 0 is mysql2's "queue as many callers as ask", which is what the system
+    // does today: it degrades into ever-growing latency instead of refusing.
+    queueLimit: readCount(
+      'DB_POOL_QUEUE_LIMIT', DB_POOL_DEFAULTS.queueLimit, 0, DB_POOL_MAX_QUEUE_LIMIT
+    ),
+  };
+}
+
 function validateFeatureDependencies(source = process.env) {
   if (source.FEATURE_QR_LEVEL3 === 'true' && source.FEATURE_VEHICLE_QR !== 'true') {
     throw new Error('FEATURE_QR_LEVEL3 requires FEATURE_VEHICLE_QR=true');
@@ -132,6 +180,7 @@ function validateEnvOrExit(source = process.env, nodeEnv = source && source.NODE
 
   try {
     parseSafetyPolicyConfig(source);
+    parseDatabasePoolConfig(source);
     validateFeatureDependencies(source);
   } catch (error) {
     return fail(error.message);
@@ -159,6 +208,18 @@ try {
   safetyPolicyConfig = { mode: 'OBSERVE', enforcementAt: null };
 }
 
+// Same reasoning as safetyPolicyConfig above: validateEnvOrExit() is the
+// authoritative rejecter of a bad pool value (outside test it has already
+// exited by the time this runs), so requiring this module under test must not
+// throw. Falling back to the shipped defaults keeps a test that deliberately
+// sets a bad value from breaking every other module that requires env.
+let databasePoolConfig;
+try {
+  databasePoolConfig = parseDatabasePoolConfig(process.env);
+} catch {
+  databasePoolConfig = { ...DB_POOL_DEFAULTS };
+}
+
 const env = {
   db: {
     host: process.env.DB_HOST,
@@ -166,6 +227,10 @@ const env = {
     name: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
+    // mysql2 pool sizing, applied in config/database.js. Unset = the 10 / 0 that
+    // used to be literals there, so behaviour is unchanged until an operator
+    // deliberately turns it. See parseDatabasePoolConfig above.
+    pool: databasePoolConfig,
   },
   jwt: {
     secret: process.env.JWT_SECRET,
@@ -271,6 +336,7 @@ module.exports = env;
 // Exposed for unit testing (pure, no side effects).
 module.exports.getMissingProductionSecrets = getMissingProductionSecrets;
 module.exports.parseSafetyPolicyConfig = parseSafetyPolicyConfig;
+module.exports.parseDatabasePoolConfig = parseDatabasePoolConfig;
 module.exports.validateFeatureDependencies = validateFeatureDependencies;
 // Imperative hard validation. Runs automatically at module load for non-test
 // environments (so the app refuses to boot on bad config); exported so it can be

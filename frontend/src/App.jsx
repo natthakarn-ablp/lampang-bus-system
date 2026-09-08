@@ -119,6 +119,7 @@ const AdminAccountSecurity = lazy(() => import('./pages/admin/AdminAccountSecuri
 const ParticipationCases      = lazy(() => import('./pages/participation/ParticipationCases'));
 const ParticipationCaseDetail = lazy(() => import('./pages/participation/ParticipationCaseDetail'));
 const ParticipationNewCase    = lazy(() => import('./pages/participation/ParticipationNewCase'));
+const ParticipationSummary    = lazy(() => import('./pages/participation/ParticipationSummary'));
 
 export const ROLE_HOME = {
   driver:      '/driver',
@@ -471,6 +472,14 @@ export default function App() {
           <Route path="/participation/cases/:id" element={
             <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
               <Layout><ParticipationCaseDetail /></Layout>
+            </PrivateRoute>
+          } />
+          {/* The aggregate of the same list. Same roles on purpose: the totals
+              are built from the rows scopeClause already allows the caller to
+              read, so anyone who may see the list may see its counts. */}
+          <Route path="/participation/summary" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+              <Layout><ParticipationSummary /></Layout>
             </PrivateRoute>
           } />
 

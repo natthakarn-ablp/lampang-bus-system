@@ -2,6 +2,7 @@
 
 const express = require('express');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
@@ -21,7 +22,7 @@ const { isCalendarDate } = require('../utils/calendarDate');
 const researchReadinessSvc = require('../services/researchReadiness.service');
 const { RESEARCH_PROTOCOL, EXTERNAL_EVIDENCE_REGISTRY } = require('../config/researchProtocol');
 const { METRICS: RESEARCH_METRICS } = require('../config/researchMetrics');
-const { todayBangkok } = require('../utils/thaiTime');
+const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
 
 /**
  * Audit entity types that stand in for the named events each metric requires.
@@ -88,6 +89,218 @@ async function loadResearchEvidenceContext() {
 const {
   snapshotPercentages, snapshotDeltas, derivedFieldDictionary, DESCRIPTIVE_STATISTIC,
 } = require('../utils/researchSnapshotFields');
+
+/**
+ * The fields of `summary.dme_mie` whose value is an object, not a scalar. Any
+ * renderer that flattens the summary into label/value rows has to skip them
+ * and print them in a section of their own, or the row says "[object Object]".
+ *
+ * It lives here, once, because the CSV renderer and the Excel renderer each
+ * kept a private copy of this list and the copies drifted: `snapshot_freshness`
+ * and `baseline_pair` were added to the summary and to the CSV list, but not to
+ * the Excel one, so the workbook wrote both objects into a value cell as a JSON
+ * blob. Two lists of the same fact drift; one cannot.
+ */
+const DME_MIE_NESTED_FIELDS = new Set([
+  '_notes', 'delta', 'role_adoption', 'snapshot_freshness', 'baseline_pair',
+]);
+
+/**
+ * Shape version of the research-export payload, written into all three
+ * formats. 3.1 adds the integrity block — format version, data checksum and
+ * provenance — to 3.0's readiness and data-dictionary sections. No metric,
+ * formula, delta rule or readiness rule changed with it; the reader who sees
+ * 3.1 gets the same numbers as 3.0 plus the means to check them.
+ */
+const RESEARCH_EXPORT_FORMAT_VERSION = '3.1';
+
+/**
+ * The payload sections the checksum covers, in this order.
+ *
+ * `data_dictionary` is excluded because it is generated from the metric
+ * registry in code: it describes the numbers, it is not one of them, and it
+ * changes when the registry changes rather than when the data does.
+ */
+const RESEARCH_CHECKSUM_SECTIONS = ['snapshots', 'audit_logs', 'export_evidence', 'summary'];
+
+/**
+ * The fields of `meta` the checksum also covers.
+ *
+ * Excluding all of `meta` was the first attempt and it was wrong. `meta` holds
+ * `evidence_readiness` and `research_claims_allowed` — the answer to "may this
+ * dataset be cited as a research result?" — which is the single most
+ * consequential statement in the whole export. Leaving it outside the hash
+ * meant a downloaded file could have `research_claims_allowed` flipped from
+ * false to true and still verify, which is precisely the tampering an integrity
+ * block exists to detect, and precisely the direction someone would tamper in.
+ *
+ * The rest of `meta` stays out for the reason the whole of it used to: it
+ * carries `generated_at`, `generated_by` and the integrity block itself, and a
+ * hash over its own output cannot be recomputed by anyone, us included.
+ */
+const RESEARCH_CHECKSUM_META_FIELDS = [
+  'format_version', 'date_range', 'included',
+  'evidence_readiness', 'research_claims_allowed', 'readiness_note',
+];
+
+/**
+ * Said the same way in all three formats, because the CSV and the workbook
+ * have no other place to explain what their checksum cell means.
+ */
+const RESEARCH_CHECKSUM_NOTE =
+  'data_checksum = sha256 ของ canonical JSON (เรียงคีย์ทุกชั้น, ลำดับแถวคงเดิม, วันที่เป็น ISO-8601) '
+  + 'ของส่วนข้อมูลที่ระบุใน covered_sections รวมกับฟิลด์ของ meta ที่ระบุใน covered_meta_fields '
+  + 'ซึ่งรวมคำตอบว่าชุดข้อมูลนี้อ้างเป็นผลวิจัยได้หรือไม่ — ไม่รวมเวลาที่ export ผู้สร้าง และตัวค่า checksum เอง '
+  + 'ตรวจซ้ำได้จากไฟล์ JSON ของช่วงวันที่เดียวกัน และเทียบกับค่าที่บันทึกไว้ใน audit log ของการ export ครั้งนี้';
+
+/**
+ * Canonical JSON for hashing: object keys sorted at every depth, array order
+ * preserved (row order is what the SQL ORDER BY produced, so it is part of the
+ * data), Date written as its ISO-8601 instant, undefined folded to null.
+ *
+ * The key sort is the whole point. Without it the checksum would depend on the
+ * order the driver happened to hand back a row's columns, which is not
+ * something a reader can reproduce a year later.
+ */
+function canonicalJson(value) {
+  if (value === undefined || value === null) return 'null';
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (typeof value === 'object') {
+    return `{${Object.keys(value).sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`)
+      .join(',')}}`;
+  }
+  // NaN, Infinity and anything JSON cannot represent become null, exactly as
+  // they would in the emitted JSON, so the hash matches the file.
+  return JSON.stringify(value) ?? 'null';
+}
+
+/**
+ * sha256 over the exported rows.
+ *
+ * WHAT IT COVERS: an object holding exactly the RESEARCH_CHECKSUM_SECTIONS
+ * this export actually contains, each section unchanged. Nothing else — not
+ * meta, not the data dictionary, and above all not generated_at.
+ *
+ * HOW TO RECOMPUTE from a downloaded JSON dataset:
+ *   const d = JSON.parse(file).data;            // the API wraps the payload in { data }
+ *   const integrity = d.meta.integrity;
+ *   const covered = {};
+ *   for (const s of integrity.covered_sections) {
+ *     if (s === 'meta_claims') continue;        // rebuilt from meta, below
+ *     covered[s] = d[s];
+ *   }
+ *   if (integrity.covered_meta_fields.length) {
+ *     covered.meta_claims = {};
+ *     for (const f of integrity.covered_meta_fields) covered.meta_claims[f] = d.meta[f];
+ *   }
+ *   crypto.createHash('sha256').update(canonicalJson(covered), 'utf8').digest('hex')
+ * must equal `integrity.data_checksum`, with canonicalJson as written above. A
+ * mismatch means a row, or the readiness claim, was changed after the file was
+ * written.
+ *
+ * The CSV and the workbook carry the same value, but they are renderings: they
+ * drop columns, so the hash cannot be recomputed from them. There it says
+ * which JSON dataset the sheet was rendered from — it does not attest to the
+ * sheet's own cells.
+ *
+ * The value is also written into the EXPORT audit row, so the checksum in the
+ * file can be compared against one recorded in the database at export time
+ * rather than being self-attested.
+ */
+function researchDataChecksum(payload) {
+  const covered = {};
+  for (const section of RESEARCH_CHECKSUM_SECTIONS) {
+    if (payload[section] !== undefined) covered[section] = payload[section];
+  }
+  // The readiness claim travels under `meta`, so it is gathered separately and
+  // hashed under a key of its own. Naming the key rather than folding the fields
+  // in at the top level keeps the recompute recipe unambiguous: a verifier
+  // rebuilds exactly this shape and nothing else.
+  const meta = payload.meta || {};
+  const coveredMeta = {};
+  for (const field of RESEARCH_CHECKSUM_META_FIELDS) {
+    if (meta[field] !== undefined) coveredMeta[field] = meta[field];
+  }
+  if (Object.keys(coveredMeta).length) covered.meta_claims = coveredMeta;
+
+  return {
+    algorithm: 'sha256',
+    canonicalisation: 'json; object keys sorted at every depth; array order preserved; dates as ISO-8601',
+    covered_sections: Object.keys(covered),
+    covered_meta_fields: Object.keys(coveredMeta),
+    data_checksum: crypto.createHash('sha256').update(canonicalJson(covered), 'utf8').digest('hex'),
+    note: RESEARCH_CHECKSUM_NOTE,
+  };
+}
+
+/**
+ * Excel rejects a cell longer than 32,767 characters, and a CSV cell that long
+ * is unreadable anyway. A default export covers every snapshot ever taken, so
+ * the id list grows by one entry a day and will eventually reach that. The
+ * complete list always travels in the JSON payload; the two spreadsheet
+ * renderings fall back to the first and last id plus the count rather than
+ * writing a cell the reader's Excel refuses to open.
+ */
+const SPREADSHEET_CELL_MAX = 30000;
+function idListCell(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return '';
+  const joined = ids.join(' | ');
+  if (joined.length <= SPREADSHEET_CELL_MAX) return joined;
+  return `${ids[0]} … ${ids[ids.length - 1]} (${ids.length} ids; รายการเต็มอยู่ในไฟล์ JSON)`;
+}
+
+/**
+ * Where the numbers came from: the requested window, and the identity of the
+ * rows that answered it. It lets a reader name the snapshots a percentage was
+ * computed from without re-querying a database that has moved on, and it
+ * distinguishes "this section was not requested" from "there were no rows" —
+ * an absent section otherwise reads as an empty one.
+ *
+ * Provenance sits in meta and is therefore outside the checksum, by design: it
+ * is derived from the covered rows (the ids are the ids of the rows in the
+ * `snapshots` section), so it can be re-derived from them and checked.
+ */
+function buildResearchProvenance(payload, { from, to, include }) {
+  const rowSpan = (rows) => (Array.isArray(rows)
+    ? {
+      included: true,
+      row_count: rows.length,
+      first_id: rows.length ? rows[0].id : null,
+      last_id: rows.length ? rows[rows.length - 1].id : null,
+    }
+    : { included: false, row_count: null, first_id: null, last_id: null });
+
+  const snapshots = payload.snapshots || [];
+  const snapshotDates = snapshots.map((s) => toBangkokDate(s.snapshot_date)).filter(Boolean).sort();
+  const dme = payload.summary?.dme_mie || null;
+
+  return {
+    date_range: { from, to },
+    requested_sections: include,
+    snapshots: {
+      ...rowSpan(payload.snapshots),
+      // The ids are the provenance proper: they say WHICH rows, where a count
+      // only says how many.
+      ids: payload.snapshots ? snapshots.map((s) => s.id) : null,
+      baseline_ids: payload.snapshots ? snapshots.filter((s) => s.is_baseline).map((s) => s.id) : null,
+      first_snapshot_date: snapshotDates[0] ?? null,
+      last_snapshot_date: snapshotDates.length ? snapshotDates[snapshotDates.length - 1] : null,
+    },
+    audit_logs: rowSpan(payload.audit_logs),
+    export_evidence: rowSpan(payload.export_evidence),
+    // The two snapshots every delta in summary.dme_mie is measured between.
+    // Repeated here so the pair travels with the provenance and not only with
+    // the numbers it produced.
+    computed_from: dme ? {
+      baseline_snapshot_id: dme.baseline_snapshot_id ?? null,
+      baseline_date: toBangkokDate(dme.baseline_date),
+      current_snapshot_id: dme.current_snapshot_id ?? null,
+      current_date: toBangkokDate(dme.current_date),
+    } : null,
+  };
+}
 
 const BCRYPT_COST = 12;
 const VALID_ROLES = ['driver', 'school', 'affiliation', 'province', 'transport', 'admin'];
@@ -1088,7 +1301,7 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
       generated_by: req.user.username,
       date_range: { from, to },
       included: include,
-      format_version: '3.0',
+      format_version: RESEARCH_EXPORT_FORMAT_VERSION,
       evidence_readiness: evidenceReadiness,
       research_claims_allowed: evidenceReadiness.research_claims_allowed,
       readiness_note: 'ชุดข้อมูลนี้เป็นหลักฐานเชิงระบบ ไม่ใช่ผลการวิจัย และยังไม่ผ่านการรับรองโดย Research lead',
@@ -1248,13 +1461,27 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
       };
     }
 
+    // Integrity and provenance are computed here, once, before the format
+    // branches: the JSON, the CSV and the workbook must carry the SAME
+    // checksum for the same rows, and the EXPORT audit row below has to record
+    // it. A checksum only present inside the file it describes proves nothing;
+    // one the database recorded independently at export time is what lets a
+    // later reader say the rows were not edited afterwards.
+    const integrity = researchDataChecksum(result);
+    result.meta.provenance = buildResearchProvenance(result, { from, to, include });
+    result.meta.integrity = integrity;
+
     const format = (req.query.format || 'json').toLowerCase();
 
     // Log this export action
     await logAudit({
       userId: req.user.id, action: 'EXPORT', entityType: 'research_dataset',
       entityId: `${from}_to_${to}`,
-      newValue: { from, to, included: include, format },
+      newValue: {
+        from, to, included: include, format,
+        format_version: RESEARCH_EXPORT_FORMAT_VERSION,
+        data_checksum: integrity.data_checksum,
+      },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
@@ -1268,6 +1495,42 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r') ? `"${s.replace(/"/g, '""')}"` : s;
       };
       let csv = BOM;
+
+      // Provenance leads the file. A spreadsheet that cannot say which
+      // snapshots produced its numbers, or whether its rows are still the rows
+      // that were exported, is not evidence — and the reader who opens the CSV
+      // first is the one who most needs to be told.
+      if (result.meta?.provenance) {
+        const p = result.meta.provenance;
+        const ig = result.meta.integrity;
+        csv += '=== Export Provenance ===\n';
+        csv += 'field,value\n';
+        csv += `format_version,${esc(result.meta.format_version)}\n`;
+        csv += `checksum_algorithm,${esc(ig.algorithm)}\n`;
+        csv += `data_checksum,${esc(ig.data_checksum)}\n`;
+        csv += `checksum_covers,${esc((ig.covered_sections || []).join(' | '))}\n`;
+        csv += `checksum_covers_meta,${esc((ig.covered_meta_fields || []).join(' | '))}\n`;
+        csv += `checksum_canonicalisation,${esc(ig.canonicalisation)}\n`;
+        csv += `checksum_note,${esc(ig.note)}\n`;
+        csv += `date_range_from,${esc(p.date_range.from)}\n`;
+        csv += `date_range_to,${esc(p.date_range.to)}\n`;
+        csv += `requested_sections,${esc((p.requested_sections || []).join(' | '))}\n`;
+        csv += `snapshot_row_count,${esc(p.snapshots.row_count)}\n`;
+        csv += `snapshot_ids,${esc(idListCell(p.snapshots.ids))}\n`;
+        csv += `baseline_snapshot_ids,${esc(idListCell(p.snapshots.baseline_ids))}\n`;
+        csv += `snapshot_date_first,${esc(p.snapshots.first_snapshot_date)}\n`;
+        csv += `snapshot_date_last,${esc(p.snapshots.last_snapshot_date)}\n`;
+        csv += `audit_log_row_count,${esc(p.audit_logs.row_count)}\n`;
+        csv += `audit_log_id_first,${esc(p.audit_logs.first_id)}\n`;
+        csv += `audit_log_id_last,${esc(p.audit_logs.last_id)}\n`;
+        csv += `export_evidence_row_count,${esc(p.export_evidence.row_count)}\n`;
+        // The pair every delta below is measured between, named rather than implied.
+        csv += `delta_baseline_snapshot_id,${esc(p.computed_from?.baseline_snapshot_id)}\n`;
+        csv += `delta_baseline_date,${esc(p.computed_from?.baseline_date)}\n`;
+        csv += `delta_current_snapshot_id,${esc(p.computed_from?.current_snapshot_id)}\n`;
+        csv += `delta_current_date,${esc(p.computed_from?.current_date)}\n`;
+        csv += '\n';
+      }
 
       if (result.snapshots?.length) {
         const cols = ['snapshot_date','total_students','students_with_vehicle','students_with_parent',
@@ -1307,10 +1570,11 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
           csv += '\n=== DME Metrics ===\n';
           csv += 'metric,value\n';
           // Nested objects would serialise as "[object Object]"; they get their
-          // own sections below instead of a meaningless cell.
-          const NESTED = new Set(['_notes', 'delta', 'role_adoption', 'snapshot_freshness', 'baseline_pair']);
+          // own sections below instead of a meaningless cell. The list is
+          // shared with the Excel renderer so the two cannot disagree about
+          // which fields are objects.
           for (const [k, v] of Object.entries(s.dme_mie)) {
-            if (NESTED.has(k)) continue;
+            if (DME_MIE_NESTED_FIELDS.has(k)) continue;
             csv += `${esc(k)},${esc(v)}\n`;
           }
           // Deltas get their own section so a null (zero denominator on either
@@ -1333,6 +1597,11 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         csv += `snapshot_latest,${esc(er.snapshot_freshness?.latest_snapshot_date)}\n`;
         csv += `snapshot_age_days,${esc(er.snapshot_freshness?.age_days)}\n`;
         csv += `snapshot_fresh,${esc(er.snapshot_freshness?.fresh)}\n`;
+        // Whether the baseline/post pair may carry a delta at all, and why not
+        // when it may not. Both renderers state it here, in words, rather than
+        // dropping the object into a value cell.
+        csv += `baseline_pair_usable,${esc(er.baseline_pair?.usable)}\n`;
+        csv += `baseline_pair_reason,${esc(er.baseline_pair?.reason)}\n`;
         csv += `protocol_frozen,${esc(er.protocol?.frozen)}\n`;
         csv += '\nmetric_key,category,evidence_status,blocking_reasons,latest_evidence_date\n';
         for (const m of er.metrics || []) {
@@ -1375,6 +1644,42 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         const row = sheet.getRow(1);
         row.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+      }
+
+      // First sheet on purpose: the reader who opens the workbook meets the
+      // date range, the snapshot ids and the checksum before any number.
+      if (result.meta?.provenance) {
+        const p = result.meta.provenance;
+        const ig = result.meta.integrity;
+        const ws = wb.addWorksheet('Provenance');
+        ws.columns = [
+          { header: 'รายการ', key: 'label', width: 30 },
+          { header: 'ค่า', key: 'value', width: 80 },
+        ];
+        ws.addRow({ label: 'format_version', value: result.meta.format_version });
+        ws.addRow({ label: 'checksum_algorithm', value: ig.algorithm });
+        ws.addRow({ label: 'data_checksum', value: ig.data_checksum });
+        ws.addRow({ label: 'checksum_covers', value: (ig.covered_sections || []).join(' | ') });
+        ws.addRow({ label: 'checksum_covers_meta', value: (ig.covered_meta_fields || []).join(' | ') });
+        ws.addRow({ label: 'checksum_canonicalisation', value: ig.canonicalisation });
+        ws.addRow({ label: 'checksum_note', value: ig.note });
+        ws.addRow({ label: 'date_range_from', value: p.date_range.from });
+        ws.addRow({ label: 'date_range_to', value: p.date_range.to });
+        ws.addRow({ label: 'requested_sections', value: (p.requested_sections || []).join(' | ') });
+        ws.addRow({ label: 'snapshot_row_count', value: p.snapshots.row_count ?? '' });
+        ws.addRow({ label: 'snapshot_ids', value: idListCell(p.snapshots.ids) });
+        ws.addRow({ label: 'baseline_snapshot_ids', value: idListCell(p.snapshots.baseline_ids) });
+        ws.addRow({ label: 'snapshot_date_first', value: p.snapshots.first_snapshot_date ?? '' });
+        ws.addRow({ label: 'snapshot_date_last', value: p.snapshots.last_snapshot_date ?? '' });
+        ws.addRow({ label: 'audit_log_row_count', value: p.audit_logs.row_count ?? '' });
+        ws.addRow({ label: 'audit_log_id_first', value: p.audit_logs.first_id ?? '' });
+        ws.addRow({ label: 'audit_log_id_last', value: p.audit_logs.last_id ?? '' });
+        ws.addRow({ label: 'export_evidence_row_count', value: p.export_evidence.row_count ?? '' });
+        ws.addRow({ label: 'delta_baseline_snapshot_id', value: p.computed_from?.baseline_snapshot_id ?? '' });
+        ws.addRow({ label: 'delta_baseline_date', value: p.computed_from?.baseline_date ?? '' });
+        ws.addRow({ label: 'delta_current_snapshot_id', value: p.computed_from?.current_snapshot_id ?? '' });
+        ws.addRow({ label: 'delta_current_date', value: p.computed_from?.current_date ?? '' });
+        styleHeader(ws);
       }
 
       if (result.snapshots?.length) {
@@ -1450,7 +1755,11 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         ws.addRow({ label: '--- DME Metrics ---', value: '' });
         if (s.dme_mie) {
           for (const [k, v] of Object.entries(s.dme_mie)) {
-            if (k === '_notes' || k === 'delta' || k === 'role_adoption') continue;
+            // Same list as the CSV renderer. It used to be a private copy that
+            // named only three of the five object fields, so snapshot_freshness
+            // and baseline_pair were written into this sheet as JSON blobs;
+            // both are stated as readable rows on the Evidence Readiness sheet.
+            if (DME_MIE_NESTED_FIELDS.has(k)) continue;
             ws.addRow({ label: k, value: v != null ? v : 'pending' });
           }
           if (s.dme_mie.delta) {
@@ -1481,6 +1790,8 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         ws.addRow({ label: 'snapshot_latest', value: er.snapshot_freshness?.latest_snapshot_date ?? '' });
         ws.addRow({ label: 'snapshot_age_days', value: er.snapshot_freshness?.age_days ?? '' });
         ws.addRow({ label: 'snapshot_fresh', value: String(er.snapshot_freshness?.fresh) });
+        ws.addRow({ label: 'baseline_pair_usable', value: String(er.baseline_pair?.usable) });
+        ws.addRow({ label: 'baseline_pair_reason', value: er.baseline_pair?.reason ?? '' });
         ws.addRow({ label: 'protocol_frozen', value: String(er.protocol?.frozen) });
         ws.addRow({ label: 'note', value: er.note || '' });
         styleHeader(ws);
@@ -1982,3 +2293,18 @@ router.post('/terms/:id/current', async (req, res, next) => {
 });
 
 module.exports = router;
+
+// Exposed for unit testing only. These are PURE functions over an already-built
+// payload — the integrity contract of the research export — so they are tested
+// directly rather than re-implemented in the test, which would only prove that
+// two copies of the same mistake agree. Attaching them to the router object
+// does not affect `app.use('/api/admin', router)`.
+module.exports._test = {
+  DME_MIE_NESTED_FIELDS,
+  RESEARCH_EXPORT_FORMAT_VERSION,
+  RESEARCH_CHECKSUM_SECTIONS,
+  idListCell,
+  canonicalJson,
+  researchDataChecksum,
+  buildResearchProvenance,
+};

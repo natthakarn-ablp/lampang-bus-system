@@ -1,0 +1,464 @@
+<title>รายงานงานวันที่ 8 กันยายน</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@500;600;700&family=Sarabun:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:   #F5F7FA;
+    --surface:  #FFFFFF;
+    --sunk:     #EDF1F5;
+    --ink:      #16202B;
+    --ink-2:    #4A5A6B;
+    --ink-3:    #7A8899;
+    --line:     #DBE2EA;
+    --line-2:   #C6D0DA;
+    --brand:    #1F5C8B;
+    --brand-in: #123C5E;
+    --amber:    #9C6206;
+    --amber-bg: #FBF1DF;
+    --good:     #26694B;
+    --good-bg:  #E4F0EA;
+    --bad:      #9E3A30;
+    --bad-bg:   #F8E7E4;
+    --shadow:   0 1px 2px rgba(22,32,43,.05), 0 8px 24px -16px rgba(22,32,43,.28);
+
+    --display: 'IBM Plex Sans Thai', 'Sarabun', system-ui, sans-serif;
+    --body:    'Sarabun', 'IBM Plex Sans Thai', system-ui, sans-serif;
+    --mono:    ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0E141A;
+      --surface:  #151D25;
+      --sunk:     #1B242D;
+      --ink:      #E3E9EF;
+      --ink-2:    #A6B3C0;
+      --ink-3:    #7D8B99;
+      --line:     #26313C;
+      --line-2:   #35434F;
+      --brand:    #79ADD4;
+      --brand-in: #A8CCE7;
+      --amber:    #D9A253;
+      --amber-bg: #2B2318;
+      --good:     #62B08A;
+      --good-bg:  #16271F;
+      --bad:      #D4756A;
+      --bad-bg:   #2B1A18;
+      --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0E141A;
+    --surface:  #151D25;
+    --sunk:     #1B242D;
+    --ink:      #E3E9EF;
+    --ink-2:    #A6B3C0;
+    --ink-3:    #7D8B99;
+    --line:     #26313C;
+    --line-2:   #35434F;
+    --brand:    #79ADD4;
+    --brand-in: #A8CCE7;
+    --amber:    #D9A253;
+    --amber-bg: #2B2318;
+    --good:     #62B08A;
+    --good-bg:  #16271F;
+    --bad:      #D4756A;
+    --bad-bg:   #2B1A18;
+    --shadow:   0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.7;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; padding: 0 1.5rem 6rem; }
+
+  /* ── masthead ─────────────────────────────────────────── */
+  .mast { padding: 3.5rem 0 2rem; border-bottom: 2px solid var(--ink); }
+  .eyebrow {
+    font-family: var(--display); font-size: .75rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--brand);
+    margin: 0 0 .75rem;
+  }
+  h1 {
+    font-family: var(--display); font-weight: 700; font-size: clamp(1.9rem, 4.2vw, 2.9rem);
+    line-height: 1.2; letter-spacing: -.015em; text-wrap: balance; margin: 0 0 .6rem;
+  }
+  .standfirst { font-size: 1.06rem; color: var(--ink-2); max-width: 46rem; margin: 0; }
+  .mast-meta {
+    margin-top: 1.5rem; display: flex; flex-wrap: wrap; gap: .5rem 1.75rem;
+    font-size: .82rem; color: var(--ink-3); font-family: var(--display); font-weight: 500;
+  }
+  .mast-meta b { color: var(--ink-2); font-weight: 600; }
+
+  /* ── the three facts that decide everything ───────────── */
+  .facts {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+    background: var(--line); border: 1px solid var(--line);
+    margin: 2rem 0 0; box-shadow: var(--shadow);
+  }
+  @media (max-width: 40rem) { .facts { grid-template-columns: 1fr; } }
+  .fact { background: var(--surface); padding: 1.1rem 1.25rem 1.2rem; }
+  .fact-k {
+    font-family: var(--display); font-size: .7rem; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 .35rem;
+  }
+  .fact-v {
+    font-family: var(--display); font-size: 1.5rem; font-weight: 700;
+    line-height: 1.15; margin: 0; font-variant-numeric: tabular-nums;
+  }
+  .fact-v .mono { font-family: var(--mono); font-size: 1.25rem; }
+  .fact-n { font-size: .82rem; color: var(--ink-2); margin: .3rem 0 0; line-height: 1.5; }
+
+  /* ── the four states this project keeps separate ──────── */
+  .ladder {
+    margin: 2.5rem 0 0; padding: 1.15rem 1.3rem 1.3rem;
+    background: var(--sunk); border: 1px solid var(--line);
+  }
+  .ladder h2 { font-family: var(--display); font-size: .95rem; font-weight: 600; margin: 0 0 .2rem; }
+  .ladder p { font-size: .87rem; color: var(--ink-2); margin: 0 0 .9rem; max-width: 44rem; }
+  .rungs { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+  .rung {
+    font-family: var(--display); font-size: .76rem; font-weight: 600;
+    padding: .22rem .6rem; border: 1px solid var(--line-2); background: var(--surface);
+    color: var(--ink-2); white-space: nowrap;
+  }
+  .rung.on { border-color: var(--good); background: var(--good-bg); color: var(--good); }
+  .rung.wait { border-color: var(--amber); background: var(--amber-bg); color: var(--amber); }
+  .arrow { color: var(--ink-3); font-size: .8rem; }
+
+  /* ── sections ─────────────────────────────────────────── */
+  section { margin-top: 3.25rem; }
+  h2.sec {
+    font-family: var(--display); font-size: 1.35rem; font-weight: 600;
+    letter-spacing: -.01em; margin: 0 0 .35rem; text-wrap: balance;
+  }
+  .sec-note { color: var(--ink-2); font-size: .95rem; margin: 0 0 1.4rem; max-width: 44rem; }
+
+  /* ── findings: rows with a severity edge, not cards ───── */
+  .find { border-top: 1px solid var(--line); }
+  .item {
+    display: grid; grid-template-columns: 4px 1fr; gap: 0 1.1rem;
+    border-bottom: 1px solid var(--line); padding: 0;
+  }
+  .edge { background: var(--line-2); }
+  .item.user .edge { background: var(--bad); }
+  .item.record .edge { background: var(--brand); }
+  .item.tool .edge { background: var(--amber); }
+  .body { padding: 1.15rem 0 1.25rem; }
+  .item h3 {
+    font-family: var(--display); font-size: 1.02rem; font-weight: 600;
+    margin: 0 0 .35rem; line-height: 1.45; text-wrap: balance;
+  }
+  .item p { margin: 0 0 .5rem; color: var(--ink-2); font-size: .93rem; }
+  .item p:last-child { margin-bottom: 0; }
+  .item .hit { color: var(--ink); }
+  .tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .65rem; }
+  .tag {
+    font-family: var(--display); font-size: .72rem; font-weight: 600;
+    padding: .16rem .5rem; border: 1px solid var(--line-2); color: var(--ink-3);
+    background: var(--surface); white-space: nowrap;
+  }
+  .tag.ok { border-color: var(--good); color: var(--good); background: var(--good-bg); }
+  .tag.wait { border-color: var(--amber); color: var(--amber); background: var(--amber-bg); }
+  code {
+    font-family: var(--mono); font-size: .85em; background: var(--sunk);
+    padding: .08em .35em; border: 1px solid var(--line); color: var(--ink);
+  }
+
+  /* ── tables ───────────────────────────────────────────── */
+  .tw { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 32rem; }
+  th, td { padding: .62rem .9rem; text-align: left; border-bottom: 1px solid var(--line); }
+  thead th {
+    font-family: var(--display); font-size: .74rem; font-weight: 600; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--ink-3); background: var(--sunk);
+    border-bottom: 1px solid var(--line-2);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: .85rem; }
+  td.name { font-weight: 500; }
+
+  /* ── the list of things only a person can do ──────────── */
+  .human { border: 1px solid var(--amber); background: var(--amber-bg); padding: 1.3rem 1.4rem 1.4rem; }
+  .human h2 { font-family: var(--display); font-size: 1.15rem; font-weight: 600; margin: 0 0 .3rem; color: var(--amber); }
+  .human > p { font-size: .92rem; color: var(--ink-2); margin: 0 0 1rem; max-width: 44rem; }
+  .human ol { margin: 0; padding-left: 1.25rem; display: grid; gap: .8rem; }
+  .human li { font-size: .93rem; }
+  .human li b { font-family: var(--display); font-weight: 600; }
+  .human li span { display: block; color: var(--ink-2); font-size: .88rem; margin-top: .15rem; }
+
+  .deploy { border: 1px solid var(--line); border-left: 4px solid var(--brand); background: var(--surface); padding: 1.2rem 1.4rem 1.3rem; box-shadow: var(--shadow); }
+  .deploy h2 { font-family: var(--display); font-size: 1.1rem; font-weight: 600; margin: 0 0 .4rem; }
+  .deploy p { font-size: .93rem; color: var(--ink-2); margin: 0 0 .7rem; }
+  .deploy p:last-child { margin-bottom: 0; }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
+    font-size: .82rem; color: var(--ink-3);
+  }
+  a { color: var(--brand-in); }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">อุ่นใจไปโรงเรียน · จังหวัดลำปาง</p>
+    <h1>รายงานงานวันที่ 8 กันยายน 2569</h1>
+    <p class="standfirst">
+      แก้ข้อบกพร่องที่ตรวจพบเอง 13 รายการ เขียนคู่มือส่วนที่ขาดให้ 8 ฉบับ และทำให้ประตูตรวจความพร้อมกลับมาเขียว
+      ไม่มีการแตะเซิร์ฟเวอร์จริงแม้แต่ครั้งเดียว
+    </p>
+    <div class="mast-meta">
+      <span>สาขา <b>feat/tracking-security-hardening</b></span>
+      <span>เริ่มจาก <b>67c3768</b></span>
+      <span>จบที่ <b>2c298a7</b></span>
+      <span><b>14</b> commit · <b>67</b> ไฟล์</span>
+    </div>
+  </header>
+
+  <div class="facts">
+    <div class="fact">
+      <p class="fact-k">ระบบจริงรันอยู่</p>
+      <p class="fact-v"><span class="mono">67c3768</span></p>
+      <p class="fact-n">ไม่เปลี่ยนจากเมื่อวาน ฐานข้อมูลเชื่อมต่อ รันต่อเนื่องมาตั้งแต่ 7 ก.ย. 19:03 น. โดยไม่ restart</p>
+    </div>
+    <div class="fact">
+      <p class="fact-k">ชุดทดสอบ</p>
+      <p class="fact-v">1,651 <span style="color:var(--ink-3);font-weight:500;font-size:1rem">ข้อ</span></p>
+      <p class="fact-n">100 ชุด · ไม่มีข้อล้มเหลว · เช้านี้มี 1,195 ข้อ วันนี้เพิ่มเทสต์ใหม่ 13 ไฟล์ 456 ข้อ</p>
+    </div>
+    <div class="fact">
+      <p class="fact-k">ประตูตรวจความพร้อม</p>
+      <p class="fact-v">6 <span style="color:var(--ink-3);font-weight:500">/</span> 8 <span style="color:var(--ink-3);font-weight:500">/</span> 0</p>
+      <p class="fact-n">ผ่าน 6 · รอคน 8 · ตก 0 — เมื่อเช้ายังตก 1 จากการเตือนผิดของตัวสแกนความลับ</p>
+    </div>
+  </div>
+
+  <div class="ladder">
+    <h2>สี่สถานะที่โครงการนี้แยกจากกันเสมอ</h2>
+    <p>
+      เอกสารของโครงการนี้เคยรวมสี่อย่างนี้เป็นคำเดียวว่า “เสร็จแล้ว” ซึ่งเป็นที่มาของการอ้างเกินจริงที่ตรวจพบมาตลอด
+      ทุกรายการในรายงานนี้จึงติดป้ายว่าไปถึงขั้นไหนแล้ว
+    </p>
+    <div class="rungs">
+      <span class="rung on">มีโค้ด</span><span class="arrow">→</span>
+      <span class="rung on">มีเทสต์คุม</span><span class="arrow">→</span>
+      <span class="rung wait">ขึ้นระบบจริง</span><span class="arrow">→</span>
+      <span class="rung wait">มีคนลงนาม</span>
+    </div>
+  </div>
+
+  <section>
+    <h2 class="sec">ข้อบกพร่องที่พบเองและแก้แล้ว</h2>
+    <p class="sec-note">
+      ไม่มีข้อไหนมาจากการที่ผู้ใช้แจ้งเข้ามา ทุกข้อพบจากการเปิดโค้ดเทียบกับสิ่งที่ระบบทำจริง
+      เรียงตามผลกระทบต่อผู้ใช้ ไม่ใช่ตามลำดับเวลา
+    </p>
+
+    <div class="find">
+
+      <article class="item user">
+        <div class="edge"></div>
+        <div class="body">
+          <h3>หน้าจอบอกความยาวรหัสผ่านขั้นต่ำผิด สามค่าใช้อยู่พร้อมกัน</h3>
+          <p class="hit">เซิร์ฟเวอร์บังคับ 8 ตัวอักษรมาตลอด หน้าจัดการผู้ใช้และหน้าบัญชีครูเขียน 6 และ<strong>หน้าโปรไฟล์คนขับเขียน 4</strong></p>
+          <p>คนขับที่อ่านว่าอย่างน้อย 4 ตัวแล้วพิมพ์สี่ตัว จะถูกปฏิเสธโดยไม่มีทางรู้กฎจริง คู่มืออบรมถึงขั้นเขียนกำกับไว้ว่าอย่าเชื่อหน้าจอ ให้จำ 8 แทน ซึ่งคือคู่มือที่ขอโทษแทนบั๊ก ตอนนี้เลขอยู่ที่เดียวและทุกหน้าดึงจากที่นั่น</p>
+          <div class="tags"><span class="tag ok">แก้แล้ว</span><span class="tag ok">มีเทสต์เดินทุกหน้า</span><span class="tag wait">รอขึ้นระบบจริง</span></div>
+        </div>
+      </article>
+
+      <article class="item user">
+        <div class="edge"></div>
+        <div class="body">
+          <h3>ไทม์ไลน์ของเรื่องร้องเรียนแสดงวันที่เป็นขีดทุกบรรทัด</h3>
+          <p class="hit">หน้าจออ่านชื่อคอลัมน์ <code>created_at</code> แต่ตารางและ API ใช้ <code>occurred_at</code></p>
+          <p>หน้าจอนั้นมีไว้เพื่อพิสูจน์ว่าแต่ละขั้นเกิดขึ้นเมื่อไร และพิสูจน์ไม่ได้เลยตั้งแต่ฟีเจอร์เปิดใช้เมื่อ 7 ก.ย. ค่าที่ไม่มีถูกวาดเป็นขีด ไม่ใช่ error จึงไม่มีอะไรดังขึ้น เทสต์ใหม่เทียบสามแหล่ง คือ migration คำสั่งดึงข้อมูล และหน้าจอ</p>
+          <div class="tags"><span class="tag ok">แก้แล้ว</span><span class="tag ok">มีเทสต์คุม</span><span class="tag wait">รอขึ้นระบบจริง</span></div>
+        </div>
+      </article>
+
+      <article class="item record">
+        <div class="edge"></div>
+        <div class="body">
+          <h3>แดชบอร์ดประเมินผลประกาศแนวโน้มที่ยังเทียบกันไม่ได้</h3>
+          <p class="hit">คำนวณเปอร์เซ็นต์คืน 0 เมื่อตัวหารเป็นศูนย์ ทำให้ “ยังไม่มีการเดินรถเลย” กับ “พลาดทุกเที่ยว” หน้าตาเหมือนกัน</p>
+          <p>และติดป้ายดีขึ้นหรือลดลงโดยไม่ตรวจว่าข้อมูลคู่นั้นเทียบกันได้ไหม ทั้งที่อีกสามหน้าเพิ่งถูกแก้ให้ตรวจ สองหน้าของผู้ดูแลระบบจึงสรุปคนละอย่างจากข้อมูลชุดเดียวกัน</p>
+          <div class="tags"><span class="tag ok">แก้แล้ว</span><span class="tag ok">เทสต์คุมครบสี่หน้า</span><span class="tag wait">รอขึ้นระบบจริง</span></div>
+        </div>
+      </article>
+
+      <article class="item record">
+        <div class="edge"></div>
+        <div class="body">
+          <h3>checksum ของชุดข้อมูลวิจัยไม่ครอบคลุมข้อความที่สำคัญที่สุด</h3>
+          <p class="hit">คำตอบว่าชุดข้อมูลนี้อ้างเป็นผลวิจัยได้หรือไม่ อยู่นอกขอบเขตการตรวจสอบความถูกต้อง</p>
+          <p>ไฟล์ที่ดาวน์โหลดไปแล้วจึงแก้คำตอบจากไม่ได้เป็นได้ แล้วยังผ่านการตรวจ นี่คือการปลอมแปลงแบบที่ checksum มีไว้จับพอดี และเป็นทิศทางที่คนจะปลอมพอดี</p>
+          <div class="tags"><span class="tag ok">แก้แล้ว</span><span class="tag ok">มีเทสต์ปลอมแปลงแล้วต้องจับได้</span><span class="tag wait">รอขึ้นระบบจริง</span></div>
+        </div>
+      </article>
+
+      <article class="item tool">
+        <div class="edge"></div>
+        <div class="body">
+          <h3>ตัวสแกนหาข้อมูลลับรายงานผลบวกลวง 18 บรรทัด</h3>
+          <p class="hit">ประตูตรวจขึ้นตกกับ commit ที่ไม่ได้ทำข้อมูลลับรั่วเลยสักบรรทัด</p>
+          <p>ทั้ง 18 รายการเป็นการอ่านค่าจากสภาพแวดล้อม การแทนค่าจากตัวแปร คำว่า CHANGE_ME และชื่อคีย์ที่อยู่ในข้อความแจ้งเตือน นี่คือรูปแบบความล้มเหลวที่อันตรายที่สุดของเครื่องมือประเภทนี้ ไม่มีใครปิดเครื่องมือที่ไม่เคยเตือนผิด แต่ทุกคนจะปิดเครื่องมือที่เตือนผิดทุกสัปดาห์ แล้วครั้งที่รั่วจริงจะผ่านไปเงียบ ๆ</p>
+          <p>ตอนนี้แยกแยะระหว่างชื่อคีย์ปรากฏ กับค่าที่ใช้งานได้จริงปรากฏ พร้อมเพิ่มกฎที่ไม่เคยมี คือรหัสผ่านในสตริงเชื่อมต่อฐานข้อมูล โทเค็นรูปแบบ JWT และหัวไฟล์กุญแจส่วนตัว</p>
+          <div class="tags"><span class="tag ok">แก้แล้ว</span><span class="tag ok">เทสต์เก็บความลับจริง 13 แบบ</span><span class="tag ok">ประตูตรวจเขียวแล้ว</span></div>
+        </div>
+      </article>
+
+      <article class="item tool">
+        <div class="edge"></div>
+        <div class="body">
+          <h3>ฮาร์เนสถ่ายภาพคู่มือกลับไปเป็นบั๊กเดิมที่มันถูกเขียนขึ้นมาแก้</h3>
+          <p class="hit">ค่าสวิตช์ฟีเจอร์ถูกเขียนตายตัวสองที่ และวันที่ 7 ก.ย. มีการเปิดสวิตช์จริงสองตัวโดยไม่มีใครแตะทั้งสองที่</p>
+          <p>เทสต์จึงยังเขียวทั้งที่ยืนยันโลกที่ไม่มีอยู่แล้ว ถ้ารันถ่ายภาพตอนนี้จะได้คู่มือที่เป็นหน้าจอแบบปิดสวิตช์อีกรอบ ซึ่งคือข้อบกพร่องที่เพิ่งเสียภาพไป 76 ภาพเมื่อสองวันก่อน ค่าย้ายไปอยู่ที่เดียว และเทสต์เลิกคัดลอกค่า เปลี่ยนไปตรวจการต่อสายแทน</p>
+          <div class="tags"><span class="tag ok">แก้แล้ว</span><span class="tag ok">มีเทสต์คุมการต่อสาย</span></div>
+        </div>
+      </article>
+
+      <article class="item tool">
+        <div class="edge"></div>
+        <div class="body">
+          <h3>อีกห้ารายการที่เล็กกว่าแต่แก้แล้วเหมือนกัน</h3>
+          <p>ตารางสิทธิ์ล้าสมัยเพราะมีไฟล์เส้นทาง 19 ไฟล์เปลี่ยนตั้งแต่สร้าง · คำอธิบายขนาด connection pool อ้างตัวเลขที่เอกสารต้นทางไม่ได้เขียนไว้ · เทสต์ความถูกต้องงานวิจัยเฝ้าชื่อฟิลด์ที่ถูกเปลี่ยนไปแล้ว · ตัวตรวจการเขียนทับบันทึกเหตุการณ์มีช่องโหว่เรื่องเครื่องหมายอ้างชื่อตาราง · และไฟล์เอกสารราชการที่ลงนามแล้วขนาด 38 MB วางอยู่ในรากของ repo โดยไม่มีอะไรกันไว้</p>
+          <div class="tags"><span class="tag ok">แก้แล้วทั้งหมด</span></div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">เรื่องที่พบบนเว็บจริง</h2>
+    <p class="sec-note">
+      ประตูตรวจเดิมดูแค่ว่าเซิร์ฟเวอร์ตอบ 200 ซึ่งผ่านได้แม้หน้าจะพัง เพราะแอปเป็นหน้าเดียวที่ทุกอย่างเกิดในเบราว์เซอร์
+      จึงสร้างเครื่องมือที่เปิดหน้าสาธารณะเจ็ดหน้าด้วยเบราว์เซอร์จริงและฟัง error แบบที่ผู้ใช้เจอ
+    </p>
+    <div class="find">
+      <article class="item tool">
+        <div class="edge"></div>
+        <div class="body">
+          <h3>Cloudflare แทรกสคริปต์เก็บสถิติเข้าทุกหน้า แล้วถูกนโยบายความปลอดภัยของเราบล็อก</h3>
+          <p class="hit">ยังไม่มีข้อมูลรั่ว เพราะการบล็อกทำงานได้จริง</p>
+          <p>
+            ความเสี่ยงที่แท้จริงคือการแก้ผิดทาง ถ้ามีใครเห็น error นี้แล้วแก้ด้วยการขยายนโยบายให้สคริปต์ผ่าน
+            ระบบจะเริ่มส่งข้อมูลการเปิดหน้า รวมถึงหน้าที่เกี่ยวกับข้อมูลเด็ก ออกไปยังผู้ประมวลผลภายนอกที่หน่วยงานไม่มีข้อตกลงด้วย โดยไม่มีใครตั้งใจให้เกิด
+          </p>
+          <p><strong>ทางแก้ที่ถูกคือปิด Browser Insights ในแดชบอร์ดของ Cloudflare ไม่ใช่แก้ที่โค้ด</strong> บันทึกไว้เป็นความเสี่ยงข้อ RR-11 พร้อมคำเตือนนี้แล้ว</p>
+          <div class="tags"><span class="tag ok">บันทึกเป็นความเสี่ยงแล้ว</span><span class="tag wait">รอเจ้าของบัญชี Cloudflare</span></div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">คู่มือ</h2>
+    <p class="sec-note">
+      คู่มือของจังหวัดไม่มีสามฟีเจอร์ที่เป็นของจังหวัดเองเลย ทั้งที่จังหวัดคือผู้ที่ต้องอ่านเรื่องร้องเรียนทั้งจังหวัด
+      และคู่มือฉบับที่เผยแพร่บนเว็บของอีกห้าบทบาทก็ไม่มีเรื่องนี้เช่นกัน
+    </p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>ฉบับ</th><th>เพิ่มอะไร</th></tr></thead>
+        <tbody>
+          <tr><td class="name">จังหวัด (อบรม + เว็บ)</td><td>กล่องรับเรื่องมีส่วนร่วม · การรีเซ็ตรหัสผ่านสังกัดและขนส่ง · หน้าความปลอดภัยบัญชี</td></tr>
+          <tr><td class="name">สังกัด · คนขับ (อบรม)</td><td>กล่องรับเรื่อง เขียนตามสิ่งที่แต่ละบทบาทเห็นจริง</td></tr>
+          <tr><td class="name">ผู้ดูแลระบบ · โรงเรียน · สังกัด · ขนส่ง · คนขับ (เว็บ)</td><td>หัวข้อเดียวกันในฉบับที่เผยแพร่จริง</td></tr>
+          <tr><td class="name">ทุกฉบับที่พูดถึงรหัสผ่าน</td><td>เลิกเขียนกำกับว่าอย่าเชื่อหน้าจอ เพราะหน้าจอถูกแล้ว</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sec-note" style="margin-top:1.2rem">
+      <strong>ข้อความที่ต้องแก้เพราะไม่ตรงกับโค้ด</strong> คู่มือเจ็ดฉบับเขียนตรงกันว่าระบบบังคับลำดับขั้น ข้ามไม่ได้
+      ความจริงระบบบังคับข้อเดียว คือแจ้งผลกลับผู้เสนอทำได้ต่อเมื่อสถานะเป็นดำเนินการเสร็จแล้วเท่านั้น
+      นอกนั้นข้ามขั้นได้ เรื่องหนึ่งจึงปิดได้โดยไม่เคยผ่านขั้นรับเรื่องเลย แก้ทั้งเจ็ดฉบับให้ตรงกันแล้ว
+    </p>
+  </section>
+
+  <section>
+    <h2 class="sec">เอกสารที่แผนอ้างถึงแต่ไม่เคยมีไฟล์</h2>
+    <p class="sec-note">ทุกฉบับเว้นช่องที่เป็นการตัดสินไว้ว่าง และเขียนกำกับว่าห้ามใครกรอกแทนผู้มีอำนาจ</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>เอกสาร</th><th>คืออะไร</th></tr></thead>
+        <tbody>
+          <tr><td class="name">บันทึก deploy ย้อนหลัง 7 ก.ย.</td><td>วันนั้น deploy 14 รอบ มีบันทึกเพียงรอบเดียว คัดจากประวัติที่เซิร์ฟเวอร์เขียนเอง และระบุชัดว่าค่าใดไม่มี</td></tr>
+          <tr><td class="name">ร่างประเมินผลกระทบข้อมูลส่วนบุคคล</td><td>ตารางข้อมูลจริง 61 ตาราง ใครเข้าถึงอะไร และความเสี่ยงแปดข้อ เว้นช่องรอ DPO 12 จุด</td></tr>
+          <tr><td class="name">ผู้ดูแลและงบประมาณหลังส่งมอบ</td><td>รายการที่ต้องต่ออายุ ผู้อนุมัติงบ และระดับบริการที่ตกลง</td></tr>
+          <tr><td class="name">สารบัญการส่งมอบความรู้</td><td>ความรู้แต่ละด้านอยู่ไฟล์ไหน พร้อมรายการสิ่งที่ยังไม่มี</td></tr>
+          <tr><td class="name">รายงานคุณภาพข้อมูล</td><td>ข้อบกพร่อง 14 แบบที่ทำให้ระบบทำงานไม่ได้ ปลอดภัยพอจะรันกับระบบจริงเพราะทุกคำสั่งคืนแค่จำนวนนับ</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="sec">ตารางสิทธิ์ที่สร้างใหม่</h2>
+    <p class="sec-note">
+      ชุดเดิมสร้างไว้ตั้งแต่ 5 ก.ย. และมีไฟล์เส้นทาง 19 ไฟล์เปลี่ยนตั้งแต่นั้น
+      ชุด “เท่าที่ระบบจริงเปิด” คราวนี้ใช้สามสวิตช์ ไม่ใช่หนึ่งเหมือนเดิม เพราะเปิดเพิ่มไปเมื่อ 7 ก.ย.
+    </p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>ชุดสวิตช์</th><th class="num">เส้นทางเดิม</th><th class="num">เส้นทางใหม่</th><th class="num">ข้อบกพร่อง</th></tr></thead>
+        <tbody>
+          <tr><td class="name">ปิดทั้งหมด</td><td class="num">250</td><td class="num">252</td><td class="num">0</td></tr>
+          <tr><td class="name">เท่าที่ระบบจริงเปิด</td><td class="num">267</td><td class="num">274</td><td class="num">0</td></tr>
+          <tr><td class="name">เปิดทั้งหมด</td><td class="num">293</td><td class="num">295</td><td class="num">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sec-note" style="margin-top:1rem">การตรวจการบังคับขอบเขตการเขียนข้อมูลไม่พบช่องโหว่ทั้งสามชุด</p>
+  </section>
+
+  <section class="deploy">
+    <h2>ถ้าจะขึ้นระบบจริง</h2>
+    <p>
+      การเปลี่ยนแปลงของวันนี้ <strong>ไม่มี migration ไม่มีการเปลี่ยนสวิตช์ และไม่แตะฐานข้อมูล</strong>
+      จึงเป็นการปล่อยรุ่นแบบธรรมดา ลำดับเหมือนทุกครั้ง คือสำรองฐานข้อมูลและตรวจสอบไฟล์สำรองก่อน
+      แล้วรันสคริปต์ปล่อยรุ่น ตามด้วย build หน้าเว็บใหม่ แล้วเฝ้าดู 15 นาที
+    </p>
+    <p>
+      คำสั่ง ssh ของผู้ช่วยถูกตัวกรองบล็อก แม้เป็นการอ่านอย่างเดียว การปล่อยรุ่นจึงต้องให้ผู้ดูแลระบบรันเอง
+    </p>
+    <p>
+      <strong>สิ่งที่ผู้ใช้จะเห็นต่างจากเดิมทันที</strong> ข้อความความยาวรหัสผ่านถูกต้องทุกหน้า ·
+      ไทม์ไลน์ของเรื่องร้องเรียนมีวันที่ · หน้าสรุปภาพรวมการมีส่วนร่วมที่ยังไม่เคยมีใครเห็น ·
+      และหน้ารายงานวิจัยเลิกประกาศแนวโน้มที่ยังเทียบกันไม่ได้
+    </p>
+  </section>
+
+  <section class="human">
+    <h2>สิ่งที่ทำแทนไม่ได้ ต้องให้คนตัดสิน</h2>
+    <p>ไม่มีข้อไหนติดเรื่องโค้ด ทุกข้อรอคำตอบหรือลายเซ็น</p>
+    <ol>
+      <li><b>ตอบคำถามสามข้อต่อบทบาท เพื่อเปิดการกู้รหัสผ่านให้จังหวัด สังกัด และขนส่ง</b>
+        <span>กลไกพร้อมแล้ว หน้าจอพร้อมแล้ว รอเพียงคำตอบว่าบัญชีเป็นของบุคคลหรือหน่วยงาน ใครมีอำนาจผูก LINE และจะส่งมอบกันอย่างไรเมื่อเปลี่ยนตัวคน</span></li>
+      <li><b>ส่งใบแจ้งหกสังกัดว่าเขารีเซ็ตรหัสผ่านโรงเรียนเองได้</b>
+        <span>เอกสารเขียนเสร็จและขึ้นระบบไปตั้งแต่ 7 ก.ย. แต่ยังไม่มีใครส่งให้เขา นี่คือการกระทำเดียวที่ลดภาระผู้ดูแลระบบได้ทันทีโดยไม่ต้องแก้อะไรเลย</span></li>
+      <li><b>ความเห็นของผู้รับผิดชอบข้อมูลส่วนบุคคล ต่อการกู้รหัสผ่านด้วยลิงก์ LINE ด่านเดียว</b>
+        <span>ร่างประเมินผลกระทบเตรียมไว้แล้ว เว้นช่องความเห็นไว้ให้</span></li>
+      <li><b>ตัดสินว่าใครมีอำนาจบันทึกมติในเรื่องร้องเรียนแต่ละประเภท</b>
+        <span>ตอนนี้ผู้ที่เห็นเรื่องบันทึกมติในเรื่องของตัวเองได้ มีเทสต์บันทึกพฤติกรรมนี้ไว้พร้อมคำอธิบายว่าเป็นข้อบกพร่องที่รอการตัดสิน ไม่ใช่การออกแบบ</span></li>
+      <li><b>รับรองย้อนหลังการเปลี่ยนแปลงระบบจริง 17 รายการ</b>
+        <span>บันทึกครบแล้วทุกรายการ รวมถึง 13 รอบที่ไม่เคยมีบันทึกของตัวเอง เหลือเพียงการเลือกว่าจะรับรองบนหลักฐานเท่านี้ หรือให้ดึงไฟล์ผลรันรายรอบจากเซิร์ฟเวอร์มาเติมก่อน</span></li>
+      <li><b>ปิด Browser Insights ในแดชบอร์ดของ Cloudflare</b>
+        <span>ห้ามแก้ด้วยการขยายนโยบายความปลอดภัยของเว็บ</span></li>
+    </ol>
+  </section>
+
+  <footer>
+    รายงานนี้สรุปงานของวันที่ 8 กันยายน 2569 เท่านั้น · บันทึกฉบับเต็มอยู่ที่ <code>docs/ops/worklog-2026-09-08.md</code> ในคลังโค้ด ·
+    ตัวเลขทุกตัวมาจากการรันจริงในวันนี้ ไม่ได้คัดจากเอกสารเก่า
+  </footer>
+
+</div>

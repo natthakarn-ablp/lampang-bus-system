@@ -400,6 +400,344 @@ const AUDIT_ROWS_GENERIC = { data: AUDIT_ROWS, meta: { page: 1, per_page: 30, to
 // real API does (sendSuccess(res, rows, 'OK', result.meta)).
 const EMERGENCIES_PAGED = { data: EMERGENCIES, meta: { page: 1, per_page: 20, total: EMERGENCIES.length } };
 
+// ── เรื่องที่ต้องมีส่วนร่วม (participation cases) ─────────────────────────
+// เปิดใช้บน production 7 ก.ย. 2569 แต่ยังไม่เคยมีภาพในคู่มือเลยสักใบ
+//
+// รูปทรงข้อมูลลอกจาก API จริง ไม่ใช่จากหน้าจอ:
+//   - รายการ  = participation.routes.js GET /cases → sendSuccess(rows, meta)
+//               ฟิลด์ตามคอลัมน์ที่ SELECT ไว้เป๊ะ ๆ
+//   - รายเรื่อง = GET /cases/:id → { ...c.*, events }
+//               events ใช้ `occurred_at` ไม่ใช่ created_at (ตาราง events
+//               ไม่มีคอลัมน์ created_at เลย — migration 050)
+//   - สรุป     = GET /summary → summariseParticipation() ต้องครบทุก bucket
+//               ของทุกสถานะ/ประเภท/บทบาท ไม่งั้นการ์ดจะขึ้น 0 ปนกับ undefined
+//
+// ขอบเขตเป็นของจริงต่อบทบาท ไม่ใช่ชุดเดียวใช้ทุกคน เพราะภาพต้องไม่ขัดกับคู่มือ:
+// คนขับ "เห็นเฉพาะเรื่องที่ตัวเองยื่น" (scopeClause: c.initiated_by = ?) ถ้าภาพ
+// โชว์เรื่องของโรงเรียนปนมาด้วย ครูที่อ่านคู่มือจะเข้าใจสิทธิ์ผิดทันที
+// เช่นเดียวกับขนส่งที่เห็นเฉพาะ scope_type = 'TRANSPORT'
+//
+// ข้อมูลทั้งหมดสมมติ และตารางชุดนี้จงใจไม่เก็บข้อมูลส่วนบุคคลอยู่แล้ว —
+// ไม่มีชื่อเด็ก ไม่มีเบอร์โทร ไม่มีเลขบัตร ไม่มีรหัสนักเรียน ในทุกช่องข้อความ
+const P_NOTE = 'ตัวชี้วัดการมีส่วนร่วม แยกจาก operational KPI และไม่ใช่ผลการวิจัย';
+
+const pCase = (o) => ({
+  decision: null, decided_at: null, assigned_to: null, due_at: null,
+  completed_at: null, feedback_sent_at: null,
+  linked_entity_type: null, linked_entity_id: null,
+  updated_at: o.created_at, ...o,
+});
+
+// เรื่องที่ยัง "ไม่จบ" — ตัวกรองตั้งต้นของหน้าคือ "ที่ยังไม่จบ" (open=true)
+// ซึ่งตัด CLOSED/WITHDRAWN ออก ถ้า fixture ใส่เรื่องที่ปิดแล้วเข้ามาด้วย
+// ภาพจะขัดกับชิปที่ถูกไฮไลต์อยู่บนหน้าจอเดียวกัน
+const P_CASE_SAFETY_SCHOOL = pCase({
+  id: 9101, case_no: 'PC-20260907-4F2A10', case_type: 'SAFETY_CONCERN',
+  subject: 'จุดจอดรับนักเรียนหน้าโรงเรียนตัวอย่าง ก อยู่บนช่องจราจร',
+  scope_type: 'SCHOOL', scope_id: 'SCH0001', initiated_role: 'school',
+  status: 'ACKNOWLEDGED', created_at: '2026-09-07T01:15:00Z',
+  updated_at: '2026-09-07T04:05:00Z',
+});
+const P_CASE_POLICY_AFF = pCase({
+  id: 9102, case_no: 'PC-20260907-7C1B94', case_type: 'POLICY_PROPOSAL',
+  subject: 'เสนอให้กำหนดรอบตรวจสภาพรถรับส่งนักเรียนปีละสองครั้ง',
+  scope_type: 'AFFILIATION', scope_id: 'AFF001', initiated_role: 'affiliation',
+  status: 'IN_CONSULTATION', created_at: '2026-09-07T02:40:00Z',
+  updated_at: '2026-09-08T01:20:00Z',
+});
+const P_CASE_SERVICE_SCHOOL = pCase({
+  id: 9103, case_no: 'PC-20260907-B8E551', case_type: 'SERVICE_ISSUE',
+  subject: 'รอบเย็นออกช้ากว่ากำหนดต่อเนื่องสามสัปดาห์',
+  scope_type: 'SCHOOL', scope_id: 'SCH0002', initiated_role: 'driver',
+  status: 'DECIDED', decision: 'APPROVED', decided_at: '2026-09-08T03:10:00Z',
+  created_at: '2026-09-07T03:55:00Z', updated_at: '2026-09-08T03:10:00Z',
+});
+const P_CASE_DATA_TRANSPORT = pCase({
+  id: 9104, case_no: 'PC-20260907-D3A207', case_type: 'DATA_QUALITY',
+  subject: 'ทะเบียนรถในระบบสะกดไม่ตรงกับที่จดทะเบียนจริง',
+  scope_type: 'TRANSPORT', scope_id: null, initiated_role: 'transport',
+  status: 'ASSIGNED', decision: 'APPROVED', decided_at: '2026-09-08T01:35:00Z',
+  assigned_to: 6, created_at: '2026-09-07T06:20:00Z', updated_at: '2026-09-08T02:15:00Z',
+});
+const P_CASE_RESOURCE_PROV = pCase({
+  id: 9105, case_no: 'PC-20260908-91FC66', case_type: 'RESOURCE_REQUEST',
+  subject: 'ขอสนับสนุนเสื้อสะท้อนแสงสำหรับผู้ดูแลรถประจำภาคเรียน',
+  scope_type: 'PROVINCE', scope_id: null, initiated_role: 'province',
+  status: 'COMPLETED', decision: 'APPROVED', decided_at: '2026-09-08T02:00:00Z',
+  assigned_to: 2, completed_at: '2026-09-08T07:30:00Z',
+  created_at: '2026-09-08T00:45:00Z', updated_at: '2026-09-08T07:30:00Z',
+});
+const P_CASE_SAFETY_TRANSPORT = pCase({
+  id: 9106, case_no: 'PC-20260907-5A9D18', case_type: 'SAFETY_CONCERN',
+  subject: 'ขอเกณฑ์ตรวจเข็มขัดนิรภัยของรถสองแถวให้ชัดเจนกว่าเดิม',
+  scope_type: 'TRANSPORT', scope_id: null, initiated_role: 'school',
+  status: 'SUBMITTED', created_at: '2026-09-07T07:45:00Z',
+});
+const P_CASE_SERVICE_SCH0001 = pCase({
+  id: 9107, case_no: 'PC-20260908-2E77A5', case_type: 'SERVICE_ISSUE',
+  subject: 'ขอเพิ่มรอบรับ-ส่งสำหรับนักเรียนชั้นอนุบาล',
+  scope_type: 'SCHOOL', scope_id: 'SCH0001', initiated_role: 'school',
+  status: 'SUBMITTED', created_at: '2026-09-08T02:30:00Z',
+});
+const P_CASE_RESOURCE_AFF = pCase({
+  id: 9108, case_no: 'PC-20260908-3C6E88', case_type: 'RESOURCE_REQUEST',
+  subject: 'ขอสนับสนุนงบประมาณอบรมคนขับรถรับส่งนักเรียนประจำปี',
+  scope_type: 'AFFILIATION', scope_id: 'AFF001', initiated_role: 'affiliation',
+  status: 'SUBMITTED', created_at: '2026-09-08T03:05:00Z',
+});
+// สองเรื่องนี้คนขับ driver01 เป็นผู้ยื่นเอง — เป็นทั้งหมดที่บัญชีคนขับเห็นได้
+const P_CASE_DRIVER_SAFETY = pCase({
+  id: 9111, case_no: 'PC-20260907-6D3E02', case_type: 'SAFETY_CONCERN',
+  subject: 'จุดรับตรงปากซอยไม่มีที่ให้เด็กยืนรอ ต้องยืนบนไหล่ทาง',
+  scope_type: 'SCHOOL', scope_id: 'SCH0001', initiated_role: 'driver',
+  status: 'ACKNOWLEDGED', created_at: '2026-09-07T00:30:00Z',
+  updated_at: '2026-09-07T04:40:00Z',
+});
+const P_CASE_DRIVER_ROUTE = pCase({
+  id: 9112, case_no: 'PC-20260908-A0F7B9', case_type: 'SERVICE_ISSUE',
+  subject: 'เส้นทางที่กำหนดมีช่วงถนนแคบ รถสวนกันไม่ได้ในชั่วโมงเร่งด่วน',
+  scope_type: 'SCHOOL', scope_id: 'SCH0001', initiated_role: 'driver',
+  status: 'DECIDED', decision: 'DEFERRED', decided_at: '2026-09-08T04:15:00Z',
+  created_at: '2026-09-08T00:20:00Z', updated_at: '2026-09-08T04:15:00Z',
+});
+
+// เรื่องที่เดินครบวง — ยื่น → รับเรื่อง → มีมติพร้อมเหตุผล → มอบหมาย →
+// ดำเนินการเสร็จ → แจ้งผลกลับผู้เสนอ คือลำดับที่คู่มือทุกฉบับอธิบายไว้
+// ภาพของหน้ารายเรื่องจึงต้องเห็นครบทั้งหกขั้น ไม่ใช่เรื่องที่เพิ่งยื่น
+const P_CASE_CLOSED_LOOP = pCase({
+  id: 9001, case_no: 'PC-20260907-C4D5E6', case_type: 'SAFETY_CONCERN',
+  subject: 'ขอย้ายจุดรับนักเรียนออกจากปากทางโค้งถนนสายตัวอย่าง',
+  body: 'จุดรับปัจจุบันอยู่ปากทางโค้ง รถที่วิ่งสวนมามองไม่เห็นเด็กที่ยืนรอ '
+      + 'ขอให้ย้ายไปหน้าศาลาประชาคมซึ่งห่างออกไปประมาณ 80 เมตรและมีไหล่ทางกว้างพอ',
+  scope_type: 'SCHOOL', scope_id: 'SCH0001',
+  initiated_by: 4, initiated_role: 'school',
+  status: 'CLOSED',
+  decision: 'APPROVED',
+  decision_rationale: 'เห็นชอบให้ย้ายจุดรับไปหน้าศาลาประชาคม เพราะระยะมองเห็นของรถที่วิ่งสวนมายาวกว่าเดิมกว่าสองเท่า และมีไหล่ทางให้เด็กยืนรอพ้นผิวจราจร',
+  decided_by: 2, decided_at: '2026-09-07T07:40:00Z',
+  assigned_to: 6,
+  completed_at: '2026-09-08T06:20:00Z', feedback_sent_at: '2026-09-08T08:05:00Z',
+  created_at: '2026-09-07T01:10:00Z', updated_at: '2026-09-08T08:05:00Z',
+  events: [
+    { id: 5101, event_type: 'SUBMITTED',    actor_role: 'school',
+      note: 'จุดรับปัจจุบันอยู่ปากทางโค้ง เด็กต้องยืนรอบนผิวจราจร ขอให้พิจารณาย้ายจุดรับ',
+      evidence_ref: null, occurred_at: '2026-09-07T01:10:00Z' },
+    { id: 5102, event_type: 'ACKNOWLEDGED', actor_role: 'province',
+      note: 'รับเรื่องไว้พิจารณา และนัดลงพื้นที่ดูจุดจริงร่วมกับขนส่งจังหวัดในวันเดียวกัน',
+      evidence_ref: null, occurred_at: '2026-09-07T03:25:00Z' },
+    { id: 5103, event_type: 'DECIDED',      actor_role: 'province',
+      note: 'เห็นชอบให้ย้ายจุดรับไปหน้าศาลาประชาคม เพราะระยะมองเห็นของรถที่วิ่งสวนมายาวกว่าเดิมกว่าสองเท่า และมีไหล่ทางให้เด็กยืนรอพ้นผิวจราจร',
+      evidence_ref: 'บันทึกที่ ลป 0001/2569', occurred_at: '2026-09-07T07:40:00Z' },
+    { id: 5104, event_type: 'ASSIGNED',     actor_role: 'province',
+      note: 'มอบหมายขนส่งจังหวัดติดป้ายจุดรับใหม่ และให้โรงเรียนแจ้งคนขับที่ใช้เส้นทางนี้',
+      evidence_ref: null, occurred_at: '2026-09-08T01:50:00Z' },
+    { id: 5105, event_type: 'COMPLETED',    actor_role: 'transport',
+      note: 'ติดป้ายจุดรับใหม่หน้าศาลาประชาคมเรียบร้อย และแจ้งคนขับที่ใช้เส้นทางนี้ครบทุกคันแล้ว',
+      evidence_ref: null, occurred_at: '2026-09-08T06:20:00Z' },
+    { id: 5106, event_type: 'FEEDBACK_SENT', actor_role: 'province',
+      note: 'แจ้งโรงเรียนผู้เสนอว่าย้ายจุดรับแล้วตั้งแต่รอบเย็นวันนี้ พร้อมส่งภาพป้ายจุดรับใหม่ให้ตรวจสอบ',
+      evidence_ref: 'บันทึกที่ ลป 0002/2569', occurred_at: '2026-09-08T08:05:00Z' },
+  ],
+});
+
+/** เรื่องที่ยังเปิดอยู่ ใช้ถ่ายภาพ "ช่องบันทึกเหตุการณ์ใหม่" ซึ่งเรื่องที่ปิดแล้วไม่มี */
+const P_DETAIL_OPEN = pCase({
+  ...P_CASE_SAFETY_SCHOOL,
+  body: 'รถที่มารับต้องจอดคร่อมช่องจราจรเพราะไม่มีช่องจอด เด็กจึงต้องเดินอ้อมท้ายรถออกไปบนถนน '
+      + 'ขอให้พิจารณาตีเส้นช่องจอดชั่วคราวหน้าโรงเรียนในช่วงเวลารับ-ส่ง',
+  initiated_by: 4,
+  events: [
+    { id: 5201, event_type: 'SUBMITTED',    actor_role: 'school',
+      note: 'รถต้องจอดคร่อมช่องจราจร เด็กต้องเดินอ้อมท้ายรถออกไปบนถนน ขอให้พิจารณาตีเส้นช่องจอดชั่วคราว',
+      evidence_ref: null, occurred_at: '2026-09-07T01:15:00Z' },
+    { id: 5202, event_type: 'ACKNOWLEDGED', actor_role: 'province',
+      note: 'รับเรื่องแล้ว จะประสานเทศบาลเรื่องการตีเส้นช่องจอดในสัปดาห์นี้',
+      evidence_ref: null, occurred_at: '2026-09-07T04:05:00Z' },
+  ],
+});
+
+const P_DETAIL_TRANSPORT = pCase({
+  ...P_CASE_DATA_TRANSPORT,
+  body: 'ทะเบียนรถบางคันในระบบสะกดต่างจากที่จดทะเบียนจริง ทำให้ค้นหาไม่เจอตอนตรวจสภาพ '
+      + 'ขอให้กำหนดผู้รับผิดชอบแก้ให้ตรงกันทั้งชุด',
+  initiated_by: 6,
+  events: [
+    { id: 5301, event_type: 'SUBMITTED',    actor_role: 'transport',
+      note: 'ทะเบียนรถบางคันสะกดไม่ตรงกับที่จดทะเบียนจริง ทำให้ค้นหาไม่เจอตอนตรวจสภาพ',
+      evidence_ref: null, occurred_at: '2026-09-07T06:20:00Z' },
+    { id: 5302, event_type: 'ACKNOWLEDGED', actor_role: 'province',
+      note: 'รับเรื่องแล้ว ขอให้ขนส่งรวบรวมรายการทะเบียนที่ไม่ตรงส่งมาก่อน',
+      evidence_ref: null, occurred_at: '2026-09-07T08:10:00Z' },
+    { id: 5303, event_type: 'DECIDED',      actor_role: 'province',
+      note: 'เห็นชอบให้แก้ทะเบียนให้ตรงกับเอกสารจดทะเบียน โดยยึดเอกสารเป็นหลักเสมอ และบันทึกการแก้ไว้ในประวัติการแก้ไขทุกครั้ง',
+      evidence_ref: 'บันทึกที่ ลป 0003/2569', occurred_at: '2026-09-08T01:35:00Z' },
+    { id: 5304, event_type: 'ASSIGNED',     actor_role: 'province',
+      note: 'มอบหมายเจ้าหน้าที่ขนส่งจังหวัดตรวจสอบและแก้ทะเบียนให้ครบภายในภาคเรียนนี้',
+      evidence_ref: null, occurred_at: '2026-09-08T02:15:00Z' },
+  ],
+});
+
+const P_DETAIL_DRIVER = pCase({
+  ...P_CASE_DRIVER_SAFETY,
+  body: 'ปากซอยที่รับเด็กไม่มีทางเท้า เด็กต้องยืนรอบนไหล่ทางที่รถมอเตอร์ไซค์ใช้วิ่ง '
+      + 'ขอให้ย้ายจุดรับเข้าไปในซอยประมาณ 20 เมตร ซึ่งมีลานหน้าวัดให้ยืนรอได้',
+  initiated_by: 1,
+  events: [
+    { id: 5401, event_type: 'SUBMITTED',    actor_role: 'driver',
+      note: 'ปากซอยไม่มีทางเท้า เด็กต้องยืนรอบนไหล่ทางที่รถมอเตอร์ไซค์ใช้วิ่ง ขอให้ย้ายจุดรับเข้าไปในซอย',
+      evidence_ref: null, occurred_at: '2026-09-07T00:30:00Z' },
+    { id: 5402, event_type: 'ACKNOWLEDGED', actor_role: 'school',
+      note: 'โรงเรียนรับเรื่องแล้ว จะสำรวจลานหน้าวัดว่าใช้เป็นจุดรับได้หรือไม่',
+      evidence_ref: null, occurred_at: '2026-09-07T04:40:00Z' },
+  ],
+});
+
+const pSummary = (o) => ({
+  by_status: { SUBMITTED: 0, ACKNOWLEDGED: 0, IN_CONSULTATION: 0, DECIDED: 0,
+    ASSIGNED: 0, COMPLETED: 0, CLOSED: 0, WITHDRAWN: 0 },
+  by_type: { POLICY_PROPOSAL: 0, SERVICE_ISSUE: 0, SAFETY_CONCERN: 0,
+    DATA_QUALITY: 0, RESOURCE_REQUEST: 0, OTHER: 0 },
+  by_initiator_role: { driver: 0, school: 0, affiliation: 0, province: 0,
+    transport: 0, admin: 0, parent: 0 },
+  // due_at ว่างทุกแถวบน production เพราะไม่มีหน้าจอไหนกรอกกำหนดเสร็จได้
+  // หน้าสรุปจึงไม่แสดงตัวเลขนี้และบอกตรง ๆ ว่ายังวัดไม่ได้ — fixture ต้องเป็น 0
+  overdue: 0,
+  note: P_NOTE,
+  ...o,
+});
+
+// ตัวเลขทุกชุดผูกกับรายการของบทบาทนั้นจริง ๆ ไม่ได้สุ่มมา:
+//   - ผลรวมของ by_status = total และของ by_type = total และของ by_initiator_role = total
+//   - จำนวนสถานะที่ "ยังไม่จบ" (ทุกสถานะยกเว้น CLOSED/WITHDRAWN) = จำนวนแถวในรายการ
+//     เพราะหน้ารายการเปิดที่ตัวกรอง "ที่ยังไม่จบ" ภาพสองใบจึงบวกกันได้ลงตัว
+//   - closed_feedback_loop = จำนวน CLOSED เป๊ะ ๆ เพราะสถานะ CLOSED มาจาก
+//     เหตุการณ์ FEEDBACK_SENT ทางเดียว (EVENT_RESULT_STATUS ใน service)
+const P_SUMMARY_ALL = pSummary({
+  total: 24,
+  by_status: { SUBMITTED: 3, ACKNOWLEDGED: 1, IN_CONSULTATION: 1, DECIDED: 1,
+    ASSIGNED: 1, COMPLETED: 1, CLOSED: 14, WITHDRAWN: 2 },
+  by_type: { POLICY_PROPOSAL: 4, SERVICE_ISSUE: 7, SAFETY_CONCERN: 6,
+    DATA_QUALITY: 3, RESOURCE_REQUEST: 3, OTHER: 1 },
+  by_initiator_role: { driver: 5, school: 9, affiliation: 4, province: 3,
+    transport: 2, admin: 1, parent: 0 },
+  closed_feedback_loop: 14, closed_feedback_loop_pct: 58.33,
+  decided_with_rationale: 12,
+});
+const P_SUMMARY_AFFILIATION = pSummary({
+  total: 9,
+  by_status: { SUBMITTED: 2, ACKNOWLEDGED: 2, IN_CONSULTATION: 1, DECIDED: 0,
+    ASSIGNED: 0, COMPLETED: 0, CLOSED: 4, WITHDRAWN: 0 },
+  by_type: { POLICY_PROPOSAL: 2, SERVICE_ISSUE: 3, SAFETY_CONCERN: 3,
+    DATA_QUALITY: 0, RESOURCE_REQUEST: 1, OTHER: 0 },
+  by_initiator_role: { driver: 2, school: 4, affiliation: 3, province: 0,
+    transport: 0, admin: 0, parent: 0 },
+  closed_feedback_loop: 4, closed_feedback_loop_pct: 44.44,
+  decided_with_rationale: 4,
+});
+const P_SUMMARY_SCHOOL = pSummary({
+  total: 6,
+  by_status: { SUBMITTED: 1, ACKNOWLEDGED: 2, IN_CONSULTATION: 0, DECIDED: 0,
+    ASSIGNED: 0, COMPLETED: 0, CLOSED: 3, WITHDRAWN: 0 },
+  by_type: { POLICY_PROPOSAL: 1, SERVICE_ISSUE: 2, SAFETY_CONCERN: 3,
+    DATA_QUALITY: 0, RESOURCE_REQUEST: 0, OTHER: 0 },
+  by_initiator_role: { driver: 2, school: 4, affiliation: 0, province: 0,
+    transport: 0, admin: 0, parent: 0 },
+  closed_feedback_loop: 3, closed_feedback_loop_pct: 50,
+  decided_with_rationale: 3,
+});
+const P_SUMMARY_TRANSPORT = pSummary({
+  total: 5,
+  by_status: { SUBMITTED: 1, ACKNOWLEDGED: 0, IN_CONSULTATION: 0, DECIDED: 0,
+    ASSIGNED: 1, COMPLETED: 0, CLOSED: 3, WITHDRAWN: 0 },
+  by_type: { POLICY_PROPOSAL: 1, SERVICE_ISSUE: 0, SAFETY_CONCERN: 2,
+    DATA_QUALITY: 2, RESOURCE_REQUEST: 0, OTHER: 0 },
+  by_initiator_role: { driver: 1, school: 2, affiliation: 0, province: 0,
+    transport: 2, admin: 0, parent: 0 },
+  closed_feedback_loop: 3, closed_feedback_loop_pct: 60,
+  decided_with_rationale: 3,
+});
+const P_SUMMARY_DRIVER = pSummary({
+  total: 2,
+  by_status: { SUBMITTED: 0, ACKNOWLEDGED: 1, IN_CONSULTATION: 0, DECIDED: 1,
+    ASSIGNED: 0, COMPLETED: 0, CLOSED: 0, WITHDRAWN: 0 },
+  by_type: { POLICY_PROPOSAL: 0, SERVICE_ISSUE: 1, SAFETY_CONCERN: 1,
+    DATA_QUALITY: 0, RESOURCE_REQUEST: 0, OTHER: 0 },
+  by_initiator_role: { driver: 2, school: 0, affiliation: 0, province: 0,
+    transport: 0, admin: 0, parent: 0 },
+  closed_feedback_loop: 0, closed_feedback_loop_pct: 0,
+  decided_with_rationale: 1,
+});
+
+/**
+ * fixture ของ participation แยกตามบทบาท — คีย์คือ role ของ token
+ *
+ * ต้องแยกตามบทบาทจริง ๆ ไม่ใช่ชุดเดียวใช้ทุกคน เพราะ scopeClause() ใน
+ * participation.routes.js ตัดสิทธิ์ที่ SQL: คนขับเห็นเฉพาะ c.initiated_by = ตน
+ * ขนส่งเห็นเฉพาะ scope_type='TRANSPORT' โรงเรียนเห็นเฉพาะโรงเรียนตน สังกัดเห็น
+ * ของตน+โรงเรียนในสังกัด ส่วนจังหวัดกับ admin เห็นทั้งจังหวัด
+ * `total` ของรายการคือจำนวนเรื่อง "ที่ยังไม่จบ" ตามตัวกรองตั้งต้นของหน้า
+ */
+const PARTICIPATION = {
+  province: {
+    // เรียงใหม่ไปเก่าเหมือน ORDER BY c.created_at DESC ของ route จริง
+    rows: [P_CASE_RESOURCE_AFF, P_CASE_SERVICE_SCH0001, P_CASE_RESOURCE_PROV,
+      P_CASE_SAFETY_TRANSPORT, P_CASE_DATA_TRANSPORT, P_CASE_SERVICE_SCHOOL,
+      P_CASE_POLICY_AFF, P_CASE_SAFETY_SCHOOL],
+    details: { 9001: P_CASE_CLOSED_LOOP, 9101: P_DETAIL_OPEN, 9104: P_DETAIL_TRANSPORT },
+    summary: P_SUMMARY_ALL,
+  },
+  admin: {
+    // เรียงใหม่ไปเก่าเหมือน ORDER BY c.created_at DESC ของ route จริง
+    rows: [P_CASE_RESOURCE_AFF, P_CASE_SERVICE_SCH0001, P_CASE_RESOURCE_PROV,
+      P_CASE_SAFETY_TRANSPORT, P_CASE_DATA_TRANSPORT, P_CASE_SERVICE_SCHOOL,
+      P_CASE_POLICY_AFF, P_CASE_SAFETY_SCHOOL],
+    details: { 9001: P_CASE_CLOSED_LOOP, 9101: P_DETAIL_OPEN, 9104: P_DETAIL_TRANSPORT },
+    summary: P_SUMMARY_ALL,
+  },
+  affiliation: {
+    rows: [P_CASE_RESOURCE_AFF, P_CASE_SERVICE_SCH0001, P_CASE_POLICY_AFF,
+      P_CASE_SAFETY_SCHOOL, P_CASE_DRIVER_SAFETY],
+    details: { 9001: P_CASE_CLOSED_LOOP, 9101: P_DETAIL_OPEN, 9111: P_DETAIL_DRIVER },
+    summary: P_SUMMARY_AFFILIATION,
+  },
+  school: {
+    // เรื่องที่คนขับยื่นในขอบเขตโรงเรียนนี้ก็อยู่ในรายการของโรงเรียนด้วย —
+    // scopeClause ของโรงเรียนตัดที่ scope_id ไม่ได้ตัดที่ว่าใครเป็นผู้ยื่น
+    rows: [P_CASE_SERVICE_SCH0001, P_CASE_SAFETY_SCHOOL, P_CASE_DRIVER_SAFETY],
+    details: { 9001: P_CASE_CLOSED_LOOP, 9101: P_DETAIL_OPEN, 9111: P_DETAIL_DRIVER },
+    summary: P_SUMMARY_SCHOOL,
+  },
+  transport: {
+    rows: [P_CASE_SAFETY_TRANSPORT, P_CASE_DATA_TRANSPORT],
+    details: { 9104: P_DETAIL_TRANSPORT },
+    summary: P_SUMMARY_TRANSPORT,
+  },
+  driver: {
+    // เห็นเฉพาะสองเรื่องที่ตัวเองยื่น ไม่มีเรื่องของโรงเรียนหรือของคนขับคนอื่น
+    rows: [P_CASE_DRIVER_ROUTE, P_CASE_DRIVER_SAFETY],
+    details: { 9111: P_DETAIL_DRIVER },
+    summary: P_SUMMARY_DRIVER,
+  },
+};
+
+/** ตอบ /api/participation/** ตามบทบาทของ token — คืน null ถ้าไม่ใช่เส้นทางนี้ */
+function participationMock(pathname, user) {
+  const set = PARTICIPATION[user?.role];
+  if (!set) return null;
+  if (pathname === '/api/participation/cases') {
+    return { data: set.rows, meta: { page: 1, per_page: 20, total: set.rows.length } };
+  }
+  if (pathname === '/api/participation/summary') return { data: set.summary };
+  const m = pathname.match(/^\/api\/participation\/cases\/(\d+)$/);
+  if (m) {
+    const row = set.details[m[1]];
+    // ไม่มีในขอบเขต = 404 เหมือนของจริง ไม่ใช่ 200 ที่ data ว่าง
+    // (routes: 'ไม่พบเรื่องที่ต้องการ') ถ้าตอบ 200 ว่าง หน้าจะพังแบบเงียบ ๆ
+    return row ? { data: row } : { __status: 404, message: 'ไม่พบเรื่องที่ต้องการ' };
+  }
+  return null;
+}
+
 const COMMON = {
   '/api/driver/roster':         { data: DRIVER_ROSTER },
   '/api/driver/pretrip-status': { data: { done: false } },
@@ -637,13 +975,18 @@ const COMMON = {
   '/api/school/pickup-vehicles': { data: PICKUP_VEHICLES },
 };
 
-function mockFor(url, scenario) {
+function mockFor(url, scenario, user) {
   const set = SCENARIOS[scenario] || SCENARIOS.normal;
   try {
     const u = new URL(url);
     if (u.pathname === '/api/admin/users' && u.searchParams.get('is_active') === 'false') {
       return set['/api/admin/users?is_active=false'] ?? null;
     }
+    // participation ตอบตามบทบาทของ token ไม่ใช่ตาม path อย่างเดียว เพราะ API จริง
+    // ตัดขอบเขตด้วย scopeClause() จาก token — ถ้า fixture ตอบชุดเดียวให้ทุกบทบาท
+    // ภาพของคนขับจะโชว์เรื่องที่คนขับเห็นไม่ได้จริง
+    const part = participationMock(u.pathname, user);
+    if (part) return part;
     const exact = set[u.pathname] ?? COMMON[u.pathname];
     if (exact) return exact;
     // A few endpoints carry an id in the path.
@@ -714,7 +1057,7 @@ async function newPage(browser, user, viewport, scenario) {
       return route.fulfill({ status: 500, contentType: 'application/json',
         body: JSON.stringify({ success: false, message: 'ระบบขัดข้องชั่วคราว' }) });
     }
-    const m = mockFor(route.request().url(), scenario);
+    const m = mockFor(route.request().url(), scenario, user);
     // A fixture may pin a non-2xx status — the only way to exercise the paths
     // that branch on *why* a call failed rather than that it failed.
     if (m?.__status) {

@@ -6,7 +6,7 @@ import api from '../api/axios';
 import ErrorState from '../components/ErrorState';
 import { FormField } from '../components/ui';
 import { ROLE_HOME } from '../App';
-import { PASSWORD_MIN_LENGTH, PASSWORD_TOO_SHORT } from '../utils/passwordPolicy';
+import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../utils/passwordPolicy';
 
 export default function ChangePassword() {
   const { user, updateUser } = useAuth();

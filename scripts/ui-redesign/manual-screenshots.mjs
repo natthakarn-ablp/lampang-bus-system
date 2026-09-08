@@ -88,6 +88,8 @@ const SHOTS = [
   { id: 'admin/14-evaluation', url: '/admin/evaluation', user: 'admin', ...DESKTOP },
   { id: 'admin/14-scope', url: '/admin/scope', user: 'admin', ...DESKTOP },
   { id: 'admin/15-executive', url: '/admin/executive-print', user: 'admin', ...DESKTOP },
+  { id: 'admin/16-participation-cases', url: '/participation', user: 'admin', ...DESKTOP, fit: true },
+  { id: 'admin/17-participation-summary', url: '/participation/summary', user: 'admin', ...DESKTOP, fit: true },
 
   // ── province ──
   { id: 'province/01-dashboard', url: '/province', user: 'province', ...DESKTOP },
@@ -102,6 +104,18 @@ const SHOTS = [
   { id: 'province/10-emergencies', url: '/province/emergencies', user: 'province', ...DESKTOP },
   { id: 'province/11-audit-log', url: '/province/audit-log', user: 'province', ...DESKTOP },
 
+  /* ── เรื่องที่ต้องมีส่วนร่วม ────────────────────────────────────────────
+     เปิดใช้บน production 7 ก.ย. 2569 คู่มืออธิบายไว้ครบทุกบทบาทแล้ว แต่ไม่มี
+     ภาพสักใบ จนบางฉบับต้องเขียนบอกผู้อ่านตรง ๆ ว่า "ยังไม่มีภาพหน้าจอ"
+
+     ทุกภาพในกลุ่มนี้ตั้ง fit: true เพราะเนื้อหายาวเกินจอ 900px — สิ่งที่ต้อง
+     เห็นในหน้ารายเรื่องคือ "ลำดับเหตุการณ์" ครบทั้งหกขั้น (ยื่น → รับเรื่อง →
+     มีมติพร้อมเหตุผล → มอบหมาย → ดำเนินการเสร็จ → แจ้งผลกลับ) ถ้าภาพตัดขั้น
+     ท้าย ๆ ทิ้ง ภาพจะพิสูจน์การปิดวงซึ่งเป็นหัวใจของฟีเจอร์นี้ไม่ได้เลย */
+  { id: 'province/12-participation-cases', url: '/participation', user: 'province', ...DESKTOP, fit: true },
+  { id: 'province/13-participation-case', url: '/participation/cases/9001', user: 'province', ...DESKTOP, fit: true },
+  { id: 'province/14-participation-summary', url: '/participation/summary', user: 'province', ...DESKTOP, fit: true },
+
   // ── affiliation ──
   { id: 'affiliation/01-dashboard', url: '/affiliation', user: 'affiliation', ...DESKTOP },
   { id: 'affiliation/02-schools', url: '/affiliation/schools', user: 'affiliation', ...DESKTOP },
@@ -113,6 +127,8 @@ const SHOTS = [
   { id: 'affiliation/08-pickup-map', url: '/affiliation/pickup-map', user: 'affiliation', ...DESKTOP },
   { id: 'affiliation/09-emergencies', url: '/affiliation/emergencies', user: 'affiliation', ...DESKTOP },
   { id: 'affiliation/10-audit-log', url: '/affiliation/audit-log', user: 'affiliation', ...DESKTOP },
+  { id: 'affiliation/11-participation-cases', url: '/participation', user: 'affiliation', ...DESKTOP, fit: true },
+  { id: 'affiliation/12-participation-summary', url: '/participation/summary', user: 'affiliation', ...DESKTOP, fit: true },
 
   // ── school ──
   { id: 'school/01-dashboard', url: '/school', user: 'school', ...DESKTOP },
@@ -130,6 +146,11 @@ const SHOTS = [
   { id: 'school/13-reports-monthly', url: '/reports/monthly', user: 'school', ...DESKTOP },
   { id: 'school/14-reports-summary', url: '/reports/summary', user: 'school', ...DESKTOP },
   { id: 'school/18-registration-review', url: '/school/registration-review', user: 'school', ...DESKTOP },
+  { id: 'school/19-participation-cases', url: '/participation', user: 'school', ...DESKTOP, fit: true },
+  // เรื่องที่ยังไม่ปิด — เป็นสถานะเดียวที่หน้าจะแสดง "บันทึกเหตุการณ์ใหม่"
+  // เรื่องที่ปิดแล้วจะขึ้นแถบ "เรื่องนี้ปิดแล้ว" แทนฟอร์ม (ParticipationCaseDetail.jsx)
+  { id: 'school/20-participation-case', url: '/participation/cases/9101', user: 'school', ...DESKTOP, fit: true },
+  { id: 'school/21-participation-new', url: '/participation/new', user: 'school', ...DESKTOP, fit: true },
   // โมดัลบนหน้ารายชื่อนักเรียน — ต้องกดเปิดก่อนถึงจะเห็น
   { id: 'school/04-import-preview', url: '/school/students', user: 'school', ...DESKTOP,
     act: async (p) => { await act.click(p, 'button:has-text("นำเข้า")', 900); } },
@@ -148,6 +169,9 @@ const SHOTS = [
   { id: 'transport/02-verification', url: '/transport/verification', user: 'transport', ...DESKTOP },
   { id: 'transport/03-inspections', url: '/transport/inspections', user: 'transport', ...DESKTOP },
   { id: 'transport/04-pickup-map', url: '/transport/pickup-map', user: 'transport', ...DESKTOP },
+  { id: 'transport/05-participation-cases', url: '/participation', user: 'transport', ...DESKTOP, fit: true },
+  { id: 'transport/06-participation-case', url: '/participation/cases/9104', user: 'transport', ...DESKTOP, fit: true },
+  { id: 'transport/07-participation-summary', url: '/participation/summary', user: 'transport', ...DESKTOP, fit: true },
 
   // ── driver (มือถือ) ──
   // ชื่อไฟล์ต้องตรงกับที่คู่มืออ้าง ไม่ใช่ลำดับหน้าในเมนู — เลข 04/05/06
@@ -158,6 +182,12 @@ const SHOTS = [
   { id: 'driver/04-pickup-map', url: '/driver/pickup-map', user: 'driver', ...MOBILE },
   { id: 'driver/05-emergency', url: '/driver/emergency', user: 'driver', ...MOBILE },
   { id: 'driver/06-profile', url: '/driver/profile', user: 'driver', ...MOBILE },
+  /* คนขับเห็นเฉพาะเรื่องที่ตัวเองยื่น (participation.routes.js scopeClause:
+     c.initiated_by = ?) fixture ของบทบาทนี้จึงมีแค่สองเรื่องที่ driver01 ยื่นเอง
+     ถ้าภาพโชว์เรื่องของโรงเรียนปนมา ภาพจะขัดกับคู่มือคนขับข้อ 8 ทันที */
+  { id: 'driver/07-participation-cases', url: '/participation', user: 'driver', ...MOBILE, fit: true },
+  { id: 'driver/08-participation-new', url: '/participation/new', user: 'driver', ...MOBILE, fit: true },
+  { id: 'driver/09-participation-case', url: '/participation/cases/9111', user: 'driver', ...MOBILE, fit: true },
   // หน้าเช็กชื่ออยู่หลังด่านตรวจสภาพรถ ซึ่งเป็นโมดัลที่ปิดไม่ได้ —
   // ต้องตอบแบบสอบถามให้ผ่านก่อน ไม่งั้นได้ภาพโมดัลซ้ำกับ 01-dashboard
   { id: 'driver/01c-checkin-top', url: '/driver', user: 'driver', ...MOBILE, act: passPretrip },
@@ -252,6 +282,28 @@ for (const shot of wanted) {
     // ซึ่งเคยหลุดเข้าคู่มือถึง 5 ใบ เพราะสคริปต์ถือว่า "ถ่ายได้" = สำเร็จ
     const crashed = await page.locator('text=ระบบพบปัญหาที่ไม่คาดคิด').count();
     if (crashed) throw new Error('ErrorBoundary: หน้าล้มเหลว (fixture ไม่ตรง shape ของ API?)');
+    // fit: ขยายความสูงของจอให้พอดีเนื้อหา ก่อนกดชัตเตอร์
+    //
+    // ใช้ fullPage: true ไม่ได้ เพราะ Layout.jsx เป็น `h-screen overflow-hidden`
+    // แล้วให้ <main> เป็นตัวเลื่อน (Layout.jsx:39,64) — document จึงสูงเท่าจอเสมอ
+    // Playwright ก็เลยคืนภาพขนาดจอเป๊ะ ๆ เหมือนเดิม ส่วนเนื้อหาที่เลยขอบล่างไป
+    // ถูกตัดทิ้งเงียบ ๆ วิธีเดียวที่ได้ทั้งหน้าคือขยายจอให้สูงพอแล้วค่อยถ่าย
+    //
+    // ค่าเริ่มต้นไม่ตั้ง fit ไว้ ภาพเดิมทุกใบจึงยังเป็น 1440x900 / 390x844 เท่าเดิม
+    if (shot.fit) {
+      const need = await page.evaluate(() => {
+        const m = document.querySelector('main');
+        if (!m) return document.documentElement.scrollHeight;
+        // ส่วนที่ไม่ได้เลื่อน (แถบบน) ต้องบวกกลับ ไม่งั้นจอที่ขยายจะยังเตี้ยไป
+        return Math.ceil(m.scrollHeight + (window.innerHeight - m.clientHeight));
+      });
+      // เพดานกันภาพยาวเป็นกิโล ถ้าชนเพดานแปลว่าเนื้อหายาวผิดปกติ ควรไปดูหน้านั้น
+      const height = Math.min(Math.max(need, shot.viewport.height), 3000);
+      if (height > shot.viewport.height) {
+        await page.setViewportSize({ width: shot.viewport.width, height });
+        await page.waitForTimeout(500);
+      }
+    }
     await page.screenshot({ path: join(OUT, `${shot.id}.png`) });
     ok++;
     const note = errors.length ? `  (console ${errors.length})` : '';

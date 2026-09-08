@@ -6,6 +6,7 @@ import api from '../api/axios';
 import ErrorState from '../components/ErrorState';
 import { FormField } from '../components/ui';
 import { ROLE_HOME } from '../App';
+import { PASSWORD_MIN_LENGTH, PASSWORD_TOO_SHORT } from '../utils/passwordPolicy';
 
 export default function ChangePassword() {
   const { user, updateUser } = useAuth();
@@ -20,8 +21,8 @@ export default function ChangePassword() {
     e.preventDefault();
     setError('');
 
-    if (form.new_password.length < 8) {
-      setError('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร');
+    if (form.new_password.length < PASSWORD_MIN_LENGTH) {
+      setError(PASSWORD_TOO_SHORT);
       return;
     }
     if (form.new_password !== form.confirm) {
@@ -77,9 +78,9 @@ export default function ChangePassword() {
             label="รหัสผ่านใหม่"
             type="password"
             required
-            minLength={8}
+            minLength={PASSWORD_MIN_LENGTH}
             autoComplete="new-password"
-            helper="อย่างน้อย 8 ตัวอักษร"
+            helper={PASSWORD_HELPER}
             value={form.new_password}
             onChange={v => setForm({ ...form, new_password: v })}
           />
@@ -87,7 +88,7 @@ export default function ChangePassword() {
             label="ยืนยันรหัสผ่านใหม่"
             type="password"
             required
-            minLength={8}
+            minLength={PASSWORD_MIN_LENGTH}
             autoComplete="new-password"
             value={form.confirm}
             onChange={v => setForm({ ...form, confirm: v })}

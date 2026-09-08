@@ -8,6 +8,7 @@ import ErrorState from '../../components/ErrorState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
+import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../../utils/passwordPolicy';
 
 /**
  * Phase 7.11.5 — school main account manages grade-teacher sub-accounts
@@ -159,7 +160,7 @@ export default function SchoolTeacherAccounts() {
   const handleCreate = async () => {
     if (!form.username?.trim()) { toast.error('กรุณากรอกชื่อผู้ใช้'); return; }
     if (!form.grade_scope)      { toast.error('กรุณาเลือกระดับชั้น'); return; }
-    if (!form.password || form.password.length < 6) { toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
+    if (!form.password || form.password.length < PASSWORD_MIN_LENGTH) { toast.error(PASSWORD_TOO_SHORT); return; }
     if (form.password !== form.confirm)              { toast.error('รหัสผ่านยืนยันไม่ตรงกัน'); return; }
     setSaving(true);
     try {
@@ -187,7 +188,7 @@ export default function SchoolTeacherAccounts() {
   };
 
   const handleReset = async () => {
-    if (!form.password || form.password.length < 6) { toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
+    if (!form.password || form.password.length < PASSWORD_MIN_LENGTH) { toast.error(PASSWORD_TOO_SHORT); return; }
     if (form.password !== form.confirm)              { toast.error('รหัสผ่านยืนยันไม่ตรงกัน'); return; }
     setSaving(true);
     try {
@@ -336,7 +337,7 @@ export default function SchoolTeacherAccounts() {
                 {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
-            <TextField label="รหัสผ่าน * (อย่างน้อย 6 ตัว)" type="password"
+            <TextField label={`รหัสผ่าน * (${PASSWORD_HELPER})`} type="password"
               value={form.password} onChange={v => setForm({...form, password: v})} />
             <TextField label="ยืนยันรหัสผ่าน *" type="password"
               value={form.confirm} onChange={v => setForm({...form, confirm: v})} />

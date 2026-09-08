@@ -11,6 +11,7 @@ const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-b
 import { useToast } from '../../components/Toast';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../../utils/passwordPolicy';
 
 const ACCOUNTS_PAGE_SIZE = 10;
 
@@ -78,7 +79,7 @@ export default function AffSchoolAccounts() {
 
   // ─── Reset password ───────────────────────────────────────────────────
   async function handleReset() {
-    if (!resetForm.password || resetForm.password.length < 8) { toast.error('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'); return; }
+    if (!resetForm.password || resetForm.password.length < PASSWORD_MIN_LENGTH) { toast.error(PASSWORD_TOO_SHORT); return; }
     if (resetForm.password !== resetForm.confirm) { toast.error('รหัสผ่านยืนยันไม่ตรงกัน'); return; }
     setResetting(true);
     try {
@@ -567,7 +568,7 @@ export default function AffSchoolAccounts() {
             <button
               type="submit"
               form="reset-password-form"
-              disabled={resetting || resetForm.password.length < 8 || resetForm.password !== resetForm.confirm}
+              disabled={resetting || resetForm.password.length < PASSWORD_MIN_LENGTH || resetForm.password !== resetForm.confirm}
               className="focus-ring text-sm font-semibold px-4 min-h-[44px] rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white transition disabled:opacity-50 disabled:pointer-events-none"
             >
               {resetting ? 'กำลังรีเซ็ต…' : 'รีเซ็ตรหัสผ่าน'}
@@ -588,10 +589,10 @@ export default function AffSchoolAccounts() {
             type="password"
             required
             autoComplete="new-password"
-            helper="อย่างน้อย 8 ตัวอักษร"
+            helper={PASSWORD_HELPER}
             value={resetForm.password}
             onChange={v => setResetForm({ ...resetForm, password: v })}
-            error={resetForm.password && resetForm.password.length < 8 ? 'ต้องมีอย่างน้อย 8 ตัวอักษร' : undefined}
+            error={resetForm.password && resetForm.password.length < PASSWORD_MIN_LENGTH ? `ต้อง${PASSWORD_HELPER}` : undefined}
           />
           <FormField
             label="ยืนยันรหัสผ่านใหม่"

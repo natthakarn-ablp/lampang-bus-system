@@ -8,6 +8,7 @@ import {
 import { useToast } from '../../components/Toast';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../../utils/passwordPolicy';
 
 /**
  * บัญชีสังกัดและขนส่ง — the province's own reset desk.
@@ -158,7 +159,7 @@ export default function ProvUnitAccounts() {
             <button
               type="submit"
               form="prov-reset-password-form"
-              disabled={resetting || resetForm.password.length < 8 || resetForm.password !== resetForm.confirm}
+              disabled={resetting || resetForm.password.length < PASSWORD_MIN_LENGTH || resetForm.password !== resetForm.confirm}
               className="focus-ring text-sm font-semibold px-4 min-h-[44px] rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white transition disabled:opacity-50 disabled:pointer-events-none"
             >
               {resetting ? 'กำลังรีเซ็ต…' : 'รีเซ็ตรหัสผ่าน'}
@@ -186,10 +187,10 @@ export default function ProvUnitAccounts() {
             type="password"
             required
             autoComplete="new-password"
-            helper="อย่างน้อย 8 ตัวอักษร และต้องไม่ซ้ำกับชื่อผู้ใช้"
+            helper={`${PASSWORD_HELPER} และต้องไม่ซ้ำกับชื่อผู้ใช้`}
             value={resetForm.password}
             onChange={v => setResetForm({ ...resetForm, password: v })}
-            error={resetForm.password && resetForm.password.length < 8 ? 'ต้องมีอย่างน้อย 8 ตัวอักษร' : undefined}
+            error={resetForm.password && resetForm.password.length < PASSWORD_MIN_LENGTH ? `ต้อง${PASSWORD_HELPER}` : undefined}
           />
           <FormField
             label="ยืนยันรหัสผ่านใหม่"

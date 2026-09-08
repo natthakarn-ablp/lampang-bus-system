@@ -3,6 +3,7 @@ import { CheckCircle2, KeyRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import { AlertBanner, FormField } from '../components/ui';
+import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../utils/passwordPolicy';
 
 export default function ResetPassword() {
   const [token] = useState(() => {
@@ -38,7 +39,7 @@ export default function ResetPassword() {
   async function submit(event) {
     event.preventDefault();
     setError('');
-    if (form.new_password.length < 8) return setError('รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร');
+    if (form.new_password.length < PASSWORD_MIN_LENGTH) return setError(PASSWORD_TOO_SHORT);
     if (form.new_password !== form.confirm) return setError('รหัสผ่านใหม่ไม่ตรงกัน');
     setBusy(true);
     try {
@@ -95,8 +96,8 @@ export default function ResetPassword() {
               onChange={(value) => setForm({ ...form, new_password: value })}
               autoComplete="new-password"
               required
-              minLength={8}
-              helper="อย่างน้อย 8 ตัวอักษร และไม่ซ้ำกับรหัสเดิม"
+              minLength={PASSWORD_MIN_LENGTH}
+              helper={`${PASSWORD_HELPER} และไม่ซ้ำกับรหัสเดิม`}
             />
             <FormField
               label="ยืนยันรหัสผ่านใหม่"
@@ -105,7 +106,7 @@ export default function ResetPassword() {
               onChange={(value) => setForm({ ...form, confirm: value })}
               autoComplete="new-password"
               required
-              minLength={8}
+              minLength={PASSWORD_MIN_LENGTH}
               error={form.confirm && form.confirm !== form.new_password ? 'รหัสผ่านไม่ตรงกัน' : undefined}
             />
             {error && <AlertBanner variant="danger">{error}</AlertBanner>}

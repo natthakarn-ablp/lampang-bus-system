@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import { isDriverNotLinked } from '../../utils/driverErrors';
+import { PASSWORD_MIN_LENGTH, PASSWORD_TOO_SHORT } from '../../utils/passwordPolicy';
 
 const VEHICLE_TYPE_OPTIONS = [
   'รถตู้',
@@ -143,7 +144,7 @@ export default function DriverProfile() {
 
   async function handleChangePassword(e) {
     e.preventDefault();
-    if (pwdForm.new_password.length < 4) { toast.error('รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร'); return; }
+    if (pwdForm.new_password.length < PASSWORD_MIN_LENGTH) { toast.error(PASSWORD_TOO_SHORT); return; }
     if (pwdForm.new_password !== pwdForm.confirm_password) { toast.error('รหัสผ่านใหม่ไม่ตรงกัน'); return; }
     setPwdSaving(true);
     try {
@@ -386,10 +387,10 @@ export default function DriverProfile() {
           <h2 className="text-sm font-semibold text-ink">เปลี่ยนรหัสผ่าน</h2>
           <FormField label="รหัสผ่านเดิม" value={pwdForm.current_password} type="password" required
             onChange={(v) => setPwdForm({ ...pwdForm, current_password: v })} />
-          <FormField label="รหัสผ่านใหม่" value={pwdForm.new_password} type="password" required minLength={4}
+          <FormField label="รหัสผ่านใหม่" value={pwdForm.new_password} type="password" required minLength={PASSWORD_MIN_LENGTH}
             onChange={(v) => setPwdForm({ ...pwdForm, new_password: v })} />
           <div>
-            <FormField label="ยืนยันรหัสผ่านใหม่" value={pwdForm.confirm_password} type="password" required minLength={4}
+            <FormField label="ยืนยันรหัสผ่านใหม่" value={pwdForm.confirm_password} type="password" required minLength={PASSWORD_MIN_LENGTH}
               onChange={(v) => setPwdForm({ ...pwdForm, confirm_password: v })} />
             {pwdForm.confirm_password && pwdForm.new_password !== pwdForm.confirm_password && (
               <p className="text-xs text-danger-ink mt-1">รหัสผ่านใหม่ไม่ตรงกัน</p>

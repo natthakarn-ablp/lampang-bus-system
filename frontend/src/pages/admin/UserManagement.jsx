@@ -8,6 +8,7 @@ import {
   DataTable, TableAction, FilterBar, ConfirmDialog, FormField,
   Modal as UiModal, StatusBadge as Badge,
 } from '../../components/ui';
+import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../../utils/passwordPolicy';
 
 const ROLE_LABELS = {
   driver: 'คนขับ', school: 'โรงเรียน', affiliation: 'สังกัด',
@@ -113,7 +114,7 @@ export default function UserManagement() {
   }
 
   async function handleReset() {
-    if (!form.password || form.password.length < 6) { toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
+    if (!form.password || form.password.length < PASSWORD_MIN_LENGTH) { toast.error(PASSWORD_TOO_SHORT); return; }
     setSaving(true);
     try {
       await api.post(`/admin/users/${selected.id}/reset-password`, { password: form.password });
@@ -238,7 +239,7 @@ export default function UserManagement() {
         <Modal title="สร้างผู้ใช้ใหม่" onClose={() => setModal(null)}>
           <div className="space-y-3">
             <Field label="ชื่อผู้ใช้" required value={form.username} onChange={v => setForm({...form, username: v})} />
-            <Field label="รหัสผ่าน" required helper="อย่างน้อย 6 ตัวอักษร" value={form.password} onChange={v => setForm({...form, password: v})} type="password" />
+            <Field label="รหัสผ่าน" required helper={PASSWORD_HELPER} value={form.password} onChange={v => setForm({...form, password: v})} type="password" />
             <FormField label="บทบาท" required>
               {ctl => (
                 <select {...ctl} value={form.role} onChange={e => setForm({...form, role: e.target.value, scope_id: ''})}
@@ -317,7 +318,7 @@ export default function UserManagement() {
             <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-4 py-2 border border-amber-200">
               ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อ login ครั้งถัดไป
             </p>
-            <Field label="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)" value={form.password} onChange={v => setForm({...form, password: v})} type="password" />
+            <Field label={`รหัสผ่านใหม่ (${PASSWORD_HELPER})`} value={form.password} onChange={v => setForm({...form, password: v})} type="password" />
             <button onClick={handleReset} disabled={saving}
               className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-medium py-3 rounded-lg transition">
               {saving ? 'กำลังรีเซ็ต…' : 'รีเซ็ตรหัสผ่าน'}

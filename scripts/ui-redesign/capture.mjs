@@ -36,25 +36,25 @@ const ONLY = (() => { const i = process.argv.indexOf('--only'); return i === -1 
 const OUT  = resolve(root, 'outputs/ui-redesign', TAG);
 mkdirSync(OUT, { recursive: true });
 
-// Feature flags exactly as production runs them (2026-09-06): only
-// FEATURE_DRIVER_REGISTRATION is on. `useAuth` reads them from
+// Feature flags exactly as production runs them. `useAuth` reads them from
 // localStorage.features (hooks/useAuth.jsx:19) and the menus branch on them
 // (MobileBottomNav.jsx:10-16, Sidebar.jsx). Seeding nothing left features
 // null, so every shot showed the flag-OFF build: the driver's middle tab read
 // "ขึ้นทะเบียน" instead of "รายชื่อเด็ก" — the opposite of what the manual says
-// and of what a driver sees. Keep this in step with the server's .env.
-const PROD_FEATURES = {
-  driverRegistration: true,
-  adminPasswordRecovery: false,
-  vehicleQr: false,
-  driverShiftSelection: false,
-  qrLevel3: false,
-  eta: false,
-  geofence: false,
-  routeDeviation: false,
-  parentConsentRequired: false,
-  participationCases: false,
-};
+// and of what a driver sees.
+//
+// The values are NOT written here any more. They were, and they rotted: two
+// flags were turned on in production on 7 Sep 2026 and this file still said
+// false, so the next run of the harness would have reproduced the very bug it
+// was written to fix. They now come from scripts/production-feature-flags.json,
+// which is the one place to edit when a flag is flipped on the server, and which
+// records when and on what evidence each value was last checked.
+const PROD_FLAG_RECORD = JSON.parse(
+  readFileSync(resolve(here, '..', 'production-feature-flags.json'), 'utf8')
+);
+const PROD_FEATURES = Object.fromEntries(
+  Object.entries(PROD_FLAG_RECORD.flags).map(([name, row]) => [name, row.enabled])
+);
 
 const FAKE_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.synthetic.fixture';
 const USERS = {

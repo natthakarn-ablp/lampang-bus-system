@@ -50,19 +50,45 @@ describe('capture harness seeds the flags production runs', () => {
     expect(CAPTURE).toMatch(/localStorage\.setItem\('features',/);
   });
 
-  it('declares PROD_FEATURES with driverRegistration on', () => {
-    const block = CAPTURE.match(/const PROD_FEATURES = \{[\s\S]*?\n\};/);
+  // The harness used to hardcode the ten flag values and this test used to
+  // hardcode them a second time. Both rotted on 7 Sep 2026, when two flags were
+  // turned on in production and neither file was touched: the guard went on
+  // passing while asserting the wrong world, and the next screenshot run would
+  // have reproduced the flags-off bug the harness exists to prevent. So the
+  // values now live in one file and this guard checks the WIRING, not a copy of
+  // the values — there is nothing left here to fall out of step.
+  it('derives PROD_FEATURES from the production flag record, never from literals', () => {
+    expect(CAPTURE).toMatch(/production-feature-flags\.json/);
+    const block = CAPTURE.match(/const PROD_FEATURES = [\s\S]*?\);/);
     expect(block).not.toBeNull();
-    expect(block[0]).toMatch(/driverRegistration:\s*true/);
-    // Everything else is off in production (handoff 2026-09-05 §3). A flag
-    // flipped here without flipping it on the server would put a menu in the
-    // manual that no user can see.
-    for (const flag of [
-      'adminPasswordRecovery', 'vehicleQr', 'driverShiftSelection', 'qrLevel3',
-      'eta', 'geofence', 'routeDeviation', 'parentConsentRequired', 'participationCases',
-    ]) {
-      expect(block[0]).toMatch(new RegExp(`${flag}:\\s*false`));
+    expect(block[0]).toMatch(/PROD_FLAG_RECORD\.flags/);
+    // A literal true/false back in this block means someone re-hardcoded it.
+    expect(block[0]).not.toMatch(/:\s*(true|false)/);
+  });
+
+  it('the flag record covers every feature the server can switch', () => {
+    const record = JSON.parse(read('scripts/production-feature-flags.json'));
+    const envMap = read('backend/src/config/env.js');
+    // Every camelCase name the record claims must be a real key of env.features,
+    // and must be wired to the env var the record names. A typo here would make
+    // the harness silently seed a flag the frontend never reads.
+    for (const [name, row] of Object.entries(record.flags)) {
+      expect(envMap).toContain(`${name}: process.env.${row.env}`);
+      expect(typeof row.enabled).toBe('boolean');
     }
+    // And the reverse: no switchable feature may be missing from the record,
+    // or the harness would seed it as undefined and the shot would be wrong.
+    const declared = [...envMap.matchAll(/^\s{4}(\w+): process\.env\.(FEATURE_\w+) === 'true',/gm)]
+      .map((m) => m[1]);
+    for (const name of declared) {
+      expect(Object.keys(record.flags)).toContain(name);
+    }
+  });
+
+  it('records when each value was last checked against the real server', () => {
+    const record = JSON.parse(read('scripts/production-feature-flags.json'));
+    expect(record.verified_at).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(String(record.verified_by).length).toBeGreaterThan(20);
   });
 });
 

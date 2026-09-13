@@ -42,6 +42,10 @@
 const fs = require('fs');
 const path = require('path');
 const { pool } = require('../src/config/database');
+const {
+  getCurrentTerm, deriveTermIdFromDate, nextConventionRollover,
+} = require('../src/services/term.service');
+const { todayBangkok, daysBetweenBangkok } = require('../src/utils/thaiTime');
 
 const args = process.argv.slice(2);
 const jsonMode = args.includes('--json');
@@ -55,6 +59,14 @@ const writePath = wi >= 0 ? args[wi + 1] : null;
 const CRITICAL = 'CRITICAL';
 const WARN = 'WARN';
 const INFO = 'INFO';
+
+// students.term_id is written only at INSERT — school.routes, studentImportPreview,
+// rosterRequest and studentTransfer all stamp it, and nothing re-stamps it when the
+// calendar moves on. Meanwhile the vehicle-inspection queries filter riders with
+// `(term_id = <current term> OR term_id IS NULL)`. So a rider stamped with the term
+// that is current today stops being counted on the day the term rolls over, with
+// nobody having changed anything. The two term checks below measure that; the date
+// it happens comes from term.service, which owns the calendar.
 
 /**
  * Every check is one COUNT query plus a rule for reading it. Keeping them in a
@@ -186,6 +198,28 @@ const CHECKS = [
           WHERE is_deleted = FALSE AND is_active = TRUE AND last_login IS NULL`,
   },
   {
+    key: 'riders_whose_term_stamp_is_not_the_current_term',
+    label: 'นักเรียนที่ยังผูกรถอยู่ แต่ term_id ไม่ใช่ภาคเรียนปัจจุบัน',
+    severity: WARN,
+    why: 'คำขอส่งตรวจรถนับเฉพาะนักเรียนที่ term_id ตรงกับภาคเรียนปัจจุบันหรือเป็นค่าว่าง เด็กกลุ่มนี้จึงไม่ถูกนับเป็นผู้โดยสาร ทำให้ยอดผู้โดยสารต่ำกว่าจริง หรือถ้าไม่เหลือใครเลย โรงเรียนจะยื่นส่งตรวจรถคันนั้นไม่ได้',
+    params: (ctx) => [ctx.current_term],
+    sql: `SELECT COUNT(*) AS n FROM students
+          WHERE is_deleted = FALSE
+            AND vehicle_id IS NOT NULL AND vehicle_id <> ''
+            AND term_id IS NOT NULL AND term_id <> ?`,
+  },
+  {
+    key: 'riders_dropped_when_the_term_next_rolls_over',
+    label: 'นักเรียนที่จะหลุดจากการนับผู้โดยสารเมื่อขึ้นภาคเรียนถัดไป',
+    severity: WARN,
+    why: 'ไม่มีจุดใดในระบบเขียน term_id ใหม่เมื่อขึ้นภาคเรียน ตัวเลขนี้คือจำนวนที่จะหายไปจากการนับในวันที่ระบุใต้หัวข้อภาคเรียน โดยไม่มีใครแก้ไขอะไรและไม่มีการแจ้งเตือน ต้องได้ข้อยุติเรื่องรายชื่อข้ามภาคเรียนก่อนถึงวันนั้น',
+    params: (ctx) => [ctx.next_term],
+    sql: `SELECT COUNT(*) AS n FROM students
+          WHERE is_deleted = FALSE
+            AND vehicle_id IS NOT NULL AND vehicle_id <> ''
+            AND term_id IS NOT NULL AND term_id <> ?`,
+  },
+  {
     key: 'schools_with_no_students',
     label: 'โรงเรียนที่ยังไม่มีข้อมูลนักเรียนเลย',
     severity: INFO,
@@ -227,9 +261,23 @@ async function build() {
   const totals = {};
   for (const t of TOTALS) totals[t.key] = await countOf(t.sql);
 
+  // The same "today" every other date read in this codebase uses, so a run just
+  // either side of UTC midnight cannot report a different term than the server does.
+  const today = todayBangkok();
+  const rolloverDate = nextConventionRollover(today);
+  // Both terms come from term.service, window-first — an admin-set window in `terms`
+  // overrides the calendar convention, and these must be the values the inspection
+  // queries will really be given, not the ones the convention alone would predict.
+  const term = {
+    current_term: await getCurrentTerm(pool),
+    next_term: rolloverDate ? await deriveTermIdFromDate(pool, rolloverDate) : null,
+    rollover_date: rolloverDate,
+    days_until_rollover: rolloverDate ? daysBetweenBangkok(today, rolloverDate) : null,
+  };
+
   const results = [];
   for (const c of CHECKS) {
-    const count = await countOf(c.sql);
+    const count = await countOf(c.sql, typeof c.params === 'function' ? c.params(term) : c.params);
     results.push({
       key: c.key,
       label: c.label,
@@ -244,6 +292,7 @@ async function build() {
     generated_at: new Date().toISOString(),
     scope: 'ทั้งจังหวัด',
     totals,
+    term,
     verdict: verdictOf(results),
     critical_open: results.filter((r) => r.severity === CRITICAL && !r.clean).length,
     warn_open: results.filter((r) => r.severity === WARN && !r.clean).length,
@@ -258,6 +307,12 @@ function render(report) {
     `  ฐาน: สังกัด ${report.totals.affiliations} · โรงเรียน ${report.totals.schools} · ` +
     `นักเรียน ${report.totals.students} · รถ ${report.totals.vehicles} · บัญชีใช้งาน ${report.totals.active_users}`
   );
+  if (report.term && report.term.rollover_date) {
+    console.log(
+      `  ภาคเรียน: ปัจจุบัน ${report.term.current_term} · ถัดไป ${report.term.next_term} ` +
+      `ตั้งแต่ ${report.term.rollover_date} (อีก ${report.term.days_until_rollover} วัน)`
+    );
+  }
   for (const c of report.checks) {
     const mark = c.clean ? ' ok ' : c.severity === CRITICAL ? 'CRIT' : c.severity === WARN ? 'WARN' : 'info';
     console.log(`  [${mark}] ${String(c.count).padStart(6)}  ${c.label}`);

@@ -72,6 +72,38 @@ describe('computeTermIdByConvention (date → BE-term, Thai calendar with break 
   });
 });
 
+describe('nextConventionRollover (the date on which counts change by themselves)', () => {
+  // students.term_id is stamped at INSERT and never re-stamped, while the vehicle
+  // inspection queries filter on it. These dates are the ones on which a rider that
+  // was counted yesterday stops being counted, with nobody having touched anything.
+  const cases = [
+    ['2026-09-13', '2026-10-12', 'mid term 1 → the October break boundary'],
+    ['2026-10-11', '2026-10-12', 'the last day before it, as a date to warn on'],
+    ['2026-10-12', '2027-04-02', 'already past it — the next one is the April break'],
+    ['2027-04-01', '2027-04-02', 'term 2 last day → next academic year'],
+  ];
+  test.each(cases)('%s → %s (%s)', (today, expected) => {
+    expect(termSvc.nextConventionRollover(today)).toBe(expected);
+  });
+
+  test('the day it names is the first day the term actually differs', () => {
+    const today = '2026-09-13';
+    const day = termSvc.nextConventionRollover(today);
+    const before = new Date(`${day}T00:00:00Z`);
+    before.setUTCDate(before.getUTCDate() - 1);
+    expect(termSvc.computeTermIdByConvention(before.toISOString().slice(0, 10)))
+      .toBe(termSvc.computeTermIdByConvention(today));
+    expect(termSvc.computeTermIdByConvention(day))
+      .not.toBe(termSvc.computeTermIdByConvention(today));
+  });
+
+  test('never returns null for a real date — the calendar always moves within a year', () => {
+    for (const d of ['2026-01-31', '2026-05-16', '2026-11-01', '2027-02-28']) {
+      expect(termSvc.nextConventionRollover(d)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+});
+
 describe('deriveTermIdFromDate (window-first, convention fallback)', () => {
   test('uses the DB date-window when one contains the date', async () => {
     const pool = poolQuery(() => [[{ id: '2569-1' }]]);

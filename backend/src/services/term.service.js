@@ -95,6 +95,44 @@ async function deriveTermIdFromDate(pool, date) {
   return computeTermIdByConvention(d);
 }
 
+/**
+ * The next day on which the CONVENTION term differs from the one for `today`, as
+ * 'YYYY-MM-DD' — or null if it does not change within a year (which cannot happen
+ * for the calendar above, but a caller should not have to know that).
+ *
+ * students.term_id is written only at INSERT and nothing re-stamps it, while several
+ * reads filter on it. That makes the rollover day a date on which counts change with
+ * nobody having touched anything, so it is a date worth being able to name. Derived
+ * by asking computeTermIdByConvention rather than by reading the boundary constants,
+ * so it cannot drift from them. Pure: no clock, no DB — it answers about the date it
+ * is handed. A per-year window in `terms` can move the real boundary; resolve the
+ * returned date through deriveTermIdFromDate to get the term that will really apply.
+ */
+function nextConventionRollover(today) {
+  const base = computeTermIdByConvention(today);
+  for (let i = 1; i <= 400; i += 1) {
+    const iso = addCalendarDays(today, i);
+    if (computeTermIdByConvention(iso) !== base) return iso;
+  }
+  return null;
+}
+
+/**
+ * 'YYYY-MM-DD' plus n days, as 'YYYY-MM-DD'. Pure calendar arithmetic: the anchor
+ * is UTC midnight and the result is read back through the UTC accessors, so no
+ * timezone conversion happens in either direction and the answer is the same in
+ * Bangkok as anywhere else. Reading it back with toISOString().slice(0, 10) would
+ * give the same digits here and is still the wrong habit — tests/dateHandlingGuard
+ * exists because that pattern reached seventeen call sites where it was wrong.
+ */
+function addCalendarDays(iso, n) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${month}-${day}`;
+}
+
 // Sync variant for write-sites without a pool handle (convention only).
 function deriveTermIdFromDateSync(date) {
   return computeTermIdByConvention(date);
@@ -208,6 +246,7 @@ module.exports = {
   deriveTermIdFromDate,
   deriveTermIdFromDateSync,
   computeTermIdByConvention,
+  nextConventionRollover,
   invalidateTermCache,
   listTerms,
   createTerm,

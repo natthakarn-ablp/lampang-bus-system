@@ -103,6 +103,27 @@ describe('every check explains itself to the person who must sign it off', () =>
     }
   });
 
+  it('a query with a placeholder says where its value comes from', () => {
+    // mysql2 throws on a `?` it was given no value for, and this script is run
+    // against production by hand — the failure would land there, not here. A
+    // check that parameterises its query must declare `params`.
+    const blocks = [...SRC.matchAll(/\{\s*\n\s*key: '([a-z0-9_]+)',([\s\S]*?)\n  \},/g)];
+    let parameterised = 0;
+    for (const [, key, body] of blocks) {
+      const sql = (body.match(/sql:\s*`([\s\S]*?)`/) || [])[1] || '';
+      if (!sql.includes('?')) continue;
+      parameterised += 1;
+      expect(`${key}: ${body}`).toMatch(/params:\s*\(ctx\) =>/);
+      // One placeholder, one value — a mismatch is a runtime error on the server.
+      const declared = (body.match(/params:\s*\(ctx\) => \[([^\]]*)\]/) || [, ''])[1];
+      expect(declared.split(',').filter((s) => s.trim()).length)
+        .toBe((sql.match(/\?/g) || []).length);
+    }
+    // The term checks are the reason this guard exists; if they are ever removed
+    // this test must fail loudly rather than pass over an empty set.
+    expect(parameterised).toBeGreaterThanOrEqual(2);
+  });
+
   it('the report states in its own output that it carries no personal data', () => {
     expect(SRC).toMatch(/safety: 'aggregate counts only/);
   });

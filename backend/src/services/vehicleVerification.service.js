@@ -1,7 +1,14 @@
 'use strict';
 
 const crypto = require('crypto');
-const { getCurrentTermCachedSync, getCurrentTerm } = require('./term.service');
+const { getCurrentTerm } = require('./term.service');
+
+// Who rides a vehicle (owner decision B1, 2 ต.ค. 2569 — decision memo CS5-05):
+// a live pupil whose vehicle_id points at it, every term, until they are moved,
+// withdrawn or graduate. students.term_id is stamped once at insert and never
+// re-stamped, so filtering riders by it dropped every pupil from the count — and
+// made a school unable to submit its bus — the day the term rolled over. The term
+// is still used below, but only to key and label the application itself.
 const { logAudit } = require('../utils/audit');
 const { validateInspectionDates } = require('../utils/inspectionDates');
 const { toBangkokDate, todayBangkok, bangkokDateStamp } = require('../utils/thaiTime');
@@ -132,7 +139,7 @@ function buildTransportSnapshot({ vehicle = {}, schools = [], drivers = [], rout
 }
 
 async function refreshVehicleEligibility(executor, vehicleId, {
-  today = todayBangkok(), currentTerm = getCurrentTermCachedSync(),
+  today = todayBangkok(),
 } = {}) {
   const [[vehicle]] = await executor.query(
     `SELECT id, certified_capacity, insurance_expiry, registration_expiry,
@@ -163,9 +170,8 @@ async function refreshVehicleEligibility(executor, vehicleId, {
     `SELECT SUM(CASE WHEN morning_enabled = TRUE THEN 1 ELSE 0 END) AS morning_rider_count,
             SUM(CASE WHEN evening_enabled = TRUE THEN 1 ELSE 0 END) AS evening_rider_count
        FROM students
-      WHERE vehicle_id = ? AND is_deleted = FALSE
-        AND (term_id = ? OR term_id IS NULL)`,
-    [vehicleId, currentTerm]
+      WHERE vehicle_id = ? AND is_deleted = FALSE`,
+    [vehicleId]
   );
   const [[drivers]] = await executor.query(
     `SELECT COUNT(*) AS valid_driver_count
@@ -269,9 +275,8 @@ async function createApplication(pool, {
       `SELECT COUNT(*) AS related
          FROM students
         WHERE vehicle_id = ? AND school_id = ?
-          AND is_deleted = FALSE
-          AND (term_id = ? OR term_id IS NULL)`,
-      [vehicleId, issuingSchoolId, currentTerm]
+          AND is_deleted = FALSE`,
+      [vehicleId, issuingSchoolId]
     );
     if (!relation || !Number(relation.related)) {
       throw appError('โรงเรียนนี้ไม่มีนักเรียนที่ใช้รถคันดังกล่าว', 403, 'SCHOOL_NOT_RELATED_TO_VEHICLE');
@@ -302,12 +307,11 @@ async function createApplication(pool, {
          FROM students s
          JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
         WHERE s.vehicle_id = ? AND s.is_deleted = FALSE
-          AND (s.term_id = ? OR s.term_id IS NULL)
         GROUP BY s.school_id, sc.name
         ORDER BY sc.name`,
-      [vehicleId, currentTerm]
+      [vehicleId]
     );
-    if (!schools.length) throw appError('รถคันนี้ยังไม่มีข้อมูลผู้โดยสารในภาคเรียนปัจจุบัน', 400, 'NO_CURRENT_RIDERS');
+    if (!schools.length) throw appError('รถคันนี้ยังไม่มีนักเรียนผูกอยู่', 400, 'NO_CURRENT_RIDERS');
 
     const [drivers] = await conn.query(
       `SELECT d.id AS driver_id, d.name AS driver_name,
@@ -1049,12 +1053,11 @@ async function createDriverApplication(pool, {
          FROM students s
          JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
         WHERE s.vehicle_id = ? AND s.is_deleted = FALSE
-          AND (s.term_id = ? OR s.term_id IS NULL)
         GROUP BY s.school_id, sc.name
         ORDER BY sc.name`,
-      [vehicleId, currentTerm]
+      [vehicleId]
     );
-    if (!schools.length) throw appError('รถคันนี้ยังไม่มีข้อมูลผู้โดยสารในภาคเรียนปัจจุบัน', 400, 'NO_CURRENT_RIDERS');
+    if (!schools.length) throw appError('รถคันนี้ยังไม่มีนักเรียนผูกอยู่', 400, 'NO_CURRENT_RIDERS');
 
     // Use the first school as issuing school (primary school)
     const issuingSchoolId = schools[0].school_id;

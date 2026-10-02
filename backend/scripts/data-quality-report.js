@@ -62,11 +62,11 @@ const INFO = 'INFO';
 
 // students.term_id is written only at INSERT — school.routes, studentImportPreview,
 // rosterRequest and studentTransfer all stamp it, and nothing re-stamps it when the
-// calendar moves on. Meanwhile the vehicle-inspection queries filter riders with
-// `(term_id = <current term> OR term_id IS NULL)`. So a rider stamped with the term
-// that is current today stops being counted on the day the term rolls over, with
-// nobody having changed anything. The two term checks below measure that; the date
-// it happens comes from term.service, which owns the calendar.
+// calendar moves on. The vehicle-inspection queries used to filter riders with
+// `(term_id = <current term> OR term_id IS NULL)`, so every rider would have dropped
+// out of the count on the day the term rolled over. Owner decision B1 (2 ต.ค. 2569)
+// removed that filter; the two term checks below stay as INFO — they now count the
+// roster entries a school should review after the rollover, not riders that vanish.
 
 /**
  * Every check is one COUNT query plus a rule for reading it. Keeping them in a
@@ -200,8 +200,8 @@ const CHECKS = [
   {
     key: 'riders_whose_term_stamp_is_not_the_current_term',
     label: 'นักเรียนที่ยังผูกรถอยู่ แต่ term_id ไม่ใช่ภาคเรียนปัจจุบัน',
-    severity: WARN,
-    why: 'คำขอส่งตรวจรถนับเฉพาะนักเรียนที่ term_id ตรงกับภาคเรียนปัจจุบันหรือเป็นค่าว่าง เด็กกลุ่มนี้จึงไม่ถูกนับเป็นผู้โดยสาร ทำให้ยอดผู้โดยสารต่ำกว่าจริง หรือถ้าไม่เหลือใครเลย โรงเรียนจะยื่นส่งตรวจรถคันนั้นไม่ได้',
+    severity: INFO,
+    why: 'ข้อมูลประกอบเท่านั้น ตั้งแต่ทางเลือก B1 (2 ต.ค. 2569) คำขอส่งตรวจรถนับผู้โดยสารโดยไม่ดู term_id แล้ว เด็กกลุ่มนี้ยังถูกนับ ตัวเลขนี้บอกว่ามีรายชื่อที่นำเข้าตั้งแต่ภาคเรียนก่อนกี่คน ซึ่งโรงเรียนควรทบทวนว่ายังใช้รถอยู่จริง',
     params: (ctx) => [ctx.current_term],
     sql: `SELECT COUNT(*) AS n FROM students
           WHERE is_deleted = FALSE
@@ -210,9 +210,9 @@ const CHECKS = [
   },
   {
     key: 'riders_dropped_when_the_term_next_rolls_over',
-    label: 'นักเรียนที่จะหลุดจากการนับผู้โดยสารเมื่อขึ้นภาคเรียนถัดไป',
-    severity: WARN,
-    why: 'ไม่มีจุดใดในระบบเขียน term_id ใหม่เมื่อขึ้นภาคเรียน ตัวเลขนี้คือจำนวนที่จะหายไปจากการนับในวันที่ระบุใต้หัวข้อภาคเรียน โดยไม่มีใครแก้ไขอะไรและไม่มีการแจ้งเตือน ต้องได้ข้อยุติเรื่องรายชื่อข้ามภาคเรียนก่อนถึงวันนั้น',
+    label: 'นักเรียนที่ผูกรถอยู่ซึ่งรายชื่อจะกลายเป็นของภาคเรียนก่อนเมื่อขึ้นภาคเรียนถัดไป',
+    severity: INFO,
+    why: 'ข้อมูลประกอบเท่านั้น ตั้งแต่ทางเลือก B1 (2 ต.ค. 2569) เด็กกลุ่มนี้ไม่หลุดจากการนับผู้โดยสารเมื่อขึ้นภาคเรียนแล้ว ตัวเลขนี้คือจำนวนรายชื่อที่โรงเรียนควรทบทวนหลังวันที่ระบุใต้หัวข้อภาคเรียน เพื่อถอนเด็กที่เลิกใช้รถแล้วออก ไม่ให้ยอดผู้โดยสารสูงเกินจริง',
     params: (ctx) => [ctx.next_term],
     sql: `SELECT COUNT(*) AS n FROM students
           WHERE is_deleted = FALSE

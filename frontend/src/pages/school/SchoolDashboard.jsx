@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Building2, GraduationCap, Bus, ClipboardList, AlertTriangle,
-  Sunrise, Sunset, ChevronDown,
+  Building2, Bus, AlertTriangle, ChevronDown,
   // Phase 10.7E-1 — icons for the action row
   Search, FileText,
   // Phase 10.8C — override button icon
@@ -12,31 +11,40 @@ import api from '../../api/axios';
 import StudentStatusTable from '../../components/StudentStatusTable';
 import { useToast } from '../../components/Toast';
 import PlateSearchInput from '../../components/PlateSearchInput';
-import { DonutChart, HBarChart } from '../../components/MiniCharts';
 import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
 import SchoolOverrideModal from '../../components/SchoolOverrideModal';
 import {
-  AppCard, AlertBanner, KPIGrid, KPIStat,
-  StatusBadge, DashboardSection, SectionTitle, ConfirmDialog} from '../../components/ui';
+  AppCard, StatusBadge, ConfirmDialog,
+  TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars, FoldSection, RoleChip,
+  pctOf, pctTone,
+} from '../../components/ui';
 import {
-  PAGE_TITLES, CARD_LABELS, CHART_TITLES, SECTION_TITLES,
-  STATUS, UI_MESSAGES, MORNING_SEGMENTS, EVENING_SEGMENTS,
+  PAGE_TITLES, SECTION_TITLES, STATUS, UI_MESSAGES,
 } from '../../constants/uiLabels';
 // Phase 10.7E-1 — teacher (grade-scoped) accounts are read-only; the
-// SchoolLayout already renders a scope chip ("ขอบเขตข้อมูล: ป.X · บัญชี
-// ครูประจำสายชั้น — ดูข้อมูลได้อย่างเดียว") above every school page, so
-// no chip is added here. We only use isGradeTeacher() to hide the
-// write-only action button ("จัดการรถ") from teacher accounts.
+// SchoolLayout already renders a scope chip above every school page. We only
+// use isGradeTeacher() to hide write-only actions from teacher accounts.
 import { useAuth } from '../../hooks/useAuth';
+import useRecentDays from '../../hooks/useRecentDays';
 import { isGradeTeacher } from '../../utils/authScope';
 import { PageTransition } from '../../lib/motion';
 import { formatGradeClass } from '../../utils/student';
 
+const isMorningLeave = (s) => s.leave_session === 'morning' || s.leave_session === 'both';
+const isEveningLeave = (s) => s.leave_session === 'evening' || s.leave_session === 'both';
+
+/** Riders expected and done on one bus for one round (leave excluded). */
+function vehicleRound(vehicle, session) {
+  const students = vehicle.students || [];
+  const expected = session === 'evening'
+    ? students.filter(s => s.evening_enabled && !isEveningLeave(s))
+    : students.filter(s => s.morning_enabled && !isMorningLeave(s));
+  const done = expected.filter(s => (session === 'evening' ? s.evening_done : s.morning_done)).length;
+  return { expected: expected.length, done, pending: expected.length - done };
+}
+
 export default function SchoolDashboard() {
-  // Phase 10.7E-1 — read user from auth context to decide whether to
-  // show the write-only "จัดการรถ" action button. Teacher accounts are
-  // read-only and would 403 if they reached the vehicle management page.
   const { user } = useAuth();
   const isTeacher = isGradeTeacher(user);
   const toast = useToast();
@@ -46,12 +54,20 @@ export default function SchoolDashboard() {
   const [loading, setLoading] = useState(true);
   const [expandedVehicle, setExpandedVehicle] = useState(null);
   const [plateSearch, setPlateSearch] = useState('');
-  // Phase 10.8C — override modal open state. Refetches both feeds on save
-  // so the session hero + alert chips + per-vehicle table all reflect the
-  // new daily_status row immediately.
+  // Phase 10.8C — override modal open state. Refetches the feeds on save so
+  // the banner, KPIs and per-vehicle list all reflect the new row at once.
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [leaves, setLeaves] = useState([]);
   const [leaveLoading, setLeaveLoading] = useState({});
+  // Pending roster requests (driver asks to add/remove a rider). null = unknown.
+  const [rosterPending, setRosterPending] = useState(null);
+  // A fold opened from the banner / a todo button is re-mounted open (its key
+  // changes) and scrolled into view.
+  const [forced, setForced] = useState({ vehicles: 0, leaves: 0 });
+  const vehiclesRef = useRef(null);
+  const leavesRef = useRef(null);
+
+  const recentDays = useRecentDays('reports', 7);
 
   function refetchDashboard() {
     return Promise.all([
@@ -66,6 +82,14 @@ export default function SchoolDashboard() {
   useEffect(() => {
     refetchDashboard().finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    // Grade teachers cannot approve requests, so the count would be a dead end.
+    if (isTeacher) return;
+    api.get('/school/roster-requests', { params: { status: 'pending' } })
+      .then(r => setRosterPending(Number(r.data?.meta?.total ?? (r.data?.data || []).length) || 0))
+      .catch(() => setRosterPending(null));
+  }, [isTeacher]);
 
   // Cancelling a leave is destructive and was behind a bare confirm(), which
   // could not name the pupil or the date being cancelled.
@@ -90,81 +114,153 @@ export default function SchoolDashboard() {
     setExpandedVehicle(prev => (prev === vehicleId ? null : vehicleId));
   }
 
+  function openFold(name, ref) {
+    setForced(prev => ({ ...prev, [name]: prev[name] + 1 }));
+    // Wait for the re-mounted (open) section to render before scrolling.
+    setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
+
   const vehicles = statusData?.vehicles || [];
   const filtered = vehicles.filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase()));
-  const totalLeave = (data?.morning_leave ?? 0) + (data?.evening_leave ?? 0);
-  const totalBase  = (data?.morning_total  ?? 0) + (data?.evening_total  ?? 0);
-  const hasEmerg   = (data?.recent_emergencies ?? 0) > 0;
 
-  // Build issue lines for alert banner
-  const issues = [];
-  if ((data?.morning_pending ?? 0) > 0) issues.push(`รอส่งเช้า ${data.morning_pending} คน`);
-  if ((data?.evening_pending ?? 0) > 0) issues.push(`รอรับเย็น ${data.evening_pending} คน`);
-  if (hasEmerg) issues.push(`เหตุฉุกเฉิน ${data.recent_emergencies} ครั้ง (7 วัน)`);
+  // ── Today's numbers ───────────────────────────────────────────────────────
+  const mTotal = data?.morning_total ?? 0;
+  const eTotal = data?.evening_total ?? 0;
+  const mLeave = data?.morning_leave ?? 0;
+  const eLeave = data?.evening_leave ?? 0;
+  const mDone = data?.morning_done ?? 0;
+  const eDone = data?.evening_done ?? 0;
+  const mPending = data?.morning_pending ?? 0;
+  const ePending = data?.evening_pending ?? 0;
+  // Pending already excludes pupils on leave, so the percentages do too.
+  const mExpected = Math.max(0, mTotal - mLeave);
+  const eExpected = Math.max(0, eTotal - eLeave);
+  const mPct = pctOf(mDone, mExpected);
+  const ePct = pctOf(eDone, eExpected);
+  const emerg7d = data?.recent_emergencies ?? 0;
+  const nothingToday = mTotal + eTotal === 0;
+  const eveningStarted = eDone > 0;
 
-  const notStarted = totalBase === 0 && !hasEmerg;
+  // ── Banner: one sentence, one tone ───────────────────────────────────────
+  const showVehicles = { label: 'ดูรถที่ยังค้าง', onClick: () => openFold('vehicles', vehiclesRef) };
+  let banner;
+  if (nothingToday) {
+    banner = { variant: 'neutral', title: 'ยังไม่มีข้อมูลการรับส่งวันนี้', sub: 'รอข้อมูลรอบเช้าจากคนขับ', topic: 'none' };
+  } else if (mPending > 0) {
+    banner = {
+      variant: 'warn', title: `รอบเช้ายังค้าง ${mPending.toLocaleString('th-TH')} คน`,
+      sub: `ส่งแล้ว ${mDone.toLocaleString('th-TH')} จาก ${mExpected.toLocaleString('th-TH')} คน`,
+      cta: showVehicles, topic: 'morning',
+    };
+  } else if (!eveningStarted) {
+    banner = {
+      variant: 'success', title: 'รอบเช้าครบแล้ว',
+      sub: `ส่งครบ ${mDone.toLocaleString('th-TH')} คน · รอบเย็นยังไม่เริ่ม`, topic: 'none',
+    };
+  } else if (ePending > 0) {
+    banner = {
+      variant: 'warn', title: `รอบเย็นยังค้าง ${ePending.toLocaleString('th-TH')} คน`,
+      sub: `รอบเช้าครบ ${mDone.toLocaleString('th-TH')} คน · รับเย็นแล้ว ${eDone.toLocaleString('th-TH')} จาก ${eExpected.toLocaleString('th-TH')} คน`,
+      cta: showVehicles, topic: 'evening',
+    };
+  } else {
+    banner = { variant: 'success', title: 'วันนี้รับส่งครบแล้ว', sub: `ส่งเช้า ${mDone.toLocaleString('th-TH')} คน · รับเย็น ${eDone.toLocaleString('th-TH')} คน`, topic: 'none' };
+  }
+
+  // ── Todos: things to act on that the banner does not already say ─────────
+  const c = data?.completeness;
+  const noVehicle = c && Number.isFinite(c.students_total) && Number.isFinite(c.students_with_vehicle)
+    ? Math.max(0, c.students_total - c.students_with_vehicle) : 0;
+  const noParent = c && Number.isFinite(c.students_total) && Number.isFinite(c.students_with_parent)
+    ? Math.max(0, c.students_total - c.students_with_parent) : 0;
+  const todos = [
+    { key: 'emergency', variant: 'danger', count: emerg7d, title: 'เหตุฉุกเฉินใน 7 วัน', sub: 'ตรวจสอบรายละเอียดและผลการแก้ไข', cta: { label: 'ดูเหตุฉุกเฉิน', to: '/school/emergencies' } },
+    !isTeacher && rosterPending != null && { key: 'roster', variant: 'warn', count: rosterPending, title: 'คำขอรายชื่อจากคนขับ', sub: 'รอโรงเรียนอนุมัติ', cta: { label: 'ตรวจคำขอ', to: '/school/approvals' } },
+    { key: 'no-vehicle', variant: 'warn', count: noVehicle, title: 'นักเรียนยังไม่ผูกรถ', sub: 'ยังไม่มีรถรับส่งในระบบ', cta: { label: 'ดูรายชื่อ', to: '/school/students?has_vehicle=no' } },
+    { key: 'no-parent', variant: 'info', count: noParent, title: 'ข้อมูลผู้ปกครองไม่ครบ', sub: 'เติมเบอร์ผู้ปกครองเพื่อให้แจ้งเตือนได้', cta: { label: 'ดูรายชื่อ', to: '/school/students' } },
+    !isTeacher && { key: 'leaves', variant: 'info', count: leaves.length, title: 'รายการลาของวันนี้', sub: 'ยกเลิกได้หากบันทึกผิด', cta: { label: 'ดูรายการลา', onClick: () => openFold('leaves', leavesRef) } },
+  ].filter(Boolean);
+
+  // ── Per-bus ranking for the round in progress ────────────────────────────
+  const rankSession = eveningStarted ? 'evening' : 'morning';
+  const rankRows = vehicles
+    .map(v => ({ v, r: vehicleRound(v, rankSession) }))
+    .filter(x => x.r.expected > 0)
+    .sort((a, b) => (b.r.pending - a.r.pending) || (a.r.done / a.r.expected - b.r.done / b.r.expected))
+    .slice(0, 6)
+    .map(({ v, r }) => {
+      const pct = pctOf(r.done, r.expected);
+      return {
+        key: v.vehicle_id || v.plate_no,
+        label: v.plate_no || 'ยังไม่ระบุรถ',
+        width: pct ?? 0,
+        text: `${r.done}/${r.expected} คน`,
+        variant: pctTone(pct),
+      };
+    });
+
+  // Data completeness, one number for the fold's subtitle.
+  const completenessPct = (() => {
+    if (!c) return null;
+    const items = [
+      { done: c.students_with_vehicle, total: c.students_total },
+      { done: c.students_with_parent,  total: c.students_total },
+      { done: c.vehicles_inspected,    total: c.vehicles_total },
+      { done: c.vehicles_insured,      total: c.vehicles_total },
+    ];
+    // Only fields the backend actually sent — a missing one would give NaN.
+    const usable = items.filter(i => Number.isFinite(i.done) && Number.isFinite(i.total));
+    return usable.length
+      ? Math.round(usable.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / usable.length * 100)
+      : null;
+  })();
+
+  const btnSecondary = 'flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]';
 
   return (
     <PageTransition>
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-5">
-      <PageHeader
-        title={PAGE_TITLES.SCHOOL_DASHBOARD}
-        subtitle={data?.school
-          ? `${data.school.name}${data.school.affiliation_name ? ' · ' + data.school.affiliation_name : ''}`
-          : null}
-        meta={data?.date
-          ? `วันที่ ${new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
-          : null}
-        icon={Building2}
-        iconColor="green"
-      />
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+      <div className="space-y-2">
+        <RoleChip role="school" />
+        <PageHeader
+          title={PAGE_TITLES.SCHOOL_DASHBOARD}
+          subtitle={data?.school
+            ? `${data.school.name}${data.school.affiliation_name ? ' · ' + data.school.affiliation_name : ''}`
+            : null}
+          meta={data?.date
+            ? `วันที่ ${new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
+            : null}
+          icon={Building2}
+          iconColor="green"
+        />
 
-      {/* Phase 10.7E-1 — action row. Renders even while the data loads
-          (the buttons are static). "จัดการรถ" is hidden for grade-teacher
-          accounts because those accounts are read-only per the system
-          intent — backend would 403 anyway.
-          Phase 10.7E-4 mobile polish — each Link uses `flex-1 sm:flex-none
-          justify-center` so the buttons fill the row evenly on mobile (no
-          awkward right-edge whitespace) and revert to content-width on
-          tablet/desktop where horizontal space is plentiful. */}
-      <div className="flex flex-wrap items-stretch gap-2">
-        <Link
-          to="/school/students"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-surface-raised text-sm font-medium px-3.5 py-2 rounded-lg transition min-h-[44px]"
-        >
-          <Search className="w-4 h-4" strokeWidth={2} />
-          ค้นหานักเรียน
-        </Link>
-        {!isTeacher && (
+        {/* Quick actions. "จัดการรถ" and "ยืนยันแทนคนขับ" are hidden for
+            grade-teacher accounts, which are read-only (the backend 403s). */}
+        <div className="flex flex-wrap items-stretch gap-2">
           <Link
-            to="/school/vehicles"
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
+            to="/school/students"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-surface-raised text-sm font-medium px-3.5 py-2 rounded-lg transition min-h-[44px]"
           >
-            <Bus className="w-4 h-4" strokeWidth={2} />
-            จัดการรถ
+            <Search className="w-4 h-4" strokeWidth={2} />
+            ค้นหานักเรียน
           </Link>
-        )}
-        <Link
-          to="/reports/daily"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
-        >
-          <FileText className="w-4 h-4" strokeWidth={2} />
-          รายงานวันนี้
-        </Link>
-        {/* Phase 10.8C — "ยืนยันแทนคนขับ" override action. Hidden for
-            grade-teacher accounts (read-only) — backend enforces 403
-            via requireFullSchoolScope anyway, but hiding the button
-            avoids a dead-end UX. */}
-        {!isTeacher && (
-          <button
-            type="button"
-            onClick={() => setOverrideOpen(true)}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
-          >
-            <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
-            ยืนยันแทนคนขับ
-          </button>
-        )}
+          {!isTeacher && (
+            <Link to="/school/vehicles" className={btnSecondary}>
+              <Bus className="w-4 h-4" strokeWidth={2} />
+              จัดการรถ
+            </Link>
+          )}
+          <Link to="/reports/daily" className={btnSecondary}>
+            <FileText className="w-4 h-4" strokeWidth={2} />
+            รายงานวันนี้
+          </Link>
+          {!isTeacher && (
+            <button type="button" onClick={() => setOverrideOpen(true)} className={btnSecondary}>
+              <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
+              ยืนยันแทนคนขับ
+            </button>
+          )}
+        </div>
       </div>
 
       {overrideOpen && (
@@ -182,247 +278,129 @@ export default function SchoolDashboard() {
         </div>
       ) : (
         <>
-          {/* Status banner — entrance fade explains today's state arriving
-              after the loading skeleton (motion-safe, ≤300ms, reduced-motion
-              users see it instantly). */}
           <div className="motion-safe:animate-fade-in-up">
-            {notStarted ? (
-              <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>
-            ) : issues.length > 0 ? (
-              <AlertBanner variant="warn" title="สิ่งที่ต้องติดตามวันนี้">
-                <ul className="space-y-0.5 mt-1">
-                  {issues.map((msg, i) => <li key={i}>{msg}</li>)}
-                </ul>
-              </AlertBanner>
-            ) : (
-              <AlertBanner variant="success" title="ดำเนินการครบแล้ว ไม่มีรายการค้าง" />
-            )}
+            <TodayBanner variant={banner.variant} title={banner.title} sub={banner.sub} cta={banner.cta} />
           </div>
 
-          {/* Phase 10.7E-3 — data completeness moved below the fold.
-              Overall % shown in the collapsible subtitle so the at-a-glance
-              read survives even when closed. The full bar breakdown opens
-              on click. CompletenessCard component is reused as-is. */}
-          {data?.completeness && (() => {
-            const c = data.completeness;
-            const items = [
-              { done: c.students_with_vehicle, total: c.students_total },
-              { done: c.students_with_parent,  total: c.students_total },
-              { done: c.vehicles_inspected,    total: c.vehicles_total },
-              { done: c.vehicles_insured,      total: c.vehicles_total },
-            ];
-            // นับเฉพาะรายการที่ backend ส่งตัวเลขมาจริง — ถ้า field ใดหายไป
-            // (API เวอร์ชันต่างกัน หรือเพิ่มตัวชี้วัดใหม่ภายหลัง) การหารจะได้
-            // NaN แล้วหน้าขึ้น "NaN% ครบถ้วน" ให้ผู้ใช้เห็น
-            const usable = items.filter(i => Number.isFinite(i.done) && Number.isFinite(i.total));
-            const pct = usable.length
-              ? Math.round(
-                usable.reduce((s, i) => s + (i.total > 0 ? i.done / i.total : 1), 0) / usable.length * 100
-              )
-              : null;
-            return (
-              <CollapsibleSection
+          <TodoCards items={todos} />
+
+          {/* Headline numbers */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="ตัวเลขหลักวันนี้">
+            {/* Before a round has any check-in, show "not started" instead of an empty ring. */}
+            {mExpected === 0 || mDone === 0 ? (
+              <KpiRingCard label="ส่งเช้า" value="ยังไม่เริ่ม" sub="ยังไม่เริ่มรอบ" variant="neutral" />
+            ) : (
+              <KpiRingCard label="ส่งเช้า" pct={mPct} sub={`${mDone.toLocaleString('th-TH')} / ${mExpected.toLocaleString('th-TH')} คน`} variant={pctTone(mPct)} />
+            )}
+            {eExpected === 0 || !eveningStarted ? (
+              <KpiRingCard label="รับเย็น" value="ยังไม่เริ่ม" sub="ยังไม่เริ่มรอบ" variant="neutral" />
+            ) : (
+              <KpiRingCard label="รับเย็น" pct={ePct} sub={`${eDone.toLocaleString('th-TH')} / ${eExpected.toLocaleString('th-TH')} คน`} variant={pctTone(ePct)} />
+            )}
+            <KpiRingCard
+              label="นักเรียนที่ลา"
+              value={mLeave + eLeave}
+              sub={`วันนี้ · เช้า ${mLeave} · เย็น ${eLeave}`}
+              variant="info"
+            />
+            <KpiRingCard
+              label="เหตุฉุกเฉิน 7 วัน"
+              value={emerg7d}
+              sub="7 วันล่าสุด"
+              variant={emerg7d > 0 ? 'danger' : 'success'}
+              chip={emerg7d > 0 ? undefined : 'ไม่มีเหตุ'}
+            />
+          </section>
+
+          {/* Two charts: the last school days, and the buses to chase now */}
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <DayBars
+              title="การรับส่ง 7 วันล่าสุด (%)"
+              days={recentDays || []}
+              note="แสดงเฉพาะวันที่มีการเช็กชื่อ"
+            />
+            <RankBars
+              title={`รายรถวันนี้ (${rankSession === 'evening' ? 'รอบเย็น' : 'รอบเช้า'})`}
+              sub="เรียงจากค้างมากไปน้อย"
+              rows={rankRows}
+              link={{ label: 'ดูรถทั้งหมด', to: '/school/vehicles' }}
+              empty="ยังไม่มีรถที่มีนักเรียนในรอบนี้"
+            />
+          </section>
+
+          {/* Details — folded */}
+          <section className="space-y-3">
+            <div ref={vehiclesRef} className="scroll-mt-4">
+              <FoldSection
+                key={`vehicles-${forced.vehicles}`}
+                defaultOpen={forced.vehicles > 0}
+                title={SECTION_TITLES.VEHICLE_STATUS}
+                subtitle={`${vehicles.length} คัน · กดเพื่อดูรายชื่อนักเรียนในแต่ละคัน`}
+              >
+                <div className="space-y-3">
+                  <PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />
+                  {filtered.length === 0 ? (
+                    <p className="py-8 text-center text-ink-muted">{UI_MESSAGES.VEHICLE_NOT_FOUND}</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {filtered.map(vehicle => (
+                        <VehicleRow
+                          key={vehicle.vehicle_id || '__none'}
+                          vehicle={vehicle}
+                          isExpanded={expandedVehicle === vehicle.vehicle_id}
+                          onToggle={() => toggleVehicle(vehicle.vehicle_id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </FoldSection>
+            </div>
+
+            {/* Leave list with cancel — school can cancel leaves recorded in error */}
+            {leaves.length > 0 && !isTeacher && (
+              <div ref={leavesRef} className="scroll-mt-4">
+                <FoldSection
+                  key={`leaves-${forced.leaves}`}
+                  defaultOpen={forced.leaves > 0}
+                  title="รายการลา"
+                  subtitle={`${leaves.length} รายการ`}
+                >
+                  <div className="space-y-2">
+                    {leaves.map(lv => (
+                      <div key={lv.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-surface border border-surface-border">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-ink truncate">{lv.student_name}</p>
+                          <p className="text-xs text-ink-muted">
+                            {formatGradeClass(lv.grade, lv.classroom, '')} · {lv.plate_no}
+                            {lv.session && ` · ${lv.session === 'morning' ? 'เช้า' : lv.session === 'evening' ? 'เย็น' : 'ทั้งวัน'}`}
+                            {lv.reason && ` · ${lv.reason}`}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmLeave(lv.id)}
+                          disabled={!!leaveLoading[lv.id]}
+                          className="shrink-0 text-xs font-medium text-danger-ink hover:text-danger-ink/80 disabled:opacity-50 px-2.5 py-1 rounded border border-danger/30 hover:bg-danger-soft transition min-h-[36px]"
+                        >
+                          {leaveLoading[lv.id] ? 'กำลัง...' : 'ยกเลิก'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </FoldSection>
+              </div>
+            )}
+
+            {c && (
+              <FoldSection
                 title="ความครบถ้วนข้อมูล"
-                subtitle={pct === null ? 'ยังคำนวณไม่ได้' : `${pct}% ครบถ้วน`}
-                defaultOpen={false}
+                subtitle={completenessPct === null ? 'ยังคำนวณไม่ได้' : `${completenessPct}% ครบถ้วน`}
               >
                 <CompletenessCard c={c} />
-              </CollapsibleSection>
-            );
-          })()}
-
-          {/* Headline KPIs */}
-          <KPIGrid cols={4} gap="sm">
-            <KPIStat
-              label={CARD_LABELS.TOTAL_STUDENTS}
-              value={data?.total_students ?? 0}
-              icon={GraduationCap}
-              variant="brand"
-            />
-            <KPIStat
-              label={CARD_LABELS.VEHICLES}
-              value={data?.total_vehicles ?? 0}
-              icon={Bus}
-              variant="brand"
-            />
-            <KPIStat
-              label={CARD_LABELS.STUDENT_LEAVE}
-              value={totalLeave > 0 ? `${data?.morning_leave ?? 0}/${data?.evening_leave ?? 0}` : '0'}
-              icon={ClipboardList}
-              variant={totalLeave > 0 ? 'warn' : 'neutral'}
-              hint={totalLeave > 0 ? 'เช้า/เย็น' : 'ไม่มีคนลา'}
-            />
-            <KPIStat
-              label={CARD_LABELS.EMERGENCY}
-              value={data?.recent_emergencies ?? 0}
-              icon={AlertTriangle}
-              variant={data?.recent_emergencies > 0 ? 'danger' : 'neutral'}
-              hint="7 วันล่าสุด"
-            />
-          </KPIGrid>
-
-          {/* Phase 10.7E-2 — alert strip. 4 at-a-glance operational chips
-              derived from existing dashboard fields. Sits right above the
-              session-card hero so admins see the actionable totals before
-              they scan the per-session detail. Mobile: flex-wrap. */}
-          {(() => {
-            const totalDone     = (data?.morning_done    ?? 0) + (data?.evening_done    ?? 0);
-            const totalPending  = (data?.morning_pending ?? 0) + (data?.evening_pending ?? 0);
-            const totalLeaveNow = (data?.morning_leave   ?? 0) + (data?.evening_leave   ?? 0);
-            const emerg7d       = data?.recent_emergencies ?? 0;
-            const Chip = ({ tone, label, value }) => {
-              const cls = {
-                neutral: 'bg-surface-raised text-ink-muted border-surface-border',
-                info:    'bg-info-soft   text-info-ink   border-info/30',
-                warn:    'bg-warn-soft   text-warn-ink   border-warn/30',
-                danger:  'bg-danger-soft text-danger-ink border-danger/30',
-                success: 'bg-success-soft text-success-ink border-success/30',
-              }[tone] || 'bg-surface-raised text-ink-muted border-surface-border';
-              return (
-                <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border tabular-nums ${cls}`}>
-                  <span>{label}</span>
-                  <span className="font-semibold">{value}</span>
-                </span>
-              );
-            };
-            return (
-              <div className="flex flex-wrap items-center gap-2">
-                <Chip tone={totalLeaveNow > 0 ? 'warn'    : 'neutral'} label="นักเรียนลา"      value={totalLeaveNow} />
-                <Chip tone={totalPending  > 0 ? 'danger'  : 'success'} label="ยังไม่ยืนยัน"     value={totalPending} />
-                <Chip tone={totalDone     > 0 ? 'success' : 'neutral'} label="สำเร็จแล้ว"   value={totalDone} />
-                <Chip tone={emerg7d       > 0 ? 'danger'  : 'neutral'} label="เหตุฉุกเฉิน 7 วัน" value={emerg7d} />
-              </div>
-            );
-          })()}
-
-          {/* Session progress (hero — Phase 10.7E-2 makes SessionCard more
-              prominent without changing data semantics; see component below). */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <SessionCard
-              icon={Sunrise}
-              label="ส่งเช้า"
-              done={data?.morning_done ?? 0}
-              total={data?.morning_total ?? 0}
-              pending={data?.morning_pending ?? 0}
-              leave={data?.morning_leave ?? 0}
-            />
-            <SessionCard
-              icon={Sunset}
-              label="รับเย็น"
-              done={data?.evening_done ?? 0}
-              total={data?.evening_total ?? 0}
-              pending={data?.evening_pending ?? 0}
-              leave={data?.evening_leave ?? 0}
-            />
-          </div>
-
-          {/* Leave list with cancel — school can cancel leaves recorded in error */}
-          {leaves.length > 0 && !isTeacher && (
-            <CollapsibleSection
-              title="นักเรียนลา"
-              subtitle={`${leaves.length} รายการ`}
-              defaultOpen={false}
-            >
-              <div className="space-y-2">
-                {leaves.map(lv => (
-                  <div key={lv.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-surface border border-surface-border">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-ink truncate">{lv.student_name}</p>
-                      <p className="text-xs text-ink-muted">
-                        {formatGradeClass(lv.grade, lv.classroom, '')} · {lv.plate_no}
-                        {lv.session && ` · ${lv.session === 'morning' ? 'เช้า' : lv.session === 'evening' ? 'เย็น' : 'ทั้งวัน'}`}
-                        {lv.reason && ` · ${lv.reason}`}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmLeave(lv.id)}
-                      disabled={!!leaveLoading[lv.id]}
-                      className="shrink-0 text-xs font-medium text-danger-ink hover:text-danger-ink/80 disabled:opacity-50 px-2.5 py-1 rounded border border-danger/30 hover:bg-danger-soft transition min-h-[36px]"
-                    >
-                      {leaveLoading[lv.id] ? 'กำลัง...' : 'ยกเลิก'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </CollapsibleSection>
-          )}
-
-          {/* Phase 10.7E-3 — analytics charts moved below the fold.
-              Three charts (morning donut, evening donut, pending bar chart)
-              kept intact; only collapsed by default. The hero session cards
-              above already show the same morning/evening pct numbers, so
-              hiding the donuts by default removes redundancy without
-              losing the data — open the section to compare layouts. */}
-          {vehicles.length > 0 && (
-            <CollapsibleSection
-              title="วิเคราะห์ภาพรวม"
-              subtitle="กราฟส่งเช้า / รับเย็น / รถที่มีรายการค้าง"
-              defaultOpen={false}
-            >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <AppCard padding="lg">
-                <p className="text-xs font-semibold text-ink-muted mb-3 text-center">{CHART_TITLES.MORNING_STATUS}</p>
-                <DonutChart
-                  size={110} thickness={16}
-                  label={`${data?.morning_total > 0 ? Math.round(((data?.morning_done ?? 0) / data.morning_total) * 100) : 0}%`}
-                  sublabel={STATUS.DONE}
-                  segments={MORNING_SEGMENTS(data?.morning_done ?? 0, data?.morning_leave ?? 0, data?.morning_pending ?? 0)}
-                />
-              </AppCard>
-              <AppCard padding="lg">
-                <p className="text-xs font-semibold text-ink-muted mb-3 text-center">{CHART_TITLES.EVENING_STATUS}</p>
-                <DonutChart
-                  size={110} thickness={16}
-                  label={`${data?.evening_total > 0 ? Math.round(((data?.evening_done ?? 0) / data.evening_total) * 100) : 0}%`}
-                  sublabel={STATUS.DONE}
-                  segments={EVENING_SEGMENTS(data?.evening_done ?? 0, data?.evening_leave ?? 0, data?.evening_pending ?? 0)}
-                />
-              </AppCard>
-              <AppCard padding="lg">
-                <HBarChart
-                  label="รถที่มีรายการค้างมากที่สุด"
-                  items={(() => {
-                    const isMLeave = (s) => s.leave_session === 'morning' || s.leave_session === 'both';
-                    return vehicles
-                      .map(v => {
-                        const mE = v.students.filter(s => s.morning_enabled && !isMLeave(s));
-                        const mP = mE.length - mE.filter(s => s.morning_done).length;
-                        return { label: v.plate_no, value: mP, color: mP > 5 ? '#EF4444' : mP > 0 ? '#F59E0B' : '#10B981' };
-                      })
-                      .sort((a, b) => b.value - a.value)
-                      .slice(0, 6);
-                  })()}
-                  valueLabel=" คน"
-                />
-              </AppCard>
-            </div>
-            </CollapsibleSection>
-          )}
-
-          {/* Vehicle status section */}
-          <DashboardSection
-            title={SECTION_TITLES.VEHICLE_STATUS}
-            description={`${filtered.length} คัน${plateSearch ? ' (กรอง)' : ''}`}
-            action={<PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />}
-          >
-            {filtered.length === 0 ? (
-              <AppCard padding="lg" className="py-12 text-center">
-                <p className="text-ink-muted">{UI_MESSAGES.VEHICLE_NOT_FOUND}</p>
-              </AppCard>
-            ) : (
-              <div className="space-y-2">
-                {filtered.map(vehicle => (
-                  <VehicleRow
-                    key={vehicle.vehicle_id || '__none'}
-                    vehicle={vehicle}
-                    isExpanded={expandedVehicle === vehicle.vehicle_id}
-                    onToggle={() => toggleVehicle(vehicle.vehicle_id)}
-                  />
-                ))}
-              </div>
+              </FoldSection>
             )}
-          </DashboardSection>
+          </section>
         </>
       )}
     </div>
@@ -483,86 +461,6 @@ function CompletenessCard({ c }) {
             </div>
           );
         })}
-      </div>
-    </AppCard>
-  );
-}
-
-function SessionCard({ icon: Icon, label, done, total, pending, leave }) {
-  const notStarted = total === 0;
-  const allDone    = !notStarted && pending === 0;
-  const pct        = notStarted ? 0 : Math.round((done / total) * 100);
-
-  // Semantic state mapping — neutral when nothing has happened yet,
-  // never danger for "0% before the day started."
-  const barCls  = notStarted ? 'bg-surface-border'
-                : allDone    ? 'bg-success'
-                : pct >= 80  ? 'bg-warn'
-                : 'bg-danger';
-  const pctTone = notStarted ? 'text-ink-muted'
-                : allDone    ? 'text-success-ink'
-                : pct >= 80  ? 'text-warn-ink'
-                : 'text-danger-ink';
-
-  // Phase 10.7E-2 — promote to hero layout: a single large done/total
-  // headline + percentage on its own row, then a wider progress bar and
-  // explicit pending/leave chips below. Data semantics unchanged: same
-  // props, same caller (already passing morning_/evening_ fields).
-  return (
-    <AppCard padding="lg" className={allDone ? 'border-success/40' : ''}>
-      {/* Header row: icon + label · pct (top-right) */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {Icon && <Icon className="w-5 h-5 text-ink-muted" strokeWidth={2} />}
-          <span className="text-base font-semibold text-ink">{label}</span>
-        </div>
-        <span className={`text-base font-semibold tabular-nums ${pctTone}`}>
-          {notStarted ? 'ยังไม่เริ่ม' : `${pct}%`}
-        </span>
-      </div>
-
-      {/* Hero number — bigger done/total readout */}
-      <div className="mb-3">
-        {notStarted ? (
-          <p className="text-2xl font-bold text-ink-muted tabular-nums">–</p>
-        ) : allDone ? (
-          <p className="text-2xl font-bold text-success-ink">{label}ครบแล้ว</p>
-        ) : (
-          <p className="text-3xl font-bold text-ink tabular-nums leading-none">
-            {done}
-            <span className="text-base font-semibold text-ink-muted"> / {total - leave} คน</span>
-          </p>
-        )}
-      </div>
-
-      {/* Progress bar — slightly taller for hero feel */}
-      <div className="w-full bg-surface rounded-full h-2.5 mb-2.5">
-        {!notStarted && (
-          <div className={`h-2.5 rounded-full transition-all ${barCls}`} style={{ width: `${pct}%` }} />
-        )}
-      </div>
-
-      {/* Detail chips: pending + leave, only when relevant */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        {notStarted ? (
-          <span className="text-ink-muted">รอเริ่มรอบ</span>
-        ) : (
-          <>
-            {pending > 0 && (
-              <span className="inline-flex items-center gap-1 bg-danger-soft text-danger-ink px-2 py-0.5 rounded-full border border-danger/30 font-medium tabular-nums">
-                {STATUS.PENDING} {pending}
-              </span>
-            )}
-            {leave > 0 && (
-              <span className="inline-flex items-center gap-1 bg-warn-soft text-warn-ink px-2 py-0.5 rounded-full border border-warn/30 font-medium tabular-nums">
-                {STATUS.LEAVE} {leave}
-              </span>
-            )}
-            {pending === 0 && leave === 0 && (
-              <span className="text-success-ink font-medium">ทุกรายการเรียบร้อย</span>
-            )}
-          </>
-        )}
       </div>
     </AppCard>
   );
@@ -662,42 +560,5 @@ function StudentStatus({ enabled, done, ts, leave }) {
       <span className="w-1.5 h-1.5 bg-warn rounded-full animate-pulse" />
       {STATUS.PENDING}
     </span>
-  );
-}
-
-/* ── Phase 10.7E-3 ── Collapsible section ────────────────────────────────
-   Local helper used to move secondary analytics below the fold without
-   removing them. Pure React state, no library. The header is a full-width
-   button (min-h ≥ 44px for mobile tap), shows a subtitle so closed state
-   still carries one piece of glanceable info, and uses the existing
-   AppCard styling so it matches the rest of the dashboard. */
-function CollapsibleSection({ title, subtitle, defaultOpen = false, children }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <AppCard padding="none">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-surface transition min-h-[44px] focus:outline-none focus:ring-2 focus:ring-brand-400 rounded-2xl"
-        aria-expanded={open}
-      >
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink truncate">{title}</p>
-          {subtitle && <p className="text-xs text-ink-muted mt-0.5 truncate">{subtitle}</p>}
-        </div>
-        <span className="text-xs text-ink-muted shrink-0 inline-flex items-center gap-1 ml-2">
-          {open ? 'ซ่อนรายละเอียด' : 'แสดงรายละเอียด'}
-          <ChevronDown
-            className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`}
-            strokeWidth={2}
-          />
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-surface-border p-3 sm:p-4">
-          {children}
-        </div>
-      )}
-    </AppCard>
   );
 }

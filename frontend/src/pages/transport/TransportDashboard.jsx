@@ -1,18 +1,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
-  AlertTriangle, ClipboardList, CheckCircle2, Lightbulb,
-  FileText, Phone, X, Search,
-  // Phase 10.7A — icons for the combined-document expiry cards
-  Clock, XCircle,
+  ClipboardList, Lightbulb, FileText, Phone,
   // Phase 10.8UX-B-1 — action row icon for pickup map
   Map as MapIcon,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { DonutChart } from '../../components/MiniCharts';
 import {
-  AppCard, AlertBanner, KPIGrid, KPIStat,
-  StatusBadge, DashboardSection, FilterBar} from '../../components/ui';
+  AppCard, AlertBanner, StatusBadge, DashboardSection, FilterBar,
+  TodayBanner, TodoCards, KpiRingCard, RankBars, FoldSection, RoleChip,
+  pctOf, pctTone,
+} from '../../components/ui';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import PageHeader from '../../components/PageHeader';
@@ -137,20 +136,28 @@ function hasAnyExpiredDoc(v) {
   return DOC_EXPIRY_FIELDS.some(f => v[f] && new Date(v[f]).getTime() < now);
 }
 
+const in30Days = () => new Date(Date.now() + 30 * 86400000);
+
+// Five groups instead of the old eleven chips. Each maps onto the client-side
+// risk tags above; a vehicle may sit in more than one group.
 const FILTERS = [
-  { key: 'all',            label: 'ทั้งหมด',           fn: () => true },
-  { key: 'urgent',         label: 'เร่งด่วน',          fn: v => riskScore(v) >= 100 },
-  { key: 'not_inspected',  label: 'ยังไม่ตรวจ',         fn: v => !v.latest_inspection_result },
-  { key: 'failed',         label: 'ไม่ผ่าน',           fn: v => v.latest_inspection_result === 'FAILED' },
-  { key: 'needs_fix',      label: 'ต้องแก้ไข',         fn: v => v.latest_inspection_result === 'NEEDS_FIX' },
-  { key: 'ins_expired',    label: 'ประกันหมด',         fn: v => v.insurance_expiry && new Date(v.insurance_expiry) < new Date() },
-  { key: 'no_ins',         label: 'ไม่มีข้อมูลประกัน',   fn: v => !v.insurance_expiry },
-  { key: 'ins_expiring',   label: 'ใกล้หมดอายุ',        fn: v => v.insurance_expiry && new Date(v.insurance_expiry) >= new Date() && new Date(v.insurance_expiry) < new Date(Date.now() + 30*86400000) },
-  // Phase 10.7A — combined-document filters across the 4 expiry fields
-  { key: 'docs_expiring',  label: 'เอกสารใกล้หมด',     fn: hasAnyExpiringDoc },
-  { key: 'docs_expired',   label: 'เอกสารหมดอายุ',     fn: hasAnyExpiredDoc },
-  { key: 'ready',          label: 'พร้อมใช้งาน',       fn: v => riskScore(v) === 0 },
+  { key: 'all',      label: 'ทั้งหมด',  fn: () => true },
+  // expired documents, failed inspection, or a risk score at the urgent level
+  { key: 'urgent',   label: 'เร่งด่วน', fn: v => riskScore(v) >= 100 || v.latest_inspection_result === 'FAILED' || hasAnyExpiredDoc(v) },
+  // never inspected, or inspected and told to fix something
+  { key: 'pending',  label: 'รอตรวจ',   fn: v => !v.latest_inspection_result || v.latest_inspection_result === 'NEEDS_FIX' },
+  // any document due in 30 days, or no insurance recorded at all
+  { key: 'expiring', label: 'ใกล้หมด',  fn: v => hasAnyExpiringDoc(v) || !v.insurance_expiry
+      || (v.insurance_expiry && new Date(v.insurance_expiry) >= new Date() && new Date(v.insurance_expiry) < in30Days()) },
+  { key: 'ready',    label: 'พร้อมใช้', fn: v => riskScore(v) === 0 },
 ];
+
+// The vehicle list endpoint caps per_page at 100 (transport.routes.js), so the
+// risk list and its chip counts only ever see the first page. KPIs and the
+// banner therefore read /transport/dashboard alone, and the list says how many
+// vehicles it covers. A complete list needs backend paging or server-side
+// filtering by risk group — not done here.
+const LIST_PAGE_SIZE = 100;
 
 export default function TransportDashboard() {
   const navigate = useNavigate();
@@ -158,9 +165,11 @@ export default function TransportDashboard() {
   const savedParam = searchParams.get('saved') || '';
   const [highlightId, setHighlightId] = useState(savedParam);
   const highlightRef = useRef(null);
+  const listRef = useRef(null);
 
   const [data, setData] = useState(null);
   const [vehicles, setVehicles] = useState([]);
+  const [listTotal, setListTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [vSearch, setVSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
@@ -168,13 +177,16 @@ export default function TransportDashboard() {
   useEffect(() => {
     Promise.all([
       api.get('/transport/dashboard').then(r => r.data.data),
-      api.get('/transport/vehicles?per_page=200').then(r => r.data.data).catch(() => []),
+      api.get(`/transport/vehicles?per_page=${LIST_PAGE_SIZE}`).then(r => r.data).catch(() => null),
     ])
-      // `vList || []` let a non-array response through (an error envelope or an
-      // object body is truthy), and every downstream vehicles.filter(...) then
-      // threw, blanking the whole dashboard. Guard on the shape, not on
-      // truthiness.
-      .then(([dash, vList]) => { setData(dash); setVehicles(Array.isArray(vList) ? vList : []); })
+      // Guard on the shape, not on truthiness: an error envelope or an object
+      // body used to slip through and blank the whole dashboard.
+      .then(([dash, body]) => {
+        setData(dash);
+        const list = Array.isArray(body?.data) ? body.data : [];
+        setVehicles(list);
+        setListTotal(Number(body?.meta?.total) || list.length);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -208,36 +220,111 @@ export default function TransportDashboard() {
   if (loading) return <LoadingState />;
   if (!data)   return <EmptyState title="ยังไม่มีข้อมูล" />;
 
-  const urgentCount = vehicles.filter(v => riskScore(v) >= 100).length;
-  const readyCount = data.passed || 0;
-  const readyPct = data.total_vehicles > 0 ? Math.round((readyCount / data.total_vehicles) * 100) : 0;
+  const n = k => Number(data[k]) || 0;
+  const total        = n('total_vehicles');
+  const noFleet      = total === 0;
+  const failed       = n('failed');
+  const expiredIns   = n('expired_insurance');
+  const expiredDocs  = n('expired_docs_count');
+  const expiringIns  = n('expiring_insurance');
+  const expiringDocs = n('expiring_docs_count');
+  const notInspected = n('not_inspected');
+  const noInsurance  = n('no_insurance_data');
+  const passed       = n('passed');
+  const needsFix     = n('needs_fix');
+  // A vehicle can be both failed and expired; the sum is "items to handle",
+  // which is what the banner promises, not a distinct vehicle count.
+  const urgentItems  = failed + expiredIns + expiredDocs;
+  const readyPct     = pctOf(passed, total);
+  const shareOf      = v => (total > 0 ? `${Math.round((v / total) * 100)}% ของทั้งหมด` : '');
+
+  function showUrgent() {
+    setActiveFilter('urgent');
+    listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  let banner;
+  let bannerTopic = null;
+  if (noFleet) {
+    banner = { variant: 'info', title: 'ยังไม่มีรถในระบบ', sub: 'เพิ่มรถผ่านโรงเรียนเพื่อเริ่มตรวจสภาพ' };
+  } else if (urgentItems > 0) {
+    const parts = [];
+    if (failed > 0)      parts.push(`ตรวจไม่ผ่าน ${failed}`);
+    if (expiredIns > 0)  parts.push(`ประกันหมดอายุ ${expiredIns}`);
+    if (expiredDocs > 0) parts.push(`เอกสารอื่นหมดอายุ ${expiredDocs}`);
+    banner = {
+      variant: 'danger',
+      title: `${urgentItems.toLocaleString('th-TH')} คันต้องจัดการเร่งด่วน`,
+      sub: parts.join(' · '),
+      cta: { label: 'ดูรถเร่งด่วน', onClick: showUrgent },
+    };
+    bannerTopic = 'urgent';
+  } else if (notInspected > 0) {
+    banner = {
+      variant: 'warn',
+      title: `รถยังไม่ได้ตรวจสภาพ ${notInspected.toLocaleString('th-TH')} คัน`,
+      sub: `${shareOf(notInspected)} · ไม่มีรถที่หมดอายุหรือตรวจไม่ผ่าน`,
+      cta: { label: 'บันทึกตรวจสภาพ', to: '/transport/inspections' },
+    };
+    bannerTopic = 'not_inspected';
+  } else {
+    banner = { variant: 'success', title: 'รถทุกคันพร้อมใช้งาน', sub: `ตรวจผ่าน ${passed.toLocaleString('th-TH')} จาก ${total.toLocaleString('th-TH')} คัน` };
+  }
+
+  const todos = [
+    bannerTopic !== 'not_inspected' && {
+      key: 'not_inspected', variant: 'warn', count: notInspected,
+      title: 'รถยังไม่ได้ตรวจสภาพ', sub: shareOf(notInspected),
+      cta: { label: 'บันทึกตรวจสภาพ', to: '/transport/inspections' },
+    },
+    {
+      key: 'expiring', variant: 'warn', count: expiringIns + expiringDocs,
+      title: 'เอกสารใกล้หมดใน 30 วัน', sub: `ประกัน ${expiringIns} · เอกสารอื่น ${expiringDocs}`,
+      cta: { label: 'ดูรายการ', onClick: () => { setActiveFilter('expiring'); listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
+    },
+    {
+      key: 'no_ins', variant: 'warn', count: noInsurance,
+      title: 'ไม่มีข้อมูลประกัน', sub: 'ควรกรอกวันหมดอายุประกัน',
+      cta: { label: 'ดูรายการ', onClick: () => { setActiveFilter('expiring'); listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
+    },
+  ].filter(Boolean);
+
+  const docRows = [
+    { key: 'ins_soon', label: 'ประกันใกล้หมด',     value: expiringIns,  variant: 'warn' },
+    { key: 'ins_out',  label: 'ประกันหมดอายุ',     value: expiredIns,   variant: 'danger' },
+    { key: 'doc_soon', label: 'เอกสารอื่นใกล้หมด', value: expiringDocs, variant: 'warn' },
+    { key: 'doc_out',  label: 'เอกสารอื่นหมดอายุ', value: expiredDocs,  variant: 'danger' },
+  ];
+  const docMax = Math.max(1, ...docRows.map(r => r.value));
+  const listPartial = listTotal > vehicles.length;
 
   return (
     <PageTransition>
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
-      <PageHeader
-        title="ภาพรวมตรวจสภาพรถ"
-        subtitle="สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด"
-      />
-
-      {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern
-          (flex-1 sm:flex-none + min-h 40px) so transport operators can tap
-          straight to inspection record / pickup map without scrolling. */}
-      <div className="flex flex-wrap items-stretch gap-2">
-        <Link
-          to="/transport/inspections"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
-        >
-          <ClipboardList className="w-4 h-4" strokeWidth={2} />
-          บันทึกตรวจสภาพ
-        </Link>
-        <Link
-          to="/transport/pickup-map"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
-        >
-          <MapIcon className="w-4 h-4" strokeWidth={2} />
-          แผนที่จุดรับส่ง
-        </Link>
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+      <div className="flex flex-col gap-2">
+        <RoleChip role="transport" />
+        <PageHeader
+          title="ภาพรวมตรวจสภาพรถ"
+          subtitle="สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด"
+          actions={
+            <div className="flex flex-wrap items-stretch gap-2">
+              <Link
+                to="/transport/inspections"
+                className="focus-ring inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3.5 rounded-xl transition border border-surface-border min-h-[44px]"
+              >
+                <ClipboardList className="w-4 h-4" strokeWidth={2} />
+                บันทึกตรวจสภาพ
+              </Link>
+              <Link
+                to="/transport/pickup-map"
+                className="focus-ring inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3.5 rounded-xl transition border border-surface-border min-h-[44px]"
+              >
+                <MapIcon className="w-4 h-4" strokeWidth={2} />
+                แผนที่จุดรับส่ง
+              </Link>
+            </div>
+          }
+        />
       </div>
 
       {/* Save success banner */}
@@ -252,175 +339,139 @@ export default function TransportDashboard() {
         ) : null;
       })()}
 
-      {/* Hero status */}
-      {(() => {
-        if ((data.total_vehicles ?? 0) === 0) {
-          return <AlertBanner variant="info" title="ยังไม่มีรถในระบบ">เพิ่มรถผ่านโรงเรียนเพื่อเริ่มตรวจสภาพ</AlertBanner>;
-        }
-        if (urgentCount > 0) {
-          return (
-            <AlertBanner variant="danger" title={`${urgentCount} คัน ต้องจัดการเร่งด่วน`}>
-              ยังไม่ตรวจ {data.not_inspected} · ไม่มีข้อมูลประกัน {data.no_insurance_data}
-            </AlertBanner>
-          );
-        }
-        return <AlertBanner variant="success" title="รถทุกคันพร้อมใช้งาน" />;
-      })()}
+      <TodayBanner {...banner} />
 
-      {/* KPI grid — neutral when no vehicles in scope yet.
-          Phase 10.7A — 4-card grid grew to 6 (added เอกสารใกล้หมด /
-          เอกสารหมดอายุ). cols={3} keeps 2 clean rows on desktop and stacks
-          naturally on mobile. The 2 new cards are clickable to drop the
-          dashboard's local filter on the rendered vehicle list below. */}
-      {(() => {
-        const noFleet = (data.total_vehicles ?? 0) === 0;
-        const expiringDocs = data.expiring_docs_count || 0;
-        const expiredDocs  = data.expired_docs_count  || 0;
-        return (
-          <KPIGrid cols={3} gap="sm">
-            <KPIStat
-              label="เร่งด่วน"
-              value={noFleet ? '–' : urgentCount}
-              icon={AlertTriangle}
-              variant={noFleet ? 'neutral' : urgentCount > 0 ? 'danger' : 'success'}
-              hint={noFleet ? 'ยังไม่มีรถในระบบ' : `จาก ${data.total_vehicles} คัน`}
-            />
-            <KPIStat
-              label="ยังไม่ตรวจ"
-              value={noFleet ? '–' : data.not_inspected}
-              icon={ClipboardList}
-              variant={noFleet ? 'neutral' : data.not_inspected > 0 ? 'danger' : 'success'}
-              hint={noFleet
-                ? null
-                : `${Math.round((data.not_inspected / data.total_vehicles) * 100)}% ของทั้งหมด`}
-            />
-            <KPIStat
-              label="ไม่มีข้อมูลประกัน"
-              value={noFleet ? '–' : data.no_insurance_data}
-              icon={FileText}
-              variant={noFleet ? 'neutral' : data.no_insurance_data > 0 ? 'warn' : 'success'}
-              hint={noFleet ? null : `ปกติ ${data.insurance_ok || 0} คัน`}
-            />
-            <KPIStat
-              label="พร้อมใช้งาน"
-              value={noFleet ? '–' : readyCount}
-              icon={CheckCircle2}
-              variant={noFleet ? 'neutral' : 'success'}
-              hint={noFleet ? null : `${readyPct}% ของทั้งหมด`}
-            />
-            <button
-              type="button"
-              onClick={() => setActiveFilter('docs_expiring')}
-              className="text-left rounded-2xl focus:outline-none focus:ring-2 focus:ring-warn/50"
-              aria-label="ดูรถที่เอกสารใกล้หมด"
-            >
-              <KPIStat
-                label="เอกสารใกล้หมด"
-                value={noFleet ? '–' : expiringDocs}
-                icon={Clock}
-                variant={noFleet ? 'neutral' : expiringDocs > 0 ? 'warn' : 'success'}
-                hint={noFleet ? null : 'ประกัน · ทะเบียน · พ.ร.บ. · ภาษี · ใน 30 วัน'}
-              />
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveFilter('docs_expired')}
-              className="text-left rounded-2xl focus:outline-none focus:ring-2 focus:ring-danger/50"
-              aria-label="ดูรถที่เอกสารหมดอายุ"
-            >
-              <KPIStat
-                label="เอกสารหมดอายุ"
-                value={noFleet ? '–' : expiredDocs}
-                icon={XCircle}
-                variant={noFleet ? 'neutral' : expiredDocs > 0 ? 'danger' : 'success'}
-                hint={noFleet ? null : 'รวมทุกประเภทเอกสารที่เลยกำหนด'}
-              />
-            </button>
-          </KPIGrid>
-        );
-      })()}
+      {!noFleet && <TodoCards items={todos} />}
 
-      {/* The chip row and the search box were a hand-rolled pair; the chips
-          were styled buttons rather than a radiogroup, and the search input
-          had no accessible name — a placeholder is not one. */}
-      <FilterBar
-        chips={{
-          label: 'กรองรถตามความเสี่ยง',
-          value: activeFilter,
-          onChange: setActiveFilter,
-          options: FILTERS.map(f => [f.key, f.label, filterCounts[f.key]]),
-        }}
-        search={{
-          value: vSearch,
-          onChange: setVSearch,
-          label: 'ค้นหาทะเบียนรถ',
-          placeholder: 'ค้นหาทะเบียนรถ…',
-        }}
-        count={filtered.length}
-        countLabel="คัน"
-        onClear={(activeFilter !== FILTERS[0].key || vSearch)
-          ? () => { setActiveFilter(FILTERS[0].key); setVSearch(''); }
-          : undefined}
-      />
+      {!noFleet && (
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiRingCard
+            label="พร้อมใช้งาน"
+            pct={readyPct}
+            sub={`${passed.toLocaleString('th-TH')} / ${total.toLocaleString('th-TH')} คัน`}
+            variant={pctTone(readyPct)}
+          />
+          <KpiRingCard
+            label="ยังไม่ตรวจ"
+            value={notInspected}
+            sub={shareOf(notInspected)}
+            variant={notInspected > 0 ? 'warn' : 'success'}
+            chip={notInspected > 0 ? undefined : 'ไม่มี'}
+          />
+          <KpiRingCard
+            label="ไม่มีข้อมูลประกัน"
+            value={noInsurance}
+            sub={shareOf(noInsurance)}
+            variant={noInsurance > 0 ? 'warn' : 'success'}
+            chip={noInsurance > 0 ? undefined : 'ไม่มี'}
+          />
+          <KpiRingCard
+            label="หมดอายุ / ไม่ผ่าน"
+            value={urgentItems}
+            sub={urgentItems > 0 ? 'ต้องแก้ก่อนให้บริการ' : 'ไม่มีรถที่หมดอายุหรือไม่ผ่าน'}
+            variant={urgentItems > 0 ? 'danger' : 'success'}
+            chip={urgentItems > 0 ? undefined : 'ไม่มี'}
+            onClick={urgentItems > 0 ? showUrgent : undefined}
+          />
+        </section>
+      )}
+
+      {!noFleet && (
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-soft p-5 flex flex-col gap-3 min-w-0">
+            <h3 className="font-bold text-ink">สถานะรถทั้งหมด</h3>
+            <DonutChart
+              size={150} thickness={22}
+              label={readyPct == null ? '–' : `${readyPct}%`} sublabel="พร้อมใช้งาน"
+              segments={[
+                { label: 'ผ่าน',        value: passed,       color: '#10B981' },
+                { label: 'ต้องแก้ไข',   value: needsFix,     color: '#F59E0B' },
+                { label: 'ไม่ผ่าน',     value: failed,       color: '#EF4444' },
+                { label: 'ยังไม่ตรวจ',  value: notInspected, color: '#94A3B8' },
+              ]}
+            />
+          </div>
+          <RankBars
+            title="เอกสารที่ต้องดูแล"
+            sub="ใน 30 วัน / เลยกำหนด"
+            rows={docRows.map(r => ({
+              key: r.key, label: r.label, variant: r.value > 0 ? r.variant : 'success',
+              width: (r.value / docMax) * 100, text: `${r.value.toLocaleString('th-TH')} คัน`,
+            }))}
+          />
+        </section>
+      )}
 
       {/* Vehicle list */}
-      <DashboardSection
-        title={`${currentFilter.label} — ${filtered.length} คัน`}
-        description={vSearch ? `ค้นหา "${vSearch}"` : null}
-      >
-        {filtered.length === 0 ? (
-          <AppCard padding="lg" className="text-center">
-            <p className="text-ink-muted">ไม่พบรถในกลุ่มนี้</p>
-          </AppCard>
-        ) : (
-          <div className="space-y-2">
-            {filtered.slice(0, 20).map(v => (
-              <VehicleRiskRow
-                key={v.id}
-                vehicle={v}
-                isHighlighted={v.id === highlightId}
-                rowRef={v.id === highlightId ? highlightRef : null}
-                onRecord={() => navigate(`/transport/inspections?vehicle_id=${v.id}`)}
-              />
-            ))}
-            {filtered.length > 20 && (
-              <p className="text-sm text-ink-muted text-center py-2">… แสดง 20 จาก {filtered.length} คัน</p>
-            )}
-          </div>
+      <div ref={listRef} className="space-y-3 scroll-mt-4">
+        <FilterBar
+          chips={{
+            label: 'กรองรถตามความเสี่ยง',
+            value: activeFilter,
+            onChange: setActiveFilter,
+            options: FILTERS.map(f => [f.key, f.label, filterCounts[f.key]]),
+          }}
+          search={{
+            value: vSearch,
+            onChange: setVSearch,
+            label: 'ค้นหาทะเบียนรถ',
+            placeholder: 'ค้นหาทะเบียนรถ…',
+          }}
+          count={filtered.length}
+          countLabel="คัน"
+          onClear={(activeFilter !== FILTERS[0].key || vSearch)
+            ? () => { setActiveFilter(FILTERS[0].key); setVSearch(''); }
+            : undefined}
+        />
+        {listPartial && (
+          <p className="text-xs text-ink-muted">
+            ตัวเลขในปุ่มกรองนับจากรถที่แสดงในรายการนี้เท่านั้น ({vehicles.length.toLocaleString('th-TH')} คัน) ตัวเลขทั้งจังหวัดดูจากการ์ดด้านบน
+          </p>
         )}
-      </DashboardSection>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <AppCard padding="lg">
-          <p className="text-sm font-semibold text-ink-muted mb-3 text-center">ผลตรวจสภาพรถ</p>
-          <DonutChart
-            size={140} thickness={20}
-            label={`${readyPct}%`} sublabel="พร้อมใช้งาน"
-            segments={[
-              { value: data.passed || 0,         color: '#10B981' },
-              { value: data.needs_fix || 0,      color: '#F59E0B' },
-              { value: data.failed || 0,         color: '#EF4444' },
-              { value: data.not_inspected || 0,  color: '#CBD5E1' },
-            ]}
-          />
-          <div className="flex flex-wrap justify-center gap-3 mt-3 text-sm">
-            <span className="text-success-ink font-medium">● ผ่าน {data.passed}</span>
-            <span className="text-warn-ink">● แก้ไข {data.needs_fix}</span>
-            <span className="text-danger-ink">● ไม่ผ่าน {data.failed}</span>
-            <span className="text-ink-muted">● ยังไม่ตรวจ {data.not_inspected}</span>
-          </div>
-        </AppCard>
-        <AppCard padding="lg">
-          <p className="text-sm font-semibold text-ink-muted mb-4">สถานะประกันภัย</p>
-          <div className="space-y-3">
-            <InsBar label="มีประกัน (ปกติ)"  value={data.insurance_ok || 0}        total={data.total_vehicles} tone="success" />
-            <InsBar label="ใกล้หมดอายุ"      value={data.expiring_insurance || 0}  total={data.total_vehicles} tone="warn" />
-            <InsBar label="หมดอายุแล้ว"      value={data.expired_insurance || 0}   total={data.total_vehicles} tone="danger" />
-            <InsBar label="ยังไม่กรอกข้อมูล"  value={data.no_insurance_data || 0}   total={data.total_vehicles} tone="neutral" />
-          </div>
-        </AppCard>
+        <DashboardSection
+          title={`${currentFilter.label} — ${filtered.length} คัน`}
+          description={[
+            listPartial ? `แสดง ${vehicles.length.toLocaleString('th-TH')} คันจากทั้งหมด ${listTotal.toLocaleString('th-TH')} คัน` : null,
+            vSearch ? `ค้นหา "${vSearch}"` : null,
+          ].filter(Boolean).join(' · ') || null}
+        >
+          {filtered.length === 0 ? (
+            <AppCard padding="lg" className="text-center">
+              <p className="text-ink-muted">ไม่พบรถในกลุ่มนี้</p>
+            </AppCard>
+          ) : (
+            <div className="space-y-2">
+              {filtered.slice(0, 20).map(v => (
+                <VehicleRiskRow
+                  key={v.id}
+                  vehicle={v}
+                  isHighlighted={v.id === highlightId}
+                  rowRef={v.id === highlightId ? highlightRef : null}
+                  onRecord={() => navigate(`/transport/inspections?vehicle_id=${v.id}`)}
+                />
+              ))}
+              {filtered.length > 20 && (
+                <p className="text-sm text-ink-muted text-center py-2">… แสดง 20 จาก {filtered.length} คัน</p>
+              )}
+            </div>
+          )}
+        </DashboardSection>
       </div>
+
+      {!noFleet && (
+        <FoldSection
+          title="สถานะประกันภัย"
+          subtitle={`ปกติ ${n('insurance_ok')} · ใกล้หมด ${expiringIns} · หมดอายุ ${expiredIns} · ยังไม่กรอก ${noInsurance}`}
+        >
+          <div className="space-y-3">
+            <InsBar label="มีประกัน (ปกติ)"  value={n('insurance_ok')} total={total} tone="success" />
+            <InsBar label="ใกล้หมดอายุ"      value={expiringIns}       total={total} tone="warn" />
+            <InsBar label="หมดอายุแล้ว"      value={expiredIns}        total={total} tone="danger" />
+            <InsBar label="ยังไม่กรอกข้อมูล"  value={noInsurance}       total={total} tone="neutral" />
+          </div>
+        </FoldSection>
+      )}
     </div>
     </PageTransition>
   );

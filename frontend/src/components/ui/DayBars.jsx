@@ -1,12 +1,15 @@
 /**
  * DayBars — grouped bars per day (two series), today's column shaded.
  *
- * days = [{ key, label, a, b, today }]   a/b are numbers (or null = no data)
+ * days = [{ key, label, a, b, today }]   a/b are numbers (or null = no data);
+ *        days itself null = still loading
  * With `percent` the scale is fixed at 0–100 and the top label shows "a%".
  */
 export default function DayBars({
-  title, days = [], aLabel = 'ส่งเช้า', bLabel = 'รับเย็น', percent = true, note, height = 160,
+  title, days, aLabel = 'ส่งเช้า', bLabel = 'รับเย็น', percent = true, note, height = 160,
 }) {
+  const loading = days == null;
+  days = days || [];
   const vals = days.flatMap(d => [d.a, d.b]).filter(v => v != null && isFinite(v));
   const max = percent ? 100 : Math.max(1, ...vals);
   const h = v => (v == null || !isFinite(v) ? 0 : Math.max(0, Math.round((Math.min(v, max) / max) * height)));
@@ -19,7 +22,9 @@ export default function DayBars({
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-warn" aria-hidden="true" />{bLabel}</span>
         </div>
       </div>
-      {days.length === 0 ? (
+      {loading ? (
+        <p className="text-sm text-ink-muted py-10 text-center" aria-busy="true">กำลังโหลด…</p>
+      ) : days.length === 0 ? (
         <p className="text-sm text-ink-muted py-10 text-center">ยังไม่มีข้อมูลย้อนหลัง</p>
       ) : (
         <>

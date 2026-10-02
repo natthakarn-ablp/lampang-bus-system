@@ -1,13 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  Bus, Building2, Clock, AlertTriangle,
-  Sunrise, Sunset, FileText, RotateCw, Truck,
-  // Phase 10.7B-2 — Wifi for the "สถานะสัญญาณรถ" hero card
-  Wifi,
-  // Phase 10.8UX-B-1 — action row icon
-  Activity,
-} from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, RotateCw, Truck, Building2, Wifi } from 'lucide-react';
 
 const POLL_INTERVAL = 30_000; // 30s background refresh
 const TICK_INTERVAL = 1_000;  // 1s freshness ticker (re-render only)
@@ -16,41 +9,42 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { safePct, kpiColor } from '../../utils/kpi';
-import { relativeTime } from '../../utils/datetime';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
+import { useAuth } from '../../hooks/useAuth';
+import useRecentDays from '../../hooks/useRecentDays';
 import {
-  AppCard, AlertBanner, KPIGrid,
-  RiskCard, DashboardSection, StatusBadge, AttentionCard,
+  AppCard, RiskCard, StatusBadge,
+  TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars, FoldSection, RoleChip,
+  pctOf, pctTone,
 } from '../../components/ui';
 import PageHeader from '../../components/PageHeader';
 import { PageTransition } from '../../lib/motion';
 
 export default function ProvinceDashboard() {
+  const { features } = useAuth();
+  const navigate = useNavigate();
+  const participationOn = !!features?.participationCases;
   const [data, setData] = useState(null);
   const [incidents, setIncidents] = useState([]);
   const [atRiskVehicles, setAtRiskVehicles] = useState([]);
+  const [newCases, setNewCases] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
-
-  // Refs for the attention-panel scroll-to-section drill-down (mirrors the
-  // TransportDashboard scrollIntoView pattern). DashboardSection itself
-  // doesn't forward refs, so we attach via a wrapping div on each section.
-  const schoolsRef   = useRef(null);
-  const incidentsRef = useRef(null);
-  const vehiclesRef  = useRef(null);
-  const scrollTo = (ref) =>
-    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const recentDays = useRecentDays('province', 7);
 
   const fetchAll = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [dashRes, incRes, atRiskRes] = await Promise.all([
+      const [dashRes, incRes, atRiskRes, partRes] = await Promise.all([
         api.get('/province/dashboard').catch((e) => e),
         api.get('/province/emergencies?per_page=5&page=1').catch(() => null),
         api.get('/province/vehicles-at-risk?limit=10').catch(() => null),
+        // Counts only (no case bodies). Called only while the feature is on —
+        // with the flag off the router is not mounted.
+        participationOn ? api.get('/participation/summary').catch(() => null) : Promise.resolve(null),
       ]);
       // A failed dashboard call used to leave data null, which rendered
       // "ไม่มีข้อมูล" — telling the province there is nothing to report when
@@ -61,12 +55,13 @@ export default function ProvinceDashboard() {
       setIncidents(Array.isArray(incList) ? incList : []);
       const atRiskList = atRiskRes?.data?.data;
       setAtRiskVehicles(Array.isArray(atRiskList) ? atRiskList : []);
+      setNewCases(Number(partRes?.data?.data?.by_status?.SUBMITTED) || 0);
       setLastSyncedAt(Date.now());
     } finally {
       setRefreshing(false);
       setLoading(false);
     }
-  }, []);
+  }, [participationOn]);
 
   // Background data refresh — silent, doesn't blank the page
   useEffect(() => {
@@ -87,297 +82,204 @@ export default function ProvinceDashboard() {
 
   const affs = data.affiliations ?? [];
   const problemSchools = data.schools_not_complete ?? [];
-  const hasEmergency = data.recent_emergencies > 0;
-  const totalPending = (data.morning_pending || 0) + (data.evening_pending || 0);
-  const totalBase    = (data.morning_total   || 0) + (data.evening_total   || 0);
-  const notStarted   = totalBase === 0 && problemSchools.length === 0 && !hasEmergency;
+  // recent_emergencies counts the last 7 days (province.service.js), not today.
+  const emergencies7d = Number(data.recent_emergencies) || 0;
+  // Per-affiliation emergency_count is TODAY's. Not summed: a bus shared by two
+  // affiliations would be counted twice — only "any today" is used.
+  const emergencyToday = affs.some(a => Number(a.emergency_count) > 0);
 
-  // Hero state: the AttentionPanel takes over from the bulleted-text banner
-  // whenever any of the three entity-level signals has content. Pending and
-  // leave counts (which used to drive bulleted-text alerts) are already
-  // surfaced in the SessionProgress cards below — no need to duplicate them
-  // in the hero.
-  const hasAnyAttention = problemSchools.length > 0
-                       || incidents.length > 0
-                       || atRiskVehicles.length > 0;
+  const mTotal = data.morning_total || 0;
+  const eTotal = data.evening_total || 0;
+  const mDone = data.morning_done || 0;
+  const eDone = data.evening_done || 0;
+  const mPct = pctOf(mDone, mTotal);
+  const ePct = pctOf(eDone, eTotal);
+  const morningStarted = mDone > 0;
+  const eveningStarted = eDone > 0;
+  const schoolTotal = data.school_total ?? data.total_schools ?? 0;
+  const schoolUsed = data.school_used_recently ?? 0;
+  const schoolPct = pctOf(schoolUsed, schoolTotal);
 
   const dateLabel = data.date
     ? new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
     : null;
 
+  // ── Banner: one sentence, one tone ──
+  let banner;
+  if (!morningStarted && !eveningStarted) {
+    banner = { variant: 'neutral', title: 'ยังไม่เริ่มรับส่งวันนี้', sub: 'รอข้อมูลรอบเช้าจากคนขับ', cta: { label: 'ดูรายงานวันนี้', to: '/reports/daily' } };
+  } else if (emergencyToday) {
+    banner = {
+      variant: 'danger',
+      title: 'มีเหตุฉุกเฉินวันนี้',
+      sub: `ส่งเช้าแล้ว ${mPct ?? 0}%${eveningStarted ? ` · รับเย็นแล้ว ${ePct ?? 0}%` : ' · รอบเย็นยังไม่เริ่ม'}`,
+      cta: { label: 'ดูเหตุฉุกเฉิน', to: '/province/emergencies' },
+    };
+  } else {
+    const worst = eveningStarted ? Math.min(mPct ?? 100, ePct ?? 100) : (mPct ?? 100);
+    const tone = pctTone(worst);
+    const sub = `ส่งเช้าแล้ว ${mPct ?? 0}% (${mDone.toLocaleString('th-TH')} / ${mTotal.toLocaleString('th-TH')} คน)`
+      + (eveningStarted ? ` · รับเย็นแล้ว ${ePct ?? 0}%` : ' · รอบเย็นยังไม่เริ่ม')
+      + ' · ไม่มีเหตุฉุกเฉินวันนี้';
+    banner = {
+      variant: tone,
+      title: tone === 'success' ? 'ภาพรวมวันนี้ปกติ'
+        : problemSchools.length > 0
+          ? `${problemSchools.length.toLocaleString('th-TH')} โรงเรียนยังมีนักเรียนรอรับส่ง`
+          : `ยังรอส่ง-รับอีก ${(Math.max(0, mTotal - mDone) + (eveningStarted ? Math.max(0, eTotal - eDone) : 0)).toLocaleString('th-TH')} คน`,
+      sub,
+      cta: { label: 'ดูรายงานวันนี้', to: '/reports/daily' },
+    };
+  }
+
+  // ── Todos (never repeat the banner topic) ──
+  const todos = [
+    {
+      key: 'risk', variant: atRiskVehicles.some(v => v.risk_score >= 100) ? 'danger' : 'warn',
+      count: atRiskVehicles.length, title: 'รถต้องแก้เอกสาร',
+      sub: atRiskVehicles.slice(0, 2).map(v => v.plate_no).join(' · ') || 'ทั้งจังหวัด',
+      cta: { label: 'ดูรายการรถ', to: '/province/vehicles' },
+    },
+    participationOn && {
+      key: 'cases', variant: 'info', count: newCases, title: 'เรื่องใหม่จากการมีส่วนร่วม',
+      sub: 'ยังไม่มีผู้รับเรื่อง', cta: { label: 'เปิดอ่าน', to: '/participation' },
+    },
+    {
+      key: 'unused', variant: 'neutral', count: data.school_not_using_recently ?? 0,
+      title: 'โรงเรียนยังไม่ใช้ระบบ', sub: `ไม่มีการใช้งานใน 14 วัน · จาก ${schoolTotal.toLocaleString('th-TH')} โรงเรียน`,
+      cta: { label: 'ดูรายชื่อ', to: '/province/schools' },
+    },
+  ].filter(Boolean);
+
+  // ── Ranking: morning completion per affiliation, lowest first ──
+  const rankRows = affs
+    .map(a => {
+      const p = a.morning_expected > 0
+        ? Math.round((a.morning_done / a.morning_expected) * 100)
+        : (a.morning_kpi != null ? Math.round(a.morning_kpi) : null);
+      return { a, p };
+    })
+    .filter(x => x.p != null)
+    .sort((x, y) => x.p - y.p)
+    .map(({ a, p }) => ({
+      key: a.id,
+      label: a.name,
+      width: p,
+      text: a.morning_expected > 0 ? `${p}% (${a.morning_done}/${a.morning_expected})` : `${p}%`,
+      variant: pctTone(p),
+    }));
+
+  const scale = [
+    { k: 'นักเรียน', v: data.total_students },
+    { k: 'โรงเรียน', v: data.total_schools ?? data.school_total },
+    { k: 'สังกัด', v: data.total_affiliations },
+    { k: 'รถรับส่ง', v: data.vehicle_serving_students ?? data.total_vehicles },
+  ];
+
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      {/* Header — shared PageHeader so every role opens on the same shape */}
-      <PageHeader
-        title={PAGE_TITLES.PROVINCE_DASHBOARD}
-        subtitle="ภาพรวมการเดินรถและงานที่ต้องติดตามทั้งจังหวัด"
-        meta={dateLabel ? `ข้อมูล ณ ${dateLabel}` : undefined}
-        actions={
-          <FreshnessPill
-            lastSyncedAt={lastSyncedAt}
-            now={now}
-            refreshing={refreshing}
-            onRefresh={fetchAll}
-          />
-        }
-      />
-
-      {/* Phase 10.8UX-B-1 — action row. Mirrors the SchoolDashboard pattern
-          (flex-1 sm:flex-none + min-h 40px) so mobile users get fast tap-
-          through entry points without opening the hamburger drawer. */}
-      <div className="flex flex-wrap items-stretch gap-2">
-        <Link
-          to="/province/live-vehicles"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
-        >
-          <Activity className="w-4 h-4" strokeWidth={2} />
-          ตำแหน่งปัจจุบัน
-        </Link>
-        <Link
-          to="/province/emergencies"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
-        >
-          <AlertTriangle className="w-4 h-4" strokeWidth={2} />
-          เหตุฉุกเฉิน
-        </Link>
-        <Link
-          to="/reports/daily"
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]"
-        >
-          <FileText className="w-4 h-4" strokeWidth={2} />
-          รายงาน
-        </Link>
+      <div className="flex flex-col gap-2">
+        <RoleChip role="province" />
+        <PageHeader
+          title={PAGE_TITLES.PROVINCE_DASHBOARD}
+          subtitle="ภาพรวมการเดินรถและงานที่ต้องติดตามทั้งจังหวัด"
+          meta={dateLabel ? `ข้อมูล ณ ${dateLabel}` : undefined}
+          actions={
+            <FreshnessPill
+              lastSyncedAt={lastSyncedAt}
+              now={now}
+              refreshing={refreshing}
+              onRefresh={fetchAll}
+            />
+          }
+        />
       </div>
 
-      {/* Hero: state ribbon (info / success) OR Executive Attention Panel */}
-      {notStarted ? (
-        <AlertBanner variant="info" title="ยังไม่เริ่มดำเนินการวันนี้">รอข้อมูลรอบเช้า</AlertBanner>
-      ) : !hasAnyAttention ? (
-        <AlertBanner variant="success" title="ระบบปกติ — ทุกโรงเรียนดำเนินการครบ" />
-      ) : (
-        <ExecutiveAttentionPanel
-          schools={problemSchools}
-          incidents={incidents}
-          vehicles={atRiskVehicles}
-          onJump={(section) => scrollTo(
-            section === 'schools'   ? schoolsRef
-            : section === 'incidents' ? incidentsRef
-            :                           vehiclesRef
-          )}
+      {/* Scale of the system — context for every number below */}
+      <div className="flex flex-wrap gap-2 -mt-3">
+        {scale.map(s => (
+          <span key={s.k} className="bg-surface-raised border border-surface-border rounded-full px-4 py-1.5 text-sm text-ink-muted">
+            <strong className="text-ink tabular-nums">{Number(s.v ?? 0).toLocaleString('th-TH')}</strong> {s.k}
+          </span>
+        ))}
+      </div>
+
+      <TodayBanner {...banner} />
+
+      <TodoCards items={todos} />
+
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiRingCard
+          label="ส่งเช้า"
+          pct={morningStarted ? mPct : null}
+          value={morningStarted ? undefined : '—'}
+          variant={morningStarted ? pctTone(mPct) : 'neutral'}
+          sub={`${mDone.toLocaleString('th-TH')} / ${mTotal.toLocaleString('th-TH')} คน`}
+          chip={morningStarted ? undefined : 'ยังไม่เริ่มรอบ'}
         />
-      )}
+        <KpiRingCard
+          label="รับเย็น"
+          pct={eveningStarted ? ePct : null}
+          value={eveningStarted ? undefined : '—'}
+          variant={eveningStarted ? pctTone(ePct) : 'neutral'}
+          sub={eveningStarted ? `${eDone.toLocaleString('th-TH')} / ${eTotal.toLocaleString('th-TH')} คน` : `${eTotal.toLocaleString('th-TH')} คนใช้บริการรอบเย็น`}
+          chip={eveningStarted ? undefined : 'ยังไม่เริ่มรอบ'}
+        />
+        <KpiRingCard
+          label="โรงเรียนที่ใช้งาน"
+          pct={schoolPct}
+          value={schoolPct == null ? '—' : undefined}
+          variant="info"
+          sub={`${schoolUsed.toLocaleString('th-TH')} / ${schoolTotal.toLocaleString('th-TH')} โรงเรียน · ใน 14 วัน`}
+        />
+        <KpiRingCard
+          label="เหตุฉุกเฉิน 7 วัน"
+          value={emergencies7d}
+          variant={emergencyToday ? 'danger' : emergencies7d > 0 ? 'warn' : 'success'}
+          sub={emergencies7d > 0 ? `ล่าสุด ${incidents[0]?.plate_no || '-'}` : 'ไม่มีเหตุ'}
+          onClick={emergencies7d > 0 ? () => navigate('/province/emergencies') : undefined}
+        />
+      </section>
 
-      {/* Phase 10.7B-2 — Executive 5-card hero. Backed by additive fields
-          from Phase 10.7B-1; legacy totals (students/schools/affiliations)
-          moved below the fold to "ภาพรวมระบบ" so the at-a-glance row stays
-          action-driving. The 5 cards intentionally include zero student PII
-          and no transport-leaked counts. KPIGrid staggers the tiles in as the
-          dashboard data lands (motion-with-evidence; reduced-motion users land
-          on the final state instantly). */}
-      <KPIGrid cols={3} gap="sm">
+      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <DayBars
+          title="การรับส่งทั้งจังหวัด 7 วันล่าสุด (%)"
+          days={recentDays || []}
+          note="คิดจากจำนวนผู้ใช้บริการปัจจุบัน"
+        />
+        <RankBars
+          title="ส่งเช้าแยกตามสังกัด"
+          sub="วันนี้ เรียงจากน้อยไปมาก"
+          rows={rankRows}
+          link={{ label: 'ดูทุกสังกัด', to: '/province/affiliations' }}
+          empty="ยังไม่มีข้อมูลรอบเช้าวันนี้"
+        />
+      </section>
 
-        {/* Card 1 — Fleet vs trackable. The 48-of-51 non-broadcast bucket
-            is the headline adoption signal post-10.7B-1; surface it loudly. */}
-        <AppCard padding="md">
-          <div className="flex items-start gap-2 mb-2">
-            <Bus className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
-            <p className="text-sm font-semibold text-ink leading-tight">รถทั้งหมด / รถที่ติดตามได้</p>
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">รถทั้งหมด</span>
-              <span className="text-2xl font-bold text-ink tabular-nums">{data.vehicle_total ?? 0}</span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">ติดตามได้</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_trackable ?? 0) > 0 ? 'text-success-ink' : 'text-ink-muted'}`}>
-                {data.vehicle_trackable ?? 0}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">ยังไม่มีข้อมูล</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_no_location ?? 0) > 0 ? 'text-warn-ink' : 'text-ink-muted'}`}>
-                {data.vehicle_no_location ?? 0}
-              </span>
-            </div>
-          </div>
-        </AppCard>
-
-        {/* Card 2 — Live signal status. Does NOT include vehicle_no_location;
-            those vehicles never broadcast and are handled by Card 1. */}
-        <AppCard padding="md">
-          <div className="flex items-start gap-2 mb-2">
-            <Wifi className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
-            <p className="text-sm font-semibold text-ink leading-tight">สถานะสัญญาณรถ</p>
-          </div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">ออนไลน์</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_online ?? 0) > 0 ? 'text-success-ink' : 'text-ink-muted'}`}>
-                {data.vehicle_online ?? 0}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">สัญญาณเก่า</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_stale ?? 0) > 0 ? 'text-warn-ink' : 'text-ink-muted'}`}>
-                {data.vehicle_stale ?? 0}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">ออฟไลน์</span>
-              <span className={`text-base font-semibold tabular-nums ${(data.vehicle_offline_smart ?? 0) > 0 ? 'text-danger-ink' : 'text-ink-muted'}`}>
-                {data.vehicle_offline_smart ?? 0}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">หยุดส่ง</span>
-              <span className="text-base font-semibold text-ink-muted tabular-nums">{data.vehicle_paused ?? 0}</span>
-            </div>
-          </div>
-        </AppCard>
-
-        {/* Card 3 — Today's pickup/dropoff progress. Compact summary; the
-            existing SessionProgress section below keeps the rich breakdown. */}
-        <AppCard padding="md">
-          <div className="flex items-start gap-2 mb-2">
-            <Clock className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
-            <p className="text-sm font-semibold text-ink leading-tight">การรับ-ส่งวันนี้</p>
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted inline-flex items-center gap-1">
-                <Sunrise className="w-3.5 h-3.5 text-warn-ink" strokeWidth={2} /> ส่งเช้า
-              </span>
-              <span className="text-base font-semibold text-ink tabular-nums">
-                {data.morning_done ?? 0}
-                <span className="text-ink-muted text-sm"> / {data.morning_total ?? 0}</span>
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted inline-flex items-center gap-1">
-                <Sunset className="w-3.5 h-3.5 text-info-ink" strokeWidth={2} /> รับเย็น
-              </span>
-              <span className="text-base font-semibold text-ink tabular-nums">
-                {data.evening_done ?? 0}
-                <span className="text-ink-muted text-sm"> / {data.evening_total ?? 0}</span>
-              </span>
-            </div>
-          </div>
-        </AppCard>
-
-        {/* Card 4 — School adoption. "ใช้งานล่าสุด" uses the 14-day window
-            from province.service.js SCHOOL_USAGE_WINDOW_DAYS. */}
-        <AppCard padding="md">
-          <div className="flex items-start gap-2 mb-2">
-            <Building2 className="w-5 h-5 text-brand shrink-0" strokeWidth={2} />
-            <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนยังไม่เริ่มใช้ระบบ</p>
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">ใช้งานล่าสุด 14 วัน</span>
-              <span className="text-base font-semibold text-ink tabular-nums">
-                {data.school_used_recently ?? 0}
-                <span className="text-ink-muted text-sm"> / {data.school_total ?? data.total_schools ?? 0}</span>
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs text-ink-muted">ยังไม่เริ่ม</span>
-              <span className={`text-2xl font-bold tabular-nums ${(data.school_not_using_recently ?? 0) > 0 ? 'text-warn-ink' : 'text-success-ink'}`}>
-                {data.school_not_using_recently ?? 0}
-              </span>
-            </div>
-          </div>
-        </AppCard>
-
-        {/* Card 5 — At-risk schools today. Tap-through to existing
-            "โรงเรียนเสี่ยง" RiskCard section below. */}
-        <AppCard
-          as="button"
-          padding="md"
-          onClick={() => scrollTo(schoolsRef)}
-          className="text-left transition hover:shadow-elevate focus:outline-none focus:ring-2 focus:ring-warn/40"
-          aria-label="ดูรายชื่อโรงเรียนเสี่ยง"
+      <section className="flex flex-col gap-3">
+        <FoldSection
+          title="สัญญาณรถ (GPS)"
+          subtitle={`ออนไลน์ ${data.vehicle_online ?? 0} · สัญญาณเก่า ${data.vehicle_stale ?? 0} · ออฟไลน์ ${data.vehicle_offline_smart ?? 0} · ยังไม่มีข้อมูล ${data.vehicle_no_location ?? 0}`}
         >
-          <div className="flex items-start gap-2 mb-2">
-            <AlertTriangle
-              className={`w-5 h-5 shrink-0 ${problemSchools.length > 0 ? 'text-warn-ink' : 'text-success-ink'}`}
-              strokeWidth={2}
-            />
-            <p className="text-sm font-semibold text-ink leading-tight">โรงเรียนเสี่ยงวันนี้</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <SignalStat label="รถทั้งหมด" value={data.vehicle_total} />
+            <SignalStat label="ติดตามได้" value={data.vehicle_trackable} tone="text-success-ink" />
+            <SignalStat label="ออนไลน์" value={data.vehicle_online} tone="text-success-ink" />
+            <SignalStat label="สัญญาณเก่า" value={data.vehicle_stale} tone="text-warn-ink" />
+            <SignalStat label="ออฟไลน์" value={data.vehicle_offline_smart} tone="text-danger-ink" />
+            <SignalStat label="หยุดส่ง" value={data.vehicle_paused} />
+            <SignalStat label="ยังไม่มีข้อมูลตำแหน่ง" value={data.vehicle_no_location} tone="text-warn-ink" />
           </div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-xs text-ink-muted">รายการค้าง</span>
-            <span className={`text-2xl font-bold tabular-nums ${problemSchools.length > 0 ? 'text-warn-ink' : 'text-success-ink'}`}>
-              {problemSchools.length}
-            </span>
-          </div>
-          {problemSchools.length > 0 && (
-            <p className="text-xs text-ink-muted mt-1 truncate">
-              เช่น {problemSchools.slice(0, 2).map(s => s.school_name).join(' · ')}
-            </p>
-          )}
-        </AppCard>
+        </FoldSection>
 
-      </KPIGrid>
-
-      {/* Auxiliary system size — was hero cards 2/3 in the pre-10.7B-2 layout.
-          Demoted below the action-driving hero because these numbers change
-          weekly/monthly and don't drive a same-day decision. */}
-      <DashboardSection title="ภาพรวมระบบ" description="ขนาดระบบในจังหวัด">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <AppCard padding="sm" className="text-center">
-            <p className="text-xs text-ink-muted">นักเรียน</p>
-            <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_students ?? 0}</p>
-          </AppCard>
-          <AppCard padding="sm" className="text-center">
-            <p className="text-xs text-ink-muted">โรงเรียน</p>
-            <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_schools ?? 0}</p>
-          </AppCard>
-          <AppCard padding="sm" className="text-center">
-            <p className="text-xs text-ink-muted">สังกัด</p>
-            <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_affiliations ?? 0}</p>
-          </AppCard>
-          <AppCard padding="sm" className="text-center">
-            <p className="text-xs text-ink-muted">รถบริการนักเรียน</p>
-            <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">
-              {data.vehicle_serving_students ?? data.total_vehicles ?? 0}
-            </p>
-          </AppCard>
-        </div>
-      </DashboardSection>
-
-      {/* Session progress */}
-      <DashboardSection title="ผลการดำเนินการวันนี้">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <SessionProgress
-            label="รอบเช้า"
-            icon={Sunrise}
-            done={data.morning_done}
-            total={data.morning_total}
-            pending={data.morning_pending}
-            leave={data.morning_leave ?? 0}
-            kpi={data.morning_kpi}
-          />
-          <SessionProgress
-            label="รอบเย็น"
-            icon={Sunset}
-            done={data.evening_done}
-            total={data.evening_total}
-            pending={data.evening_pending}
-            leave={data.evening_leave ?? 0}
-            kpi={data.evening_kpi}
-          />
-        </div>
-      </DashboardSection>
-
-      {/* Risk schools — wrapped div carries the scroll anchor for the attention panel */}
-      {problemSchools.length > 0 && (
-        <div ref={schoolsRef}>
-          <DashboardSection
-            title="โรงเรียนเสี่ยง"
-            description={`${problemSchools.length} โรงเรียนมีรายการค้างวันนี้`}
-          >
+        <FoldSection
+          title="โรงเรียนที่ยังมีนักเรียนรอรับส่ง"
+          subtitle={problemSchools.length > 0 ? `${problemSchools.length} โรงเรียน` : 'ไม่มีโรงเรียนค้าง'}
+        >
+          {problemSchools.length === 0 ? (
+            <p className="text-sm text-ink-muted text-center py-4">ไม่มีโรงเรียนค้าง</p>
+          ) : (
             <div className="space-y-2">
               {problemSchools.map(s => {
                 const pending = (s.morning_pending || 0) + (s.evening_pending || 0);
@@ -394,13 +296,13 @@ export default function ProvinceDashboard() {
                 );
               })}
             </div>
-          </DashboardSection>
-        </div>
-      )}
+          )}
+        </FoldSection>
 
-      {/* Affiliations */}
-      {affs.length > 0 && (
-        <DashboardSection title="สรุปรายสังกัด">
+        <FoldSection
+          title="สรุปรายสังกัด"
+          subtitle={`${affs.length} สังกัด · ส่งเช้า รับเย็น และเหตุฉุกเฉินวันนี้`}
+        >
           <div className="space-y-2">
             {affs.map(a => (
               <AppCard key={a.id} padding="md" className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -420,45 +322,34 @@ export default function ProvinceDashboard() {
               </AppCard>
             ))}
           </div>
-        </DashboardSection>
-      )}
+        </FoldSection>
 
-      {/* Incident feed — last 5 emergencies (only render when there are any) */}
-      {incidents.length > 0 && (
-        <div ref={incidentsRef}>
-          <DashboardSection title="เหตุฉุกเฉินล่าสุด" description={`${incidents.length} รายการล่าสุด`}>
-            <div className="space-y-2">
-              {incidents.map(em => <IncidentEntry key={em.id} em={em} />)}
-            </div>
-          </DashboardSection>
-        </div>
-      )}
-
-      {/* Priority vehicles — top 10 by risk score (hidden when API returns empty) */}
-      {atRiskVehicles.length > 0 && (
-        <div ref={vehiclesRef}>
-          <DashboardSection
-            title="รถสำคัญต้องติดตาม"
-            description={`${atRiskVehicles.length} คัน เรียงตามความเร่งด่วน`}
-          >
+        <FoldSection
+          title="รถที่ต้องติดตาม"
+          subtitle={atRiskVehicles.length > 0 ? `${atRiskVehicles.length} คัน เรียงตามความเร่งด่วน` : 'ไม่มีรถต้องติดตาม'}
+        >
+          {atRiskVehicles.length === 0 ? (
+            <p className="text-sm text-ink-muted text-center py-4">ไม่มีรถต้องติดตาม</p>
+          ) : (
             <div className="space-y-2">
               {atRiskVehicles.map(v => <VehicleAtRiskRow key={v.id} vehicle={v} />)}
             </div>
-          </DashboardSection>
-        </div>
-      )}
+          )}
+        </FoldSection>
 
-      {/* Executive summary */}
-      <AlertBanner variant="info" title="สรุปผู้บริหาร" icon={FileText}>
-        <ul className="space-y-1 mt-1 list-disc pl-4">
-          <li>รถรับส่ง <strong>{data.total_vehicles} คัน</strong> ให้บริการ <strong>{data.total_students} คน</strong> ใน <strong>{data.total_schools} โรงเรียน</strong></li>
-          <li>KPI ส่งเช้า <strong className={kpiColor(data.morning_kpi)}>{safePct(data.morning_kpi)}</strong> · รับเย็น <strong className={kpiColor(data.evening_kpi)}>{safePct(data.evening_kpi)}</strong></li>
-          {problemSchools.length > 0
-            ? <li><strong className="text-danger-ink">{problemSchools.length} โรงเรียน</strong>ยังมีรายการค้าง</li>
-            : <li><strong className="text-success-ink">ทุกโรงเรียนดำเนินการครบ</strong></li>}
-          {hasEmergency && <li>เหตุฉุกเฉิน <strong className="text-danger-ink">{data.recent_emergencies} ครั้ง</strong></li>}
-        </ul>
-      </AlertBanner>
+        <FoldSection
+          title="เหตุฉุกเฉินล่าสุด"
+          subtitle={incidents.length > 0 ? `${incidents.length} รายการล่าสุด` : 'ไม่มีเหตุล่าสุด'}
+        >
+          {incidents.length === 0 ? (
+            <p className="text-sm text-ink-muted text-center py-4">ไม่มีเหตุล่าสุด</p>
+          ) : (
+            <div className="space-y-2">
+              {incidents.map(em => <IncidentEntry key={em.id} em={em} />)}
+            </div>
+          )}
+        </FoldSection>
+      </section>
     </div>
     </PageTransition>
   );
@@ -466,43 +357,13 @@ export default function ProvinceDashboard() {
 
 /* ── Domain-specific sub-components ── */
 
-function SessionProgress({ label, icon: Icon, done, total, pending, leave, kpi }) {
-  const notStarted = total === 0;
-  const pct = notStarted ? 0 : Math.round((done / total) * 100);
-  const pendingPct = notStarted ? 0 : Math.round((pending / total) * 100);
-  const isComplete = !notStarted && pending === 0;
-
-  // Neutral when nothing has happened yet — never danger for "0% before day started."
-  const kpiTone = notStarted ? 'text-ink-muted'
-                : isComplete ? 'text-success-ink'
-                : pct >= 80  ? 'text-warn-ink'
-                : 'text-danger-ink';
-
+function SignalStat({ label, value, tone = 'text-ink' }) {
+  const n = Number(value) || 0;
   return (
-    <AppCard padding="md" className={isComplete ? 'border-success/40 bg-success-soft/40' : ''}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {Icon && <Icon className="w-4 h-4 text-ink-muted" strokeWidth={2} />}
-          <span className="text-sm font-semibold text-ink">{label}</span>
-        </div>
-        <span className={`text-xl font-semibold tabular-nums ${kpiTone}`}>
-          {notStarted ? 'ยังไม่เริ่ม' : safePct(kpi)}
-        </span>
-      </div>
-      <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-surface mb-2">
-        {done > 0 && <div className="bg-success h-full transition-all" style={{ width: `${pct}%` }} />}
-        {pending > 0 && <div className="bg-danger/80 h-full" style={{ width: `${pendingPct}%` }} />}
-      </div>
-      <div className="flex justify-between text-xs">
-        <span className={notStarted ? 'text-ink-muted tabular-nums' : 'text-success-ink font-medium tabular-nums'}>
-          {notStarted ? 'รอเริ่มรอบ' : `${done}/${total}`}
-        </span>
-        <div className="flex gap-3">
-          {pending > 0 && <span className="text-danger-ink font-medium">รอ {pending}</span>}
-          {leave > 0   && <span className="text-warn-ink">ลา {leave}</span>}
-        </div>
-      </div>
-    </AppCard>
+    <div className="rounded-xl border border-surface-border bg-surface px-3 py-2">
+      <p className="text-xs text-ink-muted inline-flex items-center gap-1"><Wifi className="w-3.5 h-3.5" aria-hidden="true" />{label}</p>
+      <p className={`text-xl font-bold tabular-nums ${n > 0 ? tone : 'text-ink-muted'}`}>{n.toLocaleString('th-TH')}</p>
+    </div>
   );
 }
 
@@ -527,56 +388,6 @@ function IncidentEntry({ em }) {
         {em.detail && <p className="text-sm text-ink-muted truncate">{em.detail}</p>}
       </div>
     </AppCard>
-  );
-}
-
-/* ── Executive Attention Panel: 3-card hero grid for at-a-glance triage ── */
-function ExecutiveAttentionPanel({ schools, incidents, vehicles, onJump }) {
-  const vehicleVariant = vehicles.some(v => v.risk_score >= 100) ? 'danger'
-                       : vehicles.length > 0                     ? 'warn'
-                       :                                            'neutral';
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 motion-safe:stagger-children">
-      <AttentionCard
-        icon={Building2}
-        title="โรงเรียนเสี่ยง"
-        count={schools.length}
-        variant={schools.length > 0 ? 'warn' : 'neutral'}
-        items={schools.slice(0, 3).map(s => ({
-          key: s.school_id,
-          primary: s.school_name,
-          secondary: `รอ ${(s.morning_pending || 0) + (s.evening_pending || 0)}`,
-        }))}
-        onJump={() => onJump('schools')}
-        emptyLabel="ไม่มีโรงเรียนค้าง"
-      />
-      <AttentionCard
-        icon={AlertTriangle}
-        title="เหตุฉุกเฉินล่าสุด"
-        count={incidents.length}
-        variant={incidents.length > 0 ? 'danger' : 'neutral'}
-        items={incidents.slice(0, 3).map(em => ({
-          key: em.id,
-          primary: em.plate_no || '-',
-          secondary: relativeTime(em.reported_at),
-        }))}
-        onJump={() => onJump('incidents')}
-        emptyLabel="ไม่มีเหตุล่าสุด"
-      />
-      <AttentionCard
-        icon={Truck}
-        title="รถสำคัญ"
-        count={vehicles.length}
-        variant={vehicleVariant}
-        items={vehicles.slice(0, 3).map(v => ({
-          key: v.id,
-          primary: v.plate_no,
-          secondary: v.risk_reasons?.[0] || `คะแนน ${v.risk_score}`,
-        }))}
-        onJump={() => onJump('vehicles')}
-        emptyLabel="ไม่มีรถต้องติดตาม"
-      />
-    </div>
   );
 }
 

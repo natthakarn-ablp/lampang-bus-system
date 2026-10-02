@@ -738,6 +738,25 @@ function participationMock(pathname, user) {
   return null;
 }
 
+// The last 7 weekdays ending today (Bangkok), so the dashboards' day chart has
+// a "วันนี้" column whatever day the screenshots are taken. Values are sample
+// percentages; today's evening is mid-round.
+const RECENT_DAYS = (() => {
+  const out = [];
+  let t = Date.now();
+  while (out.length < 7) {
+    const key = new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    const wd = new Date(`${key}T12:00:00Z`).getUTCDay();
+    if (wd !== 0 && wd !== 6) out.unshift(key);
+    t -= 86400000;
+  }
+  const M = [97, 96, 98, 95, 97, 96, 95];
+  const E = [94, 95, 96, 93, 95, 94, 75];
+  return out.map((date, i) => ({ date, morning_pct: M[i], evening_pct: E[i],
+    morning_done: Math.round(M[i] * 1.27), evening_done: Math.round(E[i] * 1.27),
+    morning_expected: 127, evening_expected: 127, morning_total: 127, evening_total: 127 }));
+})();
+
 const COMMON = {
   '/api/driver/roster':         { data: DRIVER_ROSTER },
   '/api/driver/pretrip-status': { data: { done: false } },
@@ -802,7 +821,8 @@ const COMMON = {
   '/api/transport/dashboard':  { data: TRANSPORT_DASH },
   '/api/transport/pickup-map': { data: PICKUP_POINTS },
 
-  '/api/admin/pending-requests-count': { data: { transfer: 2, vehicle: 1, roster: 1, registration: 1, total: 5 } },
+  // Same shape as admin.routes.js GET /pending-requests-count.
+  '/api/admin/pending-requests-count': { data: { total: 4, student_transfer: 2, vehicle: 1, roster: 1 } },
   '/api/admin/system-health': { data: {
     db: { status: 'ok', latency_ms: 4 }, api: { status: 'ok', uptime_h: 8 },
     backup: { status: 'ok', last_run: '2026-08-27T02:30:00+07:00', size_mb: 2.5 },
@@ -845,7 +865,8 @@ const COMMON = {
     hard_gate_count: 150,
     warning_count: 372,
   } },
-  '/api/reports/monthly': { data: { month: '2026-08', rows: STATUS_TODAY.rows } },
+  '/api/reports/monthly': { data: { month: '2026-08', rows: STATUS_TODAY.rows, daily_trend: RECENT_DAYS } },
+  '/api/province/trend':  { data: RECENT_DAYS },
   '/api/reports/summary': { data: { term: '1/2569', rows: STATUS_TODAY.rows, totals: { students: 4696, checkins: 128400 } } },
   // analytics ping — ไม่มีผลต่อภาพ แต่ถ้าไม่ตอบจะขึ้นในรายงาน fixture ที่ขาด
   '/api/visits/track': { data: { ok: true } },

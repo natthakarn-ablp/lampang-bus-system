@@ -237,10 +237,16 @@ export default function SchoolDashboard() {
         {/* Quick actions. "จัดการรถ" and "ยืนยันแทนคนขับ" are hidden for
             grade-teacher accounts, which are read-only (the backend 403s). */}
         <div className="flex flex-wrap items-stretch gap-2">
+          {/* Term 2: teachers record arrivals/boardings themselves — the
+              day's main task, so it is the first and strongest button. */}
           <Link
-            to="/school/students"
-            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-brand-700 hover:bg-brand-800 active:bg-brand-900 text-surface-raised text-sm font-medium px-3.5 py-2 rounded-lg transition min-h-[44px]"
+            to="/school/teacher-check"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-success-ink hover:opacity-90 text-white text-sm font-semibold px-4 py-2 rounded-lg transition min-h-[44px]"
           >
+            <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
+            เช็กชื่อขึ้น-ลงรถ
+          </Link>
+          <Link to="/school/students" className={btnSecondary}>
             <Search className="w-4 h-4" strokeWidth={2} />
             ค้นหานักเรียน
           </Link>

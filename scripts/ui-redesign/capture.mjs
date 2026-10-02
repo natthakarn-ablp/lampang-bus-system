@@ -62,6 +62,7 @@ const USERS = {
   province:    { username: 'province01',    display_name: 'จังหวัดลำปาง (ตัวอย่าง)', role: 'province',    scope_type: 'PROVINCE',    scope_id: 'LPG' },
   affiliation: { username: 'affiliation01', display_name: 'สังกัดตัวอย่าง เขต 1',   role: 'affiliation', scope_type: 'AFFILIATION', scope_id: 'AFF001' },
   school:      { username: 'school01',      display_name: 'โรงเรียนตัวอย่าง',       role: 'school',      scope_type: 'SCHOOL',      scope_id: 'SCH0001' },
+  teacher:     { username: 'teacher_p1',    display_name: 'ครูประจำชั้น ป.1',       role: 'school',      scope_type: 'SCHOOL',      scope_id: 'SCH0001', grade_scope: 'ป.1' },
   transport:   { username: 'transport01',   display_name: 'ขนส่งจังหวัด (ตัวอย่าง)', role: 'transport' },
   driver:      { username: 'driver01',      display_name: 'คนขับ ตัวอย่าง',         role: 'driver',      driver_id: 1 },
 };
@@ -757,6 +758,34 @@ const RECENT_DAYS = (() => {
     morning_expected: 127, evening_expected: 127, morning_total: 127, evening_total: 127 }));
 })();
 
+// Teacher check page (term 2): two buses of a ป.1 teacher's pupils in every
+// state the page draws — done by the teacher (undoable), done by the driver,
+// boarded-but-not-arrived, on leave, and still to record.
+const TEACHER_CHECK = {
+  session: 'morning', target_status: 'CHECKED_OUT',
+  vehicles: [
+    { vehicle_id: 'V-1', plate_no: 'กข-1111 ลำปาง', students: [
+      { id: 101, name: 'เด็กชายกิตติ ใจดี', grade: 'ป.1', classroom: '1', on_leave: false, no_vehicle: false,
+        status: 'CHECKED_OUT', done: true, checked_at: '2026-10-12T00:42:00Z', checked_by_role: 'school',
+        checked_by_name: 'ครูประจำชั้น ป.1', can_undo: true, log_id: 9001 },
+      { id: 102, name: 'เด็กหญิงชลธิชา มีสุข', grade: 'ป.1', classroom: '1', on_leave: false, no_vehicle: false,
+        status: 'CHECKED_OUT', done: true, checked_at: '2026-10-12T00:40:00Z', checked_by_role: 'driver',
+        checked_by_name: null, can_undo: false, log_id: 9002 },
+      { id: 103, name: 'เด็กชายธนา รักเรียน', grade: 'ป.1', classroom: '2', on_leave: false, no_vehicle: false,
+        status: 'CHECKED_IN', done: false, checked_at: '2026-10-12T00:10:00Z', checked_by_role: 'driver',
+        checked_by_name: null, can_undo: false, log_id: 9003 },
+      { id: 104, name: 'เด็กหญิงนภา ศรีสวัสดิ์', grade: 'ป.1', classroom: '2', on_leave: true, no_vehicle: false,
+        status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
+    ] },
+    { vehicle_id: 'V-2', plate_no: 'นข-2210 ลำปาง', students: [
+      { id: 105, name: 'เด็กชายภูมิ แสงทอง', grade: 'ป.1', classroom: '1', on_leave: false, no_vehicle: false,
+        status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
+      { id: 106, name: 'เด็กหญิงมณี ทองคำ', grade: 'ป.1', classroom: '3', on_leave: false, no_vehicle: false,
+        status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
+    ] },
+  ],
+};
+
 const COMMON = {
   '/api/driver/roster':         { data: DRIVER_ROSTER },
   '/api/driver/pretrip-status': { data: { done: false } },
@@ -867,6 +896,7 @@ const COMMON = {
   } },
   '/api/reports/monthly': { data: { month: '2026-08', rows: STATUS_TODAY.rows, daily_trend: RECENT_DAYS } },
   '/api/province/trend':  { data: RECENT_DAYS },
+  '/api/school/teacher-check': { data: TEACHER_CHECK },
   '/api/reports/summary': { data: { term: '1/2569', rows: STATUS_TODAY.rows, totals: { students: 4696, checkins: 128400 } } },
   // analytics ping — ไม่มีผลต่อภาพ แต่ถ้าไม่ตอบจะขึ้นในรายงาน fixture ที่ขาด
   '/api/visits/track': { data: { ok: true } },

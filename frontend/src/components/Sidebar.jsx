@@ -46,6 +46,7 @@ const MORE = 'เพิ่มเติม';
 
 const SCHOOL_NAV = [
   { to: '/school',               icon: BarChart3,     label: PAGE_TITLES.SCHOOL_DASHBOARD },
+  { to: '/school/teacher-check', icon: CheckSquare,   label: 'เช็กชื่อขึ้น-ลงรถ' },
   { to: '/school/students',      icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
   { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },

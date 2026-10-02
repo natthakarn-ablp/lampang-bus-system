@@ -321,7 +321,7 @@ export default function ParentStatus() {
                 icon={Sunrise}
                 done={status?.morning_done}
                 time={status?.morning_ts}
-                doneText="ส่งถึงแล้ว"
+                doneText={status?.morning_label || 'ส่งถึงแล้ว'}
                 pendingText="ยังไม่ส่ง"
               />
               <StatusCard
@@ -329,7 +329,7 @@ export default function ParentStatus() {
                 icon={Sunset}
                 done={status?.evening_done}
                 time={status?.evening_ts}
-                doneText="รับแล้ว"
+                doneText={status?.evening_label || 'รับแล้ว'}
                 pendingText="ยังไม่รับ"
               />
             </div>

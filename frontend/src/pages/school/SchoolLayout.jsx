@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import { Home, GraduationCap, Activity, FileText } from 'lucide-react';
+import { Home, GraduationCap, CheckSquare, FileText } from 'lucide-react';
 import Layout from '../../components/Layout';
 import MobileBottomNav from '../../components/MobileBottomNav';
 import { useAuth } from '../../hooks/useAuth';
@@ -9,14 +9,16 @@ import TeacherScopeChip from '../../components/TeacherScopeChip';
 import { isGradeTeacher } from '../../utils/authScope';
 
 // Phase 10.8UX-B-2B — mobile bottom nav tabs for school role.
-// All 4 destinations are read-allowed for both full school and grade-teacher
-// sub-accounts, so a single tab set works for both — write actions like
+// Term 2: "เช็กชื่อ" (teacher check-in) replaces the live-location tab — the
+// teacher's daily task belongs under the thumb; live location stays in the
+// sidebar. All 4 destinations work for full school and grade-teacher accounts.
+// Other write actions like
 // "ยืนยันแทนคนขับ" / "จัดการรถ" stay in the dashboard action row where the
 // existing teacher-hiding logic already lives.
 const SCHOOL_TABS = [
   { to: '/school',                end: true,  icon: Home,          label: 'หน้าแรก' },
   { to: '/school/students',       end: false, icon: GraduationCap, label: 'ค้นหา' },
-  { to: '/school/live-vehicles',  end: false, icon: Activity,      label: 'ตำแหน่ง' },
+  { to: '/school/teacher-check',  end: false, icon: CheckSquare,   label: 'เช็กชื่อ' },
   { to: '/reports/daily',         end: false, icon: FileText,      label: 'รายงาน' },
 ];
 

@@ -133,6 +133,8 @@ const SHOTS = [
   // ── school ──
   { id: 'school/01-dashboard', url: '/school', user: 'school', ...DESKTOP },
   { id: 'school/02-students', url: '/school/students', user: 'school', ...DESKTOP },
+  { id: 'school/22-teacher-check', url: '/school/teacher-check?session=morning', user: 'teacher', ...DESKTOP },
+  { id: 'school/22b-teacher-check-mobile', url: '/school/teacher-check?session=morning', user: 'teacher', ...MOBILE },
   { id: 'school/03-vehicles', url: '/school/vehicles', user: 'school', ...DESKTOP },
   { id: 'school/04-vehicle-verification', url: '/school/vehicle-verification', user: 'school', ...DESKTOP },
   { id: 'school/05-bulk-vehicles', url: '/school/bulk-vehicles', user: 'school', ...DESKTOP },

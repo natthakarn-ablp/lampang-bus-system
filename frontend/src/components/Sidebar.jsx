@@ -38,119 +38,110 @@ const DRIVER_NAV = [
   { to: '/driver/profile',     icon: User,           label: 'ข้อมูลคนขับ' },
 ];
 
+// School / affiliation / province / transport: one flat list of the pages a
+// role uses every day, then everything else folded under "เพิ่มเติม" (closed by
+// default, opened automatically when it holds the current page). Every route
+// that was in the menu before is still here — only its place changed.
+const MORE = 'เพิ่มเติม';
+
 const SCHOOL_NAV = [
-  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
-  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
-  { section: 'ภาพรวม' },
   { to: '/school',               icon: BarChart3,     label: PAGE_TITLES.SCHOOL_DASHBOARD },
-  { section: 'งานดำเนินการ' },
-  { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },
-  { to: '/school/registration-review', icon: ClipboardList, label: 'ตรวจลงทะเบียนรถ' },
-  { to: '/school/vehicle-verification', icon: CheckSquare, label: 'ส่งตรวจและรับรองรถ' },
-  { section: 'ข้อมูลหลัก' },
   { to: '/school/students',      icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
-  { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
-  { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
-  { section: 'ตรวจสอบและสนับสนุน' },
+  { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },
   { to: '/school/pickup-map',    icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { to: '/school/live-vehicles', icon: Activity,      label: 'ตำแหน่งปัจจุบัน' },
   { to: '/school/emergencies',   icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
-  { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
-  { section: 'รายงานและวิจัย' },
   { to: '/reports/daily',        icon: FileText,      label: 'รายงาน' },
+  { section: MORE },
+  { to: '/school/registration-review', icon: ClipboardList, label: 'ตรวจลงทะเบียนรถ' },
+  { to: '/school/vehicle-verification', icon: CheckSquare, label: 'ส่งตรวจและรับรองรถ' },
+  { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
+  { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
+  { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
 
 const AFFILIATION_NAV = [
-  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
-  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
-  { section: 'ภาพรวม' },
   { to: '/affiliation',             icon: BarChart3,     label: PAGE_TITLES.AFFILIATION_DASHBOARD },
-  { section: 'งานดำเนินการ' },
-  { to: '/affiliation/transfer-requests', icon: Users,   label: 'คำขอโอนย้ายนักเรียน' },
-  { to: '/affiliation/vehicle-requests',  icon: Wrench,  label: 'คำขอเกี่ยวกับรถ' },
-  { section: 'ข้อมูลหลัก' },
   { to: '/affiliation/schools',     icon: Building2,     label: 'โรงเรียนในสังกัด' },
   { to: '/affiliation/students',    icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/affiliation/vehicles',    icon: Bus,           label: 'รถรับส่ง' },
-  { to: '/affiliation/accounts',    icon: Key,           label: 'เพิ่มโรงเรียนใหม่' },
-  { section: 'ตรวจสอบและสนับสนุน' },
   { to: '/affiliation/live-vehicles', icon: Activity,    label: 'ตำแหน่งปัจจุบัน' },
   { to: '/affiliation/pickup-map',  icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { to: '/affiliation/emergencies', icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
-  { to: '/affiliation/audit-log',   icon: FileText,      label: 'ประวัติการแก้ไข' },
-  { section: 'รายงานและวิจัย' },
   { to: '/reports/daily',           icon: FileText,      label: 'รายงาน' },
+  { section: MORE },
+  { to: '/affiliation/transfer-requests', icon: Users,   label: 'คำขอโอนย้ายนักเรียน' },
+  { to: '/affiliation/vehicle-requests',  icon: Wrench,  label: 'คำขอเกี่ยวกับรถ' },
+  { to: '/affiliation/accounts',    icon: Key,           label: 'เพิ่มโรงเรียนใหม่' },
+  { to: '/affiliation/audit-log',   icon: FileText,      label: 'ประวัติการแก้ไข' },
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
 
 const PROVINCE_NAV = [
-  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
-  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
-  { section: 'ภาพรวม' },
   { to: '/province',              icon: BarChart3,     label: PAGE_TITLES.PROVINCE_DASHBOARD },
-  { section: 'ข้อมูลหลัก' },
   { to: '/province/affiliations', icon: Landmark,      label: 'สังกัด' },
   { to: '/province/schools',      icon: Building2,     label: 'โรงเรียน' },
   { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/province/vehicles',     icon: Bus,           label: 'รถรับส่ง' },
-  { section: 'ตรวจสอบและสนับสนุน' },
   { to: '/province/live-vehicles', icon: Activity,     label: 'ตำแหน่งปัจจุบัน' },
   { to: '/province/pickup-map',   icon: Map,           label: 'แผนที่จุดรับส่ง' },
+  { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
+  { to: '/reports/daily',         icon: FileText,      label: 'รายงาน' },
+  { section: MORE },
   { to: '/province/readiness',    icon: ShieldCheck,   label: 'ความพร้อมเปิดใช้งาน' },
   { to: '/admin/route-deviations', icon: Route,        label: 'การเบี่ยงเส้นทาง' },
-  { to: '/province/emergencies',  icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/province/unit-accounts', icon: Key,          label: 'บัญชีสังกัดและขนส่ง' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
-  { section: 'รายงานและวิจัย' },
-  { to: '/reports/daily',         icon: FileText,      label: 'รายงาน' },
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
 
 const TRANSPORT_NAV = [
-  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
-  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
-  { section: 'ภาพรวม' },
   { to: '/transport',              icon: BarChart3,    label: 'ภาพรวมตรวจสภาพรถ' },
-  { section: 'งานดำเนินการ' },
   { to: '/transport/verification', icon: CheckSquare,  label: 'ตรวจรับรองรถ' },
   { to: '/transport/inspections',  icon: ClipboardList, label: 'บันทึกตรวจสภาพ' },
-  { section: 'ตรวจสอบและสนับสนุน' },
   { to: '/transport/pickup-map',   icon: Map,          label: 'แผนที่จุดรับส่ง' },
+  { section: MORE },
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
 
 const ADMIN_NAV = [
-  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
-  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
-  { section: 'ภาพรวม' },
   { to: '/admin',                 icon: Home,        label: 'ศูนย์ควบคุมระบบ' },
-  { section: 'งานดำเนินการ' },
   { to: '/admin/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },
   { to: '/admin/vehicle-requests', icon: Wrench,     label: 'คำขอเกี่ยวกับรถ' },
-  { section: 'ข้อมูลหลัก' },
   { to: '/admin/users',           icon: Users,       label: 'จัดการผู้ใช้งาน' },
-  { to: '/school',                icon: Building2,   label: 'จัดการโรงเรียน' },
-  { to: '/affiliation/accounts',  icon: Key,         label: 'เพิ่มโรงเรียนใหม่' },
   { to: '/province',              icon: Map,         label: 'ภาพรวมจังหวัด' },
   { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/province/vehicles',     icon: Bus,         label: 'รถรับส่ง' },
+  { to: '/reports/daily',         icon: FileText,    label: 'รายงาน' },
   { section: 'ตรวจสอบและสนับสนุน' },
   { to: '/admin/readiness',       icon: ShieldCheck, label: 'ความพร้อมเปิดใช้งาน' },
   { to: '/admin/pickup-points',   icon: MapPin,      label: 'ตรวจสอบจุดรับส่ง' },
   { to: '/admin/live-vehicles',   icon: ShieldAlert, label: 'ตรวจสอบตำแหน่งรถ' },
   { to: '/admin/driver-integrity', icon: ShieldAlert, label: 'สุขภาพข้อมูลคนขับ' },
-  { to: '/admin/geofences',       icon: MapPin,      label: 'จุดเตือนภัย (Geofences)' },
+  { to: '/admin/geofences',       icon: MapPin,      label: 'จุดเตือนภัย' },
   { to: '/admin/route-deviations', icon: Route,      label: 'การเบี่ยงเส้นทาง' },
   { to: '/admin/audit-logs',      icon: FileText,    label: 'ประวัติการใช้งาน' },
   { to: '/admin/system-health',   icon: Activity,    label: 'สุขภาพระบบ' },
   { to: '/transport',             icon: Wrench,      label: 'ตรวจสภาพรถ' },
-  { section: 'รายงานและวิจัย' },
+  { section: 'วิจัยและประเมินผล' },
   { to: '/admin/measurement',     icon: Ruler,       label: 'กรอบวัดผลระบบ' },
   { to: '/admin/research',        icon: TrendingUp,  label: 'เปรียบเทียบ Baseline' },
   { to: '/admin/research-export', icon: Package,     label: 'ส่งออกข้อมูลวิจัย' },
   { to: '/admin/evaluation',      icon: Target,      label: 'ประเมินผลแยก Role' },
   { to: '/admin/executive',       icon: BarChart3,   label: 'สรุปผู้บริหาร' },
-  { to: '/reports/daily',         icon: FileText,    label: 'รายงาน' },
   { section: 'ตั้งค่าระบบ' },
   { to: '/admin/term-settings',   icon: Calendar,    label: 'ภาคเรียนปัจจุบัน' },
+  { section: MORE },
+  { to: '/school',                icon: Building2,   label: 'จัดการโรงเรียน' },
+  { to: '/affiliation/accounts',  icon: Key,         label: 'เพิ่มโรงเรียนใหม่' },
+  { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
+  { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
 
 const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATION_NAV, province: PROVINCE_NAV, transport: TRANSPORT_NAV, admin: ADMIN_NAV };
@@ -210,14 +201,11 @@ function navItemsForUser(user, features) {
   return deduped.filter(item => item.section || !TEACHER_BLOCKED_PATHS.has(item.to));
 }
 
-// Collapsible groups for roles whose menu crossed the 10-item threshold.
-// Grade teachers see ~8 filtered items, so they keep static headers and the
-// active section is always visible.
+// Every named section folds (the leading daily list has no header, so it is
+// always visible). A section opens automatically when it holds the current
+// page, and its open/closed state is remembered per browser.
 function isCollapsibleForUser(user) {
-  if (!user) return false;
-  if (user.role === 'admin') return true;
-  if (user.role === 'school' && !isGradeTeacher(user)) return true;
-  return false;
+  return !!user;
 }
 
 function buildGroups(items) {

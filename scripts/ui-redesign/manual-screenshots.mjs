@@ -221,6 +221,14 @@ const SHOTS = [
     act: async (p) => { await act.click(p, 'button:has-text("แบบเดิม")', 900); } },
   { id: 'school/13-override', url: '/school', user: 'school', ...DESKTOP,
     act: async (p) => { await act.click(p, 'button:has-text("ยืนยันแทนคนขับ")', 900); } },
+  // ครูกด "ถึงโรงเรียนทั้งคัน" แล้วระบบถามยืนยันก่อนบันทึก
+  { id: 'school/22c-teacher-check-confirm', url: '/school/teacher-check?session=morning', user: 'teacher', ...MOBILE,
+    act: async (p) => { await act.click(p, 'button:has-text("ถึงโรงเรียนทั้งคัน")', 900); } },
+  // หน้าภาพรวมของครูประจำสายชั้น (ไม่มีปุ่มจัดการรถ/ยืนยันแทนคนขับ)
+  { id: 'school/01b-dashboard-teacher', url: '/school', user: 'teacher', ...DESKTOP },
+  // เมนูข้าง: หน้าที่ใช้ทุกวันอยู่บน ที่เหลือพับใต้ "เพิ่มเติม" (กดเปิดให้เห็น)
+  { id: 'shared/sidebar-more', url: '/school', user: 'school', ...DESKTOP,
+    act: async (p) => { await act.click(p, 'nav button:has-text("เพิ่มเติม")', 700); } },
 
   // ── parent ──
   // parent/01-status ถ่ายไม่ได้: /parent ปฏิเสธการทำงานนอก LINE client โดยตั้งใจ

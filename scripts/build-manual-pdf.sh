@@ -65,6 +65,7 @@ declare -A TH=(
   [driver]="คู่มือ-คนขับ" [school]="คู่มือ-โรงเรียน" [transport]="คู่มือ-ขนส่ง"
   [affiliation]="คู่มือ-สังกัดเขต" [province]="คู่มือ-จังหวัด"
   [admin]="คู่มือ-ผู้ดูแลระบบ" [parent]="คู่มือ-ผู้ปกครอง"
+  [teacher]="คู่มือ-ครู-เช็กชื่อ"
 )
 
 render() { # <html-basename> <out.pdf>
@@ -83,7 +84,7 @@ cd "$MANUAL"
 # The english-named PDFs (driver.pdf …) are SYMLINKS to the Thai distribution
 # files (คู่มือ-คนขับ.pdf …) — render straight to the real Thai file; the symlink
 # (and the HTML href="pdf/driver.pdf") then points at the fresh content.
-for r in driver school transport affiliation province admin parent; do
+for r in driver school transport affiliation province admin parent teacher; do
   echo "==> ${TH[$r]}.pdf  (= $r.pdf)"
   render "user-guide-$r.html" "${TH[$r]}.pdf"
 done

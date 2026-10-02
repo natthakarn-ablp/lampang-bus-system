@@ -91,14 +91,14 @@ blockquote.callout ul{margin:6px 0;}
 </style>
 </head>
 <body>
-<nav class="topnav"><div class="nav-inner"><a href="index.html" class="active">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<nav class="topnav"><div class="nav-inner"><a href="index.html" class="active">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-teacher.html">ครูเช็กชื่อ</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
 <div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
 <div class="wrap">
 <main>
 <h1>คู่มือใช้งานระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
 <blockquote class="callout note">
 <p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง — เว็บไซต์ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong>
-ชุดคู่มืออบรมล่าสุด • อัปเดต 2026-09-07 (ตรวจกับระบบจริง commit 4f9c894)</p>
+ชุดคู่มืออบรมล่าสุด • อัปเดต 2026-09-07 (ตรวจกับระบบจริง commit 4f9c894) • ปรับปรุง 2026-10-02: แดชบอร์ดและเมนูแบบใหม่ทุกสิทธิ์ + คู่มือครูเช็กชื่อขึ้น-ลงรถ (ตรวจกับระบบจริง commit fd5d3f9)</p>
 </blockquote>
 <p>เอกสารนี้เป็น <strong>สารบัญหลัก</strong> ของคู่มือใช้งาน แยกตามสิทธิ์ (role) แต่ละสิทธิ์มีคู่มือเฉพาะของตนเองที่จัดทำโดยอ้างอิงจากโค้ดจริงของระบบ คลิกที่ชื่อสิทธิ์เพื่อเปิดคู่มือฉบับเต็ม หรือดาวน์โหลดชุดคู่มืออบรมล่าสุดเป็น PDF ได้จากตารางด้านล่าง</p>
 <hr>
@@ -173,6 +173,9 @@ blockquote.callout ul{margin:6px 0;}
 </tbody>
 </table>
 <hr>
+<blockquote class="callout tip">
+<p>🆕 <strong>ใหม่ ภาคเรียนที่ 2 (เริ่ม 12 ต.ค. 2569):</strong> ครูเป็นผู้เช็กชื่อนักเรียนที่ใช้รถรับส่งเอง — อ่าน <a href="user-guide-teacher.html"><strong>คู่มือครู: เช็กชื่อขึ้น-ลงรถ</strong></a> (หน้าเดียว อ่านจบใน 5 นาที)</p>
+</blockquote>
 <h2>คู่มือแยกตามสิทธิ์ (7 สิทธิ์)</h2>
 <table>
 <thead>
@@ -195,6 +198,12 @@ blockquote.callout ul{margin:6px 0;}
 <td>ครู/เจ้าหน้าที่โรงเรียน (รวมครูสายชั้น)</td>
 <td>ชื่อผู้ใช้ของโรงเรียน</td>
 <td><a href="user-guide-school.html">📖 เปิดคู่มือ</a></td>
+</tr>
+<tr>
+<td><strong>ครูเช็กชื่อ</strong> (ครูประจำสายชั้น) 🆕</td>
+<td>ครูที่เช็กชื่อนักเรียนขึ้น-ลงรถที่โรงเรียน (ภาคเรียนที่ 2)</td>
+<td>บัญชีครูประจำสายชั้นที่โรงเรียนสร้างให้</td>
+<td><a href="user-guide-teacher.html">📖 เปิดคู่มือ</a></td>
 </tr>
 <tr>
 <td><strong>สังกัด/เขต</strong> (Affiliation)</td>
@@ -247,6 +256,10 @@ blockquote.callout ul{margin:6px 0;}
 <td><a href="pdf/school.pdf">ดาวน์โหลด PDF</a></td>
 </tr>
 <tr>
+<td>ครูเช็กชื่อขึ้น-ลงรถ 🆕</td>
+<td><a href="pdf/teacher.pdf">ดาวน์โหลด PDF</a></td>
+</tr>
+<tr>
 <td>สังกัด/เขต</td>
 <td><a href="pdf/affiliation.pdf">ดาวน์โหลด PDF</a></td>
 </tr>
@@ -271,6 +284,14 @@ blockquote.callout ul{margin:6px 0;}
 <hr>
 <h2>1. ภาพรวมระบบ</h2>
 <p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง เป็นระบบติดตามการรับ-ส่งนักเรียนโดยรถรับส่ง ครอบคลุมตั้งแต่การเช็กชื่อขึ้น-ลงรถประจำวัน การตรวจสภาพรถ การแจ้งเตือนผู้ปกครองผ่าน LINE ไปจนถึงรายงานสรุปสำหรับผู้บริหารทุกระดับ มีการแบ่งสิทธิ์ผู้ใช้ออกเป็น 7 ระดับ แต่ละระดับเห็นและทำได้เฉพาะในขอบเขตของตน (ระบบบังคับสิทธิ์ที่ฝั่งเซิร์ฟเวอร์)</p>
+<h3>หน้าตาแบบใหม่ (ตั้งแต่ 2 ต.ค. 2569)</h3>
+<ul>
+<li><strong>เมนูด้านข้าง:</strong> หน้าที่ใช้ทุกวันอยู่ด้านบน ส่วนหน้าที่ใช้นาน ๆ ครั้ง (รวมถึง &quot;เรื่องที่ต้องมีส่วนร่วม&quot;) พับไว้ใต้หัวข้อ <strong>&quot;เพิ่มเติม&quot;</strong> — กดที่คำว่า &quot;เพิ่มเติม&quot; เพื่อเปิด</li>
+<li><strong>หน้าภาพรวม (แดชบอร์ด) ทุกสิทธิ์อ่านจากบนลงล่างเหมือนกัน:</strong> <strong>แถบสรุปวันนี้</strong> (ประโยคเดียว สีบอกสถานะ พร้อมปุ่มไปแก้) → <strong>ต้องทำวันนี้</strong> (ไม่เกิน 3 การ์ด) → <strong>ตัวเลขหลัก 4 ช่อง</strong> → <strong>กราฟ 7 วัน และกราฟสิ่งที่ต้องติดตาม</strong> → รายละเอียดอื่นพับไว้ กด &quot;ดูรายละเอียด&quot; เพื่อเปิด</li>
+<li><strong>สีบอกความหมายเหมือนกันทุกหน้า:</strong> เขียว = เรียบร้อย · เหลือง = รอติดตาม · แดง = ต้องรีบ · ฟ้า = ข้อมูล · เทา = ยังไม่เริ่ม (มีคำกำกับทุกครั้ง)</li>
+</ul>
+<p><img src="screenshots/shared/sidebar-more.png" alt="เมนูด้านข้างและหน้าภาพรวมแบบใหม่ (ตัวอย่างบัญชีโรงเรียน เปิดหัวข้อเพิ่มเติม)"></p>
+<p><em>ภาพ: เมนูด้านข้าง (เปิดหัวข้อ &quot;เพิ่มเติม&quot;) และหน้าภาพรวมแบบใหม่ — ตัวอย่างบัญชีโรงเรียน</em></p>
 <hr>
 <h2>2. การเข้าสู่ระบบ (ใช้ร่วมทุกสิทธิ์ ยกเว้นผู้ปกครอง)</h2>
 <ol>
@@ -428,10 +449,10 @@ blockquote.callout ul{margin:6px 0;}
 <h2>เอกสารที่เกี่ยวข้อง (สำหรับทีมงาน/ผู้ดูแล)</h2>
 <p>เอกสารปฏิบัติการของทีมงาน (ความพร้อมก่อนเปิดใช้จริง ขั้นตอนสำรองและกู้คืนข้อมูล และคู่มือผู้ดูแลระบบ) <strong>ไม่ได้เผยแพร่บนเว็บสาธารณะ</strong> ตั้งแต่ 7 กันยายน 2569 เพราะมีรายละเอียดความเสี่ยงและขั้นตอนภายในของระบบ ทีมงานอ่านได้จากคลังโค้ดของโครงการที่ <code>docs/</code> (ต้องมีสิทธิ์เข้าถึง) — หน้าเว็บนี้เผยแพร่เฉพาะคู่มือผู้ใช้งานเท่านั้น</p>
 <hr>
-<p><em>คู่มือชุดนี้จัดทำโดยอ้างอิงจากโค้ดจริงของระบบ (source of truth) — อัปเดต 2026-09-06</em></p>
+<p><em>คู่มือชุดนี้จัดทำโดยอ้างอิงจากโค้ดจริงของระบบ (source of truth) — อัปเดต 2026-09-06 · ปรับปรุง 2026-10-02</em></p>
 
 </main>
 </div>
-<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML และ PDF ล่าสุด · 2026-09-06</footer>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือฉบับ HTML และ PDF ล่าสุด · 2026-10-02</footer>
 </body>
 </html>

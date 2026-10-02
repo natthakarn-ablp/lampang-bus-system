@@ -91,7 +91,7 @@ blockquote.callout ul{margin:6px 0;}
 </style>
 </head>
 <body>
-<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html" class="active">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html" class="active">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-teacher.html">ครูเช็กชื่อ</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
 <div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
 <div class="wrap">
 <main>
@@ -407,7 +407,7 @@ blockquote.callout ul{margin:6px 0;}
 <li>กด <strong>&quot;นักเรียนขึ้นรถครบทุกคน (N คน)&quot;</strong> เพื่อเช็กทุกคนพร้อมกัน หรือเลือกเช็กทีละคน</li>
 <li>เมื่อส่ง/รับนักเรียนลงจากรถครบแล้ว กด <strong>&quot;ยืนยันส่งนักเรียนลงครบแล้ว (จบรอบ)&quot;</strong></li>
 </ol>
-<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ระบบบันทึกประวัติพร้อมเวลา และส่งแจ้งเตือนทาง LINE ให้ผู้ปกครองที่ผูกบัญชีไว้</p>
+<p><strong>✅ ผลลัพธ์ที่ถูกต้อง:</strong> ระบบบันทึกประวัติพร้อมเวลา และผู้ปกครองที่ผูกบัญชี LINE ไว้เปิดดูสถานะล่าสุดของบุตรหลานได้ทันที (ระบบไม่ส่งข้อความ LINE ทุกครั้งที่เช็กชื่อ — ส่งข้อความเฉพาะเหตุฉุกเฉิน)</p>
 <p><strong>⚠️ ถ้าติดปัญหา:</strong></p>
 <ul>
 <li>&quot;รายการนี้ถูกบันทึกไปแล้ว&quot; → กดสถานะเดิมซ้ำในรอบ/วันเดียวกัน (กันการกดซ้ำ) ไม่ต้องกดอีก</li>
@@ -418,6 +418,12 @@ blockquote.callout ul{margin:6px 0;}
 <p>⚠️ <strong>กดผิดแก้เองไม่ได้</strong> — ระบบไม่มีปุ่มลบ/แก้สถานะ (เก็บประวัติทั้งหมดเพื่อตรวจสอบ) ถ้าต้องแก้สถานะอย่างเป็นทางการให้ติดต่อโรงเรียน
 ℹ️ คนที่บันทึกลาในรอบนั้น จะถูกตัดออกจากการเช็กทั้งคันโดยอัตโนมัติ
 ℹ️ &quot;ส่งลงครบ&quot; จะเลือกเฉพาะคนที่ขึ้นรถแล้วแต่ยังไม่ได้ลง</p>
+</blockquote>
+<blockquote class="callout">
+<p>🏫 <strong>ตั้งแต่ภาคเรียนที่ 2 (12 ต.ค. 2569) ครูที่โรงเรียนเช็กชื่อได้ด้วย</strong> — ครูบันทึกเฉพาะสิ่งที่เห็นที่โรงเรียน: <strong>รอบเช้า = เด็กถึงโรงเรียน</strong> · <strong>รอบเย็น = เด็กขึ้นรถกลับบ้าน</strong><br>
+คุณยังเช็กชื่อในแอปได้ตามปกติ ระบบ<strong>นับรายการที่บันทึกก่อน</strong> ไม่นับซ้ำ<br>
+• ถ้าครูบันทึกเด็กคนนั้นไปแล้ว เมื่อคุณกดขั้นเดียวกันจะขึ้น &quot;รายการนี้ถูกบันทึกไปแล้ว&quot; หรือ &quot;นักเรียนถูกส่งแล้วในรอบนี้ — ไม่สามารถเช็กอินซ้ำได้&quot; — <strong>เป็นเรื่องปกติ ไม่ใช่ข้อผิดพลาด</strong> ข้ามไปคนถัดไปได้เลย<br>
+• รอบเช้า ถ้าคุณกดรับเด็กขึ้นรถจากบ้านแล้ว ครูยังบันทึก &quot;ถึงโรงเรียน&quot; ต่อได้ตามปกติ</p>
 </blockquote>
 <p><img src="screenshots/driver/01c-checkin-top.png" alt="เช็กชื่อรับ-ส่ง: ปุ่ม &quot;นักเรียนขึ้นรถครบทุกคน&quot; (ทั้งคัน) และ &quot;มีข้อยกเว้น — เลือกทีละคน&quot; (รายคน)"></p>
 <p><em>ภาพ: เช็กชื่อรับ-ส่ง: ปุ่ม &quot;นักเรียนขึ้นรถครบทุกคน&quot; (ทั้งคัน) และ &quot;มีข้อยกเว้น — เลือกทีละคน&quot; (รายคน)</em></p>
@@ -757,6 +763,10 @@ blockquote.callout ul{margin:6px 0;}
 <tr>
 <td>&quot;รายการนี้ถูกบันทึกไปแล้ว&quot;</td>
 <td>กดสถานะเดิมซ้ำในรอบ/วันเดียวกัน (กันการกดซ้ำ) — ไม่ต้องกดอีก</td>
+</tr>
+<tr>
+<td>ขึ้น &quot;รายการนี้ถูกบันทึกไปแล้ว&quot; ทั้งที่ยังไม่ได้กดเด็กคนนี้เลย (ตั้งแต่ภาคเรียนที่ 2)</td>
+<td>ครูที่โรงเรียนบันทึกเด็กคนนี้ไปก่อนแล้ว (เช้า = ถึงโรงเรียน / เย็น = ขึ้นรถกลับบ้าน) — ระบบนับรายการแรก เป็นเรื่องปกติ ข้ามไปคนถัดไปได้</td>
 </tr>
 <tr>
 <td>&quot;นักเรียนถูกส่งแล้วในรอบนี้ — ไม่สามารถเช็กอินซ้ำได้&quot;</td>

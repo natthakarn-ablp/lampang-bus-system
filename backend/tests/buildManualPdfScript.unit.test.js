@@ -19,7 +19,7 @@
  *      distribution PDF it would overwrite (a typo in the loop would render
  *      to a new filename and leave the linked one stale);
  *   3. execution — `--dry-run` actually runs from a directory that is not the
- *      repo root, lists eight renders under this checkout, and fails loudly
+ *      repo root, lists nine renders (eight guides + index) under this checkout, and fails loudly
  *      with the right hint when the manual directory is wrong. Skipped when
  *      no `bash` is on PATH, and says so.
  */
@@ -95,8 +95,8 @@ describe('filesystem: everything the loop names is really there', () => {
     return out;
   })();
 
-  it('renders all seven roles', () => {
-    expect(roles.sort()).toEqual(['admin', 'affiliation', 'driver', 'parent', 'province', 'school', 'transport']);
+  it('renders all eight guides (seven roles + the teacher check-in guide)', () => {
+    expect(roles.sort()).toEqual(['admin', 'affiliation', 'driver', 'parent', 'province', 'school', 'teacher', 'transport']);
   });
 
   it('has a source HTML guide for each role, plus the index', () => {
@@ -113,11 +113,11 @@ describe('filesystem: everything the loop names is really there', () => {
 });
 
 describe(`execution: --dry-run${hasBash ? '' : ' (skipped: no bash on PATH)'}`, () => {
-  withBash('lists eight renders under this checkout, from a cwd that is not the repo root', () => {
+  withBash('lists nine renders (eight guides + index) under this checkout, from a cwd that is not the repo root', () => {
     const r = runScript(['--dry-run'], { CHROME: '' });
     expect(`exit ${r.status}: ${r.stderr}`).toBe('exit 0: ');
     const lines = r.stdout.split('\n').filter((l) => l.startsWith('would render: '));
-    expect(lines).toHaveLength(8);
+    expect(lines).toHaveLength(9);
     // Every path is inside this checkout's docs/, wherever the shell was started.
     const rootPosix = ROOT.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, d) => `/${d.toLowerCase()}`);
     for (const l of lines) {

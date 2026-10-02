@@ -126,7 +126,7 @@ export default function ParentStatus() {
           <p className="text-base text-ink-muted mb-6">ทำตามขั้นตอนด้านล่าง เพื่อดูสถานะรับ-ส่งบุตรหลาน</p>
 
           <div className="text-left space-y-4 mb-6">
-            <StepItem number="1" text="เพิ่มเพื่อน LINE OA ระบบรถรับส่งนักเรียน" />
+            <StepItem number="1" text="เพิ่มเพื่อน LINE OA @943glwjf (รถรับส่งนักเรียน)" />
             <StepItem number="2" text='พิมพ์คำว่า "ผูกบัญชี" ในแชท' />
             <StepItem number="3" text="กรอกเบอร์โทร + รหัสนักเรียนของบุตรหลาน" />
             <StepItem number="4" text="รอโรงเรียนอนุมัติ" />

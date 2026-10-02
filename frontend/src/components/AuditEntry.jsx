@@ -44,6 +44,7 @@ const ACTION_RAIL = {
 const ENTITY_LABEL = {
   student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้',
   roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน',
+  checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ',
   driver: 'คนขับ', driver_profile: 'ข้อมูลคนขับ', emergency: 'เหตุฉุกเฉิน',
 };
 

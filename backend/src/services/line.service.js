@@ -428,10 +428,32 @@ async function getLinkedChildren(lineUserId) {
   return getChildrenByBoundPhone(lineUserId);
 }
 
+/**
+ * What a "done" session means to a parent depends on WHICH tap made it done:
+ *   morning CHECKED_IN  — boarded at home (driver)
+ *   morning CHECKED_OUT — arrived at school (driver drop-off, or a teacher)
+ *   evening CHECKED_IN  — boarded at school to go home (driver, or a teacher)
+ *   evening CHECKED_OUT — dropped at the pickup point (driver)
+ * Teachers only see the school end, so their taps must not read as
+ * "ขึ้นรถแล้ว" / "ส่งถึงจุดรับแล้ว".
+ */
+function sessionDoneLabel(session, lastStatus) {
+  if (session === 'morning') return lastStatus === 'CHECKED_OUT' ? 'ถึงโรงเรียนแล้ว' : 'ขึ้นรถแล้ว';
+  return lastStatus === 'CHECKED_IN' ? 'ขึ้นรถกลับบ้านแล้ว' : 'ส่งถึงจุดรับแล้ว';
+}
+
 async function getChildStatusToday(studentId) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   const [[status]] = await pool.query(
-    `SELECT ds.morning_done, ds.morning_ts, ds.evening_done, ds.evening_ts
+    `SELECT ds.morning_done, ds.morning_ts, ds.evening_done, ds.evening_ts,
+            (SELECT cl.status FROM checkin_logs cl
+              WHERE cl.student_id = ds.student_id AND cl.check_date = ds.check_date
+                AND cl.session = 'morning'
+              ORDER BY cl.id DESC LIMIT 1) AS morning_last,
+            (SELECT cl.status FROM checkin_logs cl
+              WHERE cl.student_id = ds.student_id AND cl.check_date = ds.check_date
+                AND cl.session = 'evening'
+              ORDER BY cl.id DESC LIMIT 1) AS evening_last
      FROM daily_status ds
      WHERE ds.student_id = ? AND ds.check_date = ?`,
     [studentId, today]
@@ -445,7 +467,12 @@ async function getChildStatusToday(studentId) {
       has_checkin_today: false,
     };
   }
-  return { ...status, has_checkin_today: true };
+  return {
+    ...status,
+    morning_label: status.morning_done ? sessionDoneLabel('morning', status.morning_last) : null,
+    evening_label: status.evening_done ? sessionDoneLabel('evening', status.evening_last) : null,
+    has_checkin_today: true,
+  };
 }
 
 // ─── Message Sending ────────────────────────────────────────────────────────
@@ -897,11 +924,11 @@ function buildChildSection(child, status, idx, total) {
 
   const mState = status.morning_done ? 'done' : 'pending';
   const mLabel = status.morning_done
-    ? `ขึ้นรถแล้ว ${formatTimeTH(status.morning_ts)}`.trim()
+    ? `${sessionDoneLabel('morning', status.morning_last)} ${formatTimeTH(status.morning_ts)}`.trim()
     : 'ยังไม่ขึ้นรถ';
   const eState = status.evening_done ? 'done' : 'pending';
   const eLabel = status.evening_done
-    ? `ส่งถึงจุดรับแล้ว ${formatTimeTH(status.evening_ts)}`.trim()
+    ? `${sessionDoneLabel('evening', status.evening_last)} ${formatTimeTH(status.evening_ts)}`.trim()
     : 'ยังไม่ส่งถึงจุดรับ';
 
   const isFirst = idx === 0;
@@ -1135,10 +1162,10 @@ function buildParentStatusText(childrenWithStatus) {
   const total = childrenWithStatus.length;
   childrenWithStatus.forEach(({ child, status }, idx) => {
     const mLabel = status.morning_done
-      ? `✅ ขึ้นรถแล้ว ${formatTimeTH(status.morning_ts)}`.trim()
+      ? `✅ ${sessionDoneLabel('morning', status.morning_last)} ${formatTimeTH(status.morning_ts)}`.trim()
       : '⏳ ยังไม่ขึ้นรถ';
     const eLabel = status.evening_done
-      ? `✅ ส่งถึงจุดรับแล้ว ${formatTimeTH(status.evening_ts)}`.trim()
+      ? `✅ ${sessionDoneLabel('evening', status.evening_last)} ${formatTimeTH(status.evening_ts)}`.trim()
       : '⏳ ยังไม่ส่งถึงจุดรับ';
     const gradeRoom = formatGradeClass(child.grade, child.classroom, '');
     if (total > 1) msg += `\n— คนที่ ${idx + 1}/${total} —`;
@@ -1348,7 +1375,7 @@ module.exports = {
   tryLinkByPhoneAndStudentId,
   findLinkableParent, commitLineLink,
   getLinkedParentId, getLinkedParentSummary, unlinkAccount,
-  getLinkedChildren, getChildStatusToday,
+  getLinkedChildren, getChildStatusToday, sessionDoneLabel,
   sendTextMessage, pushToEmergencyGroup, pushEmergencyFlexMessage,
   pushParentStatusFlex, pushParentFlex, logMessage, auditBind,
   processUnsentNotifications,

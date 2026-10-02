@@ -1245,6 +1245,12 @@ async function voidCheckin(pool, {
   logId,
   reason,
   scope = { kind: 'admin' },
+  // When the voided row was not the only check for that session (e.g. the
+  // driver boarded the child, then a teacher recorded the school arrival and
+  // undoes it), keep the session "done" on the strength of the earlier row
+  // instead of clearing it. Off by default so the existing void paths keep
+  // their exact behaviour.
+  restorePriorDone = false,
 }) {
   const id = Number.parseInt(logId, 10);
   if (!Number.isInteger(id) || id <= 0) {
@@ -1333,12 +1339,31 @@ async function voidCheckin(pool, {
     // 6. Reset the matching daily_status session flag (only the row's session).
     const doneCol = log.session === 'morning' ? 'morning_done' : 'evening_done';
     const tsCol   = log.session === 'morning' ? 'morning_ts'   : 'evening_ts';
-    await conn.query(
-      `UPDATE daily_status
-          SET ${doneCol} = FALSE, ${tsCol} = NULL
-        WHERE check_date = ? AND student_id = ?`,
-      [log.check_date, log.student_id]
-    );
+    let prior = null;
+    if (restorePriorDone) {
+      const [[p]] = await conn.query(
+        `SELECT id, status, checked_at FROM checkin_logs
+          WHERE student_id = ? AND session = ? AND check_date = ? AND id < ?
+          ORDER BY id DESC LIMIT 1`,
+        [log.student_id, log.session, log.check_date, log.id]
+      );
+      if (p && (p.status === 'CHECKED_IN' || p.status === 'CHECKED_OUT')) prior = p;
+    }
+    if (prior) {
+      await conn.query(
+        `UPDATE daily_status
+            SET ${doneCol} = TRUE, ${tsCol} = ?
+          WHERE check_date = ? AND student_id = ?`,
+        [prior.checked_at, log.check_date, log.student_id]
+      );
+    } else {
+      await conn.query(
+        `UPDATE daily_status
+            SET ${doneCol} = FALSE, ${tsCol} = NULL
+          WHERE check_date = ? AND student_id = ?`,
+        [log.check_date, log.student_id]
+      );
+    }
 
     // 7. Audit (DELETE = the business reversal). conn-scoped so it commits atomically.
     await logAudit({
@@ -1391,6 +1416,228 @@ async function voidCheckin(pool, {
   }
 }
 
+// ─── Teacher check (term 2, phase 1) ──────────────────────────────────────────
+//
+// In the first phase, teachers record attendance themselves as ROUTINE work —
+// not as an exception like /checkin-override (no reason, grade teachers allowed
+// for their own grade). A teacher stands at the school, so they can only attest
+// to what happens there:
+//   morning → the child ARRIVED at school    → CHECKED_OUT (school drop-off)
+//   evening → the child BOARDED to go home   → CHECKED_IN  (school boarding)
+// Both set the session's daily_status flag, exactly like the driver's taps.
+// Drivers may still check in their app; whoever records first counts, and the
+// duplicate / transition guards in _buildCheckinTransaction keep a second tap
+// from double-counting (a teacher's tap on an already-recorded child is skipped).
+
+const TEACHER_STATUS = Object.freeze({ morning: 'CHECKED_OUT', evening: 'CHECKED_IN' });
+const TEACHER_BATCH_MAX = 200;
+
+function teacherStatusFor(session) {
+  return TEACHER_STATUS[session] || null;
+}
+
+/**
+ * Today's roster for the teacher check page: the school's riders (only the
+ * teacher's own grade when gradeFilter is set), grouped by vehicle, each with
+ * the latest check for `session` today and who recorded it.
+ */
+async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, userId }) {
+  if (!teacherStatusFor(session)) throw makeError("session ต้องเป็น 'morning' หรือ 'evening'", 400);
+  const enabledCol = session === 'morning' ? 's.morning_enabled' : 's.evening_enabled';
+  const params = [session, schoolId];
+  let gradeAnd = '';
+  if (gradeFilter) {
+    gradeAnd = ' AND s.grade IN (?)';
+    params.push(gradeEquivalents(gradeFilter));
+  }
+  const [rows] = await pool.query(
+    `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+            s.vehicle_id, v.plate_no,
+            cl.id AS log_id, cl.status AS log_status, cl.checked_at, cl.checked_by,
+            u.role AS checked_by_role, u.display_name AS checked_by_name,
+            (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
+                         WHEN MAX(sl.session = 'both') = 1 THEN 'both'
+                         WHEN COUNT(DISTINCT sl.session) > 1 THEN 'both'
+                         ELSE MAX(sl.session) END
+               FROM student_leaves sl
+              WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE
+            ) AS leave_session
+       FROM students s
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id
+       LEFT JOIN checkin_logs cl
+              ON cl.id = (SELECT MAX(c2.id) FROM checkin_logs c2
+                           WHERE c2.student_id = s.id AND c2.session = ?
+                             AND c2.check_date = CURDATE())
+       LEFT JOIN users u ON u.id = cl.checked_by
+      WHERE s.school_id = ? AND s.is_deleted = FALSE AND ${enabledCol} = TRUE${gradeAnd}
+      ORDER BY v.plate_no IS NULL, v.plate_no, s.grade, s.classroom, s.first_name`,
+    params
+  );
+
+  const target = teacherStatusFor(session);
+  const byVehicle = new Map();
+  for (const r of rows) {
+    const key = r.vehicle_id || '__none';
+    if (!byVehicle.has(key)) {
+      byVehicle.set(key, { vehicle_id: r.vehicle_id || null, plate_no: r.plate_no || null, students: [] });
+    }
+    const onLeave = r.leave_session === 'both' || r.leave_session === session;
+    const status = r.log_status && r.log_status !== 'CANCELLED' ? r.log_status : null;
+    // "done" for the teacher = the thing the teacher attests to has been
+    // recorded, or the session is already finished (evening drop-off at home).
+    const done = !!status && (status === target || (session === 'evening' && status === 'CHECKED_OUT'));
+    byVehicle.get(key).students.push({
+      id: r.id,
+      name: `${r.prefix || ''}${r.first_name} ${r.last_name}`.trim(),
+      grade: r.grade,
+      classroom: r.classroom,
+      on_leave: onLeave,
+      no_vehicle: !r.vehicle_id,
+      status,
+      done,
+      checked_at: status ? r.checked_at : null,
+      checked_by_role: status ? r.checked_by_role || null : null,
+      checked_by_name: status ? r.checked_by_name || null : null,
+      // Only the teacher's own, still-current tap can be undone from this page.
+      can_undo: !!status && status === target && r.checked_by === userId,
+      log_id: status ? r.log_id : null,
+    });
+  }
+  return { session, target_status: target, vehicles: [...byVehicle.values()] };
+}
+
+/**
+ * Record what the teacher saw for one or more students. Each student is its own
+ * transaction (one failure never blocks the rest of the bus). Returns per-student
+ * outcomes: 'ok' | 'already' | 'on_leave' | 'no_vehicle' | 'not_rider' | 'not_found'.
+ */
+async function processTeacherCheck(pool, {
+  userId, userRole = null, userDisplayName = null, ipAddress = null, userAgent = null,
+  schoolId, gradeFilter = null, session, studentIds,
+}) {
+  const status = teacherStatusFor(session);
+  if (!status) throw makeError("session ต้องเป็น 'morning' หรือ 'evening'", 400);
+  if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
+  const ids = [...new Set((Array.isArray(studentIds) ? studentIds : [])
+    .map(x => Number.parseInt(x, 10)).filter(n => Number.isInteger(n) && n > 0))];
+  if (!ids.length) throw makeError('กรุณาเลือกนักเรียน', 400);
+  if (ids.length > TEACHER_BATCH_MAX) throw makeError(`เลือกได้ครั้งละไม่เกิน ${TEACHER_BATCH_MAX} คน`, 400);
+
+  const params = [ids, schoolId];
+  let gradeAnd = '';
+  if (gradeFilter) {
+    gradeAnd = ' AND s.grade IN (?)';
+    params.push(gradeEquivalents(gradeFilter));
+  }
+  const [students] = await pool.query(
+    `SELECT s.id, s.first_name, s.last_name, s.vehicle_id, v.plate_no,
+            s.morning_enabled, s.evening_enabled
+       FROM students s
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id
+      WHERE s.id IN (?) AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}`,
+    params
+  );
+  const byId = new Map(students.map(s => [s.id, s]));
+  const [leaves] = await pool.query(
+    `SELECT student_id FROM student_leaves
+      WHERE student_id IN (?) AND leave_date = CURDATE() AND cancelled = FALSE
+        AND session IN (?, 'both')`,
+    [ids, session]
+  );
+  const onLeave = new Set(leaves.map(l => l.student_id));
+  const termId = await getCurrentTerm(pool);
+
+  const results = [];
+  for (const id of ids) {
+    const st = byId.get(id);
+    // Outside the school or outside the teacher's grade looks the same as
+    // "not found" — the response never confirms a student exists elsewhere.
+    if (!st) { results.push({ student_id: id, result: 'not_found' }); continue; }
+    const enabled = session === 'morning' ? st.morning_enabled : st.evening_enabled;
+    if (!enabled) { results.push({ student_id: id, result: 'not_rider' }); continue; }
+    if (!st.vehicle_id) { results.push({ student_id: id, result: 'no_vehicle' }); continue; }
+    if (onLeave.has(id)) { results.push({ student_id: id, result: 'on_leave' }); continue; }
+
+    const conn = await pool.getConnection();
+    await beginCheckinTransaction(conn);
+    try {
+      const r = await _buildCheckinTransaction(conn, {
+        userId, vehicleId: st.vehicle_id, plateNo: st.plate_no || null,
+        studentId: st.id, session, status, termId, source: 'web',
+      });
+      await logAudit({
+        conn, userId, action: 'CREATE', entityType: 'checkin_teacher', entityId: String(r.log_id),
+        newValue: {
+          school_id: schoolId, student_id: st.id, student_name: r.student_name,
+          vehicle_id: st.vehicle_id, session, status, grade_scope: gradeFilter || null,
+          recorded_by_user_id: userId, recorded_by_role: userRole, recorded_by_display_name: userDisplayName,
+        },
+        ipAddress, userAgent,
+      });
+      await conn.commit();
+      results.push({ student_id: id, result: 'ok', log_id: r.log_id, checked_at: r.checked_at });
+    } catch (err) {
+      await conn.rollback();
+      // 409 = already recorded (by the driver or another teacher) or the
+      // session is already finished — first record wins, so it is a skip.
+      if (err.statusCode === 409) results.push({ student_id: id, result: 'already' });
+      else throw err;
+    } finally {
+      conn.release();
+    }
+  }
+  const count = k => results.filter(r => r.result === k).length;
+  return {
+    session, status, results,
+    recorded: count('ok'), already: count('already'),
+    skipped: results.length - count('ok') - count('already'),
+  };
+}
+
+/**
+ * A teacher takes back their OWN tap from today (a mis-tap). Only the latest
+ * check for that student/session, recorded by this user, with the teacher's
+ * status, inside their school and grade. If the driver had recorded something
+ * earlier in that session, the session stays done on the strength of it.
+ */
+async function undoTeacherCheck(pool, {
+  userId, userRole = null, userDisplayName = null, ipAddress = null, userAgent = null,
+  schoolId, gradeFilter = null, logId,
+}) {
+  const id = Number.parseInt(logId, 10);
+  if (!Number.isInteger(id) || id <= 0) throw makeError('logId ไม่ถูกต้อง', 400);
+  const params = [id, schoolId];
+  let gradeAnd = '';
+  if (gradeFilter) {
+    gradeAnd = ' AND s.grade IN (?)';
+    params.push(gradeEquivalents(gradeFilter));
+  }
+  const [[log]] = await pool.query(
+    `SELECT cl.id, cl.student_id, cl.session, cl.status, cl.checked_by,
+            cl.check_date = CURDATE() AS is_today,
+            (SELECT MAX(c2.id) FROM checkin_logs c2
+              WHERE c2.student_id = cl.student_id AND c2.session = cl.session
+                AND c2.check_date = cl.check_date) AS latest_id
+       FROM checkin_logs cl
+       JOIN students s ON s.id = cl.student_id
+      WHERE cl.id = ? AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}`,
+    params
+  );
+  if (!log) throw makeError('ไม่พบรายการที่ต้องการยกเลิก', 404);
+  if (log.checked_by !== userId || log.status !== teacherStatusFor(log.session)) {
+    throw makeError('ยกเลิกได้เฉพาะรายการที่คุณบันทึกเอง', 403);
+  }
+  if (!Number(log.is_today)) throw makeError('ยกเลิกได้เฉพาะรายการของวันนี้', 409);
+  if (Number(log.latest_id) !== Number(log.id)) {
+    throw makeError('มีการบันทึกรายการใหม่ต่อจากนี้แล้ว จึงยกเลิกไม่ได้', 409);
+  }
+  return voidCheckin(pool, {
+    userId, userRole, userDisplayName, ipAddress, userAgent,
+    logId: id, reason: 'ครูยกเลิกรายการที่บันทึกผิด',
+    scope: { kind: 'school', schoolId }, restorePriorDone: true,
+  });
+}
+
 module.exports = {
   getDriverVehicle,
   resolveVehicleForEmergency,
@@ -1404,4 +1651,8 @@ module.exports = {
   processSchoolOverride,
   processSchoolOverrideAll,
   voidCheckin,
+  TEACHER_STATUS,
+  getTeacherRoster,
+  processTeacherCheck,
+  undoTeacherCheck,
 };

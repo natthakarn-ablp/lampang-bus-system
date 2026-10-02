@@ -140,7 +140,7 @@ const { rejectOverLongFields } = require('../utils/fieldLength');
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
   const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
-  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ' };
+  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ' };
   // Phase 10.12G — neutralise every cell + redact PII from audit values.
   const esc = csvCell;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
@@ -731,6 +731,77 @@ router.post('/checkin-override/all', requireFullSchoolScope, async (req, res, ne
       null,
       201
     );
+  } catch (err) { next(err); }
+});
+
+// ─── Teacher check (term 2, phase 1) ─────────────────────────────────────────
+// Teachers record arrivals (morning) and boardings (evening) at the school as
+// routine work. Unlike /checkin-override these are OPEN to grade teachers,
+// limited to their own grade by resolveGradeScope, and need no reason — the
+// audit row records who tapped. Full school accounts see the whole school.
+
+function teacherActor(req, schoolId) {
+  return {
+    userId:          req.user.id,
+    userRole:        req.user.role,
+    userDisplayName: req.user.displayName || req.user.username || null,
+    ipAddress:       req.ip,
+    userAgent:       req.headers['user-agent'],
+    schoolId,
+    gradeFilter:     resolveGradeScope(req),
+  };
+}
+
+function sendNoSchool(req, res) {
+  return sendError(
+    res,
+    req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียนที่ผูกกับบัญชีนี้',
+    [],
+    req.user.role === 'admin' ? 400 : 403
+  );
+}
+
+router.get('/teacher-check', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const session = req.query.session;
+    if (!['morning', 'evening'].includes(session)) {
+      return sendError(res, "session ต้องเป็น 'morning' หรือ 'evening'", [], 400);
+    }
+    const data = await checkinSvc.getTeacherRoster(pool, {
+      schoolId, gradeFilter: resolveGradeScope(req), session, userId: req.user.id,
+    });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+router.post('/teacher-check', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const { session, student_ids } = req.body || {};
+    if (!['morning', 'evening'].includes(session)) {
+      return sendError(res, "session ต้องเป็น 'morning' หรือ 'evening'", [], 400);
+    }
+    if (!Array.isArray(student_ids) || !student_ids.length) {
+      return sendError(res, 'กรุณาเลือกนักเรียน', [{ field: 'student_ids', message: 'ต้องเป็น array ที่ไม่ว่าง' }], 400);
+    }
+    const result = await checkinSvc.processTeacherCheck(pool, {
+      ...teacherActor(req, schoolId), session, studentIds: student_ids,
+    });
+    return sendSuccess(res, result, `บันทึกแล้ว ${result.recorded} คน`, null, 201);
+  } catch (err) { next(err); }
+});
+
+router.post('/teacher-check/:logId/undo', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const logId = readIdParam(req, res, 'logId');
+    if (logId === null) return;
+    const result = await checkinSvc.undoTeacherCheck(pool, { ...teacherActor(req, schoolId), logId });
+    return sendSuccess(res, result, 'ยกเลิกรายการแล้ว');
   } catch (err) { next(err); }
 });
 

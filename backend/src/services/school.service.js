@@ -44,10 +44,12 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
     ga(schoolId)
   );
 
-  // Total vehicles serving this school
+  // Total vehicles serving this school — deleted vehicles left out, as the
+  // vehicle list (getVehicles) leaves them out.
   const [[{ total_vehicles }]] = await pool.query(
     `SELECT COUNT(DISTINCT vehicle_id) AS total_vehicles FROM students
-     WHERE school_id = ? AND is_deleted = FALSE AND vehicle_id IS NOT NULL${gradeAndNoAlias}`,
+     WHERE school_id = ? AND is_deleted = FALSE${gradeAndNoAlias}
+       AND vehicle_id IN (SELECT id FROM vehicles WHERE is_deleted = FALSE)`,
     ga(schoolId)
   );
 

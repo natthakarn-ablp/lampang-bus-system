@@ -29,7 +29,12 @@ const { gradeEquivalents } = require('../utils/gradeScope');
  * would silently hide a teacher's own pupils rather than fail loudly.
  */
 function buildScopeFilter(user, { date, month, school_id, affiliation_id, vehicle_id }) {
-  let where = 's.is_deleted = FALSE';
+  // A student counts only while their school is still open. The per-school and
+  // per-affiliation breakdowns have always required sc.is_deleted = FALSE; the
+  // headline totals did not, so a closed school's pupils sat in the total and in
+  // no row beneath it, and the rows never added up to the figure above them.
+  // Every query that uses this clause already joins `schools sc`.
+  let where = 's.is_deleted = FALSE AND sc.is_deleted = FALSE';
   const params = [];
 
   // Role-based scoping
@@ -102,10 +107,13 @@ async function getDailyReport(user, filters) {
     [date, ...params]
   );
 
-  // Total vehicles
+  // Total vehicles — a deleted vehicle is left out, as it is from the per-vehicle
+  // table below; a forced delete can leave pupils still pointing at one.
   const [[{ total_vehicles }]] = await pool.query(
     `SELECT COUNT(DISTINCT s.vehicle_id) AS total_vehicles FROM students s
-     JOIN schools sc ON sc.id = s.school_id WHERE ${where} AND s.vehicle_id IS NOT NULL`, params
+     JOIN schools sc ON sc.id = s.school_id
+     JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
+     WHERE ${where}`, params
   );
 
   // Emergency count for this date
@@ -119,10 +127,16 @@ async function getDailyReport(user, filters) {
     [date, ...params]
   );
 
-  // Per-vehicle breakdown
+  // Per-vehicle and per-school breakdowns carry their own expected counts. The
+  // headline divides by the pupils who use each session (morning_total /
+  // evening_total); the rows used to divide by every pupil, so a school where
+  // one child rides only in the morning showed "ค้าง" every evening while the
+  // headline above it said everything was done.
   const [vehicles] = await pool.query(
     `SELECT v.id AS vehicle_id, v.plate_no,
             COUNT(DISTINCT s2.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN s2.morning_enabled = TRUE THEN s2.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s2.evening_enabled = TRUE THEN s2.id END) AS evening_expected,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
             COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
      FROM vehicles v
@@ -135,10 +149,11 @@ async function getDailyReport(user, filters) {
     [date, ...params]
   );
 
-  // Per-school breakdown
   const [schoolBreakdown] = await pool.query(
     `SELECT sc.id AS school_id, sc.name AS school_name,
             COUNT(DISTINCT s.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN s.morning_enabled = TRUE THEN s.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s.evening_enabled = TRUE THEN s.id END) AS evening_expected,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
             COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
      FROM schools sc
@@ -323,6 +338,8 @@ async function getMonthlyReport(user, filters) {
   const [vehicleAgg] = await pool.query(
     `SELECT v.id AS vehicle_id, v.plate_no,
             COUNT(DISTINCT s2.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN s2.morning_enabled = TRUE THEN s2.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s2.evening_enabled = TRUE THEN s2.id END) AS evening_expected,
             SUM(CASE WHEN ds.morning_done = TRUE THEN 1 ELSE 0 END) AS total_morning_done,
             SUM(CASE WHEN ds.evening_done = TRUE THEN 1 ELSE 0 END) AS total_evening_done,
             COUNT(DISTINCT ds.check_date) AS days_with_data
@@ -338,8 +355,10 @@ async function getMonthlyReport(user, filters) {
   );
 
   const enrichedVehicles = vehicleAgg.map((v) => {
-    const mExp = v.student_count * (v.days_with_data || 1);
-    const eExp = v.student_count * (v.days_with_data || 1);
+    // Same denominator as the per-school rows and the headline: riders of that
+    // session, not every pupil on the vehicle.
+    const mExp = v.morning_expected * (v.days_with_data || 1);
+    const eExp = v.evening_expected * (v.days_with_data || 1);
     return {
       ...v,
       morning_kpi: pct(v.total_morning_done, mExp),
@@ -380,21 +399,21 @@ async function getSummaryReport(user, filters) {
   daily.morning_kpi = pct(daily.morning_done, daily.morning_total);
   daily.evening_kpi = pct(daily.evening_done, daily.evening_total);
 
-  // Per-school KPI
+  // Per-school / per-vehicle KPI — same denominator as the headline: the pupils
+  // who use that session, not every pupil.
   if (daily.schools) {
     daily.schools = daily.schools.map((s) => ({
       ...s,
-      morning_kpi: pct(s.morning_done, s.student_count),
-      evening_kpi: pct(s.evening_done, s.student_count),
+      morning_kpi: pct(s.morning_done, s.morning_expected),
+      evening_kpi: pct(s.evening_done, s.evening_expected),
     }));
   }
 
-  // Per-vehicle KPI
   if (daily.vehicles) {
     daily.vehicles = daily.vehicles.map((v) => ({
       ...v,
-      morning_kpi: pct(v.morning_done, v.student_count),
-      evening_kpi: pct(v.evening_done, v.student_count),
+      morning_kpi: pct(v.morning_done, v.morning_expected),
+      evening_kpi: pct(v.evening_done, v.evening_expected),
     }));
   }
 
@@ -415,6 +434,8 @@ async function getSummaryReport(user, filters) {
   const [affRows] = await pool.query(
     `SELECT a.id AS affiliation_id, a.name AS affiliation_name,
             COUNT(DISTINCT s.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN s.morning_enabled = TRUE THEN s.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s.evening_enabled = TRUE THEN s.id END) AS evening_expected,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
             COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
      FROM affiliations a
@@ -429,8 +450,8 @@ async function getSummaryReport(user, filters) {
 
   daily.affiliations = affRows.map((a) => ({
     ...a,
-    morning_kpi: pct(a.morning_done, a.student_count),
-    evening_kpi: pct(a.evening_done, a.student_count),
+    morning_kpi: pct(a.morning_done, a.morning_expected),
+    evening_kpi: pct(a.evening_done, a.evening_expected),
   }));
 
   return daily;

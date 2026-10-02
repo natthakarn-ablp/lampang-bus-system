@@ -241,6 +241,12 @@ function KpiBox({ icon: Icon, label, value, sub, tone = 'brand' }) {
  */
 function CompletionTable({ caption, rows, rowKey, labelHeader, label }) {
   const done = (d, total) => `${d}/${total}`;
+  // Each session is measured against the pupils who use it, the same
+  // denominator as the tiles above. Dividing by every pupil marked a school
+  // "ค้าง" whenever one child rode only one way, while the tiles said "ครบ".
+  // student_count is the fallback for a server that predates the fields.
+  const mExp = r => r.morning_expected ?? r.student_count;
+  const eExp = r => r.evening_expected ?? r.student_count;
   return (
     <DataTable
       caption={caption}
@@ -250,11 +256,11 @@ function CompletionTable({ caption, rows, rowKey, labelHeader, label }) {
         { key: 'label', header: labelHeader, primary: true,
           cell: r => <span className="font-medium text-ink">{label(r)}</span> },
         { key: 'students', header: 'นักเรียน', numeric: true, cell: r => r.student_count },
-        { key: 'morning', header: 'ส่งเช้า', numeric: true, cell: r => done(r.morning_done, r.student_count) },
-        { key: 'evening', header: 'รับเย็น', numeric: true, cell: r => done(r.evening_done, r.student_count) },
+        { key: 'morning', header: 'ส่งเช้า', numeric: true, cell: r => done(r.morning_done, mExp(r)) },
+        { key: 'evening', header: 'รับเย็น', numeric: true, cell: r => done(r.evening_done, eExp(r)) },
         { key: 'status', header: 'สถานะ', align: 'center', badge: true,
           cell: r => {
-            const ok = r.morning_done >= r.student_count && r.evening_done >= r.student_count;
+            const ok = r.morning_done >= mExp(r) && r.evening_done >= eExp(r);
             return <StatusBadge variant={ok ? 'success' : 'warn'}>{ok ? 'ครบ' : 'ค้าง'}</StatusBadge>;
           } },
       ]}

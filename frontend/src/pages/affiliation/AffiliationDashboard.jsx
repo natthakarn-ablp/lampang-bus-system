@@ -340,6 +340,9 @@ export default function AffiliationDashboard() {
               <AppCard padding="sm" className="text-center">
                 <p className="text-xs text-ink-muted">รถรับส่ง</p>
                 <p className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{data.total_vehicles ?? 0}</p>
+                {/* A bus shared by two schools sits in both school rows below
+                    but once here, so the rows can add up to more than this. */}
+                <p className="text-caption text-ink-muted mt-0.5">นับไม่ซ้ำคัน</p>
               </AppCard>
               <AppCard padding="sm" className="text-center">
                 <p className="text-xs text-ink-muted inline-flex items-center gap-1 justify-center w-full">

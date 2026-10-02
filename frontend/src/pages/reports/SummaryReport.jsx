@@ -187,14 +187,14 @@ export default function SummaryReport() {
                     cell: r => (
                       <div className={`font-medium ${kpiColor(r.morning_kpi)}`}>
                         <span className="tabular-nums">{safePct(r.morning_kpi)}</span>
-                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.student_count}</p>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.morning_expected ?? r.student_count}</p>
                       </div>
                     ) },
                   { key: 'e_pct', header: 'KPI รับเย็น', align: 'center',
                     cell: r => (
                       <div className={`font-medium ${kpiColor(r.evening_kpi)}`}>
                         <span className="tabular-nums">{safePct(r.evening_kpi)}</span>
-                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.student_count}</p>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.evening_expected ?? r.student_count}</p>
                       </div>
                     ) },
                   { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
@@ -225,14 +225,14 @@ export default function SummaryReport() {
                     cell: r => (
                       <div className={`font-medium ${kpiColor(r.morning_kpi)}`}>
                         <span className="tabular-nums">{safePct(r.morning_kpi)}</span>
-                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.student_count}</p>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.morning_expected ?? r.student_count}</p>
                       </div>
                     ) },
                   { key: 'e_pct', header: 'KPI รับเย็น', align: 'center',
                     cell: r => (
                       <div className={`font-medium ${kpiColor(r.evening_kpi)}`}>
                         <span className="tabular-nums">{safePct(r.evening_kpi)}</span>
-                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.student_count}</p>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.evening_expected ?? r.student_count}</p>
                       </div>
                     ) },
                   { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
@@ -268,14 +268,14 @@ export default function SummaryReport() {
                     cell: r => (
                       <div className={`font-medium ${kpiColor(r.morning_kpi)}`}>
                         <span className="tabular-nums">{safePct(r.morning_kpi)}</span>
-                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.student_count}</p>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.morning_done}/{r.morning_expected ?? r.student_count}</p>
                       </div>
                     ) },
                   { key: 'e_pct', header: 'KPI รับเย็น', align: 'center',
                     cell: r => (
                       <div className={`font-medium ${kpiColor(r.evening_kpi)}`}>
                         <span className="tabular-nums">{safePct(r.evening_kpi)}</span>
-                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.student_count}</p>
+                        <p className="text-caption text-ink-muted font-normal tabular-nums">{r.evening_done}/{r.evening_expected ?? r.student_count}</p>
                       </div>
                     ) },
                   { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },

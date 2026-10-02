@@ -306,7 +306,7 @@ router.get('/missing', async (req, res, next) => {
               s.morning_enabled, s.evening_enabled,
               ds.morning_done, ds.evening_done
        FROM students s
-       JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
+       JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ? AND sc.is_deleted = FALSE
        LEFT JOIN vehicles v ON v.id = s.vehicle_id
        LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
        LEFT JOIN student_leaves sl ON sl.student_id = s.id AND sl.leave_date = ? AND sl.cancelled = FALSE

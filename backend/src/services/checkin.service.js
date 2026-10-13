@@ -23,6 +23,7 @@ const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
 const { gradeEquivalents } = require('../utils/gradeScope');
 const { toBangkokDate } = require('../utils/thaiTime');
+const { withDeadlockRetry, isDeadlock } = require('../utils/transactionRetry');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -523,21 +524,12 @@ async function processCheckin(pool, { userId, vehicleId, plateNo, studentId, ses
   assertSession(session);
   const termId = await getCurrentTerm(pool);
 
-  const conn = await pool.getConnection();
-  await beginCheckinTransaction(conn);
-  try {
-    const result = await _buildCheckinTransaction(conn, {
+  return withDeadlockRetry(pool, beginCheckinTransaction, conn =>
+    _buildCheckinTransaction(conn, {
       userId, vehicleId, plateNo, studentId, session,
       status: 'CHECKED_IN', termId, source,
-    });
-    await conn.commit();
-    return result;
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+    })
+  );
 }
 
 // ─── processCheckout ──────────────────────────────────────────────────────────
@@ -550,21 +542,12 @@ async function processCheckout(pool, { userId, vehicleId, plateNo, studentId, se
   assertSession(session);
   const termId = await getCurrentTerm(pool);
 
-  const conn = await pool.getConnection();
-  await beginCheckinTransaction(conn);
-  try {
-    const result = await _buildCheckinTransaction(conn, {
+  return withDeadlockRetry(pool, beginCheckinTransaction, conn =>
+    _buildCheckinTransaction(conn, {
       userId, vehicleId, plateNo, studentId, session,
       status: 'CHECKED_OUT', termId, source,
-    });
-    await conn.commit();
-    return result;
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+    })
+  );
 }
 
 // ─── processCheckinAll ────────────────────────────────────────────────────────
@@ -602,18 +585,17 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
     [vehicleId]
   );
 
-  const succeeded = [];
-  const failed    = [];
-
   // Audit 2026-06-18 (limitations-scalability): use ONE pooled connection for the
   // whole batch instead of getConnection()/commit() per student, which thrashed
   // the 10-slot pool when many buses ran "check-in all" at 07:00. Each student is
   // isolated with a SAVEPOINT so one failure doesn't abort the rest (preserving
   // the partial-success contract). studentId is an integer, safe to interpolate
   // into the savepoint name.
-  const conn = await pool.getConnection();
-  try {
-    await beginCheckinTransaction(conn);
+  return withDeadlockRetry(pool, beginCheckinTransaction, async conn => {
+    // A deadlock rolls back the ENTIRE transaction, including earlier students.
+    // Keep result lists inside each attempt so aborted success cannot escape.
+    const succeeded = [];
+    const failed = [];
     for (const { id: studentId } of students) {
       const sp = `ca_${studentId}`;
       try {
@@ -625,19 +607,13 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
         await conn.query(`RELEASE SAVEPOINT ${sp}`);
         succeeded.push(result);
       } catch (err) {
-        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        if (isDeadlock(err)) throw err;
+        await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`);
         failed.push({ student_id: studentId, error: err.message });
       }
     }
-    await conn.commit();
-  } catch (err) {
-    try { await conn.rollback(); } catch { /* swallow */ }
-    throw err;
-  } finally {
-    conn.release();
-  }
-
-  return { succeeded, failed };
+    return { succeeded, failed };
+  });
 }
 
 // ─── processCheckoutAll ───────────────────────────────────────────────────────
@@ -685,11 +661,9 @@ async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, s
     [vehicleId, session]
   );
 
-  const succeeded = [];
-  const failed = [];
-  const conn = await pool.getConnection();
-  try {
-    await beginCheckinTransaction(conn);
+  return withDeadlockRetry(pool, beginCheckinTransaction, async conn => {
+    const succeeded = [];
+    const failed = [];
     for (const { id: studentId } of students) {
       const sp = `co_${studentId}`;
       try {
@@ -701,19 +675,13 @@ async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, s
         await conn.query(`RELEASE SAVEPOINT ${sp}`);
         succeeded.push(result);
       } catch (err) {
-        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        if (isDeadlock(err)) throw err;
+        await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`);
         failed.push({ student_id: studentId, error: err.message });
       }
     }
-    await conn.commit();
-  } catch (err) {
-    try { await conn.rollback(); } catch { /* swallow */ }
-    throw err;
-  } finally {
-    conn.release();
-  }
-
-  return { succeeded, failed };
+    return { succeeded, failed };
+  });
 }
 
 // ─── getStatusToday ───────────────────────────────────────────────────────────
@@ -1111,7 +1079,8 @@ async function processSchoolOverrideAll(pool, {
         await conn.query(`RELEASE SAVEPOINT ${sp}`);
         succeeded.push({ student_id: student.id, checkin_log_id: result.log_id });
       } catch (err) {
-        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        if (isDeadlock(err)) throw err;
+        await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`);
         failed.push({ student_id: student.id, error: err.message });
       }
     }

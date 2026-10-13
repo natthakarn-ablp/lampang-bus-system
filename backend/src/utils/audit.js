@@ -13,7 +13,8 @@ const AUDIT_ACTIONS = [
 
 /**
  * Write a record to audit_logs.
- * Failures are logged to stderr but never throw — auditing must not break the main flow.
+ * Detached failures are best-effort. Transaction deadlocks must propagate:
+ * InnoDB has rolled back the caller's business writes as well as this audit.
  *
  * @param {object} opts
  * @param {number|null}  opts.userId      - users.id of the actor (null for unauthenticated)
@@ -63,6 +64,7 @@ async function logAudit({
     await executor.query(sql, params);
   } catch (err) {
     console.error('[audit] Failed to write audit log:', err.message);
+    if (conn && (err.code === 'ER_LOCK_DEADLOCK' || err.errno === 1213)) throw err;
   }
 }
 

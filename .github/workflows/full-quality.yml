@@ -61,6 +61,8 @@ jobs:
           DB_ACTOR_TEST_ROOT_PASSWORD: test-root-password
       - name: Verify owner switch rollback with synthetic files
         run: python3 ../ops/database/test-install-db-actors.py
+      - name: Verify interrupted switch and terminal disconnect recovery
+        run: python3 ../ops/database/test-recover-db-actors.py
 
   frontend-build:
     name: Frontend build + strict UI checks

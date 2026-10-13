@@ -79,3 +79,29 @@ event_scheduler, run an unreviewed repository script as root, or restore broad
 NOPASSWD/Docker access. Future schema/restore operations use a reviewed operator
 credential and backup gate; the historical restore.sh remains a maintenance
 tool, not a zero-downtime production recovery mechanism.
+
+## Interrupted owner connection
+
+The October14owner run stopped after account creation, backup verification and
+the environment switch, while its same-release deployment had no completion
+record. The backend PID remained the previous one; a dead3356613holder left a
+deployment lock. Exact connection-close cause is not established. Do not rerun
+the installer or remove begin/locks blindly.
+
+recover-db-actors.py resumes ONLY that reviewed c2c04e3release. Its protected
+starter verifies the original root installer hash and root0600 env.before, then
+launches work in a separate session with private durable logs so terminal
+hangup does not terminate it. It compares every unrelated setting to env.before,
+verifies existing runtime/backup SQL principals and administrative privileges,
+checks the event/scheduler, creates a verified fresh backup, and authenticates
+the protected legacy fallback BEFORE restarting. It creates/drops no users or
+grants. The approved external deployer reclaims only a proven dead lock holder.
+
+Success requires a healthy same release, an observed new runtime DB connection,
+unchanged event metadata, smoke checks and saved PM2state. Failed reload restores
+old credential bytes and retries the same reviewed release; external env changes
+are preserved. Existing actors/backupconfig are retained on failure. Root status
+and recovery.log remain private; a fixed non-secret public status is written as
+schoolbus. recovery.begin prevents repeated background jobs. Seven synthetic
+tests cover success, rollback, concurrent changes, privilege/fallback refusal
+and a real parent-sessionSIGHUP while detached work finishes.

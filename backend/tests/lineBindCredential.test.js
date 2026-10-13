@@ -5,7 +5,7 @@
  *
  * ISOLATED — mocks the id_token verifier, line.service, and the MySQL pool, so it
  * runs WITHOUT globalSetup (no production DB). Run with an isolated jest config:
- *   npx jest --config '{"testEnvironment":"node"}' --testPathPattern lineBind --runInBand
+ *   npx jest --config '{"testEnvironment":"node"}' --testPathPatterns lineBind --runInBand
  *
  * A1-9 NOTE. The pool mock used to answer [[]] to every statement, which was
  * harmless while lineBindGuard counted failures in a Map. The counters now live

@@ -9,7 +9,7 @@
   "//test-workflow": "TEST ISOLATION: the suite targets the DISPOSABLE database lampang_bus_test, never the dev clone lampang_bus_dev. Env comes from backend/.env.test (gitignored), loaded by tests/loadTestEnv.js via jest `setupFiles` and required in tests/setup.js + tests/teardown.js + scripts/prepare-test-db.js. Local workflow: `npm run test:prepare` once to (re)build lampang_bus_test, then `npm test`. `npm run test:ci` does both in one shot. `npm run test:unit` is DB-free and needs no database.",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "dev": "node --watch src/index.js",
     "test": "jest --testEnvironment=node --runInBand --forceExit",
     "test:unit": "jest --config jest.unit.config.js --runInBand --forceExit",
     "test:prepare": "node scripts/prepare-test-db.js",
@@ -37,8 +37,7 @@
     "uuid": "^11.1.1"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
-    "nodemon": "^3.1.0",
+    "jest": "^30.5.2",
     "supertest": "^7.0.0"
   },
   "overrides": {

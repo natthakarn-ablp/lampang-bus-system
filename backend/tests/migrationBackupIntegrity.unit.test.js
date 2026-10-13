@@ -38,6 +38,21 @@ describe.each(['050', '051'])('migration %s integrity preflight', number => {
     expect(r.stdout).toContain('backup integrity: verified');
     expect(r.stdout).toContain('DRY RUN');
   });
+  test('runtime actor refuses schema changes before invoking mysql', () => {
+    fs.appendFileSync(path.join(app, 'backend/.env'), 'DB_CREDENTIAL_ROLE=runtime\n');
+    const r = run();
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain('runtime credentials cannot apply schema');
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+  test('an explicit operator file permits preflight while the runtime actor remains restricted', () => {
+    const operator = path.join(base, 'operator.env');
+    fs.copyFileSync(path.join(app, 'backend/.env'), operator);
+    fs.appendFileSync(path.join(app, 'backend/.env'), 'DB_CREDENTIAL_ROLE=runtime\n');
+    const r = run({ ENV_FILE: posix(operator) });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('DRY RUN');
+  });
   test('missing sidecar stops before database invocation', () => {
     fs.unlinkSync(dump + '.sha256');
     expect(run().status).not.toBe(0);

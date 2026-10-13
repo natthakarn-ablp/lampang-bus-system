@@ -11,6 +11,10 @@ Validate the sudoers file with visudo before installing it as
 /etc/sudoers.d/90-schoolbus-codex, mode 0440. The user's normal password-based
 sudo rights remain available for owner-controlled administration.
 
+Install the SSH snippet outside the early sshd_config.d include, and include
+it at the END of sshd_config. Its Match block must not put subsequent global
+directives in a conditional context. Validate the complete candidate with
+sshd -t and inspect sshd -T -C user=schoolbus,host=schbus,addr=127.0.0.1.
 Validate and reload SSH configuration before replacing the broad sudo policy.
 Keep an existing SSH session open, verify a separate key-only login succeeds,
 and only then remove NOPASSWD: ALL. Preserve the previous files in a protected

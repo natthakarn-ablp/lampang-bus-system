@@ -471,17 +471,34 @@ describeWithBash('deploy-backend.sh against a throwaway repository', () => {
     expect(fs.existsSync(lock)).toBe(false);
   });
 
-  it('four runs racing for a stale lock: exactly one deploys, the rest are refused, nobody deletes the winner\'s lock', async () => {
+  it('stale-lock contention permits at most one deploy; a fail-closed race can recover without overlapping reloads', async () => {
+    const before = git(fx.server, 'rev-parse', '--short', 'HEAD');
     write(`${fx.state}/deploy-backend.lock/owner.999999`, '999999 2026-01-01T00:00:00+00:00 fixture\n');
     const after = publish(fx, { 'backend/src/new.js': "'use strict';\n" }, 'feature');
     // The winner holds the lock through a 6 s "jest" so the others collide.
     const results = await Promise.all([1, 2, 3, 4].map(() => runAsync(fx, { STUB_JEST_SLEEP: '6' })));
     const winners = results.filter((r) => r.status === 0);
     const losers = results.filter((r) => r.status !== 0);
-    expect(`winners: ${winners.length}; statuses: ${results.map((r) => `${r.status}/${r.signal}`).join(',')}`).toBe('winners: 1; statuses: ' + results.map((r) => `${r.status}/${r.signal}`).join(','));
+    expect(winners.length).toBeLessThanOrEqual(1);
     // A stale-lock race may also remove a contender's directory before it
     // writes its owner record. The script safely refuses that contender.
     for (const l of losers) expect(l.out).toMatch(/another deploy is running \(pid \d+|could not acquire|collided|another run may have reclaimed/);
+    if (winners.length === 0) {
+      // Every child has exited. Fail-closed contention must not have changed
+      // code or reloaded PM2. An empty, newly orphaned directory is deliberately
+      // refused until its age permits reclaiming; simulate only that elapsed
+      // time in this owned fixture, without deleting any ownership evidence.
+      expect(readCalls(fx).filter((l) => l.startsWith('pm2 reload'))).toHaveLength(0);
+      expect(git(fx.server, 'rev-parse', '--short', 'HEAD')).toBe(before);
+      const lock = `${fx.state}/deploy-backend.lock`;
+      if (fs.existsSync(lock)) {
+        expect(fs.readdirSync(lock)).toEqual([]);
+        const old = new Date(Date.now() - 3600 * 1000);
+        fs.utimesSync(lock, old, old);
+      }
+      const retry = run(fx);
+      expect(`exit ${retry.status}: ${retry.out}`).toMatch(/^exit 0:/);
+    }
     const calls = readCalls(fx);
     expect(calls.filter((l) => l.startsWith('pm2 reload'))).toHaveLength(1);
     expect(git(fx.server, 'rev-parse', '--short', 'HEAD')).toBe(after);

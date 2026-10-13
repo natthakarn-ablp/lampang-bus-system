@@ -31,3 +31,11 @@ Full Node22 CI, migration checks and frontend build are deployment gates.
 Use a fresh verified backup and the approved dependency-staging/rollback deploy
 script. Zero runtime audit findings remain only a scoped registry snapshot;
 moderate Jest-chain and frontend build-tool findings remain separately recorded.
+
+CI also exposed an overstrict existing stale-lock fixture: all four competing
+deploys can legitimately refuse before any mutation when reclaimers collide.
+The test now enforces at most one concurrent winner, validates every refusal,
+and if all refuse proves no reload/code change and no owner evidence remains.
+After simulating only the orphan-age wait in its disposable directory, one
+serial retry must succeed. The final exactly-one-reload/target-HEAD assertions
+remain. The approved production deployment script is unchanged.

@@ -224,7 +224,11 @@ if [ "$SMOKE_EXIT" = "0" ]; then
       echo
       echo "Smoke now PASSING after previous FAIL — sending recovery notification."
       RECOVER_MSG="$(build_message recover 0 "$SUMMARY_LINE" "" "")"
-      send_line_push "$RECOVER_MSG"
+      if ! send_line_push "$RECOVER_MSG"; then
+        # Keep FAIL until recovery is delivered, so the next healthy run retries.
+        echo "Recovery delivery failed; will retry on the next healthy smoke."
+        exit 2
+      fi
       state_write last_status PASS || echo "WARN: could not update last_status"
     elif [ "$LAST_STATUS" = "FAIL" ] && [ "$ALERT_RECOVERY_ENABLED" != "1" ]; then
       echo
@@ -251,7 +255,10 @@ DEBOUNCE_NOTE=""
 KIND="fail"
 
 if [ "$STATE_OK" = "1" ]; then
-  LAST_HASH="$(state_read last_fail_hash)"
+  # Debounce only a signature that was actually delivered. last_fail_hash
+  # tracks observations, including unsuccessful sends; using it here could
+  # silence a new failed delivery behind a recent alert for a different event.
+  LAST_HASH="$(state_read last_delivered_fail_hash)"
   LAST_ALERT_TIME="$(state_read last_alert_time)"
   LAST_ALERT_TIME="${LAST_ALERT_TIME:-0}"
   LAST_STATUS="$(state_read last_status)"
@@ -282,6 +289,7 @@ fi
 # Build + send the alert.
 ALERT_MSG="$(build_message "$KIND" "$SMOKE_EXIT" "$SUMMARY_LINE" "$TAIL_LINES" "$DEBOUNCE_NOTE")"
 if send_line_push "$ALERT_MSG"; then
+  state_write last_delivered_fail_hash "$NEW_HASH" || true
   state_write last_alert_time "$NOW_EPOCH" || true
   exit 1
 else

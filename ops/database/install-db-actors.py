@@ -30,8 +30,11 @@ def replace_credentials(text: str, user: str, password: str) -> str:
     if '\r' in text or not re.fullmatch(r'[a-z0-9_]+', user) or not re.fullmatch(r'[0-9a-f]{64}', password):
         raise ValueError('Unsupported environment format or generated credential')
     for key in ('DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT', 'DB_NAME'):
-        if len(re.findall(r'^' + key + r'=.*$', text, re.M)) != 1:
+        if len(re.findall(r'^' + key + r'=.*$', text, re.M)) != 1 or len(re.findall(r'^[ \t]*(?:export[ \t]+)?' + key + r'[ \t]*=', text, re.M)) != 1:
             raise ValueError('Missing or duplicate DB key')
+        raw = re.search(r'^' + key + r'=(.*)$', text, re.M).group(1).strip()
+        if raw.startswith(('"', "'", '`')) and (len(raw) < 2 or raw[-1] != raw[0]):
+            raise ValueError('Multiline/unsupported quoted DB key; normalize before switch')
     if re.search(r'^DB_CREDENTIAL_ROLE=', text, re.M):
         raise ValueError('Role marker already exists; inspect previous operation')
     text = re.sub(r'^DB_USER=.*$', 'DB_USER=' + user, text, flags=re.M)
@@ -195,7 +198,7 @@ def main() -> None:
             raise RuntimeError('Preflight credential path already exists')
         atomic_private(preflight, installed, account.pw_uid, account.pw_gid)
         try:
-            check = "const c=require('dotenv').parse(require('fs').readFileSync('/home/schoolbus/.config/schoolbus/runtime-preflight.env'));require('mysql2/promise').createConnection({host:c.DB_HOST,port:Number(c.DB_PORT),database:c.DB_NAME,user:c.DB_USER,password:c.DB_PASSWORD}).then(async d=>{await d.query('SELECT COUNT(*) FROM users');await d.end()}).catch(()=>process.exit(2))"
+            check = "const c=require('dotenv').parse(require('fs').readFileSync('/home/schoolbus/.config/schoolbus/runtime-preflight.env'));if(c.DB_USER!=='schoolbus_runtime_20261014'||!/^([0-9a-f]{64})$/.test(c.DB_PASSWORD))process.exit(2);require('mysql2/promise').createConnection({host:c.DB_HOST,port:Number(c.DB_PORT),database:c.DB_NAME,user:c.DB_USER,password:c.DB_PASSWORD}).then(async d=>{await d.query('SELECT COUNT(*) FROM users');await d.end()}).catch(()=>process.exit(2))"
             owner(['/usr/bin/env', '--chdir=' + str(APP / 'backend'), 'node', '-e', check])
         finally:
             preflight.unlink()

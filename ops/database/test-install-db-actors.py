@@ -27,7 +27,7 @@ class SwitchTests(unittest.TestCase):
         self.assertIn('JWT_SECRET="synthetic-token-keep-byte-identical"\nFEATURE_VEHICLE_QR=false\n', result)
 
     def test_refuses_ambiguous_or_existing_switch(self):
-        for text in (ORIGINAL + 'DB_USER=other\n', ORIGINAL.replace('DB_HOST=127.0.0.1\n', ''), ORIGINAL + 'DB_CREDENTIAL_ROLE=runtime\n', ORIGINAL.replace('\n', '\r\n')):
+        for text in (ORIGINAL + 'DB_USER=other\n', ORIGINAL + 'export DB_USER=other\n', ORIGINAL + '  DB_PASSWORD =other\n', ORIGINAL.replace('DB_HOST=127.0.0.1\n', ''), ORIGINAL + 'DB_CREDENTIAL_ROLE=runtime\n', ORIGINAL.replace('\n', '\r\n'), ORIGINAL.replace('DB_PASSWORD=synthetic-legacy-only', 'DB_PASSWORD="multiline\nvalue"')):
             with self.assertRaises(ValueError):
                 actors.replace_credentials(text, 'runtime_fixture', 'a' * 64)
 

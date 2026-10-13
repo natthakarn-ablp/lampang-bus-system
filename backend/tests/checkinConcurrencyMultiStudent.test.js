@@ -205,9 +205,9 @@ describe('CS5-04 — check-in under concurrency across DIFFERENT students', () =
   }, 60000);
 
   test('checkin-all racing individual taps records exactly one boarding each', async () => {
-    // Three rounds: the batch opens its read view at its first student, so
+    // More interleavings: the batch opens its read view at its first student, so
     // whether a single tap lands inside the stale window is timing-dependent.
-    for (let round = 0; round < 3; round++) {
+    for (let round = 0; round < 12; round++) {
       await resetToday();
 
       const responses = [];

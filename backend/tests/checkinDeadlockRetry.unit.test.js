@@ -9,6 +9,7 @@ function connection(base, failStudent = null, duplicated = false, checkout = fal
     beginTransaction: jest.fn().mockResolvedValue(), commit: jest.fn().mockResolvedValue(),
     rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
     query: jest.fn(async (sql, values = []) => {
+      if (/SELECT morning_done, morning_ts/.test(sql)) return [[]];
       if (/FROM\s+students/.test(sql)) return [[{ id: values[0], cid_hash: 'synthetic-hash', first_name: 'Synthetic', last_name: 'Fixture' }]];
       if (/SELECT id, status FROM checkin_logs/.test(sql)) return [duplicated || checkout ? [{ id: 77, status: 'CHECKED_IN' }] : []];
       if (/INSERT INTO checkin_logs/.test(sql)) {
@@ -61,6 +62,18 @@ test('failed savepoint rollback aborts batch instead of returning unverified suc
     return [{}];
   });
   await expect(service.processCheckinAll(poolFor(conn), params)).rejects.toThrow('savepoint disappeared');
+  expect(conn.commit).not.toHaveBeenCalled();
+  expect(conn.rollback).toHaveBeenCalledTimes(1);
+});
+test('school override batch fails closed when its whole transaction is rolled back', async () => {
+  const conn = connection(100, 2);
+  const pool = { getConnection: jest.fn().mockResolvedValue(conn), query: jest.fn().mockResolvedValue([[
+    { id: 1, vehicle_id: 'synthetic-vehicle', first_name: 'Synthetic', last_name: 'One' },
+    { id: 2, vehicle_id: 'synthetic-vehicle', first_name: 'Synthetic', last_name: 'Two' }
+  ]]) };
+  await expect(service.processSchoolOverrideAll(pool, {
+    ...params, schoolId: 'synthetic-school', reason: 'synthetic confirmation'
+  })).rejects.toBe(deadlock);
   expect(conn.commit).not.toHaveBeenCalled();
   expect(conn.rollback).toHaveBeenCalledTimes(1);
 });

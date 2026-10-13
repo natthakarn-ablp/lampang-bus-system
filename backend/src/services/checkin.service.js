@@ -1079,7 +1079,8 @@ async function processSchoolOverrideAll(pool, {
         await conn.query(`RELEASE SAVEPOINT ${sp}`);
         succeeded.push({ student_id: student.id, checkin_log_id: result.log_id });
       } catch (err) {
-        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        if (isDeadlock(err)) throw err;
+        await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`);
         failed.push({ student_id: student.id, error: err.message });
       }
     }

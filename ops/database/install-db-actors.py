@@ -198,7 +198,18 @@ def main() -> None:
             raise RuntimeError('Preflight credential path already exists')
         atomic_private(preflight, installed, account.pw_uid, account.pw_gid)
         try:
-            check = "const c=require('dotenv').parse(require('fs').readFileSync('/home/schoolbus/.config/schoolbus/runtime-preflight.env'));if(c.DB_USER!=='schoolbus_runtime_20261014'||!/^([0-9a-f]{64})$/.test(c.DB_PASSWORD))process.exit(2);require('mysql2/promise').createConnection({host:c.DB_HOST,port:Number(c.DB_PORT),database:c.DB_NAME,user:c.DB_USER,password:c.DB_PASSWORD}).then(async d=>{await d.query('SELECT COUNT(*) FROM users');await d.end()}).catch(()=>process.exit(2))"
+            check = """const c=require('dotenv').parse(require('fs').readFileSync('/home/schoolbus/.config/schoolbus/runtime-preflight.env'));
+if(c.DB_USER!=='schoolbus_runtime_20261014'||!/^([0-9a-f]{64})$/.test(c.DB_PASSWORD))process.exit(2);
+require('mysql2/promise').createConnection({host:c.DB_HOST,port:Number(c.DB_PORT),database:c.DB_NAME,user:c.DB_USER,password:c.DB_PASSWORD}).then(async d=>{
+try {
+ const [[identity]]=await d.query('SELECT CURRENT_USER() AS principal, CURRENT_ROLE() AS role');
+ const [schema]=await d.query('SELECT PRIVILEGE_TYPE, IS_GRANTABLE FROM information_schema.SCHEMA_PRIVILEGES WHERE TABLE_SCHEMA=DATABASE()');
+ const [global]=await d.query('SELECT PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES');
+ const actual=schema.map(x=>x.PRIVILEGE_TYPE).sort().join(',');
+ if(identity.principal!=='schoolbus_runtime_20261014@localhost'||identity.role!=='NONE'||actual!=='DELETE,INSERT,SELECT,UPDATE'||schema.some(x=>x.IS_GRANTABLE==='YES')||global.some(x=>x.PRIVILEGE_TYPE!=='USAGE'))throw new Error('unexpected runtime grants');
+ await d.query('SELECT COUNT(*) FROM users');
+}finally{await d.end()}
+}).catch(()=>process.exit(2))"""
             owner(['/usr/bin/env', '--chdir=' + str(APP / 'backend'), 'node', '-e', check])
         finally:
             preflight.unlink()

@@ -11,6 +11,7 @@
 
 const express = require('express');
 const multer  = require('multer');
+const { multipartLimits } = require('../utils/multipartLimits');
 const path    = require('path');
 const fs      = require('fs');
 const crypto  = require('crypto');
@@ -35,7 +36,7 @@ const docUpload = multer({
     destination: (_req, _file, cb) => cb(null, docUploadDir),
     filename: (req, file, cb) => cb(null, `${req.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname).toLowerCase()}`),
   }),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: multipartLimits(5 * 1024 * 1024), // 5MB
   fileFilter: (_req, file, cb) => {
     const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));

@@ -26,6 +26,15 @@ function errorHandler(err, req, res, next) {
   // JWT-specific errors
   if (err.name === 'JsonWebTokenError') { status = 401; message = 'Invalid token'; }
   else if (err.name === 'TokenExpiredError') { status = 401; message = 'Token expired'; }
+  else if (err.name === 'MulterError' &&
+    (/^LIMIT_/.test(err.code || '') || ['MISSING_FIELD_NAME', 'INVALID_FIELD_NAME'].includes(err.code))) {
+    status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'ไฟล์มีขนาดเกินที่กำหนด กรุณาลดขนาดแล้วอัปโหลดใหม่'
+      : 'ข้อมูลอัปโหลดไม่ถูกต้อง กรุณาตรวจสอบไฟล์และลองใหม่';
+    // Do not echo attacker-controlled field names or uploaded filenames.
+    errors = [{ code: err.code }];
+  }
   // MySQL duplicate entry
   else if (err.code === 'ER_DUP_ENTRY') { status = 409; message = 'Duplicate entry — record already exists'; }
   // MySQL foreign key violation

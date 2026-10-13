@@ -16,6 +16,7 @@
 
 const express = require('express');
 const multer  = require('multer');
+const { multipartLimits } = require('../utils/multipartLimits');
 const path    = require('path');
 const fs      = require('fs');
 const rateLimit = require('express-rate-limit');
@@ -76,7 +77,7 @@ const upload = multer({
     destination: (_req, _file, cb) => cb(null, uploadDir),
     filename: (req, file, cb) => cb(null, `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`),
   }),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  limits: multipartLimits(2 * 1024 * 1024), // 2MB
   fileFilter: (_req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.webp'];
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));

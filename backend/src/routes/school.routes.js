@@ -2,6 +2,7 @@
 
 const express = require('express');
 const multer  = require('multer');
+const { multipartLimits } = require('../utils/multipartLimits');
 const path    = require('path');
 const fs      = require('fs');
 const ExcelJS = require('exceljs');
@@ -107,7 +108,7 @@ const importUpload = multer({
     destination: (_req, _file, cb) => cb(null, importUploadDir),
     filename: (req, file, cb) => cb(null, `import-${req.user.id}-${Date.now()}${path.extname(file.originalname)}`),
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: multipartLimits(5 * 1024 * 1024),
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, ['.xlsx', '.xls', '.csv'].includes(ext));

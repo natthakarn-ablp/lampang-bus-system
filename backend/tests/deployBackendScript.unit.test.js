@@ -479,7 +479,9 @@ describeWithBash('deploy-backend.sh against a throwaway repository', () => {
     const winners = results.filter((r) => r.status === 0);
     const losers = results.filter((r) => r.status !== 0);
     expect(`winners: ${winners.length}; statuses: ${results.map((r) => `${r.status}/${r.signal}`).join(',')}`).toBe('winners: 1; statuses: ' + results.map((r) => `${r.status}/${r.signal}`).join(','));
-    for (const l of losers) expect(l.out).toMatch(/another deploy is running \(pid \d+|could not acquire|collided/);
+    // A stale-lock race may also remove a contender's directory before it
+    // writes its owner record. The script safely refuses that contender.
+    for (const l of losers) expect(l.out).toMatch(/another deploy is running \(pid \d+|could not acquire|collided|another run may have reclaimed/);
     const calls = readCalls(fx);
     expect(calls.filter((l) => l.startsWith('pm2 reload'))).toHaveLength(1);
     expect(git(fx.server, 'rev-parse', '--short', 'HEAD')).toBe(after);

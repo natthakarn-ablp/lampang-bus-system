@@ -82,6 +82,21 @@ describe('CS5-01 — a voided check-in must not be droppable by checkout-all', (
     expect(vRes.status).toBe(201);
     expect(vRes.body.data.status).toBe('CANCELLED');
 
+    // A MySQL DATE must remain the Bangkok calendar day in the audit trail.
+    const conn = await getTestConnection();
+    let audit, today;
+    try {
+      [[audit]] = await conn.query(
+        "SELECT old_value FROM audit_logs WHERE entity_type = 'checkin' AND entity_id = ? AND action = 'DELETE' ORDER BY id DESC LIMIT 1",
+        [String(inRes.body.data.log_id)]
+      );
+      [[today]] = await conn.query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS calendar_day");
+    } finally {
+      await conn.end();
+    }
+    const before = typeof audit.old_value === 'string' ? JSON.parse(audit.old_value) : audit.old_value;
+    expect(before.check_date).toBe(today.calendar_day);
+
     const coRes = await checkoutAll('evening');
     expect(coRes.status).toBe(201);
     expect(coRes.body.data.succeeded.map(s => s.student_id)).not.toContain(STUDENT_ID);

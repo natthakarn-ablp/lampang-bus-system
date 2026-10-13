@@ -29,6 +29,10 @@ APP_DIR="${APP_DIR:-/home/schoolbus/apps/lampang-bus-system}"
 BACKUP_DIR="${BACKUP_DIR:-/home/schoolbus/backups/lampang-bus}"
 ENV_FILE="${ENV_FILE:-${APP_DIR}/backend/.env}"
 RESTORE_DB="${RESTORE_DB:-lampang_bus_restore_drill}"
+[[ "$RESTORE_DB" =~ ^[A-Za-z0-9_]+$ ]] || {
+  echo "[restore-drill] ABORT: restore database must be a simple identifier" >&2
+  exit 2
+}
 
 FORBIDDEN_DBS=(
   "lampang_bus"
@@ -115,7 +119,18 @@ password=${DB_PASSWORD}
 EOF
 unset DB_PASSWORD
 
-MYSQL() { mysql --defaults-extra-file="$DEFAULTS_FILE" --batch --skip-column-names "$@"; }
+MYSQL_BIN="${RESTORE_MYSQL:-mysql}"
+MYSQL() { "$MYSQL_BIN" --defaults-extra-file="$DEFAULTS_FILE" --batch --skip-column-names "$@"; }
+
+# Dumps may clone privileged ENABLED events. Use an isolated MySQL instance
+# with its scheduler OFF when the source schema includes scheduled work.
+SCHEDULER="$(MYSQL -e 'SELECT @@event_scheduler;')"
+EVENTS="$(MYSQL -e "SELECT COUNT(*) FROM information_schema.events WHERE event_schema='$DB_NAME';")"
+[[ "$EVENTS" =~ ^[0-9]+$ ]] || { echo "[restore-drill] ERROR: cannot determine source event count" >&2; exit 2; }
+if [ "$SCHEDULER" = "ON" ] && [ "$EVENTS" -gt 0 ]; then
+  echo "[restore-drill] ABORT: source has scheduled events and the host scheduler is ON; use an isolated MySQL instance" >&2
+  exit 2
+fi
 
 # Recreate test DB
 echo "[restore-drill] (re)creating database $RESTORE_DB ..."
@@ -124,7 +139,7 @@ MYSQL -e "DROP DATABASE IF EXISTS \`$RESTORE_DB\`; CREATE DATABASE \`$RESTORE_DB
 # Restore
 echo "[restore-drill] streaming restore ..."
 START_TS=$(date +%s)
-if ! gunzip -c "$BACKUP_PATH" | mysql --defaults-extra-file="$DEFAULTS_FILE" "$RESTORE_DB"; then
+if ! gunzip -c "$BACKUP_PATH" | "$MYSQL_BIN" --defaults-extra-file="$DEFAULTS_FILE" "$RESTORE_DB"; then
   echo "[restore-drill] ERROR: restore pipeline failed" >&2
   exit 1
 fi

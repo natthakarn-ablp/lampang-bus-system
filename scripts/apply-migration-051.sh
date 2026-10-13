@@ -43,6 +43,7 @@ ENV_FILE="${APP_DIR}/backend/.env"
 MIGRATION="${APP_DIR}/backend/migrations/051_shared_security_state.sql"
 TABLES=(login_lockouts line_webhook_events_seen line_bind_lockouts)
 DRY_RUN="${DRY_RUN:-0}"
+MYSQL_BIN="${MIGRATION_MYSQL:-mysql}"
 
 say()  { echo "[051] $*"; }
 fail() { echo "[051] ERROR: $*" >&2; exit 1; }
@@ -73,6 +74,11 @@ if [ "${SKIP_BACKUP_CHECK:-0}" != "1" ]; then
   AGE_H=$(( ( $(date +%s) - $(stat -c %Y "$LATEST") ) / 3600 ))
   say "latest backup: $(basename "$LATEST") (${AGE_H}h old)"
   [ "$AGE_H" -le 48 ] || fail "latest backup is ${AGE_H}h old — take a fresh one (or set SKIP_BACKUP_CHECK=1)"
+  [ -s "${LATEST}.sha256" ] || fail "backup checksum sidecar missing"
+  ( cd "$(dirname "$LATEST")" && sha256sum -c "$(basename "$LATEST").sha256" >/dev/null ) \
+    || fail "backup checksum verification failed"
+  gzip -t "$LATEST" || fail "backup gzip integrity check failed"
+  say "backup integrity: verified"
 fi
 
 # ── 3. credentials via a mode-600 defaults-file ─────────────────────────────
@@ -88,7 +94,7 @@ user=${DB_USER}
 password=${DB_PASSWORD}
 EOF
 
-mysql_q() { mysql --defaults-extra-file="$DEFAULTS_FILE" -N -B -e "$1"; }
+mysql_q() { "$MYSQL_BIN" --defaults-extra-file="$DEFAULTS_FILE" -N -B -e "$1"; }
 
 count_tables() {
   mysql_q "SELECT COUNT(*) FROM information_schema.tables
@@ -112,7 +118,7 @@ fi
 
 # ── 5. apply ────────────────────────────────────────────────────────────────
 say "applying ${MIGRATION} to ${DB_NAME} ..."
-mysql --defaults-extra-file="$DEFAULTS_FILE" "$DB_NAME" < "$MIGRATION"
+"$MYSQL_BIN" --defaults-extra-file="$DEFAULTS_FILE" "$DB_NAME" < "$MIGRATION"
 
 AFTER="$(count_tables)"
 say "tables present after: ${AFTER} of 3"

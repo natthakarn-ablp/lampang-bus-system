@@ -83,6 +83,11 @@ if [ "${SKIP_BACKUP_CHECK:-0}" != "1" ]; then
   AGE_H=$(( ( $(date +%s) - $(stat -c %Y "$LATEST") ) / 3600 ))
   say "latest backup: $(basename "$LATEST") (${AGE_H}h old)"
   [ "$AGE_H" -le 48 ] || fail "latest backup is ${AGE_H}h old — take a fresh one (or set SKIP_BACKUP_CHECK=1)"
+  [ -s "${LATEST}.sha256" ] || fail "backup checksum sidecar missing"
+  ( cd "$(dirname "$LATEST")" && sha256sum -c "$(basename "$LATEST").sha256" >/dev/null ) \
+    || fail "backup checksum verification failed"
+  gzip -t "$LATEST" || fail "backup gzip integrity check failed"
+  say "backup integrity: verified"
 fi
 
 # ── 3. credentials via a mode-600 defaults-file ─────────────────────────────

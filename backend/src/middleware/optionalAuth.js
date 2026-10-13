@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const { pool } = require('../config/database');
 const idTokenSvc = require('../services/lineIdToken.service');
+const { sessionResetJti, issuedBeforeReset } = require('../utils/sessionReset');
 
 // Phase QR-1 — "auth if present, never 401". Attaches whatever identity it can
 // prove so a handler can ESCALATE the access level; missing/invalid credentials
@@ -28,8 +29,13 @@ async function optionalAuth(req, _res, next) {
       const payload = jwt.verify(bearer, env.jwt.secret, { algorithms: ['HS256'] });
       if (payload && payload.type !== 'refresh' && payload.sub) {
         const [rows] = await pool.query(
-          'SELECT is_active, must_change_password, password_changed_at FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
-          [payload.sub]
+          `SELECT u.is_active, u.must_change_password, u.password_changed_at,
+                  rt.revoked_at AS sessions_reset_at
+             FROM users u
+             LEFT JOIN revoked_tokens rt ON rt.jti = ?
+            WHERE u.id = ? AND u.is_deleted = FALSE
+            LIMIT 1`,
+          [sessionResetJti(payload.sub), payload.sub]
         );
         const dbUser = rows[0];
         const tokenPredatesPwChange = dbUser && dbUser.password_changed_at && payload.iat &&
@@ -37,7 +43,8 @@ async function optionalAuth(req, _res, next) {
         // Mirror authenticate()'s quarantine: a must_change_password (freshly
         // provisioned / admin-reset) account is not allowed to operate yet, so it
         // must NOT gain a QR access level — stay anonymous (L1) until onboarded.
-        if (dbUser && dbUser.is_active && !dbUser.must_change_password && !tokenPredatesPwChange) {
+        if (dbUser && dbUser.is_active && !dbUser.must_change_password && !tokenPredatesPwChange
+            && !issuedBeforeReset(payload.iat, dbUser.sessions_reset_at)) {
           req.user = {
             id: payload.sub,
             username: payload.username || '',

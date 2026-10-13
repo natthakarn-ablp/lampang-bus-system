@@ -1,0 +1,2 @@
+# Owner-approved maintenance helper. All other sudo commands require password.
+schoolbus ALL=(root) NOPASSWD: /usr/local/sbin/schoolbus-ops

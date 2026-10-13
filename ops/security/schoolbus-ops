@@ -1,0 +1,20 @@
+#!/bin/sh
+# Install as root-owned /usr/local/sbin/schoolbus-ops (0755).
+# This helper never executes project code or commands supplied by its caller.
+set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+[ "$(id -u)" = 0 ] || { echo "Run through the approved sudo policy" >&2; exit 2; }
+[ "$#" = 1 ] || { echo "Expected one action" >&2; exit 2; }
+case "$1" in
+  nginx-test) exec /usr/sbin/nginx -t ;;
+  nginx-reload)
+    /usr/sbin/nginx -t
+    exec /usr/bin/systemctl reload nginx
+    ;;
+  service-status)
+    exec /usr/bin/systemctl show nginx mysql pm2-schoolbus \
+      --no-pager -p Id -p ActiveState -p Result
+    ;;
+  *) echo "Unsupported action" >&2; exit 2 ;;
+esac

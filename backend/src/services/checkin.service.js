@@ -22,6 +22,7 @@ const { getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
 const { gradeEquivalents } = require('../utils/gradeScope');
+const { toBangkokDate } = require('../utils/thaiTime');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -1379,7 +1380,7 @@ async function voidCheckin(pool, {
         session:         log.session,
         status:          log.status,
         vehicle_id:      log.vehicle_id,
-        check_date:      log.check_date,
+        check_date:      toBangkokDate(log.check_date),
         daily_status: priorDs
           ? { morning_done: !!priorDs.morning_done, evening_done: !!priorDs.evening_done }
           : null,

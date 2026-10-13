@@ -50,6 +50,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const crypto = require('crypto');
+const zlib = require('zlib');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'apply-migration-050.sh');
@@ -190,7 +192,8 @@ function makeFixture({ env = ENV_BASE, migration = MIGRATION_SQL, tables = [] } 
 /** A backup file whose mtime is `ageHours` in the past. */
 function addBackup(fx, name, ageHours) {
   const file = path.join(fx.backups, name);
-  write(file, 'not a real dump\n');
+  fs.writeFileSync(file, zlib.gzipSync('-- MySQL dump — synthetic fixture only\n'));
+  write(file + '.sha256', crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') + '  ' + name + '\n');
   const when = new Date(Date.now() - ageHours * HOUR);
   fs.utimesSync(file, when, when);
   return file;

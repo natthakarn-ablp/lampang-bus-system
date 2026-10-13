@@ -15,8 +15,9 @@
  * env-loading layer (issue #7) were somehow misconfigured. The guard runs on
  * EVERY getTestConnection()/getTestPool() call.
  *
- * Connection params mirror exactly what the test files previously passed to
- * mysql.createConnection(...) so behaviour is unchanged.
+ * SQL sessions and date decoding use Bangkok, matching the application pool.
+ * Otherwise CURDATE() fixture cleanup targets yesterday between00:00–07:00
+ * Bangkok while application writes target today, causing cross-test leakage.
  */
 
 const mysql = require('mysql2/promise');
@@ -30,6 +31,7 @@ function testDbConfig(extra = {}) {
     user:     process.env.DB_USER || 'lampang',
     password: process.env.DB_PASSWORD || '',
     charset:  'utf8mb4',
+    timezone: '+07:00',
     ...extra,
   };
 }
@@ -42,7 +44,14 @@ function testDbConfig(extra = {}) {
  */
 async function getTestConnection(extra = {}) {
   assertDisposableTestDatabase(process.env);
-  return mysql.createConnection(testDbConfig(extra));
+  const conn = await mysql.createConnection(testDbConfig(extra));
+  try {
+    await conn.query("SET time_zone = '+07:00'");
+    return conn;
+  } catch (error) {
+    await conn.end();
+    throw error;
+  }
 }
 
 /**
@@ -53,7 +62,9 @@ async function getTestConnection(extra = {}) {
  */
 function getTestPool(extra = {}) {
   assertDisposableTestDatabase(process.env);
-  return mysql.createPool(testDbConfig(extra));
+  const pool = mysql.createPool(testDbConfig(extra));
+  pool.on('connection', conn => { conn.query("SET time_zone = '+07:00'"); });
+  return pool;
 }
 
 module.exports = { getTestConnection, getTestPool, testDbConfig };

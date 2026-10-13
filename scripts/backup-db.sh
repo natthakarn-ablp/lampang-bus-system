@@ -11,7 +11,9 @@
 #             >> /home/schoolbus/backups/lampang-bus/backup.log 2>&1
 #
 # Security notes:
-#   - DB credentials are read from backend/.env (chmod 600 expected).
+#   - Prefer the dedicated backup credential file; backend/.env remains the
+#     fallback only before role separation is installed. ENV_FILE can explicitly
+#     select an operator/test credential file. All should have mode 600.
 #   - The MySQL password is written to a private temp defaults-file
 #     (mode 600, cleaned on EXIT/INT/TERM) and passed via
 #     --defaults-extra-file so it never appears on the command line
@@ -20,12 +22,19 @@
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
-APP_DIR="/home/schoolbus/apps/lampang-bus-system"
-BACKUP_DIR="/home/schoolbus/backups/lampang-bus"
-ENV_FILE="${APP_DIR}/backend/.env"
+APP_DIR="${APP_DIR:-/home/schoolbus/apps/lampang-bus-system}"
+BACKUP_DIR="${BACKUP_DIR:-/home/schoolbus/backups/lampang-bus}"
+DB_BACKUP_ENV_FILE="${DB_BACKUP_ENV_FILE:-/home/schoolbus/.config/schoolbus/db-backup.env}"
+if [ "${ENV_FILE+x}" != x ]; then
+  if [ -e "$DB_BACKUP_ENV_FILE" ] || [ -L "$DB_BACKUP_ENV_FILE" ]; then
+    ENV_FILE="$DB_BACKUP_ENV_FILE"
+  else
+    ENV_FILE="${APP_DIR}/backend/.env"
+  fi
+fi
 RETENTION_DAYS=7
 
-if [ ! -f "$ENV_FILE" ]; then
+if [ ! -f "$ENV_FILE" ] || [ ! -r "$ENV_FILE" ]; then
   echo "[backup-db] ERROR: env file not found: $ENV_FILE" >&2
   exit 1
 fi

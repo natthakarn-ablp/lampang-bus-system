@@ -20,8 +20,14 @@ if [ ! -f "$BACKUP_DIR/database.sql" ]; then
 fi
 
 # Load DB credentials from current .env (or backup .env)
-ENV_FILE="$APP_DIR/backend/.env"
-[ ! -f "$ENV_FILE" ] && ENV_FILE="$BACKUP_DIR/backend.env"
+if [ "${ENV_FILE+x}" != x ]; then
+  ENV_FILE="$APP_DIR/backend/.env"
+  [ ! -f "$ENV_FILE" ] && ENV_FILE="$BACKUP_DIR/backend.env"
+fi
+if grep -Eq '^DB_CREDENTIAL_ROLE=runtime[[:space:]]*$' "$ENV_FILE"; then
+  echo 'ERROR: select reviewed restore operator credentials with ENV_FILE before stopping the backend' >&2
+  exit 2
+fi
 DB_USER=$(grep -oP '^DB_USER=\K.*' "$ENV_FILE")
 DB_PASS=$(grep -oP '^DB_PASSWORD=\K.*' "$ENV_FILE")
 DB_NAME=$(grep -oP '^DB_NAME=\K.*' "$ENV_FILE")

@@ -53,6 +53,10 @@ if [ ! -f "$ENV_FILE" ]; then
   echo "[restore-drill] ERROR: env file not found: $ENV_FILE" >&2
   exit 1
 fi
+if grep -Eq '^DB_CREDENTIAL_ROLE=runtime[[:space:]]*$' "$ENV_FILE"; then
+  echo '[restore-drill] ABORT: select isolated restore operator credentials with ENV_FILE' >&2
+  exit 2
+fi
 
 DB_HOST="$(grep -oP '^DB_HOST=\K.*' "$ENV_FILE" || true)"
 DB_PORT="$(grep -oP '^DB_PORT=\K.*' "$ENV_FILE" || true)"

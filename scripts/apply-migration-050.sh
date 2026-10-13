@@ -46,7 +46,7 @@ set -euo pipefail
 
 APP_DIR="${APP_DIR:-/home/schoolbus/apps/lampang-bus-system}"
 BACKUP_DIR="${BACKUP_DIR:-/home/schoolbus/backups/lampang-bus}"
-ENV_FILE="${APP_DIR}/backend/.env"
+ENV_FILE="${ENV_FILE:-${APP_DIR}/backend/.env}"
 MIGRATION="${APP_DIR}/backend/migrations/050_participation_cases.sql"
 TABLES=(participation_cases participation_case_events)
 EXPECTED="${#TABLES[@]}"
@@ -61,6 +61,8 @@ fail() { echo "[050] ERROR: $*" >&2; exit 1; }
 
 # ── 1. inputs exist ─────────────────────────────────────────────────────────
 [ -f "$ENV_FILE" ]  || fail "env file not found: $ENV_FILE"
+! grep -Eq '^DB_CREDENTIAL_ROLE=runtime[[:space:]]*$' "$ENV_FILE" \
+  || fail "runtime credentials cannot apply schema; select reviewed operator credentials with ENV_FILE"
 [ -f "$MIGRATION" ] || fail "migration not found: $MIGRATION (git pull first?)"
 
 DB_HOST="$(grep -oP '^DB_HOST=\K.*' "$ENV_FILE" || true)"

@@ -522,7 +522,7 @@ describe('apply-migration-050.sh source', () => {
   it('keeps the server defaults, so an unset environment behaves exactly as it did', () => {
     expect(code).toMatch(/^APP_DIR="\$\{APP_DIR:-\/home\/schoolbus\/apps\/lampang-bus-system\}"$/m);
     expect(code).toMatch(/^BACKUP_DIR="\$\{BACKUP_DIR:-\/home\/schoolbus\/backups\/lampang-bus\}"$/m);
-    expect(code).toMatch(/^ENV_FILE="\$\{APP_DIR\}\/backend\/\.env"$/m);
+    expect(code).toMatch(/^ENV_FILE="\$\{ENV_FILE:-\$\{APP_DIR\}\/backend\/\.env\}"$/m);
     expect(code).toMatch(/^MIGRATION="\$\{APP_DIR\}\/backend\/migrations\/050_participation_cases\.sql"$/m);
   });
 

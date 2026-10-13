@@ -5,18 +5,28 @@
 # Example: bash scripts/backup.sh pre-deploy-v2
 # ═══════════════════════════════════════════════════════════════
 set -euo pipefail
+umask 077
 
 APP_DIR="/home/schoolbus/apps/lampang-bus-system"
 BACKUP_BASE="/home/schoolbus/backups"
 TAG="${1:-$(date +%Y%m%d-%H%M%S)}"
 BACKUP_DIR="$BACKUP_BASE/backup-$TAG"
 
-# Load DB credentials from .env
-DB_USER=$(grep -oP '^DB_USER=\K.*' "$APP_DIR/backend/.env")
-DB_PASS=$(grep -oP '^DB_PASSWORD=\K.*' "$APP_DIR/backend/.env")
-DB_NAME=$(grep -oP '^DB_NAME=\K.*' "$APP_DIR/backend/.env")
-DB_HOST=$(grep -oP '^DB_HOST=\K.*' "$APP_DIR/backend/.env" || echo localhost)
-DB_PORT=$(grep -oP '^DB_PORT=\K.*' "$APP_DIR/backend/.env" || echo 3306)
+# Same dedicated backup actor as backup-db.sh; explicit ENV_FILE takes priority.
+DB_BACKUP_ENV_FILE="${DB_BACKUP_ENV_FILE:-/home/schoolbus/.config/schoolbus/db-backup.env}"
+if [ "${ENV_FILE+x}" != x ]; then
+  if [ -e "$DB_BACKUP_ENV_FILE" ] || [ -L "$DB_BACKUP_ENV_FILE" ]; then
+    ENV_FILE="$DB_BACKUP_ENV_FILE"
+  else
+    ENV_FILE="$APP_DIR/backend/.env"
+  fi
+fi
+[ -f "$ENV_FILE" ] && [ -r "$ENV_FILE" ] || { echo 'ERROR: backup credential file unavailable' >&2; exit 1; }
+DB_USER=$(grep -oP '^DB_USER=\K.*' "$ENV_FILE")
+DB_PASS=$(grep -oP '^DB_PASSWORD=\K.*' "$ENV_FILE")
+DB_NAME=$(grep -oP '^DB_NAME=\K.*' "$ENV_FILE")
+DB_HOST=$(grep -oP '^DB_HOST=\K.*' "$ENV_FILE" || echo localhost)
+DB_PORT=$(grep -oP '^DB_PORT=\K.*' "$ENV_FILE" || echo 3306)
 
 # Stage the MySQL password in a private defaults-extra-file so it
 # never appears on the mysqldump command line or in /proc/<pid>/environ.
@@ -43,7 +53,8 @@ mkdir -p "$BACKUP_DIR"
 
 # 1. Database
 echo "[1/5] Backing up MySQL database..."
-mysqldump --defaults-extra-file="$MYSQL_DEFAULTS_FILE" "$DB_NAME" > "$BACKUP_DIR/database.sql" 2>/dev/null
+mysqldump --defaults-extra-file="$MYSQL_DEFAULTS_FILE" --single-transaction --quick \
+  --routines --triggers --events --no-tablespaces "$DB_NAME" > "$BACKUP_DIR/database.sql"
 DB_SIZE=$(wc -c < "$BACKUP_DIR/database.sql")
 echo "  → database.sql ($DB_SIZE bytes)"
 

@@ -5,6 +5,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const { multipartLimits } = require('../utils/multipartLimits');
 const ExcelJS = require('exceljs');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
@@ -35,7 +36,7 @@ const importUpload = multer({
     destination: (_req, _file, cb) => cb(null, importUploadDir),
     filename: (_req, file, cb) => cb(null, `aff-import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname).toLowerCase()}`),
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: multipartLimits(5 * 1024 * 1024),
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ext === '.xlsx' || ext === '.csv') cb(null, true);

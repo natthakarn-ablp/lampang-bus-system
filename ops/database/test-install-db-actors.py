@@ -49,6 +49,7 @@ class SwitchTests(unittest.TestCase):
             app = root / 'app'
             env = app / 'backend/.env'
             env.parent.mkdir(parents=True)
+            env.parent.chmod(0o755)
             env.write_text(ORIGINAL)
             env.chmod(0o600)
             save = root / 'recovery'

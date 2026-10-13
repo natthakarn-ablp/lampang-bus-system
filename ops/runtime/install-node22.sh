@@ -92,6 +92,9 @@ fi
 as_owner bash "$APP/scripts/backup-db.sh"
 install -d -m 755 "$NODE_ROOT"
 tar -xJf "$SAVE/$ARCHIVE" -C "$NODE_ROOT" --strip-components=1 --no-same-owner
+# The protected backup umask must not make the root-owned runtime unreadable
+# to the service account. Keep write access root-only, restore read/execute.
+chmod -R u=rwX,go=rX "$NODE_ROOT"
 test "$("$NODE" --version)" = v22.23.3
 NODE_CHANGED=1
 ln -s "$NODE" "$SAVE/node.link"

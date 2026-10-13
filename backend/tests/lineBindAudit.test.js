@@ -6,7 +6,7 @@
  * ISOLATED — mocks ONLY the MySQL pool and loads the REAL line.service.auditBind to
  * prove the audit row never contains a raw phone number or id_token. Run with an
  * isolated jest config (no globalSetup):
- *   npx jest --config '{"testEnvironment":"node"}' --testPathPattern lineBind --runInBand
+ *   npx jest --config '{"testEnvironment":"node"}' --testPathPatterns lineBind --runInBand
  */
 
 const mockQuery = jest.fn().mockResolvedValue([{}]);

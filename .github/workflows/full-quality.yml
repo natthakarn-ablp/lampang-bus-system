@@ -63,6 +63,8 @@ jobs:
         run: python3 ../ops/database/test-install-db-actors.py
       - name: Verify interrupted switch and terminal disconnect recovery
         run: python3 ../ops/database/test-recover-db-actors.py
+      - name: Verify encrypted snapshots and immutable cipher-only transfer
+        run: bash ../ops/backup/run-synthetic-tests.sh
 
   frontend-build:
     name: Frontend build + strict UI checks

@@ -23,6 +23,9 @@ scripts/**/*.mjs     text eol=lf
 backend/scripts/*.js text eol=lf
 backend/tests/*.js   text eol=lf
 ops/database/*.py    text eol=lf
+# Backup helper fingerprints must match across owner Windows and server Linux.
+ops/backup/*.py      text eol=lf
+ops/backup/*.ps1     text eol=lf
 
 # Already stored as binary-detected content; leave it exactly as git has it
 # rather than renormalizing a file this work never touched.

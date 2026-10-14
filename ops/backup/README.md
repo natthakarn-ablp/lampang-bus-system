@@ -104,6 +104,9 @@ and the actual rclone local backend run against temporary synthetic files; no
 production snapshot, credentials, preexisting proof files or Drive writes are
 needed. Fixture keys and artifacts are removed on exit. Those test-only tool
 variables do not alter the production CLI's fixed tool paths and hashes.
+Backup Python and PowerShell sources are explicitly LF in `.gitattributes` so
+Windows exports preserve the same bytes and helper fingerprints as Linux.
+Verify exported helper SHA256 and Git blob IDs before staging a reviewed release.
 
 On Windows PowerShell 5.1, run `test-owner-stream.ps1` with the reviewed portable
 Windows age binaries installed. It generates its own private temporary identity

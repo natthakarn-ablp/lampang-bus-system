@@ -60,7 +60,7 @@ export default function PageHeader({
       )}
 
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="flex items-start gap-3 min-w-0 flex-1">
+        <div className="flex items-start gap-3 min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-[16rem]">
           {Icon && (
             <div className={`w-11 h-11 rounded-xl ${toneClass} flex items-center justify-center shrink-0 text-white`}>
               <Icon className="w-6 h-6" />

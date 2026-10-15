@@ -10,8 +10,12 @@ import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import { FormField, Modal, TableAction } from '../../components/ui';
+import { useAuth } from '../../hooks/useAuth';
+import { isFullSchoolAccount } from '../../utils/authScope';
 
 export default function VehicleList() {
+  const { user } = useAuth();
+  const canEditVehicles = user?.role === 'admin' || isFullSchoolAccount(user);
   const [searchParams] = useSearchParams();
   const toast = useToast();
   const [vehicles, setVehicles] = useState([]);
@@ -28,6 +32,7 @@ export default function VehicleList() {
 
   const load = useCallback(() => {
     setLoading(true);
+    setError('');
     api.get('/school/vehicles')
       .then((res) => setVehicles(Array.isArray(res.data.data) ? res.data.data : []))
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
@@ -37,6 +42,7 @@ export default function VehicleList() {
   useEffect(() => { load(); }, [load]);
 
   function openEdit(v) {
+    if (!canEditVehicles) return;
     setEditVehicle(v);
     setEditForm({
       vehicle_type: v.vehicle_type || '',
@@ -50,6 +56,7 @@ export default function VehicleList() {
 
   async function handleSaveEdit(e) {
     e.preventDefault();
+    if (!canEditVehicles) return;
     setSavingEdit(true);
     try {
       await api.put(`/school/vehicles/${editVehicle.id}`, editForm);
@@ -73,10 +80,10 @@ export default function VehicleList() {
         actions={<PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />}
       />
 
-      {error && <ErrorState message={error} className="mb-4" onRetry={load} />}
-
       {loading ? (
         <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} onRetry={load} />
       ) : shown.length === 0 ? (
         <EmptyState
           icon={Bus}
@@ -102,12 +109,12 @@ export default function VehicleList() {
                 phoneLinks
                 showDriverPhoto
                 rosterColumns={['name', 'grade', 'parent', 'phone']}
-                actions={
+                actions={canEditVehicles ? (
                   <TableAction tone="neutral" onClick={() => openEdit(v)}>
                     <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
                     แก้ไขข้อมูลรถ
                   </TableAction>
-                }
+                ) : null}
               />
             ))}
           </div>
@@ -115,7 +122,7 @@ export default function VehicleList() {
       )}
 
       {/* ─── Edit vehicle modal ────────────────────────────────────────── */}
-      {editVehicle && (
+      {canEditVehicles && editVehicle && (
         <Modal
           title="แก้ไขข้อมูลรถ"
           onClose={() => setEditVehicle(null)}

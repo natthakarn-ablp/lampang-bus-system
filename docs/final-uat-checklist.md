@@ -3,6 +3,8 @@
 > รายการทดสอบครั้งสุดท้ายก่อนเปิดใช้งานจริง
 > Phase 10.11A • 2026-06-02
 
+> หมายเหตุ 2026-10-15: ค่ารุ่นและผลสร้างเว็บในตาราง Environment เป็น baseline เก่า ไม่ใช่สถานะ production ปัจจุบัน ให้บันทึก commit/runtime ที่ตรวจจริงใน evidence รอบใหม่ เส้นทาง UI ให้เทียบ `frontend/src/App.jsx` และใช้ `scripts/create-uat-evidence-pack.js` สร้างแบบฟอร์มรอบปัจจุบัน การสร้างแบบฟอร์มไม่ใช่ผล UAT ที่ผ่านแล้ว งานเขียน/นำเข้า/ผูกบัญชี/เหตุฉุกเฉินต้องใช้ข้อมูลและสภาพแวดล้อมทดสอบแยก ส่วน production ใช้อ่านอย่างเดียว
+
 ---
 
 ## 1. Purpose
@@ -22,7 +24,7 @@
 |---|---|
 | Production URL | https://schoolbuslampang.com |
 | Backend health endpoint (loopback) | http://127.0.0.1:3000/health |
-| Backend health endpoint (public) | https://schoolbuslampang.com/api/health (ผ่าน nginx proxy) |
+| Backend health endpoint (public) | ยังไม่มี endpoint นี้ที่ยืนยันว่าให้ JSON health; `/health` หรือ `/api/health` อาจตอบ SPA HTML 200 จึงไม่นับเป็น health PASS ให้ตรวจ loopback ด้านบน |
 | Current HEAD ที่ทดสอบ | `6a5fd7d` (frontend bundle from 2a802b2 — script-only commits since then) |
 | Frontend build | `frontend/dist/assets/index-Ct8cd_LJ.js` |
 | Database | MySQL 8.0 — `lampang_bus` |

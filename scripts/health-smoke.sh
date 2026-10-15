@@ -338,19 +338,18 @@ else
 
     # Decision tree for PM2 critical-pattern matches:
     #   count = baseline  → BASELINE (known historical entries)
-    #   count > baseline  → WARN     (new entries — show last 20)
+    #   count > baseline  → WARN     (new entries — count only)
+    # Never print matched log lines. A diagnostic can contain student data,
+    # SQL parameters or credentials, and the alert wrapper forwards its tail.
     #   count < baseline  → BASELINE (logs likely rotated — note for operator)
     #   count = 0         → PASS (handled in outer branch)
     if [ "$COUNT" = "$BASELINE_PM2_CRITICAL_MATCHES" ]; then
-      baseline "PM2 critical matches=$COUNT (== baseline — historical entries from 2026-05-13 incident; first 3 shown for traceability)"
-      printf '%s\n' "$MATCHES" | head -3 | sed 's/^/         /'
+      baseline "PM2 critical matches=$COUNT (== baseline — historical entries from 2026-05-13 incident; log contents withheld)"
     elif [ "$COUNT" -lt "$BASELINE_PM2_CRITICAL_MATCHES" ] 2>/dev/null; then
       baseline "PM2 critical matches=$COUNT (< baseline $BASELINE_PM2_CRITICAL_MATCHES — logs likely rotated; consider resetting baseline)"
-      printf '%s\n' "$MATCHES" | sed 's/^/         /'
     else
       NEW_COUNT=$((COUNT - BASELINE_PM2_CRITICAL_MATCHES))
-      warn "PM2 critical matches=$COUNT (baseline $BASELINE_PM2_CRITICAL_MATCHES + $NEW_COUNT new) — showing last 20:"
-      printf '%s\n' "$MATCHES" | tail -20 | sed 's/^/         /'
+      warn "PM2 critical matches=$COUNT (baseline $BASELINE_PM2_CRITICAL_MATCHES + $NEW_COUNT new) — log contents withheld; inspect privately on the server"
     fi
   fi
 fi

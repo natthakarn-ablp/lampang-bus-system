@@ -85,11 +85,15 @@ node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp
 cd /home/schoolbus/apps/lampang-bus-system
 set -o pipefail
 BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh postdeploy 2>&1 | tee outputs/operator-gates/<timestamp>/postdeploy-gate.redacted.log
-pm2 logs schoolbus-backend --lines 100 --nostream > outputs/operator-gates/<timestamp>/monitor-pm2.redacted.log 2>&1
-tail -n 100 /home/schoolbus/backups/lampang-bus/health-check.log > outputs/operator-gates/<timestamp>/monitor-health-check.redacted.log 2>&1
-tail -n 100 /home/schoolbus/logs/offhost-sync.log > outputs/operator-gates/<timestamp>/monitor-offhost-sync.redacted.log 2>&1
+# ตรวจ raw PM2/health/off-host logs เฉพาะในพื้นที่ private บน server
+# สร้าง monitor-pm2.redacted.log, monitor-health-check.redacted.log และ
+# monitor-offhost-sync.redacted.log จากสรุปที่ operator ตรวจจริงและปิดบังข้อมูลแล้ว
+# อย่าคัดลอก raw logs เข้า evidence pack แล้วเพียงตั้งชื่อว่า .redacted.log
+# เมื่อมีหลักฐานครบและตรวจว่าไม่มีข้อมูลส่วนบุคคล/secret/token จึงรัน validator:
 node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 ```
+
+ไฟล์ monitor ต้องบันทึกช่วงเวลาที่ตรวจ แหล่งข้อมูล จำนวน/ประเภทเหตุผิดปกติและผลพิจารณาที่ตรวจจริง โดยไม่คัดลอก SQL parameters, request bodies, tokens หรือข้อมูลนักเรียน/ผู้ปกครอง ห้ามแต่งสรุปว่าไม่พบเหตุโดยไม่ได้ตรวจ ชื่อไฟล์ `.redacted.log` ไม่ใช่การลบข้อมูล และตัวตรวจด้วยรูปแบบข้อความไม่ยืนยันว่าปลอดข้อมูลส่วนบุคคลทุกแบบ หากยังตรวจ/ปิดบังไม่ครบให้คง PENDING และไม่ส่ง raw logs ไปใน GitHub/แชต/ชุดส่งมอบ
 
 ## บันทึกการเปลี่ยนแปลง production ที่เกิดขึ้นก่อนการลงนาม (อ้างอิงเท่านั้น — ไม่ใช่การอนุมัติ)
 

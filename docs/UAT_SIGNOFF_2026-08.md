@@ -12,8 +12,10 @@
 สร้างชุดหลักฐาน UAT แยกตามบทบาทก่อนเริ่มทดสอบ:
 
 ```bash
-node scripts/create-uat-evidence-pack.js --mode sandbox --base-url https://schoolbuslampang.com
+node scripts/create-uat-evidence-pack.js --mode read-only-production --base-url https://schoolbuslampang.com
 ```
+
+คำสั่งนี้สร้างแบบฟอร์มเท่านั้น ไม่ได้ทำให้ production กลายเป็น sandbox งานที่เขียนข้อมูลต้องมีสภาพแวดล้อมทดสอบแยกจริง แล้วใช้ `--mode sandbox --base-url <URLของสภาพแวดล้อมทดสอบ>` หากยังไม่มีสภาพแวดล้อมนั้นให้คงรายการเขียนข้อมูลเป็น PENDING ไม่ใช้ URL production แทน
 
 กรอกผลและลิงก์หลักฐานจาก `outputs/uat-evidence/<timestamp>/` กลับมาที่เอกสารนี้ก่อนรัน validator
 

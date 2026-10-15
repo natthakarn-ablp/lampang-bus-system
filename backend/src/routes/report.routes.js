@@ -438,8 +438,8 @@ router.get('/export/pdf', async (req, res, next) => {
           { v: `${s.student_count}`, a: 'center' },
           { v: `${s.morning_done}`, a: 'center' },
           { v: `${s.evening_done}`, a: 'center' },
-          { v: `${(s.student_count || 0) - (s.morning_done || 0)}`, a: 'center' },
-          { v: `${(s.student_count || 0) - (s.evening_done || 0)}`, a: 'center' },
+          { v: `${(s.morning_expected ?? s.student_count ?? 0) - (s.morning_done || 0)}`, a: 'center' },
+          { v: `${(s.evening_expected ?? s.student_count ?? 0) - (s.evening_done || 0)}`, a: 'center' },
         ];
         for (let i = 0; i < cols.length; i++) {
           doc.text(vals[i].v, tx, rowY + 1, { width: cols[i].w, align: vals[i].a });
@@ -478,8 +478,8 @@ router.get('/export/pdf', async (req, res, next) => {
           { v: `${v.student_count}`, a: 'center' },
           { v: `${v.morning_done}`, a: 'center' },
           { v: `${v.evening_done}`, a: 'center' },
-          { v: `${(v.student_count || 0) - (v.morning_done || 0)}`, a: 'center' },
-          { v: `${(v.student_count || 0) - (v.evening_done || 0)}`, a: 'center' },
+          { v: `${(v.morning_expected ?? v.student_count ?? 0) - (v.morning_done || 0)}`, a: 'center' },
+          { v: `${(v.evening_expected ?? v.student_count ?? 0) - (v.evening_done || 0)}`, a: 'center' },
         ];
         for (let i = 0; i < cols2.length; i++) {
           doc.text(vals[i].v, tx2, rowY + 1, { width: cols2[i].w, align: vals[i].a });

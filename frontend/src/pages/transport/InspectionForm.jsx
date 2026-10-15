@@ -5,6 +5,7 @@ import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import PageHeader from '../../components/PageHeader';
 import Pagination from '../../components/Pagination';
@@ -58,6 +59,7 @@ export default function InspectionForm() {
   const [inspections, setInspections] = useState([]);
   const [meta, setMeta] = useState({ page: 1, per_page: 20, total: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(!!prefillVehicleId);
   const [saving, setSaving] = useState(false);
   // window.confirm could not show the plate and the date side by side, and
@@ -87,6 +89,7 @@ export default function InspectionForm() {
 
   const fetchInspections = useCallback(async (page = 1) => {
     setLoading(true);
+    setError('');
     try {
       const params = new URLSearchParams();
       params.set('page', page);
@@ -95,7 +98,9 @@ export default function InspectionForm() {
       const res = await api.get(`/transport/inspections?${params}`);
       setInspections(res.data?.data || []);
       setMeta(res.data?.meta || { page: 1, per_page: 20, total: 0 });
-    } catch (err) { console.error('[InspectionForm] inspections load failed:', err.message); } finally { setLoading(false); }
+    } catch (err) {
+      setError(err.response?.data?.message || 'โหลดประวัติการตรวจสภาพรถไม่สำเร็จ');
+    } finally { setLoading(false); }
   }, [resultFilter]);
 
   useEffect(() => { fetchInspections(1); }, [fetchInspections]);
@@ -389,13 +394,15 @@ export default function InspectionForm() {
           onChange: setResultFilter,
           options: [['', 'ทุกผลตรวจ'], ...RESULT_OPTIONS.map(o => [o.value, o.label])],
         }]}
-        count={meta.total}
+        count={loading || error ? undefined : meta.total}
         countLabel="ผลตรวจ"
         onClear={resultFilter ? () => setResultFilter('') : undefined}
       />
 
       {loading ? (
         <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => fetchInspections(meta.page)} />
       ) : inspections.length === 0 ? (
         <EmptyState icon={ClipboardList} title="ไม่มีบันทึกการตรวจ" description="เริ่มบันทึกผลตรวจรถคันใหม่จากฟอร์มด้านบน" />
       ) : (

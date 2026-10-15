@@ -22,6 +22,7 @@ export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [meta, setMeta] = useState({ page: 1, per_page: 50, total: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -48,6 +49,7 @@ export default function UserManagement() {
 
   const fetchUsers = useCallback(async (page = 1) => {
     setLoading(true);
+    setError('');
     try {
       const params = new URLSearchParams();
       params.set('page', page);
@@ -57,7 +59,9 @@ export default function UserManagement() {
       const res = await api.get(`/admin/users?${params}`);
       setUsers(Array.isArray(res.data.data) ? res.data.data : []);
       setMeta(res.data.meta);
-    } catch {} finally { setLoading(false); }
+    } catch (err) {
+      setError(err.response?.data?.message || 'โหลดบัญชีผู้ใช้ไม่สำเร็จ');
+    } finally { setLoading(false); }
   }, [filterRole, debouncedSearch]);
 
   useEffect(() => { fetchUsers(1); }, [fetchUsers]);
@@ -183,7 +187,7 @@ export default function UserManagement() {
           onChange: setFilterRole,
           options: [['', 'ทุกบทบาท'], ...ROLE_OPTIONS],
         }]}
-        count={meta.total}
+        count={loading || error ? undefined : meta.total}
         countLabel="บัญชี"
         onClear={() => { setSearch(''); setFilterRole(''); }}
       />
@@ -191,6 +195,8 @@ export default function UserManagement() {
       <DataTable
         caption="รายการบัญชีผู้ใช้งานระบบ"
         loading={loading}
+        error={error}
+        onRetry={() => fetchUsers(meta.page)}
         rows={users}
         rowKey={u => u.id}
         columns={[
@@ -219,7 +225,7 @@ export default function UserManagement() {
         }}
       />
 
-      {users.length > 0 && (
+      {!loading && !error && users.length > 0 && (
         <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={users.length} onPage={(p) => fetchUsers(p)} />
       )}
 

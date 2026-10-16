@@ -244,29 +244,33 @@ export default function SchoolDashboard() {
             className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-success-ink hover:opacity-90 text-white text-sm font-semibold px-4 py-2 rounded-lg transition min-h-[44px]"
           >
             <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
-            เช็กชื่อขึ้น-ลงรถ
+            เช็กชื่อวันนี้
           </Link>
           <Link to="/school/students" className={btnSecondary}>
             <Search className="w-4 h-4" strokeWidth={2} />
-            ค้นหานักเรียน
+            นักเรียน
           </Link>
           {!isTeacher && (
             <Link to="/school/vehicles" className={btnSecondary}>
               <Bus className="w-4 h-4" strokeWidth={2} />
-              จัดการรถ
+              รถรับส่ง
             </Link>
           )}
           <Link to="/reports/daily" className={btnSecondary}>
             <FileText className="w-4 h-4" strokeWidth={2} />
             รายงานวันนี้
           </Link>
-          {!isTeacher && (
+        </div>
+        {!isTeacher && (
+          <details className="rounded-xl border border-surface-border p-3">
+            <summary className="focus-ring min-h-[44px] flex items-center text-sm font-medium cursor-pointer">งานแก้ไขรายการพิเศษ</summary>
+            <p className="text-sm text-ink-muted mb-3">เช็กชื่อประจำวันใช้ปุ่ม “เช็กชื่อวันนี้” ด้านบน ส่วนนี้สำหรับยืนยันแทนคนขับเมื่อมีเหตุจำเป็นและต้องระบุเหตุผล</p>
             <button type="button" onClick={() => setOverrideOpen(true)} className={btnSecondary}>
               <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
               ยืนยันแทนคนขับ
             </button>
+          </details>
           )}
-        </div>
       </div>
 
       {overrideOpen && (

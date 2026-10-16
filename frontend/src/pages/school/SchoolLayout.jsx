@@ -17,7 +17,7 @@ import { isGradeTeacher } from '../../utils/authScope';
 // existing teacher-hiding logic already lives.
 const SCHOOL_TABS = [
   { to: '/school',                end: true,  icon: Home,          label: 'หน้าแรก' },
-  { to: '/school/students',       end: false, icon: GraduationCap, label: 'ค้นหา' },
+  { to: '/school/students',       end: false, icon: GraduationCap, label: 'นักเรียน' },
   { to: '/school/teacher-check',  end: false, icon: CheckSquare,   label: 'เช็กชื่อ' },
   { to: '/reports/daily',         end: false, icon: FileText,      label: 'รายงาน' },
 ];

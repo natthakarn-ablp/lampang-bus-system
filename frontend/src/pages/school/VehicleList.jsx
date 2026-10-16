@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Bus, Pencil } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Bus, Pencil, Plus } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import PageHeader from '../../components/PageHeader';
+import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import VehicleRosterCard from '../../components/VehicleRosterCard';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
@@ -22,8 +23,6 @@ export default function VehicleList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [plateSearch, setPlateSearch] = useState(searchParams.get('plate') || '');
-  const [expandedVehicle, setExpandedVehicle] = useState(null);
-  const [studentCache, setStudentCache] = useState({});
 
   // ─── Edit vehicle (self-service) ──────────────────────────────────────
   const [editVehicle, setEditVehicle] = useState(null);
@@ -74,11 +73,28 @@ export default function VehicleList() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <SchoolWorkflowNav current="vehicles" />
       <PageHeader
         title="รถรับส่ง"
-        subtitle="รถรับส่งของโรงเรียน พร้อมคนขับ ผู้ดูแล และรายชื่อนักเรียน"
-        actions={<PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />}
+        subtitle="รถที่นักเรียนของโรงเรียนเลือกใช้ พร้อมรายชื่อเด็กในแต่ละคัน"
+        actions={canEditVehicles ? (
+          <Link to="/school/bulk-vehicles" className="focus-ring inline-flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">
+            <Plus className="w-4 h-4" aria-hidden="true" /> เพิ่มรถรับส่ง
+          </Link>
+        ) : undefined}
       />
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex-1 min-w-[12rem]">
+          <PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />
+        </div>
+        <Link to="/school/students" className="focus-ring inline-flex items-center min-h-[44px] px-3 rounded-lg text-brand-700 hover:bg-brand-50 text-sm font-medium">
+          {canEditVehicles ? 'เลือกรถให้นักเรียนที่มีรายชื่อแล้ว' : 'ดูรายชื่อนักเรียน'}
+        </Link>
+      </div>
+      {canEditVehicles && (
+        <p className="text-sm text-ink-muted mb-4">เพิ่มรถไว้แล้วแต่ยังไม่เห็นที่นี่? ไปที่นักเรียนแล้วเลือกรถให้เด็ก รถจะปรากฏเมื่อมีนักเรียนของโรงเรียนใช้บริการ</p>
+      )}
 
       {loading ? (
         <LoadingState />
@@ -88,7 +104,7 @@ export default function VehicleList() {
         <EmptyState
           icon={Bus}
           title={plateSearch ? 'ไม่พบรถตามที่ค้นหา' : 'ไม่มีรถรับส่ง'}
-          description={plateSearch ? 'ลองค้นด้วยทะเบียนอื่น' : 'ยังไม่มีรถในระบบ'}
+          description={plateSearch ? 'ลองค้นด้วยทะเบียนอื่น' : 'ยังไม่มีนักเรียนในโรงเรียนที่เลือกรถรับส่ง'}
         />
       ) : (
         <>
@@ -110,10 +126,15 @@ export default function VehicleList() {
                 showDriverPhoto
                 rosterColumns={['name', 'grade', 'parent', 'phone']}
                 actions={canEditVehicles ? (
-                  <TableAction tone="neutral" onClick={() => openEdit(v)}>
-                    <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
-                    แก้ไขข้อมูลรถ
-                  </TableAction>
+                  <div className="flex flex-wrap gap-2">
+                    <Link to={`/school/students?add=one&vehicle_id=${encodeURIComponent(v.id)}`} className="focus-ring inline-flex items-center min-h-[44px] px-3 rounded-lg text-brand-700 hover:bg-brand-50 text-sm font-medium">
+                      เพิ่มนักเรียนใหม่ขึ้นรถคันนี้
+                    </Link>
+                    <TableAction tone="neutral" onClick={() => openEdit(v)}>
+                      <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
+                      แก้ไขข้อมูลรถ
+                    </TableAction>
+                  </div>
                 ) : null}
               />
             ))}

@@ -10,6 +10,8 @@ const { logAudit } = require('../utils/audit');
 const { readIdParam } = require('../utils/pathParams');
 const transportSvc = require('../services/transport.service');
 const ppSvc = require('../services/pickupPoint.service');
+const { importExportLimiter } = require('../middleware/rateLimiters');
+const { COLUMNS: SAFETY_EXPORT_COLUMNS, encodeSafetyCsv } = require('../utils/transportSafetyCsv');
 
 // All routes require transport or admin role
 router.use(authenticate, requireRole('transport', 'admin'));
@@ -134,6 +136,22 @@ router.get('/dashboard', async (req, res, next) => {
     const data = await transportSvc.getDashboard();
     sendSuccess(res, data);
   } catch (err) { next(err); }
+});
+
+// Separate from /api/reports: transport never receives student/phone exports.
+router.get('/export/vehicles.csv', importExportLimiter, async (req, res, next) => {
+  try {
+    const rows = await transportSvc.getSafetyExportRows();
+    await logAudit({
+      userId: req.user.id, action: 'EXPORT', entityType: 'transport_safety_report',
+      entityId: 'vehicles', newValue: { rows: rows.length, fields: SAFETY_EXPORT_COLUMNS.map(([key]) => key) },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'], required: true,
+    });
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', 'attachment; filename="transport-vehicle-safety.csv"');
+    return res.send(encodeSafetyCsv(rows));
+  } catch (err) { return next(err); }
 });
 
 // ─── GET /api/transport/vehicles ────────────────────────────────────────────
@@ -273,14 +291,9 @@ router.delete('/inspections/:id', async (req, res, next) => {
     const inspectionId = readIdParam(req, res);
     if (inspectionId === null) return;
 
-    const old = await transportSvc.deleteInspection({
+    await transportSvc.deleteInspection({
       inspectionId, userId: req.user.id, isAdmin: req.user.role === 'admin',
-    });
-
-    await logAudit({
-      userId: req.user.id, action: 'DELETE', entityType: 'vehicle_inspection', entityId: inspectionId,
-      oldValue: { vehicle_id: old.vehicle_id, result: old.result, expiry_date: old.expiry_date, inspection_date: old.inspection_date, notes: old.notes },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      ip: req.ip, userAgent: req.headers['user-agent'],
     });
 
     sendSuccess(res, null, 'ลบผลตรวจสำเร็จ');

@@ -154,7 +154,7 @@ async function refreshVehicleEligibility(executor, vehicleId, {
        FROM inspection_attempts ia
        JOIN vehicle_inspection_applications a ON a.id = ia.application_id
       WHERE a.vehicle_id = ? AND ia.result <> 'IN_PROGRESS' AND ia.finalized_at IS NOT NULL
-      ORDER BY ia.inspection_date DESC, ia.finalized_at DESC LIMIT 1`,
+      ORDER BY ia.inspection_date DESC, ia.finalized_at DESC, ia.id DESC LIMIT 1`,
     [vehicleId]
   );
   let inspection = sharedInspection || null;
@@ -472,7 +472,7 @@ async function getApplication(pool, { applicationId, viewer } = {}) {
     [applicationId]
   );
   const [attempts] = await pool.query(
-    `SELECT ia.id, ia.result, ia.provider_type, ia.provider_reference,
+    `SELECT ia.id, ia.inspected_by, ia.result, ia.provider_type, ia.provider_reference,
             ia.inspection_date, ia.expiry_date, ia.notes, ia.finalized_at,
             u.display_name AS inspector_name
        FROM inspection_attempts ia
@@ -727,6 +727,17 @@ async function startInspection(pool, {
     if (!application) throw appError('ไม่พบคำขอส่งตรวจ', 404, 'APPLICATION_NOT_FOUND');
     if (!['READY_TO_PRINT', 'SUBMITTED', 'NEEDS_FIX', 'INSPECTION_PENDING'].includes(application.status)) {
       throw appError('สถานะคำขอไม่พร้อมเริ่มตรวจ', 409, 'INVALID_APPLICATION_STATUS', { current_status: application.status });
+    }
+    const [[openAttempt]] = await conn.query(
+      `SELECT id FROM inspection_attempts
+        WHERE application_id = ? AND result = 'IN_PROGRESS'
+        LIMIT 1 FOR UPDATE`,
+      [applicationId]
+    );
+    if (openAttempt) {
+      throw appError('คำขอนี้มีการตรวจที่กำลังดำเนินการอยู่แล้ว', 409, 'INSPECTION_ALREADY_IN_PROGRESS', {
+        attempt_id: openAttempt.id,
+      });
     }
     const [[template]] = await conn.query(
       `SELECT id, version_no

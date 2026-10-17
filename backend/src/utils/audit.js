@@ -26,6 +26,7 @@ const AUDIT_ACTIONS = [
  * @param {string|null}  opts.ipAddress   - req.ip
  * @param {string|null}  opts.userAgent   - req.headers['user-agent']
  * @param {object|null}  opts.conn        - Optional existing mysql2 connection (for transactions)
+ * @param {boolean}      opts.required    - Fail the operation if audit cannot be stored
  */
 async function logAudit({
   userId = null,
@@ -37,6 +38,7 @@ async function logAudit({
   ipAddress = null,
   userAgent = null,
   conn = null,
+  required = false,
 }) {
   if (!AUDIT_ACTIONS.includes(action)) {
     console.error(`[audit] Unknown action: ${action}`);
@@ -64,7 +66,7 @@ async function logAudit({
     await executor.query(sql, params);
   } catch (err) {
     console.error('[audit] Failed to write audit log:', err.message);
-    if (conn && (err.code === 'ER_LOCK_DEADLOCK' || err.errno === 1213)) throw err;
+    if (required || (conn && (err.code === 'ER_LOCK_DEADLOCK' || err.errno === 1213))) throw err;
   }
 }
 

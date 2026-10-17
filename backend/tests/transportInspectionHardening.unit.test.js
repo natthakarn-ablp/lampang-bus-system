@@ -151,6 +151,18 @@ describe('createInspection', () => {
     expect(conn.commit).toHaveBeenCalled();
     expect(run.mock.calls.some(([sql]) => /INSERT INTO audit_logs/.test(sql))).toBe(true);
   });
+
+  test('finalized shared result blocks a new legacy result before insert', async () => {
+    const { db, conn, run } = mockDb([
+      [/FROM vehicles WHERE id = \? AND is_deleted = FALSE FOR UPDATE/, [[{ id: 'V1' }]]],
+      [/FROM inspection_attempts ia/, [[{ id: 91 }]]],
+    ]);
+    await expect(svc.createInspection({
+      ...base, inspectionDate: TODAY, expiryDate: addDays(TODAY, 300),
+    }, db)).rejects.toMatchObject({ statusCode: 409, errors: [{ code: 'SHARED_INSPECTION_IMMUTABLE' }] });
+    expect(run.mock.calls.some(([sql]) => /INSERT INTO vehicle_inspections/.test(sql))).toBe(false);
+    expect(conn.rollback).toHaveBeenCalled();
+  });
 });
 
 // ── updateInspection (F2 + F3) ──────────────────────────────────────────────
@@ -203,5 +215,56 @@ describe('updateInspection', () => {
     expect(run.mock.calls.some(([sql]) => /INSERT INTO audit_logs/.test(sql))).toBe(true);
     expect(refreshVehicleEligibility).toHaveBeenCalledWith(conn, 'V1');
     expect(conn.commit).toHaveBeenCalled();
+  });
+
+  test('finalized shared result cannot be rewritten through legacy PUT', async () => {
+    const { db, conn, run } = mockDb([
+      [selRe, [[row]]],
+      [/FROM inspection_attempts ia/, [[{ id: 91 }]]],
+    ]);
+    await expect(svc.updateInspection({
+      inspectionId: 7, result: 'PASSED', expiryDate: addDays(TODAY, 300), userId: 5,
+    }, db)).rejects.toMatchObject({ statusCode: 409, errors: [{ code: 'SHARED_INSPECTION_IMMUTABLE' }] });
+    expect(run.mock.calls.some(([sql]) => /UPDATE vehicle_inspections SET/.test(sql))).toBe(false);
+    expect(conn.rollback).toHaveBeenCalled();
+  });
+});
+
+describe('deleteInspection', () => {
+  const row = { id: 7, vehicle_id: 'V1', inspected_by: 5, result: 'FAILED',
+    inspection_date: TODAY, expiry_date: null, notes: 'test' };
+  const selected = /FROM vehicle_inspections WHERE id = \? FOR UPDATE/;
+
+  test('shared result blocks hard deletion and preserves audit history', async () => {
+    const { db, conn, run } = mockDb([
+      [selected, [[row]]], [/FROM inspection_attempts ia/, [[{ id: 91 }]]],
+    ]);
+    await expect(svc.deleteInspection({ inspectionId: 7, userId: 5 }, db))
+      .rejects.toMatchObject({ statusCode: 409, errors: [{ code: 'SHARED_INSPECTION_IMMUTABLE' }] });
+    expect(run.mock.calls.some(([sql]) => /DELETE FROM vehicle_inspections/.test(sql))).toBe(false);
+    expect(conn.rollback).toHaveBeenCalled();
+  });
+
+  test('eligibility failure rolls back the deletion', async () => {
+    const { db, conn } = mockDb([[selected, [[row]]]]);
+    refreshVehicleEligibility.mockRejectedValueOnce(new Error('eligibility failed'));
+    await expect(svc.deleteInspection({ inspectionId: 7, userId: 5 }, db))
+      .rejects.toThrow('eligibility failed');
+    expect(conn.rollback).toHaveBeenCalled();
+    expect(conn.commit).not.toHaveBeenCalled();
+  });
+
+  test('audit failure rolls back the deletion', async () => {
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { db, conn } = mockDb([
+      [selected, [[row]]],
+      [/INSERT INTO audit_logs/, () => { throw new Error('audit unavailable'); }],
+    ]);
+    try {
+      await expect(svc.deleteInspection({ inspectionId: 7, userId: 5 }, db))
+        .rejects.toThrow('audit unavailable');
+      expect(conn.rollback).toHaveBeenCalled();
+      expect(conn.commit).not.toHaveBeenCalled();
+    } finally { errorLog.mockRestore(); }
   });
 });

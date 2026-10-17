@@ -27,13 +27,17 @@ const countSql = (pool) => pool.calls[0].sql;
 const listSql = (pool) => pool.calls[1].sql;
 
 describe('getPendingVehicles (รถที่ยังไม่ตรวจ)', () => {
-  test('default set = vehicles with NO inspection row (matches not_inspected)', async () => {
+  test('default set = vehicles without a canonical finalized inspection', async () => {
     const pool = fakePool({ total: 3, rows: [{ id: 'V-1' }] });
     const result = await getPendingVehicles({ page: 1, per_page: 50 }, pool);
 
-    // not_inspected definition: non-deleted vehicle with no inspection row.
+    // The canonical result prefers the finalized shared inspection and falls back
+    // to legacy inspection only when no finalized shared attempt exists.
     expect(countSql(pool)).toMatch(/v\.is_deleted = FALSE/);
-    expect(countSql(pool)).toMatch(/NOT EXISTS\s*\(SELECT 1 FROM vehicle_inspections vi WHERE vi\.vehicle_id = v\.id\)/);
+    expect(countSql(pool)).toMatch(/CASE WHEN EXISTS\s*\(/);
+    expect(countSql(pool)).toMatch(/FROM inspection_attempts ia/);
+    expect(countSql(pool)).toMatch(/FROM vehicle_inspections vi/);
+    expect(countSql(pool)).toMatch(/END IS NULL/);
     // Default must NOT pull in latest-result=PENDING rows (keeps total == not_inspected).
     expect(countSql(pool)).not.toMatch(/'PENDING'/);
 
@@ -44,7 +48,7 @@ describe('getPendingVehicles (รถที่ยังไม่ตรวจ)', (
   test('includePending adds latest-result PENDING vehicles (dashboard `pending`)', async () => {
     const pool = fakePool({ total: 5 });
     await getPendingVehicles({ includePending: true }, pool);
-    expect(countSql(pool)).toMatch(/NOT EXISTS/);
+    expect(countSql(pool)).toMatch(/END IS NULL/);
     expect(countSql(pool)).toMatch(/= 'PENDING'/);
   });
 

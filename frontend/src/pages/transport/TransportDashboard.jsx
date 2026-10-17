@@ -16,9 +16,18 @@ import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import PageHeader from '../../components/PageHeader';
 import { PageTransition } from '../../lib/motion';
+import { todayBangkok } from '../../utils/thaiTime';
 
 // SLA configuration — days allowed to resolve a risk item
 const SLA_DAYS = 7;
+
+function isReady(v) {
+  const today = todayBangkok();
+  return v.verification_status === 'ELIGIBLE' && !v.has_open_inspection && !v.inspection_conflict
+    && v.latest_inspection_result === 'PASSED'
+    && ['inspection_expiry', 'insurance_expiry', 'registration_expiry',
+      'compulsory_insurance_expiry', 'tax_expiry'].every(key => v[key] && String(v[key]).slice(0, 10) >= today);
+}
 
 function formatThaiDate(d) {
   if (!d) return '-';
@@ -75,6 +84,8 @@ function riskScore(v) {
   if (insExpired) score += 50;
   if (!hasIns) score += 40;
   if (insExpiring) score += 20;
+  if (v.inspection_conflict) score += 100;
+  if (!isReady(v)) score += 40;
   return score;
 }
 
@@ -84,6 +95,9 @@ function riskTags(v) {
   if (insp === 'FAILED')        tags.push({ text: 'ไม่ผ่านตรวจ',    variant: 'danger' });
   else if (!insp)               tags.push({ text: 'ยังไม่ตรวจ',     variant: 'danger' });
   else if (insp === 'NEEDS_FIX') tags.push({ text: 'ต้องแก้ไข',     variant: 'warn' });
+  if (v.has_open_inspection) tags.push({ text: 'กำลังตรวจ', variant: 'info' });
+  if (v.inspection_conflict) tags.push({ text: 'ข้อมูลผลตรวจไม่ตรงกัน', variant: 'danger' });
+  if (insp === 'PASSED' && !isReady(v)) tags.push({ text: 'ยังไม่พร้อมใช้', variant: 'warn' });
   const hasIns = v.insurance_expiry != null;
   if (hasIns && new Date(v.insurance_expiry) < new Date())                                  tags.push({ text: 'ประกันหมด',      variant: 'danger' });
   else if (!hasIns)                                                                          tags.push({ text: 'ไม่มีข้อมูลประกัน', variant: 'neutral' });
@@ -93,6 +107,8 @@ function riskTags(v) {
 
 function suggestion(v) {
   const insp = v.latest_inspection_result;
+  if (v.inspection_conflict) return 'ตรวจเอกสารจริงและผลในคิวก่อนดำเนินการแก้ไข';
+  if (v.has_open_inspection) return 'รอเจ้าหน้าที่ผู้รับงานสรุปผลตรวจ';
   if (insp === 'FAILED')   return 'ควรตรวจซ้ำ/แก้ไขทันที';
   if (!insp)               return 'ควรบันทึกผลตรวจ';
   if (insp === 'NEEDS_FIX') return 'ควรแก้ไขแล้วตรวจซ้ำ';
@@ -100,6 +116,7 @@ function suggestion(v) {
   if (hasIns && new Date(v.insurance_expiry) < new Date()) return 'ควรต่อประกัน';
   if (!hasIns) return 'ควรกรอกข้อมูลประกัน';
   if (hasIns && new Date(v.insurance_expiry) < new Date(Date.now() + 30*86400000)) return 'ประกันใกล้หมด ควรต่อล่วงหน้า';
+  if (!isReady(v)) return 'ตรวจวันหมดอายุเอกสารและคุณสมบัติคนขับ';
   return null;
 }
 
@@ -143,13 +160,13 @@ const in30Days = () => new Date(Date.now() + 30 * 86400000);
 const FILTERS = [
   { key: 'all',      label: 'ทั้งหมด',  fn: () => true },
   // expired documents, failed inspection, or a risk score at the urgent level
-  { key: 'urgent',   label: 'เร่งด่วน', fn: v => riskScore(v) >= 100 || v.latest_inspection_result === 'FAILED' || hasAnyExpiredDoc(v) },
+  { key: 'urgent',   label: 'เร่งด่วน', fn: v => riskScore(v) >= 100 || v.inspection_conflict || v.latest_inspection_result === 'FAILED' || hasAnyExpiredDoc(v) },
   // never inspected, or inspected and told to fix something
   { key: 'pending',  label: 'รอตรวจ',   fn: v => !v.latest_inspection_result || v.latest_inspection_result === 'NEEDS_FIX' },
   // any document due in 30 days, or no insurance recorded at all
   { key: 'expiring', label: 'ใกล้หมด',  fn: v => hasAnyExpiringDoc(v) || !v.insurance_expiry
       || (v.insurance_expiry && new Date(v.insurance_expiry) >= new Date() && new Date(v.insurance_expiry) < in30Days()) },
-  { key: 'ready',    label: 'พร้อมใช้', fn: v => riskScore(v) === 0 },
+  { key: 'ready',    label: 'พร้อมใช้', fn: isReady },
 ];
 
 // The vehicle list endpoint caps per_page at 100 (transport.routes.js), so the
@@ -173,6 +190,29 @@ export default function TransportDashboard() {
   const [loading, setLoading] = useState(true);
   const [vSearch, setVSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+
+  async function downloadSafetyReport() {
+    setExporting(true);
+    setExportError('');
+    try {
+      const response = await api.get('/transport/export/vehicles.csv', { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'transport-vehicle-safety.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      // Older mobile browsers may begin reading the Blob after click returns.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      setExportError('ดาวน์โหลดรายงานไม่สำเร็จ กรุณาลองอีกครั้ง');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     Promise.all([
@@ -231,11 +271,13 @@ export default function TransportDashboard() {
   const notInspected = n('not_inspected');
   const noInsurance  = n('no_insurance_data');
   const passed       = n('passed');
+  const ready        = n('ready_count');
   const needsFix     = n('needs_fix');
+  const conflicts    = n('inspection_conflict_count');
   // A vehicle can be both failed and expired; the sum is "items to handle",
   // which is what the banner promises, not a distinct vehicle count.
-  const urgentItems  = failed + expiredIns + expiredDocs;
-  const readyPct     = pctOf(passed, total);
+  const urgentItems  = failed + expiredIns + expiredDocs + conflicts;
+  const readyPct     = pctOf(ready, total);
   const shareOf      = v => (total > 0 ? `${Math.round((v / total) * 100)}% ของทั้งหมด` : '');
 
   function showUrgent() {
@@ -252,9 +294,10 @@ export default function TransportDashboard() {
     if (failed > 0)      parts.push(`ตรวจไม่ผ่าน ${failed}`);
     if (expiredIns > 0)  parts.push(`ประกันหมดอายุ ${expiredIns}`);
     if (expiredDocs > 0) parts.push(`เอกสารอื่นหมดอายุ ${expiredDocs}`);
+    if (conflicts > 0)    parts.push(`ข้อมูลผลตรวจไม่ตรงกัน ${conflicts}`);
     banner = {
       variant: 'danger',
-      title: `${urgentItems.toLocaleString('th-TH')} คันต้องจัดการเร่งด่วน`,
+      title: `${urgentItems.toLocaleString('th-TH')} รายการต้องจัดการเร่งด่วน`,
       sub: parts.join(' · '),
       cta: { label: 'ดูรถเร่งด่วน', onClick: showUrgent },
     };
@@ -264,18 +307,21 @@ export default function TransportDashboard() {
       variant: 'warn',
       title: `รถยังไม่ได้ตรวจสภาพ ${notInspected.toLocaleString('th-TH')} คัน`,
       sub: `${shareOf(notInspected)} · ไม่มีรถที่หมดอายุหรือตรวจไม่ผ่าน`,
-      cta: { label: 'บันทึกตรวจสภาพ', to: '/transport/inspections' },
+      cta: { label: 'เปิดคิวรับรองรถ', to: '/transport/verification' },
     };
     bannerTopic = 'not_inspected';
-  } else {
+  } else if (ready === total) {
     banner = { variant: 'success', title: 'รถทุกคันพร้อมใช้งาน', sub: `ตรวจผ่าน ${passed.toLocaleString('th-TH')} จาก ${total.toLocaleString('th-TH')} คัน` };
+  } else {
+    banner = { variant: 'warn', title: `มีรถยังไม่พร้อมใช้ ${(total - ready).toLocaleString('th-TH')} คัน`,
+      sub: 'ตรวจผลรับรอง เอกสาร และคนขับในคิวขนส่ง', cta: { label: 'เปิดคิวรับรองรถ', to: '/transport/verification' } };
   }
 
   const todos = [
     bannerTopic !== 'not_inspected' && {
       key: 'not_inspected', variant: 'warn', count: notInspected,
       title: 'รถยังไม่ได้ตรวจสภาพ', sub: shareOf(notInspected),
-      cta: { label: 'บันทึกตรวจสภาพ', to: '/transport/inspections' },
+      cta: { label: 'เปิดคิวรับรองรถ', to: '/transport/verification' },
     },
     {
       key: 'expiring', variant: 'warn', count: expiringIns + expiringDocs,
@@ -309,12 +355,17 @@ export default function TransportDashboard() {
           actions={
             <div className="flex flex-wrap items-stretch gap-2">
               <Link
-                to="/transport/inspections"
+                to="/transport/verification"
                 className="focus-ring inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3.5 rounded-xl transition border border-surface-border min-h-[44px]"
               >
                 <ClipboardList className="w-4 h-4" strokeWidth={2} />
-                บันทึกตรวจสภาพ
+                ตรวจรับรองรถ
               </Link>
+              <button type="button" onClick={downloadSafetyReport} disabled={exporting}
+                className="focus-ring inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3.5 rounded-xl transition border border-surface-border min-h-[44px] disabled:opacity-50">
+                <FileText className="w-4 h-4" strokeWidth={2} />
+                {exporting ? 'กำลังเตรียมรายงาน…' : 'ส่งออกรายงานรถ CSV'}
+              </button>
               <Link
                 to="/transport/pickup-map"
                 className="focus-ring inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3.5 rounded-xl transition border border-surface-border min-h-[44px]"
@@ -326,6 +377,8 @@ export default function TransportDashboard() {
           }
         />
       </div>
+
+      {exportError && <AlertBanner variant="danger" title={exportError} />}
 
       {/* Save success banner */}
       {highlightId && (() => {
@@ -348,7 +401,7 @@ export default function TransportDashboard() {
           <KpiRingCard
             label="พร้อมใช้งาน"
             pct={readyPct}
-            sub={`${passed.toLocaleString('th-TH')} / ${total.toLocaleString('th-TH')} คัน`}
+            sub={`${ready.toLocaleString('th-TH')} / ${total.toLocaleString('th-TH')} คัน`}
             variant={pctTone(readyPct)}
           />
           <KpiRingCard
@@ -384,10 +437,8 @@ export default function TransportDashboard() {
               size={150} thickness={22}
               label={readyPct == null ? '–' : `${readyPct}%`} sublabel="พร้อมใช้งาน"
               segments={[
-                { label: 'ผ่าน',        value: passed,       color: '#10B981' },
-                { label: 'ต้องแก้ไข',   value: needsFix,     color: '#F59E0B' },
-                { label: 'ไม่ผ่าน',     value: failed,       color: '#EF4444' },
-                { label: 'ยังไม่ตรวจ',  value: notInspected, color: '#94A3B8' },
+                { label: 'พร้อมใช้', value: ready, color: '#10B981' },
+                { label: 'ยังไม่พร้อม', value: Math.max(0, total - ready), color: '#F59E0B' },
               ]}
             />
           </div>
@@ -448,7 +499,8 @@ export default function TransportDashboard() {
                   vehicle={v}
                   isHighlighted={v.id === highlightId}
                   rowRef={v.id === highlightId ? highlightRef : null}
-                  onRecord={() => navigate(`/transport/inspections?vehicle_id=${v.id}`)}
+                  onRecord={() => navigate(v.has_shared_inspection
+                    ? '/transport/verification' : `/transport/inspections?vehicle_id=${v.id}`)}
                 />
               ))}
               {filtered.length > 20 && (
@@ -535,7 +587,7 @@ function VehicleRiskRow({ vehicle: v, isHighlighted, rowRef, onRecord }) {
           className="focus-ring inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 active:bg-brand-200 border border-brand-200 px-3 min-h-[44px] rounded-lg transition"
         >
           <FileText className="w-3.5 h-3.5" strokeWidth={2} />
-          บันทึกตรวจ
+          {v.has_shared_inspection ? 'เปิดคิวรับรอง' : 'บันทึกตรวจ'}
         </button>
         {v.driver_phone && (
           <a

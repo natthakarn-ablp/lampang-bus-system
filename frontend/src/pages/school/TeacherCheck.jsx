@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Sunrise, Sunset, Bus, CheckCircle2, Undo2, Users } from 'lucide-react';
+import { Sunrise, Sunset, Bus, CheckCircle2, Undo2, Users, Search } from 'lucide-react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
+import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import { useToast } from '../../components/Toast';
 import { AppCard, ConfirmDialog, StatusBadge } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
@@ -55,26 +56,54 @@ export default function TeacherCheck() {
     if (q === 'morning' || q === 'evening') return q;
     return bangkokHour() < 12 ? 'morning' : 'evening';
   });
-  const [data, setData] = useState(null);
+  const [loaded, setLoaded] = useState(null);
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [showPending, setShowPending] = useState(true);
   const [busy, setBusy] = useState({});          // student id → true while saving
   const [confirmBus, setConfirmBus] = useState(null);
   const [savingBus, setSavingBus] = useState(false);
+  const requestSeq = useRef(0);
+  const sessionRef = useRef(session);
+  const writeInFlight = useRef(false);
+  const confirmationRef = useRef(null);
+  const mounted = useRef(true);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; requestSeq.current += 1; };
+  }, []);
+
+  const load = useCallback(async (round = sessionRef.current) => {
+    if (!mounted.current) return;
+    const request = ++requestSeq.current;
+    setLoaded(null);
+    setError(null);
+    setLoading(true);
     try {
-      const r = await api.get('/school/teacher-check', { params: { session } });
-      setData(r.data?.data || { vehicles: [] });
-      setError(null);
+      const r = await api.get('/school/teacher-check', { params: { session: round } });
+      if (!mounted.current || request !== requestSeq.current || sessionRef.current !== round) return;
+      setLoaded({ session: round, payload: r.data?.data || { vehicles: [] } });
     } catch (err) {
+      if (!mounted.current || request !== requestSeq.current || sessionRef.current !== round) return;
+      // A failed refresh must not leave the previous round's buttons usable.
+      setLoaded(null);
       setError(err.response?.data?.message || 'โหลดรายชื่อไม่สำเร็จ');
+    } finally {
+      if (mounted.current && request === requestSeq.current && sessionRef.current === round) setLoading(false);
     }
-  }, [session]);
+  }, []);
 
-  useEffect(() => { setData(null); load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => { requestSeq.current += 1; };
+  }, [load]);
 
   const s = SESSIONS[session];
+  const data = loaded?.session === session ? loaded.payload : null;
   const vehicles = data?.vehicles || [];
+  const interactionLocked = savingBus || Object.values(busy).some(Boolean) || Boolean(confirmBus);
   const totals = useMemo(() => {
     let expected = 0; let done = 0;
     for (const v of vehicles) {
@@ -86,6 +115,25 @@ export default function TeacherCheck() {
     }
     return { expected, done };
   }, [vehicles]);
+  const query = search.trim().toLocaleLowerCase('th-TH');
+  const visibleVehicles = vehicles.map(v => ({
+    ...v,
+    visibleStudents: v.students.filter(st => {
+      if (showPending && (st.done || st.on_leave || st.no_vehicle)) return false;
+      const text = [st.name, st.grade, st.classroom, formatGradeClass(st.grade, st.classroom), v.plate_no]
+        .filter(value => value !== null && value !== undefined).join(' ').toLocaleLowerCase('th-TH');
+      return !query || query.split(/\s+/).every(word => text.includes(word));
+    }),
+  })).filter(v => v.visibleStudents.length > 0);
+  const visibleCount = visibleVehicles.reduce((count, v) => count + v.visibleStudents.length, 0);
+  const allCount = vehicles.reduce((count, v) => count + v.students.length, 0);
+
+  function changeSession(next) {
+    if (next === sessionRef.current || writeInFlight.current || confirmationRef.current) return;
+    sessionRef.current = next;
+    setSession(next);
+    load(next);
+  }
 
   function reportResult(result) {
     const { recorded = 0, already = 0, skipped = 0 } = result || {};
@@ -94,26 +142,29 @@ export default function TeacherCheck() {
     if (skipped) toast.info(`ข้าม ${skipped} คน (ลา / ไม่ได้ใช้รถรอบนี้)`);
   }
 
-  async function record(ids) {
-    const r = await api.post('/school/teacher-check', { session, student_ids: ids });
-    reportResult(r.data?.data);
+  async function record(ids, round) {
+    const r = await api.post('/school/teacher-check', { session: round, student_ids: ids });
+    if (mounted.current) reportResult(r.data?.data);
   }
 
   async function tapStudent(st) {
-    if (busy[st.id] || st.done || st.on_leave || st.no_vehicle) return;
+    if (writeInFlight.current || confirmationRef.current || loading || !data || sessionRef.current !== session || st.done || st.on_leave || st.no_vehicle) return;
+    writeInFlight.current = true;
     setBusy(b => ({ ...b, [st.id]: true }));
     try {
-      await record([st.id]);
+      await record([st.id], session);
       await load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'บันทึกไม่สำเร็จ');
     } finally {
-      setBusy(b => ({ ...b, [st.id]: false }));
+      writeInFlight.current = false;
+      if (mounted.current) setBusy(b => ({ ...b, [st.id]: false }));
     }
   }
 
   async function undo(st) {
-    if (!st.log_id || busy[st.id]) return;
+    if (!st.can_undo || !st.log_id || writeInFlight.current || confirmationRef.current || loading || !data || sessionRef.current !== session) return;
+    writeInFlight.current = true;
     setBusy(b => ({ ...b, [st.id]: true }));
     try {
       await api.post(`/school/teacher-check/${st.log_id}/undo`, {});
@@ -122,23 +173,44 @@ export default function TeacherCheck() {
     } catch (err) {
       toast.error(err.response?.data?.message || 'ยกเลิกไม่สำเร็จ');
     } finally {
-      setBusy(b => ({ ...b, [st.id]: false }));
+      writeInFlight.current = false;
+      if (mounted.current) setBusy(b => ({ ...b, [st.id]: false }));
     }
   }
 
-  async function recordWholeBus() {
-    const v = confirmBus;
-    if (!v) return;
+  function confirmWholeBus(v) {
+    if (writeInFlight.current || confirmationRef.current || loading || !data || query || sessionRef.current !== session) return;
+    // Search hides the bulk action. In either list view, every remaining pupil
+    // is visible, and this snapshot fixes both the exact IDs and the round.
     const ids = v.students.filter(st => !st.done && !st.on_leave && !st.no_vehicle).map(st => st.id);
+    if (!ids.length) return;
+    const confirmation = { plate_no: v.plate_no, ids, session };
+    confirmationRef.current = confirmation;
+    setConfirmBus(confirmation);
+  }
+
+  function cancelWholeBus() {
+    // ConfirmDialog also invokes cancellation for Escape and backdrop clicks.
+    if (writeInFlight.current) return;
+    confirmationRef.current = null;
+    setConfirmBus(null);
+  }
+
+  async function recordWholeBus() {
+    const confirmation = confirmationRef.current;
+    if (!confirmation || writeInFlight.current || confirmation.session !== sessionRef.current) return;
+    writeInFlight.current = true;
     setSavingBus(true);
     try {
-      await record(ids);
+      await record(confirmation.ids, confirmation.session);
+      confirmationRef.current = null;
       setConfirmBus(null);
       await load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'บันทึกไม่สำเร็จ');
     } finally {
-      setSavingBus(false);
+      writeInFlight.current = false;
+      if (mounted.current) setSavingBus(false);
     }
   }
 
@@ -165,12 +237,18 @@ export default function TeacherCheck() {
     <PageTransition>
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
         <PageHeader
-          title="เช็กชื่อขึ้น-ลงรถ"
+          title="เช็กชื่อวันนี้"
           subtitle={grade ? `นักเรียนชั้น ${grade} ที่ใช้รถรับส่ง` : 'นักเรียนทุกชั้นที่ใช้รถรับส่ง'}
-          meta="แตะชื่อเด็กเมื่อเห็นด้วยตาว่า ถึงโรงเรียน (เช้า) หรือ ขึ้นรถกลับบ้าน (เย็น)"
           icon={Users}
           iconColor="teal"
         />
+        <SchoolWorkflowNav current="attendance" />
+
+        <AppCard padding="md" className="space-y-1">
+          <p className="font-semibold text-ink">เห็นเด็กแล้ว แตะชื่อเพื่อบันทึกทันที</p>
+          <p className="text-sm text-ink-muted">เช้า: เด็กถึงโรงเรียน · เย็น: เด็กขึ้นรถกลับบ้าน ไม่ต้องกดบันทึกอีกครั้ง</p>
+          <p className="text-sm text-ink-muted">ใช้ข้อมูลร่วมกับคนขับและครูท่านอื่น หากขึ้นว่าบันทึกแล้ว ไม่ต้องเช็กซ้ำ</p>
+        </AppCard>
 
         {/* Session switch */}
         <div role="tablist" aria-label="เลือกรอบ" className="grid grid-cols-2 gap-2 p-1 bg-surface border border-surface-border rounded-2xl">
@@ -183,8 +261,9 @@ export default function TeacherCheck() {
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => setSession(key)}
-                className={`focus-ring min-h-[52px] rounded-xl inline-flex items-center justify-center gap-2 font-semibold transition ${
+                onClick={() => changeSession(key)}
+                disabled={interactionLocked}
+                className={`focus-ring min-h-[52px] rounded-xl inline-flex items-center justify-center gap-2 px-2 font-semibold transition disabled:cursor-wait disabled:opacity-70 ${
                   active ? 'bg-brand-700 text-white shadow-soft' : 'text-ink-muted hover:bg-surface-raised'
                 }`}
               >
@@ -210,15 +289,73 @@ export default function TeacherCheck() {
           </AppCard>
         )}
 
-        {error && (
-          <AppCard padding="md" className="text-danger-ink">{error}</AppCard>
+        {data && vehicles.length > 0 && (
+          <AppCard padding="md" className="space-y-3">
+            <label htmlFor="teacher-check-search" className="block text-sm font-semibold text-ink">ค้นหานักเรียนหรือรถ</label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3.5 w-5 h-5 text-ink-muted" aria-hidden="true" />
+              <input
+                id="teacher-check-search"
+                type="search"
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                disabled={interactionLocked}
+                placeholder="ชื่อ ชั้น ห้อง หรือทะเบียนรถ"
+                className="focus-ring w-full min-h-[48px] pl-10 pr-3 rounded-xl border border-surface-border bg-surface-raised text-ink disabled:opacity-60"
+              />
+            </div>
+            <div role="group" aria-label="กรองรายชื่อ" className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                aria-pressed={showPending}
+                onClick={() => setShowPending(true)}
+                disabled={interactionLocked}
+                className={`focus-ring min-h-[44px] rounded-xl px-2 text-sm font-semibold border disabled:opacity-60 ${showPending ? 'bg-brand-50 border-brand-600 text-brand-700' : 'bg-surface-raised border-surface-border text-ink-muted'}`}
+              >
+                ยังไม่เช็ก ({totals.expected - totals.done})
+              </button>
+              <button
+                type="button"
+                aria-pressed={!showPending}
+                onClick={() => setShowPending(false)}
+                disabled={interactionLocked}
+                className={`focus-ring min-h-[44px] rounded-xl px-2 text-sm font-semibold border disabled:opacity-60 ${!showPending ? 'bg-brand-50 border-brand-600 text-brand-700' : 'bg-surface-raised border-surface-border text-ink-muted'}`}
+              >
+                ทั้งหมด ({allCount})
+              </button>
+            </div>
+            <p className="text-sm text-ink-muted" aria-live="polite">
+              แสดง {visibleCount} คน · เลือก “ทั้งหมด” เพื่อดูรายการที่บันทึกแล้ว ลา หรือไม่มีรถ
+            </p>
+            {query && <p className="text-sm text-ink-muted">ขณะค้นหา บันทึกได้ทีละคน หากต้องการบันทึกทั้งคัน ให้ล้างคำค้นหาก่อน</p>}
+          </AppCard>
         )}
-        {!data && !error && <p className="text-center text-ink-muted py-10">กำลังโหลดรายชื่อ…</p>}
+
+        {error && (
+          <AppCard padding="md" className="space-y-3">
+            <p role="alert" className="text-danger-ink">{error}</p>
+            <button
+              type="button"
+              onClick={() => load()}
+              disabled={interactionLocked || loading}
+              className="focus-ring min-h-[44px] px-4 rounded-xl bg-brand-700 text-white font-semibold disabled:opacity-60"
+            >
+              โหลดรายชื่ออีกครั้ง
+            </button>
+          </AppCard>
+        )}
+        {loading && <p role="status" className="text-center text-ink-muted py-10">กำลังโหลดรายชื่อรอบ{s.label}…</p>}
         {data && vehicles.length === 0 && (
           <AppCard padding="lg" className="text-center text-ink-muted">ไม่มีนักเรียนที่ใช้รถรับส่งรอบนี้</AppCard>
         )}
+        {data && vehicles.length > 0 && visibleCount === 0 && (
+          <AppCard padding="lg" className="text-center space-y-2">
+            <p className="font-semibold text-ink">{query ? 'ไม่พบรายชื่อตามคำค้นหา' : 'ไม่มีรายชื่อที่ต้องเช็กเพิ่มในรอบนี้'}</p>
+            <p className="text-sm text-ink-muted">{query ? 'ลองค้นหาชื่อ ชั้น ห้อง หรือทะเบียนรถใหม่ หรือเลือก “ทั้งหมด”' : 'เลือก “ทั้งหมด” เพื่อดูสถานะนักเรียนแต่ละคนและยกเลิกรายการที่คุณบันทึกได้'}</p>
+          </AppCard>
+        )}
 
-        {vehicles.map(v => {
+        {visibleVehicles.map(v => {
           const pending = v.students.filter(st => !st.done && !st.on_leave && !st.no_vehicle);
           const counted = v.students.filter(st => !st.on_leave && !st.no_vehicle);
           return (
@@ -229,25 +366,26 @@ export default function TeacherCheck() {
                   <p className="font-bold text-ink">{v.plate_no || 'ยังไม่ได้ผูกรถ'}</p>
                   <p className="text-sm text-ink-muted">บันทึกแล้ว {counted.length - pending.length} / {counted.length} คน</p>
                 </div>
-                {v.vehicle_id && pending.length > 0 && (
+                {v.vehicle_id && pending.length > 0 && !query && (
                   <button
                     type="button"
-                    onClick={() => setConfirmBus(v)}
-                    className="focus-ring w-full sm:w-auto min-h-[44px] px-4 rounded-xl bg-success-ink text-white text-sm font-semibold hover:opacity-90 transition"
+                    onClick={() => confirmWholeBus(v)}
+                    disabled={interactionLocked}
+                    className="focus-ring w-full sm:w-auto min-h-[44px] px-4 rounded-xl bg-success-ink text-white text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
                   >
-                    {s.verb}ทั้งคัน ({pending.length} คน)
+                    บันทึกที่เหลือทั้งคัน ({pending.length} คน)
                   </button>
                 )}
               </div>
               <ul className="divide-y divide-surface-border">
-                {v.students.map(st => {
+                {v.visibleStudents.map(st => {
                   const disabled = st.done || st.on_leave || st.no_vehicle;
                   return (
                     <li key={st.id} className="flex items-center gap-3 px-4 py-2">
                       <button
                         type="button"
                         onClick={() => tapStudent(st)}
-                        disabled={disabled || busy[st.id]}
+                        disabled={disabled || interactionLocked}
                         aria-label={disabled ? st.name : `บันทึก ${st.name} ${s.verb}`}
                         className={`focus-ring flex-1 min-w-0 min-h-[52px] flex items-center gap-3 rounded-xl px-2 text-left transition ${
                           disabled ? 'cursor-default' : 'hover:bg-brand-50 active:bg-brand-100'
@@ -273,7 +411,8 @@ export default function TeacherCheck() {
                           <button
                             type="button"
                             onClick={() => undo(st)}
-                            className="focus-ring min-h-[44px] px-3 rounded-lg text-sm font-semibold text-ink-muted hover:bg-surface inline-flex items-center gap-1"
+                            disabled={interactionLocked}
+                            className="focus-ring min-h-[44px] px-3 rounded-lg text-sm font-semibold text-ink-muted hover:bg-surface inline-flex items-center gap-1 disabled:opacity-60"
                             aria-label={`ยกเลิกรายการของ ${st.name}`}
                           >
                             <Undo2 className="w-4 h-4" aria-hidden="true" /> ยกเลิก
@@ -293,12 +432,12 @@ export default function TeacherCheck() {
           tone="brand"
           title={`บันทึก "${s.verb}" ทั้งคัน?`}
           description={confirmBus
-            ? `รถ ${confirmBus.plate_no} · ${confirmBus.students.filter(st => !st.done && !st.on_leave && !st.no_vehicle).length} คนที่ยังไม่ได้บันทึก จะถูกบันทึกว่า${s.verb}แล้ว ให้กดเมื่อเห็นเด็กครบทั้งคันเท่านั้น`
+            ? `รอบ${SESSIONS[confirmBus.session].label} รถ ${confirmBus.plate_no} · บันทึกเฉพาะ ${confirmBus.ids.length} คนที่ยังไม่เช็กว่า${SESSIONS[confirmBus.session].verb}แล้ว ให้กดเมื่อเห็นเด็กตามรายชื่อที่เหลือครบทุกคนเท่านั้น`
             : ''}
-          confirmLabel="บันทึกทั้งคัน"
+          confirmLabel={confirmBus ? `ยืนยัน ${confirmBus.ids.length} คน` : 'ยืนยันบันทึก'}
           loading={savingBus}
           onConfirm={recordWholeBus}
-          onCancel={() => setConfirmBus(null)}
+          onCancel={cancelWholeBus}
         />
       </div>
     </PageTransition>

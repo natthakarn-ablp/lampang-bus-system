@@ -73,15 +73,15 @@ export default function VehicleRosterCard({
 
   return (
     <AppCard padding="md">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+        <div className="min-w-0 flex-1 basis-40">
           <h2 className="font-semibold text-ink">{v.plate_no}</h2>
           <p className="text-caption text-ink-muted">{v.vehicle_type || 'ไม่ระบุประเภท'}</p>
           {v.school_names && (
             <p className="text-caption text-brand-700 mt-0.5">{v.school_names}</p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
           <StatusBadge variant="brand" size="lg">
             <span className="tabular-nums">{v.student_count ?? 0}</span> คน
           </StatusBadge>

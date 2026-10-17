@@ -356,7 +356,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
         ) : undefined}
       >
         <p className="text-sm text-ink-muted mb-4">
-          {rows
+          {applied ? 'บันทึกรายการที่สำเร็จแล้ว ตรวจสอบผลด้านล่างได้เลย' : rows
             ? 'ขั้นตอนนี้เป็นการตรวจสอบข้อมูลเท่านั้น ระบบยังไม่บันทึกข้อมูลนักเรียน'
             : 'อัปโหลดไฟล์ CSV หรือ Excel (.xlsx) เพื่อตรวจสอบรายแถวก่อนนำเข้าจริง'}
         </p>

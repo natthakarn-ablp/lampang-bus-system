@@ -310,7 +310,7 @@ const VEHICLE_LIST_COLUMNS = `v.id, v.plate_no, v.vehicle_type,
  * Kept opt-in so the default list total stays equal to `not_inspected`.
  */
 async function getPendingVehicles({ page = 1, per_page = 50, includePending = false } = {}, db = pool) {
-  // NOT EXISTS → "no inspection ever recorded" == the not_inspected definition.
+  // NULL canonical result means neither a finalized shared attempt nor a legacy inspection exists.
   let cond = `${latestInspectionColumn('result')} IS NULL`;
   if (includePending) {
     // OR latest inspection result is PENDING (matches dashboard `pending`).

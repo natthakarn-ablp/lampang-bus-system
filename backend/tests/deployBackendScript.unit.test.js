@@ -155,6 +155,10 @@ echo "mv $*" >> "$STUB_LOG"; echo "mv $0" >> "$STUB_LOG.paths"
 if [ -n "\${STUB_MV_FAIL_WHEN:-}" ] && [[ "$*" =~ \${STUB_MV_FAIL_WHEN} ]]; then echo "stub mv: refusing: $*" >&2; exit 1; fi
 exec "${realMv}" "$@"
 `,
+    publisher: `#!/usr/bin/env bash
+echo "publisher $*" >> "$STUB_LOG"; echo "publisher $0" >> "$STUB_LOG.paths"
+exit "\${STUB_PUBLISH_EXIT:-0}"
+`,
   };
   for (const [name, body] of Object.entries(stubs)) {
     const file = path.join(dir, name);
@@ -227,6 +231,7 @@ const INHERITED_DEPLOY_VARS = [
   'DEPLOY_ROLLBACK', 'DEPLOY_UNKNOWN_RUNNING', 'HEALTH_ATTEMPTS', 'HEALTH_TIMEOUT_SEC',
   'HEALTH_SLEEP_SEC', 'LOCK_WAIT_ATTEMPTS', 'LOCK_ORPHAN_SEC',
   'DEPLOY_CURL', 'DEPLOY_PM2', 'DEPLOY_NPM', 'DEPLOY_NPX', 'DEPLOY_NODE', 'DEPLOY_MV',
+  'DEPLOY_FRONTEND', 'DEPLOY_PYTHON',
 ];
 function baseEnv() {
   const out = {};
@@ -254,6 +259,7 @@ function envFor(fx, env = {}) {
     DEPLOY_NPX: `${fx.stubs}/npx`,
     DEPLOY_MV: `${fx.stubs}/mv`,
     DEPLOY_NODE: toPosix(process.execPath),
+    DEPLOY_PYTHON: `${fx.stubs}/publisher`,
     STUB_LOG: fx.stubLog,
     STUB_REPO: fx.server,
     STUB_RUNTIME: fx.runtime,
@@ -335,6 +341,29 @@ describeWithBash('deploy-backend.sh against a throwaway repository', () => {
     expect(`exit ${r.status}: ${r.out}`).toMatch(/^exit 0:/);
     expect(r.out).toContain('already up to date');
     expect(pm2Reloads(r)).toHaveLength(1);
+  });
+
+  it('frontend opt-in invokes the publisher only after backend health passes', () => {
+    const after = publish(fx, { 'backend/src/new.js': "'use strict';\nmodule.exports = 2;\n" }, 'feature');
+    const r = run(fx, { DEPLOY_FRONTEND: '1' });
+    expect(r.status).toBe(0);
+    expect(r.head).toBe(after);
+    expect(r.running).toBe(after);
+    expect(r.stubCalls.filter(l => l.startsWith('publisher '))).toHaveLength(1);
+    expect(r.out).toContain('Frontend origin check OK');
+    expect(pm2Reloads(r)).toHaveLength(1);
+  });
+
+  it('a frontend publication failure rolls the backend back to the running release', () => {
+    const before = git(fx.server, 'rev-parse', '--short', 'HEAD');
+    publish(fx, { 'backend/src/new.js': "'use strict';\nmodule.exports = 2;\n" }, 'feature');
+    const r = run(fx, { DEPLOY_FRONTEND: '1', STUB_PUBLISH_EXIT: '1' });
+    expect(r.status).not.toBe(0);
+    expect(r.head).toBe(before);
+    expect(r.running).toBe(before);
+    expect(r.stubCalls.filter(l => l.startsWith('publisher '))).toHaveLength(1);
+    expect(pm2Reloads(r)).toHaveLength(2);
+    expect(r.out).toContain('frontend publication failed after backend health passed');
   });
 
   it('does not inherit the calling deploy\'s environment: EXPECTED_BRANCH and DEPLOY_* set by the parent must not reach the fixture', () => {

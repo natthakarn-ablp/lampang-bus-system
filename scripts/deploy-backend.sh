@@ -68,8 +68,9 @@
 #         DEPLOY_STATE_DIR, DEPLOY_INSTALL=auto|always|never,
 #         DEPLOY_ROLLBACK=auto|never, DEPLOY_UNKNOWN_RUNNING=abort|use-checkout,
 #         HEALTH_ATTEMPTS, HEALTH_TIMEOUT_SEC, HEALTH_SLEEP_SEC,
-#         LOCK_WAIT_ATTEMPTS, LOCK_ORPHAN_SEC,
-#         DEPLOY_CURL, DEPLOY_PM2, DEPLOY_NPM, DEPLOY_NPX, DEPLOY_NODE, DEPLOY_MV
+#         LOCK_WAIT_ATTEMPTS, LOCK_ORPHAN_SEC, DEPLOY_FRONTEND=0|1,
+#         DEPLOY_CURL, DEPLOY_PM2, DEPLOY_NPM, DEPLOY_NPX, DEPLOY_NODE, DEPLOY_MV,
+#         DEPLOY_PYTHON
 set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/home/schoolbus/apps/lampang-bus-system}"
@@ -91,6 +92,7 @@ DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-$(dirname "$(dirname "$PROJECT_DIR")")/dep
 DEPLOY_INSTALL="${DEPLOY_INSTALL:-auto}"
 DEPLOY_ROLLBACK="${DEPLOY_ROLLBACK:-auto}"
 DEPLOY_UNKNOWN_RUNNING="${DEPLOY_UNKNOWN_RUNNING:-abort}"
+DEPLOY_FRONTEND="${DEPLOY_FRONTEND:-0}"
 HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-12}"
 HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-5}"
 HEALTH_SLEEP_SEC="${HEALTH_SLEEP_SEC:-2}"
@@ -104,6 +106,7 @@ NPM_BIN="${DEPLOY_NPM:-npm}"
 NPX_BIN="${DEPLOY_NPX:-npx}"
 NODE_BIN="${DEPLOY_NODE:-node}"
 MV_BIN="${DEPLOY_MV:-mv}"
+PYTHON_BIN="${DEPLOY_PYTHON:-python3}"
 # Written into node_modules by a completed install: the sha256 of
 # package.json + package-lock.json that install satisfied.
 DEPS_MARKER=".deploy-lockfile.sha256"
@@ -342,6 +345,7 @@ is_uint "$LOCK_ORPHAN_SEC" && [ "$LOCK_ORPHAN_SEC" -ge 1 ] || fail "LOCK_ORPHAN_
 case "$DEPLOY_INSTALL" in auto|always|never) ;; *) fail "DEPLOY_INSTALL must be auto, always or never (got '$DEPLOY_INSTALL')" ;; esac
 case "$DEPLOY_ROLLBACK" in auto|never) ;; *) fail "DEPLOY_ROLLBACK must be auto or never (got '$DEPLOY_ROLLBACK')" ;; esac
 case "$DEPLOY_UNKNOWN_RUNNING" in abort|use-checkout) ;; *) fail "DEPLOY_UNKNOWN_RUNNING must be abort or use-checkout (got '$DEPLOY_UNKNOWN_RUNNING')" ;; esac
+case "$DEPLOY_FRONTEND" in 0|1) ;; *) fail "DEPLOY_FRONTEND must be 0 or 1 (got '$DEPLOY_FRONTEND')" ;; esac
 [ -n "$HEALTH_SERVICE" ] || fail "HEALTH_SERVICE must not be empty"
 [ -d "$PROJECT_DIR" ] || fail "project dir not found: $PROJECT_DIR"
 [ -d "$BACKEND_DIR" ] || fail "backend dir not found: $BACKEND_DIR"
@@ -572,6 +576,21 @@ fi
 
 echo "[deploy] Waiting for health: up to $HEALTH_ATTEMPTS probes (${HEALTH_TIMEOUT_SEC}s timeout + ${HEALTH_SLEEP_SEC}s each); the body must say success, service $HEALTH_SERVICE, commit $AFTER and database connected..."
 if wait_for_health "$AFTER_FULL"; then
+  if [ "$DEPLOY_FRONTEND" = 1 ]; then
+    echo "[deploy] Building, backing up and publishing the frontend under the same deployment lock..."
+    if "$PYTHON_BIN" "$PROJECT_DIR/scripts/publish-frontend.py" \
+      --project "$PROJECT_DIR" --state "$DEPLOY_STATE_DIR" \
+      --backups "$(dirname "$(dirname "$PROJECT_DIR")")/backups/frontend-dist" \
+      --expected-commit "$AFTER_FULL"; then
+      echo "[deploy] Frontend origin check OK"
+    else
+      publish_rc=$?
+      if [ "$publish_rc" -eq 2 ]; then
+        fail "frontend restore failed; preserving the current backend for incident inspection"
+      fi
+      roll_back "frontend publication failed after backend health passed"
+    fi
+  fi
   RESULT="ok"
   echo "[deploy] Health check OK — running $HEALTH_COMMIT (deployed $AFTER, was $ROLLBACK), database connected"
   exit 0

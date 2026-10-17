@@ -13,6 +13,7 @@ import {
   AlertBanner, ConfirmDialog, DataTable, TableAction, FilterBar, FormField,
 } from '../../components/ui';
 import { todayBangkok } from '../../utils/thaiTime';
+import { useAuth } from '../../hooks/useAuth';
 
 // Shared by the selects on this form; FormField supplies the label wiring.
 const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition';
@@ -50,6 +51,7 @@ function formatThaiDate(dateStr) {
 
 export default function InspectionForm() {
   const toast = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const prefillVehicleId = searchParams.get('vehicle_id') || '';
@@ -127,6 +129,10 @@ export default function InspectionForm() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (vehicles.find(v => v.id === form.vehicle_id)?.has_shared_inspection) {
+      toast.error('รถคันนี้มีผลรับรองจากคิวแล้ว กรุณาตรวจรอบใหม่ในคิวรับรองรถ');
+      return;
+    }
     if (!form.vehicle_id && !isOtherVehicle) { toast.error('กรุณาเลือกรถ'); return; }
     if (isOtherVehicle) {
       if (!/^[ก-ฮ]{2}$/.test(newPlate.letters)) { toast.error('หมวดอักษรต้องเป็นอักษรไทย 2 ตัว'); return; }
@@ -178,6 +184,7 @@ export default function InspectionForm() {
   );
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
+  const selectedVehicleHasSharedResult = Boolean(vehicles.find(v => v.id === form.vehicle_id)?.has_shared_inspection);
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
@@ -250,6 +257,12 @@ export default function InspectionForm() {
                   </select>
                 )}
               </FormField>
+
+              {selectedVehicleHasSharedResult && (
+                <AlertBanner variant="warn" title="รถคันนี้มีผลรับรองจากคิวแล้ว">
+                  หากต้องแก้ผล ให้โรงเรียนส่งคำขอตรวจรอบใหม่ แล้วเปิดเมนู “ตรวจและรับรองรถ”
+                </AlertBanner>
+              )}
 
               {/* New plate structured input */}
               {isOtherVehicle && (
@@ -377,7 +390,7 @@ export default function InspectionForm() {
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || selectedVehicleHasSharedResult}
             className="focus-ring w-full sm:w-auto bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white font-semibold px-6 min-h-[48px] rounded-lg transition"
           >
             {saving ? 'กำลังบันทึก…' : 'บันทึกผลตรวจ'}
@@ -422,14 +435,15 @@ export default function InspectionForm() {
               { key: 'inspection_date', header: 'วันที่ตรวจ', secondary: true, cell: ins => formatThaiDate(ins.inspection_date) },
               { key: 'expiry_date', header: 'หมดอายุ', cell: ins => formatThaiDate(ins.expiry_date) },
               { key: 'inspector_name', header: 'ผู้ตรวจ', cell: ins => ins.inspector_name || '-' },
+              { key: 'locked_by_shared', header: 'วิธีแก้ไข', cell: ins => ins.locked_by_shared ? 'ตรวจรอบใหม่ในคิวรับรอง' : 'บันทึกเดิม' },
               { key: 'notes', header: 'หมายเหตุ', cell: ins => ins.notes || '-' },
             ]}
             rows={inspections}
-            actions={ins => (
+            actions={ins => !ins.locked_by_shared && (user?.role === 'admin' || String(ins.inspected_by) === String(user?.id)) ? (
               <TableAction tone="danger" onClick={() => setConfirmDelete(ins)}>
                 ลบผลตรวจ
               </TableAction>
-            )}
+            ) : null}
           />
 
           {totalPages > 1 && (

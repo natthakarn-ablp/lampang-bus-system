@@ -18,6 +18,59 @@ function svcError(message, statusCode = 400, code = null) {
   return err;
 }
 
+// The certification calculation uses a finalized shared attempt before a
+// legacy row. Keep transport lists and dashboard on that same source. A newer
+// legacy row must never make a finalized shared result appear to change.
+function checkedInspectionColumn(column) {
+  const allowed = ['result', 'inspection_date', 'expiry_date'];
+  if (!allowed.includes(column)) throw new Error('Invalid inspection column');
+}
+const HAS_SHARED_INSPECTION = `EXISTS (
+    SELECT 1 FROM inspection_attempts ia
+      JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+     WHERE a.vehicle_id = v.id AND ia.result <> 'IN_PROGRESS'
+       AND ia.finalized_at IS NOT NULL
+  )`;
+function sharedInspectionColumn(column) {
+  checkedInspectionColumn(column);
+  return `(SELECT ia.${column} FROM inspection_attempts ia
+       JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+      WHERE a.vehicle_id = v.id AND ia.result <> 'IN_PROGRESS'
+        AND ia.finalized_at IS NOT NULL
+      ORDER BY ia.inspection_date DESC, ia.finalized_at DESC, ia.id DESC LIMIT 1)`;
+}
+function legacyInspectionColumn(column) {
+  checkedInspectionColumn(column);
+  return `(SELECT vi.${column} FROM vehicle_inspections vi
+      WHERE vi.vehicle_id = v.id
+      ORDER BY vi.inspection_date DESC, vi.id DESC LIMIT 1)`;
+}
+function latestInspectionColumn(column) {
+  return `CASE WHEN ${HAS_SHARED_INSPECTION} THEN ${sharedInspectionColumn(column)}
+    ELSE ${legacyInspectionColumn(column)} END`;
+}
+function inspectionConflictSql() {
+  return `(${HAS_SHARED_INSPECTION} AND NOT (
+    ${sharedInspectionColumn('result')} <=> ${legacyInspectionColumn('result')}
+    AND ${sharedInspectionColumn('inspection_date')} <=> ${legacyInspectionColumn('inspection_date')}
+    AND ${sharedInspectionColumn('expiry_date')} <=> ${legacyInspectionColumn('expiry_date')}
+  ))`;
+}
+
+async function assertLegacyWritable(conn, vehicleId) {
+  const [[finalized]] = await conn.query(
+    `SELECT ia.id FROM inspection_attempts ia
+       JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+      WHERE a.vehicle_id = ? AND ia.result <> 'IN_PROGRESS'
+        AND ia.finalized_at IS NOT NULL
+      LIMIT 1 FOR UPDATE`,
+    [vehicleId],
+  );
+  if (finalized) {
+    throw svcError('รถคันนี้มีผลรับรองจากคิวแล้ว กรุณาส่งคำขอตรวจรอบใหม่แทนการแก้บันทึกเดิม', 409, 'SHARED_INSPECTION_IMMUTABLE');
+  }
+}
+
 /**
  * Transport role sees ALL vehicles + inspection data, never student PII.
  * No school/affiliation scope — transport is cross-cutting safety, not a
@@ -38,28 +91,16 @@ async function getDashboard() {
   // coverage count doesn't include soft-deleted rows. Without this, a
   // retired bus that was last inspected last year would still bump
   // `inspected_count` above `total_vehicles`, breaking the dashboard math.
-  const [[{ inspected_count }]] = await pool.query(
-    `SELECT COUNT(DISTINCT vi.vehicle_id) AS inspected_count
-     FROM   vehicle_inspections vi
-     JOIN   vehicles v ON v.id = vi.vehicle_id AND v.is_deleted = FALSE`
-  );
-
-  const [[{ passed, failed, needs_fix, pending }]] = await pool.query(
+  const [[{ inspected_count, passed, failed, needs_fix, pending }]] = await pool.query(
     `SELECT
+       SUM(latest_result IS NOT NULL) AS inspected_count,
        SUM(latest_result = 'PASSED') AS passed,
        SUM(latest_result = 'FAILED') AS failed,
        SUM(latest_result = 'NEEDS_FIX') AS needs_fix,
        SUM(latest_result = 'PENDING') AS pending
      FROM (
-       SELECT vi.vehicle_id,
-              vi.result AS latest_result
-       FROM vehicle_inspections vi
-       JOIN vehicles v ON v.id = vi.vehicle_id AND v.is_deleted = FALSE
-       INNER JOIN (
-         SELECT vehicle_id, MAX(inspection_date) AS max_date
-         FROM vehicle_inspections
-         GROUP BY vehicle_id
-       ) latest ON vi.vehicle_id = latest.vehicle_id AND vi.inspection_date = latest.max_date
+       SELECT v.id, ${latestInspectionColumn('result')} AS latest_result
+         FROM vehicles v WHERE v.is_deleted = FALSE
      ) sub`
   );
 
@@ -93,6 +134,27 @@ async function getDashboard() {
      FROM vehicles WHERE is_deleted = FALSE`
   );
 
+  // Conservative live-date check prevents a cached ELIGIBLE state from
+  // labelling an expired certificate/document as ready on the dashboard.
+  const [[{ ready_count }]] = await pool.query(
+    `SELECT COUNT(*) AS ready_count FROM vehicles v
+      WHERE v.is_deleted = FALSE AND v.verification_status = 'ELIGIBLE'
+        AND NOT ${inspectionConflictSql()}
+        AND ${latestInspectionColumn('result')} = 'PASSED'
+        AND ${latestInspectionColumn('expiry_date')} >= CURDATE()
+        AND v.insurance_expiry >= CURDATE()
+        AND v.registration_expiry >= CURDATE()
+        AND v.compulsory_insurance_expiry >= CURDATE()
+        AND v.tax_expiry >= CURDATE()
+        AND NOT EXISTS (SELECT 1 FROM inspection_attempts ia
+          JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+          WHERE a.vehicle_id = v.id AND ia.result = 'IN_PROGRESS')`
+  );
+  const [[{ inspection_conflict_count }]] = await pool.query(
+    `SELECT COUNT(*) AS inspection_conflict_count FROM vehicles v
+      WHERE v.is_deleted = FALSE AND ${inspectionConflictSql()}`
+  );
+
   return {
     date: today,
     total_vehicles: total_vehicles || 0,
@@ -102,6 +164,8 @@ async function getDashboard() {
     failed: Number(failed) || 0,
     needs_fix: Number(needs_fix) || 0,
     pending: Number(pending) || 0,
+    ready_count: Number(ready_count) || 0,
+    inspection_conflict_count: Number(inspection_conflict_count) || 0,
     insurance_ok: Number(ins.insurance_ok) || 0,
     expiring_insurance: Number(ins.expiring_insurance) || 0,
     expired_insurance: Number(ins.expired_insurance) || 0,
@@ -165,6 +229,11 @@ async function getVehicles({ status, search, page = 1, per_page = 50 } = {}) {
             v.verification_status,
             v.verification_reasons_json,
             v.verification_updated_at,
+            ${HAS_SHARED_INSPECTION} AS has_shared_inspection,
+            ${inspectionConflictSql()} AS inspection_conflict,
+            EXISTS (SELECT 1 FROM inspection_attempts ia
+              JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+              WHERE a.vehicle_id = v.id AND ia.result = 'IN_PROGRESS') AS has_open_inspection,
             v.created_at,
             (SELECT d.name FROM driver_vehicle_assignments dva
              JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
@@ -177,15 +246,9 @@ async function getVehicles({ status, search, page = 1, per_page = 50 } = {}) {
             -- MUST NOT see student roster size. If a future safety need
             -- requires an aggregate (e.g. "max bus capacity vs assigned"),
             -- expose it from school/affiliation services, not transport.
-            (SELECT vi2.result FROM vehicle_inspections vi2
-             WHERE vi2.vehicle_id = v.id
-             ORDER BY vi2.inspection_date DESC LIMIT 1) AS latest_inspection_result,
-            (SELECT vi2.inspection_date FROM vehicle_inspections vi2
-             WHERE vi2.vehicle_id = v.id
-             ORDER BY vi2.inspection_date DESC LIMIT 1) AS latest_inspection_date,
-            (SELECT vi2.expiry_date FROM vehicle_inspections vi2
-             WHERE vi2.vehicle_id = v.id
-             ORDER BY vi2.inspection_date DESC LIMIT 1) AS inspection_expiry
+            ${latestInspectionColumn('result')} AS latest_inspection_result,
+            ${latestInspectionColumn('inspection_date')} AS latest_inspection_date,
+            ${latestInspectionColumn('expiry_date')} AS inspection_expiry
      FROM vehicles v
      WHERE ${where}
      ORDER BY v.plate_no
@@ -218,6 +281,11 @@ const VEHICLE_LIST_COLUMNS = `v.id, v.plate_no, v.vehicle_type,
             v.verification_status,
             v.verification_reasons_json,
             v.verification_updated_at,
+            ${HAS_SHARED_INSPECTION} AS has_shared_inspection,
+            ${inspectionConflictSql()} AS inspection_conflict,
+            EXISTS (SELECT 1 FROM inspection_attempts ia
+              JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+              WHERE a.vehicle_id = v.id AND ia.result = 'IN_PROGRESS') AS has_open_inspection,
             v.created_at,
             (SELECT d.name FROM driver_vehicle_assignments dva
              JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
@@ -225,15 +293,9 @@ const VEHICLE_LIST_COLUMNS = `v.id, v.plate_no, v.vehicle_type,
             (SELECT d.phone FROM driver_vehicle_assignments dva
              JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
              WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE LIMIT 1) AS driver_phone,
-            (SELECT vi2.result FROM vehicle_inspections vi2
-             WHERE vi2.vehicle_id = v.id
-             ORDER BY vi2.inspection_date DESC LIMIT 1) AS latest_inspection_result,
-            (SELECT vi2.inspection_date FROM vehicle_inspections vi2
-             WHERE vi2.vehicle_id = v.id
-             ORDER BY vi2.inspection_date DESC LIMIT 1) AS latest_inspection_date,
-            (SELECT vi2.expiry_date FROM vehicle_inspections vi2
-             WHERE vi2.vehicle_id = v.id
-             ORDER BY vi2.inspection_date DESC LIMIT 1) AS inspection_expiry`;
+            ${latestInspectionColumn('result')} AS latest_inspection_result,
+            ${latestInspectionColumn('inspection_date')} AS latest_inspection_date,
+            ${latestInspectionColumn('expiry_date')} AS inspection_expiry`;
 
 /**
  * Vehicles that the dashboard counts under `not_inspected`
@@ -249,14 +311,10 @@ const VEHICLE_LIST_COLUMNS = `v.id, v.plate_no, v.vehicle_type,
  */
 async function getPendingVehicles({ page = 1, per_page = 50, includePending = false } = {}, db = pool) {
   // NOT EXISTS → "no inspection ever recorded" == the not_inspected definition.
-  let cond = `NOT EXISTS (SELECT 1 FROM vehicle_inspections vi WHERE vi.vehicle_id = v.id)`;
+  let cond = `${latestInspectionColumn('result')} IS NULL`;
   if (includePending) {
     // OR latest inspection result is PENDING (matches dashboard `pending`).
-    cond = `(${cond} OR (
-      SELECT vi3.result FROM vehicle_inspections vi3
-      WHERE vi3.vehicle_id = v.id
-      ORDER BY vi3.inspection_date DESC LIMIT 1
-    ) = 'PENDING')`;
+    cond = `(${cond} OR ${latestInspectionColumn('result')} = 'PENDING')`;
   }
   const where = `v.is_deleted = FALSE AND ${cond}`;
 
@@ -339,8 +397,12 @@ async function getInspections({ vehicle_id, result, page = 1, per_page = 20 } = 
 
   const offset = (page - 1) * per_page;
   const [inspections] = await pool.query(
-    `SELECT vi.id, vi.vehicle_id, v.plate_no, vi.inspection_date, vi.expiry_date,
+    `SELECT vi.id, vi.vehicle_id, vi.inspected_by, v.plate_no, vi.inspection_date, vi.expiry_date,
             vi.result, vi.notes, vi.created_at,
+            EXISTS (SELECT 1 FROM inspection_attempts ia
+              JOIN vehicle_inspection_applications a ON a.id = ia.application_id
+              WHERE a.vehicle_id = vi.vehicle_id AND ia.result <> 'IN_PROGRESS'
+                AND ia.finalized_at IS NOT NULL) AS locked_by_shared,
             u.display_name AS inspector_name
      FROM vehicle_inspections vi
      JOIN vehicles v ON v.id = vi.vehicle_id
@@ -379,6 +441,7 @@ async function createInspection(
       [vehicleId],
     );
     if (!vehicle) throw svcError('ไม่พบรถที่ระบุ', 404, 'VEHICLE_NOT_FOUND');
+    await assertLegacyWritable(conn, vehicleId);
 
     const [res] = await conn.query(
       `INSERT INTO vehicle_inspections
@@ -394,6 +457,7 @@ async function createInspection(
         result, notes: notes || null, certifying_school_id: certifyingSchoolId || null,
       },
       ipAddress: ip, userAgent, conn,
+      required: true,
     });
 
     // eslint-disable-next-line global-require -- lazy to avoid a require cycle with vehicleVerification.service
@@ -436,6 +500,7 @@ async function updateInspection(
     if (!isAdmin && row.inspected_by !== userId) {
       throw svcError('แก้ไขได้เฉพาะผลตรวจที่คุณเป็นผู้บันทึก', 403, 'NOT_INSPECTION_OWNER');
     }
+    await assertLegacyWritable(conn, row.vehicle_id);
 
     const dateErr = validateInspectionDates({ result, inspectionDate: row.inspection_date, expiryDate });
     if (dateErr) throw svcError(dateErr.message, 400, dateErr.code);
@@ -450,6 +515,7 @@ async function updateInspection(
       oldValue: { result: row.result, expiry_date: row.expiry_date, notes: row.notes },
       newValue: { result, expiry_date: expiryDate || null, notes: notes || null },
       ipAddress: ip, userAgent, conn,
+      required: true,
     });
 
     // eslint-disable-next-line global-require -- lazy to avoid a require cycle
@@ -482,6 +548,28 @@ async function getVehicleById(id, db = pool) {
   return row ? withCalendarDates(row, VEHICLE_DATE_FIELDS) : null;
 }
 
+// Dedicated export projection. Deliberately excludes names, phones, notes,
+// riders, students, document files and any unrestricted report-service fields.
+async function getSafetyExportRows(db = pool) {
+  const [rows] = await db.query(
+    `SELECT v.plate_no, v.vehicle_type,
+            v.insurance_expiry, v.registration_expiry,
+            v.compulsory_insurance_expiry, v.tax_expiry,
+            ${latestInspectionColumn('result')} AS latest_inspection_result,
+            ${latestInspectionColumn('inspection_date')} AS latest_inspection_date,
+            ${latestInspectionColumn('expiry_date')} AS inspection_expiry
+       FROM vehicles v WHERE v.is_deleted = FALSE
+      ORDER BY v.plate_no LIMIT 10001`
+  );
+  if (rows.length > 10000) {
+    throw svcError('จำนวนรถเกินขอบเขตรายงาน กรุณาติดต่อผู้ดูแล', 413, 'EXPORT_ROW_LIMIT');
+  }
+  return rows.map(row => withCalendarDates(row, [
+    'insurance_expiry', 'registration_expiry', 'compulsory_insurance_expiry',
+    'tax_expiry', 'latest_inspection_date', 'inspection_expiry',
+  ]));
+}
+
 /**
  * Delete a wrongly-recorded inspection (self-correction). vehicle_inspections
  * has no soft-delete column, so this is a hard delete — the removed row is
@@ -490,28 +578,42 @@ async function getVehicleById(id, db = pool) {
  * because refreshVehicleEligibility falls back to vehicle_inspections.
  * @returns the deleted row (for the caller's audit oldValue)
  */
-async function deleteInspection({ inspectionId, userId, isAdmin = false }) {
-  const [[row]] = await pool.query(
-    `SELECT id, vehicle_id, inspected_by, result, expiry_date, inspection_date, notes
-       FROM vehicle_inspections WHERE id = ?`,
-    [inspectionId]
-  );
-  if (!row) { const e = new Error('ไม่พบผลตรวจ'); e.statusCode = 404; throw e; }
-  if (!isAdmin && row.inspected_by !== userId) {
-    const e = new Error('ลบได้เฉพาะผลตรวจที่คุณเป็นผู้บันทึก'); e.statusCode = 403; throw e;
-  }
-
-  // The caller writes this row into audit_logs.old_value as JSON. Raw DATE
-  // columns would be recorded a day early there, which is worse than in a
-  // response: the response is transient, the audit row is the record of what
-  // was deleted.
-  const audited = withCalendarDates(row, INSPECTION_DATE_FIELDS);
-  await pool.query(`DELETE FROM vehicle_inspections WHERE id = ?`, [inspectionId]);
+async function deleteInspection(
+  { inspectionId, userId, isAdmin = false, ip = null, userAgent = null }, db = pool,
+) {
+  const conn = await db.getConnection();
   try {
+    await conn.beginTransaction();
+    const [[row]] = await conn.query(
+      `SELECT id, vehicle_id, inspected_by, result, expiry_date, inspection_date, notes
+         FROM vehicle_inspections WHERE id = ? FOR UPDATE`,
+      [inspectionId],
+    );
+    if (!row) throw svcError('ไม่พบผลตรวจ', 404, 'INSPECTION_NOT_FOUND');
+    if (!isAdmin && String(row.inspected_by) !== String(userId)) {
+      throw svcError('ลบได้เฉพาะผลตรวจที่คุณเป็นผู้บันทึก', 403, 'NOT_INSPECTION_OWNER');
+    }
+    await assertLegacyWritable(conn, row.vehicle_id);
+    const audited = withCalendarDates(row, INSPECTION_DATE_FIELDS);
+    await conn.query('DELETE FROM vehicle_inspections WHERE id = ?', [inspectionId]);
     const { refreshVehicleEligibility } = require('./vehicleVerification.service');
-    await refreshVehicleEligibility(pool, row.vehicle_id);
-  } catch (e) { /* non-fatal: eligibility recompute is best-effort */ }
-  return audited;
+    await refreshVehicleEligibility(conn, row.vehicle_id);
+    await logAudit({
+      userId, action: 'DELETE', entityType: 'vehicle_inspection', entityId: String(inspectionId),
+      oldValue: {
+        vehicle_id: row.vehicle_id, result: row.result, expiry_date: audited.expiry_date,
+        inspection_date: audited.inspection_date, notes: row.notes,
+      },
+      ipAddress: ip, userAgent, conn, required: true,
+    });
+    await conn.commit();
+    return audited;
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
 }
 
 module.exports = {
@@ -521,6 +623,7 @@ module.exports = {
   getExpiringVehicles,
   getInspections,
   getVehicleById,
+  getSafetyExportRows,
   createInspection,
   updateInspection,
   deleteInspection,

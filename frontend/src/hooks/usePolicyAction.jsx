@@ -74,14 +74,14 @@ export default function usePolicyAction() {
         </button>
         <button type="button" onClick={confirm} disabled={busy}
           className="focus-ring min-h-[44px] rounded-lg bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
-          {busy ? 'กำลังยืนยัน…' : pending?.reviewMode ? 'ทดลองหน้าต่างและดำเนินการต่อ'
+          {busy ? 'กำลังยืนยัน…' : pending?.reviewMode ? 'ตรวจแล้ว ดำเนินรายการจริง'
             : action?.kind === 'warning' ? 'เข้าใจและส่งออก' : 'รับรองและดำเนินการ'}
         </button>
       </>}
     >
       <div className="space-y-4 text-sm leading-7 text-ink-muted">
         {pending?.reviewMode && <p role="status" className="rounded-xl border border-warn-border bg-warn-soft p-3 text-xs leading-6 text-warn-ink">
-          ร่างสำหรับประชุม: หน้าต่างนี้ยังไม่บันทึกหลักฐานทางกฎหมาย และการกดยืนยันจะดำเนินรายการด้วยสิทธิ์เดิมของระบบ
+          ใช้งานจริงเพื่อประชุมวันที่ 21 ตุลาคม 2569: รายการที่ทำต่อจะบันทึกจริงตามสิทธิ์เดิมของระบบ ส่วนการกดหน้าต่างนี้ยังไม่บันทึกเป็นหลักฐานรับทราบทางกฎหมาย
         </p>}
         <p className="text-ink">{action?.summary}</p>
         {action?.body && <p className="whitespace-pre-line">{action.body}</p>}

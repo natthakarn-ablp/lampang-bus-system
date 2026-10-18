@@ -38,7 +38,7 @@ describe('approved staff notice boundary', () => {
   test('rejects forged topic and stale version before any write', async () => {
     for (const body of [
       { key: 'school', version: 'approved-test-v1' },
-      { key: 'transport', version: 'draft-20261018' },
+      { key: 'transport', version: 'meeting-pilot-20261021' },
     ]) {
       const response = await request(app).post('/api/policy-notices/acknowledge').send(body);
       expect(response.status).toBe(400);

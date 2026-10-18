@@ -103,10 +103,10 @@ export default function PolicyNoticeGate({ user, children }) {
         <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="policy-notice-title"
           className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-surface-border bg-surface-raised shadow-elevate p-5 sm:p-7">
           <p className="text-xs font-semibold tracking-wide text-brand-700 mb-2">
-            {reviewMode ? 'ร่างเพื่อรับฟังความคิดเห็น' : 'แจ้งการใช้ข้อมูล'} · ฉบับ {current.version}
+            {reviewMode ? 'ใช้งานจริงเพื่อประชุมวันที่ 21 ต.ค. 2569' : 'แจ้งการใช้ข้อมูล'} · ฉบับ {current.version}
           </p>
           {reviewMode && <p role="status" className="mb-4 rounded-xl border border-warn-border bg-warn-soft p-3 text-xs leading-6 text-warn-ink">
-            ข้อความนี้เป็นร่างสำหรับประชุมและทดสอบหน้าจอ ยังไม่ใช่ประกาศที่มีผล ไม่บันทึกเป็นความยินยอมหรือการรับทราบตามกฎหมาย และไม่เปลี่ยนสิทธิ์ของบัญชี
+            เจ้าของระบบอนุมัติให้ใช้หน้าต่างนี้บนระบบจริงเพื่อประชุมและรับข้อเสนอแนะ รายการที่ทำต่อจะบันทึกจริงตามสิทธิ์เดิม แต่การกดดูข้อความนี้ยังไม่ใช่ความยินยอมหรือหลักฐานรับทราบประกาศทางกฎหมาย
           </p>}
           <h2 id="policy-notice-title" className="text-xl font-semibold text-gray-900 mb-3">{current.title}</h2>
           <p className="text-sm leading-7 text-gray-700 whitespace-pre-line">{current.summary}</p>
@@ -120,7 +120,7 @@ export default function PolicyNoticeGate({ user, children }) {
             อ่านประกาศฉบับเต็ม
           </a>}
           <p className="mt-4 text-xs leading-5 text-ink-muted">{reviewMode
-            ? 'การปิดร่างนี้เก็บเฉพาะในเบราว์เซอร์เครื่องนี้ เพื่อไม่ให้แสดงซ้ำระหว่างทดลอง ไม่มีการบันทึกหลักฐานทางกฎหมาย'
+            ? 'การกดดูแล้วเก็บเฉพาะในเบราว์เซอร์เครื่องนี้ เพื่อไม่ให้แสดงซ้ำระหว่างการประชุม ไม่มีการบันทึกเป็นหลักฐานทางกฎหมาย'
             : 'การกดรับทราบเป็นเพียงหลักฐานว่าเห็นประกาศ ไม่ใช่การให้ความยินยอม และไม่เปลี่ยนสิทธิ์เข้าถึงข้อมูล'}</p>
           {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -130,7 +130,7 @@ export default function PolicyNoticeGate({ user, children }) {
             </button>
             <button type="button" onClick={acknowledge} disabled={busy}
               className="focus-ring min-h-[44px] rounded-lg bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
-              {busy ? 'กำลังบันทึก…' : reviewMode ? 'ดูร่างนี้แล้ว' : 'รับทราบ'}
+              {busy ? 'กำลังบันทึก…' : reviewMode ? 'ดูแล้ว ใช้งานต่อ' : 'รับทราบ'}
             </button>
           </div>
         </section>

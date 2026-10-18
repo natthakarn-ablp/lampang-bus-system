@@ -37,8 +37,8 @@ export default function PolicyCenter() {
     <div className="mx-auto max-w-4xl space-y-5 p-4 sm:p-6">
       <PageHeader title="นโยบายและสิทธิของฉัน" subtitle="อ่านหัวข้อที่ตรงกับหน้าที่และดูว่าแต่ละข้อความจะแสดงเมื่อใด" />
       {state.reviewMode && <div role="status" className="rounded-2xl border border-warn-border bg-warn-soft p-4 text-sm leading-7 text-warn-ink">
-        <p className="font-semibold">ร่างสำหรับประชุมและรับฟังความคิดเห็น</p>
-        <p>ข้อความในหน้านี้ยังไม่ใช่ประกาศที่มีผล ฐานกฎหมาย ระยะเวลาเก็บ ผู้ควบคุมข้อมูล และช่องทางติดต่อยังรอผู้รับผิดชอบกำหนด การเปิดอ่านไม่ถูกบันทึกเป็นความยินยอมหรือการรับทราบตามกฎหมาย</p>
+        <p className="font-semibold">ใช้งานจริงเพื่อประชุมคณะทำงานวันที่ 21 ตุลาคม 2569</p>
+        <p>เจ้าของระบบอนุมัติให้นำหน้าต่างนี้ขึ้นระบบจริงเพื่อทดสอบขั้นตอนและรับข้อเสนอแนะ การทำรายการยังเป็นข้อมูลจริงตามสิทธิ์เดิม ส่วนฐานกฎหมาย ระยะเวลาเก็บ ผู้ควบคุมข้อมูล และช่องทางติดต่อเป็นหัวข้อให้คณะทำงานกำหนดก่อนเปิดบันทึกหลักฐานรับทราบทางกฎหมาย</p>
       </div>}
       {state.loading ? <LoadingState /> : state.error ? <ErrorState message={state.error} onRetry={load} />
         : !state.enabled || state.policies.length === 0 ? (

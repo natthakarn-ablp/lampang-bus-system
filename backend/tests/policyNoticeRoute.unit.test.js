@@ -37,7 +37,7 @@ describe('unapproved policy notices in explicit review mode', () => {
 
   test('refuses to record an acknowledgement before legal approval', async () => {
     const response = await request(app).post('/api/policy-notices/acknowledge')
-      .send({ key: 'transport', version: 'draft-20261018' });
+      .send({ key: 'transport', version: 'meeting-pilot-20261021' });
     expect(response.status).toBe(404);
     expect(pool.getConnection).not.toHaveBeenCalled();
   });

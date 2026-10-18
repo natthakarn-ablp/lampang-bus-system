@@ -51,9 +51,9 @@ router.post('/acknowledge', async (req, res, next) => {
     try {
       [result] = await conn.query(
       `INSERT INTO policy_acknowledgements
-         (user_id, user_role, scope_type, scope_id, notice_key, notice_version, notice_sha256)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [req.user.id, req.user.role, req.user.scopeType, req.user.scopeId, key, version, digest(notice)]
+         (user_id, user_role, scope_type, scope_id, notice_key, notice_version, notice_sha256, notice_text_snapshot)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.user.id, req.user.role, req.user.scopeType, req.user.scopeId, key, version, digest(notice), JSON.stringify(notice)]
       );
     } catch (err) {
       if (err.code !== 'ER_DUP_ENTRY') throw err;

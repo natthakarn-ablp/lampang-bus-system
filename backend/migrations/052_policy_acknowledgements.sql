@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS policy_acknowledgements (
   notice_key VARCHAR(40) NOT NULL,
   notice_version VARCHAR(40) NOT NULL,
   notice_sha256 CHAR(64) NOT NULL,
+  notice_text_snapshot TEXT NOT NULL,
   acknowledged_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_policy_ack_user_key_version (user_id, notice_key, notice_version),
   INDEX idx_policy_ack_version (notice_key, notice_version),

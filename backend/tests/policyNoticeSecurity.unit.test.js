@@ -54,6 +54,11 @@ describe('approved staff notice boundary', () => {
     expect(conn.query.mock.calls[0][1].slice(0, 6)).toEqual(
       [27, 'transport', 'PROVINCE', 'LPG', 'transport', 'approved-test-v1']
     );
+    const parameters = conn.query.mock.calls[0][1];
+    expect(parameters[6]).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(parameters[7])).toEqual(expect.objectContaining({
+      key: 'transport', version: 'approved-test-v1', kind: 'notice',
+    }));
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
       userId: 27, entityType: 'policy_acknowledgement', entityId: '95', conn, required: true,
     }));

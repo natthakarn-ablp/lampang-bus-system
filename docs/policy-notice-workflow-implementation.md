@@ -11,4 +11,4 @@ Before a responsible controller can approve and activate a version, record and r
 3. Which actions need a notice, which need a separate certification, and which (if any) truly require consent. School staff cannot consent on behalf of a child or parent.
 4. A safe migration/rollback, six-role browser and API UAT, keyboard/mobile tests, and human review of the actual text. Parent LIFF and QR remain separate and cannot be signed off without a separate test environment.
 
-Activation must be a separate reviewed change after those decisions. `APPROVED` is computed from the review fields, a full-notice URL and non-empty body text for every topic; changing one boolean is insufficient. Do not deploy this draft as a legal notice or enable QR/LINE flags to make this dialog appear.
+Activation must be a separate reviewed change after those decisions. `APPROVED` is computed from the review fields, a full-notice URL, body text, lawful basis and retention rule for every topic; changing one boolean is insufficient. The ledger stores the exact notice snapshot and its hash. Do not deploy this draft as a legal notice or enable QR/LINE flags to make this dialog appear.

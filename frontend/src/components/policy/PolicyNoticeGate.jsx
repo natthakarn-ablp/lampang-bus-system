@@ -63,6 +63,10 @@ export default function PolicyNoticeGate({ user, children }) {
           <h2 id="policy-notice-title" className="text-xl font-semibold text-gray-900 mb-3">{current.title}</h2>
           <p className="text-sm leading-7 text-gray-700 whitespace-pre-line">{current.summary}</p>
           <p className="mt-4 text-sm leading-7 text-gray-700 whitespace-pre-line">{current.body}</p>
+          <dl className="mt-4 rounded-lg bg-surface p-3 text-xs leading-5 text-gray-700">
+            <dt className="font-semibold">ฐานการใช้ข้อมูล</dt><dd>{current.lawfulBasis}</dd>
+            <dt className="mt-2 font-semibold">ระยะเวลาเก็บ</dt><dd>{current.retentionRule}</dd>
+          </dl>
           <a href={current.fullNoticeUrl} target="_blank" rel="noopener noreferrer"
             className="focus-ring mt-4 inline-block text-sm font-medium text-brand-700 underline underline-offset-2">
             อ่านประกาศฉบับเต็ม

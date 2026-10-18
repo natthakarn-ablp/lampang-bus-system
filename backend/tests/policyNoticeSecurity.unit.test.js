@@ -2,7 +2,10 @@
 
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req, _res, next) => {
-    req.user = { id: 27, role: 'transport', scopeType: 'PROVINCE', scopeId: 'LPG' };
+    req.user = {
+      id: 27, role: req.get('X-Test-Role') || 'transport',
+      scopeType: 'PROVINCE', scopeId: 'LPG',
+    };
     next();
   },
 }));
@@ -119,6 +122,35 @@ describe('approved staff notice boundary', () => {
     });
     expect(response.status).toBe(404);
     expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('FROM vehicles'), ['V-not-found']);
+    expect(pool.getConnection).not.toHaveBeenCalled();
+  });
+
+  test('binds a report warning to its exact date and format without accepting row data', async () => {
+    const conn = {
+      beginTransaction: jest.fn().mockResolvedValue(undefined),
+      query: jest.fn().mockResolvedValue([{ insertId: 118, affectedRows: 1 }]),
+      commit: jest.fn().mockResolvedValue(undefined), rollback: jest.fn(), release: jest.fn(),
+    };
+    pool.getConnection.mockResolvedValue(conn);
+    const response = await request(app).post('/api/policy-notices/prepare-action')
+      .set('X-Test-Role', 'admin').send({
+        context: 'report.export', subject_type: 'report_export', subject_id: 'daily:2026-10-18:csv',
+        claim: { report_type: 'daily', format: 'csv', date: '2026-10-18', month: null, rows: [{ student_name: 'reject' }] },
+      });
+    expect(response.status).toBe(200);
+    expect(JSON.parse(conn.query.mock.calls[0][1][12])).toEqual({
+      report_type: 'daily', format: 'csv', date: '2026-10-18', month: null,
+      contains_student_rows: true,
+    });
+  });
+
+  test('rejects a report claim that does not match its token subject', async () => {
+    const response = await request(app).post('/api/policy-notices/prepare-action')
+      .set('X-Test-Role', 'admin').send({
+        context: 'report.export', subject_type: 'report_export', subject_id: 'daily:2026-10-18:csv',
+        claim: { report_type: 'daily', format: 'csv', date: '2026-10-17', month: null },
+      });
+    expect(response.status).toBe(400);
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
 });

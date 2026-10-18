@@ -7,13 +7,15 @@ const { requireRole } = require('../middleware/roleGuard');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const { sendSuccess, sendError } = require('../utils/response');
-const { isCalendarDate } = require('../utils/calendarDate');
-const { APPROVED, noticesForRole, actionPolicyForRole, catalogForRole } = require('../config/policyNotices');
-const { tokenDigest } = require('../utils/policyActionEvidence');
+const { isCalendarDate, isCalendarMonth } = require('../utils/calendarDate');
+const {
+  APPROVED, REVIEW_MODE, noticesForRole, actionPolicyForRole, catalogForRole,
+} = require('../config/policyNotices');
+const { tokenDigest, consumePolicyAction } = require('../utils/policyActionEvidence');
 
 const router = express.Router();
 const STAFF_ROLES = ['school', 'driver', 'transport', 'affiliation', 'province', 'admin'];
-router.use(authenticate, requireRole(...STAFF_ROLES));
+router.use(authenticate);
 
 function digest(notice) {
   return crypto.createHash('sha256').update(JSON.stringify(notice)).digest('hex');
@@ -54,7 +56,45 @@ function sanitizeClaim(context, input) {
       || input.contains_students !== false || input.contains_phone_numbers !== false) return null;
     return { report: 'vehicle_safety', contains_students: false, contains_phone_numbers: false };
   }
+  if (context === 'driver.shift_start') {
+    if (!['MORNING', 'EVENING', 'OTHER'].includes(input.session)) return null;
+    return { session: input.session };
+  }
+  if (context === 'report.export') {
+    if (!['daily', 'monthly'].includes(input.report_type)
+      || !['csv', 'excel', 'pdf'].includes(input.format)) return null;
+    if (input.report_type === 'daily' && !isCalendarDate(input.date)) return null;
+    if (input.report_type === 'monthly' && !isCalendarMonth(input.month)) return null;
+    return {
+      report_type: input.report_type,
+      format: input.format,
+      date: input.report_type === 'daily' ? input.date : null,
+      month: input.report_type === 'monthly' ? input.month : null,
+      contains_student_rows: input.report_type === 'daily' && input.format !== 'pdf',
+    };
+  }
+  if (context === 'admin.research_export') {
+    const allowed = ['snapshots', 'audit', 'exports', 'summary'];
+    if (!isCalendarDate(input.from) || !isCalendarDate(input.to) || input.from > input.to
+      || !['json', 'csv', 'excel'].includes(input.format)
+      || !Array.isArray(input.include) || input.include.length === 0
+      || input.include.length > allowed.length
+      || input.include.some((value) => !allowed.includes(value))
+      || new Set(input.include).size !== input.include.length) return null;
+    return { from: input.from, to: input.to, format: input.format, include: [...input.include].sort() };
+  }
   return null;
+}
+
+function claimMatchesSubject(context, subjectId, claim) {
+  if (context === 'report.export') {
+    const value = claim.report_type === 'daily' ? claim.date : claim.month;
+    return subjectId === `${claim.report_type}:${value}:${claim.format}`;
+  }
+  if (context === 'admin.research_export') {
+    return subjectId === `${claim.from}:${claim.to}:${claim.format}:${claim.include.join(',')}`;
+  }
+  return true;
 }
 
 async function subjectExistsForRole(req, action, subjectId) {
@@ -79,12 +119,49 @@ async function subjectExistsForRole(req, action, subjectId) {
     );
     return rows.length === 1;
   }
+  if (action.context === 'driver.shift_start') {
+    if (!req.user.driver_id) return false;
+    const [rows] = await pool.query(
+      `SELECT id FROM driver_vehicle_assignments
+        WHERE driver_id = ? AND vehicle_id = ? AND is_active = TRUE
+          AND authorization_status = 'AUTHORIZED'
+          AND (valid_from IS NULL OR valid_from <= CURDATE())
+          AND (valid_until IS NULL OR valid_until >= CURDATE())
+        LIMIT 1`,
+      [req.user.driver_id, subjectId]
+    );
+    return rows.length === 1;
+  }
+  if (action.context === 'report.export') {
+    const [type, value, format, extra] = subjectId.split(':');
+    return !extra && ['csv', 'excel', 'pdf'].includes(format)
+      && ((type === 'daily' && isCalendarDate(value))
+        || (type === 'monthly' && isCalendarMonth(value)));
+  }
+  if (action.context === 'admin.research_export') {
+    const [from, to, format, includeCsv, extra] = subjectId.split(':');
+    const allowed = ['snapshots', 'audit', 'exports', 'summary'];
+    const include = (includeCsv || '').split(',').filter(Boolean);
+    return !extra && isCalendarDate(from) && isCalendarDate(to) && from <= to
+      && ['json', 'csv', 'excel'].includes(format)
+      && include.length > 0 && include.length <= allowed.length
+      && include.every((value) => allowed.includes(value))
+      && new Set(include).size === include.length;
+  }
   return false;
 }
 
-// An unapproved draft is never displayed or recorded as a lawful notice.
-router.get('/current', async (req, res, next) => {
-  if (!APPROVED) return sendSuccess(res, { enabled: false, notices: [] });
+// Review drafts may be displayed only with explicit labels. They are never
+// recorded as a lawful acknowledgement or action-evidence decision.
+router.get('/current', requireRole(...STAFF_ROLES), async (req, res, next) => {
+  if (!APPROVED && !REVIEW_MODE) return sendSuccess(res, { enabled: false, reviewMode: false, notices: [] });
+  if (!APPROVED) {
+    return sendSuccess(res, {
+      enabled: true,
+      reviewMode: true,
+      notices: noticesForRole(req.user.role).map((notice) => ({ ...notice, acknowledged: false })),
+    });
+  }
   try {
     const notices = noticesForRole(req.user.role);
     const [rows] = await pool.query(
@@ -93,7 +170,7 @@ router.get('/current', async (req, res, next) => {
     );
     const acknowledged = new Set(rows.map((row) => `${row.notice_key}:${row.notice_version}`));
     return sendSuccess(res, {
-      enabled: true,
+      enabled: true, reviewMode: false,
       notices: notices.map((notice) => ({
         ...notice,
         acknowledged: acknowledged.has(`${notice.key}:${notice.version}`),
@@ -102,15 +179,21 @@ router.get('/current', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
-router.get('/action/:context', async (req, res) => {
-  if (!APPROVED) return sendSuccess(res, { enabled: false, action: null });
+router.get('/action/:context', requireRole(...STAFF_ROLES), async (req, res) => {
+  if (!APPROVED && !REVIEW_MODE) return sendSuccess(res, { enabled: false, reviewMode: false, action: null });
   const action = actionPolicyForRole(req.user.role, req.params.context);
   if (!action) return sendError(res, 'ไม่พบข้อความสำหรับบทบาทและรายการนี้', [], 404);
-  return sendSuccess(res, { enabled: true, action });
+  return sendSuccess(res, { enabled: true, reviewMode: !APPROVED, action });
 });
 
-router.get('/catalog', async (req, res, next) => {
-  if (!APPROVED) return sendSuccess(res, { enabled: false, policies: [] });
+router.get('/catalog', requireRole(...STAFF_ROLES), async (req, res, next) => {
+  if (!APPROVED && !REVIEW_MODE) return sendSuccess(res, { enabled: false, reviewMode: false, policies: [] });
+  if (!APPROVED) {
+    return sendSuccess(res, {
+      enabled: true, reviewMode: true,
+      policies: catalogForRole(req.user.role).map((policy) => ({ ...policy, acknowledgedAt: null })),
+    });
+  }
   try {
     const [rows] = await pool.query(
       'SELECT notice_key, notice_version, acknowledged_at FROM policy_acknowledgements WHERE user_id = ?',
@@ -123,11 +206,11 @@ router.get('/catalog', async (req, res, next) => {
       ...policy,
       acknowledgedAt: acknowledged.get(`${policy.key}:${policy.version}`) || null,
     }));
-    return sendSuccess(res, { enabled: true, policies });
+    return sendSuccess(res, { enabled: true, reviewMode: false, policies });
   } catch (err) { return next(err); }
 });
 
-router.post('/prepare-action', async (req, res, next) => {
+router.post('/prepare-action', requireRole(...STAFF_ROLES), async (req, res, next) => {
   if (!APPROVED) return sendError(res, 'ยังไม่มีข้อความที่ผ่านการรับรอง', [], 404);
   const context = typeof req.body?.context === 'string' ? req.body.context : '';
   const action = actionPolicyForRole(req.user.role, context);
@@ -145,6 +228,9 @@ router.post('/prepare-action', async (req, res, next) => {
   const claim = sanitizeClaim(context, req.body?.claim);
   if (!claim) {
     return sendError(res, 'กรุณาระบุสรุปรายการที่ยืนยัน', [], 400);
+  }
+  if (!claimMatchesSubject(context, subjectId, claim)) {
+    return sendError(res, 'สรุปรายการไม่ตรงกับรายการอ้างอิง', [], 400);
   }
   const claimSnapshot = JSON.stringify(claim);
   if (Buffer.byteLength(claimSnapshot, 'utf8') > 4096) {
@@ -186,7 +272,22 @@ router.post('/prepare-action', async (req, res, next) => {
   }
 });
 
-router.post('/acknowledge', async (req, res, next) => {
+// Browser-generated PDF reports have no download route where the one-use
+// token can be consumed. Consume it here immediately before opening print.
+router.post('/consume-client-action', requireRole('school', 'affiliation', 'province', 'admin'), async (req, res) => {
+  const context = typeof req.body?.context === 'string' ? req.body.context : '';
+  const subjectType = readSubject(req.body?.subject_type, 50);
+  const subjectId = readSubject(req.body?.subject_id);
+  const action = actionPolicyForRole(req.user.role, context);
+  if (context !== 'report.export' || subjectType !== 'report_export' || !subjectId
+    || !action || action.subjectType !== subjectType || !subjectId.endsWith(':pdf')) {
+    return sendError(res, 'รายการพิมพ์ไม่ตรงกับข้อความยืนยัน', [], 400);
+  }
+  if (!await consumePolicyAction(req, res, { context, subjectType, subjectId })) return undefined;
+  return sendSuccess(res, { consumed: APPROVED, reviewMode: !APPROVED });
+});
+
+router.post('/acknowledge', requireRole(...STAFF_ROLES), async (req, res, next) => {
   if (!APPROVED) return sendError(res, 'ยังไม่มีประกาศที่ผ่านการรับรอง', [], 404);
   const key = typeof req.body?.key === 'string' ? req.body.key : '';
   const version = typeof req.body?.version === 'string' ? req.body.version : '';

@@ -1,13 +1,14 @@
 'use strict';
 
 const {
-  APPROVED, VERSION, LEGAL_REVIEW, ROLE_TOPICS, ACTION_POLICIES,
+  APPROVED, REVIEW_MODE, VERSION, LEGAL_REVIEW, ROLE_TOPICS, ACTION_POLICIES,
   noticesForRole, actionPolicyForRole, catalogForRole,
 } = require('../src/config/policyNotices');
 
 describe('staff policy notice draft', () => {
-  test('stays dark until a reviewed notice is explicitly approved', () => {
+  test('keeps legal approval false while exposing a labelled review candidate', () => {
     expect(APPROVED).toBe(false);
+    expect(REVIEW_MODE).toBe(true);
     expect(LEGAL_REVIEW.approved).toBe(false);
     expect(LEGAL_REVIEW.fullNoticeUrl).toBe('');
     expect(VERSION).toMatch(/^draft-/);
@@ -33,7 +34,8 @@ describe('staff policy notice draft', () => {
   test('maps consequential actions to an exact role, subject and evidence kind', () => {
     expect(Object.keys(ACTION_POLICIES).sort()).toEqual([
       'school.student_import_apply', 'transport.inspection_create',
-      'transport.inspection_update', 'transport.vehicle_export',
+      'transport.inspection_update', 'transport.vehicle_export', 'driver.shift_start',
+      'report.export', 'admin.research_export',
     ].sort());
     expect(actionPolicyForRole('school', 'school.student_import_apply')).toEqual(
       expect.objectContaining({ key: 'school_import', kind: 'certification', subjectType: 'import_batch' })
@@ -42,6 +44,15 @@ describe('staff policy notice draft', () => {
       expect.objectContaining({ key: 'transport_export', kind: 'warning', subjectType: 'transport_safety_report' })
     );
     expect(actionPolicyForRole('driver', 'transport.vehicle_export')).toBeNull();
+    expect(actionPolicyForRole('driver', 'driver.shift_start')).toEqual(
+      expect.objectContaining({ key: 'driver_shift', kind: 'certification', subjectType: 'vehicle' })
+    );
+    expect(actionPolicyForRole('province', 'report.export')).toEqual(
+      expect.objectContaining({ key: 'report_export', kind: 'warning', subjectType: 'report_export' })
+    );
+    expect(actionPolicyForRole('admin', 'admin.research_export')).toEqual(
+      expect.objectContaining({ key: 'admin_research_export', kind: 'warning', subjectType: 'research_export' })
+    );
   });
 
   test('builds a revisit catalog without duplicating create and update inspection text', () => {

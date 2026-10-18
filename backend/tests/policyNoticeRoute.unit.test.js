@@ -2,7 +2,10 @@
 
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req, _res, next) => {
-    req.user = { id: 17, role: 'transport', scopeType: 'PROVINCE', scopeId: 'LPG' };
+    req.user = {
+      id: 17, role: req.get('X-Test-Role') || 'transport',
+      scopeType: 'PROVINCE', scopeId: 'LPG',
+    };
     next();
   },
 }));
@@ -19,13 +22,16 @@ const app = express();
 app.use(express.json());
 app.use('/api/policy-notices', router);
 
-describe('unapproved policy notices', () => {
+describe('unapproved policy notices in explicit review mode', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  test('returns no draft content and does not query the ledger', async () => {
+  test('returns labelled role-scoped draft content without querying the ledger', async () => {
     const response = await request(app).get('/api/policy-notices/current');
     expect(response.status).toBe(200);
-    expect(response.body.data).toEqual({ enabled: false, notices: [] });
+    expect(response.body.data).toEqual(expect.objectContaining({
+      enabled: true, reviewMode: true,
+      notices: expect.arrayContaining([expect.objectContaining({ key: 'transport', acknowledged: false })]),
+    }));
     expect(pool.query).not.toHaveBeenCalled();
   });
 
@@ -36,13 +42,31 @@ describe('unapproved policy notices', () => {
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
 
-  test('does not expose action drafts or catalog content', async () => {
+  test('exposes action and catalog drafts only as review mode', async () => {
     const [action, catalog] = await Promise.all([
       request(app).get('/api/policy-notices/action/transport.vehicle_export'),
       request(app).get('/api/policy-notices/catalog'),
     ]);
-    expect(action.body.data).toEqual({ enabled: false, action: null });
-    expect(catalog.body.data).toEqual({ enabled: false, policies: [] });
+    expect(action.body.data).toEqual(expect.objectContaining({
+      enabled: true, reviewMode: true,
+      action: expect.objectContaining({ context: 'transport.vehicle_export', kind: 'warning' }),
+    }));
+    expect(catalog.body.data).toEqual(expect.objectContaining({
+      enabled: true, reviewMode: true,
+      policies: expect.arrayContaining([expect.objectContaining({ key: 'transport' })]),
+    }));
     expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  test('does not create or consume legal evidence for a browser PDF in review mode', async () => {
+    const response = await request(app).post('/api/policy-notices/consume-client-action')
+      .set('X-Test-Role', 'admin').send({
+        context: 'report.export', subject_type: 'report_export',
+        subject_id: 'daily:2026-10-18:pdf',
+      });
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({ consumed: false, reviewMode: true });
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(pool.getConnection).not.toHaveBeenCalled();
   });
 });

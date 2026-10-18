@@ -3,10 +3,10 @@ import api from '../api/axios';
 import Modal from '../components/ui/Modal';
 
 /**
- * Server-backed confirmation for consequential actions. With no approved
- * policy, the server returns enabled:false and the existing action proceeds
- * unchanged. When enabled, the server issues a one-use, actor/subject-bound
- * token only after the exact reviewed text has been shown.
+ * Server-backed confirmation for consequential actions. Review mode displays
+ * the real dialog but continues under existing RBAC without evidence. Once a
+ * policy is legally approved, the server issues a one-use actor/subject-bound
+ * token only after the exact approved text has been shown.
  */
 export default function usePolicyAction() {
   const [pending, setPending] = useState(null);
@@ -18,7 +18,11 @@ export default function usePolicyAction() {
     if (!response.data?.data?.enabled) return execute(null);
     return new Promise((resolve, reject) => {
       setError('');
-      setPending({ request, execute, resolve, reject, action: response.data.data.action });
+      setPending({
+        request, execute, resolve, reject,
+        action: response.data.data.action,
+        reviewMode: response.data.data.reviewMode === true,
+      });
     });
   }, []);
 
@@ -34,6 +38,12 @@ export default function usePolicyAction() {
     setBusy(true);
     setError('');
     try {
+      if (pending.reviewMode) {
+        const result = await pending.execute(null);
+        pending.resolve(result);
+        setPending(null);
+        return;
+      }
       const prepared = await api.post('/policy-notices/prepare-action', {
         context: pending.request.context,
         subject_type: pending.request.subjectType,
@@ -64,18 +74,22 @@ export default function usePolicyAction() {
         </button>
         <button type="button" onClick={confirm} disabled={busy}
           className="focus-ring min-h-[44px] rounded-lg bg-brand-600 px-5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50">
-          {busy ? 'กำลังยืนยัน…' : action?.kind === 'warning' ? 'เข้าใจและส่งออก' : 'รับรองและดำเนินการ'}
+          {busy ? 'กำลังยืนยัน…' : pending?.reviewMode ? 'ทดลองหน้าต่างและดำเนินการต่อ'
+            : action?.kind === 'warning' ? 'เข้าใจและส่งออก' : 'รับรองและดำเนินการ'}
         </button>
       </>}
     >
       <div className="space-y-4 text-sm leading-7 text-ink-muted">
+        {pending?.reviewMode && <p role="status" className="rounded-xl border border-warn-border bg-warn-soft p-3 text-xs leading-6 text-warn-ink">
+          ร่างสำหรับประชุม: หน้าต่างนี้ยังไม่บันทึกหลักฐานทางกฎหมาย และการกดยืนยันจะดำเนินรายการด้วยสิทธิ์เดิมของระบบ
+        </p>}
         <p className="text-ink">{action?.summary}</p>
         {action?.body && <p className="whitespace-pre-line">{action.body}</p>}
         <dl className="rounded-xl bg-surface p-4 text-xs leading-6">
           <dt className="font-semibold text-ink">ฐานการใช้ข้อมูล</dt>
-          <dd>{action?.lawfulBasis}</dd>
+          <dd>{action?.lawfulBasis || 'รอทีมกฎหมายและหน่วยงานกำหนด'}</dd>
           <dt className="mt-2 font-semibold text-ink">ระยะเวลาเก็บหลักฐาน</dt>
-          <dd>{action?.retentionRule}</dd>
+          <dd>{action?.retentionRule || 'รอทีมกฎหมายและหน่วยงานกำหนด'}</dd>
         </dl>
         {action?.fullNoticeUrl && <a href={action.fullNoticeUrl} target="_blank" rel="noopener noreferrer"
           className="focus-ring inline-block font-medium text-brand-700 underline underline-offset-2">อ่านประกาศฉบับเต็ม</a>}

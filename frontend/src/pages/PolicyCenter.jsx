@@ -13,6 +13,9 @@ const CONTEXT_LABELS = {
   'transport.inspection_create': 'ก่อนบันทึกผลตรวจรถ',
   'transport.inspection_update': 'ก่อนแก้ไขผลตรวจรถ',
   'transport.vehicle_export': 'ก่อนส่งออกรายงานรถ',
+  'driver.shift_start': 'ก่อนเริ่มรอบรถ',
+  'report.export': 'ก่อนดาวน์โหลดรายงาน',
+  'admin.research_export': 'ก่อนส่งออกชุดข้อมูลวิจัย',
 };
 
 export default function PolicyCenter() {
@@ -33,6 +36,10 @@ export default function PolicyCenter() {
   return (
     <div className="mx-auto max-w-4xl space-y-5 p-4 sm:p-6">
       <PageHeader title="นโยบายและสิทธิของฉัน" subtitle="อ่านหัวข้อที่ตรงกับหน้าที่และดูว่าแต่ละข้อความจะแสดงเมื่อใด" />
+      {state.reviewMode && <div role="status" className="rounded-2xl border border-warn-border bg-warn-soft p-4 text-sm leading-7 text-warn-ink">
+        <p className="font-semibold">ร่างสำหรับประชุมและรับฟังความคิดเห็น</p>
+        <p>ข้อความในหน้านี้ยังไม่ใช่ประกาศที่มีผล ฐานกฎหมาย ระยะเวลาเก็บ ผู้ควบคุมข้อมูล และช่องทางติดต่อยังรอผู้รับผิดชอบกำหนด การเปิดอ่านไม่ถูกบันทึกเป็นความยินยอมหรือการรับทราบตามกฎหมาย</p>
+      </div>}
       {state.loading ? <LoadingState /> : state.error ? <ErrorState message={state.error} onRetry={load} />
         : !state.enabled || state.policies.length === 0 ? (
           <EmptyState
@@ -58,14 +65,14 @@ export default function PolicyCenter() {
                   {policy.contexts.map((context) => <li key={context}>• {CONTEXT_LABELS[context] || context}</li>)}
                 </ul>
                 <div className="mt-4 border-t border-surface-border pt-4 text-xs leading-6 text-ink-muted">
-                  <p><span className="font-semibold text-ink">ฐานการใช้ข้อมูล:</span> {policy.lawfulBasis}</p>
-                  <p><span className="font-semibold text-ink">ระยะเวลาเก็บ:</span> {policy.retentionRule}</p>
+                  <p><span className="font-semibold text-ink">ฐานการใช้ข้อมูล:</span> {policy.lawfulBasis || 'รอทีมกฎหมายและหน่วยงานกำหนด'}</p>
+                  <p><span className="font-semibold text-ink">ระยะเวลาเก็บ:</span> {policy.retentionRule || 'รอทีมกฎหมายและหน่วยงานกำหนด'}</p>
                   {policy.acknowledgedAt && <p className="mt-1 text-success-ink">รับทราบฉบับนี้แล้ว</p>}
                 </div>
-                <a href={policy.fullNoticeUrl} target="_blank" rel="noopener noreferrer"
+                {policy.fullNoticeUrl && <a href={policy.fullNoticeUrl} target="_blank" rel="noopener noreferrer"
                   className="focus-ring mt-4 inline-flex min-h-[44px] items-center text-sm font-semibold text-brand-700 underline underline-offset-2">
                   อ่านประกาศฉบับเต็ม
-                </a>
+                </a>}
               </article>
             ))}
           </div>

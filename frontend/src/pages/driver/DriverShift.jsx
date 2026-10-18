@@ -9,6 +9,7 @@ import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import AlertBanner from '../../components/ui/AlertBanner';
 import { CommandHero, FormField} from '../../components/ui';
+import usePolicyAction from '../../hooks/usePolicyAction';
 
 const REASONS = {
   VEHICLE_NOT_ELIGIBLE: 'รถยังไม่ผ่านเงื่อนไขความปลอดภัย',
@@ -117,6 +118,7 @@ function ActiveShiftCard({ active, busy, onEnd }) {
 
 export default function DriverShift() {
   const toast = useToast();
+  const { runWithPolicy, policyActionDialog } = usePolicyAction();
   const [vehicles, setVehicles] = useState([]);
   const [active, setActive] = useState(null);
   const [session, setSession] = useState('MORNING');
@@ -146,7 +148,13 @@ export default function DriverShift() {
   async function start(vehicleId) {
     setBusy(true);
     try {
-      await api.post('/driver/shifts/start', { vehicle_id: vehicleId, session });
+      const result = await runWithPolicy({
+        context: 'driver.shift_start', subjectType: 'vehicle', subjectId: vehicleId,
+        claim: { session },
+      }, (token) => api.post('/driver/shifts/start', { vehicle_id: vehicleId, session }, {
+        headers: token ? { 'X-Policy-Action-Token': token } : {},
+      }));
+      if (result?.cancelled) return;
       toast.success('เริ่มรอบและบันทึกคนขับจริงแล้ว');
       await load();
     } catch (err) {
@@ -171,7 +179,7 @@ export default function DriverShift() {
 
   if (loading) return <LoadingState />;
 
-  return (
+  return (<>
     <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-5">
       <CommandHero
         eyebrow="Driver daily workflow"
@@ -239,5 +247,6 @@ export default function DriverShift() {
         </>
       )}
     </div>
-  );
+    {policyActionDialog}
+  </>);
 }

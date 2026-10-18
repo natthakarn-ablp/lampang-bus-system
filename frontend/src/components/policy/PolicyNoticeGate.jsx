@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../../api/axios';
 
-// Notices are fetched from the server, which exposes only approved versions.
-// This is an acknowledgement flow, not a consent form or a permission grant.
+// The server marks either an approved version or an explicit review draft.
+// Neither mode is a consent form or a permission grant; review mode writes no
+// legal evidence at all.
 export default function PolicyNoticeGate({ user, children }) {
   const location = useLocation();
   const [queue, setQueue] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [reviewMode, setReviewMode] = useState(false);
   const dialogRef = useRef(null);
   const busyRef = useRef(false);
   busyRef.current = busy;
@@ -19,10 +21,14 @@ export default function PolicyNoticeGate({ user, children }) {
     api.get('/policy-notices/current')
       .then(({ data }) => {
         if (!active || !data?.data?.enabled) return;
+        const reviewing = data.data.reviewMode === true;
+        setReviewMode(reviewing);
         const pending = data.data.notices.filter((notice) => !notice.acknowledged);
-        const unseen = pending.filter((notice) =>
-          sessionStorage.getItem(`policy_notice_later:${user.id}:${notice.key}:${notice.version}`) !== '1'
-        );
+        const unseen = pending.filter((notice) => {
+          const later = sessionStorage.getItem(`policy_notice_later:${user.id}:${notice.key}:${notice.version}`) === '1';
+          const reviewed = localStorage.getItem(`policy_notice_review_seen:${user.id}:${notice.key}:${notice.version}`) === '1';
+          return !later && (!reviewing || !reviewed);
+        });
         setQueue(unseen);
       })
       .catch(() => { /* An unavailable notice service must not block emergency work. */ });
@@ -73,6 +79,11 @@ export default function PolicyNoticeGate({ user, children }) {
 
   async function acknowledge() {
     if (!current || busy) return;
+    if (reviewMode) {
+      localStorage.setItem(`policy_notice_review_seen:${user.id}:${current.key}:${current.version}`, '1');
+      next();
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -91,19 +102,26 @@ export default function PolicyNoticeGate({ user, children }) {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-5" role="presentation">
         <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="policy-notice-title"
           className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-surface-border bg-surface-raised shadow-elevate p-5 sm:p-7">
-          <p className="text-xs font-semibold tracking-wide text-brand-700 mb-2">แจ้งการใช้ข้อมูล · ฉบับ {current.version}</p>
+          <p className="text-xs font-semibold tracking-wide text-brand-700 mb-2">
+            {reviewMode ? 'ร่างเพื่อรับฟังความคิดเห็น' : 'แจ้งการใช้ข้อมูล'} · ฉบับ {current.version}
+          </p>
+          {reviewMode && <p role="status" className="mb-4 rounded-xl border border-warn-border bg-warn-soft p-3 text-xs leading-6 text-warn-ink">
+            ข้อความนี้เป็นร่างสำหรับประชุมและทดสอบหน้าจอ ยังไม่ใช่ประกาศที่มีผล ไม่บันทึกเป็นความยินยอมหรือการรับทราบตามกฎหมาย และไม่เปลี่ยนสิทธิ์ของบัญชี
+          </p>}
           <h2 id="policy-notice-title" className="text-xl font-semibold text-gray-900 mb-3">{current.title}</h2>
           <p className="text-sm leading-7 text-gray-700 whitespace-pre-line">{current.summary}</p>
           <p className="mt-4 text-sm leading-7 text-gray-700 whitespace-pre-line">{current.body}</p>
           <dl className="mt-4 rounded-lg bg-surface p-3 text-xs leading-5 text-gray-700">
-            <dt className="font-semibold">ฐานการใช้ข้อมูล</dt><dd>{current.lawfulBasis}</dd>
-            <dt className="mt-2 font-semibold">ระยะเวลาเก็บ</dt><dd>{current.retentionRule}</dd>
+            <dt className="font-semibold">ฐานการใช้ข้อมูล</dt><dd>{current.lawfulBasis || 'รอทีมกฎหมายและหน่วยงานผู้รับผิดชอบกำหนด'}</dd>
+            <dt className="mt-2 font-semibold">ระยะเวลาเก็บ</dt><dd>{current.retentionRule || 'รอทีมกฎหมายและหน่วยงานผู้รับผิดชอบกำหนด'}</dd>
           </dl>
-          <a href={current.fullNoticeUrl} target="_blank" rel="noopener noreferrer"
+          {current.fullNoticeUrl && <a href={current.fullNoticeUrl} target="_blank" rel="noopener noreferrer"
             className="focus-ring mt-4 inline-block text-sm font-medium text-brand-700 underline underline-offset-2">
             อ่านประกาศฉบับเต็ม
-          </a>
-          <p className="mt-4 text-xs leading-5 text-ink-muted">การกดรับทราบเป็นเพียงหลักฐานว่าเห็นประกาศ ไม่ใช่การให้ความยินยอม และไม่เปลี่ยนสิทธิ์เข้าถึงข้อมูล</p>
+          </a>}
+          <p className="mt-4 text-xs leading-5 text-ink-muted">{reviewMode
+            ? 'การปิดร่างนี้เก็บเฉพาะในเบราว์เซอร์เครื่องนี้ เพื่อไม่ให้แสดงซ้ำระหว่างทดลอง ไม่มีการบันทึกหลักฐานทางกฎหมาย'
+            : 'การกดรับทราบเป็นเพียงหลักฐานว่าเห็นประกาศ ไม่ใช่การให้ความยินยอม และไม่เปลี่ยนสิทธิ์เข้าถึงข้อมูล'}</p>
           {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button type="button" onClick={later} disabled={busy}
@@ -112,7 +130,7 @@ export default function PolicyNoticeGate({ user, children }) {
             </button>
             <button type="button" onClick={acknowledge} disabled={busy}
               className="focus-ring min-h-[44px] rounded-lg bg-brand-600 px-5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
-              {busy ? 'กำลังบันทึก…' : 'รับทราบ'}
+              {busy ? 'กำลังบันทึก…' : reviewMode ? 'ดูร่างนี้แล้ว' : 'รับทราบ'}
             </button>
           </div>
         </section>

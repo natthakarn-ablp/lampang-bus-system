@@ -13,6 +13,8 @@ const { pipeline } = require('stream/promises');
 const { csvCell, neutralizeSpreadsheetCell } = require('../utils/exportSecurity');
 const { abbreviateGrade } = require('../utils/gradeDisplay');
 const { DECISION_LOG_ROLES, validateDecisionLog } = require('../utils/decisionLog');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
+const { todayBangkok } = require('../utils/thaiTime');
 
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
@@ -127,6 +129,15 @@ const MONTHLY_HEADERS = [
   'รับเย็นแล้ว', 'รับเย็นคาดหวัง', 'KPI เย็น',
   'วันที่มีข้อมูล', 'วันส่งเช้าครบ 100%', 'วันรับเย็นครบ 100%',
 ];
+
+async function consumeReportExportPolicy(req, res, reportType, format) {
+  const value = reportType === 'daily'
+    ? (req.filters.date || todayBangkok())
+    : (req.filters.month || todayBangkok().slice(0, 7));
+  return consumePolicyAction(req, res, {
+    context: 'report.export', subjectType: 'report_export', subjectId: `${reportType}:${value}:${format}`,
+  });
+}
 
 function toNumber(value) {
   return Number(value || 0);
@@ -253,6 +264,7 @@ function abortStreamedExport(res, err, next) {
 
 router.get('/export/csv', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'daily', 'csv')) return;
     // Resolved before any header goes out, so a bad filter still answers JSON.
     const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
     const filename = `report-${date}.csv`;
@@ -281,6 +293,7 @@ router.get('/export/csv', async (req, res, next) => {
  */
 router.get('/export/excel', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'daily', 'excel')) return;
     const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
     const filename = `report-${date}.xlsx`;
 
@@ -347,6 +360,7 @@ router.get('/export/excel', async (req, res, next) => {
  */
 router.get('/export/pdf', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'daily', 'pdf')) return;
     const report = await reportSvc.getDailyReport(req.user, req.filters);
     const thaiDate = new Date(report.date).toLocaleDateString('th-TH', {
       year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Bangkok',
@@ -507,6 +521,7 @@ router.get('/export/pdf', async (req, res, next) => {
  */
 router.get('/export/monthly/csv', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'monthly', 'csv')) return;
     const report = await reportSvc.getMonthlyReport(req.user, req.filters);
     const rows = buildMonthlyExportRows(report);
     const filename = `monthly-report-${report.month}.csv`;
@@ -532,6 +547,7 @@ router.get('/export/monthly/csv', async (req, res, next) => {
  */
 router.get('/export/monthly/excel', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'monthly', 'excel')) return;
     const report = await reportSvc.getMonthlyReport(req.user, req.filters);
     const rows = buildMonthlyExportRows(report);
     const filename = `monthly-report-${report.month}.xlsx`;
@@ -570,6 +586,7 @@ router.get('/export/monthly/excel', async (req, res, next) => {
  */
 router.get('/export/monthly/pdf', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'monthly', 'pdf')) return;
     const report = await reportSvc.getMonthlyReport(req.user, req.filters);
     const rows = buildMonthlyExportRows(report);
     const monthLabel = new Date(`${report.month}-01`).toLocaleDateString('th-TH', {

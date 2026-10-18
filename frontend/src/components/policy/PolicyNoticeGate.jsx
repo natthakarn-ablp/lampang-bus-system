@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../../api/axios';
 
@@ -9,6 +9,9 @@ export default function PolicyNoticeGate({ user, children }) {
   const [queue, setQueue] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const dialogRef = useRef(null);
+  const busyRef = useRef(false);
+  busyRef.current = busy;
 
   useEffect(() => {
     let active = true;
@@ -28,6 +31,35 @@ export default function PolicyNoticeGate({ user, children }) {
 
   const current = queue[0];
   const emergency = /(^|\/)emergency(\/|$)/.test(location.pathname);
+
+  useEffect(() => {
+    if (!current || emergency) return undefined;
+    const previousFocus = document.activeElement;
+    dialogRef.current?.focus();
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        if (busyRef.current) return;
+        event.preventDefault();
+        sessionStorage.setItem(`policy_notice_later:${user.id}:${current.key}:${current.version}`, '1');
+        setQueue((items) => items.slice(1));
+      }
+      if (event.key !== 'Tab') return;
+      const controls = [...(dialogRef.current?.querySelectorAll('a[href], button:not([disabled])') || [])];
+      if (!controls.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first.focus();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previousFocus?.focus?.();
+    };
+  }, [current?.key, current?.version, emergency, user?.id]);
 
   function next() {
     setError('');
@@ -57,7 +89,7 @@ export default function PolicyNoticeGate({ user, children }) {
     {children}
     {current && !emergency && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-5" role="presentation">
-        <section role="dialog" aria-modal="true" aria-labelledby="policy-notice-title"
+        <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="policy-notice-title"
           className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-surface-border bg-surface-raised shadow-elevate p-5 sm:p-7">
           <p className="text-xs font-semibold tracking-wide text-brand-700 mb-2">แจ้งการใช้ข้อมูล · ฉบับ {current.version}</p>
           <h2 id="policy-notice-title" className="text-xl font-semibold text-gray-900 mb-3">{current.title}</h2>

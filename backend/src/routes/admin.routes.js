@@ -23,6 +23,7 @@ const researchReadinessSvc = require('../services/researchReadiness.service');
 const { RESEARCH_PROTOCOL, EXTERNAL_EVIDENCE_REGISTRY } = require('../config/researchProtocol');
 const { METRICS: RESEARCH_METRICS } = require('../config/researchMetrics');
 const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
 
 /**
  * Audit entity types that stand in for the named events each metric requires.
@@ -1289,6 +1290,11 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         [{ field: 'from', message: 'วันเริ่มต้นต้องไม่อยู่หลังวันสิ้นสุด' }], 400);
     }
     const include = (req.query.include || 'snapshots,audit,exports,summary').split(',');
+    const format = (req.query.format || 'json').toLowerCase();
+    const policySubject = `${from}:${to}:${format}:${[...include].sort().join(',')}`;
+    if (!await consumePolicyAction(req, res, {
+      context: 'admin.research_export', subjectType: 'research_export', subjectId: policySubject,
+    })) return;
 
     // Evidence readiness is derived per metric from data that exists. The old
     // `dme_mie_ready: true` constant is gone: it asserted the dataset was fit
@@ -1470,8 +1476,6 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
     const integrity = researchDataChecksum(result);
     result.meta.provenance = buildResearchProvenance(result, { from, to, include });
     result.meta.integrity = integrity;
-
-    const format = (req.query.format || 'json').toLowerCase();
 
     // Log this export action
     await logAudit({

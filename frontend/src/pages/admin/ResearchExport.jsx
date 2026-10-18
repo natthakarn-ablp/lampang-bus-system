@@ -8,6 +8,7 @@ import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { AppCard, AlertBanner, StatusBadge, FormField, SectionTitle } from '../../components/ui';
 import { describeBlockingReason } from '../../utils/evidenceStatus';
+import usePolicyAction from '../../hooks/usePolicyAction';
 
 const DATASETS = [
   { key: 'snapshots', label: 'Snapshots',       desc: 'daily_snapshots' },
@@ -26,6 +27,7 @@ const EXT_MAP = { json: 'json', csv: 'csv', excel: 'xlsx' };
 
 export default function ResearchExport() {
   const toast = useToast();
+  const { runWithPolicy, policyActionDialog } = usePolicyAction();
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   const [from, setFrom] = useState('2026-01-01');
   const [to, setTo] = useState(today);
@@ -71,26 +73,36 @@ export default function ResearchExport() {
     const include = DATASETS.filter(d => included.has(d.key)).map(d => d.key);
     if (include.length === 0) { toast.error('กรุณาเลือกอย่างน้อย 1 ชุดข้อมูล'); return; }
 
-    setExporting(format);
     try {
-      const token = localStorage.getItem('access_token');
-      const dateTag = `${from.replace(/-/g, '')}-${to.replace(/-/g, '')}`;
-      const url = `/api/admin/research-export?from=${from}&to=${to}&include=${include.join(',')}&download=true&format=${format}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `research-dataset-${dateTag}.${EXT_MAP[format]}`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast.success('ดาวน์โหลดสำเร็จ');
+      const sortedInclude = [...include].sort();
+      const result = await runWithPolicy({
+        context: 'admin.research_export', subjectType: 'research_export',
+        subjectId: `${from}:${to}:${format}:${sortedInclude.join(',')}`,
+        claim: { from, to, format, include: sortedInclude },
+      }, async (policyToken) => {
+        setExporting(format);
+        const token = localStorage.getItem('access_token');
+        const dateTag = `${from.replace(/-/g, '')}-${to.replace(/-/g, '')}`;
+        const url = `/api/admin/research-export?from=${from}&to=${to}&include=${include.join(',')}&download=true&format=${format}`;
+        const headers = { Authorization: `Bearer ${token}` };
+        if (policyToken) headers['X-Policy-Action-Token'] = policyToken;
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error('Export failed');
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `research-dataset-${dateTag}.${EXT_MAP[format]}`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        return { downloaded: true };
+      });
+      if (!result?.cancelled) toast.success('ดาวน์โหลดสำเร็จ');
     } catch {
       toast.error('ดาวน์โหลดไม่สำเร็จ');
     } finally { setExporting(null); }
   }
 
-  return (
+  return (<>
     <div className="p-3 sm:p-6 max-w-4xl mx-auto pb-10">
       <PageHeader
         icon={Download}
@@ -267,7 +279,8 @@ export default function ResearchExport() {
         ชุดข้อมูลมี audit log ระดับผู้ใช้ — โปรดตรวจสอบขอบเขตการเผยแพร่ก่อนนำออกนอกหน่วยงาน
       </AlertBanner>
     </div>
-  );
+    {policyActionDialog}
+  </>);
 }
 
 function fmtDate(d) {

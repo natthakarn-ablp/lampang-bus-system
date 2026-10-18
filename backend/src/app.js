@@ -33,6 +33,7 @@ const GLOBAL_API_LIMITED_PREFIXES = [
   '/api/geofences',
   '/api/route-deviations',
   '/api/participation',
+  '/api/policy-notices',
 ];
 
 // ─── Proxy trust ────────────────────────────────────────────────────────────
@@ -128,6 +129,7 @@ app.use(GLOBAL_API_LIMITED_PREFIXES, globalApiLimiter);
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth',   authRoutes);
+app.use('/api/policy-notices', require('./routes/policyNotice.routes'));
 app.use('/api/auth/recovery', require('./routes/adminPasswordRecovery.routes'));
 
 // ─── Phase 10.14 — Driver-initiated vehicle registration (feature-flagged) ───

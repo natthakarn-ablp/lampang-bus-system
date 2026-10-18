@@ -30,6 +30,7 @@ const { logAudit }      = require('../utils/audit');
 const { readIdParam } = require('../utils/pathParams');
 const { validatePassword } = require('../utils/passwordPolicy');
 const { isAllowedImage } = require('../utils/fileType');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
 const checkinSvc        = require('../services/checkin.service');
 const ppSvc             = require('../services/pickupPoint.service');
 const leaveSvc          = require('../services/leave.service');
@@ -158,6 +159,9 @@ router.get('/active-shift', async (req, res, next) => {
 
 router.post('/shifts/start', async (req, res, next) => {
   try {
+    if (!await consumePolicyAction(req, res, {
+      context: 'driver.shift_start', subjectType: 'vehicle', subjectId: req.body.vehicle_id,
+    })) return;
     // SECURITY (L5) — startShift FIRST validates the driver's own AUTHORIZED
     // assignment (driver_vehicle_assignments … authorization_status='AUTHORIZED',
     // FOR UPDATE) and throws DRIVER_NOT_AUTHORIZED before any audit write. Only

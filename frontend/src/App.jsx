@@ -6,6 +6,7 @@ import { AdminContextProvider } from './hooks/useAdminContext';
 import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
+import PolicyNoticeGate from './components/policy/PolicyNoticeGate';
 import { useVisitTracker } from './hooks/useVisitTracker';
 
 // Eager: Login is the entry path for unauthed users. Lazy-loading it would add
@@ -15,6 +16,7 @@ import Login from './pages/Login';
 // Lazy: everything past auth. Chunks are grouped by role so each user only
 // downloads what their role uses.
 const ChangePassword       = lazy(() => import('./pages/ChangePassword'));
+const PolicyCenter         = lazy(() => import('./pages/PolicyCenter'));
 const ForgotPassword       = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword        = lazy(() => import('./pages/ResetPassword'));
 const ParentStatus         = lazy(() => import('./pages/parent/ParentStatus'));
@@ -151,7 +153,7 @@ function PrivateRoute({ children, allowedRoles }) {
       </div>
     );
   }
-  return children;
+  return <PolicyNoticeGate user={user}>{children}</PolicyNoticeGate>;
 }
 
 // ── Suspense fallback for lazy-loaded routes ────────────────────────────────
@@ -209,6 +211,11 @@ export default function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/manual/*" element={<ManualRedirect />} />
+          <Route path="/my-policy" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+              <Layout><PolicyCenter /></Layout>
+            </PrivateRoute>
+          } />
 
           {/* Driver module */}
           <Route

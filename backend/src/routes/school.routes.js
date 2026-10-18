@@ -28,6 +28,7 @@ const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const checkinSvc = require('../services/checkin.service');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
 
 /**
  * Minimal RFC 4180 CSV parser — handles quoted fields with embedded commas
@@ -1905,6 +1906,9 @@ router.post('/students/import/:batchId/apply', importExportLimiter, requireFullS
     const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate, auto_create_vehicle } = req.body || {};
     const VALID_MODES = ['insert_ready', 'update_guardian_confirmed', 'reactivate_student_confirmed', 'mixed_confirmed'];
     if (!VALID_MODES.includes(mode)) return sendError(res, 'โหมดการนำเข้าไม่ถูกต้อง', [], 400);
+    if (!await consumePolicyAction(req, res, {
+      context: 'school.student_import_apply', subjectType: 'import_batch', subjectId: batchId,
+    })) return;
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.applyBatch(pool, {
       batchId, schoolId, userId: req.user.id, mode,

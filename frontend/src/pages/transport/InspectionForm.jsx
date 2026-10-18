@@ -14,6 +14,7 @@ import {
 } from '../../components/ui';
 import { todayBangkok } from '../../utils/thaiTime';
 import { useAuth } from '../../hooks/useAuth';
+import usePolicyAction from '../../hooks/usePolicyAction';
 
 // Shared by the selects on this form; FormField supplies the label wiring.
 const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition';
@@ -81,6 +82,7 @@ export default function InspectionForm() {
   const isOtherSchool = form?.certifying_school_id === '__other__';
   const isOtherVehicle = form?.vehicle_id === '__other__';
   const [newPlate, setNewPlate] = useState({ prefix: '', letters: '', number: '', province: 'ลำปาง' });
+  const { runWithPolicy, policyActionDialog } = usePolicyAction();
 
   useEffect(() => {
     // `|| []` only catches null; a non-array payload reached .filter() below
@@ -157,7 +159,15 @@ export default function InspectionForm() {
         payload.certifying_school_id = '';
         payload.notes = `[โรงเรียนที่ออกใบรับรอง: ${customSchoolName.trim()}]${payload.notes ? ' ' + payload.notes : ''}`;
       }
-      await api.post('/transport/inspections', payload);
+      const saved = await runWithPolicy({
+        context: 'transport.inspection_create', subjectType: 'vehicle', subjectId: payload.vehicle_id,
+        claim: {
+          inspection_date: payload.inspection_date, expiry_date: payload.expiry_date || null,
+          result: payload.result, has_notes: !!payload.notes,
+        },
+      }, (token) => api.post('/transport/inspections', payload,
+        token ? { headers: { 'X-Policy-Action-Token': token } } : undefined));
+      if (saved?.cancelled) return;
       toast.success('บันทึกผลตรวจสำเร็จ');
       const savedVehicleId = form.vehicle_id;
       setShowForm(false);
@@ -461,6 +471,7 @@ export default function InspectionForm() {
         onConfirm={() => handleDeleteInspection(confirmDelete)}
         onCancel={() => setConfirmDelete(null)}
       />
+      {policyActionDialog}
     </div>
   );
 }

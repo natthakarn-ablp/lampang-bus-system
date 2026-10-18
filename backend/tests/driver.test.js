@@ -107,8 +107,13 @@ describe('GET /api/driver/roster', () => {
     expect(student).toHaveProperty('classroom');
     expect(student).toHaveProperty('morning_done');
     expect(student).toHaveProperty('evening_done');
-    // cid_hash must NOT be exposed
+    // Identity and guardian contact data must NOT be exposed in the daily
+    // operational roster. Drivers only need name, class and trip status.
     expect(student).not.toHaveProperty('cid');
+    expect(student).not.toHaveProperty('cid_hash');
+    expect(student).not.toHaveProperty('phone');
+    expect(student).not.toHaveProperty('parent_phone');
+    expect(student).not.toHaveProperty('guardian_phone');
   });
 
   it('?session=morning filters only morning-enabled students', async () => {

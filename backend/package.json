@@ -19,7 +19,8 @@
     "create:admin": "node scripts/create-admin.js",
     "seed:uat:prod": "node scripts/seed-production-uat-users.js",
     "uat:live": "node scripts/run-uat-live-check.js",
-    "audit:transport-permissions": "node scripts/verify-transport-permissions.js --check"
+    "audit:transport-permissions": "node scripts/verify-transport-permissions.js --check",
+    "audit:driver-permissions": "node scripts/verify-driver-permissions.js --check"
   },
   "dependencies": {
     "@line/bot-sdk": "^10.6.0",

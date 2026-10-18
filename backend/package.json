@@ -18,7 +18,8 @@
     "migrate": "node scripts/migrate-from-excel.js",
     "create:admin": "node scripts/create-admin.js",
     "seed:uat:prod": "node scripts/seed-production-uat-users.js",
-    "uat:live": "node scripts/run-uat-live-check.js"
+    "uat:live": "node scripts/run-uat-live-check.js",
+    "audit:transport-permissions": "node scripts/verify-transport-permissions.js --check"
   },
   "dependencies": {
     "@line/bot-sdk": "^10.6.0",

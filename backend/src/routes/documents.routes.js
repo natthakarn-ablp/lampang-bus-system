@@ -58,13 +58,17 @@ router.get('/:docType/:id/file', async (req, res, next) => {
     catch { return NOT_FOUND(res); }
     if (!stat.isFile()) return NOT_FOUND(res);
 
-    // Audit the view (best-effort; EXPORT = data left the system to a user).
-    logAudit({
+    // A document contains personal data and leaves the system when viewed.
+    // Store the audit row before any response headers or bytes are released.
+    // If audit storage is unavailable, fail closed instead of creating an
+    // unrecorded sensitive-data access.
+    await logAudit({
       userId: req.user.id, action: 'EXPORT',
       entityType: docType === 'vehicle' ? 'vehicle_document' : 'driver_document',
       entityId: String(id),
       newValue: { action: 'view_document', doc_type: row.doc_type },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      required: true,
     });
 
     // Content-Type: the STORED mime is the CLIENT-DECLARED multipart type, so a

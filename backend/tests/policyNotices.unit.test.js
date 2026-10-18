@@ -5,13 +5,13 @@ const {
   noticesForRole, actionPolicyForRole, catalogForRole,
 } = require('../src/config/policyNotices');
 
-describe('staff policy notice draft', () => {
-  test('keeps legal approval false while exposing a labelled review candidate', () => {
+describe('staff policy notice meeting pilot', () => {
+  test('keeps legal approval false while exposing the labelled production meeting candidate', () => {
     expect(APPROVED).toBe(false);
     expect(REVIEW_MODE).toBe(true);
     expect(LEGAL_REVIEW.approved).toBe(false);
     expect(LEGAL_REVIEW.fullNoticeUrl).toBe('');
-    expect(VERSION).toMatch(/^draft-/);
+    expect(VERSION).toBe('meeting-pilot-20261021');
   });
 
   test('has the common topic and a distinct scoped topic for every staff role', () => {

@@ -35,4 +35,14 @@ describe('unapproved policy notices', () => {
     expect(response.status).toBe(404);
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
+
+  test('does not expose action drafts or catalog content', async () => {
+    const [action, catalog] = await Promise.all([
+      request(app).get('/api/policy-notices/action/transport.vehicle_export'),
+      request(app).get('/api/policy-notices/catalog'),
+    ]);
+    expect(action.body.data).toEqual({ enabled: false, action: null });
+    expect(catalog.body.data).toEqual({ enabled: false, policies: [] });
+    expect(pool.query).not.toHaveBeenCalled();
+  });
 });

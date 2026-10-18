@@ -68,6 +68,10 @@ const ACCEPTED_OPEN_ROUTES = [
     reason: 'Every staff role may acknowledge only its own approved notice. Scope and actor are taken from the authenticated token, never the request body; topic and version are checked against that role before the append-only write.',
   },
   {
+    method: 'POST', path: '/api/policy-notices/prepare-action',
+    reason: 'Every staff role enters through one endpoint, but the server resolves the action policy from the authenticated role and rejects any foreign context. Scope and actor come only from the token; the subject type is fixed by the approved policy, and the resulting one-use token remains bound to that actor, context and subject.',
+  },
+  {
     method: 'POST', path: '/api/visits/track',
     reason: 'Public aggregate visit counter. No PII, no IP, no user-agent stored. Rate-limited via GLOBAL_API_LIMITED_PREFIXES; flagged non_attributable_traffic_counter so it is never used as a research metric.',
   },

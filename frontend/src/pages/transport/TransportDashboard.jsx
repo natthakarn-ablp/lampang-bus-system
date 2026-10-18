@@ -17,6 +17,7 @@ import EmptyState from '../../components/EmptyState';
 import PageHeader from '../../components/PageHeader';
 import { PageTransition } from '../../lib/motion';
 import { todayBangkok } from '../../utils/thaiTime';
+import usePolicyAction from '../../hooks/usePolicyAction';
 
 // SLA configuration — days allowed to resolve a risk item
 const SLA_DAYS = 7;
@@ -192,12 +193,19 @@ export default function TransportDashboard() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
+  const { runWithPolicy, policyActionDialog } = usePolicyAction();
 
   async function downloadSafetyReport() {
     setExporting(true);
     setExportError('');
     try {
-      const response = await api.get('/transport/export/vehicles.csv', { responseType: 'blob' });
+      const response = await runWithPolicy({
+        context: 'transport.vehicle_export', subjectType: 'transport_safety_report', subjectId: 'vehicles',
+        claim: { report: 'vehicle_safety', contains_students: false, contains_phone_numbers: false },
+      }, (token) => api.get('/transport/export/vehicles.csv', {
+        responseType: 'blob', ...(token ? { headers: { 'X-Policy-Action-Token': token } } : {}),
+      }));
+      if (response?.cancelled) return;
       const url = URL.createObjectURL(response.data);
       const link = document.createElement('a');
       link.href = url;
@@ -379,6 +387,7 @@ export default function TransportDashboard() {
       </div>
 
       {exportError && <AlertBanner variant="danger" title={exportError} />}
+      {policyActionDialog}
 
       {/* Save success banner */}
       {highlightId && (() => {

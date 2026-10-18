@@ -4,7 +4,7 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart,
+  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart, ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
@@ -36,6 +36,7 @@ const DRIVER_NAV = [
   { to: '/driver/emergency',   icon: AlertTriangle,  label: 'แจ้งเหตุฉุกเฉิน' },
   { section: 'ข้อมูลหลัก' },
   { to: '/driver/profile',     icon: User,           label: 'ข้อมูลคนขับ' },
+  { to: '/my-policy',          icon: ScrollText,     label: 'นโยบายและสิทธิของฉัน' },
 ];
 
 // School / affiliation / province / transport: one flat list of the pages a
@@ -60,6 +61,7 @@ const SCHOOL_NAV = [
   { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
   { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
   { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
+  { to: '/my-policy',             icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
@@ -78,6 +80,7 @@ const AFFILIATION_NAV = [
   { to: '/affiliation/vehicle-requests',  icon: Wrench,  label: 'คำขอเกี่ยวกับรถ' },
   { to: '/affiliation/accounts',    icon: Key,           label: 'เพิ่มโรงเรียนใหม่' },
   { to: '/affiliation/audit-log',   icon: FileText,      label: 'ประวัติการแก้ไข' },
+  { to: '/my-policy',                icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
@@ -97,6 +100,7 @@ const PROVINCE_NAV = [
   { to: '/admin/route-deviations', icon: Route,        label: 'การเบี่ยงเส้นทาง' },
   { to: '/province/unit-accounts', icon: Key,          label: 'บัญชีสังกัดและขนส่ง' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
+  { to: '/my-policy',              icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
@@ -107,6 +111,7 @@ const TRANSPORT_NAV = [
   { to: '/transport/inspections',  icon: ClipboardList, label: 'บันทึกตรวจสภาพ' },
   { to: '/transport/pickup-map',   icon: Map,          label: 'แผนที่จุดรับส่ง' },
   { section: MORE },
+  { to: '/my-policy',          icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
   { to: '/participation/summary', icon: PieChart,    label: 'สรุปการมีส่วนร่วม' },
 ];
@@ -138,6 +143,7 @@ const ADMIN_NAV = [
   { to: '/admin/executive',       icon: BarChart3,   label: 'สรุปผู้บริหาร' },
   { section: 'ตั้งค่าระบบ' },
   { to: '/admin/term-settings',   icon: Calendar,    label: 'ภาคเรียนปัจจุบัน' },
+  { to: '/my-policy',             icon: ScrollText,  label: 'นโยบายและสิทธิของฉัน' },
   { section: MORE },
   { to: '/school',                icon: Building2,   label: 'จัดการโรงเรียน' },
   { to: '/affiliation/accounts',  icon: Key,         label: 'เพิ่มโรงเรียนใหม่' },

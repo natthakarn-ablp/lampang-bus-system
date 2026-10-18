@@ -12,6 +12,7 @@ const transportSvc = require('../services/transport.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { importExportLimiter } = require('../middleware/rateLimiters');
 const { COLUMNS: SAFETY_EXPORT_COLUMNS, encodeSafetyCsv } = require('../utils/transportSafetyCsv');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
 
 // All routes require transport or admin role
 router.use(authenticate, requireRole('transport', 'admin'));
@@ -141,6 +142,9 @@ router.get('/dashboard', async (req, res, next) => {
 // Separate from /api/reports: transport never receives student/phone exports.
 router.get('/export/vehicles.csv', importExportLimiter, async (req, res, next) => {
   try {
+    if (!await consumePolicyAction(req, res, {
+      context: 'transport.vehicle_export', subjectType: 'transport_safety_report', subjectId: 'vehicles',
+    })) return;
     const rows = await transportSvc.getSafetyExportRows();
     await logAudit({
       userId: req.user.id, action: 'EXPORT', entityType: 'transport_safety_report',
@@ -236,6 +240,9 @@ router.post('/inspections', async (req, res, next) => {
     if (!validResults.includes(result)) {
       return sendError(res, `result must be one of: ${validResults.join(', ')}`, [], 400);
     }
+    if (!await consumePolicyAction(req, res, {
+      context: 'transport.inspection_create', subjectType: 'vehicle', subjectId: vehicle_id,
+    })) return;
 
     // Date-bound validation + audit + eligibility refresh all happen atomically
     // inside the service (CLAUDE.md rule 7). Do not audit here.
@@ -267,6 +274,9 @@ router.put('/inspections/:id', async (req, res, next) => {
     if (!validResults.includes(result)) {
       return sendError(res, `result must be one of: ${validResults.join(', ')}`, [], 400);
     }
+    if (!await consumePolicyAction(req, res, {
+      context: 'transport.inspection_update', subjectType: 'vehicle_inspection', subjectId: inspectionId,
+    })) return;
 
     // Ownership check, date-bound validation, audit and eligibility refresh all
     // happen atomically inside the service (rule 7). 404/403 surface from there.

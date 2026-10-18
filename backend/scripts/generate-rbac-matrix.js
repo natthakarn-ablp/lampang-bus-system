@@ -64,6 +64,10 @@ const ACCEPTED_OPEN_ROUTES = [
     reason: 'Every role may acknowledge, comment on or report back about a case they can already see. Visibility is re-checked inside the transaction with the same scope predicate the list uses, so an id from another scope cannot be advanced, and the event state machine restricts which events each status accepts.',
   },
   {
+    method: 'POST', path: '/api/policy-notices/acknowledge',
+    reason: 'Every staff role may acknowledge only its own approved notice. Scope and actor are taken from the authenticated token, never the request body; topic and version are checked against that role before the append-only write.',
+  },
+  {
     method: 'POST', path: '/api/visits/track',
     reason: 'Public aggregate visit counter. No PII, no IP, no user-agent stored. Rate-limited via GLOBAL_API_LIMITED_PREFIXES; flagged non_attributable_traffic_counter so it is never used as a research metric.',
   },

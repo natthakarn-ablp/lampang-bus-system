@@ -6,6 +6,7 @@ import { AdminContextProvider } from './hooks/useAdminContext';
 import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
+import PolicyNoticeGate from './components/policy/PolicyNoticeGate';
 import { useVisitTracker } from './hooks/useVisitTracker';
 
 // Eager: Login is the entry path for unauthed users. Lazy-loading it would add
@@ -151,7 +152,7 @@ function PrivateRoute({ children, allowedRoles }) {
       </div>
     );
   }
-  return children;
+  return <PolicyNoticeGate user={user}>{children}</PolicyNoticeGate>;
 }
 
 // ── Suspense fallback for lazy-loaded routes ────────────────────────────────

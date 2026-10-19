@@ -30,4 +30,11 @@ describe('driver permission workflow contract', () => {
     }
     for (const route of ['/reports', '/admin', '/transport', '/school/students']) expect(block).not.toContain(route);
   });
+
+  test('legacy driver consent URL follows the Vehicle QR feature flag', () => {
+    const app = fs.readFileSync(path.join(__dirname, '../../frontend/src/App.jsx'), 'utf8');
+    expect(app).toMatch(/function DriverConsentRoute\(\)[\s\S]*features\?\.vehicleQr/);
+    expect(app).toMatch(/features\?\.vehicleQr\) return <Navigate to="\/my-policy" replace \/>/);
+    expect(app).toMatch(/path="\/driver\/consent"[\s\S]*<DriverConsentRoute \/>/);
+  });
 });

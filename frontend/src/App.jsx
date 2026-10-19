@@ -187,6 +187,16 @@ function ManualRedirect() {
   return <RouteFallback />;
 }
 
+// The consent API is intentionally dark when Vehicle QR is off. Keep a copied
+// or bookmarked legacy URL from landing on a form whose API cannot exist; the
+// current policy centre is the useful destination until that feature is
+// explicitly enabled.
+function DriverConsentRoute() {
+  const { features } = useAuth();
+  if (!features?.vehicleQr) return <Navigate to="/my-policy" replace />;
+  return <div className="p-4 max-w-md mx-auto"><DriverConsentForm /></div>;
+}
+
 // ── Role-based redirect after login ─────────────────────────────────────────
 function RootRedirect() {
   const { user, loading } = useAuth();
@@ -402,7 +412,7 @@ export default function App() {
           } />
           <Route path="/driver/consent" element={
             <PrivateRoute allowedRoles={['driver']}>
-              <div className="p-4 max-w-md mx-auto"><DriverConsentForm /></div>
+              <DriverConsentRoute />
             </PrivateRoute>
           } />
           <Route path="/admin/pickup-points" element={

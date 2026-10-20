@@ -99,7 +99,7 @@ export default function PolicyNoticeGate({ user, children }) {
   return <>
     {children}
     {current && !emergency && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-5" role="presentation">
+      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-3 sm:items-center sm:p-5" role="presentation">
         <section ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="policy-notice-title"
           className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-surface-border bg-surface-raised shadow-elevate p-5 sm:p-7">
           <p className="text-xs font-semibold tracking-wide text-brand-700 mb-2">

@@ -82,7 +82,7 @@ export default function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-modal flex items-start justify-center overflow-y-auto p-4 sm:items-center">
       <div
         className="absolute inset-0 bg-navy-950/60 motion-safe:animate-fade-in"
         onClick={dismissible ? () => onCloseRef.current?.() : undefined}

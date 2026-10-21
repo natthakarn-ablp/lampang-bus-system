@@ -13,6 +13,7 @@ const REQUIRED_ROUTES = [
   { id: 'view.dashboard', category: 'VIEW', method: 'GET', path: '/api/transport/dashboard', exactRoles: ['admin', 'transport'] },
   { id: 'view.vehicles', category: 'VIEW', method: 'GET', path: '/api/transport/vehicles', exactRoles: ['admin', 'transport'] },
   { id: 'view.vehicle', category: 'VIEW', method: 'GET', path: '/api/transport/vehicles/:id', exactRoles: ['admin', 'transport'] },
+  { id: 'view.incident-roster', category: 'VIEW', method: 'GET', path: '/api/transport/vehicles/:id/incident-roster', exactRoles: ['admin', 'transport'], dataBoundary: 'vehicle_pupil_school_recorded_events', auditRequired: true },
   { id: 'view.pending', category: 'VIEW', method: 'GET', path: '/api/transport/vehicles/pending', exactRoles: ['admin', 'transport'] },
   { id: 'view.expiring', category: 'VIEW', method: 'GET', path: '/api/transport/vehicles/expiring', exactRoles: ['admin', 'transport'] },
   { id: 'view.inspections', category: 'VIEW', method: 'GET', path: '/api/transport/inspections', exactRoles: ['admin', 'transport'] },

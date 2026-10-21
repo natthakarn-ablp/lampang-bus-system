@@ -13,7 +13,7 @@ describe('transport permission workflow contract', () => {
     expect(report.transport_route_count).toBeGreaterThan(30);
     expect(report.findings).toEqual([]);
     expect(report.passed).toBe(true);
-    expect(report.counts).toMatchObject({ VIEW: 15, EDIT: 7, APPROVE: 3, EXPORT: 1, DENY: 4, CONDITIONAL: 3 });
+    expect(report.counts).toMatchObject({ VIEW: 16, EDIT: 7, APPROVE: 3, EXPORT: 1, DENY: 4, CONDITIONAL: 3 });
   });
 
   test('transport remains excluded from student reports, school writes and driver check-in', () => {

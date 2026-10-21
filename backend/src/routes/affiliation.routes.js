@@ -15,6 +15,7 @@ const { isCalendarDate } = require('../utils/calendarDate');
 const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
+const { buildAffiliationSchoolsWorkbook } = require('../utils/affiliationSchoolsWorkbook');
 const affAdminSvc = require('../services/affiliationAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
@@ -197,6 +198,41 @@ router.get('/schools', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+/**
+ * GET /api/affiliation/schools/report
+ * Current master-data counts only; zero does not mean a school failed to report.
+ */
+router.get('/schools/report', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
+
+    const report = await affSvc.getSchoolsReport(affId);
+    res.setHeader('Cache-Control', 'no-store');
+    return sendSuccess(res, report);
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/affiliation/schools/report/excel
+ * Genuine XLSX using the same scoped report snapshot as the JSON endpoint.
+ */
+router.get('/schools/report/excel', importExportLimiter, async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
+
+    const report = await affSvc.getSchoolsReport(affId);
+    const workbook = buildAffiliationSchoolsWorkbook(report);
+    // Finish serialization before sending attachment headers so errors remain JSON.
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="affiliation-schools-report.xlsx"');
+    return res.send(Buffer.from(buffer));
+  } catch (err) { next(err); }
 });
 
 /**

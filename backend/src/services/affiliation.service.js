@@ -220,8 +220,8 @@ async function getDashboard(affiliationId) {
 /**
  * List schools in an affiliation with student/vehicle counts.
  */
-async function getSchools(affiliationId) {
-  const [schools] = await pool.query(
+async function getSchools(affiliationId, executor = pool) {
+  const [schools] = await executor.query(
     `SELECT sc.id, sc.name,
             (SELECT COUNT(*) FROM students s
              WHERE s.school_id = sc.id AND s.is_deleted = FALSE) AS student_count,
@@ -238,6 +238,60 @@ async function getSchools(affiliationId) {
   );
 
   return schools;
+}
+
+/**
+ * Current master-data overview, not a school submission/attestation report.
+ * Keep school rows and the deduplicated fleet count in one read-only snapshot.
+ */
+async function getSchoolsReport(affiliationId) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    await connection.query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
+    const generatedAt = new Date().toISOString();
+    const [[affiliation]] = await connection.query(
+      'SELECT id, name FROM affiliations WHERE id = ? AND is_deleted = FALSE',
+      [affiliationId]
+    );
+    if (!affiliation) {
+      const error = new Error('ไม่พบข้อมูลสังกัด');
+      error.statusCode = 404;
+      throw error;
+    }
+    const schoolRows = await getSchools(affiliationId, connection);
+    const [[{ total_vehicles }]] = await connection.query(
+      `SELECT COUNT(DISTINCT s.vehicle_id) AS total_vehicles FROM students s
+       JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+       JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
+       WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE`,
+      [affiliationId]
+    );
+    const schools = schoolRows.map(row => ({
+      ...row,
+      student_count: Number(row.student_count),
+      vehicle_count: Number(row.vehicle_count),
+    }));
+    const report = {
+      affiliation,
+      generated_at: generatedAt,
+      summary: {
+        total_schools: schools.length,
+        total_students: schools.reduce((total, school) => total + school.student_count, 0),
+        // Shared vehicles appear in multiple school rows but only once here.
+        total_vehicles: Number(total_vehicles),
+      },
+      schools,
+    };
+    await connection.commit();
+    return report;
+  } catch (err) {
+    // Preserve the original query error even if cleanup also fails.
+    try { await connection.rollback(); } catch { /* preserve original error */ }
+    throw err;
+  } finally {
+    connection.release();
+  }
 }
 
 /**
@@ -550,6 +604,7 @@ async function getVehiclesAtRisk(affiliationId, { limit = 10 } = {}) {
 module.exports = {
   getDashboard,
   getSchools,
+  getSchoolsReport,
   getStudents,
   getVehicles,
   getStatusToday,

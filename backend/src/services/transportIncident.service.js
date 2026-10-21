@@ -11,11 +11,13 @@ function validateSelection({ vehicleId, date, session }, today = todayBangkok())
   if (typeof vehicleId !== 'string' || !/^[A-Za-z0-9_-]{1,20}$/.test(vehicleId)) {
     throw invalid('รหัสรถไม่ถูกต้อง');
   }
-  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)
-      || !Number.isFinite(Date.parse(`${date}T00:00:00Z`))
-      || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date) {
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw invalid('วันที่ไม่ถูกต้อง');
   }
+  const [year, month, day] = date.split('-').map(Number);
+  const calendar = new Date(`${date}T00:00:00Z`);
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() + 1 !== month
+      || calendar.getUTCDate() !== day) throw invalid('วันที่ไม่ถูกต้อง');
   const age = daysBetweenBangkok(date, today);
   if (age < 0 || age > 30) throw invalid('เลือกวันที่วันนี้หรือย้อนหลังได้ไม่เกิน 30 วัน');
   if (!['morning', 'evening'].includes(session)) throw invalid('กรุณาเลือกรอบเช้าหรือรอบเย็น');

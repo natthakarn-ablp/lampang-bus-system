@@ -13,6 +13,7 @@ const ppSvc = require('../services/pickupPoint.service');
 const { importExportLimiter } = require('../middleware/rateLimiters');
 const { COLUMNS: SAFETY_EXPORT_COLUMNS, encodeSafetyCsv } = require('../utils/transportSafetyCsv');
 const { consumePolicyAction } = require('../utils/policyActionEvidence');
+const incidentSvc = require('../services/transportIncident.service');
 
 // All routes require transport or admin role
 router.use(authenticate, requireRole('transport', 'admin'));
@@ -205,6 +206,25 @@ router.get('/vehicles/expiring', async (req, res, next) => {
     });
     sendSuccess(res, data.vehicles, 'OK', data.meta);
   } catch (err) { next(err); }
+});
+
+// Dedicated incident view; do not broaden school, driver or export routes.
+router.get('/vehicles/:id/incident-roster', async (req, res, next) => {
+  res.set('Cache-Control', 'no-store, private');
+  try {
+    const data = await incidentSvc.getIncidentVehicle({
+      vehicleId: req.params.id, date: req.query.date, session: req.query.session,
+      role: req.user.role,
+    });
+    await logAudit({
+      userId: req.user.id, action: 'VIEW', entityType: 'transport_incident_roster',
+      entityId: req.params.id,
+      newValue: { date: data.date, session: data.session,
+        roster_count: data.current_roster.length, event_count: data.recorded_events.length },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'], required: true,
+    });
+    return sendSuccess(res, data);
+  } catch (err) { return next(err); }
 });
 
 // ─── GET /api/transport/vehicles/:id ────────────────────────────────────────

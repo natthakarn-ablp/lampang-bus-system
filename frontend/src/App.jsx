@@ -95,6 +95,7 @@ const PolicyReport         = lazy(() => import('./pages/reports/PolicyReport'));
 const TransportLayout      = lazy(() => import('./pages/transport/TransportLayout'));
 const TransportDashboard   = lazy(() => import('./pages/transport/TransportDashboard'));
 const TransportVehicleList = lazy(() => import('./pages/transport/TransportVehicleList'));
+const TransportIncidentRoster = lazy(() => import('./pages/transport/TransportIncidentRoster'));
 const InspectionForm       = lazy(() => import('./pages/transport/InspectionForm'));
 const TransportPickupMap   = lazy(() => import('./pages/transport/TransportPickupMap'));
 const VerificationQueue    = lazy(() => import('./pages/transport/VerificationQueue'));
@@ -348,6 +349,7 @@ export default function App() {
           >
             <Route index             element={<TransportDashboard />} />
             <Route path="vehicles"   element={<TransportVehicleList />} />
+            <Route path="vehicles/:id/incident-roster" element={<TransportIncidentRoster />} />
             <Route path="inspections" element={<InspectionForm />} />
             <Route path="verification" element={<VerificationQueue />} />
             <Route path="pickup-map"  element={<TransportPickupMap />} />

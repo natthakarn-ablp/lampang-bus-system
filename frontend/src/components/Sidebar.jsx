@@ -106,6 +106,7 @@ const PROVINCE_NAV = [
 ];
 
 const TRANSPORT_NAV = [
+  { to: '/transport/vehicles',     icon: Bus,          label: 'ข้อมูลรถเมื่อเกิดเหตุ' },
   { to: '/transport',              icon: BarChart3,    label: 'ภาพรวมตรวจสภาพรถ' },
   { to: '/transport/verification', icon: CheckSquare,  label: 'ตรวจรับรองรถ' },
   { to: '/transport/inspections',  icon: ClipboardList, label: 'บันทึกตรวจสภาพ' },

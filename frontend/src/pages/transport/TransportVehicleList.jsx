@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Bus } from 'lucide-react';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
@@ -119,6 +119,8 @@ export default function TransportVehicleList() {
         loading={loading}
         rows={vehicles}
         rowKey={v => v.id}
+        actionsHeader="ข้อมูลเมื่อเกิดเหตุ"
+        actions={v => <Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} className="inline-flex items-center min-h-11 px-3 rounded-lg text-brand-700 font-medium underline focus-ring">ดูนักเรียนและข้อมูลรถ</Link>}
         columns={[
           { key: 'plate', header: 'ทะเบียนรถ', primary: true,
             cell: v => <span className="font-medium text-ink">{v.plate_no}</span> },

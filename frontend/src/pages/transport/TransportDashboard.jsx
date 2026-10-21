@@ -362,6 +362,9 @@ export default function TransportDashboard() {
           subtitle="สรุปสถานะรถและการตรวจสภาพทั้งจังหวัด"
           actions={
             <div className="flex flex-wrap items-stretch gap-2">
+              <Link to="/transport/vehicles" className="focus-ring inline-flex items-center justify-center bg-brand-700 text-white text-sm font-medium px-3.5 rounded-xl min-h-[44px]">
+                ค้นรถและนักเรียนเมื่อเกิดเหตุ
+              </Link>
               <Link
                 to="/transport/verification"
                 className="focus-ring inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3.5 rounded-xl transition border border-surface-border min-h-[44px]"

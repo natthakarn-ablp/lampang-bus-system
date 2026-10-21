@@ -72,7 +72,8 @@ async function assertLegacyWritable(conn, vehicleId) {
 }
 
 /**
- * Transport role sees ALL vehicles + inspection data, never student PII.
+ * Ordinary transport lists contain vehicle + inspection data, no pupil PII.
+ * The separately audited incident read is in transportIncident.service.js.
  * No school/affiliation scope — transport is cross-cutting safety, not a
  * roster view. Per Phase 10.6C PDPA cleanup: no roster-size aggregate, no
  * student names/IDs, no parent info — only vehicle, driver, inspection, insurance

@@ -4,11 +4,11 @@
 // approve the full notice, contact channel, lawful basis and retention period
 // before any entry is marked approved. Acknowledgement is never consent.
 const VERSION = 'meeting-pilot-20261021';
-// The owner approved real production use for the 21 Oct 2026 working-group
-// meeting. Operational actions remain real and retain their existing audit.
-// Until the committee supplies the missing legal facts, meeting mode does not
-// create legal acknowledgement evidence or present itself as a final notice.
-const REVIEW_MODE = true;
+// The owner requested removal of the 21 Oct 2026 meeting-pilot dialogs.
+// Keep the draft for legal review,
+// but do not display it or create acknowledgement evidence while unapproved.
+// Operational actions remain available under their existing permissions.
+const REVIEW_MODE = false;
 const LEGAL_REVIEW = Object.freeze({
   approved: false,
   approvalReference: '',

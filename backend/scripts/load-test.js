@@ -814,6 +814,9 @@ async function runStage({
       const bearer = tokenForScenario(scenario, tokens, fallbackToken);
       const init = {
         method: scenario.method,
+        // A sandbox endpoint must never silently redirect generated traffic
+        // to a different host (including production).
+        redirect: 'error',
         headers: { 'content-type': 'application/json', ...headers, ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
       };
       if (scenario.body) init.body = JSON.stringify(scenario.body(vu));

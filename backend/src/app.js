@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const { routeLatencyMiddleware } = require('./services/routeLatency.service');
 
 const env = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
@@ -106,6 +107,10 @@ app.get('/health', async (_req, res) => {
     },
   });
 });
+
+// Aggregate timing for operator API routes only. Labels come from registered
+// route templates; raw URLs, params and response bodies are never retained.
+app.use(routeLatencyMiddleware);
 
 // ─── Global rate-limit floor (Medium fix) ───────────────────────────────────
 // A single authenticated token should not be able to hammer any API endpoint

@@ -2031,6 +2031,13 @@ router.get('/operations/capacity-sample', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Process-local, PII-free route histograms. The router-level admin guard above
+// applies here too; snapshots are cumulative and reset after PM2 restarts.
+router.get('/operations/route-latency', (_req, res) => {
+  const { snapshot } = require('../services/routeLatency.service');
+  return sendSuccess(res, snapshot());
+});
+
 // ─── Phase 10.13B-8 — Driver lifecycle & assignment wizard (admin-only) ──────
 router.get('/driver-integrity', async (req, res, next) => {
   try {

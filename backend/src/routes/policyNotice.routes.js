@@ -284,7 +284,7 @@ router.post('/consume-client-action', requireRole('school', 'affiliation', 'prov
     return sendError(res, 'รายการพิมพ์ไม่ตรงกับข้อความยืนยัน', [], 400);
   }
   if (!await consumePolicyAction(req, res, { context, subjectType, subjectId })) return undefined;
-  return sendSuccess(res, { consumed: APPROVED, reviewMode: !APPROVED });
+  return sendSuccess(res, { consumed: APPROVED, reviewMode: REVIEW_MODE && !APPROVED });
 });
 
 router.post('/acknowledge', requireRole(...STAFF_ROLES), async (req, res, next) => {

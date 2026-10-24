@@ -155,14 +155,14 @@ const SHOTS = [
   { id: 'school/21-participation-new', url: '/participation/new', user: 'school', ...DESKTOP, fit: true },
   // โมดัลบนหน้ารายชื่อนักเรียน — ต้องกดเปิดก่อนถึงจะเห็น
   { id: 'school/04-import-preview', url: '/school/students', user: 'school', ...DESKTOP,
-    act: async (p) => { await act.click(p, 'button:has-text("นำเข้า")', 900); } },
+    act: async (p) => { await act.click(p, 'button:has-text("เพิ่มหลายคนจากไฟล์")', 900); } },
   { id: 'school/05-import-history', url: '/school/students', user: 'school', ...DESKTOP,
-    act: async (p) => { await act.click(p, 'button:has-text("ประวัติการนำเข้า")', 900); } },
+    act: async (p) => { await act.click(p, 'summary:has-text("ประวัติและเครื่องมือนำเข้าเพิ่มเติม")', 400); await act.click(p, 'button:has-text("ประวัติการนำเข้า")', 900); } },
   // โมดัลโอนย้ายอยู่ "หลัง" โมดัลแก้ไขนักเรียน (StudentSearch.jsx:510) ต้องกด
   // แก้ไขของแถวแรกก่อน แล้วจึงกด "ขอโอนย้ายนักเรียน" — selector เดิมหาไม่เจอ
   { id: 'school/17-transfer', url: '/school/students', user: 'school', ...DESKTOP,
     act: async (p) => {
-      await act.click(p, 'button:has-text("แก้ไข")', 900);
+      await act.click(p, 'button:has-text("แก้ข้อมูล")', 900);
       await act.click(p, 'button:has-text("ขอโอนย้ายนักเรียน")', 900);
     } },
 
@@ -171,6 +171,9 @@ const SHOTS = [
   { id: 'transport/02-verification', url: '/transport/verification', user: 'transport', ...DESKTOP },
   { id: 'transport/03-inspections', url: '/transport/inspections', user: 'transport', ...DESKTOP },
   { id: 'transport/04-pickup-map', url: '/transport/pickup-map', user: 'transport', ...DESKTOP },
+  // ข้อมูลรถเมื่อเกิดเหตุ: รายการรถ แล้วกดเข้าดูนักเรียนของคันแรก
+  { id: 'transport/08-incident-vehicles', url: '/transport/vehicles', user: 'transport', ...DESKTOP },
+  { id: 'transport/09-incident-roster', url: '/transport/vehicles/V-1/incident-roster', user: 'transport', ...DESKTOP, fit: true },
   { id: 'transport/05-participation-cases', url: '/participation', user: 'transport', ...DESKTOP, fit: true },
   { id: 'transport/06-participation-case', url: '/participation/cases/9104', user: 'transport', ...DESKTOP, fit: true },
   { id: 'transport/07-participation-summary', url: '/participation/summary', user: 'transport', ...DESKTOP, fit: true },
@@ -218,12 +221,16 @@ const SHOTS = [
   // ปุ่มบนหน้าจริงเขียนว่า "แบบเดิม" (คำเต็ม "นำเข้าแบบเดิม (สำรอง)" อยู่ใน title
   // ซึ่ง has-text ไม่เห็น) — selector เดิมจึงไม่กดอะไรเลย ได้ภาพซ้ำหน้ารายชื่อ
   { id: 'school/06-import-legacy', url: '/school/students', user: 'school', ...DESKTOP,
-    act: async (p) => { await act.click(p, 'button:has-text("แบบเดิม")', 900); } },
+    act: async (p) => { await act.click(p, 'summary:has-text("ประวัติและเครื่องมือนำเข้าเพิ่มเติม")', 400); await act.click(p, 'button:has-text("แบบเดิม")', 900); } },
   { id: 'school/13-override', url: '/school', user: 'school', ...DESKTOP,
-    act: async (p) => { await act.click(p, 'button:has-text("ยืนยันแทนคนขับ")', 900); } },
-  // ครูกด "ถึงโรงเรียนทั้งคัน" แล้วระบบถามยืนยันก่อนบันทึก
+    act: async (p) => {
+      // ปุ่มย้ายเข้าไปอยู่ใต้ "งานแก้ไขรายการพิเศษ" (SchoolDashboard.jsx) ต้องกางก่อน
+      await act.click(p, 'summary:has-text("งานแก้ไขรายการพิเศษ")', 400);
+      await act.click(p, 'button:has-text("ยืนยันแทนคนขับ")', 900);
+    } },
+  // ครูกด "บันทึกที่เหลือทั้งคัน (n คน)" แล้วระบบถามยืนยันก่อนบันทึก
   { id: 'school/22c-teacher-check-confirm', url: '/school/teacher-check?session=morning', user: 'teacher', ...MOBILE,
-    act: async (p) => { await act.click(p, 'button:has-text("ถึงโรงเรียนทั้งคัน")', 900); } },
+    act: async (p) => { await act.click(p, 'button:has-text("บันทึกที่เหลือทั้งคัน")', 900); } },
   // หน้าภาพรวมของครูประจำสายชั้น (ไม่มีปุ่มจัดการรถ/ยืนยันแทนคนขับ)
   { id: 'school/01b-dashboard-teacher', url: '/school', user: 'teacher', ...DESKTOP },
   // เมนูข้าง: หน้าที่ใช้ทุกวันอยู่บน ที่เหลือพับใต้ "เพิ่มเติม" (กดเปิดให้เห็น)

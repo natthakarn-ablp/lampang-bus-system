@@ -1003,6 +1003,28 @@ const COMMON = {
     { id: 'I-2', plate_no: 'กข-2222 ลำปาง', result: 'NEEDS_FIX', inspection_date: '2026-07-15', expiry_date: null,         inspector_name: 'เจ้าหน้าที่ ทดสอบ', notes: 'ยางสึก' },
   ], meta: { page: 1, per_page: 20, total: 2 } },
   '/api/transport/vehicles': { data: PICKUP_VEHICLES, meta: { page: 1, per_page: 20, total: 2 } },
+  // ข้อมูลรถเมื่อเกิดเหตุ (TransportIncidentRoster.jsx) — ชื่อสมมุติทั้งหมด
+  '/api/transport/vehicles/V-1/incident-roster': { data: {
+    fetched_at: '2026-08-27T01:05:00Z', date: '2026-08-27', session: 'morning',
+    vehicle: { id: 'V-1', plate_no: 'กข-1111 ลำปาง', vehicle_type: 'รถตู้', driver_names: ['นายคนขับ ตัวอย่าง'], certified_capacity: 12 },
+    current_roster: [
+      { id: 'R-1', name: 'ด.ช.นักเรียน ตัวอย่าง ก', school_name: 'โรงเรียนบ้านตัวอย่าง', pickup_points: ['หน้าวัดตัวอย่าง'] },
+      { id: 'R-2', name: 'ด.ญ.นักเรียน ตัวอย่าง ข', school_name: 'โรงเรียนบ้านตัวอย่าง', pickup_points: ['ปากซอยตัวอย่าง 3'] },
+      { id: 'R-3', name: 'ด.ช.นักเรียน ตัวอย่าง ค', school_name: 'โรงเรียนตัวอย่างสอง', pickup_points: [] },
+    ],
+    recorded_events: [
+      { id: 'E-2', name: 'ด.ญ.นักเรียน ตัวอย่าง ข', school_name: 'โรงเรียนบ้านตัวอย่าง', status: 'CHECKED_IN', checked_at: '2026-08-27T00:42:00Z', updated_at: '2026-08-27T00:42:00Z', pickup_points: ['ปากซอยตัวอย่าง 3'] },
+      { id: 'E-1', name: 'ด.ช.นักเรียน ตัวอย่าง ก', school_name: 'โรงเรียนบ้านตัวอย่าง', status: 'CHECKED_IN', checked_at: '2026-08-27T00:35:00Z', updated_at: '2026-08-27T00:35:00Z', pickup_points: ['หน้าวัดตัวอย่าง'] },
+    ],
+  } },
+  // สรุปโรงเรียนในสังกัด (SchoolList.jsx) — ตัวเลขสมมุติ
+  '/api/affiliation/schools/report': { data: {
+    summary: { total_schools: 2, total_students: 186, total_vehicles: 9 },
+    schools: [
+      { id: 'SC-1', name: 'โรงเรียนบ้านตัวอย่าง', student_count: 124, vehicle_count: 6 },
+      { id: 'SC-2', name: 'โรงเรียนตัวอย่างสอง', student_count: 62, vehicle_count: 3 },
+    ],
+  } },
   '/api/transport/schools': { data: [
     { id: 'SC-1', name: 'โรงเรียนบ้านตัวอย่าง' },
     { id: 'SC-2', name: 'โรงเรียนตัวอย่างสอง' },

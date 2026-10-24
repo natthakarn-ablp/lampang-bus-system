@@ -62,6 +62,48 @@ async function passPretrip(page) {
   await page.waitForTimeout(200);
 }
 
+/** หน้าผู้ปกครองที่ผูกบัญชีแล้ว — เฉพาะในฮาร์เนสนี้
+ *
+ *  /parent ยืนยันตัวตนจาก id_token ของ LIFF เท่านั้น ซึ่งเปิดนอกแอป LINE ไม่ได้
+ *  แทนที่จะเปิดช่องในโค้ดจริง ฮาร์เนสเสิร์ฟโมดูล utils/liff.js ตัวปลอมแทนไฟล์ที่
+ *  vite ส่ง (ในเบราว์เซอร์ทดสอบเท่านั้น) แล้วตอบ /api/parent/** ด้วยข้อมูลสมมุติ
+ *  โค้ด production ไม่รู้จักโทเค็นนี้ และเซิร์ฟเวอร์จริงไม่ถูกเรียกเลย */
+const PARENT_CHILD = {
+  id: 9001, first_name: 'นักเรียน', last_name: 'ตัวอย่าง', grade: 'ป.3', classroom: '2',
+  school_name: 'โรงเรียนบ้านตัวอย่าง', plate_no: 'กข-1111 ลำปาง', driver_name: 'นายคนขับ ตัวอย่าง',
+};
+const PARENT_API = {
+  '/api/parent/children': { data: [PARENT_CHILD], meta: { consent_required: false } },
+  [`/api/parent/children/${PARENT_CHILD.id}/status`]: { data: {
+    morning_done: true, morning_ts: '2026-08-27T00:41:00Z', morning_label: 'ส่งถึงโรงเรียนแล้ว',
+    evening_done: false, evening_ts: null, evening_label: null,
+  } },
+  [`/api/parent/children/${PARENT_CHILD.id}/history`]: { data: { history: [
+    { check_date: '2026-08-27', session: 'morning', status: 'CHECKED_OUT', checked_at: '2026-08-27T00:41:00Z' },
+    { check_date: '2026-08-26', session: 'evening', status: 'CHECKED_OUT', checked_at: '2026-08-26T09:12:00Z' },
+    { check_date: '2026-08-26', session: 'morning', status: 'CHECKED_OUT', checked_at: '2026-08-26T00:38:00Z' },
+    { check_date: '2026-08-25', session: 'evening', status: 'ABSENT', checked_at: '2026-08-25T08:55:00Z' },
+    { check_date: '2026-08-25', session: 'morning', status: 'CHECKED_OUT', checked_at: '2026-08-25T00:44:00Z' },
+  ] } },
+};
+async function asLinkedParent(page) {
+  await page.route(/\/src\/utils\/liff\.js/, route => route.fulfill({
+    status: 200, contentType: 'application/javascript',
+    body: [
+      "export async function resolveLineUserId() { return 'U-fixture'; }",
+      "export async function getLiffIdToken() { return 'fixture-id-token'; }",
+      'export function isLiffReady() { return true; }',
+      'export function isInLiffClient() { return true; }',
+    ].join('\n'),
+  }));
+  // ลงทะเบียนหลัง newPage → Playwright ใช้ตัวนี้ก่อนตัวดัก /api ทั่วไป
+  await page.route(/\/api\/parent\//, route => {
+    const m = PARENT_API[new URL(route.request().url()).pathname];
+    return route.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify(m ? { success: true, message: 'OK', ...m } : { success: true, message: 'OK', data: {} }) });
+  });
+}
+
 /* ── ภาพที่ต้องถ่าย: ชื่อไฟล์ในคู่มือ -> หน้าจริง ────────────────────────
    id ต้องตรงกับ path เดิมเป๊ะ เพราะคู่มือ HTML และ markdown อ้างชื่อนี้ */
 const SHOTS = [
@@ -242,6 +284,11 @@ const SHOTS = [
   // ในหัวข้อปัญหาที่พบบ่อย หน้าที่ผูกบัญชีแล้วยังถ่ายไม่ได้: /parent ยืนยันตัวตน
   // จาก id_token ที่ LINE เซ็นเท่านั้น (ไม่มี query param ให้แอบระบุตัวตน)
   { id: 'parent/01-status', url: '/parent', user: null, ...MOBILE },
+  { id: 'parent/03-children', url: '/parent', user: null, ...MOBILE, prepare: asLinkedParent },
+  { id: 'parent/04-status-today', url: '/parent', user: null, ...MOBILE, prepare: asLinkedParent,
+    act: async (p) => { await act.click(p, 'button:has-text("สถานะวันนี้")', 900); } },
+  { id: 'parent/05-history', url: '/parent', user: null, ...MOBILE, prepare: asLinkedParent,
+    act: async (p) => { await act.click(p, 'button:has-text("ย้อนหลัง")', 900); } },
   { id: 'parent/02-link', url: '/parent/link', user: null, ...MOBILE },
 ];
 
@@ -287,6 +334,7 @@ for (const shot of wanted) {
   });
 
   try {
+    if (shot.prepare) await shot.prepare(page);
     await page.goto(BASE + shot.url, { waitUntil: 'networkidle', timeout: 20000 });
     // หน้าโหลดข้อมูลผ่าน effect หลัง networkidle — รอจน skeleton หายไป
     // ภาพเดิมบางใบถ่ายเร็วเกินจนได้ placeholder เบลอแทนข้อความจริง

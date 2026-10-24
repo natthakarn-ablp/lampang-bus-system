@@ -35,8 +35,9 @@ export default function ParticipationNewCase() {
   const [scopeId, setScopeId] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // PROVINCE is the whole province, so it is the one scope with no narrower id.
-  const scopeIdRequired = needsScope && scopeType && scopeType !== 'PROVINCE';
+  // PROVINCE and TRANSPORT are province-wide, so they have no narrower id
+  // (participation.service.js PROVINCE_WIDE_SCOPES).
+  const scopeIdRequired = needsScope && scopeType && !['PROVINCE', 'TRANSPORT'].includes(scopeType);
 
   async function submit(e) {
     e.preventDefault();
@@ -50,7 +51,7 @@ export default function ParticipationNewCase() {
       const payload = { case_type: caseType, subject: subject.trim(), body: body.trim() || null };
       if (needsScope) {
         payload.scope_type = scopeType;
-        if (scopeType !== 'PROVINCE') payload.scope_id = scopeId.trim();
+        if (scopeIdRequired) payload.scope_id = scopeId.trim();
       }
       const res = await api.post('/participation/cases', payload);
       toast.success(res.data.message || 'บันทึกเรื่องสำเร็จ');

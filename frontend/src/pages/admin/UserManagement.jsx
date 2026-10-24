@@ -204,6 +204,10 @@ export default function UserManagement() {
             cell: u => <span className="font-medium text-ink">{u.username}</span> },
           { key: 'display_name', header: 'ชื่อแสดง', secondary: true,
             cell: u => u.display_name || '-' },
+          // The participation "มอบหมายผู้รับผิดชอบ" form asks for this number
+          // (ParticipationCaseDetail.jsx), and no other screen shows it.
+          { key: 'id', header: 'รหัสผู้ใช้',
+            cell: u => <span className="text-ink-muted tabular-nums">{u.id}</span> },
           { key: 'role', header: 'บทบาท', cell: u => <RoleBadge role={u.role} /> },
           { key: 'scope', header: 'หน่วยงาน',
             cell: u => <span className="text-ink-muted">{u.scope_name || u.scope_id || '-'}</span> },

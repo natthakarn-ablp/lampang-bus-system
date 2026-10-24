@@ -52,6 +52,11 @@ describe('case validation', () => {
     expect(svc.validateCaseInput({
       ...VALID_CASE, scope_type: 'PROVINCE', scope_id: null, initiated_role: 'province',
     }).error).toBeUndefined();
+    // TRANSPORT is province-wide as well — the route files it with a null id,
+    // and rejecting that left the transport role unable to raise any case.
+    expect(svc.validateCaseInput({
+      ...VALID_CASE, scope_type: 'TRANSPORT', scope_id: null, initiated_role: 'transport',
+    }).error).toBeUndefined();
   });
 
   it('rejects a half-specified link to an operational record', () => {

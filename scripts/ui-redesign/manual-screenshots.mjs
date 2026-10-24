@@ -238,9 +238,10 @@ const SHOTS = [
     act: async (p) => { await act.click(p, 'nav button:has-text("เพิ่มเติม")', 700); } },
 
   // ── parent ──
-  // parent/01-status ถ่ายไม่ได้: /parent ปฏิเสธการทำงานนอก LINE client โดยตั้งใจ
-  // (ยืนยันตัวตนจาก id_token ที่ LINE เซ็นเท่านั้น) การทำให้ถ่ายได้ต้องเปิดช่อง
-  // ระบุตัวตนผ่าน query param ซึ่งเป็นช่องโหว่ — ภาพนั้นต้องถ่ายด้วยคนใน LINE
+  // หน้าสถานะเมื่อเปิดนอก LINE / ยังไม่ผูกบัญชี — คู่มือผู้ปกครองใช้ภาพนี้
+  // ในหัวข้อปัญหาที่พบบ่อย หน้าที่ผูกบัญชีแล้วยังถ่ายไม่ได้: /parent ยืนยันตัวตน
+  // จาก id_token ที่ LINE เซ็นเท่านั้น (ไม่มี query param ให้แอบระบุตัวตน)
+  { id: 'parent/01-status', url: '/parent', user: null, ...MOBILE },
   { id: 'parent/02-link', url: '/parent/link', user: null, ...MOBILE },
 ];
 

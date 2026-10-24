@@ -32,6 +32,7 @@ const CASE_TYPES = Object.freeze([
 ]);
 
 const SCOPE_TYPES = Object.freeze(['SCHOOL', 'AFFILIATION', 'PROVINCE', 'TRANSPORT']);
+const PROVINCE_WIDE_SCOPES = Object.freeze(['PROVINCE', 'TRANSPORT']);
 
 const ROLES = Object.freeze([
   'driver', 'school', 'affiliation', 'province', 'transport', 'admin', 'parent',
@@ -128,9 +129,11 @@ function validateCaseInput(input = {}) {
   if (!SCOPE_TYPES.includes(scopeType)) {
     return { error: `scope_type ต้องเป็นค่าใดค่าหนึ่งใน ${SCOPE_TYPES.join(', ')}` };
   }
-  // PROVINCE is the whole province, so it has no narrower id; every other
-  // scope must name the unit it belongs to or the case cannot be routed.
-  if (scopeType !== 'PROVINCE' && !scopeId) {
+  // PROVINCE is the whole province, so it has no narrower id. TRANSPORT is
+  // province-wide too: callerScope() files it with a null id and its list
+  // clause matches on scope_type alone. Every other scope must name the unit
+  // it belongs to or the case cannot be routed.
+  if (!PROVINCE_WIDE_SCOPES.includes(scopeType) && !scopeId) {
     return { error: 'scope_id จำเป็นสำหรับ scope_type นี้' };
   }
   if (!ROLES.includes(initiatedRole)) {

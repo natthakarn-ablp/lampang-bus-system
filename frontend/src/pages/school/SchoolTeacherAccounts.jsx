@@ -312,7 +312,6 @@ export default function SchoolTeacherAccounts() {
           ]}
           actions={a => (
             <>
-              <TableAction tone="brand" onClick={() => openEdit(a)}>แก้ไข</TableAction>
               <TableAction tone="neutral" onClick={() => openReset(a)}>รีเซ็ตรหัส</TableAction>
               <TableAction tone="danger" disabled={!isDeletable(a)} onClick={() => openDelete(a)}>ลบ</TableAction>
             </>

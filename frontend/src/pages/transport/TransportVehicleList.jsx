@@ -147,7 +147,7 @@ export default function TransportVehicleList() {
         actions={v => <Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} aria-label={`ดูนักเรียนและข้อมูลรถ ${v.plate_no}`} className="focus-ring inline-flex items-center justify-center min-h-12 px-4 py-2 rounded-xl bg-brand-700 text-white font-semibold">ดูนักเรียนและข้อมูลรถ</Link>}
         columns={[
           { key: 'plate', header: 'ทะเบียนรถ', primary: true,
-            cell: v => <Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} className="block whitespace-normal break-words font-semibold text-brand-700 underline focus-ring rounded">{v.plate_no}</Link> },
+            cell: v => <Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} className="flex min-h-[44px] items-center whitespace-normal break-words font-semibold text-brand-700 underline focus-ring rounded">{v.plate_no}</Link> },
           { key: 'type', header: 'ประเภท', secondary: true, cell: v => v.vehicle_type || '-' },
           { key: 'driver', header: 'คนขับ', cell: v => v.driver_name || '-' },
           { key: 'result', header: 'ผลตรวจล่าสุด', align: 'center', badge: true,

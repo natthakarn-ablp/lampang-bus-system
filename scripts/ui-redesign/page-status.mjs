@@ -158,6 +158,7 @@ const EXEMPT = {
     header: 'production-approved login page (commit d9485ec); deliberately branded and outside the shell',
     form: 'the login form is the page; its fields carry autocomplete and wired labels already, verified in the baseline audit',
     modal: 'the contact-admin panel is inline on the page, not a dialog',
+    states: 'its only api.get is the public /auth/recovery/config probe, and its .catch deliberately hides the admin recovery link ("ผู้ดูแลระบบ: รีเซ็ตผ่าน LINE" → /forgot-password) when the policy cannot be read; failing closed is the intended state, so the login form shows no loading or error UI for it',
   },
   // ExecutivePrint is not a screen page that also prints — it IS the print
   // artifact the report pages hand off to (their own screen tables already go

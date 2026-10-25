@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Copy, Download, KeyRound, Link2, RefreshCw, ShieldCheck, Unlink } from 'lucide-react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
-import { AlertBanner, AppCard, FormField } from '../../components/ui';
+import { AlertBanner, AppCard, ConfirmDialog, FormField } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../components/Toast';
 import { getLiffIdToken, resolveLineUserId } from '../../utils/liff';
@@ -26,6 +26,7 @@ export default function AdminAccountSecurity() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [codes, setCodes] = useState([]);
@@ -130,10 +131,16 @@ export default function AdminAccountSecurity() {
     }
   }
 
-  async function unlinkLine() {
+  // window.confirm blocked the tab and could not mark this as destructive;
+  // the dialog says what is lost before anything is sent.
+  function requestUnlink() {
     setError('');
     if (!password) return setError('กรุณากรอกรหัสผ่านปัจจุบัน');
-    if (!window.confirm('ยกเลิกการผูก LINE และรหัสกู้คืนทั้งหมดใช่หรือไม่')) return;
+    setConfirmUnlink(true);
+  }
+
+  async function unlinkLine() {
+    setConfirmUnlink(false);
     setBusy('unlink');
     try {
       await api.delete('/auth/recovery/self/line', { data: { current_password: password } });
@@ -269,7 +276,7 @@ export default function AdminAccountSecurity() {
                       <RefreshCw className="h-4 w-4" aria-hidden="true" /> สร้างรหัสชุดใหม่
                     </button>
                   )}
-                  <button type="button" onClick={unlinkLine} disabled={Boolean(busy)} className="focus-ring inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 font-bold text-danger-ink hover:bg-danger-soft disabled:opacity-50">
+                  <button type="button" onClick={requestUnlink} disabled={Boolean(busy)} className="focus-ring inline-flex min-h-[44px] items-center gap-2 rounded-lg px-4 font-bold text-danger-ink hover:bg-danger-soft disabled:opacity-50">
                     <Unlink className="h-4 w-4" aria-hidden="true" /> ยกเลิกการผูก
                   </button>
                 </>
@@ -284,6 +291,16 @@ export default function AdminAccountSecurity() {
           </AlertBanner>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmUnlink}
+        tone="danger"
+        title="ยกเลิกการผูก LINE?"
+        description="รหัสกู้คืนทั้งหมดจะใช้ไม่ได้อีก และการกู้คืนรหัสผ่านผ่าน LINE จะหยุดทำงานจนกว่าจะผูกใหม่"
+        confirmLabel="ยกเลิกการผูก"
+        loading={busy === 'unlink'}
+        onConfirm={unlinkLine}
+        onCancel={() => setConfirmUnlink(false)}
+      />
     </div>
   );
 }

@@ -1,0 +1,1355 @@
+{
+  "routes": [
+    {
+      "path": "/login",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/forgot-password",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/reset-password",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/change-password",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/manual/*",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/my-policy",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "transport",
+        "driver",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/driver",
+      "roles": [
+        "driver"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/driver/roster",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/emergency",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/profile",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/leaves",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/requests",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/pretrip",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/pickup-map",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/shift",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/applications",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/driver/vehicle-registration",
+      "roles": [
+        "driver"
+      ],
+      "parent": "/driver"
+    },
+    {
+      "path": "/school",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/school/teacher-check",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/students",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/vehicles",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/vehicle-verification",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/status",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/emergencies",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/missing",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/approvals",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/bulk-vehicles",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/audit-log",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/pickup-map",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/live-vehicles",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/teacher-accounts",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/registration-review",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/affiliation",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/affiliation/schools",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/students",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/vehicles",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/status",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/emergencies",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/accounts",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/audit-log",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/live-vehicles",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/pickup-map",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/transfer-requests",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/vehicle-requests",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/province",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/province/affiliations",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/schools",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/students",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/vehicles",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/status",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/emergencies",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/audit-log",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/unit-accounts",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/live-vehicles",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/pickup-map",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/readiness",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/reports",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/reports/daily",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "admin"
+      ],
+      "parent": "/reports"
+    },
+    {
+      "path": "/reports/monthly",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "admin"
+      ],
+      "parent": "/reports"
+    },
+    {
+      "path": "/reports/summary",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "admin"
+      ],
+      "parent": "/reports"
+    },
+    {
+      "path": "/reports/policy",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "admin"
+      ],
+      "parent": "/reports"
+    },
+    {
+      "path": "/transport",
+      "roles": [
+        "transport",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/transport/vehicles",
+      "roles": [
+        "transport",
+        "admin"
+      ],
+      "parent": "/transport"
+    },
+    {
+      "path": "/transport/vehicles/:id/incident-roster",
+      "roles": [
+        "transport",
+        "admin"
+      ],
+      "parent": "/transport"
+    },
+    {
+      "path": "/transport/inspections",
+      "roles": [
+        "transport",
+        "admin"
+      ],
+      "parent": "/transport"
+    },
+    {
+      "path": "/transport/verification",
+      "roles": [
+        "transport",
+        "admin"
+      ],
+      "parent": "/transport"
+    },
+    {
+      "path": "/transport/pickup-map",
+      "roles": [
+        "transport",
+        "admin"
+      ],
+      "parent": "/transport"
+    },
+    {
+      "path": "/admin",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/users",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/parent/link/admin-recovery",
+      "roles": [
+        "admin",
+        "province",
+        "affiliation",
+        "transport"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/audit-logs",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/transfer-requests",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/vehicle-requests",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/driver-integrity",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/geofences",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/route-deviations",
+      "roles": [
+        "admin",
+        "province"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/vehicle-qr",
+      "roles": [
+        "admin",
+        "transport"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/driver/consent",
+      "roles": [
+        "driver"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/pickup-points",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/live-vehicles",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/measurement",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/research",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/research-export",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/evaluation",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/executive",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/system-health",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/term-settings",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/readiness",
+      "roles": [
+        "admin",
+        "province"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/executive-print",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/participation",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "transport",
+        "driver",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/participation/new",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "transport",
+        "driver",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/participation/cases/:id",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "transport",
+        "driver",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/participation/summary",
+      "roles": [
+        "school",
+        "affiliation",
+        "province",
+        "transport",
+        "driver",
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/qr/:token",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/parent",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/parent/link",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/parent/link/link",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/link",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/*",
+      "roles": null,
+      "parent": null
+    }
+  ],
+  "nav": {
+    "driver": [
+      {
+        "to": "/participation",
+        "label": "เรื่องที่ต้องมีส่วนร่วม",
+        "group": null,
+        "icon": "Inbox"
+      },
+      {
+        "to": "/participation/summary",
+        "label": "สรุปการมีส่วนร่วม",
+        "group": null,
+        "icon": "PieChart"
+      },
+      {
+        "to": "/driver",
+        "label": "PAGE_TITLES.DRIVER_DASHBOARD",
+        "group": "ภาพรวม",
+        "icon": "BarChart3"
+      },
+      {
+        "to": "/driver/shift",
+        "label": "เลือกรถและเริ่มรอบ",
+        "group": "งานดำเนินการ",
+        "icon": "Bus"
+      },
+      {
+        "to": "/driver/pickup-map",
+        "label": "แผนที่จุดรับส่ง",
+        "group": "งานดำเนินการ",
+        "icon": "Map"
+      },
+      {
+        "to": "/driver/requests",
+        "label": "คำขอรายชื่อ",
+        "group": "งานดำเนินการ",
+        "icon": "ClipboardList"
+      },
+      {
+        "to": "/driver/vehicle-registration",
+        "label": "รายชื่อเด็กในรถ",
+        "group": "งานดำเนินการ",
+        "icon": "GraduationCap"
+      },
+      {
+        "to": "/driver/applications",
+        "label": "สถานะส่งตรวจรถ",
+        "group": "งานดำเนินการ",
+        "icon": "CheckSquare"
+      },
+      {
+        "to": "/driver/emergency",
+        "label": "แจ้งเหตุฉุกเฉิน",
+        "group": "งานดำเนินการ",
+        "icon": "AlertTriangle"
+      },
+      {
+        "to": "/driver/profile",
+        "label": "ข้อมูลคนขับ",
+        "group": "ข้อมูลหลัก",
+        "icon": "User"
+      },
+      {
+        "to": "/my-policy",
+        "label": "นโยบายและสิทธิของฉัน",
+        "group": "ข้อมูลหลัก",
+        "icon": "ScrollText"
+      }
+    ],
+    "school": [
+      {
+        "to": "/school",
+        "label": "PAGE_TITLES.SCHOOL_DASHBOARD",
+        "group": null,
+        "icon": "BarChart3"
+      },
+      {
+        "to": "/school/teacher-check",
+        "label": "เช็กชื่อวันนี้",
+        "group": null,
+        "icon": "CheckSquare"
+      },
+      {
+        "to": "/school/students",
+        "label": "นักเรียน",
+        "group": null,
+        "icon": "GraduationCap"
+      },
+      {
+        "to": "/school/vehicles",
+        "label": "รถรับส่ง",
+        "group": null,
+        "icon": "Bus"
+      },
+      {
+        "to": "/school/emergencies",
+        "label": "เหตุฉุกเฉิน",
+        "group": null,
+        "icon": "AlertTriangle"
+      },
+      {
+        "to": "/reports/daily",
+        "label": "รายงาน",
+        "group": null,
+        "icon": "FileText"
+      },
+      {
+        "to": "/school/approvals",
+        "label": "คำขอรายชื่อ",
+        "group": null,
+        "icon": "CheckSquare"
+      },
+      {
+        "to": "/school/pickup-map",
+        "label": "แผนที่จุดรับส่ง",
+        "group": null,
+        "icon": "Map"
+      },
+      {
+        "to": "/school/live-vehicles",
+        "label": "ตำแหน่งปัจจุบัน",
+        "group": null,
+        "icon": "Activity"
+      },
+      {
+        "to": "/school/registration-review",
+        "label": "ตรวจลงทะเบียนรถ",
+        "group": null,
+        "icon": "ClipboardList"
+      },
+      {
+        "to": "/school/vehicle-verification",
+        "label": "ส่งตรวจและรับรองรถ",
+        "group": null,
+        "icon": "CheckSquare"
+      },
+      {
+        "to": "/school/bulk-vehicles",
+        "label": "เพิ่มรถรับส่ง",
+        "group": null,
+        "icon": "Plus"
+      },
+      {
+        "to": "/school/teacher-accounts",
+        "label": "บัญชีครูประจำสายชั้น",
+        "group": null,
+        "icon": "Users"
+      },
+      {
+        "to": "/school/audit-log",
+        "label": "ประวัติการแก้ไข",
+        "group": null,
+        "icon": "FileText"
+      },
+      {
+        "to": "/my-policy",
+        "label": "นโยบายและสิทธิของฉัน",
+        "group": null,
+        "icon": "ScrollText"
+      },
+      {
+        "to": "/participation",
+        "label": "เรื่องที่ต้องมีส่วนร่วม",
+        "group": null,
+        "icon": "Inbox"
+      },
+      {
+        "to": "/participation/summary",
+        "label": "สรุปการมีส่วนร่วม",
+        "group": null,
+        "icon": "PieChart"
+      }
+    ],
+    "affiliation": [
+      {
+        "to": "/affiliation",
+        "label": "PAGE_TITLES.AFFILIATION_DASHBOARD",
+        "group": null,
+        "icon": "BarChart3"
+      },
+      {
+        "to": "/affiliation/schools",
+        "label": "โรงเรียนในสังกัด",
+        "group": null,
+        "icon": "Building2"
+      },
+      {
+        "to": "/affiliation/students",
+        "label": "ข้อมูลนักเรียน",
+        "group": null,
+        "icon": "GraduationCap"
+      },
+      {
+        "to": "/affiliation/vehicles",
+        "label": "รถรับส่ง",
+        "group": null,
+        "icon": "Bus"
+      },
+      {
+        "to": "/affiliation/live-vehicles",
+        "label": "ตำแหน่งปัจจุบัน",
+        "group": null,
+        "icon": "Activity"
+      },
+      {
+        "to": "/affiliation/pickup-map",
+        "label": "แผนที่จุดรับส่ง",
+        "group": null,
+        "icon": "Map"
+      },
+      {
+        "to": "/affiliation/emergencies",
+        "label": "เหตุฉุกเฉิน",
+        "group": null,
+        "icon": "AlertTriangle"
+      },
+      {
+        "to": "/reports/daily",
+        "label": "รายงาน",
+        "group": null,
+        "icon": "FileText"
+      },
+      {
+        "to": "/affiliation/transfer-requests",
+        "label": "คำขอโอนย้ายนักเรียน",
+        "group": null,
+        "icon": "Users"
+      },
+      {
+        "to": "/affiliation/vehicle-requests",
+        "label": "คำขอเกี่ยวกับรถ",
+        "group": null,
+        "icon": "Wrench"
+      },
+      {
+        "to": "/affiliation/accounts",
+        "label": "เพิ่มโรงเรียนใหม่",
+        "group": null,
+        "icon": "Key"
+      },
+      {
+        "to": "/affiliation/audit-log",
+        "label": "ประวัติการแก้ไข",
+        "group": null,
+        "icon": "FileText"
+      },
+      {
+        "to": "/my-policy",
+        "label": "นโยบายและสิทธิของฉัน",
+        "group": null,
+        "icon": "ScrollText"
+      },
+      {
+        "to": "/participation",
+        "label": "เรื่องที่ต้องมีส่วนร่วม",
+        "group": null,
+        "icon": "Inbox"
+      },
+      {
+        "to": "/participation/summary",
+        "label": "สรุปการมีส่วนร่วม",
+        "group": null,
+        "icon": "PieChart"
+      }
+    ],
+    "province": [
+      {
+        "to": "/province",
+        "label": "PAGE_TITLES.PROVINCE_DASHBOARD",
+        "group": null,
+        "icon": "BarChart3"
+      },
+      {
+        "to": "/province/affiliations",
+        "label": "สังกัด",
+        "group": null,
+        "icon": "Landmark"
+      },
+      {
+        "to": "/province/schools",
+        "label": "โรงเรียน",
+        "group": null,
+        "icon": "Building2"
+      },
+      {
+        "to": "/province/students",
+        "label": "ข้อมูลนักเรียน",
+        "group": null,
+        "icon": "GraduationCap"
+      },
+      {
+        "to": "/province/vehicles",
+        "label": "รถรับส่ง",
+        "group": null,
+        "icon": "Bus"
+      },
+      {
+        "to": "/province/live-vehicles",
+        "label": "ตำแหน่งปัจจุบัน",
+        "group": null,
+        "icon": "Activity"
+      },
+      {
+        "to": "/province/pickup-map",
+        "label": "แผนที่จุดรับส่ง",
+        "group": null,
+        "icon": "Map"
+      },
+      {
+        "to": "/province/emergencies",
+        "label": "เหตุฉุกเฉิน",
+        "group": null,
+        "icon": "AlertTriangle"
+      },
+      {
+        "to": "/reports/daily",
+        "label": "รายงาน",
+        "group": null,
+        "icon": "FileText"
+      },
+      {
+        "to": "/province/readiness",
+        "label": "ความพร้อมเปิดใช้งาน",
+        "group": null,
+        "icon": "ShieldCheck"
+      },
+      {
+        "to": "/admin/route-deviations",
+        "label": "การเบี่ยงเส้นทาง",
+        "group": null,
+        "icon": "Route"
+      },
+      {
+        "to": "/province/unit-accounts",
+        "label": "บัญชีสังกัดและขนส่ง",
+        "group": null,
+        "icon": "Key"
+      },
+      {
+        "to": "/province/audit-log",
+        "label": "ประวัติการแก้ไข",
+        "group": null,
+        "icon": "FileText"
+      },
+      {
+        "to": "/my-policy",
+        "label": "นโยบายและสิทธิของฉัน",
+        "group": null,
+        "icon": "ScrollText"
+      },
+      {
+        "to": "/participation",
+        "label": "เรื่องที่ต้องมีส่วนร่วม",
+        "group": null,
+        "icon": "Inbox"
+      },
+      {
+        "to": "/participation/summary",
+        "label": "สรุปการมีส่วนร่วม",
+        "group": null,
+        "icon": "PieChart"
+      }
+    ],
+    "transport": [
+      {
+        "to": "/transport/vehicles",
+        "label": "ข้อมูลรถเมื่อเกิดเหตุ",
+        "group": null,
+        "icon": "Bus"
+      },
+      {
+        "to": "/transport",
+        "label": "ภาพรวมตรวจสภาพรถ",
+        "group": null,
+        "icon": "BarChart3"
+      },
+      {
+        "to": "/transport/verification",
+        "label": "ตรวจรับรองรถ",
+        "group": null,
+        "icon": "CheckSquare"
+      },
+      {
+        "to": "/transport/inspections",
+        "label": "บันทึกตรวจสภาพ",
+        "group": null,
+        "icon": "ClipboardList"
+      },
+      {
+        "to": "/transport/pickup-map",
+        "label": "แผนที่จุดรับส่ง",
+        "group": null,
+        "icon": "Map"
+      },
+      {
+        "to": "/my-policy",
+        "label": "นโยบายและสิทธิของฉัน",
+        "group": null,
+        "icon": "ScrollText"
+      },
+      {
+        "to": "/participation",
+        "label": "เรื่องที่ต้องมีส่วนร่วม",
+        "group": null,
+        "icon": "Inbox"
+      },
+      {
+        "to": "/participation/summary",
+        "label": "สรุปการมีส่วนร่วม",
+        "group": null,
+        "icon": "PieChart"
+      }
+    ],
+    "admin": [
+      {
+        "to": "/admin",
+        "label": "ศูนย์ควบคุมระบบ",
+        "group": null,
+        "icon": "Home"
+      },
+      {
+        "to": "/admin/transfer-requests",
+        "label": "คำขอโอนย้ายนักเรียน",
+        "group": null,
+        "icon": "Users"
+      },
+      {
+        "to": "/admin/vehicle-requests",
+        "label": "คำขอเกี่ยวกับรถ",
+        "group": null,
+        "icon": "Wrench"
+      },
+      {
+        "to": "/admin/users",
+        "label": "จัดการผู้ใช้งาน",
+        "group": null,
+        "icon": "Users"
+      },
+      {
+        "to": "/province",
+        "label": "ภาพรวมจังหวัด",
+        "group": null,
+        "icon": "Map"
+      },
+      {
+        "to": "/province/students",
+        "label": "ข้อมูลนักเรียน",
+        "group": null,
+        "icon": "GraduationCap"
+      },
+      {
+        "to": "/province/vehicles",
+        "label": "รถรับส่ง",
+        "group": null,
+        "icon": "Bus"
+      },
+      {
+        "to": "/reports/daily",
+        "label": "รายงาน",
+        "group": null,
+        "icon": "FileText"
+      },
+      {
+        "to": "/admin/readiness",
+        "label": "ความพร้อมเปิดใช้งาน",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "ShieldCheck"
+      },
+      {
+        "to": "/admin/pickup-points",
+        "label": "ตรวจสอบจุดรับส่ง",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "MapPin"
+      },
+      {
+        "to": "/admin/live-vehicles",
+        "label": "ตรวจสอบตำแหน่งรถ",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "ShieldAlert"
+      },
+      {
+        "to": "/admin/driver-integrity",
+        "label": "สุขภาพข้อมูลคนขับ",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "ShieldAlert"
+      },
+      {
+        "to": "/admin/geofences",
+        "label": "จุดเตือนภัย",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "MapPin"
+      },
+      {
+        "to": "/admin/route-deviations",
+        "label": "การเบี่ยงเส้นทาง",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "Route"
+      },
+      {
+        "to": "/admin/audit-logs",
+        "label": "ประวัติการใช้งาน",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "FileText"
+      },
+      {
+        "to": "/admin/system-health",
+        "label": "สุขภาพระบบ",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "Activity"
+      },
+      {
+        "to": "/transport",
+        "label": "ตรวจสภาพรถ",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "Wrench"
+      },
+      {
+        "to": "/admin/measurement",
+        "label": "กรอบวัดผลระบบ",
+        "group": "วิจัยและประเมินผล",
+        "icon": "Ruler"
+      },
+      {
+        "to": "/admin/research",
+        "label": "เปรียบเทียบ Baseline",
+        "group": "วิจัยและประเมินผล",
+        "icon": "TrendingUp"
+      },
+      {
+        "to": "/admin/research-export",
+        "label": "ส่งออกข้อมูลวิจัย",
+        "group": "วิจัยและประเมินผล",
+        "icon": "Package"
+      },
+      {
+        "to": "/admin/evaluation",
+        "label": "ประเมินผลแยก Role",
+        "group": "วิจัยและประเมินผล",
+        "icon": "Target"
+      },
+      {
+        "to": "/admin/executive",
+        "label": "สรุปผู้บริหาร",
+        "group": "วิจัยและประเมินผล",
+        "icon": "BarChart3"
+      },
+      {
+        "to": "/admin/term-settings",
+        "label": "ภาคเรียนปัจจุบัน",
+        "group": "ตั้งค่าระบบ",
+        "icon": "Calendar"
+      },
+      {
+        "to": "/my-policy",
+        "label": "นโยบายและสิทธิของฉัน",
+        "group": "ตั้งค่าระบบ",
+        "icon": "ScrollText"
+      },
+      {
+        "to": "/school",
+        "label": "จัดการโรงเรียน",
+        "group": "ตั้งค่าระบบ",
+        "icon": "Building2"
+      },
+      {
+        "to": "/affiliation/accounts",
+        "label": "เพิ่มโรงเรียนใหม่",
+        "group": "ตั้งค่าระบบ",
+        "icon": "Key"
+      },
+      {
+        "to": "/participation",
+        "label": "เรื่องที่ต้องมีส่วนร่วม",
+        "group": "ตั้งค่าระบบ",
+        "icon": "Inbox"
+      },
+      {
+        "to": "/participation/summary",
+        "label": "สรุปการมีส่วนร่วม",
+        "group": "ตั้งค่าระบบ",
+        "icon": "PieChart"
+      }
+    ]
+  }
+}

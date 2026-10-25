@@ -73,6 +73,25 @@ describe('the summary page consumes the endpoint that nothing used to call', () 
     const sidebar = read('frontend/src/components/Sidebar.jsx');
     expect(sidebar).toMatch(/to: '\/participation\/summary'/);
   });
+
+  it('hides both Participation menu links from grade-scoped teachers', () => {
+    const sidebar = read('frontend/src/components/Sidebar.jsx');
+    const blocked = sidebar.match(/const TEACHER_BLOCKED_PATHS = new Set\(\[([\s\S]*?)\]\);/);
+    expect(blocked).not.toBeNull();
+    expect(blocked[1]).toContain("'/participation'");
+    expect(blocked[1]).toContain("'/participation/summary'");
+  });
+
+  it('denies direct Participation routes to grade-scoped teachers', () => {
+    const app = read('frontend/src/App.jsx');
+    expect(app).toMatch(/import \{ isGradeTeacher \} from '\.\/utils\/authScope'/);
+    expect(app).toMatch(/!allowGradeTeacher && isGradeTeacher\(user\)/);
+    const participationRoutes = app.slice(
+      app.indexOf('<Route path="/participation"'),
+      app.indexOf('{/* Vehicle QR')
+    );
+    expect(participationRoutes.match(/allowGradeTeacher=\{false\}/g)).toHaveLength(4);
+  });
 });
 
 describe('the disclaimer survives', () => {

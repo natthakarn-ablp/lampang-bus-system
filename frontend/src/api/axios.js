@@ -53,6 +53,15 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
+    const mustChangePassword = error.response?.status === 403
+      && error.response?.data?.errors?.some((entry) => entry?.code === 'MUST_CHANGE_PASSWORD');
+    if (mustChangePassword && window.location.pathname !== '/change-password') {
+      // Preserve the authenticated session: the change-password endpoint is
+      // deliberately allow-listed by the server and needs the current token.
+      window.location.href = '/change-password';
+      return Promise.reject(error);
+    }
+
     if (
       error.response?.status === 401 &&
       !original._retry &&

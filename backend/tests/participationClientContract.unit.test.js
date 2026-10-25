@@ -56,7 +56,8 @@ function loadClientConstants() {
   // eslint-disable-next-line no-new-func
   return new Function(`${body}
     return { CASE_TYPE_LABEL, STATUS_LABEL, EVENT_LABEL, DECISION_LABEL,
-             SCOPE_TYPE_LABEL, ROLE_LABEL, ALLOWED_EVENTS, LIMITS, NOTE_REQUIRED };`)();
+             SCOPE_TYPE_LABEL, ROLE_LABEL, ALLOWED_EVENTS, EVENT_ROLE_POLICY,
+             LIMITS, NOTE_REQUIRED, eventsForActor };`)();
 }
 
 // Loaded in beforeAll, not at module scope: reading a file outside the jest root
@@ -94,6 +95,19 @@ describe('the client copy of the state machine matches the service', () => {
   it('agrees on which statuses are terminal', () => {
     const clientTerminal = svc.CASE_STATUSES.filter((s) => (client.ALLOWED_EVENTS[s] || []).length === 0);
     expect(sorted(clientTerminal)).toEqual(sorted(svc.TERMINAL_STATUSES));
+  });
+});
+
+describe('the client offers only events the server authority policy permits', () => {
+  it('copies the non-ownership event role mapping exactly', () => {
+    expect(client.EVENT_ROLE_POLICY).toEqual(svc.EVENT_ROLE_POLICY);
+  });
+
+  it('applies original-filer ownership for WITHDRAWN', () => {
+    const currentCase = { status: 'SUBMITTED', initiated_by: 51 };
+    expect(client.eventsForActor(currentCase, { id: 51, role: 'driver' })).toContain('WITHDRAWN');
+    expect(client.eventsForActor(currentCase, { id: 11, role: 'school' })).not.toContain('WITHDRAWN');
+    expect(client.eventsForActor(currentCase, { id: 61, role: 'admin' })).toContain('WITHDRAWN');
   });
 });
 

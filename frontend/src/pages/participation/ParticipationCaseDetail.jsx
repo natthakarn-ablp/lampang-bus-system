@@ -7,8 +7,9 @@ import { useToast } from '../../components/Toast';
 import PageHeader from '../../components/PageHeader';
 import { StatusBadge, AlertBanner, FormField, AppCard } from '../../components/ui';
 import {
-  ALLOWED_EVENTS, CASE_TYPE_LABEL, DECISION_LABEL, EVENT_LABEL, LIMITS,
+  CASE_TYPE_LABEL, DECISION_LABEL, EVENT_LABEL, LIMITS,
   NOTE_REQUIRED, ROLE_LABEL, SCOPE_TYPE_LABEL, STATUS_LABEL, fmtDateTime,
+  eventsForActor,
 } from './constants';
 
 /**
@@ -62,8 +63,8 @@ export default function ParticipationCaseDetail() {
   useEffect(() => { load(); }, [load]);
 
   const allowed = useMemo(
-    () => (data ? (ALLOWED_EVENTS[data.status] || []) : []),
-    [data]
+    () => eventsForActor(data, user),
+    [data, user]
   );
 
   // Reset the dependent fields whenever the chosen event changes, so a decision

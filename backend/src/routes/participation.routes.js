@@ -31,6 +31,21 @@ const svc = require('../services/participation.service');
 
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'transport', 'driver', 'admin'));
 
+// A grade-scoped teacher is represented as role=school, but Participation
+// cases have organisation scope and no grade dimension. Deny the entire module
+// rather than expose school-wide free text or writes outside the teacher guide.
+router.use((req, res, next) => {
+  if (req.user.role === 'school' && req.user.gradeScope) {
+    return sendError(
+      res,
+      'บัญชีครูประจำชั้นไม่มีสิทธิ์เข้าถึงเรื่องการมีส่วนร่วมระดับโรงเรียน',
+      [{ code: 'GRADE_TEACHER_PARTICIPATION_FORBIDDEN' }],
+      403
+    );
+  }
+  return next();
+});
+
 const LIST_MAX = 100;
 
 /**

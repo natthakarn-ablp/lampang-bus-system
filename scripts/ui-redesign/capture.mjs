@@ -255,6 +255,17 @@ const SCENARIOS = {
   },
   // every call fails — dashboard must degrade, not blank out
   error: { __ALL_FAIL__: true },
+  // Some dashboard feeds answer 500 while the rest load. The failed sections
+  // must say so and read "—"; before the fix they were swallowed into
+  // null / [] and rendered as 0 ("no emergencies", "nothing to do").
+  aff_dash_partial_500: {
+    '/api/affiliation/dashboard':        { __status: 500, message: 'ระบบขัดข้องชั่วคราว' },
+    '/api/affiliation/vehicles-at-risk': { __status: 500, message: 'ระบบขัดข้องชั่วคราว' },
+  },
+  school_dash_partial_500: {
+    '/api/school/dashboard': { __status: 500, message: 'ระบบขัดข้องชั่วคราว' },
+    '/api/school/leaves':    { __status: 500, message: 'ระบบขัดข้องชั่วคราว' },
+  },
 
   // บัญชีคนขับที่ยังไม่ผูกกับรถ (`driver_id` ว่าง) — พบจริงบน production
   // 27 ส.ค. 2569 บัญชีแบบนี้เคยติดกับดัก: PretripModal ที่ปิดไม่ได้เปิดขึ้นมา
@@ -1302,6 +1313,34 @@ const PRINT_MEASURE = `(() => {
   };
 })()`;
 
+// A dashboard whose feeds partly failed must not present a number it does not
+// have: no KPI or to-do count may read 0, the failed ones must read "—", the
+// to-do list must not claim "ไม่มีงานค้าง", and the retry button must be a
+// full 44px target.
+async function assertPartialFailureShown(page) {
+  const found = await page.evaluate(() => {
+    const kpi = document.querySelector('section[aria-label="ตัวเลขหลักวันนี้"]');
+    const todo = [...document.querySelectorAll('section')]
+      .find(sec => sec.querySelector(':scope > h2')?.textContent.trim() === 'ต้องทำวันนี้');
+    const leaves = el => (el ? [...el.querySelectorAll('*')].filter(n => n.children.length === 0) : []);
+    const texts = [...leaves(kpi), ...leaves(todo)].map(n => n.textContent.trim());
+    const retry = [...document.querySelectorAll('[role=alert] button')]
+      .find(b => b.textContent.includes('ลองใหม่'));
+    return {
+      kpiFound: Boolean(kpi), todoFound: Boolean(todo),
+      zeros: texts.filter(t => /^0\s*(%|คน)?$/.test(t)),
+      dashes: texts.filter(t => t === '—').length,
+      nothingToDo: Boolean(todo && todo.textContent.includes('ไม่มีงานค้าง')),
+      retryHeight: retry ? retry.getBoundingClientRect().height : 0,
+    };
+  });
+  if (!found.kpiFound || !found.todoFound) throw new Error('KPI or to-do section not rendered');
+  if (found.zeros.length) throw new Error(`failed section shows 0: ${found.zeros.join(', ')}`);
+  if (found.dashes === 0) throw new Error('no "—" placeholder for the failed sections');
+  if (found.nothingToDo) throw new Error('to-do list claims "ไม่มีงานค้าง" while its source failed');
+  if (found.retryHeight < 44) throw new Error(`retry button is ${found.retryHeight}px tall, needs 44`);
+}
+
 // path, roles that may view it, which viewports, scenario
 const SHOTS = [
   { id: '01-login',        url: '/login',       user: null,          vps: ['mobile', 'desktop'] },
@@ -1313,6 +1352,18 @@ const SHOTS = [
   { id: '07-province',     url: '/province',    user: 'province',    vps: ['mobile', 'desktop'] },
   { id: '08-affiliation',  url: '/affiliation', user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '09-school',       url: '/school',      user: 'school',      vps: ['mobile', 'desktop'] },
+  { id: '08c-affiliation-partial-500', url: '/affiliation', user: 'affiliation', vps: ['mobile', 'desktop'],
+    scenario: 'aff_dash_partial_500', act: assertPartialFailureShown,
+    // the schools feed still loaded, so its fold renders normally
+    expect: ['[role=alert]:has-text("โหลดข้อมูลบางส่วนไม่สำเร็จ")', '[role=alert]:has-text("ภาพรวมวันนี้")',
+             '[role=alert]:has-text("รถที่ต้องติดตาม")', 'button:has-text("ลองใหม่")',
+             'text=รถที่ต้องติดตาม — คัน', 'text=สถานะโรงเรียนในสังกัด'] },
+  { id: '09c-school-partial-500', url: '/school', user: 'school', vps: ['mobile', 'desktop'],
+    scenario: 'school_dash_partial_500', act: assertPartialFailureShown,
+    // status-today still loaded, so the per-vehicle fold keeps its real count
+    expect: ['[role=alert]:has-text("โหลดข้อมูลบางส่วนไม่สำเร็จ")', '[role=alert]:has-text("ตัวเลขภาพรวมวันนี้")',
+             '[role=alert]:has-text("รายการลา")', 'button:has-text("ลองใหม่")',
+             'text=กดเพื่อดูรายชื่อนักเรียนในแต่ละคัน'] },
   { id: '10-transport',    url: '/transport',   user: 'transport',   vps: ['mobile', 'desktop'] },
   { id: '11-driver',       url: '/driver',      user: 'driver',      vps: ['mobile', 'tablet'] },
   // บัญชีคนขับที่ยังไม่ผูกรถ — ต้องได้คำอธิบายภาษาไทย ไม่ใช่โมดัลบังคับที่ปิดไม่ได้
@@ -1636,7 +1687,7 @@ if (IS_MAIN) await (async () => {
   const withErr  = report.filter(r => r.errors.length);
   // Scenarios that fail calls on purpose log browser-level "Failed to load
   // resource" lines that are the fixture working, not the page misbehaving.
-  const FAILS_BY_DESIGN = new Set(['error', 'driver_unlinked']);
+  const FAILS_BY_DESIGN = new Set(['error', 'driver_unlinked', 'aff_dash_partial_500', 'school_dash_partial_500']);
   const unexpectedErr = report.filter(r => r.errors.length && !FAILS_BY_DESIGN.has(r.scenario));
   const failed   = report.filter(r => r.failed);
   const looping  = report.filter(r => r.renderLoops?.length);

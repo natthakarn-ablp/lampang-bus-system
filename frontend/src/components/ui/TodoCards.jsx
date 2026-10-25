@@ -8,10 +8,14 @@ import { tone } from './tone';
  * they set `keepZero` (e.g. admin's pending requests showing a green 0).
  * Nothing left → one green "ไม่มีงานค้าง" line.
  *
- * item = { key, variant, count, title, sub, cta: { label, to } | { label, onClick }, keepZero }
+ * `unavailable` marks a count whose source failed to load: the card stays and
+ * shows "—", because dropping it (or showing 0) would claim there is nothing
+ * to do when the truth is unknown.
+ *
+ * item = { key, variant, count, title, sub, cta: { label, to } | { label, onClick }, keepZero, unavailable }
  */
 export default function TodoCards({ title = 'ต้องทำวันนี้', items = [], max = 3 }) {
-  const shown = items.filter(i => i && (i.keepZero || Number(i.count) > 0)).slice(0, max);
+  const shown = items.filter(i => i && (i.unavailable || i.keepZero || Number(i.count) > 0)).slice(0, max);
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-lg font-bold text-ink">{title}</h2>
@@ -28,7 +32,7 @@ export default function TodoCards({ title = 'ต้องทำวันนี�
               <div key={item.key || idx} className="bg-surface-raised border border-surface-border rounded-2xl shadow-soft p-4 flex flex-col gap-3">
                 <div className="flex items-center gap-3">
                   <span className={`min-w-[56px] h-14 px-2 rounded-2xl inline-flex items-center justify-center text-2xl font-bold tabular-nums ${t.soft} ${t.ink}`}>
-                    {Number(item.count).toLocaleString('th-TH')}
+                    {item.unavailable ? '—' : Number(item.count).toLocaleString('th-TH')}
                   </span>
                   <div className="min-w-0">
                     <p className="font-semibold text-ink leading-snug">{item.title}</p>

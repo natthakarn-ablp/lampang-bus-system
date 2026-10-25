@@ -75,6 +75,29 @@ export const ALLOWED_EVENTS = {
   WITHDRAWN:       [],
 };
 
+/** Mirror of EVENT_ROLE_POLICY in participation.service.js. */
+export const EVENT_ROLE_POLICY = {
+  ACKNOWLEDGED: ['school', 'affiliation', 'province', 'transport', 'admin'],
+  COMMENTED: ['driver', 'school', 'affiliation', 'province', 'transport', 'admin'],
+  CONSULTED: ['school', 'affiliation', 'province', 'transport', 'admin'],
+  DECIDED: ['province', 'admin'],
+  ASSIGNED: ['province', 'admin'],
+  COMPLETED: ['school', 'affiliation', 'province', 'transport', 'admin'],
+  FEEDBACK_SENT: ['province', 'admin'],
+};
+
+export const eventsForActor = (currentCase, user) => {
+  if (!currentCase || !user) return [];
+  return (ALLOWED_EVENTS[currentCase.status] || []).filter((eventType) => {
+    if (eventType === 'WITHDRAWN') {
+      return user.role === 'admin'
+        || (user.id != null && currentCase.initiated_by != null
+          && String(user.id) === String(currentCase.initiated_by));
+    }
+    return (EVENT_ROLE_POLICY[eventType] || []).includes(user.role);
+  });
+};
+
 /** Field limits, mirrored from the service so the form can count before sending. */
 export const LIMITS = { SUBJECT: 200, BODY: 5000, NOTE: 2000, EVIDENCE_REF: 200 };
 

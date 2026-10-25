@@ -252,6 +252,7 @@ const app = makeApp();
 // driver — a scope boundary can only be tested against another scope.
 const HOLDERS = {
   schoolA:      { id: 11, role: 'school',      scopeType: 'SCHOOL',      scopeId: 'SCH0001' },
+  teacherA:     { id: 13, role: 'school',      scopeType: 'SCHOOL',      scopeId: 'SCH0001', gradeScope: 'อนุบาล 1' },
   schoolB:      { id: 12, role: 'school',      scopeType: 'SCHOOL',      scopeId: 'SCH0002' },
   affiliationA: { id: 21, role: 'affiliation', scopeType: 'AFFILIATION', scopeId: 'AFF001' },
   affiliationB: { id: 22, role: 'affiliation', scopeType: 'AFFILIATION', scopeId: 'AFF002' },
@@ -270,6 +271,7 @@ function tokenFor(holder) {
       role: holder.role,
       scopeType: holder.scopeType,
       scopeId: holder.scopeId,
+      gradeScope: holder.gradeScope || null,
     },
     env.jwt.secret,
     { algorithm: 'HS256', expiresIn: '1h' }
@@ -435,6 +437,30 @@ describe('reading a case that belongs to another scope', () => {
   });
 });
 
+describe('grade-scoped teachers are outside Participation', () => {
+  it('returns 403 for list, detail, summary, create and append routes', async () => {
+    const requests = [
+      request(app).get('/api/participation/cases'),
+      request(app).get('/api/participation/cases/1'),
+      request(app).get('/api/participation/summary'),
+      request(app).post('/api/participation/cases').send({
+        case_type: 'OTHER', subject: 'ไม่ควรบันทึก', body: null,
+      }),
+      request(app).post('/api/participation/cases/1/events').send({
+        event_type: 'COMMENTED', note: 'ไม่ควรบันทึก',
+      }),
+    ];
+
+    for (const pending of requests) {
+      const res = await pending.set('Authorization', as('teacherA'));
+      expect(res.status).toBe(403);
+      expect(res.body.errors?.[0]?.code).toBe('GRADE_TEACHER_PARTICIPATION_FORBIDDEN');
+    }
+    expect(mockDb.participation_case_events).toEqual([]);
+    expect(mockDb.audit_logs).toEqual([]);
+  });
+});
+
 describe('the expectations above are a floor, not a vacuous pass', () => {
   it('the engine narrows on the predicate it is given', () => {
     // Everything above rests on one claim: that a weaker scope predicate would
@@ -537,71 +563,58 @@ describe('filing a case', () => {
   });
 });
 
-/**
- * ─── KNOWN GAP, NOT A DESIGN ───────────────────────────────────────────────
- *
- * THIS BLOCK RECORDS A DEFECT. Every expectation in it describes behaviour
- * that is WRONG and is expected to change. It is written down rather than
- * fixed because the fix is an owner decision — which roles may record a
- * decision, and which may assign work — and that decision is open as C0-2.
- *
- * What is missing: `appendEvent` validates the state transition
- * (ALLOWED_EVENTS) and the fields each event needs (a decision plus its
- * rationale, an assignee, a note). It never asks whether the ACTOR'S ROLE is
- * entitled to record that event. The route supplies `actor_role` from the
- * token, so the role recorded is honest — but nothing checks it against the
- * event.
- *
- * The consequence, exercised below: any role that can reach a case can record
- * DECIDED on it. A driver can enter the province's decision on their own
- * case, with a rationale, and the case then reports as "decided with a stated
- * reason" in the participation summary — the precise metric this feature
- * exists to make trustworthy.
- *
- * WHEN C0-2 IS ANSWERED: delete this block and replace it with the tests for
- * the agreed mapping. If one of these expectations starts failing before then,
- * the mapping has been implemented without the decision being recorded — find
- * out who decided it, do not "fix" this file to match.
- */
-describe('KNOWN GAP (C0-2): appendEvent does not check the actor role against the event', () => {
-  it('lets a driver record DECIDED on their own case — no role check exists', async () => {
+describe('approved event authority at the request boundary', () => {
+  it('refuses a driver recording DECIDED on their own case', async () => {
     const res = await request(app)
       .post('/api/participation/cases/7/events')
       .set('Authorization', as('driverA'))
       .send({ event_type: 'DECIDED', decision: 'APPROVED', note: 'อนุมัติตามที่เสนอ' });
-
-    // Documented, not endorsed: this should very probably be a 403.
-    expect(res.status).toBe(201);
-    const row = mockDb.participation_cases.find((c) => c.id === 7);
-    expect(row.status).toBe('DECIDED');
-    expect(row.decision).toBe('APPROVED');
-    expect(row.decided_by).toBe(51);
-    expect(mockDb.participation_case_events.at(-1).actor_role).toBe('driver');
+    expect(res.status).toBe(403);
+    expect(res.body.errors?.[0]?.code).toBe('PARTICIPATION_EVENT_FORBIDDEN');
+    expect(mockDb.participation_case_events).toEqual([]);
   });
 
-  it('lets a school record ASSIGNED, so work can be assigned by whoever raised it', async () => {
-    await request(app)
-      .post('/api/participation/cases/1/events')
-      .set('Authorization', as('schoolA'))
-      .send({ event_type: 'DECIDED', decision: 'APPROVED', note: 'เห็นชอบ' });
+  it('refuses a school recording ASSIGNED', async () => {
+    mockDb.participation_cases.find((c) => c.id === 1).status = 'DECIDED';
     const res = await request(app)
       .post('/api/participation/cases/1/events')
       .set('Authorization', as('schoolA'))
       .send({ event_type: 'ASSIGNED', assigned_to: 41, note: 'มอบหมายให้ขนส่ง' });
+    expect(res.status).toBe(403);
+    expect(mockDb.participation_cases.find((c) => c.id === 1).assigned_to).toBeNull();
+  });
 
-    expect(res.status).toBe(201);
+  it('allows province to decide and admin to assign an in-scope case', async () => {
+    const decided = await request(app)
+      .post('/api/participation/cases/1/events')
+      .set('Authorization', as('province'))
+      .send({ event_type: 'DECIDED', decision: 'APPROVED', note: 'เห็นชอบ' });
+    expect(decided.status).toBe(201);
+    const assigned = await request(app)
+      .post('/api/participation/cases/1/events')
+      .set('Authorization', as('admin'))
+      .send({ event_type: 'ASSIGNED', assigned_to: 41, note: 'มอบหมายให้ขนส่ง' });
+    expect(assigned.status).toBe(201);
     expect(mockDb.participation_cases.find((c) => c.id === 1).assigned_to).toBe(41);
   });
 
-  it('the gap is bounded by scope: it is only ever the caller\'s OWN case', async () => {
-    // The one reassurance worth pinning while C0-2 is open. The missing check
-    // is "may this role decide", not "may this role reach this case" — the
-    // scope predicate above still holds, so the blast radius of the gap is a
-    // case the actor could already see.
-    const res = await request(app)
-      .post('/api/participation/cases/8/events')
+  it('allows withdrawal only to the original filer or admin', async () => {
+    const own = await request(app)
+      .post('/api/participation/cases/7/events')
       .set('Authorization', as('driverA'))
-      .send({ event_type: 'DECIDED', decision: 'APPROVED', note: 'อนุมัติ' });
-    expect(res.status).toBe(404);
+      .send({ event_type: 'WITHDRAWN', note: 'ถอนเรื่อง' });
+    expect(own.status).toBe(201);
+
+    const notOwner = await request(app)
+      .post('/api/participation/cases/8/events')
+      .set('Authorization', as('schoolA'))
+      .send({ event_type: 'WITHDRAWN', note: 'ไม่ใช่ผู้ยื่น' });
+    expect(notOwner.status).toBe(403);
+
+    const res = await request(app)
+      .post('/api/participation/cases/1/events')
+      .set('Authorization', as('admin'))
+      .send({ event_type: 'WITHDRAWN', note: 'ปิดทางปกครอง' });
+    expect(res.status).toBe(201);
   });
 });

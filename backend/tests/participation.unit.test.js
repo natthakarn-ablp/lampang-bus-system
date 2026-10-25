@@ -180,6 +180,44 @@ describe('event state machine', () => {
   });
 });
 
+describe('event authority policy', () => {
+  const roles = ['driver', 'school', 'affiliation', 'province', 'transport', 'admin'];
+  const expected = {
+    SUBMITTED: [],
+    ACKNOWLEDGED: ['school', 'affiliation', 'province', 'transport', 'admin'],
+    COMMENTED: roles,
+    CONSULTED: ['school', 'affiliation', 'province', 'transport', 'admin'],
+    DECIDED: ['province', 'admin'],
+    ASSIGNED: ['province', 'admin'],
+    COMPLETED: ['school', 'affiliation', 'province', 'transport', 'admin'],
+    FEEDBACK_SENT: ['province', 'admin'],
+  };
+
+  it('allows every non-ownership event only for the approved roles', () => {
+    for (const [eventType, allowedRoles] of Object.entries(expected)) {
+      for (const role of roles) {
+        expect(svc.canActorAppendEvent(
+          { initiated_by: 99 },
+          { eventType, actorRole: role, userId: 10 }
+        )).toBe(allowedRoles.includes(role));
+      }
+    }
+  });
+
+  it('allows WITHDRAWN only to the original filer or an admin', () => {
+    const currentCase = { initiated_by: 51 };
+    expect(svc.canActorAppendEvent(currentCase, {
+      eventType: 'WITHDRAWN', actorRole: 'driver', userId: 51,
+    })).toBe(true);
+    expect(svc.canActorAppendEvent(currentCase, {
+      eventType: 'WITHDRAWN', actorRole: 'school', userId: 11,
+    })).toBe(false);
+    expect(svc.canActorAppendEvent(currentCase, {
+      eventType: 'WITHDRAWN', actorRole: 'admin', userId: 61,
+    })).toBe(true);
+  });
+});
+
 describe('participation summary', () => {
   const closed = {
     status: 'CLOSED', case_type: 'SERVICE_ISSUE', initiated_role: 'school',

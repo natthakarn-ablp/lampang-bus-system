@@ -242,6 +242,19 @@ if (env.features.routeDeviation) {
   app.use('/api/route-deviations', require('./routes/routeDeviation.routes'));
 }
 
+// Unknown API paths must remain API responses in production. Without this
+// boundary, the SPA catch-all below returns index.html with HTTP 200 for a
+// misspelled /api URL, which hides client and monitoring failures.
+function apiNotFound(_req, res) {
+  return res.status(404).json({
+    success: false,
+    message: 'Route not found',
+    errors: [],
+    data: null,
+  });
+}
+app.use('/api', apiNotFound);
+
 // ─── Serve frontend build in production ──────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
   const frontendDist = path.join(__dirname, '../../frontend/dist');
@@ -263,3 +276,4 @@ module.exports = app;
 // Exposed for unit testing the CORS allow-list.
 module.exports.isOriginAllowed = isOriginAllowed;
 module.exports.GLOBAL_API_LIMITED_PREFIXES = GLOBAL_API_LIMITED_PREFIXES;
+module.exports.apiNotFound = apiNotFound;

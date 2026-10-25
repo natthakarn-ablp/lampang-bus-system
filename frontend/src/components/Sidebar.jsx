@@ -164,6 +164,8 @@ const TEACHER_BLOCKED_PATHS = new Set([
   '/school/audit-log',
   '/school/bulk-vehicles',
   '/school/teacher-accounts',
+  '/participation',
+  '/participation/summary',
   // A registration application is one driver's rider list for a whole bus, with
   // that application's school-wide totals — nothing on it is divisible by grade,
   // and a teacher can take no action there. The backend now 403s the whole

@@ -48,6 +48,23 @@ const EVENT_TYPES = Object.freeze([
   'DECIDED', 'ASSIGNED', 'COMPLETED', 'FEEDBACK_SENT', 'WITHDRAWN',
 ]);
 
+/**
+ * Server-side authority for manual case events.
+ *
+ * `WITHDRAWN` is intentionally absent because it is ownership-based: only the
+ * original filer or an admin may withdraw. `SUBMITTED` is created
+ * automatically by createCase and is never a manual follow-up event.
+ */
+const EVENT_ROLE_POLICY = Object.freeze({
+  ACKNOWLEDGED: Object.freeze(['school', 'affiliation', 'province', 'transport', 'admin']),
+  COMMENTED: Object.freeze(['driver', 'school', 'affiliation', 'province', 'transport', 'admin']),
+  CONSULTED: Object.freeze(['school', 'affiliation', 'province', 'transport', 'admin']),
+  DECIDED: Object.freeze(['province', 'admin']),
+  ASSIGNED: Object.freeze(['province', 'admin']),
+  COMPLETED: Object.freeze(['school', 'affiliation', 'province', 'transport', 'admin']),
+  FEEDBACK_SENT: Object.freeze(['province', 'admin']),
+});
+
 const DECISIONS = Object.freeze(['APPROVED', 'REJECTED', 'DEFERRED', 'NO_ACTION_NEEDED']);
 
 const SUBJECT_MAX = 200;
@@ -235,6 +252,17 @@ function validateEventInput(currentCase, input = {}) {
   };
 }
 
+/** Enforces actor authority separately from state-transition validity. */
+function canActorAppendEvent(currentCase, { eventType, actorRole, userId } = {}) {
+  if (!currentCase || !EVENT_TYPES.includes(eventType) || !ROLES.includes(actorRole)) return false;
+  if (eventType === 'WITHDRAWN') {
+    return actorRole === 'admin'
+      || (userId != null && currentCase.initiated_by != null
+        && String(userId) === String(currentCase.initiated_by));
+  }
+  return (EVENT_ROLE_POLICY[eventType] || []).includes(actorRole);
+}
+
 /**
  * Aggregate participation metrics.
  *
@@ -322,6 +350,18 @@ async function appendEvent(executor, { caseId, input, userId }) {
   }
   const v = parsed.value;
 
+  if (!canActorAppendEvent(currentCase, {
+    eventType: v.eventType,
+    actorRole: v.actorRole,
+    userId,
+  })) {
+    throw appError(
+      'บทบาทนี้ไม่มีสิทธิ์บันทึกเหตุการณ์ดังกล่าว',
+      403,
+      'PARTICIPATION_EVENT_FORBIDDEN'
+    );
+  }
+
   await executor.query(
     `INSERT INTO participation_case_events
        (case_id, event_type, actor_user_id, actor_role, note, evidence_ref)
@@ -358,6 +398,7 @@ module.exports = {
   ROLES,
   CASE_STATUSES,
   EVENT_TYPES,
+  EVENT_ROLE_POLICY,
   DECISIONS,
   TERMINAL_STATUSES,
   ALLOWED_EVENTS,
@@ -368,6 +409,7 @@ module.exports = {
   makeCaseNo,
   validateCaseInput,
   validateEventInput,
+  canActorAppendEvent,
   summariseParticipation,
   createCase,
   appendEvent,

@@ -8,6 +8,7 @@ import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import PolicyNoticeGate from './components/policy/PolicyNoticeGate';
 import { useVisitTracker } from './hooks/useVisitTracker';
+import { isGradeTeacher } from './utils/authScope';
 
 // Eager: Login is the entry path for unauthed users. Lazy-loading it would add
 // a Suspense flash on first paint for the most common cold-start state.
@@ -135,11 +136,14 @@ export const ROLE_HOME = {
 };
 
 // ── PrivateRoute: redirects to /login if not authenticated ───────────────────
-function PrivateRoute({ children, allowedRoles }) {
+function PrivateRoute({ children, allowedRoles, allowGradeTeacher = true }) {
   const { user, loading } = useAuth();
   if (loading) return <RouteFallback />;
   if (!user)   return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
+  const roleDenied = allowedRoles && !allowedRoles.includes(user.role);
+  const gradeTeacherDenied = !allowGradeTeacher && isGradeTeacher(user);
+  if (roleDenied || gradeTeacherDenied) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
@@ -203,6 +207,7 @@ function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user)   return <Navigate to="/login" replace />;
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
 
   return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />;
 }
@@ -481,17 +486,17 @@ export default function App() {
               and every call 404s, which the list page names explicitly rather
               than showing an empty table. */}
           <Route path="/participation" element={
-            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']} allowGradeTeacher={false}>
               <Layout><ParticipationCases /></Layout>
             </PrivateRoute>
           } />
           <Route path="/participation/new" element={
-            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']} allowGradeTeacher={false}>
               <Layout><ParticipationNewCase /></Layout>
             </PrivateRoute>
           } />
           <Route path="/participation/cases/:id" element={
-            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']} allowGradeTeacher={false}>
               <Layout><ParticipationCaseDetail /></Layout>
             </PrivateRoute>
           } />
@@ -499,7 +504,7 @@ export default function App() {
               are built from the rows scopeClause already allows the caller to
               read, so anyone who may see the list may see its counts. */}
           <Route path="/participation/summary" element={
-            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']} allowGradeTeacher={false}>
               <Layout><ParticipationSummary /></Layout>
             </PrivateRoute>
           } />

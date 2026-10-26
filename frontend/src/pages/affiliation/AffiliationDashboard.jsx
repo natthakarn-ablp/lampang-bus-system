@@ -10,7 +10,7 @@ import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
 import { relativeTime } from '../../utils/datetime';
 import {
-  AppCard, StatusBadge,
+  AppCard, StatusBadge, AlertBanner,
   TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars, FoldSection, RoleChip,
   pctOf, pctTone,
 } from '../../components/ui';
@@ -20,6 +20,19 @@ import { PageTransition } from '../../lib/motion';
 
 const REFRESH_INTERVAL_MS = 30_000;
 
+// What each feed is called in the load-failure banner.
+const SECTION_LABELS = {
+  dashboard: 'ภาพรวมวันนี้',
+  schools: 'สถานะโรงเรียนในสังกัด',
+  incidents: 'เหตุฉุกเฉินล่าสุด',
+  atRisk: 'รถที่ต้องติดตาม',
+};
+const UNAVAILABLE_SUB = 'โหลดข้อมูลไม่สำเร็จ';
+
+// Resolve to { ok, res } instead of throwing, so one failed feed does not hide
+// the others and is never mistaken for an empty one.
+const settle = promise => promise.then(res => ({ ok: true, res }), () => ({ ok: false }));
+
 export default function AffiliationDashboard() {
   const toast = useToast();
   const [data, setData] = useState(null);
@@ -27,6 +40,8 @@ export default function AffiliationDashboard() {
   const [incidents, setIncidents] = useState([]);
   const [atRiskVehicles, setAtRiskVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
+  // section key -> true while its last request failed; those sections show "—"
+  const [failed, setFailed] = useState({});
   const [notified, setNotified] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
@@ -47,28 +62,31 @@ export default function AffiliationDashboard() {
     requestInFlight.current = true;
     setRefreshing(true);
     try {
-      const [dashRes, schoolsRes, incRes, atRiskRes] = await Promise.all([
-        api.get('/affiliation/dashboard').catch(() => null),
-        api.get('/affiliation/schools').catch(() => null),
-        api.get('/affiliation/emergencies?per_page=5&page=1').catch(() => null),
-        api.get('/affiliation/vehicles-at-risk?limit=10').catch(() => null),
+      const [dash, schoolsRes, incRes, atRiskRes] = await Promise.all([
+        settle(api.get('/affiliation/dashboard')),
+        settle(api.get('/affiliation/schools')),
+        settle(api.get('/affiliation/emergencies?per_page=5&page=1')),
+        settle(api.get('/affiliation/vehicles-at-risk?limit=10')),
       ]);
-      if (dashRes) {
-        setData(dashRes.data.data);
+      if (dash.ok) {
+        setData(dash.res.data.data);
         setLastUpdatedAt(new Date());
       }
-      if (schoolsRes) {
-        const schoolList = schoolsRes.data?.data;
+      if (schoolsRes.ok) {
+        const schoolList = schoolsRes.res.data?.data;
         setSchools(Array.isArray(schoolList) ? schoolList : []);
       }
-      if (incRes) {
-        const incList = incRes.data?.data;
+      if (incRes.ok) {
+        const incList = incRes.res.data?.data;
         setIncidents(Array.isArray(incList) ? incList : []);
       }
-      if (atRiskRes) {
-        const atRiskList = atRiskRes.data?.data;
+      if (atRiskRes.ok) {
+        const atRiskList = atRiskRes.res.data?.data;
         setAtRiskVehicles(Array.isArray(atRiskList) ? atRiskList : []);
       }
+      setFailed({
+        dashboard: !dash.ok, schools: !schoolsRes.ok, incidents: !incRes.ok, atRisk: !atRiskRes.ok,
+      });
     } finally {
       requestInFlight.current = false;
       setRefreshing(false);
@@ -107,6 +125,7 @@ export default function AffiliationDashboard() {
   const dateLabel = data?.date
     ? `วันที่ ${new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
     : null;
+  const failedSections = Object.keys(SECTION_LABELS).filter(key => failed[key]);
   const freshnessLabel = lastUpdatedAt
     ? `อัปเดตล่าสุด ${lastUpdatedAt.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
     : null;
@@ -145,28 +164,51 @@ export default function AffiliationDashboard() {
         />
       </div>
 
+      {!loading && failedSections.length > 0 && (
+        <AlertBanner variant="danger" title="โหลดข้อมูลบางส่วนไม่สำเร็จ">
+          <div className="space-y-2">
+            <p>ส่วนที่โหลดไม่ได้: {failedSections.map(key => SECTION_LABELS[key]).join(' · ')} — ตัวเลขของส่วนนี้แสดงเป็น “—” จนกว่าจะโหลดสำเร็จ</p>
+            <button
+              type="button"
+              onClick={refreshDashboard}
+              disabled={refreshing}
+              className="focus-ring inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-danger/40 bg-surface-raised px-4 text-sm font-semibold text-danger-ink transition hover:bg-danger-soft disabled:cursor-wait disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2} aria-hidden="true" />
+              ลองใหม่
+            </button>
+          </div>
+        </AlertBanner>
+      )}
+
       {loading ? (
         <SkeletonKpiGrid count={4} />
-      ) : !data ? (
+      ) : !data && !failed.dashboard ? (
         <p className="text-ink-muted py-10 text-center">{UI_MESSAGES.NO_DATA}</p>
       ) : (() => {
-        const problemSchools = data.schools_not_complete ?? [];
-        const mTotal = data.morning_total ?? 0;
-        const eTotal = data.evening_total ?? 0;
-        const mDone = data.morning_done ?? 0;
-        const eDone = data.evening_done ?? 0;
-        const mPending = data.morning_pending ?? Math.max(0, mTotal - mDone);
-        const ePending = data.evening_pending ?? Math.max(0, eTotal - eDone);
+        // A failed dashboard feed must read "—", not the zeros an empty object
+        // would produce; the other feeds still render if they loaded.
+        const dashOk = !failed.dashboard;
+        const today = dashOk ? data : {};
+        const problemSchools = today.schools_not_complete ?? [];
+        const mTotal = today.morning_total ?? 0;
+        const eTotal = today.evening_total ?? 0;
+        const mDone = today.morning_done ?? 0;
+        const eDone = today.evening_done ?? 0;
+        const mPending = today.morning_pending ?? Math.max(0, mTotal - mDone);
+        const ePending = today.evening_pending ?? Math.max(0, eTotal - eDone);
         const mPct = pctOf(mDone, mTotal);
         const ePct = pctOf(eDone, eTotal);
-        const emerg7 = data.emergency_7d ?? data.recent_emergencies ?? 0;
-        const schoolTotal = data.school_total ?? data.total_schools ?? schools.length;
-        const usedRecently = data.school_used_recently ?? 0;
+        const emerg7 = today.emergency_7d ?? today.recent_emergencies ?? 0;
+        const schoolTotal = today.school_total ?? today.total_schools ?? schools.length;
+        const usedRecently = today.school_used_recently ?? 0;
 
         // ── Banner: one sentence, one tone ──
         const notChecked = problemSchools.filter(s => (s.morning_done || 0) === 0 && (s.morning_expected || 0) > 0);
         let banner;
-        if (mTotal + eTotal === 0 || (mDone === 0 && eDone === 0 && notChecked.length === 0)) {
+        if (!dashOk) {
+          banner = null;
+        } else if (mTotal + eTotal === 0 || (mDone === 0 && eDone === 0 && notChecked.length === 0)) {
           banner = { variant: 'neutral', title: 'ยังไม่เริ่มรอบวันนี้', sub: 'รอข้อมูลการเช็กชื่อรอบเช้าจากโรงเรียนในสังกัด' };
         } else if (notChecked.length > 0) {
           const names = notChecked.slice(0, 2).map(s => s.school_name).join(' · ');
@@ -195,25 +237,30 @@ export default function AffiliationDashboard() {
 
         // ── Todos: never repeat the banner's topic ──
         const todos = [
-          banner.topic !== 'schools' && {
-            key: 'risk-schools', variant: 'warn', count: data.at_risk_schools ?? 0,
-            title: 'โรงเรียนที่ต้องติดตาม', sub: 'ยังมีนักเรียนรอส่งหรือรอรับ',
+          banner?.topic !== 'schools' && {
+            key: 'risk-schools', variant: 'warn', count: today.at_risk_schools ?? 0,
+            title: 'โรงเรียนที่ต้องติดตาม', sub: dashOk ? 'ยังมีนักเรียนรอส่งหรือรอรับ' : UNAVAILABLE_SUB,
+            unavailable: !dashOk,
             cta: { label: 'ดูรายชื่อ', onClick: () => openAndScroll('schools') },
           },
           {
             key: 'risk-vehicles', variant: atRiskVehicles.some(v => v.risk_score >= 100) ? 'danger' : 'warn',
             count: atRiskVehicles.length,
-            title: 'รถต้องแก้เอกสาร', sub: atRiskVehicles[0]?.risk_reasons?.[0] || 'ประกันหรือเอกสารรถต้องตรวจ',
+            title: 'รถต้องแก้เอกสาร',
+            sub: failed.atRisk ? UNAVAILABLE_SUB : (atRiskVehicles[0]?.risk_reasons?.[0] || 'ประกันหรือเอกสารรถต้องตรวจ'),
+            unavailable: !!failed.atRisk,
             cta: { label: 'ดูรายการรถ', onClick: () => openAndScroll('vehicles') },
           },
           {
-            key: 'missing-vehicle-data', variant: 'info', count: data.schools_missing_vehicle_data ?? 0,
-            title: 'โรงเรียนข้อมูลรถไม่ครบถ้วน', sub: 'นักเรียนบางคนยังไม่ผูกกับรถ',
+            key: 'missing-vehicle-data', variant: 'info', count: today.schools_missing_vehicle_data ?? 0,
+            title: 'โรงเรียนข้อมูลรถไม่ครบถ้วน', sub: dashOk ? 'นักเรียนบางคนยังไม่ผูกกับรถ' : UNAVAILABLE_SUB,
+            unavailable: !dashOk,
             cta: { label: 'ดูโรงเรียน', to: '/affiliation/schools' },
           },
           {
-            key: 'not-using', variant: 'info', count: data.school_not_using_recently ?? 0,
-            title: 'โรงเรียนยังไม่ใช้ระบบ', sub: 'ไม่มีข้อมูลเช็กชื่อใน 14 วัน',
+            key: 'not-using', variant: 'info', count: today.school_not_using_recently ?? 0,
+            title: 'โรงเรียนยังไม่ใช้ระบบ', sub: dashOk ? 'ไม่มีข้อมูลเช็กชื่อใน 14 วัน' : UNAVAILABLE_SUB,
+            unavailable: !dashOk,
             cta: { label: 'ดูโรงเรียน', to: '/affiliation/schools' },
           },
         ].filter(Boolean);
@@ -236,11 +283,19 @@ export default function AffiliationDashboard() {
 
         return (
         <>
-          <TodayBanner variant={banner.variant} title={banner.title} sub={banner.sub} cta={banner.cta} />
+          {banner && <TodayBanner variant={banner.variant} title={banner.title} sub={banner.sub} cta={banner.cta} />}
 
           <TodoCards items={todos} />
 
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="ตัวเลขหลักวันนี้">
+            {!dashOk ? (
+              <>
+                <KpiRingCard label="ส่งเช้า" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
+                <KpiRingCard label="รับเย็น" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
+                <KpiRingCard label="โรงเรียนที่ใช้งาน" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
+                <KpiRingCard label="เหตุฉุกเฉิน 7 วัน" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
+              </>
+            ) : (<>
             <KpiRingCard
               label="ส่งเช้า" pct={mPct} value="–" variant={mPct == null ? 'neutral' : pctTone(mPct)}
               sub={`${mDone.toLocaleString('th-TH')} / ${mTotal.toLocaleString('th-TH')} คน`}
@@ -262,9 +317,10 @@ export default function AffiliationDashboard() {
               label="เหตุฉุกเฉิน 7 วัน" value={emerg7}
               variant={emerg7 > 0 ? 'danger' : 'success'}
               chip={emerg7 > 0 ? 'ต้องรีบ' : 'ไม่มีเหตุ'}
-              sub={emerg7 > 0 ? (incidents[0] ? `${incidents[0].plate_no || '-'} · ${relativeTime(incidents[0].reported_at)}` : 'ดูรายละเอียดด้านล่าง') : 'ไม่มีเหตุในสังกัด'}
+              sub={emerg7 > 0 ? (!failed.incidents && incidents[0] ? `${incidents[0].plate_no || '-'} · ${relativeTime(incidents[0].reported_at)}` : 'ดูรายละเอียดด้านล่าง') : 'ไม่มีเหตุในสังกัด'}
               onClick={emerg7 > 0 ? () => openAndScroll('emergencies') : undefined}
             />
+            </>)}
           </section>
 
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -277,7 +333,7 @@ export default function AffiliationDashboard() {
               title="โรงเรียนที่ต้องติดตาม"
               sub="ส่งเช้าวันนี้ เรียงจากน้อยไปมาก"
               rows={rankRows}
-              empty="ทุกโรงเรียนส่งเช้าครบแล้ว"
+              empty={dashOk ? 'ทุกโรงเรียนส่งเช้าครบแล้ว' : UNAVAILABLE_SUB}
               link={{ label: 'ดูทุกโรงเรียน', to: '/affiliation/schools' }}
             />
           </section>
@@ -287,10 +343,12 @@ export default function AffiliationDashboard() {
               <FoldSection
                 key={`schools-${openFold.schools || 0}`}
                 defaultOpen={!!openFold.schools}
-                title={`โรงเรียนที่ยังมีรายการค้าง ${problemSchools.length} โรงเรียน`}
+                title={`โรงเรียนที่ยังมีรายการค้าง ${dashOk ? problemSchools.length : '—'} โรงเรียน`}
                 subtitle="ความคืบหน้ารายโรงเรียน พร้อมปุ่มแจ้งเตือนโรงเรียน"
               >
-                {problemSchools.length === 0 ? (
+                {!dashOk ? (
+                  <p className="py-6 text-center text-sm text-ink-muted">{UNAVAILABLE_SUB}</p>
+                ) : problemSchools.length === 0 ? (
                   <p className="py-6 text-center text-sm text-ink-muted">ไม่มีโรงเรียนค้าง</p>
                 ) : (
                   <div className="space-y-3">
@@ -307,16 +365,18 @@ export default function AffiliationDashboard() {
               </FoldSection>
             </div>
 
-            <SchoolReadinessFold schools={schools} totals={data} />
+            <SchoolReadinessFold schools={schools} totals={today} schoolsFailed={!!failed.schools} totalsFailed={!dashOk} />
 
             <div ref={foldRefs.vehicles}>
               <FoldSection
                 key={`vehicles-${openFold.vehicles || 0}`}
                 defaultOpen={!!openFold.vehicles}
-                title={`รถที่ต้องติดตาม ${atRiskVehicles.length} คัน`}
+                title={`รถที่ต้องติดตาม ${failed.atRisk ? '—' : atRiskVehicles.length} คัน`}
                 subtitle="ประกันหรือเอกสารรถที่ต้องตรวจสอบ"
               >
-                {atRiskVehicles.length === 0 ? (
+                {failed.atRisk ? (
+                  <p className="py-6 text-center text-sm text-ink-muted">{UNAVAILABLE_SUB}</p>
+                ) : atRiskVehicles.length === 0 ? (
                   <p className="py-6 text-center text-sm text-ink-muted">ไม่มีรถต้องติดตาม</p>
                 ) : (
                   <ul className="divide-y divide-surface-border rounded-xl border border-surface-border">
@@ -340,9 +400,11 @@ export default function AffiliationDashboard() {
                 key={`emergencies-${openFold.emergencies || 0}`}
                 defaultOpen={!!openFold.emergencies}
                 title="เหตุฉุกเฉินล่าสุด"
-                subtitle={incidents.length > 0 ? `${incidents.length} รายการล่าสุด` : 'ไม่มีเหตุล่าสุด'}
+                subtitle={failed.incidents ? UNAVAILABLE_SUB : incidents.length > 0 ? `${incidents.length} รายการล่าสุด` : 'ไม่มีเหตุล่าสุด'}
               >
-                {incidents.length === 0 ? (
+                {failed.incidents ? (
+                  <p className="py-6 text-center text-sm text-ink-muted">{UNAVAILABLE_SUB}</p>
+                ) : incidents.length === 0 ? (
                   <p className="py-6 text-center text-sm text-ink-muted">ไม่มีเหตุล่าสุด</p>
                 ) : (
                   <ul className="divide-y divide-surface-border rounded-xl border border-surface-border">
@@ -370,17 +432,23 @@ export default function AffiliationDashboard() {
   );
 }
 
-function SchoolReadinessFold({ schools, totals }) {
+function SchoolReadinessFold({ schools, totals, schoolsFailed, totalsFailed }) {
   const withData = schools.filter(s => Number(s.student_count) > 0).length;
   const loggedInWaiting = schools.filter(s => Number(s.student_count) === 0 && s.last_login_at).length;
   const notStarted = Math.max(0, schools.length - withData - loggedInWaiting);
+  const schoolCounts = schoolsFailed
+    ? 'มีข้อมูล — · เข้าระบบแล้วรอนำเข้า — · ยังไม่เข้าใช้ —'
+    : `มีข้อมูล ${withData} · เข้าระบบแล้วรอนำเข้า ${loggedInWaiting} · ยังไม่เข้าใช้ ${notStarted}`;
+  const vehicleCount = totalsFailed ? '—' : (totals?.total_vehicles ?? 0);
 
   return (
     <FoldSection
       title="สถานะโรงเรียนในสังกัด"
-      subtitle={`มีข้อมูล ${withData} · เข้าระบบแล้วรอนำเข้า ${loggedInWaiting} · ยังไม่เข้าใช้ ${notStarted} · รถ ${totals?.total_vehicles ?? 0} คัน (นับไม่ซ้ำคัน)`}
+      subtitle={`${schoolCounts} · รถ ${vehicleCount} คัน (นับไม่ซ้ำคัน)`}
     >
-      {schools.length === 0 ? (
+      {schoolsFailed ? (
+        <p className="py-6 text-center text-sm text-ink-muted">โหลดข้อมูลไม่สำเร็จ</p>
+      ) : schools.length === 0 ? (
         <p className="py-6 text-center text-sm text-ink-muted">ยังไม่มีข้อมูลโรงเรียนในสังกัด</p>
       ) : (
         <div className="overflow-hidden rounded-lg border border-surface-border bg-surface-raised divide-y divide-surface-border">

@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Building2, Bus, AlertTriangle, ChevronDown,
   // Phase 10.7E-1 — icons for the action row
   Search, FileText,
   // Phase 10.8C — override button icon
-  CheckCircle2,
+  CheckCircle2, RefreshCw,
 } from 'lucide-react';
 import api from '../../api/axios';
 import StudentStatusTable from '../../components/StudentStatusTable';
@@ -15,7 +15,7 @@ import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
 import SchoolOverrideModal from '../../components/SchoolOverrideModal';
 import {
-  AppCard, StatusBadge, ConfirmDialog,
+  AppCard, StatusBadge, ConfirmDialog, AlertBanner,
   TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars, FoldSection, RoleChip,
   pctOf, pctTone,
 } from '../../components/ui';
@@ -30,6 +30,19 @@ import useRecentDays from '../../hooks/useRecentDays';
 import { isGradeTeacher } from '../../utils/authScope';
 import { PageTransition } from '../../lib/motion';
 import { formatGradeClass } from '../../utils/student';
+
+// What each feed is called in the load-failure banner.
+const SECTION_LABELS = {
+  dashboard: 'ตัวเลขภาพรวมวันนี้',
+  status: 'สถานะรถรายคัน',
+  leaves: 'รายการลา',
+  roster: 'คำขอรายชื่อจากคนขับ',
+};
+const UNAVAILABLE_SUB = 'โหลดข้อมูลไม่สำเร็จ';
+
+// Resolve to { ok, value } instead of throwing, so one failed feed does not
+// hide the others and is never mistaken for an empty one.
+const settle = promise => promise.then(r => ({ ok: true, value: r.data.data }), () => ({ ok: false }));
 
 const isMorningLeave = (s) => s.leave_session === 'morning' || s.leave_session === 'both';
 const isEveningLeave = (s) => s.leave_session === 'evening' || s.leave_session === 'both';
@@ -61,6 +74,9 @@ export default function SchoolDashboard() {
   const [leaveLoading, setLeaveLoading] = useState({});
   // Pending roster requests (driver asks to add/remove a rider). null = unknown.
   const [rosterPending, setRosterPending] = useState(null);
+  // section key -> true while its last request failed; those sections show "—"
+  const [failed, setFailed] = useState({});
+  const [retrying, setRetrying] = useState(false);
   // A fold opened from the banner / a todo button is re-mounted open (its key
   // changes) and scrolled into view.
   const [forced, setForced] = useState({ vehicles: 0, leaves: 0 });
@@ -71,25 +87,38 @@ export default function SchoolDashboard() {
 
   function refetchDashboard() {
     return Promise.all([
-      api.get('/school/dashboard').then(r => r.data.data),
-      api.get('/school/status-today').then(r => r.data.data),
-      api.get('/school/leaves').then(r => r.data.data).catch(() => []),
-    ])
-      .then(([dash, status, lv]) => { setData(dash); setStatusData(status); setLeaves(lv || []); })
-      .catch(() => {});
+      settle(api.get('/school/dashboard')),
+      settle(api.get('/school/status-today')),
+      settle(api.get('/school/leaves')),
+    ]).then(([dash, status, lv]) => {
+      if (dash.ok) setData(dash.value);
+      if (status.ok) setStatusData(status.value);
+      if (lv.ok) setLeaves(lv.value || []);
+      setFailed(prev => ({ ...prev, dashboard: !dash.ok, status: !status.ok, leaves: !lv.ok }));
+    });
   }
 
   useEffect(() => {
     refetchDashboard().finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
+  const loadRosterPending = useCallback(() => {
     // Grade teachers cannot approve requests, so the count would be a dead end.
-    if (isTeacher) return;
-    api.get('/school/roster-requests', { params: { status: 'pending' } })
-      .then(r => setRosterPending(Number(r.data?.meta?.total ?? (r.data?.data || []).length) || 0))
-      .catch(() => setRosterPending(null));
+    if (isTeacher) return Promise.resolve();
+    return api.get('/school/roster-requests', { params: { status: 'pending' } })
+      .then(r => {
+        setRosterPending(Number(r.data?.meta?.total ?? (r.data?.data || []).length) || 0);
+        setFailed(prev => ({ ...prev, roster: false }));
+      })
+      .catch(() => setFailed(prev => ({ ...prev, roster: true })));
   }, [isTeacher]);
+
+  useEffect(() => { loadRosterPending(); }, [loadRosterPending]);
+
+  function retryFailed() {
+    setRetrying(true);
+    Promise.all([refetchDashboard(), loadRosterPending()]).finally(() => setRetrying(false));
+  }
 
   // Cancelling a leave is destructive and was behind a bare confirm(), which
   // could not name the pupil or the date being cancelled.
@@ -120,24 +149,30 @@ export default function SchoolDashboard() {
     setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 
+  const failedSections = Object.keys(SECTION_LABELS).filter(key => failed[key]);
+  // A failed dashboard feed must read "—", never the zeros a missing payload
+  // would default to. `dash` is null whenever the last load of it failed.
+  const dashOk = !failed.dashboard;
+  const dash = dashOk ? data : null;
+
   const vehicles = statusData?.vehicles || [];
   const filtered = vehicles.filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase()));
 
   // ── Today's numbers ───────────────────────────────────────────────────────
-  const mTotal = data?.morning_total ?? 0;
-  const eTotal = data?.evening_total ?? 0;
-  const mLeave = data?.morning_leave ?? 0;
-  const eLeave = data?.evening_leave ?? 0;
-  const mDone = data?.morning_done ?? 0;
-  const eDone = data?.evening_done ?? 0;
-  const mPending = data?.morning_pending ?? 0;
-  const ePending = data?.evening_pending ?? 0;
+  const mTotal = dash?.morning_total ?? 0;
+  const eTotal = dash?.evening_total ?? 0;
+  const mLeave = dash?.morning_leave ?? 0;
+  const eLeave = dash?.evening_leave ?? 0;
+  const mDone = dash?.morning_done ?? 0;
+  const eDone = dash?.evening_done ?? 0;
+  const mPending = dash?.morning_pending ?? 0;
+  const ePending = dash?.evening_pending ?? 0;
   // Pending already excludes pupils on leave, so the percentages do too.
   const mExpected = Math.max(0, mTotal - mLeave);
   const eExpected = Math.max(0, eTotal - eLeave);
   const mPct = pctOf(mDone, mExpected);
   const ePct = pctOf(eDone, eExpected);
-  const emerg7d = data?.recent_emergencies ?? 0;
+  const emerg7d = dash?.recent_emergencies ?? 0;
   const nothingToday = mTotal + eTotal === 0;
   const eveningStarted = eDone > 0;
 
@@ -168,17 +203,17 @@ export default function SchoolDashboard() {
   }
 
   // ── Todos: things to act on that the banner does not already say ─────────
-  const c = data?.completeness;
+  const c = dash?.completeness;
   const noVehicle = c && Number.isFinite(c.students_total) && Number.isFinite(c.students_with_vehicle)
     ? Math.max(0, c.students_total - c.students_with_vehicle) : 0;
   const noParent = c && Number.isFinite(c.students_total) && Number.isFinite(c.students_with_parent)
     ? Math.max(0, c.students_total - c.students_with_parent) : 0;
   const todos = [
-    { key: 'emergency', variant: 'danger', count: emerg7d, title: 'เหตุฉุกเฉินใน 7 วัน', sub: 'ตรวจสอบรายละเอียดและผลการแก้ไข', cta: { label: 'ดูเหตุฉุกเฉิน', to: '/school/emergencies' } },
-    !isTeacher && rosterPending != null && { key: 'roster', variant: 'warn', count: rosterPending, title: 'คำขอรายชื่อจากคนขับ', sub: 'รอโรงเรียนอนุมัติ', cta: { label: 'ตรวจคำขอ', to: '/school/approvals' } },
-    { key: 'no-vehicle', variant: 'warn', count: noVehicle, title: 'นักเรียนยังไม่ผูกรถ', sub: 'ยังไม่มีรถรับส่งในระบบ', cta: { label: 'ดูรายชื่อ', to: '/school/students?has_vehicle=no' } },
-    { key: 'no-parent', variant: 'info', count: noParent, title: 'ข้อมูลผู้ปกครองไม่ครบ', sub: 'เติมเบอร์ผู้ปกครองเพื่อให้แจ้งเตือนได้', cta: { label: 'ดูรายชื่อ', to: '/school/students' } },
-    !isTeacher && { key: 'leaves', variant: 'info', count: leaves.length, title: 'รายการลาของวันนี้', sub: 'ยกเลิกได้หากบันทึกผิด', cta: { label: 'ดูรายการลา', onClick: () => openFold('leaves', leavesRef) } },
+    { key: 'emergency', variant: 'danger', count: emerg7d, title: 'เหตุฉุกเฉินใน 7 วัน', sub: dashOk ? 'ตรวจสอบรายละเอียดและผลการแก้ไข' : UNAVAILABLE_SUB, unavailable: !dashOk, cta: { label: 'ดูเหตุฉุกเฉิน', to: '/school/emergencies' } },
+    !isTeacher && (failed.roster || rosterPending != null) && { key: 'roster', variant: 'warn', count: rosterPending ?? 0, title: 'คำขอรายชื่อจากคนขับ', sub: failed.roster ? UNAVAILABLE_SUB : 'รอโรงเรียนอนุมัติ', unavailable: !!failed.roster, cta: { label: 'ตรวจคำขอ', to: '/school/approvals' } },
+    { key: 'no-vehicle', variant: 'warn', count: noVehicle, title: 'นักเรียนยังไม่ผูกรถ', sub: dashOk ? 'ยังไม่มีรถรับส่งในระบบ' : UNAVAILABLE_SUB, unavailable: !dashOk, cta: { label: 'ดูรายชื่อ', to: '/school/students?has_vehicle=no' } },
+    { key: 'no-parent', variant: 'info', count: noParent, title: 'ข้อมูลผู้ปกครองไม่ครบ', sub: dashOk ? 'เติมเบอร์ผู้ปกครองเพื่อให้แจ้งเตือนได้' : UNAVAILABLE_SUB, unavailable: !dashOk, cta: { label: 'ดูรายชื่อ', to: '/school/students' } },
+    !isTeacher && { key: 'leaves', variant: 'info', count: leaves.length, title: 'รายการลาของวันนี้', sub: failed.leaves ? UNAVAILABLE_SUB : 'ยกเลิกได้หากบันทึกผิด', unavailable: !!failed.leaves, cta: failed.leaves ? undefined : { label: 'ดูรายการลา', onClick: () => openFold('leaves', leavesRef) } },
   ].filter(Boolean);
 
   // ── Per-bus ranking for the round in progress ────────────────────────────
@@ -281,6 +316,23 @@ export default function SchoolDashboard() {
         />
       )}
 
+      {!loading && failedSections.length > 0 && (
+        <AlertBanner variant="danger" title="โหลดข้อมูลบางส่วนไม่สำเร็จ">
+          <div className="space-y-2">
+            <p>ส่วนที่โหลดไม่ได้: {failedSections.map(key => SECTION_LABELS[key]).join(' · ')} — ตัวเลขของส่วนนี้แสดงเป็น “—” จนกว่าจะโหลดสำเร็จ</p>
+            <button
+              type="button"
+              onClick={retryFailed}
+              disabled={retrying}
+              className="focus-ring inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-danger/40 bg-surface-raised px-4 text-sm font-semibold text-danger-ink transition hover:bg-danger-soft disabled:cursor-wait disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${retrying ? 'animate-spin' : ''}`} strokeWidth={2} aria-hidden="true" />
+              ลองใหม่
+            </button>
+          </div>
+        </AlertBanner>
+      )}
+
       {loading ? (
         <div className="space-y-4">
           <SkeletonKpiGrid count={4} />
@@ -288,14 +340,24 @@ export default function SchoolDashboard() {
         </div>
       ) : (
         <>
-          <div className="motion-safe:animate-fade-in-up">
-            <TodayBanner variant={banner.variant} title={banner.title} sub={banner.sub} cta={banner.cta} />
-          </div>
+          {dashOk && (
+            <div className="motion-safe:animate-fade-in-up">
+              <TodayBanner variant={banner.variant} title={banner.title} sub={banner.sub} cta={banner.cta} />
+            </div>
+          )}
 
           <TodoCards items={todos} />
 
           {/* Headline numbers */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="ตัวเลขหลักวันนี้">
+            {!dashOk ? (
+              <>
+                <KpiRingCard label="ส่งเช้า" value="—" sub={UNAVAILABLE_SUB} variant="neutral" chip="ไม่มีข้อมูล" />
+                <KpiRingCard label="รับเย็น" value="—" sub={UNAVAILABLE_SUB} variant="neutral" chip="ไม่มีข้อมูล" />
+                <KpiRingCard label="นักเรียนที่ลา" value="—" sub={UNAVAILABLE_SUB} variant="neutral" chip="ไม่มีข้อมูล" />
+                <KpiRingCard label="เหตุฉุกเฉิน 7 วัน" value="—" sub={UNAVAILABLE_SUB} variant="neutral" chip="ไม่มีข้อมูล" />
+              </>
+            ) : (<>
             {/* Before a round has any check-in, show "not started" instead of an empty ring. */}
             {mExpected === 0 || mDone === 0 ? (
               <KpiRingCard label="ส่งเช้า" value="ยังไม่เริ่ม" sub="ยังไม่เริ่มรอบ" variant="neutral" />
@@ -320,6 +382,7 @@ export default function SchoolDashboard() {
               variant={emerg7d > 0 ? 'danger' : 'success'}
               chip={emerg7d > 0 ? undefined : 'ไม่มีเหตุ'}
             />
+            </>)}
           </section>
 
           {/* Two charts: the last school days, and the buses to chase now */}
@@ -334,7 +397,7 @@ export default function SchoolDashboard() {
               sub="เรียงจากค้างมากไปน้อย"
               rows={rankRows}
               link={{ label: 'ดูรถทั้งหมด', to: '/school/vehicles' }}
-              empty="ยังไม่มีรถที่มีนักเรียนในรอบนี้"
+              empty={failed.status ? UNAVAILABLE_SUB : 'ยังไม่มีรถที่มีนักเรียนในรอบนี้'}
             />
           </section>
 
@@ -345,8 +408,11 @@ export default function SchoolDashboard() {
                 key={`vehicles-${forced.vehicles}`}
                 defaultOpen={forced.vehicles > 0}
                 title={SECTION_TITLES.VEHICLE_STATUS}
-                subtitle={`${vehicles.length} คัน · กดเพื่อดูรายชื่อนักเรียนในแต่ละคัน`}
+                subtitle={failed.status ? `— คัน · ${UNAVAILABLE_SUB}` : `${vehicles.length} คัน · กดเพื่อดูรายชื่อนักเรียนในแต่ละคัน`}
               >
+                {failed.status ? (
+                  <p className="py-8 text-center text-ink-muted">{UNAVAILABLE_SUB}</p>
+                ) : (
                 <div className="space-y-3">
                   <PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />
                   {filtered.length === 0 ? (
@@ -364,6 +430,7 @@ export default function SchoolDashboard() {
                     </div>
                   )}
                 </div>
+                )}
               </FoldSection>
             </div>
 

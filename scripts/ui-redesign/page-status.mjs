@@ -174,6 +174,12 @@ const EXEMPT = {
   'pages/ChangePassword.jsx': {
     header: 'rendered outside the shell, before a session is fully established',
   },
+  'pages/ForgotPassword.jsx': {
+    header: 'standalone unauthenticated recovery page outside the application shell; its branded card heading is the page header',
+  },
+  'pages/ResetPassword.jsx': {
+    header: 'standalone token recovery page outside the application shell; its state-aware card heading is the page header',
+  },
 };
 
 const rows = [];

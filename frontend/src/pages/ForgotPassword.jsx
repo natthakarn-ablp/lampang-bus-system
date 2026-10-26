@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeft, KeyRound, Send } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
+import ErrorState from '../components/ErrorState';
+import LoadingState from '../components/LoadingState';
 import { AlertBanner, FormField } from '../components/ui';
 
 const LOGO = '/brand/school-safe-logo.webp';
@@ -12,12 +14,17 @@ export default function ForgotPassword() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  const [configError, setConfigError] = useState('');
 
-  useEffect(() => {
+  const loadConfig = useCallback(() => {
+    setEnabled(null);
+    setConfigError('');
     api.get('/auth/recovery/config')
       .then((res) => setEnabled(Boolean(res.data.data?.admin_password_recovery)))
-      .catch(() => setEnabled(false));
+      .catch(() => setConfigError('ตรวจสอบสถานะบริการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
   }, []);
+
+  useEffect(() => { loadConfig(); }, [loadConfig]);
 
   async function submit(event) {
     event.preventDefault();
@@ -42,7 +49,11 @@ export default function ForgotPassword() {
           <p className="mt-2 text-sm leading-6 text-ink-muted">ระยะแรกเปิดสำหรับบัญชีผู้ดูแลระบบที่ผูก LINE แล้ว</p>
         </div>
 
-        {enabled === false && (
+        {enabled === null && !configError && <LoadingState compact message="กำลังตรวจสอบบริการกู้คืนรหัสผ่าน…" />}
+
+        {configError && <ErrorState className="mt-6" message={configError} onRetry={loadConfig} />}
+
+        {enabled === false && !configError && (
           <AlertBanner variant="warn" className="mt-6" title="ยังไม่เปิดใช้บริการนี้">
             กรุณาติดต่อผู้ดูแลระบบระดับจังหวัดเพื่อรีเซ็ตรหัสผ่านตามขั้นตอนเดิม
           </AlertBanner>
@@ -60,10 +71,11 @@ export default function ForgotPassword() {
               placeholder="กรอกชื่อผู้ใช้"
             />
             {error && <AlertBanner variant="danger">{error}</AlertBanner>}
-            <button type="submit" disabled={busy} className="focus-ring inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 font-bold text-white hover:bg-brand-700 disabled:opacity-50">
-              <Send className="h-4 w-4" aria-hidden="true" />
-              {busy ? 'กำลังส่งคำขอ…' : 'ส่งลิงก์ไปยัง LINE'}
-            </button>
+            {busy ? <LoadingState compact message="กำลังส่งคำขอ…" /> : (
+              <button type="submit" className="focus-ring inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 font-bold text-white hover:bg-brand-700">
+                <Send className="h-4 w-4" aria-hidden="true" /> ส่งลิงก์ไปยัง LINE
+              </button>
+            )}
           </form>
         )}
 

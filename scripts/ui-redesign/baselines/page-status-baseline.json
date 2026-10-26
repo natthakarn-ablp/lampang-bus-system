@@ -1,16 +1,5 @@
 {
   "schemaVersion": 1,
   "generatedFrom": "0ac329d14e37ebf2e1b5b8ee340d52dc5059d266",
-  "acceptedPartial": [
-    {
-      "file": "pages/ForgotPassword.jsx",
-      "patterns": ["header", "states"],
-      "reason": "Known standalone recovery-page header and async-state migration debt; temporary acceptance must only shrink."
-    },
-    {
-      "file": "pages/ResetPassword.jsx",
-      "patterns": ["header", "states"],
-      "reason": "Known standalone recovery-page header and async-state migration debt; temporary acceptance must only shrink."
-    }
-  ]
+  "acceptedPartial": []
 }

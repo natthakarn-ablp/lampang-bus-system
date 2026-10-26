@@ -139,16 +139,20 @@ export default function AdminAccountSecurity() {
     setConfirmUnlink(true);
   }
 
+  // The dialog stays open while the request runs so its loading state is
+  // visible; it closes on success, and on failure too so the error banner on
+  // the page (which the dialog would cover) can be read.
   async function unlinkLine() {
-    setConfirmUnlink(false);
     setBusy('unlink');
     try {
       await api.delete('/auth/recovery/self/line', { data: { current_password: password } });
+      setConfirmUnlink(false);
       setCodes([]);
       setPassword('');
       toast.success('ยกเลิกการผูก LINE แล้ว');
       await loadStatus();
     } catch (err) {
+      setConfirmUnlink(false);
       setError(err.response?.data?.message || 'ไม่สามารถยกเลิกการผูก LINE ได้');
     } finally {
       setBusy('');
@@ -299,7 +303,7 @@ export default function AdminAccountSecurity() {
         confirmLabel="ยกเลิกการผูก"
         loading={busy === 'unlink'}
         onConfirm={unlinkLine}
-        onCancel={() => setConfirmUnlink(false)}
+        onCancel={() => { if (busy !== 'unlink') setConfirmUnlink(false); }}
       />
     </div>
   );

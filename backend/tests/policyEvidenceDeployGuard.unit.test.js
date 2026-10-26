@@ -1,19 +1,15 @@
 'use strict';
 
 /**
- * Migrations 052 + 053 boot guard (src/index.js).
+ * Migrations 052 + 053 at boot (src/index.js).
  *
- * /api/policy-notices is mounted unconditionally and reads/writes
- * policy_acknowledgements (052) and policy_action_evidence (053).
- * deploy-backend.sh does not apply migrations, so a build that reaches a
- * database without them must refuse to start rather than serve 500s.
- *
- * Unlike sharedStateDeployGuard.unit.test.js, this boots the real index.js
- * with the database, env and Express app replaced, so both directions are
- * executed rather than read from the source text:
- *   - both tables present   -> the app starts listening, no exit
- *   - either table missing  -> FATAL naming it, process.exit(1), never listens
- *   - the probe itself fails -> warn and keep booting (same rule as 051)
+ * Whether 052/053 are on production is unconfirmed and the policy-notice
+ * feature is not core work, so a missing table must NOT stop the app. This
+ * boots the real index.js with the database, env and Express app replaced and
+ * checks all three outcomes of the table probe:
+ *   - both tables present    -> listens, no exit, says so
+ *   - a table missing        -> listens, no exit, warns naming the table(s)
+ *   - the probe itself fails -> listens, no exit, warns that it could not check
  */
 
 const POLICY_TABLES = ['policy_acknowledgements', 'policy_action_evidence'];
@@ -50,7 +46,7 @@ function bootIndex({ missing = [], probeError = null } = {}) {
 // start() is async and not exported; let its awaited probes settle.
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-describe('migration 052/053 boot guard', () => {
+describe('migration 052/053 check at boot never stops the app', () => {
   let exitSpy;
   let errorSpy;
   let warnSpy;
@@ -63,12 +59,9 @@ describe('migration 052/053 boot guard', () => {
     for (const evt of ['SIGTERM', 'SIGINT', 'unhandledRejection', 'uncaughtException']) {
       signalListeners[evt] = process.listeners(evt).slice();
     }
-    // A real exit stops start() where it is called. Throwing on the first call
-    // reproduces that; start().catch() then calls exit again, which is let through.
-    let exited = false;
+    // A real exit would stop start(); throwing reproduces that so an exit
+    // anywhere in the boot path shows up as "never listened".
     exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => {
-      if (exited) return undefined;
-      exited = true;
       throw new Error(`process.exit(${code})`);
     });
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -84,7 +77,7 @@ describe('migration 052/053 boot guard', () => {
     jest.resetModules();
   });
 
-  it('starts normally when both tables exist', async () => {
+  it('tables present: starts and reports them present', async () => {
     const { listen, query } = bootIndex();
     await settle();
 
@@ -93,34 +86,33 @@ describe('migration 052/053 boot guard', () => {
     expect(exitSpy).not.toHaveBeenCalled();
     expect(errorSpy).not.toHaveBeenCalled();
     expect(listen).toHaveBeenCalledTimes(1);
-    expect(logSpy.mock.calls.flat().join('\n')).toMatch(/Policy evidence check passed/);
+    expect(logSpy.mock.calls.flat().join('\n')).toMatch(/Policy-notice tables present/);
   });
 
   it.each([
     [['policy_acknowledgements']],
     [['policy_action_evidence']],
     [POLICY_TABLES],
-  ])('refuses to start when %j is missing', async (missing) => {
+  ])('tables missing (%j): still starts, warns, never exits', async (missing) => {
     const { listen } = bootIndex({ missing });
     await settle();
 
-    expect(exitSpy).toHaveBeenCalledWith(1);
-    const fatal = errorSpy.mock.calls.flat().join('\n');
-    expect(fatal).toMatch(/FATAL: this build requires migrations 052 and 053/);
-    for (const t of missing) expect(fatal).toContain(t);
-    expect(fatal).toMatch(/052_policy_acknowledgements\.sql/);
-    expect(fatal).toMatch(/053_policy_action_evidence\.sql/);
-    expect(exitSpy.mock.calls[0]).toEqual([1]);
-    // "never listens" is what proves the guard sits before app.listen.
-    expect(listen).not.toHaveBeenCalled();
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(listen).toHaveBeenCalledTimes(1);
+    const warning = warnSpy.mock.calls.flat().join('\n');
+    expect(warning).toMatch(/policy-notice tables missing/);
+    for (const t of missing) expect(warning).toContain(t);
+    expect(warning).toMatch(/503/);
+    expect(warning).toMatch(/052_policy_acknowledgements\.sql/);
+    expect(warning).toMatch(/053_policy_action_evidence\.sql/);
   });
 
-  it('only warns when the probe itself fails, like the 051 guard', async () => {
+  it('probe fails: still starts and warns that it could not check', async () => {
     const { listen } = bootIndex({ probeError: new Error('information_schema denied') });
     await settle();
 
     expect(exitSpy).not.toHaveBeenCalled();
-    expect(warnSpy.mock.calls.flat().join('\n')).toMatch(/could not verify policy-evidence migration presence/);
     expect(listen).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls.flat().join('\n')).toMatch(/could not verify policy-notice tables/);
   });
 });

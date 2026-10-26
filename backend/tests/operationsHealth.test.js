@@ -29,6 +29,13 @@ function makePool(over = {}) {
   return {
     query: async (sql) => {
       if (/FROM schema_migrations/.test(sql)) return [[]];
+      // All-clear includes the migration 052/053 policy-notice tables.
+      if (/information_schema\.tables/.test(sql)) {
+        if (over.policyProbeError) throw over.policyProbeError;
+        const missing = over.policyMissing || [];
+        return [['policy_acknowledgements', 'policy_action_evidence']
+          .filter((t) => !missing.includes(t)).map((t) => ({ table_name: t }))];
+      }
       let n = 0;
       if (/GROUP BY school_id, student_code/.test(sql)) n = over.dup || 0;
       else if (/school_id IS NULL OR student_code IS NULL/.test(sql)) n = over.missing || 0;

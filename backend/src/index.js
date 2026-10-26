@@ -6,6 +6,7 @@ process.env.TZ = 'Asia/Bangkok';
 const env = require('./config/env');
 const { testConnection, pool } = require('./config/database');
 const app = require('./app');
+const { getPolicyEvidenceStatus } = require('./utils/policyEvidenceTables');
 
 // Audit 2026-06-18 (config-infra-dos): bind to loopback by default so only the
 // local nginx reverse proxy can reach the backend. Binding to 0.0.0.0 let a
@@ -119,52 +120,21 @@ async function assertSharedSecurityStateMigrationPresent() {
   console.log('[app] Shared security state check passed (migration 051 tables present)');
 }
 
-// ─── Policy notice evidence guard (migrations 052 + 053) ─────────────────────
-// Same shape as the 051 guard, and for the same reason: no feature flag.
-// app.js mounts /api/policy-notices unconditionally, and its routes read
-// policy_acknowledgements (052) and write policy_action_evidence (053). Without
-// them every acknowledgement and every certified action fails per request with
-// ER_NO_SUCH_TABLE. deploy-backend.sh does not apply migrations, so exiting at
-// boot turns that ordering mistake into a failed deploy that pm2 survives on the
-// previous process, instead of a broken feature in production.
-//
-// 053 says it must be applied together with 052, so both are checked together.
-// Same resilience rule: a genuinely-missing table is fatal, but a probe that
-// fails for an unrelated reason only warns.
-const REQUIRED_POLICY_EVIDENCE_TABLES = ['policy_acknowledgements', 'policy_action_evidence'];
-
-async function assertPolicyEvidenceMigrationPresent() {
-  let presentTables;
-  try {
-    const [rows] = await pool.query(
-      `SELECT table_name AS table_name
-         FROM information_schema.tables
-        WHERE table_schema = ?
-          AND table_name IN (?, ?)`,
-      [env.db.name, ...REQUIRED_POLICY_EVIDENCE_TABLES]
-    );
-    presentTables = new Set(rows.map((r) => String(r.table_name).toLowerCase()));
-  } catch (err) {
-    console.warn(
-      `[app] WARNING: could not verify policy-evidence migration presence (${err.message}). ` +
-      'Continuing startup; verify migrations 052 and 053 were applied.'
-    );
-    return;
+// ─── Policy notice tables check (migrations 052 + 053) — warn, never exit ────
+// /api/policy-notices reads policy_acknowledgements (052) and writes
+// policy_action_evidence (053). Unlike the 051 guard above, a missing table is
+// NOT fatal: whether 052/053 are on production is unconfirmed, and the policy
+// feature is not core work, so it must not keep the whole app from booting.
+// Instead the boot logs a warning, every /api/policy-notices route answers 503
+// (utils/policyEvidenceTables.js), and /admin/system-health shows a WARN row.
+// The status is cached for at most 60 s and re-probed on demand, so applying
+// the migrations re-enables the feature without a restart.
+async function checkPolicyEvidenceTables() {
+  const status = await getPolicyEvidenceStatus({ force: true });
+  if (status.state === 'ready') {
+    console.log('[app] Policy-notice tables present (migration 052/053)');
   }
-
-  const missing = REQUIRED_POLICY_EVIDENCE_TABLES.filter((t) => !presentTables.has(t));
-  if (missing.length > 0) {
-    console.error(
-      '[app] FATAL: this build requires migrations 052 and 053 — ' +
-      `missing table(s): ${missing.join(', ')}. ` +
-      'Apply backend/migrations/052_policy_acknowledgements.sql and then ' +
-      '053_policy_action_evidence.sql BEFORE starting this version; without them ' +
-      'every /api/policy-notices acknowledgement and certified action fails. To go ' +
-      'back instead, deploy the previous release — the schema change is additive.'
-    );
-    process.exit(1);
-  }
-  console.log('[app] Policy evidence check passed (migration 052/053 tables present)');
+  // 'missing' and 'unknown' are logged by getPolicyEvidenceStatus itself.
 }
 
 // ─── Phase 11A — Intelligent Tracking migration guard (2026-06-23) ───────────
@@ -306,7 +276,7 @@ async function assertParticipationCasesMigrationPresent() {
 async function start() {
   await testConnection();
   await assertSharedSecurityStateMigrationPresent();
-  await assertPolicyEvidenceMigrationPresent();
+  await checkPolicyEvidenceTables();
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();
   await assertAdminRecoveryMigrationPresent();

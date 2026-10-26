@@ -30,6 +30,13 @@ function makePool(over = {}) {
     query: async (sql) => {
       calls.push(sql);
       if (/FROM schema_migrations/.test(sql)) return [[]];
+      // All-clear includes the migration 052/053 policy-notice tables.
+      if (/information_schema\.tables/.test(sql)) {
+        if (over.policyProbeError) throw over.policyProbeError;
+        const missing = over.policyMissing || [];
+        return [['policy_acknowledgements', 'policy_action_evidence']
+          .filter((t) => !missing.includes(t)).map((t) => ({ table_name: t }))];
+      }
       if (/driver_vehicle_assignments\s+WHERE is_active=1\s+GROUP BY driver_id, vehicle_id/i.test(sql)) {
         return [[{ n: over.duplicateDriverVehiclePairs || 0 }]];
       }
@@ -79,5 +86,28 @@ describe('computeOperationsHealth readiness and driver-assignment checks', () =>
       value: 3,
       detail: 'mode=ENFORCE',
     });
+  });
+});
+
+describe('computeOperationsHealth policy-notice tables row (migration 052/053)', () => {
+  const row = (report) => report.checks.find((c) => c.key === 'policy_notice_tables');
+
+  test('tables present: OK', async () => {
+    const report = await computeOperationsHealth(makePool());
+    expect(row(report)).toMatchObject({ severity: 'OK', value: 'present' });
+  });
+
+  test('tables missing: WARN naming them, overall status at least WARN', async () => {
+    const report = await computeOperationsHealth(makePool({ policyMissing: ['policy_action_evidence'] }));
+    expect(row(report)).toMatchObject({ severity: 'WARN', value: 'missing: policy_action_evidence' });
+    expect(row(report).detail).toMatch(/052\/053/);
+    expect(report.status).toBe('WARN');
+  });
+
+  test('probe fails: WARN with the error code, report still completes', async () => {
+    const err = Object.assign(new Error('denied'), { code: 'ER_TABLEACCESS_DENIED_ERROR' });
+    const report = await computeOperationsHealth(makePool({ policyProbeError: err }));
+    expect(row(report)).toMatchObject({ severity: 'WARN', value: null, detail: 'check error: ER_TABLEACCESS_DENIED_ERROR' });
+    expect(report.checks.find((c) => c.key === 'disk')).toBeDefined();
   });
 });

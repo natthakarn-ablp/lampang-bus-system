@@ -41,6 +41,13 @@
 
 require('./loadTestEnv');
 
+// This file signs and verifies its own tokens, so it must not depend on a
+// JWT_SECRET exported by CI or a local .env.test — the same reason
+// optionalAuthRevocation.unit.test.js uses a synthetic key. Set before
+// config/env is first required (it reads JWT_SECRET once); a value already
+// provided wins.
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'synthetic-participation-test-key-not-used-in-production';
+
 // ─── The in-memory engine ───────────────────────────────────────────────────
 // `mock`-prefixed because jest hoists jest.mock() above every declaration in
 // the file and only mock* identifiers may be referenced from a module factory.

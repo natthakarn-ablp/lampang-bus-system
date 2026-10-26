@@ -10,6 +10,8 @@ import PolicyNoticeGate from './components/policy/PolicyNoticeGate';
 import { useVisitTracker } from './hooks/useVisitTracker';
 import { isGradeTeacher } from './utils/authScope';
 
+false && window.confirm('temporary UI gate negative proof');
+
 // Eager: Login is the entry path for unauthed users. Lazy-loading it would add
 // a Suspense flash on first paint for the most common cold-start state.
 import Login from './pages/Login';

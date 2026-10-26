@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const { pool } = require('../config/database');
 const { sendError } = require('../utils/response');
+const { sessionResetJti, issuedBeforeReset } = require('../utils/sessionReset');
 
 // Endpoints a user MUST still be able to reach while a forced password change
 // is pending (Phase 10.12D). The forced flow for every role routes through the
@@ -67,9 +68,17 @@ async function authenticate(req, res, next) {
     // immediately rather than remaining valid until its access token expires.
     // One indexed primary-key lookup that also yields the current
     // must_change_password flag (no second query needed).
+    // The LEFT JOIN reads the session-reset sentinel in the same round trip —
+    // rt.jti is the primary key and its value is known here, so this stays one
+    // lookup rather than a second query on every authenticated request.
     const [rows] = await pool.query(
-      'SELECT is_active, must_change_password, driver_id, password_changed_at FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
-      [payload.sub]
+      `SELECT u.is_active, u.must_change_password, u.driver_id, u.password_changed_at,
+              rt.revoked_at AS sessions_reset_at
+         FROM users u
+         LEFT JOIN revoked_tokens rt ON rt.jti = ?
+        WHERE u.id = ? AND u.is_deleted = FALSE
+        LIMIT 1`,
+      [sessionResetJti(payload.sub), payload.sub]
     );
     const dbUser = rows[0];
 
@@ -90,6 +99,14 @@ async function authenticate(req, res, next) {
       if (payload.iat < changedAtUnix) {
         return sendError(res, 'เซสชันหมดอายุจากการเปลี่ยนรหัสผ่าน กรุณาเข้าสู่ระบบใหม่', [{ code: 'PASSWORD_CHANGED' }], 401);
       }
+    }
+
+    // A refresh token was replayed for this account, so every token minted
+    // before that moment is treated as compromised — including this access
+    // token, which would otherwise stay valid for its full 24h. Same shape as
+    // the password_changed_at rule above, against a different cutoff.
+    if (path !== '/api/auth/logout' && issuedBeforeReset(payload.iat, dbUser.sessions_reset_at)) {
+      return sendError(res, 'เซสชันถูกยกเลิกเพื่อความปลอดภัย กรุณาเข้าสู่ระบบใหม่', [{ code: 'SESSION_REVOKED' }], 401);
     }
 
     req.user.mustChangePassword = !!dbUser.must_change_password;

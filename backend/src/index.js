@@ -6,6 +6,7 @@ process.env.TZ = 'Asia/Bangkok';
 const env = require('./config/env');
 const { testConnection, pool } = require('./config/database');
 const app = require('./app');
+const { getPolicyEvidenceStatus } = require('./utils/policyEvidenceTables');
 
 // Audit 2026-06-18 (config-infra-dos): bind to loopback by default so only the
 // local nginx reverse proxy can reach the backend. Binding to 0.0.0.0 let a
@@ -67,6 +68,75 @@ async function assertDriverShiftMigrationPresent() {
   console.log('[app] Driver-shift migration check passed (migration 039 tables present)');
 }
 
+// ─── A1-9 — shared security state guard (migration 051) ──────────────────────
+// Unlike the guards above, this one has no feature flag to hide behind. The
+// login lockout is read on EVERY login attempt for every role
+// (utils/sharedSecurityState.js), the LINE webhook claims each event before
+// handling it, and the account-binding lockout gates the parent bind flow. If
+// migration 051 has not run, the first symptom is that nobody can sign in, as
+// a 500 that names ER_NO_SUCH_TABLE and nothing else.
+//
+// deploy-backend.sh is `git pull` + `pm2 reload` and does not apply migrations,
+// so this is a realistic ordering mistake rather than a theoretical one. Exiting
+// at boot means pm2 keeps the previous process serving and the deploy fails
+// visibly — a failed deploy instead of an outage.
+//
+// Same resilience rule as the guards above: a table that is genuinely absent is
+// fatal, but a probe that fails for an unrelated reason only warns.
+const REQUIRED_SHARED_STATE_TABLES = [
+  'login_lockouts', 'line_webhook_events_seen', 'line_bind_lockouts',
+];
+
+async function assertSharedSecurityStateMigrationPresent() {
+  let presentTables;
+  try {
+    const [rows] = await pool.query(
+      `SELECT table_name AS table_name
+         FROM information_schema.tables
+        WHERE table_schema = ?
+          AND table_name IN (?, ?, ?)`,
+      [env.db.name, ...REQUIRED_SHARED_STATE_TABLES]
+    );
+    presentTables = new Set(rows.map((r) => String(r.table_name).toLowerCase()));
+  } catch (err) {
+    console.warn(
+      `[app] WARNING: could not verify shared-security-state migration presence (${err.message}). ` +
+      'Continuing startup; verify migration 051 was applied.'
+    );
+    return;
+  }
+
+  const missing = REQUIRED_SHARED_STATE_TABLES.filter((t) => !presentTables.has(t));
+  if (missing.length > 0) {
+    console.error(
+      '[app] FATAL: this build requires migration 051 — ' +
+      `missing table(s): ${missing.join(', ')}. ` +
+      'Apply backend/migrations/051_shared_security_state.sql BEFORE starting this ' +
+      'version; without it every login fails. To go back instead, deploy the ' +
+      'previous release — the schema change is additive and safe to leave in place.'
+    );
+    process.exit(1);
+  }
+  console.log('[app] Shared security state check passed (migration 051 tables present)');
+}
+
+// ─── Policy notice tables check (migrations 052 + 053) — warn, never exit ────
+// /api/policy-notices reads policy_acknowledgements (052) and writes
+// policy_action_evidence (053). Unlike the 051 guard above, a missing table is
+// NOT fatal: whether 052/053 are on production is unconfirmed, and the policy
+// feature is not core work, so it must not keep the whole app from booting.
+// Instead the boot logs a warning, every /api/policy-notices route answers 503
+// (utils/policyEvidenceTables.js), and /admin/system-health shows a WARN row.
+// The status is cached for at most 60 s and re-probed on demand, so applying
+// the migrations re-enables the feature without a restart.
+async function checkPolicyEvidenceTables() {
+  const status = await getPolicyEvidenceStatus({ force: true });
+  if (status.state === 'ready') {
+    console.log('[app] Policy-notice tables present (migration 052/053)');
+  }
+  // 'missing' and 'unknown' are logged by getPolicyEvidenceStatus itself.
+}
+
 // ─── Phase 11A — Intelligent Tracking migration guard (2026-06-23) ───────────
 // Same pattern as the driver-shift guard: if any of FEATURE_ETA /
 // FEATURE_GEOFENCE / FEATURE_ROUTE_DEVIATION is on, migration 040 must have
@@ -80,6 +150,37 @@ const REQUIRED_TRACKING_TABLES = [
   'route_deviations',
   'eta_predictions',
 ];
+
+const REQUIRED_ADMIN_RECOVERY_TABLES = [
+  'user_recovery_channels',
+  'user_recovery_codes',
+  'password_reset_requests',
+];
+
+async function assertAdminRecoveryMigrationPresent() {
+  if (!env.features.adminPasswordRecovery) return;
+  const placeholders = REQUIRED_ADMIN_RECOVERY_TABLES.map(() => '?').join(', ');
+  let presentTables;
+  try {
+    const [rows] = await pool.query(
+      `SELECT table_name AS table_name FROM information_schema.tables
+        WHERE table_schema = ? AND table_name IN (${placeholders})`,
+      [env.db.name, ...REQUIRED_ADMIN_RECOVERY_TABLES]
+    );
+    presentTables = new Set(rows.map((row) => String(row.table_name).toLowerCase()));
+  } catch (error) {
+    throw new Error(`Could not verify admin-recovery migration 049: ${error.message}`);
+  }
+  const missing = REQUIRED_ADMIN_RECOVERY_TABLES.filter((table) => !presentTables.has(table));
+  if (missing.length) {
+    console.error(
+      `[app] FATAL: FEATURE_ADMIN_PASSWORD_RECOVERY=true requires migration 049 — ` +
+      `missing table(s): ${missing.join(', ')}.`
+    );
+    process.exit(1);
+  }
+  console.log('[app] Admin password-recovery migration check passed (migration 049 tables present)');
+}
 
 async function assertTrackingMigrationPresent() {
   const anyTrackingFlag =
@@ -118,11 +219,68 @@ async function assertTrackingMigrationPresent() {
   console.log('[app] Intelligent Tracking migration check passed (migration 040 tables present)');
 }
 
+// ─── Phase 4 — participation cases migration guard (migration 050) ───────────
+// Same shape as the driver-shift and tracking guards. app.js mounts the
+// /api/participation router only when FEATURE_PARTICIPATION_CASES=true, and
+// nothing else reads participation_cases / participation_case_events, so the
+// probe only runs when the flag is on and a dark deployment is unaffected.
+//
+// This is not theoretical. As of 2026-09-05 production had migration 051
+// applied but NOT 050 (docs/project-closure/handoff-2026-09-05.md §0.1), so
+// flipping the flag on there would have turned every /api/participation
+// request into a 500 naming ER_NO_SUCH_TABLE. With this guard the same
+// mistake is one FATAL line at boot, and pm2 keeps the previous process
+// serving — a failed deploy instead of a broken module.
+//
+// Same resilience rule as the guards above: a genuinely-missing table is
+// fatal, but a probe that fails for an unrelated reason only warns.
+const REQUIRED_PARTICIPATION_TABLES = ['participation_cases', 'participation_case_events'];
+
+async function assertParticipationCasesMigrationPresent() {
+  if (!env.features.participationCases) return; // flag off → router not mounted, nothing reads the tables
+
+  let presentTables;
+  try {
+    const placeholders = REQUIRED_PARTICIPATION_TABLES.map(() => '?').join(', ');
+    const [rows] = await pool.query(
+      `SELECT table_name AS table_name
+         FROM information_schema.tables
+        WHERE table_schema = ?
+          AND table_name IN (${placeholders})`,
+      [env.db.name, ...REQUIRED_PARTICIPATION_TABLES]
+    );
+    presentTables = new Set(rows.map((r) => String(r.table_name).toLowerCase()));
+  } catch (err) {
+    console.warn(
+      `[app] WARNING: could not verify participation-cases migration presence (${err.message}). ` +
+      'Continuing startup; verify migration 050 was applied.'
+    );
+    return;
+  }
+
+  const missing = REQUIRED_PARTICIPATION_TABLES.filter((t) => !presentTables.has(t));
+  if (missing.length > 0) {
+    console.error(
+      '[app] FATAL: FEATURE_PARTICIPATION_CASES=true requires migration 050 — ' +
+      `missing table(s): ${missing.join(', ')}. ` +
+      'Apply backend/migrations/050_participation_cases.sql or set ' +
+      'FEATURE_PARTICIPATION_CASES=false before starting. Without it every ' +
+      '/api/participation request fails with ER_NO_SUCH_TABLE.'
+    );
+    process.exit(1);
+  }
+  console.log('[app] Participation-cases migration check passed (migration 050 tables present)');
+}
+
 // ─── Start ───────────────────────────────────────────────────────────────────
 async function start() {
   await testConnection();
+  await assertSharedSecurityStateMigrationPresent();
+  await checkPolicyEvidenceTables();
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();
+  await assertAdminRecoveryMigrationPresent();
+  await assertParticipationCasesMigrationPresent();
   // Warm the current-term cache so getCurrentTermCachedSync() returns the live
   // DB value (terms.is_current) from the first request. Best-effort — falls back
   // to env.app.currentTerm if the table/row isn't present yet (pre-migration-046).

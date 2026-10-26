@@ -22,6 +22,8 @@ import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { CommandHero, StatusStepRail, AlertBanner, ConfirmDialog, FilterBar, FormField} from '../../components/ui';
 import DocumentReviewPanel from '../../components/DocumentReviewPanel';
+import { todayBangkok } from '../../utils/thaiTime';
+import { useAuth } from '../../hooks/useAuth';
 
 const STATUS = {
   DRAFT: ['ฉบับร่าง', 'neutral'],
@@ -35,8 +37,8 @@ const STATUS = {
 };
 
 const RESULT_STYLE = {
-  PASS: 'bg-success text-white border-success',
-  FAIL: 'bg-danger text-white border-danger',
+  PASS: 'bg-success-ink text-white border-success',
+  FAIL: 'bg-danger-ink text-white border-danger',
   NOT_APPLICABLE: 'bg-ink text-white border-ink',
 };
 
@@ -256,7 +258,7 @@ function InspectionChecklistPanel({
           <button
             type="button"
             onClick={passAll}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-success px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg bg-success-ink px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90"
           >
             <CheckCheck className="h-4 w-4" strokeWidth={2.4} aria-hidden="true" />
             ผ่านทั้งหมด
@@ -393,7 +395,7 @@ function InspectionChecklistPanel({
               ยืนยันผลตรวจ
             </button>
             {disabledReason && (
-              <span className="inline-flex items-center gap-1.5 text-sm text-danger">
+              <span className="inline-flex items-center gap-1.5 text-sm text-danger-ink">
                 <AlertTriangle className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
                 {disabledReason}
               </span>
@@ -551,6 +553,7 @@ const CONTROL_CLS = 'focus-ring min-h-[44px] w-full rounded-lg border border-sur
 
 export default function VerificationQueue() {
   const toast = useToast();
+  const { user } = useAuth();
   const [queue, setQueue] = useState([]);
   const [detail, setDetail] = useState(null);
   const [template, setTemplate] = useState(null);
@@ -564,6 +567,8 @@ export default function VerificationQueue() {
   const [filter, setFilter] = useState({ status: '', search: '' });
   // Discarding a part-completed inspection is worth a real dialog.
   const [confirmAbort, setConfirmAbort] = useState(false);
+  const [abortReason, setAbortReason] = useState('');
+  const [selectedDriverId, setSelectedDriverId] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -607,6 +612,7 @@ export default function VerificationQueue() {
       setDetail(data);
       const active = (data.attempts || []).find(attempt => attempt.result === 'IN_PROGRESS');
       setAttemptId(active?.id || null);
+      setSelectedDriverId(String(data.drivers?.[0]?.driver_id || ''));
       setChecks({});
       setTab('inspect');
     } catch (err) {
@@ -620,7 +626,7 @@ export default function VerificationQueue() {
     setBusy(true);
     try {
       const res = await api.post(`/verification/transport/applications/${detail.id}/start`, {
-        inspection_date: new Date().toISOString().slice(0, 10),
+        inspection_date: todayBangkok(),
         provider_type: 'DLT_OFFICER',
       });
       setAttemptId(res.data.data.attempt_id);
@@ -635,11 +641,15 @@ export default function VerificationQueue() {
 
   async function abortAttempt() {
     if (!attemptId) return;
+    if (!abortReason.trim()) return;
     setConfirmAbort(false);
     setBusy(true);
     try {
-      await api.delete(`/verification/transport/attempts/${attemptId}`);
+      await api.delete(`/verification/transport/attempts/${attemptId}`, {
+        data: { reason: abortReason.trim() },
+      });
       toast.success('ยกเลิกการตรวจแล้ว');
+      setAbortReason('');
       setAttemptId(null);
       setChecks({});
       await loadQueue();
@@ -759,6 +769,9 @@ export default function VerificationQueue() {
   if (loading && !detail) return <LoadingState />;
 
   const noDrivers = detail ? !(detail.drivers || []).length : false;
+  const activeAttempt = detail?.attempts?.find(attempt => attempt.result === 'IN_PROGRESS');
+  const ownsAttempt = Boolean(activeAttempt && String(activeAttempt.inspected_by) === String(user?.id));
+  const canAbortAttempt = ownsAttempt || user?.role === 'admin';
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-3 sm:p-6">
@@ -864,7 +877,7 @@ export default function VerificationQueue() {
             {tab === 'inspect' ? (
               <>
                 <VehicleDetailSummary detail={detail} />
-                {attemptId && template ? (
+                {attemptId && template && ownsAttempt ? (
                   <InspectionChecklistPanel
                     template={template}
                     checks={checks}
@@ -876,8 +889,20 @@ export default function VerificationQueue() {
                     busy={busy}
                     disabledReason={disabledReason}
                     onFinalize={finalize}
-                    onAbort={() => setConfirmAbort(true)}
+                    onAbort={() => { setAbortReason(''); setConfirmAbort(true); }}
                   />
+                ) : attemptId ? (
+                  <AppCard>
+                    <AlertBanner variant="info" title="มีเจ้าหน้าที่กำลังตรวจรถคันนี้">
+                      ผู้รับงาน: {activeAttempt?.inspector_name || 'เจ้าหน้าที่ขนส่ง'} · เปิดดูข้อมูลได้ แต่สรุปผลแทนไม่ได้
+                    </AlertBanner>
+                    {canAbortAttempt && (
+                      <button type="button" disabled={busy} onClick={() => { setAbortReason(''); setConfirmAbort(true); }}
+                        className="focus-ring mt-3 min-h-[44px] rounded-lg border border-danger px-4 text-danger">
+                        ยกเลิกงานตรวจที่ค้าง
+                      </button>
+                    )}
+                  </AppCard>
                 ) : (
                   <StartInspectionCard detail={detail} template={template} onStart={start} busy={busy} />
                 )}
@@ -897,11 +922,23 @@ export default function VerificationQueue() {
             )}
             {detail.vehicle_id && (
               <AppCard>
+                {(detail.drivers || []).length > 1 && (
+                  <label className="mb-3 block text-sm font-medium text-ink">
+                    เลือกคนขับเพื่อตรวจเอกสาร
+                    <select value={selectedDriverId} onChange={event => setSelectedDriverId(event.target.value)}
+                      className={CONTROL_CLS}>
+                      {detail.drivers.map(driver => (
+                        <option key={driver.driver_id} value={driver.driver_id}>
+                          {driver.driver_name} ({driver.assignment_role === 'BACKUP' ? 'สำรอง' : 'หลัก'})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <DocumentReviewPanel
                   apiBase="/verification/transport/documents"
                   vehicleId={detail.vehicle_id}
-                  driverId={(detail.drivers || []).find((d) => d.assignment_role !== 'BACKUP')?.driver_id
-                    || (detail.drivers || [])[0]?.driver_id || null}
+                  driverId={selectedDriverId || null}
                   canReview
                   title="เอกสารรถและคนขับ (หลักฐานประกอบ)"
                 />
@@ -918,9 +955,17 @@ export default function VerificationQueue() {
         confirmLabel="ยกเลิกการตรวจ"
         cancelLabel="ตรวจต่อ"
         loading={busy}
+        confirmDisabled={!abortReason.trim()}
         onConfirm={abortAttempt}
-        onCancel={() => setConfirmAbort(false)}
-      />
+        onCancel={() => { setConfirmAbort(false); setAbortReason(''); }}
+      >
+        <label className="block text-sm font-medium text-ink" htmlFor="transport-abort-reason">
+          เหตุผลที่ยกเลิกการตรวจ
+        </label>
+        <textarea id="transport-abort-reason" value={abortReason} maxLength={500}
+          onChange={event => setAbortReason(event.target.value)}
+          className={`${CONTROL_CLS} mt-1 min-h-[88px]`} placeholder="เช่น ข้อมูลเอกสารไม่ตรงกับรถจริง" />
+      </ConfirmDialog>
     </div>
   );
 }

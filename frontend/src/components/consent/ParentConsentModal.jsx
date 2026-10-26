@@ -46,7 +46,7 @@ export default function ParentConsentModal({ idToken, onConsented, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="focus-ring inline-flex items-center justify-center px-4 min-h-[44px] rounded-lg text-gray-500 hover:text-gray-700 text-sm"
+            className="focus-ring inline-flex items-center justify-center px-4 min-h-[44px] rounded-lg text-ink-muted hover:text-gray-700 text-sm"
           >
             ไม่ใช่ตอนนี้
           </button>

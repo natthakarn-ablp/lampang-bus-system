@@ -15,7 +15,7 @@ export default function SchoolAuditLog() {
       <div className="p-4 sm:p-6 max-w-3xl mx-auto">
         <AppCard padding="lg">
           <div className="flex items-start gap-3">
-            <ShieldAlert className="w-6 h-6 text-warn shrink-0" strokeWidth={2} />
+            <ShieldAlert className="w-6 h-6 text-warn-ink shrink-0" strokeWidth={2} />
             <div>
               <h1 className="text-lg font-semibold text-ink mb-1">
                 ไม่สามารถเข้าถึงหน้านี้ได้

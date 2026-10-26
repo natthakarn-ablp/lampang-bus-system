@@ -54,6 +54,40 @@ export function levelBadge(morningKpi, eveningKpi) {
   return            { label: 'เฝ้าระวัง',  variant: 'danger',  cls: 'bg-danger-soft text-danger-ink' };
 }
 
+/**
+ * Snapshot percentage, or null when it cannot be computed.
+ *
+ * Mirrors backend/src/utils/researchSnapshotFields.js pctOf(): a zero, missing
+ * or non-numeric denominator is null — never 0. "0%" is a finding; null is the
+ * absence of one (the registry's missing-data rule, e.g. "total_students = 0
+ * ให้รายงาน null ห้ามรายงาน 0%"). The executive and research pages used to
+ * return 0 here, so a baseline with no students read as "0% → 85%, ▲ +85".
+ */
+export function snapshotPct(numerator, denominator) {
+  if (numerator == null || denominator == null) return null;
+  const n = Number(numerator);
+  const d = Number(denominator);
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d <= 0) return null;
+  return Math.round((n / d) * 10000) / 100;
+}
+
+/** Percentage-point change, or null when either side is null (mirrors deltaOf()). */
+export function pctDelta(baselinePct, currentPct) {
+  if (baselinePct == null || currentPct == null) return null;
+  return Math.round((currentPct - baselinePct) * 100) / 100;
+}
+
+/** "80%" — or "ไม่มีข้อมูล" when the percentage is null. */
+export function fmtSnapshotPct(v) {
+  return v == null ? 'ไม่มีข้อมูล' : `${v}%`;
+}
+
+/** "+12.5%" / "-3%" / "0%" — or "ไม่มีข้อมูล" when the delta is null. */
+export function fmtPctDelta(d) {
+  if (d == null) return 'ไม่มีข้อมูล';
+  return `${d > 0 ? '+' : ''}${d}%`;
+}
+
 /** Top N items sorted descending by key. */
 export function topN(arr, key, n = 5) {
   return [...arr].sort((a, b) => (b[key] ?? 0) - (a[key] ?? 0)).slice(0, n);

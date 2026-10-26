@@ -3,6 +3,8 @@
 > รายการทดสอบครั้งสุดท้ายก่อนเปิดใช้งานจริง
 > Phase 10.11A • 2026-06-02
 
+> หมายเหตุ 2026-10-15: ค่ารุ่นและผลสร้างเว็บในตาราง Environment เป็น baseline เก่า ไม่ใช่สถานะ production ปัจจุบัน ให้บันทึก commit/runtime ที่ตรวจจริงใน evidence รอบใหม่ เส้นทาง UI ให้เทียบ `frontend/src/App.jsx` และใช้ `scripts/create-uat-evidence-pack.js` สร้างแบบฟอร์มรอบปัจจุบัน การสร้างแบบฟอร์มไม่ใช่ผล UAT ที่ผ่านแล้ว งานเขียน/นำเข้า/ผูกบัญชี/เหตุฉุกเฉินต้องใช้ข้อมูลและสภาพแวดล้อมทดสอบแยก ส่วน production ใช้อ่านอย่างเดียว
+
 ---
 
 ## 1. Purpose
@@ -22,7 +24,7 @@
 |---|---|
 | Production URL | https://schoolbuslampang.com |
 | Backend health endpoint (loopback) | http://127.0.0.1:3000/health |
-| Backend health endpoint (public) | https://schoolbuslampang.com/api/health (ผ่าน nginx proxy) |
+| Backend health endpoint (public) | https://schoolbuslampang.com/api/health — JSON แบบจำกัดข้อมูลและ rate limit; HTTP 200 หมายถึงพร้อม (`status: "ok"`), HTTP 503 หมายถึงไม่พร้อม (`status` ไม่ใช่ `"ok"`); ต้องมี `Cache-Control: no-store` และเฉพาะ `status`, commit 7 ตัวอักษร, `database.connected`, `migrations.latest`, `migrations.pending` |
 | Current HEAD ที่ทดสอบ | `6a5fd7d` (frontend bundle from 2a802b2 — script-only commits since then) |
 | Frontend build | `frontend/dist/assets/index-Ct8cd_LJ.js` |
 | Database | MySQL 8.0 — `lampang_bus` |
@@ -135,17 +137,17 @@ Evidence/Notes:
 | T1 | Login → `/transport` | redirect ถูก | ▢ |
 | T2 | PDPA-clean dashboard | **ไม่มีตัวเลขจำนวนนักเรียนใด ๆ** บนหน้าจอ; ไม่มี student list | ▢ |
 | T3 | Document expiry cards | เห็นรายการรถใกล้หมดประกัน / ใกล้หมดอายุการตรวจสภาพ | ▢ |
-| T4 | Inspection flow | เปิด inspection form → กรอก result (PASSED/FAILED/NEEDS_FIX) + วันหมดอายุ → save → record ปรากฏใน list | ▢ |
+| T4 | Inspection flow | เปิด `/transport/verification` → รับคำขอจากโรงเรียน → ลง checklist ครบ → ผลผ่านต้องมีวันหมดอายุ → สถานะรถตรงกับคิวและ dashboard | ▢ |
 | T5 | Pickup map | เปิด map → เห็นจุดรับ-ส่งแต่ละรถ; **ไม่ระบุชื่อนักเรียนรายบุคคล** | ▢ |
-| T6 | Action row | เห็นปุ่ม "เพิ่มผลตรวจ" + "ส่งออกรายงาน" ที่ด้านบน | ▢ |
-| T7 | Reports export | export ผลตรวจสภาพรถเป็น Excel/CSV/PDF ได้ | ▢ |
+| T6 | Action row | เห็นปุ่ม "ตรวจรับรองรถ" และ "ส่งออกรายงานรถ CSV" ที่ด้านบน | ▢ |
+| T7 | Safety export | CSV มีเฉพาะทะเบียน/ประเภทรถ/ผลตรวจ/วันหมดอายุ ไม่มีชื่อหรือรหัสนักเรียน เบอร์โทร หมายเหตุ หรือไฟล์หลักฐาน; role อื่น 403; audit EXPORT | ▢ |
 | T8 | Hidden permission | เปิด `/school` หรือ `/parent` → 403 | ▢ |
 | T9 | Mobile 375px | layout ใช้ได้, ไม่มี horizontal scroll | ▢ |
-| T10 | คิวตรวจรับรองรถ (2026-06-22) | `/transport/verification-queue` → เห็นรถที่ส่งตรวจ + ปุ่ม "ตรวจรับรอง" | ▢ |
-| T11 | ตรวจรับรองรถ | กดตรวจ → กรอกผล (APPROVED/REJECTED) + หมายเหตุ → save → สถานะเปลี่ยน + audit log | ▢ |
+| T10 | คิวตรวจรับรองรถ | `/transport/verification` → เห็นรถที่ส่งตรวจ; คำขอเดียวเริ่มตรวจซ้อนตอบ 409 | ▢ |
+| T11 | ตรวจรับรองรถ | ผู้เริ่มตรวจลงผล PASSED/FAILED/NEEDS_FIX/PENDING เท่านั้น; คนอื่นสรุปไม่ได้; แก้ผลที่สรุปแล้วด้วยคำขอตรวจรอบใหม่และ audit | ▢ |
 
-> **ข้อสำคัญ T2 + T5**: transport เห็นเฉพาะข้อมูลรถและการตรวจสภาพ ไม่มีสิทธิ์
-> เห็นจำนวนหรือชื่อนักเรียน — ถ้าเห็น แจ้ง dev ทันที (regression)
+> **ข้อสำคัญ T2 + T5**: หน้าภาพรวมและแผนที่ของขนส่งไม่แสดงข้อมูลนักเรียนรายคน;
+> คิวรับรองแสดงจำนวนผู้โดยสารแบบรวมเพื่อเทียบความจุ แต่รายงานส่งออกไม่มีจำนวน/ชื่อ/รหัสนักเรียน
 
 ---
 
@@ -240,6 +242,7 @@ Evidence/Notes:
 | O3 | Gzip integrity | `gzip -t <latest>.sql.gz` → silent (success) | ▢ |
 | O4 | Restore drill | `./scripts/restore-drill-db.sh` → restored table count = production table count; row count summary ปรินต์ครบ; production DB ไม่เปลี่ยน | ▢ |
 | O5 | Health check | `./scripts/health-check.sh` → 8/8 OK, exit 0 | ▢ |
+| O5a | Public health | `curl -i https://schoolbuslampang.com/api/health` → HTTP 200 เมื่อพร้อม / HTTP 503 เมื่อไม่พร้อม, body JSON รูปร่างเดิม, `Cache-Control: no-store`, ตรง §2 และไม่คืน runtime/environment/path/error ดิบ | ▢ |
 | O6 | Cron scheduled | `crontab -l` → backup 02:30 + health 5-min present; `systemctl is-active cron` → active | ▢ |
 | O7 | PM2 systemd | `systemctl is-active pm2-schoolbus` → active; `pm2 list` → backend + logrotate online | ▢ |
 | O8 | Off-host backup | (pending operator config) → ดู §9 ของเอกสารนี้ ถ้ายัง YELLOW ระบุไว้ | ▢ |

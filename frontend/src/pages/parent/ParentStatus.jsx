@@ -3,9 +3,11 @@ import { useState, useEffect } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
 import { getLiffIdToken } from '../../utils/liff';
 import AppCard from '../../components/ui/AppCard';
+import { formatGradeClass } from '../../utils/student';
+import ParentConsentModal from '../../components/consent/ParentConsentModal';
 
 const STATUS_MAP = {
-  CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-success-soft text-success border-success/30', icon: '✅' },
+  CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-success-soft text-success-ink border-success/30', icon: '✅' },
   CHECKED_OUT: { label: 'ส่งแล้ว',  cls: 'bg-brand-100 text-brand-700 border-brand-200',  icon: '✅' },
   ABSENT:      { label: 'ไม่มา',   cls: 'bg-red-100 text-red-700 border-red-200',    icon: '❌' },
   CANCELLED:   { label: 'ยกเลิก',  cls: 'bg-surface text-ink-muted border-surface-border',  icon: '↩️' },
@@ -21,6 +23,11 @@ export default function ParentStatus() {
   const [view, setView] = useState('list');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  // The API tells us whether this parent still owes consent before the
+  // tracking fields are shown. Absent on an older backend, in which case
+  // nothing is prompted and behaviour is unchanged.
+  const [consentRequired, setConsentRequired] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +48,10 @@ export default function ParentStatus() {
         const res = await axios.get('/api/parent/children', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!cancelled) setChildren(Array.isArray(res.data?.data) ? res.data.data : []);
+        if (!cancelled) {
+          setChildren(Array.isArray(res.data?.data) ? res.data.data : []);
+          setConsentRequired(res.data?.meta?.consent_required === true);
+        }
       } catch (err) {
         if (!cancelled) {
           const code = err.response?.status;
@@ -116,7 +126,7 @@ export default function ParentStatus() {
           <p className="text-base text-ink-muted mb-6">ทำตามขั้นตอนด้านล่าง เพื่อดูสถานะรับ-ส่งบุตรหลาน</p>
 
           <div className="text-left space-y-4 mb-6">
-            <StepItem number="1" text="เพิ่มเพื่อน LINE OA ระบบรถรับส่งนักเรียน" />
+            <StepItem number="1" text="เพิ่มเพื่อน LINE OA @943glwjf (รถรับส่งนักเรียน)" />
             <StepItem number="2" text='พิมพ์คำว่า "ผูกบัญชี" ในแชท' />
             <StepItem number="3" text="กรอกเบอร์โทร + รหัสนักเรียนของบุตรหลาน" />
             <StepItem number="4" text="รอโรงเรียนอนุมัติ" />
@@ -146,7 +156,7 @@ export default function ParentStatus() {
       <div className="min-h-screen bg-surface flex items-center justify-center p-4">
         <AppCard padding="lg" className="max-w-sm w-full text-center border-danger/30">
           <p className="text-4xl mb-3">⚠️</p>
-          <p className="text-base text-red-600 font-medium mb-4">{error}</p>
+          <p className="text-base text-danger-ink font-medium mb-4">{error}</p>
           <button type="button" onClick={() => window.location.reload()}
             className="bg-red-50 hover:bg-red-100 text-red-700 font-medium px-6 py-3 rounded-xl transition border border-red-200">
             ลองใหม่อีกครั้ง
@@ -220,6 +230,26 @@ export default function ParentStatus() {
         {/* ── Children list ── */}
         {view === 'list' && (
           <div className="space-y-4">
+            {/* The parent is linked and school-approved, so the question is not
+                "is this your child" but "may we show you the vehicle and
+                driver". Ask it here rather than letting a 403 appear later
+                with no way to act on it. */}
+            {consentRequired && (
+              <AppCard padding="md" className="border-warn/40 bg-warn-soft">
+                <p className="text-base font-semibold text-ink">ต้องให้ความยินยอมก่อนดูข้อมูลการเดินทาง</p>
+                <p className="text-sm text-ink-muted mt-1">
+                  ระบบจะแสดงทะเบียนรถ ชื่อคนขับ และสถานะการรับ-ส่งของบุตรหลาน เมื่อคุณให้ความยินยอมแล้ว
+                  คุณถอนความยินยอมได้ทุกเมื่อ
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowConsent(true)}
+                  className="focus-ring mt-3 inline-flex items-center justify-center bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold text-base px-5 min-h-[44px] rounded-xl transition"
+                >
+                  อ่านและให้ความยินยอม
+                </button>
+              </AppCard>
+            )}
             <p className="text-base font-semibold text-ink-muted">
               บุตรหลานของคุณ ({children.length} คน)
             </p>
@@ -231,7 +261,7 @@ export default function ParentStatus() {
                     {child.first_name} {child.last_name}
                   </p>
                   <p className="text-base text-ink-muted mt-0.5">
-                    {child.grade && child.classroom ? `${child.grade}/${child.classroom}` : child.grade || '-'}
+                    {formatGradeClass(child.grade, child.classroom)}
                     {child.school_name && (
                       <span className="text-ink-muted"> · {child.school_name}</span>
                     )}
@@ -277,7 +307,7 @@ export default function ParentStatus() {
                 {selectedChild.first_name} {selectedChild.last_name}
               </p>
               <p className="text-base text-ink-muted">
-                {selectedChild.grade && selectedChild.classroom ? `${selectedChild.grade}/${selectedChild.classroom}` : selectedChild.grade || '-'}
+                {formatGradeClass(selectedChild.grade, selectedChild.classroom)}
                 {selectedChild.school_name && ` · ${selectedChild.school_name}`}
               </p>
             </AppCard>
@@ -291,7 +321,7 @@ export default function ParentStatus() {
                 icon={Sunrise}
                 done={status?.morning_done}
                 time={status?.morning_ts}
-                doneText="ส่งถึงแล้ว"
+                doneText={status?.morning_label || 'ส่งถึงแล้ว'}
                 pendingText="ยังไม่ส่ง"
               />
               <StatusCard
@@ -299,7 +329,7 @@ export default function ParentStatus() {
                 icon={Sunset}
                 done={status?.evening_done}
                 time={status?.evening_ts}
-                doneText="รับแล้ว"
+                doneText={status?.evening_label || 'รับแล้ว'}
                 pendingText="ยังไม่รับ"
               />
             </div>
@@ -405,10 +435,10 @@ export default function ParentStatus() {
                       ? `${Math.max(1, Math.round(eta.eta_seconds / 60))} นาที`
                       : '—'}
                   </p>
-                  <p className="text-sm text-amber-600 mt-1">
+                  <p className="text-sm text-warn-ink mt-1">
                     ระยะทาง {eta.distance_meters != null ? `${(eta.distance_meters / 1000).toFixed(1)} กม.` : 'ไม่ทราบ'}
                   </p>
-                  <p className="text-xs text-amber-500 mt-1">
+                  <p className="text-xs text-warn-ink mt-1">
                     ความมั่นใจ: {eta.confidence === 'HIGH' ? 'สูง' : eta.confidence === 'MEDIUM' ? 'ปานกลาง' : eta.confidence === 'LOW' ? 'ต่ำ' : 'ไม่ทราบ'}
                   </p>
                 </div>
@@ -427,6 +457,16 @@ export default function ParentStatus() {
           </div>
         )}
       </div>
+
+      {/* Consent is collected in the same place the restriction is felt, so a
+          parent never has to find another screen to unblock themselves. */}
+      {showConsent && (
+        <ParentConsentModal
+          idToken={idToken}
+          onConsented={() => { setShowConsent(false); window.location.reload(); }}
+          onClose={() => setShowConsent(false)}
+        />
+      )}
     </div>
   );
 }

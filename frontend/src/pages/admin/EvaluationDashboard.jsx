@@ -9,16 +9,37 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { AppCard, AlertBanner, StatusBadge, DataTable } from '../../components/ui';
+import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
+import { snapshotPct, pctDelta, fmtSnapshotPct, fmtPctDelta } from '../../utils/kpi';
 
-function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
-function delta(c, b) { return Math.round((c - b) * 100) / 100; }
+/**
+ * A percentage, or null when there is nothing to compute one from.
+ *
+ * This used to return 0 on a zero denominator, which is the bug the rest of the
+ * research pages were corrected for: "0%" is a finding — it says every trip was
+ * missed — while a zero denominator says no trip was recorded at all. The two
+ * look identical on screen and mean opposite things. snapshotPct in utils/kpi.js
+ * is the shared implementation and this page now uses it, so the dashboard and
+ * the metrics table cannot disagree about the same numbers.
+ */
+const pct = snapshotPct;
+
+/** The change between two percentages, or null if either side is unknown. */
+const delta = (c, b) => pctDelta(b, c);
 
 /**
  * Direction of change. The glyphs ▲ / ▼ / = carried the whole meaning before:
  * unreadable to a screen reader and, paired only with red/green, invisible to
  * a colour-blind reader. Each trend now names itself.
+ *
+ * `usable` is not optional. Naming a direction is a research claim, and the
+ * project's rule is that a baseline may only be compared with a later snapshot
+ * when the server says the pair is usable and the snapshot is fresh. Without
+ * that, the honest answer is that the two numbers exist and cannot be compared
+ * — not "ดีขึ้น".
  */
-function trend(d, higher = true) {
+function trend(d, usable, higher = true) {
+  if (!usable || d === null || d === undefined) return null;
   if (d === 0) return { Icon: Minus, cls: 'text-ink-muted', label: 'คงเดิม' };
   const ok = higher ? d > 0 : d < 0;
   return ok
@@ -69,11 +90,15 @@ const CODE_BG = {
   blue:   'bg-brand-600', indigo: 'bg-brand-700', purple: 'bg-navy-800',
 };
 
-function evalStatus(actions, snapHas) {
-  const total = actions?.total || 0;
-  if (!snapHas || total < 5) return { label: 'ยังต้องเพิ่มหลักฐาน', variant: 'danger' };
-  if (total >= 20) return { label: 'พร้อมประเมิน', variant: 'success' };
-  return { label: 'ประเมินได้บางส่วน', variant: 'warn' };
+/**
+ * Role status now comes from server-computed metric coverage. The previous
+ * rule — any snapshot plus 20 raw audit actions equals "พร้อมประเมิน" — let
+ * 1,757 logins and 3,257 student creates stand in for evaluability, which is
+ * the exact error the 2026-09-04 audit flagged as Major 1.
+ */
+function evalStatus(roleCoverage) {
+  const meta = roleEvidenceMeta(roleCoverage);
+  return { label: meta.label, variant: meta.variant };
 }
 
 /**
@@ -132,9 +157,30 @@ export default function EvaluationDashboard() {
   const lData = latest?.data || {};
   const hasSnap = Boolean(baseline) && Boolean(latest);
 
-  const statuses = ROLE_DEFS.map(r => evalStatus(roleActions[r.id], hasSnap).label);
-  const readyCount = statuses.filter(l => l === 'พร้อมประเมิน').length;
-  const partialCount = statuses.filter(l => l === 'ประเมินได้บางส่วน').length;
+  // Coverage comes from the server; an older backend that omits it yields
+  // "unknown", never an optimistic default.
+  const readiness = data.evidence_readiness || null;
+  const roleCoverage = readiness?.roles || {};
+  const coverageList = ROLE_DEFS.map(r => roleCoverage[r.id] || null);
+  const readyCount = coverageList.filter(c => c?.status === EVIDENCE_STATUS.SYSTEM_EVIDENCE).length;
+  const partialCount = coverageList.filter(c => c?.status === EVIDENCE_STATUS.PARTIAL).length;
+  const freshness = readiness?.snapshot_freshness || null;
+  const blockingReasons = readiness?.blocking_reasons || [];
+
+  // Same gate as ResearchMetrics, ExecutiveSummary and ExecutivePrint, built the
+  // same way from the same two server answers, so the four admin pages cannot
+  // contradict each other about whether today's numbers may be compared with the
+  // baseline. `=== true` is deliberate: an older backend that omits the field
+  // yields undefined, and an unknown readiness must gate the claim exactly as a
+  // refusal does.
+  const baselinePair = readiness?.baseline_pair || null;
+  const comparisonUsable = baselinePair?.usable === true && freshness?.fresh === true;
+  const blockingCode = baselinePair && !baselinePair.usable
+    ? baselinePair.reason
+    : (freshness && !freshness.fresh ? freshness.reason : null);
+  const comparisonBlockedReason = comparisonUsable
+    ? null
+    : (blockingCode ? describeBlockingReason(blockingCode) : 'ยังไม่ทราบสถานะความพร้อมของข้อมูล');
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto pb-10">
@@ -149,15 +195,37 @@ export default function EvaluationDashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <SummaryPill label="Baseline" value={baseline ? fmtDate(baseline.date) : 'ยังไม่มี'} tone={baseline ? 'brand' : 'muted'} />
         <SummaryPill label="Snapshot ล่าสุด" value={latest ? fmtDate(latest.date) : 'ยังไม่มี'} tone={latest ? 'brand' : 'muted'} />
-        <SummaryPill label="พร้อมประเมิน" value={`${readyCount} / ${ROLE_DEFS.length} role`} tone={readyCount >= 4 ? 'success' : 'warn'} />
+        <SummaryPill label="มีหลักฐานระบบเบื้องต้น" value={`${readyCount} / ${ROLE_DEFS.length} role`} tone={readyCount >= 4 ? 'success' : 'warn'} />
         <SummaryPill label="ยังต้องเพิ่ม" value={`${ROLE_DEFS.length - readyCount - partialCount} role`} tone="muted" />
       </div>
+
+      {/* Readiness is a claim about evidence, so its limits travel with it
+          rather than sitting in a document nobody opens next to the numbers. */}
+      <AlertBanner variant={readiness?.research_claims_allowed ? 'info' : 'warn'} className="mb-5"
+        title="สถานะนี้เป็นความพร้อมของหลักฐาน ไม่ใช่ผลการวิจัย">
+        <p>
+          จำนวน action ไม่ใช่เกณฑ์ความพร้อมประเมิน สถานะแต่ละบทบาทคำนวณจากความครอบคลุมของตัวชี้วัดที่มีหลักฐานจริง
+        </p>
+        {freshness && (
+          <p className="mt-1">
+            Snapshot ล่าสุด {freshness.latest_snapshot_date || 'ยังไม่มี'}
+            {freshness.age_days != null && ` (อายุ ${freshness.age_days} วัน, เกณฑ์ ${freshness.max_age_days} วัน)`}
+            {freshness.fresh ? ' — อยู่ในเกณฑ์' : ' — เก่าเกินเกณฑ์ ห้ามตีความว่าเป็นสถานะปัจจุบัน'}
+          </p>
+        )}
+        {blockingReasons.length > 0 && (
+          <p className="mt-1">
+            ยังอ้างผลวิจัยไม่ได้ เพราะ: {blockingReasons.map(describeBlockingReason).join(' · ')}
+          </p>
+        )}
+      </AlertBanner>
 
       <div className="space-y-3">
         {ROLE_DEFS.map(role => {
           const actions = roleActions[role.id] || { actions: {}, total: 0 };
           const exports = roleExports[role.id] || 0;
-          const status = evalStatus(actions, hasSnap);
+          const coverage = roleCoverage[role.id] || null;
+          const status = evalStatus(coverage);
           const isOpen = expanded === role.id;
           const panelId = `eval-panel-${role.id}`;
 
@@ -165,7 +233,7 @@ export default function EvaluationDashboard() {
             const bv = pct(bData[m.num] || 0, bData[m.den] || 0);
             const cv = pct(lData[m.num] || 0, lData[m.den] || 0);
             const d = delta(cv, bv);
-            return { ...m, bv, cv, d, t: trend(d) };
+            return { ...m, bv, cv, d, t: trend(d, comparisonUsable) };
           });
 
           return (
@@ -187,7 +255,8 @@ export default function EvaluationDashboard() {
                       <StatusBadge variant={status.variant} size="sm">{status.label}</StatusBadge>
                     </span>
                     <span className="block text-caption text-ink-muted">
-                      {role.focus} · {actions.total || 0} actions · {exports} exports
+                      {role.focus} · หลักฐานครบ {coverage ? `${coverage.system_evidence}/${coverage.metric_total}` : '-'} ตัวชี้วัด ·
+                      {' '}{actions.total || 0} actions (ปริมาณการใช้งาน) · {exports} exports
                     </span>
                   </span>
                   <span className="hidden sm:flex gap-2 shrink-0">
@@ -236,23 +305,36 @@ export default function EvaluationDashboard() {
                   {hasSnap && (
                     <div>
                       <h3 className="text-caption font-semibold text-ink-muted mb-1.5">Baseline vs Current</h3>
+                      {!comparisonUsable && (
+                        <p className="mb-1.5 text-caption text-ink-muted">
+                          ตัวเลขสองคอลัมน์แรกคือค่าที่บันทึกไว้จริง แต่ยังนำมาเทียบกันเป็นแนวโน้มไม่ได้ — {comparisonBlockedReason}
+                        </p>
+                      )}
                       <DataTable
                         caption={`ตัวชี้วัดของสิทธิ์${role.name} เทียบกับ baseline`}
                         rowKey={r => r.label}
                         rows={metricRows}
                         columns={[
                           { key: 'label', header: 'ตัวชี้วัด', primary: true, cell: r => r.label },
-                          { key: 'bv', header: 'Baseline', align: 'center', numeric: true, cell: r => `${r.bv}%` },
+                          { key: 'bv', header: 'Baseline', align: 'center', numeric: true,
+                            cell: r => fmtSnapshotPct(r.bv) },
                           { key: 'cv', header: 'ปัจจุบัน', align: 'center', numeric: true,
-                            cell: r => <span className="font-semibold text-ink">{r.cv}%</span> },
+                            cell: r => <span className="font-semibold text-ink">{fmtSnapshotPct(r.cv)}</span> },
+                          // The change column shows a direction only when the server
+                          // says the pair may be compared. Otherwise it shows the
+                          // arithmetic difference with no arrow and no colour, or
+                          // nothing at all when a denominator was zero — a dash is
+                          // honest, an arrow would be a claim.
                           { key: 'd', header: 'เปลี่ยนแปลง', align: 'center', numeric: true,
-                            cell: r => (
+                            cell: r => (comparisonUsable && r.t ? (
                               <span className={`inline-flex items-center gap-1 font-semibold ${r.t.cls}`}>
                                 <r.t.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
-                                {r.d > 0 ? '+' : ''}{r.d}%
+                                {fmtPctDelta(r.d)}
                                 <span className="sr-only">{r.t.label}</span>
                               </span>
-                            ) },
+                            ) : (
+                              <span className="text-ink-muted">{r.d === null ? '—' : fmtPctDelta(r.d)}</span>
+                            )) },
                         ]}
                       />
                     </div>

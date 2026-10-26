@@ -1,9 +1,17 @@
 'use strict';
 
 const crypto = require('crypto');
-const { getCurrentTermCachedSync, getCurrentTerm } = require('./term.service');
+const { getCurrentTerm } = require('./term.service');
+
+// Who rides a vehicle (owner decision B1, 2 ต.ค. 2569 — decision memo CS5-05):
+// a live pupil whose vehicle_id points at it, every term, until they are moved,
+// withdrawn or graduate. students.term_id is stamped once at insert and never
+// re-stamped, so filtering riders by it dropped every pupil from the count — and
+// made a school unable to submit its bus — the day the term rolled over. The term
+// is still used below, but only to key and label the application itself.
 const { logAudit } = require('../utils/audit');
 const { validateInspectionDates } = require('../utils/inspectionDates');
+const { toBangkokDate, todayBangkok, bangkokDateStamp } = require('../utils/thaiTime');
 
 const ACTIVE_APPLICATION_STATUSES = [
   'DRAFT', 'READY_TO_PRINT', 'SUBMITTED', 'INSPECTION_PENDING', 'NEEDS_FIX',
@@ -24,10 +32,12 @@ function appError(message, statusCode = 400, code = null, extra = null) {
   return error;
 }
 
+// Bangkok calendar date. mysql2 hands back a DATE column as an instant at
+// 17:00Z the previous day, so slicing its ISO string read every expiry one day
+// early — in the eligibility decision AND in what the UI displayed.
 function isoDate(value) {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
+  return toBangkokDate(value);
 }
 
 function daysBetween(from, to) {
@@ -44,7 +54,7 @@ function computeEligibility({
   peakRiders = 0,
   validDriverCount = 0,
   suspended = false,
-  today = new Date().toISOString().slice(0, 10),
+  today = todayBangkok(),
 } = {}) {
   const reasons = [];
   let expiring = false;
@@ -129,7 +139,7 @@ function buildTransportSnapshot({ vehicle = {}, schools = [], drivers = [], rout
 }
 
 async function refreshVehicleEligibility(executor, vehicleId, {
-  today = new Date().toISOString().slice(0, 10), currentTerm = getCurrentTermCachedSync(),
+  today = todayBangkok(),
 } = {}) {
   const [[vehicle]] = await executor.query(
     `SELECT id, certified_capacity, insurance_expiry, registration_expiry,
@@ -144,7 +154,7 @@ async function refreshVehicleEligibility(executor, vehicleId, {
        FROM inspection_attempts ia
        JOIN vehicle_inspection_applications a ON a.id = ia.application_id
       WHERE a.vehicle_id = ? AND ia.result <> 'IN_PROGRESS' AND ia.finalized_at IS NOT NULL
-      ORDER BY ia.inspection_date DESC, ia.finalized_at DESC LIMIT 1`,
+      ORDER BY ia.inspection_date DESC, ia.finalized_at DESC, ia.id DESC LIMIT 1`,
     [vehicleId]
   );
   let inspection = sharedInspection || null;
@@ -160,9 +170,8 @@ async function refreshVehicleEligibility(executor, vehicleId, {
     `SELECT SUM(CASE WHEN morning_enabled = TRUE THEN 1 ELSE 0 END) AS morning_rider_count,
             SUM(CASE WHEN evening_enabled = TRUE THEN 1 ELSE 0 END) AS evening_rider_count
        FROM students
-      WHERE vehicle_id = ? AND is_deleted = FALSE
-        AND (term_id = ? OR term_id IS NULL)`,
-    [vehicleId, currentTerm]
+      WHERE vehicle_id = ? AND is_deleted = FALSE`,
+    [vehicleId]
   );
   const [[drivers]] = await executor.query(
     `SELECT COUNT(*) AS valid_driver_count
@@ -198,7 +207,7 @@ async function refreshVehicleEligibility(executor, vehicleId, {
 }
 
 function makeRequestNo(now = new Date()) {
-  const date = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const date = bangkokDateStamp(now);
   return `VIA-${date}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 }
 
@@ -266,9 +275,8 @@ async function createApplication(pool, {
       `SELECT COUNT(*) AS related
          FROM students
         WHERE vehicle_id = ? AND school_id = ?
-          AND is_deleted = FALSE
-          AND (term_id = ? OR term_id IS NULL)`,
-      [vehicleId, issuingSchoolId, currentTerm]
+          AND is_deleted = FALSE`,
+      [vehicleId, issuingSchoolId]
     );
     if (!relation || !Number(relation.related)) {
       throw appError('โรงเรียนนี้ไม่มีนักเรียนที่ใช้รถคันดังกล่าว', 403, 'SCHOOL_NOT_RELATED_TO_VEHICLE');
@@ -299,12 +307,11 @@ async function createApplication(pool, {
          FROM students s
          JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
         WHERE s.vehicle_id = ? AND s.is_deleted = FALSE
-          AND (s.term_id = ? OR s.term_id IS NULL)
         GROUP BY s.school_id, sc.name
         ORDER BY sc.name`,
-      [vehicleId, currentTerm]
+      [vehicleId]
     );
-    if (!schools.length) throw appError('รถคันนี้ยังไม่มีข้อมูลผู้โดยสารในภาคเรียนปัจจุบัน', 400, 'NO_CURRENT_RIDERS');
+    if (!schools.length) throw appError('รถคันนี้ยังไม่มีนักเรียนผูกอยู่', 400, 'NO_CURRENT_RIDERS');
 
     const [drivers] = await conn.query(
       `SELECT d.id AS driver_id, d.name AS driver_name,
@@ -465,7 +472,7 @@ async function getApplication(pool, { applicationId, viewer } = {}) {
     [applicationId]
   );
   const [attempts] = await pool.query(
-    `SELECT ia.id, ia.result, ia.provider_type, ia.provider_reference,
+    `SELECT ia.id, ia.inspected_by, ia.result, ia.provider_type, ia.provider_reference,
             ia.inspection_date, ia.expiry_date, ia.notes, ia.finalized_at,
             u.display_name AS inspector_name
        FROM inspection_attempts ia
@@ -701,7 +708,7 @@ async function listChecklistTemplates(pool) {
 }
 
 async function startInspection(pool, {
-  applicationId, inspectorUserId, inspectionDate = new Date().toISOString().slice(0, 10),
+  applicationId, inspectorUserId, inspectionDate = todayBangkok(),
   providerType = 'DLT_OFFICER', providerReference = null,
 }) {
   if (!applicationId || !inspectorUserId) {
@@ -720,6 +727,17 @@ async function startInspection(pool, {
     if (!application) throw appError('ไม่พบคำขอส่งตรวจ', 404, 'APPLICATION_NOT_FOUND');
     if (!['READY_TO_PRINT', 'SUBMITTED', 'NEEDS_FIX', 'INSPECTION_PENDING'].includes(application.status)) {
       throw appError('สถานะคำขอไม่พร้อมเริ่มตรวจ', 409, 'INVALID_APPLICATION_STATUS', { current_status: application.status });
+    }
+    const [[openAttempt]] = await conn.query(
+      `SELECT id FROM inspection_attempts
+        WHERE application_id = ? AND result = 'IN_PROGRESS'
+        LIMIT 1 FOR UPDATE`,
+      [applicationId]
+    );
+    if (openAttempt) {
+      throw appError('คำขอนี้มีการตรวจที่กำลังดำเนินการอยู่แล้ว', 409, 'INSPECTION_ALREADY_IN_PROGRESS', {
+        attempt_id: openAttempt.id,
+      });
     }
     const [[template]] = await conn.query(
       `SELECT id, version_no
@@ -1046,12 +1064,11 @@ async function createDriverApplication(pool, {
          FROM students s
          JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
         WHERE s.vehicle_id = ? AND s.is_deleted = FALSE
-          AND (s.term_id = ? OR s.term_id IS NULL)
         GROUP BY s.school_id, sc.name
         ORDER BY sc.name`,
-      [vehicleId, currentTerm]
+      [vehicleId]
     );
-    if (!schools.length) throw appError('รถคันนี้ยังไม่มีข้อมูลผู้โดยสารในภาคเรียนปัจจุบัน', 400, 'NO_CURRENT_RIDERS');
+    if (!schools.length) throw appError('รถคันนี้ยังไม่มีนักเรียนผูกอยู่', 400, 'NO_CURRENT_RIDERS');
 
     // Use the first school as issuing school (primary school)
     const issuingSchoolId = schools[0].school_id;

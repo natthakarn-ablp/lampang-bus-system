@@ -16,6 +16,7 @@
 
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 const ONLINE_SECONDS_MAX = 60;        // ≤ 60s = ONLINE
 const STALE_SECONDS_MAX  = 5 * 60;    // ≤ 5min = STALE; > 5min = OFFLINE
@@ -199,8 +200,12 @@ const SELECT_VEHICLE_BASE = `
  * teacher sees only vehicles carrying her grade. null = full school.
  */
 async function listForSchool(schoolId, gradeFilter = null) {
-  const subqueryGrade = gradeFilter ? ' AND s.grade = ?' : '';
-  const params = gradeFilter ? [schoolId, gradeFilter] : [schoolId];
+  // Tolerant grade match (see gradeScope.js). With an exact `= ?` a teacher whose
+  // pupils are stored as 'ประถมศึกษาปีที่ 4' gets an empty vehicle list and no
+  // indication that a filter, rather than reality, emptied it.
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const subqueryGrade = eq ? ` AND s.grade IN (${eq.map(() => '?').join(',')})` : '';
+  const params = eq ? [schoolId, ...eq] : [schoolId];
   const [rows] = await pool.query(
     `${SELECT_VEHICLE_BASE}
      FROM vehicles v

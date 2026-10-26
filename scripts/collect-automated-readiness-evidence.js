@@ -4,10 +4,46 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const schema = require('./lib/closure-report-schema');
+const { runCommand, gradeScan, gradeWorktreeStatus } = require('./lib/command-result');
+const { secretMatches } = require('./lib/secret-scan');
 
 const ROOT = path.resolve(__dirname, '..');
 const DEFAULT_OUT_ROOT = path.join(ROOT, 'outputs', 'automated-readiness');
 const DEFAULT_BASE_URL = 'https://schoolbuslampang.com';
+
+// Evidence roots are named as roots, never as `<timestamp>` children. A row that
+// says `outputs/uat-evidence/<timestamp>/` cannot be checked by anything: the
+// path does not exist, and no validator can tell an unresolved placeholder from
+// a real directory. The root plus an instruction to create a timestamped run
+// directory at execution time carries the same information, and it is checkable.
+//
+// The row schema, the gate grading rules and the evidence-existence rule live in
+// scripts/lib/closure-report-schema.js, shared with the go-live bundle, the
+// closure board and both validators.
+const {
+  ACTION_COLUMNS,
+  EVIDENCE_ROOTS,
+  UAT_SIGNOFF_DOC,
+  OWNER_APPROVAL_DOC,
+  TIMESTAMPED_RUN_DIR,
+} = schema;
+
+const AUTOMATED_COLUMNS = [
+  'id',
+  'category',
+  'status',
+  'detail',
+  'log',
+  'exit_code',
+  'gate_pass',
+  'gate_warn',
+  'gate_fail',
+  'gate_skip',
+  'warning_count',
+  'failure_count',
+  'not_evaluated_count',
+];
 
 let outRoot = DEFAULT_OUT_ROOT;
 let runId = timestampBangkok();
@@ -66,10 +102,13 @@ fs.mkdirSync(logsDir, { recursive: true });
 const generatedAt = new Date().toISOString();
 const automated = [];
 const humanActions = [];
-const gitHead = git(['rev-parse', '--short', 'HEAD']).trim();
-const gitStatus = git(['status', '--short']);
+const headResult = git(['rev-parse', '--short', 'HEAD']);
+const gitHead = headResult.ok ? headResult.text.trim() : '(git unavailable)';
+const statusResult = git(['status', '--short']);
+const gitStatus = statusResult.text;
+const statusGrade = gradeWorktreeStatus(statusResult);
+recordInline('git-status', 'source-state', statusGrade.status, statusGrade.detail, statusGrade.output);
 
-recordInline('git-status', 'source-state', gitStatus.trim() ? 'PENDING' : 'PASS', gitStatus.trim() ? 'worktree has source changes' : 'worktree clean', gitStatus || '(clean)');
 recordSecretScan('secret-scan-head', 'git show --format= --patch HEAD', git(['show', '--format=', '--patch', 'HEAD']));
 recordSecretScan('secret-scan-staged', 'git diff --cached', git(['diff', '--cached']));
 
@@ -127,9 +166,9 @@ const totals = automated.reduce((acc, check) => {
 }, { pass: 0, pending: 0, fail: 0 });
 
 writeFile('automated-checks.json', `${JSON.stringify(automated, null, 2)}\n`);
-writeFile('automated-checks.csv', csv(automated, ['id', 'category', 'status', 'detail', 'log']));
+writeFile('automated-checks.csv', csv(automatedCsvRows(), AUTOMATED_COLUMNS));
 writeFile('human-actions.json', `${JSON.stringify(humanActions, null, 2)}\n`);
-writeFile('human-actions.csv', csv(humanActions, ['id', 'owner', 'priority', 'action', 'reason', 'evidence']));
+writeFile('human-actions.csv', csv(humanActions, ACTION_COLUMNS));
 writeFile('summary.md', summary(totals));
 writeFile('manifest.json', `${JSON.stringify({
   generated_at: generatedAt,
@@ -148,6 +187,10 @@ writeFile('manifest.json', `${JSON.stringify({
   },
   totals,
   human_action_count: humanActions.length,
+  automated_columns: AUTOMATED_COLUMNS,
+  action_columns: ACTION_COLUMNS,
+  evidence_roots: EVIDENCE_ROOTS,
+  gate_grading: 'gate fail>0 => FAIL; gate warn>0 with fail=0 => PENDING; PASS only when warn=0 and fail=0',
   safety: {
     calls_public_http: true,
     runs_local_validators: true,
@@ -183,10 +226,26 @@ function runNode(id, category, script, argsForScript) {
   });
   const output = `${result.stdout || ''}${result.stderr || ''}`;
   fs.writeFileSync(log, output);
-  const status = result.status === 0 ? statusFromOutput(output) : 'FAIL';
-  record(id, category, status, detailFromOutput(output, result.status), log);
+  const exitCode = result.status == null ? 1 : result.status;
+  // The reasons a validator printed belong in the row, not only in the log: a
+  // FAIL row that reports zero failures contradicts its own status, and a
+  // PENDING row whose detail is the trailing "PASS (pending allowed)" line tells
+  // a reader the opposite of what happened.
+  const graded = schema.gradeValidatorOutput(output, exitCode);
+  record(id, category, graded.status, graded.detail, log, {
+    exitCode,
+    gateSummary: null,
+    warnings: graded.warnings,
+    failures: graded.failures,
+    notEvaluated: graded.notEvaluated,
+  });
 }
 
+/**
+ * Gate grading lives in the shared schema module: fail > 0 is FAIL, warn > 0
+ * with fail = 0 is PENDING, and PASS needs both at zero. The exit code alone is
+ * not a verdict, because the gate exits 0 on a [warn] by design.
+ */
 function runBashGate(id, category, commandArgs, env) {
   const bash = findBash();
   if (!bash) {
@@ -201,31 +260,30 @@ function runBashGate(id, category, commandArgs, env) {
   });
   const output = `${result.stdout || ''}${result.stderr || ''}`;
   fs.writeFileSync(log, output);
-  const status = result.status === 0 ? 'PASS' : 'FAIL';
-  const summaryLine = output.split(/\r?\n/).reverse().find((line) => line.startsWith('[gate] summary ')) || `exit=${result.status}`;
-  record(id, category, status, summaryLine, log);
-}
 
-function recordSecretScan(id, category, text) {
-  const matches = secretMatches(text);
-  recordInline(id, category, matches.length > 0 ? 'FAIL' : 'PASS', matches.length > 0 ? `${matches.length} secret-like lines found` : 'no secret patterns found', matches.join('\n'));
-}
-
-function secretMatches(text) {
-  const pattern = /(DB_PASSWORD|PASSWORD=|SECRET=|TOKEN=|Bearer |LINE_CHANNEL_SECRET|CHANNEL_ACCESS_TOKEN|mysql:\/\/|JWT_SECRET|[A-Za-z0-9_]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})/;
-  return String(text || '').split(/\r?\n/).filter((line) => {
-    if (isScannerPatternSourceLine(line)) return false;
-    return pattern.test(line);
+  const exitCode = result.status == null ? 1 : result.status;
+  const graded = schema.gradeGateOutput(output, exitCode);
+  record(id, category, graded.status, graded.detail, log, {
+    exitCode,
+    gateSummary: graded.gateSummary,
+    warnings: graded.warnings,
+    failures: graded.failures,
+    notEvaluated: graded.notEvaluated,
   });
 }
 
-function isScannerPatternSourceLine(line) {
-  if (line.includes("line.includes('DB_PASSWORD')")) return true;
-  return line.includes('DB_PASSWORD') && (
-    line.includes('const pattern') ||
-    line.includes('isScannerPatternSourceLine')
-  );
+/**
+ * A scan that could not read its input is PENDING, never PASS. "no secret
+ * patterns found" has to mean the patterns were looked for.
+ *
+ * @param {{ok: boolean, text: string, reason: string}} result  the git() output
+ */
+function recordSecretScan(id, category, result) {
+  const grade = gradeScan(result, secretMatches);
+  recordInline(id, category, grade.status, grade.detail, grade.output);
 }
+
+
 
 function capabilityAudit() {
   const onProductionServer = ROOT.replace(/\\/g, '/').startsWith('/home/schoolbus/apps/lampang-bus-system');
@@ -233,58 +291,162 @@ function capabilityAudit() {
   const hasRestoreApproval = process.env.SCHOOLBUS_RESTORE_DRILL_APPROVED === 'true';
   const hasDeployApproval = process.env.SCHOOLBUS_DEPLOY_APPROVED === 'true';
   const hasRoleCredentials = Boolean(process.env.SCHOOLBUS_UAT_CREDENTIALS_FILE);
+  const signoffDocs = `${UAT_SIGNOFF_DOC} + ${OWNER_APPROVAL_DOC}`;
 
   if (!onProductionServer) {
-    addHumanAction('production-read-only-gate', 'operator', 'P0', 'Run production read-only gate on the server and paste redacted logs into operator evidence.', `current checkout is ${ROOT}, not /home/schoolbus/apps/lampang-bus-system`, 'docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md');
-    addHumanAction('postdeploy-gate-monitor', 'operator', 'P0', 'After approved deployment, run postdeploy gate and 30-60 minute monitor on the server.', 'requires server runtime, PM2/log access, and approved deployment', 'outputs/operator-gates/<timestamp>/');
+    addHumanAction({
+      id: 'production-read-only-gate',
+      category: 'operator-gate',
+      owner: 'operator',
+      priority: 'P0',
+      source: `checkout-location check: repository root is ${ROOT}, not /home/schoolbus/apps/lampang-bus-system`,
+      source_type: 'command',
+      expected_evidence_root: EVIDENCE_ROOTS.operatorGates,
+      evidence_instruction: `${TIMESTAMPED_RUN_DIR}; it must hold production-gate.redacted.log`,
+      action: 'Run production read-only gate on the server and paste redacted logs into operator evidence.',
+    });
+    addHumanAction({
+      id: 'postdeploy-gate-monitor',
+      category: 'operator-gate',
+      owner: 'operator',
+      priority: 'P0',
+      source: `checkout-location check: repository root is ${ROOT}, so no server runtime, PM2 or log access is reachable from here`,
+      source_type: 'command',
+      expected_evidence_root: EVIDENCE_ROOTS.operatorGates,
+      evidence_instruction: `${TIMESTAMPED_RUN_DIR}; it must hold postdeploy-gate and monitor-* redacted logs`,
+      action: 'After approved deployment, run postdeploy gate and 30-60 minute monitor on the server.',
+    });
   }
   if (!hasServerApproval) {
-    addHumanAction('operator-approval', 'operator', 'P0', 'Approve the named production read-only, restore drill, deploy, and postdeploy scopes.', 'SCHOOLBUS_OPERATOR_APPROVED=true is not set and approval document is not signed', 'docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md');
+    addHumanAction({
+      id: 'operator-approval',
+      category: 'approval-scope',
+      owner: 'operator',
+      priority: 'P0',
+      source: 'environment check: SCHOOLBUS_OPERATOR_APPROVED is not set to "true"',
+      source_type: 'environment',
+      expected_evidence_root: OWNER_APPROVAL_DOC,
+      evidence_instruction: 'sign the production read-only, restore drill, deploy and postdeploy approval rows in this document',
+      action: 'Approve the named production read-only, restore drill, deploy, and postdeploy scopes.',
+    });
   }
   if (!hasRestoreApproval || !onProductionServer) {
-    addHumanAction('restore-drill', 'operator', 'P0', 'Run restore drill only after approval, against lampang_bus_restore_drill, using latest backup.', 'restore drill needs operator approval, server backup files, MySQL privileges, and isolated drill DB', 'outputs/restore-drill/<timestamp>/');
+    addHumanAction({
+      id: 'restore-drill',
+      category: 'restore-drill',
+      owner: 'operator',
+      priority: 'P0',
+      source: `environment check: SCHOOLBUS_RESTORE_DRILL_APPROVED=${process.env.SCHOOLBUS_RESTORE_DRILL_APPROVED === 'true' ? 'true' : 'not set'}, on_production_server=${onProductionServer}`,
+      source_type: 'environment',
+      expected_evidence_root: EVIDENCE_ROOTS.restoreDrill,
+      evidence_instruction: `${TIMESTAMPED_RUN_DIR}; it must hold restore-drill-result.md and the redacted drill log`,
+      action: 'Run restore drill only after approval, against lampang_bus_restore_drill, using latest backup.',
+    });
   }
   if (!hasDeployApproval) {
-    addHumanAction('deploy-approved-commit', 'technical-owner', 'P0', `Approve and deploy commit ${gitHead || '(unknown)'} through the server runbook.`, 'SCHOOLBUS_DEPLOY_APPROVED=true is not set and deployment must not be faked', 'docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md');
+    addHumanAction({
+      id: 'deploy-approved-commit',
+      category: 'approval-scope',
+      owner: 'technical-owner',
+      priority: 'P0',
+      source: 'environment check: SCHOOLBUS_DEPLOY_APPROVED is not set to "true"',
+      source_type: 'environment',
+      expected_evidence_root: OWNER_APPROVAL_DOC,
+      evidence_instruction: `record the approved commit (${gitHead || 'unknown'}) and sign the deploy approval row in this document`,
+      action: `Approve and deploy commit ${gitHead || '(unknown)'} through the server runbook.`,
+    });
   }
   if (!hasRoleCredentials) {
-    addHumanAction('role-uat-evidence', 'uat-lead', 'P0', 'Run role UAT with real approved test accounts for admin/province/affiliation/school/driver/transport/parent/LINE/operator.', 'no SCHOOLBUS_UAT_CREDENTIALS_FILE is provided; role login/LINE evidence cannot be fabricated', 'outputs/uat-evidence/<timestamp>/');
+    addHumanAction({
+      id: 'role-uat-evidence',
+      category: 'uat-evidence',
+      owner: 'uat-lead',
+      priority: 'P0',
+      source: 'environment check: SCHOOLBUS_UAT_CREDENTIALS_FILE is not provided, so role login/LINE evidence cannot be produced here',
+      source_type: 'environment',
+      expected_evidence_root: EVIDENCE_ROOTS.uat,
+      evidence_instruction: `${TIMESTAMPED_RUN_DIR}; it must hold one completed file per role`,
+      action: 'Run role UAT with real approved test accounts for admin/province/affiliation/school/driver/transport/parent/LINE/operator.',
+    });
   }
-  addHumanAction('owner-dpo-signoff', 'project-owner', 'P0', 'Owner, technical owner, operator, and DPO/legal sign the final approval and UAT sign-off documents after evidence is real.', 'human legal/owner approval is required and must not be automated', 'docs/UAT_SIGNOFF_2026-08.md + docs/PHASE9_OWNER_OPERATOR_APPROVAL_2026-08.md');
+  addHumanAction({
+    id: 'owner-dpo-signoff',
+    category: 'signoff',
+    owner: 'project-owner',
+    priority: 'P0',
+    source: signoffDocs,
+    source_type: 'document',
+    expected_evidence_root: signoffDocs,
+    evidence_instruction: 'human legal/owner approval must be signed in both documents; it must not be automated',
+    action: 'Owner, technical owner, operator, and DPO/legal sign the final approval and UAT sign-off documents after evidence is real.',
+  });
 }
 
-function addHumanAction(id, owner, priority, action, reason, evidence) {
-  humanActions.push({ id, owner, priority, action, reason, evidence });
+/**
+ * Every action row carries `source` (what produced this status, checkable now)
+ * and `expected_evidence_root` (where the closing evidence must land, possibly
+ * not created yet) as separate fields. `evidence_status` is derived, never
+ * asserted: a root directory that exists but holds no run directory with a
+ * manifest is still MISSING, so an empty `outputs/uat-evidence/` can never read
+ * as evidence that UAT happened.
+ */
+function addHumanAction(item) {
+  humanActions.push(schema.actionRow(ROOT, item));
 }
 
-function statusFromOutput(output) {
-  return /\bPENDING\b/.test(output) ? 'PENDING' : 'PASS';
+function automatedCsvRows() {
+  return automated.map((check) => ({
+    id: check.id,
+    category: check.category,
+    status: check.status,
+    detail: check.detail,
+    log: check.log,
+    exit_code: check.exit_code == null ? '' : check.exit_code,
+    gate_pass: check.gate_summary ? check.gate_summary.pass : '',
+    gate_warn: check.gate_summary ? check.gate_summary.warn : '',
+    gate_fail: check.gate_summary ? check.gate_summary.fail : '',
+    gate_skip: check.gate_summary ? check.gate_summary.skip : '',
+    warning_count: check.warnings.length,
+    failure_count: check.failures.length,
+    not_evaluated_count: check.not_evaluated.length,
+  }));
 }
 
-function detailFromOutput(output, exitStatus) {
-  const lines = String(output || '').split(/\r?\n/).filter(Boolean);
-  const summary = lines.reverse().find((line) => /summary|PASS|PENDING|FAIL/.test(line));
-  return summary || `exit=${exitStatus}`;
-}
-
-function record(id, category, status, detail, logPath) {
-  automated.push({ id, category, status, detail, log: rel(logPath) });
+function record(id, category, status, detail, logPath, extra) {
+  const info = extra || {};
+  automated.push({
+    id,
+    category,
+    status,
+    detail,
+    log: rel(logPath),
+    exit_code: info.exitCode === undefined ? null : info.exitCode,
+    gate_summary: info.gateSummary === undefined ? null : info.gateSummary,
+    warnings: info.warnings || [],
+    failures: info.failures || [],
+    not_evaluated: info.notEvaluated || [],
+  });
 }
 
 function recordInline(id, category, status, detail, output) {
   const log = path.join(logsDir, `${id}.log`);
   fs.writeFileSync(log, output || '');
-  record(id, category, status, detail, log);
+  record(id, category, status, detail, log, { notEvaluated: schema.notEvaluatedLines(output) });
 }
 
 function summary(totals) {
-  const checkRows = automated.map((check) => `| ${check.id} | ${check.status} | ${escapeCell(check.detail)} | \`${check.log}\` |`).join('\n');
-  const humanRows = humanActions.map((item) => `| ${item.priority} | ${item.owner} | ${escapeCell(item.action)} | ${escapeCell(item.reason)} | \`${item.evidence}\` |`).join('\n');
+  const checkRows = automated.map((check) => {
+    const counts = check.gate_summary
+      ? `${check.gate_summary.pass}/${check.gate_summary.warn}/${check.gate_summary.fail}`
+      : '-';
+    return `| ${check.id} | ${check.status} | ${counts} | ${escapeCell(check.detail)} | \`${check.log}\` |`;
+  }).join('\n');
+  const humanRows = humanActions.map((item) => `| ${item.priority} | ${item.owner} | ${escapeCell(item.action)} | ${escapeCell(item.source)} | \`${item.expected_evidence_root}\` | ${item.evidence_status} | ${escapeCell(item.evidence_instruction)} |`).join('\n');
   return `# Automated Readiness Evidence
 
 - Generated: ${generatedAt}
 - Git HEAD: \`${gitHead || 'unknown'}\`
-- Git status clean: ${gitStatus.trim() ? 'no' : 'yes'}
+- Git status clean: ${statusResult.ok ? (gitStatus.trim() ? 'no' : 'yes') : 'NOT EVALUATED'}
 - Base URL: \`${baseUrl}\`
 - PASS: ${totals.pass}
 - PENDING: ${totals.pending}
@@ -293,14 +455,14 @@ function summary(totals) {
 
 ## Automated Checks Run
 
-| Check | Status | Detail | Log |
-|---|---|---|---|
+| Check | Status | Gate pass/warn/fail | Detail | Log |
+|---|---|---|---|---|
 ${checkRows}
 
 ## Human/External Actions Still Required
 
-| Priority | Owner | Action | Reason | Evidence |
-|---|---|---|---|---|
+| Priority | Owner | Action | Status source | Expected evidence root | Evidence status | What to produce there |
+|---|---|---|---|---|---|---|
 ${humanRows}
 
 ## Safety
@@ -338,9 +500,17 @@ function findBash() {
   return '';
 }
 
+/**
+ * Run git and keep whether it ran, separate from what it printed.
+ *
+ * This used to return '' on failure, which every caller read as a real, empty
+ * answer: an unreadable worktree became "worktree clean" and an unreadable diff
+ * became "no secret patterns found". Both PASS, both having checked nothing.
+ * The grading now lives in scripts/lib/command-result.js, where it is unit
+ * tested without paying 35 seconds to run this whole collector.
+ */
 function git(argsForGit) {
-  const result = spawnSync('git', argsForGit, { cwd: ROOT, encoding: 'utf8' });
-  return result.status === 0 ? String(result.stdout || '') : '';
+  return runCommand(spawnSync, 'git', argsForGit, { cwd: ROOT });
 }
 
 function timestampBangkok() {

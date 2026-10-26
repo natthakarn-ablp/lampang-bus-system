@@ -10,10 +10,10 @@ import ErrorState from '../../components/ErrorState';
 
 // ── Status buckets (spec §6.3) — semantic via icon + text, never color alone ─
 const BUCKET_META = {
-  ready:      { label: 'พร้อมใช้งาน',   Icon: CheckCircle2,  tone: 'text-success', soft: 'bg-success-soft' },
-  needs_data: { label: 'ต้องเติมข้อมูล', Icon: FilePlus2,     tone: 'text-info',    soft: 'bg-info-soft' },
-  at_risk:    { label: 'มีข้อมูลเสี่ยง', Icon: AlertTriangle, tone: 'text-warn',    soft: 'bg-warn-soft' },
-  suspended:  { label: 'ถูกระงับ',       Icon: Ban,           tone: 'text-danger',  soft: 'bg-danger-soft' },
+  ready:      { label: 'พร้อมใช้งาน',   Icon: CheckCircle2,  tone: 'text-success-ink', soft: 'bg-success-soft' },
+  needs_data: { label: 'ต้องเติมข้อมูล', Icon: FilePlus2,     tone: 'text-info-ink',    soft: 'bg-info-soft' },
+  at_risk:    { label: 'มีข้อมูลเสี่ยง', Icon: AlertTriangle, tone: 'text-warn-ink',    soft: 'bg-warn-soft' },
+  suspended:  { label: 'ถูกระงับ',       Icon: Ban,           tone: 'text-danger-ink',  soft: 'bg-danger-soft' },
 };
 
 const SECTION_META = {
@@ -136,7 +136,7 @@ export default function DeploymentReadiness() {
                       พร้อม {th(sec.ready)} จาก {th(sec.total)}
                     </p>
                     {sec.missing > 0 && (
-                      <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-warn">
+                      <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-warn-ink">
                         <AlertTriangle className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
                         ต้องดำเนินการ {th(sec.missing)}
                       </p>
@@ -153,7 +153,7 @@ export default function DeploymentReadiness() {
             <h2 className="mb-2 text-sm font-semibold text-ink-muted">รายการที่ต้องดำเนินการ</h2>
             {data.gaps.length === 0 ? (
               <AppCard className="text-center">
-                <CheckCircle2 className="mx-auto h-7 w-7 text-success" strokeWidth={1.8} aria-hidden="true" />
+                <CheckCircle2 className="mx-auto h-7 w-7 text-success-ink" strokeWidth={1.8} aria-hidden="true" />
                 <p className="mt-2 text-sm font-medium text-ink">ไม่มีรายการค้าง</p>
                 <p className="text-xs text-ink-muted">ข้อมูลรถและคนขับพร้อมครบทุกเงื่อนไข</p>
               </AppCard>

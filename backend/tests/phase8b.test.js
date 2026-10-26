@@ -136,9 +136,17 @@ describe('School add vehicle', () => {
 afterAll(async () => {
   // Guarded via getTestConnection() (issue #8).
   const conn = await getTestConnection();
-  await conn.query(`DELETE FROM driver_vehicle_assignments WHERE vehicle_id IN (SELECT id FROM vehicles WHERE plate_no = 'ZZTEST 9901 ลำปาง')`).catch(() => {});
-  await conn.query(`DELETE FROM users WHERE username = 'ZZTEST 9901 ลำปาง'`).catch(() => {});
+  // The plate this suite actually creates is 'ผก 9901 ลำปาง' (see the onboarding
+  // request above). 'ZZTEST 9901 ลำปาง' appears nowhere else in the repository —
+  // it is a name left behind by a rename, so these deletes matched nothing and
+  // the vehicle survived every run. Bounded at one row, because the onboarding
+  // route returns existed:true on the second run rather than inserting again,
+  // which is why it never grew loud enough to notice.
+  const PLATE = 'ผก 9901 ลำปาง';
+  await conn.query(`DELETE FROM driver_vehicle_assignments WHERE vehicle_id IN (SELECT id FROM vehicles WHERE plate_no = ?)`, [PLATE]).catch(() => {});
+  await conn.query(`DELETE FROM users WHERE username = ?`, [PLATE]).catch(() => {});
   await conn.query(`DELETE FROM drivers WHERE name = '__BulkDriver'`).catch(() => {});
-  await conn.query(`DELETE FROM vehicles WHERE plate_no = 'ZZTEST 9901 ลำปาง'`).catch(() => {});
+  await conn.query(`DELETE FROM audit_logs WHERE entity_type = 'vehicle' AND entity_id IN (SELECT id FROM vehicles WHERE plate_no = ?)`, [PLATE]).catch(() => {});
+  await conn.query(`DELETE FROM vehicles WHERE plate_no = ?`, [PLATE]).catch(() => {});
   await conn.end();
 });

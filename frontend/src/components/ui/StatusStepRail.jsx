@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, Circle, Clock3 } from 'lucide-react';
 
 const STATUS_STYLE = {
   complete: {
-    dot: 'bg-success-soft text-success ring-success/25',
+    dot: 'bg-success-soft text-success-ink ring-success/25',
     line: 'bg-success',
     label: 'text-ink',
     icon: CheckCircle2,
@@ -14,13 +14,13 @@ const STATUS_STYLE = {
     icon: Clock3,
   },
   warning: {
-    dot: 'bg-warn-soft text-warn ring-warn/25',
+    dot: 'bg-warn-soft text-warn-ink ring-warn/25',
     line: 'bg-warn',
     label: 'text-ink',
     icon: AlertTriangle,
   },
   danger: {
-    dot: 'bg-danger-soft text-danger ring-danger/25',
+    dot: 'bg-danger-soft text-danger-ink ring-danger/25',
     line: 'bg-danger',
     label: 'text-ink',
     icon: AlertTriangle,

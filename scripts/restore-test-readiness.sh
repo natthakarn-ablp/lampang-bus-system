@@ -15,6 +15,7 @@
 #
 # Env:
 #   RESTORE_TEST_FORCE_READ_ONLY=true  # never create the test DB even if config allows it
+#   RESTORE_TEST_CONFIG_FILE=/path/to/config  # optional override (mainly for isolated tests)
 # ─────────────────────────────────────────────────────────────
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,7 +35,7 @@ note "latest backup verification: PASS"
 command -v mysql >/dev/null 2>&1 || notready "mysql client not found in PATH"
 
 # 3. Load optional restore-test config.
-CFG="$ROOT/scripts/restore-test.env"
+CFG="${RESTORE_TEST_CONFIG_FILE:-$ROOT/scripts/restore-test.env}"
 if [ -f "$CFG" ]; then
   perm="$(stat -c '%a' "$CFG" 2>/dev/null || echo '')"
   [ "$perm" = "600" ] || unsafe "restore-test.env must be chmod 600 (found ${perm:-?})"

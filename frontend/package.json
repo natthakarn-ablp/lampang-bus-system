@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test:school-report": "node --test tests/affiliationSchoolReport.browser.test.mjs",
     "build": "vite build && node ../scripts/postbuild-symlinks.js",
     "preview": "vite preview",
     "qa:browser": "sh -c 'cp ../scripts/browser-review.mjs ./browser-review.mjs && node ./browser-review.mjs; code=$?; rm -f ./browser-review.mjs; exit $code'",
     "check:labels": "node ../scripts/check-ui-labels.js",
     "check:labels:strict": "node ../scripts/check-ui-labels.js --strict",
     "check:labels:verbose": "node ../scripts/check-ui-labels.js --verbose",
-    "check:hybrid-ui": "node ./scripts/check-hybrid-motion-ui.mjs",
+    "check:hybrid-ui": "node ./scripts/check-hybrid-motion-ui.mjs && node --test ./tests/transportIncidentView.test.mjs && node ./tests/check-incident-render.mjs",
     "hooks:install": "node ../scripts/install-hooks.js",
     "hooks:install:strict": "node ../scripts/install-hooks.js --strict",
     "hooks:remove": "node ../scripts/install-hooks.js --remove"

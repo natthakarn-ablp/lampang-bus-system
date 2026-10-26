@@ -112,7 +112,7 @@ export default function VehicleRequests() {
                     กลับ
                   </button>
                   <button onClick={submit} disabled={busy || !note.trim()}
-                    className={`focus-ring min-h-[44px] text-sm text-white font-semibold px-4 rounded-lg transition disabled:opacity-40 disabled:pointer-events-none ${action === 'approve' ? 'bg-success hover:bg-success/90' : 'bg-danger hover:bg-danger/90'}`}>
+                    className={`focus-ring min-h-[44px] text-sm text-white font-semibold px-4 rounded-lg transition disabled:opacity-40 disabled:pointer-events-none ${action === 'approve' ? 'bg-success-ink hover:bg-success-ink/90' : 'bg-danger-ink hover:bg-danger-ink/90'}`}>
                     {action === 'approve'
                       ? (detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' ? 'ยืนยันกู้คืนรถ' : 'ยืนยันอนุมัติ')
                       : 'ยืนยันไม่อนุมัติ'}
@@ -121,12 +121,12 @@ export default function VehicleRequests() {
               ) : (
                 <>
                   <button onClick={() => setAction('reject')}
-                    className="focus-ring min-h-[44px] text-sm bg-danger hover:bg-danger/90 text-white font-semibold px-4 rounded-lg transition">
+                    className="focus-ring min-h-[44px] text-sm bg-danger-ink hover:bg-danger-ink/90 text-white font-semibold px-4 rounded-lg transition">
                     ไม่อนุมัติ
                   </button>
                   <button onClick={() => setAction('approve')}
                     disabled={detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' && detail.active_canonical_conflict}
-                    className="focus-ring min-h-[44px] text-sm bg-success hover:bg-success/90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 rounded-lg transition">
+                    className="focus-ring min-h-[44px] text-sm bg-success-ink hover:bg-success-ink/90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 rounded-lg transition">
                     {detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' ? 'อนุมัติและกู้คืนรถ' : 'อนุมัติคำขอ'}
                   </button>
                 </>

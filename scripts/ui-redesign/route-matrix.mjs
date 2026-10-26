@@ -18,10 +18,11 @@
  *   node scripts/ui-redesign/route-matrix.mjs --gate  # exit 1 if anything is unresolved
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { evaluatePartialRatchet } from './partial-ratchet.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..');
@@ -36,6 +37,11 @@ for (const m of appSrc.matchAll(/const (\w+)\s*=\s*lazy\(\(\)\s*=>\s*import\('([
 for (const m of appSrc.matchAll(/^import (\w+) from '\.\/([^']+)';/gm)) {
   COMPONENT_FILE[m[1]] = m[2];
 }
+// Route wrappers defined inside App.jsx that only gate and then render one
+// page body. They are scored as the body they render.
+//   DriverConsentRoute — redirects to /my-policy while Vehicle QR is off,
+//                        otherwise renders DriverConsentForm (PAGE_LIKE in page-status)
+COMPONENT_FILE.DriverConsentRoute = COMPONENT_FILE.DriverConsentForm;
 
 // Routes that render no page of their own. Each says why.
 const NON_PAGE = {
@@ -119,7 +125,16 @@ function pageStatusJson() {
 const status = JSON.parse(pageStatusJson());
 const STATUS_BY_FILE = Object.fromEntries(status.rows.map(r => [r.file, r]));
 
-const inventory = JSON.parse(readFileSync(resolve(root, 'outputs/ui-redesign/nav-before.json'), 'utf8'));
+// The tracked route inventory. Never regenerated here: a gate that snapshots
+// the code it is checking would always agree with itself.
+const BASELINE = resolve(here, 'baselines/nav-baseline.json');
+if (!existsSync(BASELINE)) {
+  console.error(`✗ nav baseline not found: ${BASELINE}`);
+  console.error('  Record it deliberately from a known-good commit, review the diff, and commit it:');
+  console.error('    node scripts/ui-redesign/nav-snapshot.mjs --write-baseline');
+  process.exit(1);
+}
+const inventory = JSON.parse(readFileSync(BASELINE, 'utf8'));
 const paths = [...new Set(inventory.routes.map(r => r.path))];
 
 const rows = paths.map(path => {
@@ -137,6 +152,10 @@ const rows = paths.map(path => {
   return { path, kind: 'page', status: st.status, why: file,
            gaps: Object.entries(st.detail).filter(([, v]) => v === 'todo').map(([k]) => k) };
 });
+
+// Exact route count of the tracked baseline (scripts/ui-redesign/baselines/
+// nav-baseline.json). Re-recording the baseline means updating this too.
+const EXPECTED_ROUTES = 100;
 
 const counts = rows.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1), m), {});
 const unresolved = rows.filter(r => r.status === 'UNCLASSIFIED');
@@ -157,13 +176,14 @@ if (process.argv.includes('--md')) {
 
 console.log(`\nroutes: ${rows.length}`);
 console.log(Object.entries(counts).map(([k, v]) => `${k}: ${v}`).join('  ·  '));
-console.log(`reconciles to 89: ${rows.length === 89 ? 'YES' : 'NO (' + rows.length + ')'}`);
+console.log(`reconciles to ${EXPECTED_ROUTES}: ${rows.length === EXPECTED_ROUTES ? 'YES' : 'NO (' + rows.length + ')'}`);
 if (unresolved.length) {
   console.log('\nUNCLASSIFIED:');
   unresolved.forEach(r => console.log(`  ${r.path} — ${r.why}`));
 }
 
 if (process.argv.includes('--gate')) {
-  const bad = unresolved.length + partial.length;
-  process.exit(bad === 0 && rows.length === 89 ? 0 : 1);
+  const ratchet = evaluatePartialRatchet(status);
+  const routeFailures = unresolved.length + (rows.length === EXPECTED_ROUTES ? 0 : 1);
+  process.exit(routeFailures === 0 && ratchet.ok ? 0 : 1);
 }

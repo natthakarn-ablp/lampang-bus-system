@@ -6,8 +6,8 @@
 
 | Evidence | สถานะ |
 |---|---|
-| Local gate | PASS: `pass=13 warn=0 fail=0` |
-| Public external gate | PASS: `pass=5 warn=0 fail=0` against `https://schoolbuslampang.com` |
+| Local gate | PASS: `pass=14 warn=0 fail=0` (รันล่าสุด 8 ก.ย. 2569 ที่ `228b1a0` — `outputs/automated-readiness/20260908-140635/logs/local-gate.log`; ตัวเลขเดิมที่บันทึกไว้ตอนร่างเอกสารคือ `pass=13` — gate ชุดเดียวกันวันนี้รายงาน 14 ข้อ) |
+| Public external gate | PASS: `pass=5 warn=0 fail=0` against `https://schoolbuslampang.com` (รันล่าสุด 8 ก.ย. 2569 — `outputs/automated-readiness/20260908-140635/logs/public-gate.log`) |
 | Evidence pack | `outputs/phase9-evidence/20260825-201200/summary.md` |
 | Evidence validator | PASS via `scripts/validate-phase9-evidence.js` |
 | UAT evidence safety scan | ต้อง PASS ผ่าน `scripts/scan-uat-evidence-safety.js` ก่อนแนบหลักฐาน UAT |
@@ -85,11 +85,66 @@ node scripts/validate-restore-drill-evidence.js outputs/restore-drill/<timestamp
 cd /home/schoolbus/apps/lampang-bus-system
 set -o pipefail
 BASE_URL=http://127.0.0.1:3000 bash scripts/production-readiness-gate.sh postdeploy 2>&1 | tee outputs/operator-gates/<timestamp>/postdeploy-gate.redacted.log
-pm2 logs schoolbus-backend --lines 100 --nostream > outputs/operator-gates/<timestamp>/monitor-pm2.redacted.log 2>&1
-tail -n 100 /home/schoolbus/backups/lampang-bus/health-check.log > outputs/operator-gates/<timestamp>/monitor-health-check.redacted.log 2>&1
-tail -n 100 /home/schoolbus/logs/offhost-sync.log > outputs/operator-gates/<timestamp>/monitor-offhost-sync.redacted.log 2>&1
+# ตรวจ raw PM2/health/off-host logs เฉพาะในพื้นที่ private บน server
+# สร้าง monitor-pm2.redacted.log, monitor-health-check.redacted.log และ
+# monitor-offhost-sync.redacted.log จากสรุปที่ operator ตรวจจริงและปิดบังข้อมูลแล้ว
+# อย่าคัดลอก raw logs เข้า evidence pack แล้วเพียงตั้งชื่อว่า .redacted.log
+# เมื่อมีหลักฐานครบและตรวจว่าไม่มีข้อมูลส่วนบุคคล/secret/token จึงรัน validator:
 node scripts/validate-operator-gate-evidence.js outputs/operator-gates/<timestamp>
 ```
+
+ไฟล์ monitor ต้องบันทึกช่วงเวลาที่ตรวจ แหล่งข้อมูล จำนวน/ประเภทเหตุผิดปกติและผลพิจารณาที่ตรวจจริง โดยไม่คัดลอก SQL parameters, request bodies, tokens หรือข้อมูลนักเรียน/ผู้ปกครอง ห้ามแต่งสรุปว่าไม่พบเหตุโดยไม่ได้ตรวจ ชื่อไฟล์ `.redacted.log` ไม่ใช่การลบข้อมูล และตัวตรวจด้วยรูปแบบข้อความไม่ยืนยันว่าปลอดข้อมูลส่วนบุคคลทุกแบบ หากยังตรวจ/ปิดบังไม่ครบให้คง PENDING และไม่ส่ง raw logs ไปใน GitHub/แชต/ชุดส่งมอบ
+
+## บันทึกการเปลี่ยนแปลง production ที่เกิดขึ้นก่อนการลงนาม (อ้างอิงเท่านั้น — ไม่ใช่การอนุมัติ)
+
+เพิ่ม 5 ก.ย. 2569 · **แก้ให้ตรงกับความจริง 8 ก.ย. 2569** ตารางเดิมบันทึกไว้สามรายการของวันที่ 5 ก.ย. ความจริงคือ **วันที่ 7 ก.ย. วันเดียวมีการ deploy 14 รอบ** และมีเพียงรอบเดียวในจำนวนนั้นที่มีบันทึกของตัวเอง
+ที่มาของตารางที่ 1 คือ `/home/schoolbus/logs/deploy-history.log` บนเซิร์ฟเวอร์ ซึ่งสคริปต์ `deploy-backend.sh` เขียนเองทุกครั้ง จึงเป็นหลักฐานที่ครบกว่าเอกสารใด ๆ ในโครงการ อ่านเมื่อ 8 ก.ย. 2569 · เวลาในตารางแปลงเป็นเวลาไทยแล้ว (UTC+7)
+ช่องอนุมัติและลายเซ็นด้านล่าง **ยังว่าง** และต้องเป็นบุคคลตามบทบาทกรอกเอง แบบฟอร์มรับรองย้อนหลังอยู่ที่ `docs/ops/retrospective-attestation-2026-09-05.md`
+
+### ตารางที่ 1 · การ deploy ทุกรอบ
+
+| # | วันเวลา (ไทย) | commit | เนื้อหาโดยย่อ | ผล | บันทึก |
+|---:|---|---|---|---|---|
+| 1 | 5 ก.ย. 20:38–20:40 | `c0b0d49` | ปิดงานค้าง handoff §2 ข้อ 1–9 | สำเร็จ | `docs/ops/deploy-2026-09-05-c0b0d49.md` |
+| 2 | 5 ก.ย. 21:58–22:04 | `a0e783e` | รวม frontend rebuild | สำเร็จ | `docs/ops/deploy-2026-09-05-a0e783e.md` |
+| 3 | 6 ก.ย. 08:45–08:46 | `14caf5b` | แก้สคริปต์ deploy ตาม review (สองรอบก่อนหน้าหยุดกลางทางโดยตั้งใจ) | สำเร็จ | `docs/ops/deploy-2026-09-06-14caf5b.md` |
+| 4 | 7 ก.ย. 07:41–07:42 | `f60aee5` | คู่มือ + ภาพประกอบคนขับ | สำเร็จ | `docs/ops/deploy-2026-09-07-f60aee5.md` |
+| 5 | 7 ก.ย. 08:22–08:23 | `7c220ee` | เลิกเผยแพร่เอกสารภายใน เหลือเฉพาะคู่มือ | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 6 | 7 ก.ย. 10:44–10:45 | `313906d` | สคริปต์ลง migration 050 | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 7 | 7 ก.ย. 10:57–10:58 | `f326b5c` | สคริปต์เปิด/ปิด feature flag ที่ถอยกลับเองได้ | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 8 | 7 ก.ย. 11:05–11:06 | `5ce2c9e` | แก้ LINE login ให้กลับหน้าเดิม | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 9 | 7 ก.ย. 13:12–13:13 | `d591923` | ชื่อผู้ใช้ที่ถูกลบแล้วอธิบายตัวเองแทน "Duplicate entry" | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 10 | 7 ก.ย. 13:28–13:29 | `6fc7ff5` | ลบบัญชีแล้วปล่อย LINE ที่ผูกไว้ | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 11 | 7 ก.ย. 13:48–13:49 | `21196c1` | รหัสกู้คืนเป็นทางเลือกตามค่าตั้ง | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 12 | 7 ก.ย. 14:11 | `f90eee2` | เลิกแจกรหัสกู้คืนที่เซิร์ฟเวอร์ไม่ตรวจ | **หยุดก่อนแตะ PM2** (`exit=1`) — production ยังรัน `21196c1` | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 13 | 7 ก.ย. 14:14 | `4f9c894` | (รอบแก้ต่อจากข้อ 12) | **หยุดก่อนแตะ PM2** (`exit=1`) — production ยังรัน `21196c1` | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 14 | 7 ก.ย. 14:16–14:17 | `4f9c894` | ชุดทดสอบเลิกอ่านค่าตั้งของเครื่องที่รัน | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 15 | 7 ก.ย. 15:24–15:25 | `9edc79f` | คู่มือการกู้รหัสผ่านและสองฟีเจอร์ที่เปิดวันนั้น | สำเร็จ | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 16 | 7 ก.ย. 18:58 | `bc931d6` | ใบแจ้งหกสังกัดว่ารีเซ็ตรหัสโรงเรียนเองได้ | **หยุดก่อนแตะ PM2** (`exit=1`) — production ยังรัน `9edc79f` | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+| 17 | 7 ก.ย. 19:02–19:03 | `67c3768` | จังหวัดรีเซ็ตรหัสผ่านสังกัด/ขนส่ง + หน้าความปลอดภัยบัญชีหลายบทบาท | สำเร็จ — **รันอยู่จนถึงปัจจุบัน** | `docs/ops/deploy-2026-09-07-reconstructed.md` (ย้อนหลัง) |
+
+**อ่านตารางนี้อย่างไร** วันที่ 7 ก.ย. มี 14 รอบ (ข้อ 4–17) สำเร็จ 11 รอบ และ **หยุดกลางทางโดยไม่แตะ PM2 3 รอบ** การหยุดทั้งสามครั้งคือสคริปต์ทำงานถูกต้อง มันตรวจพบปัญหาก่อนสั่ง `pm2 reload` แล้วคืนสภาพเดิม production จึงไม่เคยตกจากเหตุนี้ · ในทั้ง 14 รอบ มีเพียงข้อ 4 ที่มีเอกสารบันทึกของตัวเอง
+
+### ตารางที่ 2 · การเปลี่ยนแปลงฐานข้อมูลและค่าตั้ง
+
+| # | เหตุการณ์ | วันเวลา (ไทย) | บันทึก | สถานะการรับรอง |
+|---:|---|---|---|---|
+| 1 | migration 051 ลง `lampang_bus` | 5 ก.ย. 13:12 | `docs/ops/deploy-runbook-051-shared-security-state.md` §7 | รอรับรองย้อนหลัง |
+| 2 | ตั้ง `FEATURE_ADMIN_PASSWORD_RECOVERY=true` | 7 ก.ย. 09:39 | `docs/project-closure/owner-answers-2026-09-07.md` ข้อ 5 | รอรับรองย้อนหลัง |
+| 3 | migration 050 ลง `lampang_bus` (`participation_cases`, `participation_case_events`) | 7 ก.ย. ประมาณ 12:15 | `docs/project-closure/owner-answers-2026-09-07.md` ข้อ 5 (ต่อ) | รอรับรองย้อนหลัง |
+| 4 | ตั้ง `FEATURE_PARTICIPATION_CASES=true` | 7 ก.ย. 12:55 | `docs/project-closure/owner-answers-2026-09-07.md` ข้อ 5 (ต่อ) | รอรับรองย้อนหลัง |
+| 5 | ตั้ง `ADMIN_RECOVERY_REQUIRE_CODE=false` (ลิงก์ LINE เป็นด่านเดียว) | 7 ก.ย. | `docs/project-closure/decision-2026-09-07-admin-recovery-single-factor.md` | รอรับรองย้อนหลัง |
+
+### สิ่งที่ตรวจสอบแล้วเมื่อ 8 ก.ย. 2569 (อ่านอย่างเดียว)
+
+| ตรวจอะไร | ผล |
+|---|---|
+| `http://127.0.0.1:3000/health` บนเซิร์ฟเวอร์ | `commit: 67c3768` · `database.connected: true` · `node v20.20.2` · `environment: production` |
+| โปรเซสเริ่มเมื่อไร (`process.uptime()` 69,960 วินาที ณ 07:29 UTC) | 7 ก.ย. 19:03 น. — ตรงกับบรรทัด `end result=ok head=67c3768` ในประวัติ deploy และรันต่อเนื่องมา 19 ชม. 26 นาทีโดยไม่ restart |
+| `GET /api/auth/recovery/config` (สาธารณะ) | `admin_password_recovery: true` · `requires_recovery_code: false` · จังหวัด/สังกัด/โรงเรียน/ขนส่ง/คนขับ ปิดด้วยเหตุ `decision_gates_unconfirmed` |
+| ไฟล์ `assets/index-Dwb_iTiF.js` ที่เว็บจริงเสิร์ฟ | มีข้อความ "บัญชีสังกัดและขนส่ง" "ความปลอดภัยบัญชี" และเส้นทาง `unit-accounts` / `reset-password` — frontend ของข้อ 17 ขึ้นแล้ว |
+
+**สิ่งที่ต้องทำก่อนลงนาม** การ deploy 13 รอบในตารางที่ 1 ไม่เคยมีบันทึกของตัวเอง จึงจัดทำบันทึกย้อนหลังไว้ที่ `docs/ops/deploy-2026-09-07-reconstructed.md` เมื่อ 8 ก.ย. 2569 โดยคัดจาก `deploy-history.log` บนเซิร์ฟเวอร์ เอกสารนั้นระบุชัดว่าค่าใดมีและค่าใดไม่มี (ไม่มีผลทดสอบรายรอบ ไม่มีจำนวน restart รายรอบ ไม่มีการเฝ้าดูหลัง deploy รายรอบ) ผู้ลงนามต้องเลือกว่าจะรับรองย้อนหลังบนหลักฐานเท่านี้ หรือให้ดึงไฟล์ `.out` รายรอบจากเซิร์ฟเวอร์มาเติมก่อน
 
 ## Sign-off
 

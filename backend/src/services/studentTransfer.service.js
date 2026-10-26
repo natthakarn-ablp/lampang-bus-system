@@ -131,12 +131,51 @@ async function approveAndApply(pool, { requestId, adminUserId, adminNote }) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, 1, ?)`,
       [newId, st.student_code, cid, st.prefix || null, st.first_name || '-', st.last_name || '-', st.grade || null, st.classroom || null, req.destination_school_id, getCurrentTermCachedSync()]
     );
-    // Copy the parent link (if any) to the destination student.
-    const [[ps]] = await conn.query('SELECT parent_id FROM parent_student WHERE student_id = ? LIMIT 1', [st.id]);
-    if (ps) await conn.query('INSERT INTO parent_student (parent_id, student_id, approved, approved_by, approved_at) VALUES (?, ?, TRUE, ?, NOW()) ON DUPLICATE KEY UPDATE approved = TRUE', [ps.parent_id, newId, adminUserId]);
+    // Carry the guardian links across, preserving each one's approval state.
+    //
+    // This used to take a single row (`LIMIT 1` with no ORDER BY) and write it
+    // back with approved = TRUE, which was wrong twice over. A pupil with two
+    // guardians silently lost one. Worse, a guardian who had been REVOKED was
+    // eligible to be the row picked up — the student-import path sets
+    // approved = FALSE on the previous guardian whenever a guardian phone
+    // changes (studentImportPreview.service.js) and leaves the row in place —
+    // so a transfer could hand a removed guardian access to the child again,
+    // stamped with the approving admin's id and with nothing to show it had
+    // happened. In a school setting a guardian is usually removed for a
+    // custody or safeguarding reason, so that is the wrong direction to fail.
+    //
+    // A set-based copy fixes both: every link moves, and `approved` (with its
+    // approver and timestamp) moves with it, so a revoked guardian stays
+    // revoked on the new record.
+    const [copied] = await conn.query(
+      `INSERT INTO parent_student (parent_id, student_id, relationship, approved, approved_by, approved_at)
+       SELECT parent_id, ?, relationship, approved, approved_by, approved_at
+         FROM parent_student
+        WHERE student_id = ?
+       ON DUPLICATE KEY UPDATE
+         relationship = VALUES(relationship),
+         approved     = VALUES(approved),
+         approved_by  = VALUES(approved_by),
+         approved_at  = VALUES(approved_at)`,
+      [newId, st.id]
+    );
+    const [[linkCounts]] = await conn.query(
+      `SELECT COUNT(*) AS total, SUM(approved = TRUE) AS approved_total
+         FROM parent_student WHERE student_id = ?`,
+      [newId]
+    );
 
     const beforeJson = { student_id: st.id, school_id: st.school_id };
-    const afterJson = { applied_student_id: newId, school_id: req.destination_school_id };
+    const afterJson = {
+      applied_student_id: newId,
+      school_id: req.destination_school_id,
+      // Record what happened to the guardian links. Who may see a child's
+      // location is exactly the thing a later complaint asks about, and the
+      // transfer is the moment it changes hands.
+      guardian_links_copied: Number(copied?.affectedRows || 0),
+      guardian_links_total: Number(linkCounts?.total || 0),
+      guardian_links_approved: Number(linkCounts?.approved_total || 0),
+    };
     await conn.query(
       `UPDATE student_transfer_requests SET status='APPLIED', approved_by=?, approved_at=NOW(), applied_at=NOW(),
          applied_student_id=?, admin_note=?, before_json=CAST(? AS JSON), after_json=CAST(? AS JSON), updated_at=NOW() WHERE id=?`,

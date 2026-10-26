@@ -21,6 +21,9 @@ const env = require('../config/env');
 const { getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
+const { gradeEquivalents } = require('../utils/gradeScope');
+const { toBangkokDate } = require('../utils/thaiTime');
+const { withDeadlockRetry, isDeadlock } = require('../utils/transactionRetry');
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -300,6 +303,36 @@ async function getRoster(pool, vehicleId, session) {
   }));
 }
 
+// ─── beginCheckinTransaction ─────────────────────────────────────────────────
+
+/**
+ * Open a check-in transaction at READ COMMITTED.
+ *
+ * CS5-04. The duplicate guard in _buildCheckinTransaction needs two things: a
+ * per-student mutex (the students row, locked FOR UPDATE) and a read of
+ * checkin_logs that is no older than that mutex. Under the server default
+ * REPEATABLE READ the second is only obtainable with a locking read, and a
+ * locking read that matches no row takes a gap lock — which is what turned one
+ * busload of simultaneous check-ins into deadlock 500s and lost boardings.
+ *
+ * READ COMMITTED gives the freshness without the gap locks: no gap locking, and
+ * every statement gets its own read view, so a waiter sees the winner's row and
+ * a long batch transaction no longer answers this check from a snapshot taken at
+ * its first student. Bare SET TRANSACTION (no SESSION/GLOBAL) applies to the
+ * NEXT transaction only, so the pooled connection reverts to the server default
+ * as soon as this transaction ends and no other code path changes behaviour.
+ *
+ * The cost is real and deliberate: inside these transactions a repeated read can
+ * now see another transaction's commit. Nothing on this path re-reads a row it
+ * has already read, and every write is keyed by the student row it holds locked,
+ * so the non-repeatable read is unobservable today — but any statement added
+ * here later must not assume a stable snapshot.
+ */
+async function beginCheckinTransaction(conn) {
+  await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+  await conn.beginTransaction();
+}
+
 // ─── _buildCheckinTransaction ─────────────────────────────────────────────────
 
 /**
@@ -317,11 +350,16 @@ async function _buildCheckinTransaction(conn, {
   source,
 }) {
   // 1. Verify student belongs to this vehicle
+  // CS5-04 — FOR UPDATE makes this row the per-student mutex for the whole
+  // check-in transaction. Without it the guard below is a bare read-then-write:
+  // three simultaneous taps all read "no log yet" and all insert, producing
+  // three checkin_logs rows and three parent notifications for one boarding.
   const [students] = await conn.query(
     `SELECT id, cid_hash, first_name, last_name
      FROM   students
      WHERE  id = ? AND vehicle_id = ? AND is_deleted = FALSE
-     LIMIT  1`,
+     LIMIT  1
+     FOR    UPDATE`,
     [studentId, vehicleId]
   );
   if (!students.length) {
@@ -334,6 +372,21 @@ async function _buildCheckinTransaction(conn, {
   // duplicate of the same session+status for today so a double-tap or network
   // retry can't create duplicate checkin_logs AND duplicate parent notifications.
   // A different status (board CHECKED_IN → dropoff CHECKED_OUT) is still allowed.
+  // CS5-04 — this read must stay a PLAIN read. Under REPEATABLE READ a
+  // SELECT ... FOR UPDATE that matches nothing takes a gap lock, and when a whole
+  // bus checks in at once every student's gap lock lands in the same empty range
+  // of idx_cl_date_student; the INSERT below then wants an insert-intention lock
+  // inside a gap another transaction is already holding. Measured against the
+  // test database: 33 of 40 concurrent taps across 20 students died with
+  // ER_LOCK_DEADLOCK — HTTP 500 to the driver — and 14 of the 20 children ended
+  // the run with no boarding row at all. A duplicate is visible and correctable;
+  // a lost boarding is silent, so that trade was the wrong way round.
+  // The lock this guard actually needs is the students row above. What the
+  // locking read was additionally buying — a CURRENT read, so a caller that
+  // waited on the student row sees the winner's committed row instead of a stale
+  // snapshot — is supplied instead by running the transaction at READ COMMITTED
+  // (see beginCheckinTransaction), where every statement reads fresh. That also
+  // fixes the batch paths, whose snapshot was taken at their FIRST student.
   const [dupLog] = await conn.query(
     `SELECT id, status FROM checkin_logs
      WHERE student_id = ? AND session = ? AND check_date = CURDATE()
@@ -471,21 +524,12 @@ async function processCheckin(pool, { userId, vehicleId, plateNo, studentId, ses
   assertSession(session);
   const termId = await getCurrentTerm(pool);
 
-  const conn = await pool.getConnection();
-  await conn.beginTransaction();
-  try {
-    const result = await _buildCheckinTransaction(conn, {
+  return withDeadlockRetry(pool, beginCheckinTransaction, conn =>
+    _buildCheckinTransaction(conn, {
       userId, vehicleId, plateNo, studentId, session,
       status: 'CHECKED_IN', termId, source,
-    });
-    await conn.commit();
-    return result;
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+    })
+  );
 }
 
 // ─── processCheckout ──────────────────────────────────────────────────────────
@@ -498,21 +542,12 @@ async function processCheckout(pool, { userId, vehicleId, plateNo, studentId, se
   assertSession(session);
   const termId = await getCurrentTerm(pool);
 
-  const conn = await pool.getConnection();
-  await conn.beginTransaction();
-  try {
-    const result = await _buildCheckinTransaction(conn, {
+  return withDeadlockRetry(pool, beginCheckinTransaction, conn =>
+    _buildCheckinTransaction(conn, {
       userId, vehicleId, plateNo, studentId, session,
       status: 'CHECKED_OUT', termId, source,
-    });
-    await conn.commit();
-    return result;
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally {
-    conn.release();
-  }
+    })
+  );
 }
 
 // ─── processCheckinAll ────────────────────────────────────────────────────────
@@ -550,18 +585,17 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
     [vehicleId]
   );
 
-  const succeeded = [];
-  const failed    = [];
-
   // Audit 2026-06-18 (limitations-scalability): use ONE pooled connection for the
   // whole batch instead of getConnection()/commit() per student, which thrashed
   // the 10-slot pool when many buses ran "check-in all" at 07:00. Each student is
   // isolated with a SAVEPOINT so one failure doesn't abort the rest (preserving
   // the partial-success contract). studentId is an integer, safe to interpolate
   // into the savepoint name.
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+  return withDeadlockRetry(pool, beginCheckinTransaction, async conn => {
+    // A deadlock rolls back the ENTIRE transaction, including earlier students.
+    // Keep result lists inside each attempt so aborted success cannot escape.
+    const succeeded = [];
+    const failed = [];
     for (const { id: studentId } of students) {
       const sp = `ca_${studentId}`;
       try {
@@ -573,19 +607,13 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
         await conn.query(`RELEASE SAVEPOINT ${sp}`);
         succeeded.push(result);
       } catch (err) {
-        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        if (isDeadlock(err)) throw err;
+        await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`);
         failed.push({ student_id: studentId, error: err.message });
       }
     }
-    await conn.commit();
-  } catch (err) {
-    try { await conn.rollback(); } catch { /* swallow */ }
-    throw err;
-  } finally {
-    conn.release();
-  }
-
-  return { succeeded, failed };
+    return { succeeded, failed };
+  });
 }
 
 // ─── processCheckoutAll ───────────────────────────────────────────────────────
@@ -596,13 +624,26 @@ async function processCheckinAll(pool, { userId, vehicleId, plateNo, session, so
  * actually recorded (real data showed checkout was scanned only ~11% of the time,
  * making a "left-behind" signal impossible). Eligibility is computed from
  * checkin_logs directly (CHECKED_IN without a matching CHECKED_OUT) — NOT from
- * daily_status.*_done, which is already TRUE after the morning board. A student
- * who never boarded is never dropped, so this cannot fabricate a checkout.
+ * daily_status.*_done, which is already TRUE after the morning board; the
+ * daily_status flag is consulted only to drop a board that was VOIDED (CS5-01).
+ * A student who never boarded is never dropped, so this cannot fabricate a
+ * checkout.
  * Returns { succeeded: [], failed: [] }.
  */
 async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, source = 'web' }) {
   assertSession(session);
   const termId = await getCurrentTerm(pool);
+
+  // CS5-01 — a board that was voided must never be droppable. voidCheckin keeps
+  // the original CHECKED_IN row (history is append-only) and records the reversal
+  // as a CANCELLED row plus a reset of daily_status.<session>_done. Reading
+  // checkin_logs alone therefore still saw a child whose boarding was cancelled as
+  // "on the bus", and wrote a CHECKED_OUT row plus a checkout notification to the
+  // parent of a child who never rode. Honour the state the void writer resets —
+  // the same state the sibling path processCheckinAll reads. Only a session we
+  // positively know was reset is excluded, so a day with no daily_status row
+  // behaves exactly as before.
+  const doneColumn = session === 'morning' ? 'ds.morning_done' : 'ds.evening_done';
 
   const [students] = await pool.query(
     `SELECT DISTINCT ci.student_id AS id
@@ -612,15 +653,17 @@ async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, s
         AND NOT EXISTS (
           SELECT 1 FROM checkin_logs co
            WHERE co.student_id = ci.student_id AND co.session = ci.session
-             AND co.check_date = CURDATE() AND co.status = 'CHECKED_OUT')`,
+             AND co.check_date = CURDATE() AND co.status = 'CHECKED_OUT')
+        AND NOT EXISTS (
+          SELECT 1 FROM daily_status ds
+           WHERE ds.student_id = ci.student_id AND ds.check_date = ci.check_date
+             AND ${doneColumn} = FALSE)`,
     [vehicleId, session]
   );
 
-  const succeeded = [];
-  const failed = [];
-  const conn = await pool.getConnection();
-  try {
-    await conn.beginTransaction();
+  return withDeadlockRetry(pool, beginCheckinTransaction, async conn => {
+    const succeeded = [];
+    const failed = [];
     for (const { id: studentId } of students) {
       const sp = `co_${studentId}`;
       try {
@@ -632,19 +675,13 @@ async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, s
         await conn.query(`RELEASE SAVEPOINT ${sp}`);
         succeeded.push(result);
       } catch (err) {
-        try { await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`); } catch { /* savepoint gone */ }
+        if (isDeadlock(err)) throw err;
+        await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`);
         failed.push({ student_id: studentId, error: err.message });
       }
     }
-    await conn.commit();
-  } catch (err) {
-    try { await conn.rollback(); } catch { /* swallow */ }
-    throw err;
-  } finally {
-    conn.release();
-  }
-
-  return { succeeded, failed };
+    return { succeeded, failed };
+  });
 }
 
 // ─── getStatusToday ───────────────────────────────────────────────────────────
@@ -812,7 +849,7 @@ async function processSchoolOverride(pool, {
 
   // 4. Reuse driver transaction worker
   const conn = await pool.getConnection();
-  await conn.beginTransaction();
+  await beginCheckinTransaction(conn);
   try {
     const result = await _buildCheckinTransaction(conn, {
       userId,
@@ -872,28 +909,285 @@ async function processSchoolOverride(pool, {
   }
 }
 
+// ─── processSchoolOverrideAll ─────────────────────────────────────────────────
+
+/**
+ * School confirms a whole session on behalf of the driver, marking only the
+ * exceptions.
+ *
+ * The single-student override (processSchoolOverride) required the school to
+ * pick pupils one at a time, which does not match how the day actually works:
+ * the driver ran the route and almost everyone boarded. The school knows the
+ * short list of who did not. So the selection is inverted — the caller sends
+ * `absentStudentIds`, and every other eligible pupil is confirmed present.
+ *
+ * Eligibility mirrors processCheckinAll (the driver's own bulk path) so the two
+ * cannot disagree about who counts:
+ *   - assigned to a vehicle
+ *   - session enabled for that pupil
+ *   - not already done for the session today
+ *   - no active leave record for today + session
+ * A pupil on recorded leave is therefore never confirmed present even if the
+ * caller forgets to tick them — the leave record wins, matching the 409 the
+ * single-student path raises.
+ *
+ * Transaction shape follows processCheckinAll: one pooled connection for the
+ * whole batch (a per-pupil getConnection() thrashed the 10-slot pool at 07:00),
+ * with a SAVEPOINT per pupil so one failure does not discard the rest.
+ *
+ * Each confirmed pupil gets the same checkin_override audit row the
+ * single-student path writes, plus one batch-level row recording the whole
+ * decision — including who was left out and why the school says so.
+ */
+async function processSchoolOverrideAll(pool, {
+  userId,
+  userRole,
+  userDisplayName,
+  ipAddress,
+  userAgent,
+  schoolId,
+  session,
+  status = 'CHECKED_IN',
+  reason,
+  absentStudentIds = [],
+  gradeFilter = null,
+}) {
+  assertSession(session);
+  if (!['CHECKED_IN', 'CHECKED_OUT'].includes(status)) {
+    throw makeError("status must be 'CHECKED_IN' or 'CHECKED_OUT'", 400);
+  }
+  const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+  if (!trimmedReason) throw makeError('กรุณาระบุเหตุผลการยืนยันแทน', 400);
+  if (trimmedReason.length > 500) throw makeError('เหตุผลต้องไม่เกิน 500 ตัวอักษร', 400);
+  if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
+
+  // Absent ids arrive from a form; keep only positive integers so a malformed
+  // entry cannot silently widen the set that gets confirmed present.
+  const absentSet = new Set(
+    (Array.isArray(absentStudentIds) ? absentStudentIds : [])
+      .map(n => Number.parseInt(n, 10))
+      .filter(n => Number.isInteger(n) && n > 0)
+  );
+
+  const sessionFilter = session === 'morning'
+    ? 'AND s.morning_enabled = TRUE'
+    : 'AND s.evening_enabled = TRUE';
+  const doneColumn = session === 'morning' ? 'ds.morning_done' : 'ds.evening_done';
+  // Tolerant grade match, not `= ?`. The route in front of this currently blocks
+  // grade teachers outright, so gradeFilter is null today — but an exact match is
+  // the bug gradeScopeCounts.test.js was written for (variant spellings like
+  // 'ประถมศึกษาปีที่ 4' silently match nothing), and leaving it here would hand
+  // that bug to whoever wires the parameter up later.
+  const eqGrades = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const gradeAnd = eqGrades ? ` AND s.grade IN (${eqGrades.map(() => '?').join(',')})` : '';
+
+  const params = [schoolId];
+  if (eqGrades) params.push(...eqGrades);
+  params.push(session);
+
+  const [eligible] = await pool.query(
+    `SELECT s.id, s.vehicle_id, s.first_name, s.last_name, v.plate_no
+       FROM students s
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id
+       LEFT JOIN daily_status ds
+              ON ds.student_id = s.id AND ds.check_date = CURDATE()
+      WHERE s.school_id = ?
+        AND s.is_deleted = FALSE
+        AND s.vehicle_id IS NOT NULL
+        AND (${doneColumn} IS NULL OR ${doneColumn} = FALSE)
+        ${sessionFilter}${gradeAnd}
+        AND NOT EXISTS (
+          SELECT 1 FROM student_leaves sl
+           WHERE sl.student_id = s.id
+             AND sl.leave_date = CURDATE()
+             AND sl.cancelled = FALSE
+             AND (sl.session = ? OR sl.session = 'both'))`,
+    params
+  );
+
+  const toConfirm = eligible.filter(s => !absentSet.has(Number(s.id)));
+  const skipped = eligible
+    .filter(s => absentSet.has(Number(s.id)))
+    .map(s => ({ student_id: s.id, reason: 'marked_absent' }));
+
+  const succeeded = [];
+  const failed = [];
+  const confirmedAt = new Date().toISOString();
+  const termId = await getCurrentTerm(pool);
+
+  const conn = await pool.getConnection();
+  try {
+    await beginCheckinTransaction(conn);
+
+    for (const student of toConfirm) {
+      const sp = `sov_${student.id}`;
+      try {
+        await conn.query(`SAVEPOINT ${sp}`);
+
+        const [[prior]] = await conn.query(
+          `SELECT morning_done, morning_ts, evening_done, evening_ts
+             FROM daily_status WHERE check_date = CURDATE() AND student_id = ? LIMIT 1`,
+          [student.id]
+        );
+        const priorDailyStatus = prior
+          ? {
+            morning_done: !!prior.morning_done,
+            morning_ts: prior.morning_ts ? new Date(prior.morning_ts).toISOString() : null,
+            evening_done: !!prior.evening_done,
+            evening_ts: prior.evening_ts ? new Date(prior.evening_ts).toISOString() : null,
+          }
+          : { morning_done: false, morning_ts: null, evening_done: false, evening_ts: null };
+
+        const result = await _buildCheckinTransaction(conn, {
+          userId,
+          vehicleId: student.vehicle_id,
+          plateNo: student.plate_no || null,
+          studentId: student.id,
+          session,
+          status,
+          termId,
+          source: 'web',
+        });
+
+        await logAudit({
+          conn,
+          userId,
+          action: 'UPDATE',
+          entityType: 'checkin_override',
+          entityId: String(student.id),
+          oldValue: priorDailyStatus,
+          newValue: {
+            school_id: schoolId,
+            student_id: student.id,
+            student_name: `${student.first_name} ${student.last_name}`,
+            vehicle_id: student.vehicle_id,
+            plate_no: student.plate_no || null,
+            session,
+            status,
+            reason: trimmedReason,
+            confirmed_by_user_id: userId,
+            confirmed_by_role: userRole || null,
+            confirmed_by_display_name: userDisplayName || null,
+            override_checkin_log_id: result.log_id,
+            timestamp_utc: confirmedAt,
+            batch: true,
+          },
+          ipAddress: ipAddress || null,
+          userAgent: userAgent || null,
+        });
+
+        await conn.query(`RELEASE SAVEPOINT ${sp}`);
+        succeeded.push({ student_id: student.id, checkin_log_id: result.log_id });
+      } catch (err) {
+        if (isDeadlock(err)) throw err;
+        await conn.query(`ROLLBACK TO SAVEPOINT ${sp}`);
+        failed.push({ student_id: student.id, error: err.message });
+      }
+    }
+
+    // One row describing the whole decision. Without it the audit trail shows a
+    // burst of individual confirmations with no record of who was deliberately
+    // left out — which is the half a complaint would actually ask about.
+    await logAudit({
+      conn,
+      userId,
+      action: 'UPDATE',
+      entityType: 'checkin_override_batch',
+      entityId: String(schoolId),
+      oldValue: null,
+      newValue: {
+        school_id: schoolId,
+        session,
+        status,
+        reason: trimmedReason,
+        grade_scope: gradeFilter || null,
+        eligible_count: eligible.length,
+        confirmed_count: succeeded.length,
+        absent_marked_count: skipped.length,
+        failed_count: failed.length,
+        absent_student_ids: skipped.map(s => s.student_id),
+        confirmed_by_user_id: userId,
+        confirmed_by_role: userRole || null,
+        confirmed_by_display_name: userDisplayName || null,
+        timestamp_utc: confirmedAt,
+      },
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null,
+    });
+
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* swallow */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+
+  return {
+    session,
+    status,
+    eligible_count: eligible.length,
+    confirmed_count: succeeded.length,
+    absent_marked_count: skipped.length,
+    failed_count: failed.length,
+    confirmed_at: confirmedAt,
+    confirmed_by: userDisplayName || null,
+    succeeded,
+    skipped,
+    failed,
+  };
+}
+
 // ─── getNoShowStudents (roadmap A — no-show; checkout-independent) ─────────────
 // Students who SHOULD have boarded (assigned to a bus + session-enabled) but have
 // NO CHECKED_IN for the day/session, excluding those on leave. Built on CHECKED_IN
 // (reliably recorded ~90%+) so it is trustworthy even though checkout is not.
-async function getNoShowStudents(pool, { schoolId, session, date = null }) {
+// AUD-004 — `gradeFilter` pins the result to one grade for a teacher sub-account.
+// This read names children who did NOT board, with their classroom and bus, for any
+// date the caller asks for; it is the most sensitive roster on the school router, so
+// it follows the same grade boundary as every other /api/school read rather than
+// being the one exception. Matched tolerantly (gradeEquivalents) because
+// students.grade is stored inconsistently — an exact match would hide a teacher's
+// own missing pupils, which is the failure that matters here.
+async function getNoShowStudents(pool, { schoolId, session, date = null, gradeFilter = null }) {
   assertSession(session);
   const enabledCol = session === 'morning' ? 's.morning_enabled' : 's.evening_enabled';
+  // CS5-01 (same root cause as processCheckoutAll): a CHECKED_IN row that was
+  // voided still sits in checkin_logs, so a child whose boarding was cancelled
+  // dropped out of the no-show list while GET /api/school/missing (which reads
+  // daily_status) correctly listed them. Ignore a board whose session flag was
+  // positively reset by the void.
+  //
+  // Known consequence, measured and documented in
+  // docs/audit/core-scope-defect-hunt-2026-09-04.md §10.7: checkin_logs has no
+  // column linking a CANCELLED row to the row it reverses, so "was this boarding
+  // voided" has to be inferred from daily_status.<session>_done — and that one
+  // flag covers BOTH the board and the drop-off. Voiding a CHECK-OUT therefore
+  // resets it too, and this query then lists a pupil who demonstrably did board.
+  // It goes away only when that linkage column exists (§10.4 option B).
+  const doneCol = session === 'morning' ? 'ds.morning_done' : 'ds.evening_done';
+  const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+  const gradeAnd = eq ? ` AND s.grade IN (${eq.map(() => '?').join(',')})` : '';
   const [rows] = await pool.query(
     `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom, s.vehicle_id, v.plate_no
        FROM students s
        LEFT JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
-      WHERE s.school_id = ? AND s.is_deleted = FALSE
+      WHERE s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}
         AND ${enabledCol} = TRUE
         AND s.vehicle_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM checkin_logs ci
                          WHERE ci.student_id = s.id AND ci.session = ?
-                           AND ci.check_date = COALESCE(?, CURDATE()) AND ci.status = 'CHECKED_IN')
+                           AND ci.check_date = COALESCE(?, CURDATE()) AND ci.status = 'CHECKED_IN'
+                           AND NOT EXISTS (SELECT 1 FROM daily_status ds
+                                            WHERE ds.student_id = ci.student_id
+                                              AND ds.check_date = ci.check_date
+                                              AND ${doneCol} = FALSE))
         AND NOT EXISTS (SELECT 1 FROM student_leaves sl
                          WHERE sl.student_id = s.id AND sl.leave_date = COALESCE(?, CURDATE())
                            AND sl.cancelled = FALSE AND (sl.session = ? OR sl.session = 'both'))
       ORDER BY s.grade, s.classroom, s.first_name`,
-    [schoolId, session, date, date, session]
+    eq ? [schoolId, ...eq, session, date, date, session]
+       : [schoolId, session, date, date, session]
   );
   return rows;
 }
@@ -921,6 +1215,12 @@ async function voidCheckin(pool, {
   logId,
   reason,
   scope = { kind: 'admin' },
+  // When the voided row was not the only check for that session (e.g. the
+  // driver boarded the child, then a teacher recorded the school arrival and
+  // undoes it), keep the session "done" on the strength of the earlier row
+  // instead of clearing it. Off by default so the existing void paths keep
+  // their exact behaviour.
+  restorePriorDone = false,
 }) {
   const id = Number.parseInt(logId, 10);
   if (!Number.isInteger(id) || id <= 0) {
@@ -1009,12 +1309,31 @@ async function voidCheckin(pool, {
     // 6. Reset the matching daily_status session flag (only the row's session).
     const doneCol = log.session === 'morning' ? 'morning_done' : 'evening_done';
     const tsCol   = log.session === 'morning' ? 'morning_ts'   : 'evening_ts';
-    await conn.query(
-      `UPDATE daily_status
-          SET ${doneCol} = FALSE, ${tsCol} = NULL
-        WHERE check_date = ? AND student_id = ?`,
-      [log.check_date, log.student_id]
-    );
+    let prior = null;
+    if (restorePriorDone) {
+      const [[p]] = await conn.query(
+        `SELECT id, status, checked_at FROM checkin_logs
+          WHERE student_id = ? AND session = ? AND check_date = ? AND id < ?
+          ORDER BY id DESC LIMIT 1`,
+        [log.student_id, log.session, log.check_date, log.id]
+      );
+      if (p && (p.status === 'CHECKED_IN' || p.status === 'CHECKED_OUT')) prior = p;
+    }
+    if (prior) {
+      await conn.query(
+        `UPDATE daily_status
+            SET ${doneCol} = TRUE, ${tsCol} = ?
+          WHERE check_date = ? AND student_id = ?`,
+        [prior.checked_at, log.check_date, log.student_id]
+      );
+    } else {
+      await conn.query(
+        `UPDATE daily_status
+            SET ${doneCol} = FALSE, ${tsCol} = NULL
+          WHERE check_date = ? AND student_id = ?`,
+        [log.check_date, log.student_id]
+      );
+    }
 
     // 7. Audit (DELETE = the business reversal). conn-scoped so it commits atomically.
     await logAudit({
@@ -1030,7 +1349,7 @@ async function voidCheckin(pool, {
         session:         log.session,
         status:          log.status,
         vehicle_id:      log.vehicle_id,
-        check_date:      log.check_date,
+        check_date:      toBangkokDate(log.check_date),
         daily_status: priorDs
           ? { morning_done: !!priorDs.morning_done, evening_done: !!priorDs.evening_done }
           : null,
@@ -1067,6 +1386,228 @@ async function voidCheckin(pool, {
   }
 }
 
+// ─── Teacher check (term 2, phase 1) ──────────────────────────────────────────
+//
+// In the first phase, teachers record attendance themselves as ROUTINE work —
+// not as an exception like /checkin-override (no reason, grade teachers allowed
+// for their own grade). A teacher stands at the school, so they can only attest
+// to what happens there:
+//   morning → the child ARRIVED at school    → CHECKED_OUT (school drop-off)
+//   evening → the child BOARDED to go home   → CHECKED_IN  (school boarding)
+// Both set the session's daily_status flag, exactly like the driver's taps.
+// Drivers may still check in their app; whoever records first counts, and the
+// duplicate / transition guards in _buildCheckinTransaction keep a second tap
+// from double-counting (a teacher's tap on an already-recorded child is skipped).
+
+const TEACHER_STATUS = Object.freeze({ morning: 'CHECKED_OUT', evening: 'CHECKED_IN' });
+const TEACHER_BATCH_MAX = 200;
+
+function teacherStatusFor(session) {
+  return TEACHER_STATUS[session] || null;
+}
+
+/**
+ * Today's roster for the teacher check page: the school's riders (only the
+ * teacher's own grade when gradeFilter is set), grouped by vehicle, each with
+ * the latest check for `session` today and who recorded it.
+ */
+async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, userId }) {
+  if (!teacherStatusFor(session)) throw makeError("session ต้องเป็น 'morning' หรือ 'evening'", 400);
+  const enabledCol = session === 'morning' ? 's.morning_enabled' : 's.evening_enabled';
+  const params = [session, schoolId];
+  let gradeAnd = '';
+  if (gradeFilter) {
+    gradeAnd = ' AND s.grade IN (?)';
+    params.push(gradeEquivalents(gradeFilter));
+  }
+  const [rows] = await pool.query(
+    `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+            s.vehicle_id, v.plate_no,
+            cl.id AS log_id, cl.status AS log_status, cl.checked_at, cl.checked_by,
+            u.role AS checked_by_role, u.display_name AS checked_by_name,
+            (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
+                         WHEN MAX(sl.session = 'both') = 1 THEN 'both'
+                         WHEN COUNT(DISTINCT sl.session) > 1 THEN 'both'
+                         ELSE MAX(sl.session) END
+               FROM student_leaves sl
+              WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE
+            ) AS leave_session
+       FROM students s
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id
+       LEFT JOIN checkin_logs cl
+              ON cl.id = (SELECT MAX(c2.id) FROM checkin_logs c2
+                           WHERE c2.student_id = s.id AND c2.session = ?
+                             AND c2.check_date = CURDATE())
+       LEFT JOIN users u ON u.id = cl.checked_by
+      WHERE s.school_id = ? AND s.is_deleted = FALSE AND ${enabledCol} = TRUE${gradeAnd}
+      ORDER BY v.plate_no IS NULL, v.plate_no, s.grade, s.classroom, s.first_name`,
+    params
+  );
+
+  const target = teacherStatusFor(session);
+  const byVehicle = new Map();
+  for (const r of rows) {
+    const key = r.vehicle_id || '__none';
+    if (!byVehicle.has(key)) {
+      byVehicle.set(key, { vehicle_id: r.vehicle_id || null, plate_no: r.plate_no || null, students: [] });
+    }
+    const onLeave = r.leave_session === 'both' || r.leave_session === session;
+    const status = r.log_status && r.log_status !== 'CANCELLED' ? r.log_status : null;
+    // "done" for the teacher = the thing the teacher attests to has been
+    // recorded, or the session is already finished (evening drop-off at home).
+    const done = !!status && (status === target || (session === 'evening' && status === 'CHECKED_OUT'));
+    byVehicle.get(key).students.push({
+      id: r.id,
+      name: `${r.prefix || ''}${r.first_name} ${r.last_name}`.trim(),
+      grade: r.grade,
+      classroom: r.classroom,
+      on_leave: onLeave,
+      no_vehicle: !r.vehicle_id,
+      status,
+      done,
+      checked_at: status ? r.checked_at : null,
+      checked_by_role: status ? r.checked_by_role || null : null,
+      checked_by_name: status ? r.checked_by_name || null : null,
+      // Only the teacher's own, still-current tap can be undone from this page.
+      can_undo: !!status && status === target && r.checked_by === userId,
+      log_id: status ? r.log_id : null,
+    });
+  }
+  return { session, target_status: target, vehicles: [...byVehicle.values()] };
+}
+
+/**
+ * Record what the teacher saw for one or more students. Each student is its own
+ * transaction (one failure never blocks the rest of the bus). Returns per-student
+ * outcomes: 'ok' | 'already' | 'on_leave' | 'no_vehicle' | 'not_rider' | 'not_found'.
+ */
+async function processTeacherCheck(pool, {
+  userId, userRole = null, userDisplayName = null, ipAddress = null, userAgent = null,
+  schoolId, gradeFilter = null, session, studentIds,
+}) {
+  const status = teacherStatusFor(session);
+  if (!status) throw makeError("session ต้องเป็น 'morning' หรือ 'evening'", 400);
+  if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
+  const ids = [...new Set((Array.isArray(studentIds) ? studentIds : [])
+    .map(x => Number.parseInt(x, 10)).filter(n => Number.isInteger(n) && n > 0))];
+  if (!ids.length) throw makeError('กรุณาเลือกนักเรียน', 400);
+  if (ids.length > TEACHER_BATCH_MAX) throw makeError(`เลือกได้ครั้งละไม่เกิน ${TEACHER_BATCH_MAX} คน`, 400);
+
+  const params = [ids, schoolId];
+  let gradeAnd = '';
+  if (gradeFilter) {
+    gradeAnd = ' AND s.grade IN (?)';
+    params.push(gradeEquivalents(gradeFilter));
+  }
+  const [students] = await pool.query(
+    `SELECT s.id, s.first_name, s.last_name, s.vehicle_id, v.plate_no,
+            s.morning_enabled, s.evening_enabled
+       FROM students s
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id
+      WHERE s.id IN (?) AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}`,
+    params
+  );
+  const byId = new Map(students.map(s => [s.id, s]));
+  const [leaves] = await pool.query(
+    `SELECT student_id FROM student_leaves
+      WHERE student_id IN (?) AND leave_date = CURDATE() AND cancelled = FALSE
+        AND session IN (?, 'both')`,
+    [ids, session]
+  );
+  const onLeave = new Set(leaves.map(l => l.student_id));
+  const termId = await getCurrentTerm(pool);
+
+  const results = [];
+  for (const id of ids) {
+    const st = byId.get(id);
+    // Outside the school or outside the teacher's grade looks the same as
+    // "not found" — the response never confirms a student exists elsewhere.
+    if (!st) { results.push({ student_id: id, result: 'not_found' }); continue; }
+    const enabled = session === 'morning' ? st.morning_enabled : st.evening_enabled;
+    if (!enabled) { results.push({ student_id: id, result: 'not_rider' }); continue; }
+    if (!st.vehicle_id) { results.push({ student_id: id, result: 'no_vehicle' }); continue; }
+    if (onLeave.has(id)) { results.push({ student_id: id, result: 'on_leave' }); continue; }
+
+    const conn = await pool.getConnection();
+    await beginCheckinTransaction(conn);
+    try {
+      const r = await _buildCheckinTransaction(conn, {
+        userId, vehicleId: st.vehicle_id, plateNo: st.plate_no || null,
+        studentId: st.id, session, status, termId, source: 'web',
+      });
+      await logAudit({
+        conn, userId, action: 'CREATE', entityType: 'checkin_teacher', entityId: String(r.log_id),
+        newValue: {
+          school_id: schoolId, student_id: st.id, student_name: r.student_name,
+          vehicle_id: st.vehicle_id, session, status, grade_scope: gradeFilter || null,
+          recorded_by_user_id: userId, recorded_by_role: userRole, recorded_by_display_name: userDisplayName,
+        },
+        ipAddress, userAgent,
+      });
+      await conn.commit();
+      results.push({ student_id: id, result: 'ok', log_id: r.log_id, checked_at: r.checked_at });
+    } catch (err) {
+      await conn.rollback();
+      // 409 = already recorded (by the driver or another teacher) or the
+      // session is already finished — first record wins, so it is a skip.
+      if (err.statusCode === 409) results.push({ student_id: id, result: 'already' });
+      else throw err;
+    } finally {
+      conn.release();
+    }
+  }
+  const count = k => results.filter(r => r.result === k).length;
+  return {
+    session, status, results,
+    recorded: count('ok'), already: count('already'),
+    skipped: results.length - count('ok') - count('already'),
+  };
+}
+
+/**
+ * A teacher takes back their OWN tap from today (a mis-tap). Only the latest
+ * check for that student/session, recorded by this user, with the teacher's
+ * status, inside their school and grade. If the driver had recorded something
+ * earlier in that session, the session stays done on the strength of it.
+ */
+async function undoTeacherCheck(pool, {
+  userId, userRole = null, userDisplayName = null, ipAddress = null, userAgent = null,
+  schoolId, gradeFilter = null, logId,
+}) {
+  const id = Number.parseInt(logId, 10);
+  if (!Number.isInteger(id) || id <= 0) throw makeError('logId ไม่ถูกต้อง', 400);
+  const params = [id, schoolId];
+  let gradeAnd = '';
+  if (gradeFilter) {
+    gradeAnd = ' AND s.grade IN (?)';
+    params.push(gradeEquivalents(gradeFilter));
+  }
+  const [[log]] = await pool.query(
+    `SELECT cl.id, cl.student_id, cl.session, cl.status, cl.checked_by,
+            cl.check_date = CURDATE() AS is_today,
+            (SELECT MAX(c2.id) FROM checkin_logs c2
+              WHERE c2.student_id = cl.student_id AND c2.session = cl.session
+                AND c2.check_date = cl.check_date) AS latest_id
+       FROM checkin_logs cl
+       JOIN students s ON s.id = cl.student_id
+      WHERE cl.id = ? AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}`,
+    params
+  );
+  if (!log) throw makeError('ไม่พบรายการที่ต้องการยกเลิก', 404);
+  if (log.checked_by !== userId || log.status !== teacherStatusFor(log.session)) {
+    throw makeError('ยกเลิกได้เฉพาะรายการที่คุณบันทึกเอง', 403);
+  }
+  if (!Number(log.is_today)) throw makeError('ยกเลิกได้เฉพาะรายการของวันนี้', 409);
+  if (Number(log.latest_id) !== Number(log.id)) {
+    throw makeError('มีการบันทึกรายการใหม่ต่อจากนี้แล้ว จึงยกเลิกไม่ได้', 409);
+  }
+  return voidCheckin(pool, {
+    userId, userRole, userDisplayName, ipAddress, userAgent,
+    logId: id, reason: 'ครูยกเลิกรายการที่บันทึกผิด',
+    scope: { kind: 'school', schoolId }, restorePriorDone: true,
+  });
+}
+
 module.exports = {
   getDriverVehicle,
   resolveVehicleForEmergency,
@@ -1078,5 +1619,10 @@ module.exports = {
   getStatusToday,
   getNoShowStudents,
   processSchoolOverride,
+  processSchoolOverrideAll,
   voidCheckin,
+  TEACHER_STATUS,
+  getTeacherRoster,
+  processTeacherCheck,
+  undoTeacherCheck,
 };

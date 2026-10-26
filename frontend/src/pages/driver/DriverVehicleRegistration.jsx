@@ -242,7 +242,7 @@ export default function DriverVehicleRegistration() {
 
           <div className="flex gap-3 pt-1">
             <button type="submit" disabled={saving}
-              className="flex-1 bg-green-600 active:bg-green-700 disabled:opacity-50 text-white text-xl font-bold rounded-2xl py-4">
+              className="flex-1 bg-green-700 active:bg-green-700 disabled:opacity-50 text-white text-xl font-bold rounded-2xl py-4">
               {saving ? 'กำลังบันทึก…' : 'บันทึก'}
             </button>
             <button type="button" onClick={() => { resetForm(); setShowForm(false); }}
@@ -265,7 +265,7 @@ export default function DriverVehicleRegistration() {
               <div key={sid}>
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-lg font-bold text-gray-800">{grp.name}</h2>
-                  <span className="text-base text-gray-500">{grp.items.length} คน</span>
+                  <span className="text-base text-ink-muted">{grp.items.length} คน</span>
                 </div>
                 <div className="space-y-3">
                   {grp.items.map((st) => {
@@ -274,12 +274,12 @@ export default function DriverVehicleRegistration() {
                       <div key={st.id} className="bg-white rounded-2xl border-2 border-gray-200 px-4 py-4 flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-lg font-medium text-gray-900 truncate">{st.raw_student_name}</p>
-                          <p className="text-base text-gray-500 mt-0.5">{PICKUP_LABEL[st.pickup_type] || '-'}</p>
+                          <p className="text-base text-ink-muted mt-0.5">{PICKUP_LABEL[st.pickup_type] || '-'}</p>
                           <div className="mt-2"><ApprovalPill status={st.approval_status} /></div>
                         </div>
                         {!locked && (
                           <button onClick={() => setConfirmDelete(st)} disabled={deletingId === st.id}
-                            className="shrink-0 flex flex-col items-center text-red-600 active:text-red-800 disabled:opacity-40 px-2 py-1">
+                            className="shrink-0 flex flex-col items-center text-danger-ink active:text-red-800 disabled:opacity-40 px-2 py-1">
                             <Trash2 className="w-7 h-7" />
                             <span className="text-sm font-medium mt-0.5">ลบ</span>
                           </button>
@@ -452,9 +452,9 @@ function DriverDocuments() {
       {/* Attached list */}
       <div className="mt-5">
         {loading ? (
-          <p className="text-base text-gray-400 py-4">กำลังโหลด…</p>
+          <p className="text-base text-ink-muted py-4">กำลังโหลด…</p>
         ) : items.length === 0 ? (
-          <p className="text-base text-gray-500 py-4">ยังไม่มีเอกสารแนบ</p>
+          <p className="text-base text-ink-muted py-4">ยังไม่มีเอกสารแนบ</p>
         ) : (
           <div className="space-y-3">
             {items.map((d) => {
@@ -464,7 +464,7 @@ function DriverDocuments() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-lg font-medium text-gray-900">{DOC_LABEL[d.doc_type] || 'เอกสาร'}</p>
-                      <p className="text-base text-gray-500 mt-0.5 truncate">{d.original_name || '-'}</p>
+                      <p className="text-base text-ink-muted mt-0.5 truncate">{d.original_name || '-'}</p>
                       <div className="mt-2"><ReviewPill status={d.review_status} /></div>
                       {d.review_status === 'REJECTED' && d.review_note && (
                         <p className="text-base text-red-700 mt-2 leading-snug">เหตุผล: {d.review_note}</p>
@@ -478,7 +478,7 @@ function DriverDocuments() {
                       </button>
                       {!locked && (
                         <button onClick={() => setConfirmDoc(d)} disabled={busyId === d.id}
-                          className="flex flex-col items-center text-red-600 active:text-red-800 disabled:opacity-40 px-2">
+                          className="flex flex-col items-center text-danger-ink active:text-red-800 disabled:opacity-40 px-2">
                           <Trash2 className="w-7 h-7" />
                           <span className="text-sm font-medium mt-0.5">ลบ</span>
                         </button>

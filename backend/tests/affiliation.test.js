@@ -131,6 +131,7 @@ describe('GET /api/affiliation/schools', () => {
     expect(s).toHaveProperty('name');
     expect(s).toHaveProperty('student_count');
     expect(s).toHaveProperty('vehicle_count');
+    expect(s).toHaveProperty('last_login_at');
   });
 
   test('test school appears in list', async () => {

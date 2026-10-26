@@ -6,7 +6,9 @@ import { AdminContextProvider } from './hooks/useAdminContext';
 import { ToastProvider } from './components/Toast';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
+import PolicyNoticeGate from './components/policy/PolicyNoticeGate';
 import { useVisitTracker } from './hooks/useVisitTracker';
+import { isGradeTeacher } from './utils/authScope';
 
 // Eager: Login is the entry path for unauthed users. Lazy-loading it would add
 // a Suspense flash on first paint for the most common cold-start state.
@@ -15,6 +17,9 @@ import Login from './pages/Login';
 // Lazy: everything past auth. Chunks are grouped by role so each user only
 // downloads what their role uses.
 const ChangePassword       = lazy(() => import('./pages/ChangePassword'));
+const PolicyCenter         = lazy(() => import('./pages/PolicyCenter'));
+const ForgotPassword       = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword        = lazy(() => import('./pages/ResetPassword'));
 const ParentStatus         = lazy(() => import('./pages/parent/ParentStatus'));
 const ParentLink           = lazy(() => import('./pages/parent/ParentLink'));
 const VehicleQr            = lazy(() => import('./pages/qr/VehicleQr'));
@@ -37,6 +42,7 @@ const DriverVehicleRegistration = lazy(() => import('./pages/driver/DriverVehicl
 // School
 const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
 const SchoolDashboard      = lazy(() => import('./pages/school/SchoolDashboard'));
+const TeacherCheck         = lazy(() => import('./pages/school/TeacherCheck'));
 const StudentSearch        = lazy(() => import('./pages/school/StudentSearch'));
 const VehicleList          = lazy(() => import('./pages/school/VehicleList'));
 const EmergencyList        = lazy(() => import('./pages/school/EmergencyList'));
@@ -74,6 +80,7 @@ const ProvVehicleList      = lazy(() => import('./pages/province/ProvVehicleList
 const ProvDailyStatus      = lazy(() => import('./pages/province/ProvDailyStatus'));
 const ProvEmergencyList    = lazy(() => import('./pages/province/ProvEmergencyList'));
 const ProvAuditLog         = lazy(() => import('./pages/province/ProvAuditLog'));
+const ProvUnitAccounts     = lazy(() => import('./pages/province/ProvUnitAccounts'));
 const ProvinceLiveVehicles = lazy(() => import('./pages/province/ProvinceLiveVehicles'));
 const ProvincePickupMap    = lazy(() => import('./pages/province/ProvincePickupMap'));
 const DeploymentReadiness  = lazy(() => import('./pages/province/DeploymentReadiness'));
@@ -89,6 +96,7 @@ const PolicyReport         = lazy(() => import('./pages/reports/PolicyReport'));
 const TransportLayout      = lazy(() => import('./pages/transport/TransportLayout'));
 const TransportDashboard   = lazy(() => import('./pages/transport/TransportDashboard'));
 const TransportVehicleList = lazy(() => import('./pages/transport/TransportVehicleList'));
+const TransportIncidentRoster = lazy(() => import('./pages/transport/TransportIncidentRoster'));
 const InspectionForm       = lazy(() => import('./pages/transport/InspectionForm'));
 const TransportPickupMap   = lazy(() => import('./pages/transport/TransportPickupMap'));
 const VerificationQueue    = lazy(() => import('./pages/transport/VerificationQueue'));
@@ -112,6 +120,11 @@ const ExecutivePrint       = lazy(() => import('./pages/admin/ExecutivePrint'));
 const SystemHealth         = lazy(() => import('./pages/admin/SystemHealth'));
 const TermSettings         = lazy(() => import('./pages/admin/TermSettings'));
 const AdminLiveVehicles    = lazy(() => import('./pages/admin/AdminLiveVehicles'));
+const AdminAccountSecurity = lazy(() => import('./pages/admin/AdminAccountSecurity'));
+const ParticipationCases      = lazy(() => import('./pages/participation/ParticipationCases'));
+const ParticipationCaseDetail = lazy(() => import('./pages/participation/ParticipationCaseDetail'));
+const ParticipationNewCase    = lazy(() => import('./pages/participation/ParticipationNewCase'));
+const ParticipationSummary    = lazy(() => import('./pages/participation/ParticipationSummary'));
 
 export const ROLE_HOME = {
   driver:      '/driver',
@@ -123,11 +136,14 @@ export const ROLE_HOME = {
 };
 
 // ── PrivateRoute: redirects to /login if not authenticated ───────────────────
-function PrivateRoute({ children, allowedRoles }) {
+function PrivateRoute({ children, allowedRoles, allowGradeTeacher = true }) {
   const { user, loading } = useAuth();
   if (loading) return <RouteFallback />;
   if (!user)   return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
+  const roleDenied = allowedRoles && !allowedRoles.includes(user.role);
+  const gradeTeacherDenied = !allowGradeTeacher && isGradeTeacher(user);
+  if (roleDenied || gradeTeacherDenied) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="bg-white rounded-2xl shadow-lg p-8 max-w-md w-full text-center">
@@ -142,7 +158,7 @@ function PrivateRoute({ children, allowedRoles }) {
       </div>
     );
   }
-  return children;
+  return <PolicyNoticeGate user={user}>{children}</PolicyNoticeGate>;
 }
 
 // ── Suspense fallback for lazy-loaded routes ────────────────────────────────
@@ -176,11 +192,22 @@ function ManualRedirect() {
   return <RouteFallback />;
 }
 
+// The consent API is intentionally dark when Vehicle QR is off. Keep a copied
+// or bookmarked legacy URL from landing on a form whose API cannot exist; the
+// current policy centre is the useful destination until that feature is
+// explicitly enabled.
+function DriverConsentRoute() {
+  const { features } = useAuth();
+  if (!features?.vehicleQr) return <Navigate to="/my-policy" replace />;
+  return <div className="p-4 max-w-md mx-auto"><DriverConsentForm /></div>;
+}
+
 // ── Role-based redirect after login ─────────────────────────────────────────
 function RootRedirect() {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user)   return <Navigate to="/login" replace />;
+  if (user.must_change_password) return <Navigate to="/change-password" replace />;
 
   return <Navigate to={ROLE_HOME[user.role] || '/login'} replace />;
 }
@@ -196,8 +223,15 @@ export default function App() {
         <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/change-password" element={<ChangePassword />} />
           <Route path="/manual/*" element={<ManualRedirect />} />
+          <Route path="/my-policy" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']}>
+              <Layout><PolicyCenter /></Layout>
+            </PrivateRoute>
+          } />
 
           {/* Driver module */}
           <Route
@@ -231,6 +265,7 @@ export default function App() {
             }
           >
             <Route index               element={<SchoolDashboard />} />
+            <Route path="teacher-check" element={<TeacherCheck />} />
             <Route path="students"     element={<StudentSearch />} />
             <Route path="vehicles"     element={<VehicleList />} />
             <Route path="vehicle-verification" element={<VehicleVerification />} />
@@ -286,6 +321,7 @@ export default function App() {
             <Route path="status"       element={<ProvDailyStatus />} />
             <Route path="emergencies"  element={<ProvEmergencyList />} />
             <Route path="audit-log"    element={<ProvAuditLog />} />
+            <Route path="unit-accounts" element={<ProvUnitAccounts />} />
             <Route path="live-vehicles" element={<ProvinceLiveVehicles />} />
             <Route path="pickup-map"   element={<ProvincePickupMap />} />
             <Route path="readiness"    element={<DeploymentReadiness />} />
@@ -318,6 +354,7 @@ export default function App() {
           >
             <Route index             element={<TransportDashboard />} />
             <Route path="vehicles"   element={<TransportVehicleList />} />
+            <Route path="vehicles/:id/incident-roster" element={<TransportIncidentRoster />} />
             <Route path="inspections" element={<InspectionForm />} />
             <Route path="verification" element={<VerificationQueue />} />
             <Route path="pickup-map"  element={<TransportPickupMap />} />
@@ -332,6 +369,17 @@ export default function App() {
           <Route path="/admin/users" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><UserManagement /></Layout>
+            </PrivateRoute>
+          } />
+          {/* Account security (LINE binding for password recovery). Sits under
+              /parent/link because that is the LIFF endpoint path, so LINE
+              returns the user to this page rather than to the parent screen.
+              Open to every role whose recovery CAN be enabled; whether it
+              actually is remains the server's decision, read from
+              /auth/recovery/config, and the page says so when it is not. */}
+          <Route path="/parent/link/admin-recovery" element={
+            <PrivateRoute allowedRoles={['admin', 'province', 'affiliation', 'transport']}>
+              <Layout><AdminAccountSecurity /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/audit-logs" element={
@@ -371,7 +419,7 @@ export default function App() {
           } />
           <Route path="/driver/consent" element={
             <PrivateRoute allowedRoles={['driver']}>
-              <div className="p-4 max-w-md mx-auto"><DriverConsentForm /></div>
+              <DriverConsentRoute />
             </PrivateRoute>
           } />
           <Route path="/admin/pickup-points" element={
@@ -427,6 +475,37 @@ export default function App() {
           <Route path="/admin/executive-print" element={
             <PrivateRoute allowedRoles={['admin']}>
               <ExecutivePrint />
+            </PrivateRoute>
+          } />
+
+          {/* Participation cases — the roles here match the router's own
+              requireRole list (participation.routes.js:32). Scope is enforced
+              in SQL from the token, so being allowed in is not being allowed
+              to see everything. The router is only mounted when
+              FEATURE_PARTICIPATION_CASES is on; with it off these pages load
+              and every call 404s, which the list page names explicitly rather
+              than showing an empty table. */}
+          <Route path="/participation" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']} allowGradeTeacher={false}>
+              <Layout><ParticipationCases /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/participation/new" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']} allowGradeTeacher={false}>
+              <Layout><ParticipationNewCase /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/participation/cases/:id" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']} allowGradeTeacher={false}>
+              <Layout><ParticipationCaseDetail /></Layout>
+            </PrivateRoute>
+          } />
+          {/* The aggregate of the same list. Same roles on purpose: the totals
+              are built from the rows scopeClause already allows the caller to
+              read, so anyone who may see the list may see its counts. */}
+          <Route path="/participation/summary" element={
+            <PrivateRoute allowedRoles={['school', 'affiliation', 'province', 'transport', 'driver', 'admin']} allowGradeTeacher={false}>
+              <Layout><ParticipationSummary /></Layout>
             </PrivateRoute>
           } />
 

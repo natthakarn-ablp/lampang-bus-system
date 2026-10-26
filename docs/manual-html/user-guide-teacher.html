@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือครู: เช็กชื่อขึ้น-ลงรถ — ระบบรถรับส่งนักเรียนจังหวัดลำปาง</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>@font-face{font-family:"Sarabun";font-weight:400;font-display:swap;src:url("fonts/Sarabun-Regular.ttf") format("truetype");}@font-face{font-family:"Sarabun";font-weight:700;font-display:swap;src:url("fonts/Sarabun-Bold.ttf") format("truetype");}
+:root{
+  --accent:#1e5fa8; --accent-dark:#16467d; --accent-soft:#eaf2fb;
+  --ink:#1a2230; --ink-soft:#475067; --muted:#6b7488;
+  --line:#e3e8f0; --bg:#f5f7fb; --card:#ffffff;
+  --warn-bg:#fff7e6; --warn-bd:#e8a33d; --warn-ink:#7a4d06;
+  --tip-bg:#eef6ff; --tip-bd:#4a90d9; --tip-ink:#1a4e84;
+  --note-bg:#f3f5f9; --note-bd:#9aa6bd; --note-ink:#3a445a;
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Sarabun',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px; line-height:1.75; -webkit-font-smoothing:antialiased;
+}
+.topnav{position:sticky; top:0; z-index:50; background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px); border-bottom:1px solid var(--line);}
+.nav-inner{max-width:980px; margin:0 auto; padding:8px 20px; display:flex; flex-wrap:wrap; gap:4px;}
+.topnav a{font-size:14.5px; font-weight:500; color:var(--ink-soft); text-decoration:none;
+  padding:6px 12px; border-radius:8px; white-space:nowrap;}
+.topnav a:hover{background:var(--accent-soft); color:var(--accent-dark);}
+.topnav a.active{background:var(--accent); color:#fff;}
+.wrap{max-width:980px; margin:0 auto; padding:0 20px 80px;}
+main{background:var(--card); margin-top:28px; padding:48px 56px; border-radius:var(--radius);
+  border:1px solid var(--line); box-shadow:0 1px 3px rgba(16,30,54,.04);}
+h1{font-size:30px; font-weight:700; line-height:1.3; margin:0 0 8px; color:var(--ink);
+  padding-bottom:16px; border-bottom:3px solid var(--accent);}
+h2{font-size:23px; font-weight:700; margin:40px 0 12px; color:var(--accent-dark);
+  padding-top:12px;}
+h3{font-size:19.5px; font-weight:600; margin:28px 0 8px; color:var(--ink);}
+h4{font-size:17px; font-weight:600; margin:20px 0 6px; color:var(--ink-soft);}
+p{margin:10px 0;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+strong{font-weight:600; color:var(--ink);}
+ul,ol{margin:10px 0; padding-left:26px;}
+li{margin:5px 0;}
+hr{border:none; border-top:1px solid var(--line); margin:32px 0;}
+code{font-family:'IBM Plex Mono',monospace; font-size:14.5px; background:#eef1f6;
+  padding:2px 6px; border-radius:5px; color:#7a3a8c;}
+pre{background:#1e2430; color:#e6e9ef; padding:16px 18px; border-radius:10px; overflow:auto;}
+pre code{background:none; color:inherit; padding:0;}
+main img{display:block; max-width:100%; height:auto; margin:16px auto 4px; border:1px solid var(--line);
+  border-radius:10px; box-shadow:0 3px 12px rgba(16,30,54,.10);}
+main p > em:only-child{display:block; text-align:center; color:var(--muted); font-size:13.5px; margin:0 0 18px;}
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:15.5px;
+  border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+thead th{background:var(--accent); color:#fff; font-weight:600; text-align:left;
+  padding:11px 14px; font-size:15px;}
+tbody td{padding:10px 14px; border-top:1px solid var(--line); vertical-align:top;}
+tbody tr:nth-child(even){background:#fafbfd;}
+tbody tr:hover{background:var(--accent-soft);}
+blockquote.callout{margin:16px 0; padding:14px 18px; border-radius:10px; border-left:5px solid;
+  font-size:16px;}
+blockquote.callout p{margin:6px 0;}
+blockquote.callout ul{margin:6px 0;}
+.callout.warn{background:var(--warn-bg); border-color:var(--warn-bd); color:var(--warn-ink);}
+.callout.tip{background:var(--tip-bg); border-color:var(--tip-bd); color:var(--tip-ink);}
+.callout.note{background:var(--note-bg); border-color:var(--note-bd); color:#3a445a;}
+.callout.warn strong,.callout.tip strong,.callout.note strong{color:inherit;}
+.docfoot{max-width:980px; margin:24px auto 0; padding:0 20px; color:var(--muted); font-size:13.5px; text-align:center;}
+.toolbar{max-width:980px; margin:18px auto 0; padding:0 20px; display:flex; justify-content:flex-end;}
+.btn-print{font-size:14px; font-weight:500; color:var(--accent-dark); background:var(--accent-soft);
+  border:1px solid var(--line); padding:7px 14px; border-radius:8px; cursor:pointer;}
+.btn-print:hover{background:#dceafa;}
+@media (max-width:640px){
+  body{font-size:16px;}
+  main{padding:28px 20px;}
+  h1{font-size:24px;} h2{font-size:20px;} h3{font-size:17.5px;}
+  .nav-inner{padding:6px 12px;}
+}
+@media print{
+  .topnav,.toolbar{display:none;}
+  body{background:#fff; font-size:12pt;}
+  main{box-shadow:none; border:none; margin:0; padding:0;}
+  a{color:#000; text-decoration:none;}
+  table,blockquote,h2,h3,figure,img{page-break-inside:avoid; break-inside:avoid;}
+  main img{box-shadow:none; max-height:90vh; width:auto;}
+}
+</style>
+</head>
+<body>
+<nav class="topnav"><div class="nav-inner"><a href="index.html">หน้าหลัก</a><a href="user-guide-driver.html">คนขับ</a><a href="user-guide-school.html">โรงเรียน</a><a href="user-guide-teacher.html" class="active">ครูเช็กชื่อ</a><a href="user-guide-affiliation.html">สังกัด/เขต</a><a href="user-guide-province.html">จังหวัด</a><a href="user-guide-transport.html">ขนส่ง</a><a href="user-guide-admin.html">ผู้ดูแลระบบ</a><a href="user-guide-parent.html">ผู้ปกครอง</a></div></nav>
+<div class="toolbar"><button class="btn-print" onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>
+<div class="wrap">
+<main>
+<h1>คู่มือครูประจำสายชั้น: เช็กชื่อขึ้น-ลงรถ</h1>
+<blockquote class="callout note">
+<p>เว็บไซต์ <a href="https://schoolbuslampang.com" target="_blank" rel="noopener">schoolbuslampang.com</a> · ปรับปรุง 24 ต.ค. 2569 · ภาพในคู่มือเป็นข้อมูลตัวอย่าง ไม่ใช่ข้อมูลจริง</p>
+</blockquote>
+
+<h2 id="who">คู่มือนี้สำหรับใคร และทำอะไรได้บ้าง</h2>
+<ul>
+<li>สำหรับครูที่ได้รับ<strong>บัญชีครูประจำสายชั้น</strong>จากโรงเรียน</li>
+<li>คุณเช็กชื่อเด็กที่ใช้รถรับส่ง<strong>เฉพาะชั้นที่รับผิดชอบ</strong></li>
+<li><strong>รอบเช้า</strong> บันทึกว่าเด็ก<strong>ถึงโรงเรียน</strong>แล้ว</li>
+<li><strong>รอบเย็น</strong> บันทึกว่าเด็ก<strong>ขึ้นรถกลับบ้าน</strong>แล้ว</li>
+<li>คุณดูรายชื่อนักเรียน รถรับส่ง และรายงานของชั้นตัวเองได้ แต่<strong>แก้ไขไม่ได้</strong></li>
+<li>ไม่ต้องพิมพ์เหตุผล ระบบจำเองว่าใครกด และกดเวลาไหน</li>
+</ul>
+
+<h2 id="start">เริ่มต้นใช้งาน</h2>
+<h3>ขอบัญชี</h3>
+<p>ขอบัญชีจากผู้ดูแลบัญชีของโรงเรียน (เจ้าหน้าที่ที่ใช้บัญชีโรงเรียนหลัก) เขาจะให้<strong>ชื่อผู้ใช้</strong>และ<strong>รหัสผ่านเริ่มต้น</strong>กับคุณ</p>
+<h3>เข้าสู่ระบบ</h3>
+<ol>
+<li>เปิด <a href="https://schoolbuslampang.com" target="_blank" rel="noopener">schoolbuslampang.com</a> บนมือถือ</li>
+<li>พิมพ์ชื่อผู้ใช้ในช่อง <strong>ชื่อผู้ใช้หรือทะเบียนรถ</strong></li>
+<li>พิมพ์รหัสผ่าน</li>
+<li>กด <strong>เข้าสู่ระบบ</strong></li>
+</ol>
+<p><strong>ครั้งแรก</strong> ระบบจะขึ้นว่า <strong>กรุณาเปลี่ยนรหัสผ่านเริ่มต้น</strong></p>
+<ol>
+<li>พิมพ์ <strong>รหัสผ่านปัจจุบัน</strong> (รหัสที่ได้รับ)</li>
+<li>พิมพ์ <strong>รหัสผ่านใหม่</strong> อย่างน้อย 8 ตัวอักษร และไม่เดาง่าย</li>
+<li>พิมพ์รหัสใหม่อีกครั้งในช่อง <strong>ยืนยันรหัสผ่านใหม่</strong></li>
+<li>กด <strong>เปลี่ยนรหัสผ่าน</strong></li>
+</ol>
+<h3>ลืมรหัสผ่าน</h3>
+<p>แจ้งผู้ดูแลบัญชีของโรงเรียน ให้ตั้งรหัสใหม่ให้ (เมนู <strong>เพิ่มเติม</strong> › <strong>บัญชีครูประจำสายชั้น</strong> › <strong>รีเซ็ตรหัส</strong>)</p>
+<blockquote class="callout tip">
+<p>💡 เคล็ดลับ: บันทึกหน้าเว็บไว้ที่หน้าจอหลักของมือถือ จะเปิดได้เร็วเหมือนแอป</p>
+</blockquote>
+
+<h2 id="daily">งานประจำวัน (ทำตามลำดับ)</h2>
+<ol>
+<li>เปิดหน้า <strong>เช็กชื่อวันนี้</strong></li>
+<li>ตรวจว่าเลือกรอบถูก (เช้า หรือ เย็น)</li>
+<li>เห็นเด็กแล้ว แตะชื่อเด็ก</li>
+<li>ดูว่าปุ่ม <strong>ยังไม่เช็ก</strong> เหลือ 0 คน</li>
+</ol>
+
+<h3 id="open">1. เปิดหน้าเช็กชื่อ</h3>
+<p>เลือกทางใดทางหนึ่ง</p>
+<ul>
+<li><strong>มือถือ:</strong> แตะ <strong>เช็กชื่อ</strong> ที่แถบด้านล่างของจอ</li>
+<li><strong>หน้าแรก:</strong> กดปุ่มสีเขียว <strong>เช็กชื่อวันนี้</strong></li>
+<li><strong>เมนูด้านข้าง:</strong> กด <strong>เช็กชื่อวันนี้</strong></li>
+</ul>
+<p>ด้านบนของจอจะเห็นป้าย <strong>ขอบเขตข้อมูล</strong> ตามด้วยชั้นของคุณ เช่น ป.1</p>
+<p><img src="screenshots/school/01b-dashboard-teacher.png" alt="หน้าแรกของบัญชีครูประจำสายชั้น มีปุ่มสีเขียวสำหรับเช็กชื่อ"></p>
+<p><em>ภาพ: หน้าแรกของครูประจำสายชั้น ปุ่มสีเขียวอยู่ด้านบน &quot;เช็กชื่อวันนี้&quot;</em></p>
+
+<h3 id="session">2. เลือกรอบ</h3>
+<p>ด้านบนมีปุ่ม 2 ปุ่ม: <strong>เช้า · ถึงโรงเรียน</strong> และ <strong>เย็น · ขึ้นรถกลับบ้าน</strong></p>
+<ul>
+<li>ก่อนเที่ยง ระบบเลือก<strong>รอบเช้า</strong>ให้เอง</li>
+<li>หลังเที่ยง ระบบเลือก<strong>รอบเย็น</strong>ให้เอง</li>
+<li>ถ้าต้องการอีกรอบ กดปุ่มรอบนั้น</li>
+</ul>
+<p>ใต้ปุ่มรอบจะบอก <strong>บันทึกแล้ว … จาก … คน</strong> และเปอร์เซ็นต์ของชั้นคุณ</p>
+
+<h3 id="tap">3. แตะชื่อเด็กเมื่อเห็นตัวจริง</h3>
+<p>รายชื่อแยกเป็นกล่องตามคันรถ หัวกล่องบอกทะเบียนรถ และ <strong>บันทึกแล้ว … / … คน</strong></p>
+<ol>
+<li>รอบเช้า: เมื่อ<strong>เห็นเด็กลงจากรถที่โรงเรียน</strong> แตะชื่อเด็ก</li>
+<li>รอบเย็น: เมื่อ<strong>เห็นเด็กขึ้นรถ</strong> แตะชื่อเด็ก</li>
+<li>รอให้ขึ้นข้อความ <strong>บันทึกแล้ว 1 คน</strong></li>
+</ol>
+<p>แตะครั้งเดียวก็บันทึกแล้ว ไม่ต้องกดปุ่มบันทึกอีก</p>
+<p>ทำเสร็จแล้วจะเห็น: วงกลมหน้าชื่อเป็นเครื่องหมายถูกสีเขียว และป้าย &quot;ถึงโรงเรียนแล้ว 07:42 น. · คุณ&quot; (รอบเย็นเป็น &quot;ขึ้นรถแล้ว … · คุณ&quot;)</p>
+<p><img src="screenshots/school/22b-teacher-check-mobile.png" alt="หน้าเช็กชื่อบนมือถือ มีปุ่มเลือกรอบ ความคืบหน้า และรายชื่อตามคันรถ"></p>
+<p><em>ภาพ: หน้าเช็กชื่อบนมือถือ ปุ่ม &quot;ยังไม่เช็ก&quot; / &quot;ทั้งหมด&quot; และปุ่ม &quot;บันทึกที่เหลือทั้งคัน&quot;</em></p>
+
+<h3 id="search">ค้นหาเด็ก หรือดูทั้งหมด</h3>
+<ul>
+<li>ปกติจอแสดงเฉพาะเด็กที่ <strong>ยังไม่เช็ก</strong> เด็กที่บันทึกแล้วจะหายจากรายการ</li>
+<li>อยากเห็นทุกคน (รวมคนที่บันทึกแล้ว ลา หรือไม่มีรถ) กด <strong>ทั้งหมด</strong></li>
+<li>หาเด็กไม่เจอ พิมพ์ชื่อ ชั้น ห้อง หรือทะเบียนรถ ในช่อง <strong>ค้นหานักเรียนหรือรถ</strong></li>
+</ul>
+
+<h3 id="wholebus">บันทึกทั้งคันในครั้งเดียว</h3>
+<p>ใช้เมื่อเห็นเด็กที่เหลือในคันนั้น<strong>ครบทุกคนจริง</strong></p>
+<ol>
+<li>ล้างช่องค้นหาให้ว่างก่อน (ขณะค้นหา ปุ่มนี้จะไม่แสดง)</li>
+<li>กดปุ่มสีเขียว <strong>บันทึกที่เหลือทั้งคัน (… คน)</strong> ที่หัวกล่องของรถคันนั้น</li>
+<li>อ่านจำนวนคนในหน้าต่างที่ขึ้นมา</li>
+<li>กด <strong>ยืนยัน … คน</strong></li>
+</ol>
+<p>ทำเสร็จแล้วจะเห็น: ข้อความ <strong>บันทึกแล้ว … คน</strong> และหัวกล่องบอกว่าบันทึกครบ</p>
+<p><img src="screenshots/school/22c-teacher-check-confirm.png" alt="หน้าต่างถามยืนยันก่อนบันทึกทั้งคัน"></p>
+<p><em>ภาพ: ระบบถามยืนยันก่อนบันทึกทั้งคัน ปุ่มยืนยันบอกจำนวนคน เช่น &quot;ยืนยัน 1 คน&quot;</em></p>
+<blockquote class="callout warn">
+<p>⚠️ ระวัง: ถ้าไม่แน่ใจว่ามีเด็กไม่มา ให้แตะทีละชื่อ อย่ากดทั้งคัน ระบบข้ามเด็กที่ลาและเด็กที่บันทึกแล้วให้เอง</p>
+</blockquote>
+
+<h3 id="badges">อ่านป้ายข้างชื่อเด็ก</h3>
+<table>
+<thead><tr><th>ถ้าเห็น</th><th>ให้ทำแบบนี้</th></tr></thead>
+<tbody>
+<tr><td>วงกลมว่าง ไม่มีป้าย</td><td>ยังไม่มีใครบันทึก แตะชื่อเมื่อเห็นเด็ก</td></tr>
+<tr><td>✅ &quot;… · คุณ&quot;</td><td>คุณบันทึกแล้ว ไม่ต้องทำอะไร</td></tr>
+<tr><td>✅ &quot;… · คนขับ&quot; หรือ &quot;… · ชื่อครูท่านอื่น&quot;</td><td>มีคนบันทึกแล้ว ไม่ต้องเช็กซ้ำ</td></tr>
+<tr><td>ℹ️ <strong>คนขับรับขึ้นรถแล้ว</strong> (รอบเช้า)</td><td>คนขับรับเด็กจากบ้านแล้ว แต่ยังไม่มีใครยืนยันว่าถึงโรงเรียน เมื่อเห็นเด็กถึงโรงเรียน ให้แตะชื่อตามปกติ</td></tr>
+<tr><td>✅ <strong>ส่งถึงบ้านแล้ว</strong> (รอบเย็น)</td><td>คนขับส่งเด็กแล้ว ไม่ต้องทำอะไร</td></tr>
+<tr><td>ชื่อมีเส้นขีดฆ่า + ป้าย <strong>ลา</strong></td><td>เด็กลารอบนี้ แตะไม่ได้ ไม่ต้องบันทึก</td></tr>
+<tr><td>ป้าย <strong>ไม่มีรถ</strong> ในกล่อง <strong>ยังไม่ได้ผูกรถ</strong></td><td>เด็กยังไม่มีรถในระบบ แจ้งผู้ดูแลบัญชีของโรงเรียนให้เลือกรถให้เด็ก</td></tr>
+</tbody>
+</table>
+
+<h3 id="undo">กดผิด ยกเลิกอย่างไร</h3>
+<ol>
+<li>กด <strong>ทั้งหมด</strong> เพื่อให้เห็นแถวที่บันทึกแล้ว</li>
+<li>หาแถวที่กดผิด</li>
+<li>กด <strong>ยกเลิก</strong> ด้านขวาของชื่อ</li>
+</ol>
+<p>ทำเสร็จแล้วจะเห็น: ข้อความ &quot;ยกเลิกรายการของ … แล้ว&quot; และวงกลมหน้าชื่อกลับเป็นว่าง</p>
+<ul>
+<li>ยกเลิกได้เฉพาะรายการที่<strong>คุณบันทึกเอง</strong> และเป็นรายการ<strong>ของวันนี้</strong></li>
+<li>รายการของคนขับหรือครูท่านอื่นไม่มีปุ่ม <strong>ยกเลิก</strong> ให้คนที่บันทึกยกเลิกเอง หรือแจ้งผู้ดูแลบัญชีของโรงเรียน</li>
+<li>ถ้าคนขับบันทึกไว้ก่อน (เช่น รับขึ้นรถแล้ว) เมื่อคุณยกเลิกรายการของคุณ รายการของคนขับยังอยู่</li>
+</ul>
+
+<h2 id="other">งานอื่น ๆ (ทำเมื่อจำเป็น)</h2>
+<h3>ดูรถรับส่งของชั้นคุณ</h3>
+<ol>
+<li>กดเมนู <strong>รถรับส่ง</strong></li>
+<li>ดูรถที่เด็กในชั้นคุณใช้ พร้อมคนขับและรายชื่อเด็กในคัน</li>
+</ol>
+<p>คุณเห็นเฉพาะรถที่มีเด็กในชั้นคุณ และ<strong>แก้ไขข้อมูลรถไม่ได้</strong> (ไม่มีปุ่มแก้ไขหรือเพิ่มรถ) ถ้าข้อมูลรถผิด แจ้งผู้ดูแลบัญชีของโรงเรียน</p>
+<h3>ดูรายชื่อนักเรียน และรายงาน</h3>
+<ul>
+<li>กด <strong>นักเรียน</strong> เพื่อดูรายชื่อเด็กในชั้นคุณ (ดูได้อย่างเดียว)</li>
+<li>กด <strong>รายงาน</strong> เพื่อดูตัวเลขรับ-ส่งของชั้นคุณ</li>
+</ul>
+<h3>ผู้ปกครองจะเห็นอะไร</h3>
+<ul>
+<li>รอบเช้าที่คุณบันทึก ผู้ปกครองเห็น <strong>ถึงโรงเรียนแล้ว</strong></li>
+<li>รอบเย็นที่คุณบันทึก ผู้ปกครองเห็น <strong>ขึ้นรถกลับบ้านแล้ว</strong></li>
+<li>ผู้ปกครองดูได้เองเมื่อเปิดเมนูใน LINE ระบบไม่ส่งข้อความทุกครั้งที่เช็กชื่อ</li>
+<li>ถ้าผู้ปกครองถามวิธีดู ให้เพิ่มเพื่อน LINE <a href="https://line.me/R/ti/p/@943glwjf" target="_blank" rel="noopener"><strong>@943glwjf</strong></a> แล้วพิมพ์ &quot;ผูกบัญชี&quot; (ดู <a href="user-guide-parent.html">คู่มือผู้ปกครอง</a>)</li>
+</ul>
+
+<h2 id="faq">ปัญหาที่พบบ่อย</h2>
+<table>
+<thead><tr><th>ถ้าเห็น/ถ้าเกิด</th><th>ให้ทำแบบนี้</th></tr></thead>
+<tbody>
+<tr><td>ขึ้นว่า &quot;… คนมีการบันทึกไว้แล้ว (คนขับหรือครูท่านอื่น)&quot;</td><td>มีคนบันทึกก่อนแล้ว ระบบนับครั้งเดียว ไม่ต้องทำอะไร</td></tr>
+<tr><td>ขึ้นว่า &quot;ข้าม … คน (ลา / ไม่ได้ใช้รถรอบนี้)&quot;</td><td>เด็กลา หรือไม่ได้ใช้รถรอบนี้ ไม่ต้องทำอะไร</td></tr>
+<tr><td>ขึ้นว่า &quot;ไม่มีรายชื่อที่ต้องเช็กเพิ่มในรอบนี้&quot;</td><td>เช็กครบแล้ว กด <strong>ทั้งหมด</strong> ถ้าอยากดูทุกคน</td></tr>
+<tr><td>หาชื่อเด็กไม่เจอ</td><td>กด <strong>ทั้งหมด</strong> แล้วค้นหาอีกครั้ง ถ้ายังไม่เจอ เด็กอาจไม่อยู่ในชั้นคุณ หรือไม่ได้ใช้รถรอบนี้ แจ้งผู้ดูแลบัญชีของโรงเรียนให้แก้ข้อมูล</td></tr>
+<tr><td>เด็กลา แต่ไม่มีป้าย <strong>ลา</strong></td><td><strong>อย่าแตะชื่อ</strong> แจ้งผู้ดูแลบัญชีของโรงเรียนหรือคนขับให้บันทึกการลา</td></tr>
+<tr><td>ไม่เห็นปุ่ม <strong>บันทึกที่เหลือทั้งคัน</strong></td><td>ล้างช่องค้นหาให้ว่าง ถ้ายังไม่เห็น แปลว่าคันนั้นเช็กครบแล้ว หรือเด็กยังไม่มีรถ</td></tr>
+<tr><td>แตะแล้วไม่ขึ้น &quot;บันทึกแล้ว … คน&quot; หรือขึ้น &quot;บันทึกไม่สำเร็จ&quot;</td><td>ยังไม่ได้บันทึก ตรวจสัญญาณอินเทอร์เน็ต แล้วแตะใหม่ (แตะซ้ำไม่ทำให้นับซ้ำ)</td></tr>
+<tr><td>ขึ้น &quot;โหลดรายชื่อไม่สำเร็จ&quot;</td><td>ตรวจสัญญาณ แล้วกด <strong>โหลดรายชื่ออีกครั้ง</strong></td></tr>
+<tr><td>กด <strong>ยกเลิก</strong> แล้วขึ้น &quot;มีการบันทึกรายการใหม่ต่อจากนี้แล้ว จึงยกเลิกไม่ได้&quot;</td><td>แจ้งผู้ดูแลบัญชีของโรงเรียนให้ช่วยแก้</td></tr>
+<tr><td>ขึ้น &quot;ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง&quot;</td><td>ตรวจการพิมพ์อีกครั้ง ถ้าลืมรหัส แจ้งผู้ดูแลบัญชีของโรงเรียนให้รีเซ็ตรหัส</td></tr>
+</tbody>
+</table>
+
+<h2 id="contact">ติดต่อใครเมื่อมีปัญหา</h2>
+<ul>
+<li><strong>ผู้ดูแลบัญชีของโรงเรียน</strong> (เจ้าหน้าที่ที่ใช้บัญชีโรงเรียนหลัก): ลืมรหัสผ่าน ข้อมูลนักเรียนผิด เด็กยังไม่มีรถ บันทึกการลา และรายการที่คุณยกเลิกเองไม่ได้</li>
+<li><strong>ผู้ปกครอง</strong>ถามวิธีดูสถานะ: แนะนำ LINE <strong>@943glwjf</strong></li>
+</ul>
+<p>เมื่อแจ้งปัญหา ให้บอก</p>
+<ul>
+<li>ชื่อผู้ใช้ของคุณ และชั้นที่รับผิดชอบ</li>
+<li>วันที่ เวลา และรอบ (เช้า หรือ เย็น)</li>
+<li>ทะเบียนรถ และชื่อเด็กที่เกี่ยวข้อง</li>
+<li>ข้อความที่ขึ้นบนจอ (ภาพหน้าจอช่วยได้มาก ส่งเฉพาะคนที่เกี่ยวข้อง)</li>
+</ul>
+
+<h2 id="privacy">ข้อควรระวังเรื่องข้อมูลนักเรียน</h2>
+<ul>
+<li>แตะชื่อเฉพาะเมื่อ<strong>เห็นเด็กด้วยตาตัวเอง</strong> ผู้ปกครองดูสถานะจากสิ่งที่คุณบันทึก</li>
+<li>อย่าบอกรหัสผ่าน หรือให้คนอื่นใช้บัญชีของคุณ</li>
+<li>อย่าส่งภาพหน้าจอที่มีชื่อเด็กหรือเบอร์โทรลงกลุ่ม LINE ทั่วไป</li>
+<li>ใช้เครื่องส่วนกลางเสร็จแล้ว ให้ออกจากระบบทุกครั้ง</li>
+</ul>
+
+<h2 id="check">ตรวจความเข้าใจหลังอบรม</h2>
+<ul>
+<li>☐ เข้าสู่ระบบ และเปลี่ยนรหัสผ่านครั้งแรกได้</li>
+<li>☐ เปิดหน้า <strong>เช็กชื่อวันนี้</strong> และเปลี่ยนรอบเช้า/เย็นได้</li>
+<li>☐ แตะชื่อเด็กทีละคน และเห็นป้าย &quot;· คุณ&quot;</li>
+<li>☐ ใช้ <strong>บันทึกที่เหลือทั้งคัน</strong> เมื่อเห็นเด็กครบเท่านั้น</li>
+<li>☐ กด <strong>ทั้งหมด</strong> แล้ว <strong>ยกเลิก</strong> รายการที่กดผิดได้</li>
+<li>☐ รู้ว่าต้องแจ้งใครเมื่อหาชื่อเด็กไม่เจอ หรือเด็กลาแต่ไม่มีป้าย</li>
+</ul>
+</main>
+</div>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · คู่มือครูประจำสายชั้น · ปรับปรุง 24 ต.ค. 2569</footer>
+</body>
+</html>

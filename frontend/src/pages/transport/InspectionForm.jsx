@@ -5,12 +5,16 @@ import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
+import ErrorState from '../../components/ErrorState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import PageHeader from '../../components/PageHeader';
 import Pagination from '../../components/Pagination';
 import {
   AlertBanner, ConfirmDialog, DataTable, TableAction, FilterBar, FormField,
 } from '../../components/ui';
+import { todayBangkok } from '../../utils/thaiTime';
+import { useAuth } from '../../hooks/useAuth';
+import usePolicyAction from '../../hooks/usePolicyAction';
 
 // Shared by the selects on this form; FormField supplies the label wiring.
 const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition';
@@ -48,6 +52,7 @@ function formatThaiDate(dateStr) {
 
 export default function InspectionForm() {
   const toast = useToast();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const prefillVehicleId = searchParams.get('vehicle_id') || '';
@@ -57,6 +62,7 @@ export default function InspectionForm() {
   const [inspections, setInspections] = useState([]);
   const [meta, setMeta] = useState({ page: 1, per_page: 20, total: 0 });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(!!prefillVehicleId);
   const [saving, setSaving] = useState(false);
   // window.confirm could not show the plate and the date side by side, and
@@ -65,7 +71,7 @@ export default function InspectionForm() {
   const [resultFilter, setResultFilter] = useState('');
 
   const [form, setForm] = useState({
-    vehicle_id: prefillVehicleId || '', inspection_date: new Date().toISOString().slice(0, 10),
+    vehicle_id: prefillVehicleId || '', inspection_date: todayBangkok(),
     expiry_date: '', result: 'PASSED', notes: '', certifying_school_id: '',
   });
 
@@ -76,6 +82,7 @@ export default function InspectionForm() {
   const isOtherSchool = form?.certifying_school_id === '__other__';
   const isOtherVehicle = form?.vehicle_id === '__other__';
   const [newPlate, setNewPlate] = useState({ prefix: '', letters: '', number: '', province: 'ลำปาง' });
+  const { runWithPolicy, policyActionDialog } = usePolicyAction();
 
   useEffect(() => {
     // `|| []` only catches null; a non-array payload reached .filter() below
@@ -86,6 +93,7 @@ export default function InspectionForm() {
 
   const fetchInspections = useCallback(async (page = 1) => {
     setLoading(true);
+    setError('');
     try {
       const params = new URLSearchParams();
       params.set('page', page);
@@ -94,7 +102,9 @@ export default function InspectionForm() {
       const res = await api.get(`/transport/inspections?${params}`);
       setInspections(res.data?.data || []);
       setMeta(res.data?.meta || { page: 1, per_page: 20, total: 0 });
-    } catch (err) { console.error('[InspectionForm] inspections load failed:', err.message); } finally { setLoading(false); }
+    } catch (err) {
+      setError(err.response?.data?.message || 'โหลดประวัติการตรวจสภาพรถไม่สำเร็จ');
+    } finally { setLoading(false); }
   }, [resultFilter]);
 
   useEffect(() => { fetchInspections(1); }, [fetchInspections]);
@@ -121,6 +131,10 @@ export default function InspectionForm() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (vehicles.find(v => v.id === form.vehicle_id)?.has_shared_inspection) {
+      toast.error('รถคันนี้มีผลรับรองจากคิวแล้ว กรุณาตรวจรอบใหม่ในคิวรับรองรถ');
+      return;
+    }
     if (!form.vehicle_id && !isOtherVehicle) { toast.error('กรุณาเลือกรถ'); return; }
     if (isOtherVehicle) {
       if (!/^[ก-ฮ]{2}$/.test(newPlate.letters)) { toast.error('หมวดอักษรต้องเป็นอักษรไทย 2 ตัว'); return; }
@@ -145,11 +159,19 @@ export default function InspectionForm() {
         payload.certifying_school_id = '';
         payload.notes = `[โรงเรียนที่ออกใบรับรอง: ${customSchoolName.trim()}]${payload.notes ? ' ' + payload.notes : ''}`;
       }
-      await api.post('/transport/inspections', payload);
+      const saved = await runWithPolicy({
+        context: 'transport.inspection_create', subjectType: 'vehicle', subjectId: payload.vehicle_id,
+        claim: {
+          inspection_date: payload.inspection_date, expiry_date: payload.expiry_date || null,
+          result: payload.result, has_notes: !!payload.notes,
+        },
+      }, (token) => api.post('/transport/inspections', payload,
+        token ? { headers: { 'X-Policy-Action-Token': token } } : undefined));
+      if (saved?.cancelled) return;
       toast.success('บันทึกผลตรวจสำเร็จ');
       const savedVehicleId = form.vehicle_id;
       setShowForm(false);
-      setForm({ vehicle_id: '', inspection_date: new Date().toISOString().slice(0, 10), expiry_date: '', result: 'PASSED', notes: '', certifying_school_id: '' });
+      setForm({ vehicle_id: '', inspection_date: todayBangkok(), expiry_date: '', result: 'PASSED', notes: '', certifying_school_id: '' });
       setVehicleSearch('');
       setSchoolSearch('');
       setCustomSchoolName('');
@@ -172,6 +194,7 @@ export default function InspectionForm() {
   );
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
+  const selectedVehicleHasSharedResult = Boolean(vehicles.find(v => v.id === form.vehicle_id)?.has_shared_inspection);
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
@@ -244,6 +267,12 @@ export default function InspectionForm() {
                   </select>
                 )}
               </FormField>
+
+              {selectedVehicleHasSharedResult && (
+                <AlertBanner variant="warn" title="รถคันนี้มีผลรับรองจากคิวแล้ว">
+                  หากต้องแก้ผล ให้โรงเรียนส่งคำขอตรวจรอบใหม่ แล้วเปิดเมนู “ตรวจและรับรองรถ”
+                </AlertBanner>
+              )}
 
               {/* New plate structured input */}
               {isOtherVehicle && (
@@ -371,7 +400,7 @@ export default function InspectionForm() {
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || selectedVehicleHasSharedResult}
             className="focus-ring w-full sm:w-auto bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-50 disabled:pointer-events-none text-white font-semibold px-6 min-h-[48px] rounded-lg transition"
           >
             {saving ? 'กำลังบันทึก…' : 'บันทึกผลตรวจ'}
@@ -388,13 +417,15 @@ export default function InspectionForm() {
           onChange: setResultFilter,
           options: [['', 'ทุกผลตรวจ'], ...RESULT_OPTIONS.map(o => [o.value, o.label])],
         }]}
-        count={meta.total}
+        count={loading || error ? undefined : meta.total}
         countLabel="ผลตรวจ"
         onClear={resultFilter ? () => setResultFilter('') : undefined}
       />
 
       {loading ? (
         <LoadingState />
+      ) : error ? (
+        <ErrorState message={error} onRetry={() => fetchInspections(meta.page)} />
       ) : inspections.length === 0 ? (
         <EmptyState icon={ClipboardList} title="ไม่มีบันทึกการตรวจ" description="เริ่มบันทึกผลตรวจรถคันใหม่จากฟอร์มด้านบน" />
       ) : (
@@ -414,14 +445,15 @@ export default function InspectionForm() {
               { key: 'inspection_date', header: 'วันที่ตรวจ', secondary: true, cell: ins => formatThaiDate(ins.inspection_date) },
               { key: 'expiry_date', header: 'หมดอายุ', cell: ins => formatThaiDate(ins.expiry_date) },
               { key: 'inspector_name', header: 'ผู้ตรวจ', cell: ins => ins.inspector_name || '-' },
+              { key: 'locked_by_shared', header: 'วิธีแก้ไข', cell: ins => ins.locked_by_shared ? 'ตรวจรอบใหม่ในคิวรับรอง' : 'บันทึกเดิม' },
               { key: 'notes', header: 'หมายเหตุ', cell: ins => ins.notes || '-' },
             ]}
             rows={inspections}
-            actions={ins => (
+            actions={ins => !ins.locked_by_shared && (user?.role === 'admin' || String(ins.inspected_by) === String(user?.id)) ? (
               <TableAction tone="danger" onClick={() => setConfirmDelete(ins)}>
                 ลบผลตรวจ
               </TableAction>
-            )}
+            ) : null}
           />
 
           {totalPages > 1 && (
@@ -439,6 +471,7 @@ export default function InspectionForm() {
         onConfirm={() => handleDeleteInspection(confirmDelete)}
         onCancel={() => setConfirmDelete(null)}
       />
+      {policyActionDialog}
     </div>
   );
 }

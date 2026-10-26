@@ -89,7 +89,7 @@ export default function ConfirmDialog({
   if (!open) return null;
 
   const confirmTone = tone === 'danger'
-    ? 'bg-danger hover:bg-danger/90 active:bg-danger text-white'
+    ? 'bg-danger-ink hover:bg-danger-ink/90 active:bg-danger-ink text-white'
     : 'bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white';
 
   return (
@@ -105,7 +105,7 @@ export default function ConfirmDialog({
       >
         <div className="flex items-start gap-3">
           <span className={`shrink-0 w-10 h-10 rounded-full inline-flex items-center justify-center ${tone === 'danger' ? 'bg-danger-soft' : 'bg-brand-50'}`}>
-            <AlertTriangle className={`w-5 h-5 ${tone === 'danger' ? 'text-danger' : 'text-brand-700'}`} strokeWidth={2.2} aria-hidden="true" />
+            <AlertTriangle className={`w-5 h-5 ${tone === 'danger' ? 'text-danger-ink' : 'text-brand-700'}`} strokeWidth={2.2} aria-hidden="true" />
           </span>
           <div className="min-w-0 flex-1">
             <h2 id={`${uid}-title`} className="text-base font-semibold text-ink leading-tight">{title}</h2>

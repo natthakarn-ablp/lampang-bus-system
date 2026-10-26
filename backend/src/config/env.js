@@ -48,9 +48,85 @@ function parseSafetyPolicyConfig(source = process.env) {
   return { mode: raw, enforcementAt };
 }
 
+// ── Database pool sizing (config-infra) ──────────────────────────────────────
+// The pool size and the queue limit were literals in src/config/database.js, so
+// the first knob anyone reaches for under load could only be turned by editing
+// source and redeploying. The local capacity rehearsal measured pool
+// utilisation 1.0, with callers already queueing, at 20 simulated users on a
+// development machine — a rehearsal, not a capacity result
+// (docs/performance/load-test-local-2026-09-05.md §2.1), so this WILL be turned.
+// The defaults below reproduce the previous literals exactly: an unset
+// environment behaves byte-for-byte as it did before.
+const DB_POOL_DEFAULTS = { connectionLimit: 10, queueLimit: 0 };
+
+// The production MySQL reports max_connections = 151 (capacity sample, recorded
+// in docs/performance/phase9-rehearsal-2026-09-05.md §5). A pool larger than the
+// server's entire connection budget cannot serve more traffic — it only converts
+// contention inside mysql2 into connection refusals at the server, including for
+// the operator's own mysql session when they log in to diagnose it. A value above
+// this is a typo, not a tuning decision, so it is refused at boot.
+const DB_POOL_MAX_CONNECTION_LIMIT = 150;
+
+// A finite queue exists to shed load; a five-figure queue is unlimited in every
+// way that matters, so treat it the same way as an over-large pool.
+const DB_POOL_MAX_QUEUE_LIMIT = 10000;
+
+function parseDatabasePoolConfig(source = process.env) {
+  // Deliberately NOT parseInt(): it reads '20x' as 20 and 'abc' as NaN, and a
+  // pool that silently runs at a truncated size — or falls back to the default
+  // an operator thought they had overridden — only shows up as latency under
+  // real load, days after the deploy that introduced it. Refuse instead.
+  const readCount = (key, fallback, min, max) => {
+    const raw = String(source[key] ?? '').trim();
+    if (raw === '') return fallback;
+    if (!/^[0-9]+$/.test(raw) || Number(raw) < min || Number(raw) > max) {
+      throw new Error(`${key} must be a whole number between ${min} and ${max}`);
+    }
+    return Number(raw);
+  };
+  return {
+    connectionLimit: readCount(
+      'DB_POOL_CONNECTION_LIMIT', DB_POOL_DEFAULTS.connectionLimit, 1, DB_POOL_MAX_CONNECTION_LIMIT
+    ),
+    // 0 is mysql2's "queue as many callers as ask", which is what the system
+    // does today: it degrades into ever-growing latency instead of refusing.
+    queueLimit: readCount(
+      'DB_POOL_QUEUE_LIMIT', DB_POOL_DEFAULTS.queueLimit, 0, DB_POOL_MAX_QUEUE_LIMIT
+    ),
+  };
+}
+
 function validateFeatureDependencies(source = process.env) {
   if (source.FEATURE_QR_LEVEL3 === 'true' && source.FEATURE_VEHICLE_QR !== 'true') {
     throw new Error('FEATURE_QR_LEVEL3 requires FEATURE_VEHICLE_QR=true');
+  }
+  // Turning the parent consent gate on blocks a linked parent from their
+  // child's status until they grant consent. The only place a parent CAN
+  // grant it is /api/consent, which is mounted by FEATURE_VEHICLE_QR. Enabling
+  // the gate without that router locks every parent out with no way back in,
+  // so it fails at boot rather than at the parent's phone.
+  if (source.FEATURE_PARENT_CONSENT_REQUIRED === 'true' && source.FEATURE_VEHICLE_QR !== 'true') {
+    throw new Error(
+      'FEATURE_PARENT_CONSENT_REQUIRED requires FEATURE_VEHICLE_QR=true '
+      + '(the /api/consent router is the only way a parent can grant consent)'
+    );
+  }
+  if (source.FEATURE_ADMIN_PASSWORD_RECOVERY === 'true') {
+    if (!String(source.LINE_LIFF_ID || '').trim()) {
+      throw new Error('FEATURE_ADMIN_PASSWORD_RECOVERY requires LINE_LIFF_ID');
+    }
+    if (!String(source.LINE_CHANNEL_ACCESS_TOKEN || '').trim()) {
+      throw new Error('FEATURE_ADMIN_PASSWORD_RECOVERY requires LINE_CHANNEL_ACCESS_TOKEN');
+    }
+    let publicUrl;
+    try {
+      publicUrl = new URL(source.PUBLIC_APP_URL || 'https://schoolbuslampang.com');
+    } catch {
+      throw new Error('PUBLIC_APP_URL must be a valid HTTPS URL');
+    }
+    if (publicUrl.protocol !== 'https:') {
+      throw new Error('PUBLIC_APP_URL must be a valid HTTPS URL');
+    }
   }
   return true;
 }
@@ -104,6 +180,7 @@ function validateEnvOrExit(source = process.env, nodeEnv = source && source.NODE
 
   try {
     parseSafetyPolicyConfig(source);
+    parseDatabasePoolConfig(source);
     validateFeatureDependencies(source);
   } catch (error) {
     return fail(error.message);
@@ -131,6 +208,18 @@ try {
   safetyPolicyConfig = { mode: 'OBSERVE', enforcementAt: null };
 }
 
+// Same reasoning as safetyPolicyConfig above: validateEnvOrExit() is the
+// authoritative rejecter of a bad pool value (outside test it has already
+// exited by the time this runs), so requiring this module under test must not
+// throw. Falling back to the shipped defaults keeps a test that deliberately
+// sets a bad value from breaking every other module that requires env.
+let databasePoolConfig;
+try {
+  databasePoolConfig = parseDatabasePoolConfig(process.env);
+} catch {
+  databasePoolConfig = { ...DB_POOL_DEFAULTS };
+}
+
 const env = {
   db: {
     host: process.env.DB_HOST,
@@ -138,6 +227,10 @@ const env = {
     name: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
+    // mysql2 pool sizing, applied in config/database.js. Unset = the 10 / 0 that
+    // used to be literals there, so behaviour is unchanged until an operator
+    // deliberately turns it. See parseDatabasePoolConfig above.
+    pool: databasePoolConfig,
   },
   jwt: {
     secret: process.env.JWT_SECRET,
@@ -161,6 +254,7 @@ const env = {
       'https://schoolbuslampang.com,https://www.schoolbuslampang.com,https://schoolbus.lp-pao.go.th')
       .split(',').map((s) => s.trim()).filter(Boolean),
     timezone: process.env.TZ || 'Asia/Bangkok',
+    publicUrl: process.env.PUBLIC_APP_URL || 'https://schoolbuslampang.com',
     currentTerm: process.env.CURRENT_TERM || '2568-2',
     // Hour (0-23, Bangkok time) at which the session switches morning → evening.
     // Before this hour = morning (ส่งเช้า). From this hour onward = evening (รับเย็น).
@@ -174,6 +268,22 @@ const env = {
   // featureVehicleQr is false the /api/qr + /api/consent routers are not mounted,
   // so the existing system is byte-for-byte unchanged.
   features: {
+    // Admin-only self-service recovery through server-verified LINE Login plus
+    // a one-use recovery code. Migration 049 must exist before enabling.
+    adminPasswordRecovery: process.env.FEATURE_ADMIN_PASSWORD_RECOVERY === 'true',
+    // Whether completing an admin password reset also requires one of the
+    // single-use recovery codes, on top of the 15-minute link delivered to the
+    // bound LINE account. Default TRUE: two factors, the second of which does
+    // not live in LINE. Setting it to false makes the LINE link sufficient on
+    // its own — a deliberate trade the owner made on 2026-09-07 because a lost
+    // code sheet otherwise makes recovery impossible; recorded in
+    // docs/project-closure/decision-2026-09-07-admin-recovery-single-factor.md
+    // Compensating controls that remain either way: the link is single-use and
+    // expires in 15 minutes, it can only reach the LINE identity bound to that
+    // account, requests and completions are rate-limited and audited, and a
+    // confirmation message is pushed to that LINE the moment a password is
+    // changed.
+    adminRecoveryRequireCode: process.env.ADMIN_RECOVERY_REQUIRE_CODE !== 'false',
     vehicleQr: process.env.FEATURE_VEHICLE_QR === 'true',
     driverShiftSelection: process.env.FEATURE_DRIVER_SHIFT_SELECTION === 'true',
     qrLevel3: process.env.FEATURE_QR_LEVEL3 === 'true',   // Level-3 sensitive viewer (default off, DPO-gated)
@@ -198,6 +308,11 @@ const env = {
     // without breaking the live parent experience until consent text + DPO are
     // signed off. Turn on only together with FEATURE_VEHICLE_QR's consent flow.
     parentConsentRequired: process.env.FEATURE_PARENT_CONSENT_REQUIRED === 'true',
+    // Phase 4 — participatory-administration cases + append-only event log.
+    // Dark by default: when false the /api/participation router is not
+    // mounted, so the existing system is byte-for-byte unchanged. Migration
+    // 050 must be applied before flipping this on.
+    participationCases: process.env.FEATURE_PARTICIPATION_CASES === 'true',
   },
   // Phase 11A — tunable thresholds for the intelligent tracking layer.
   // Exposed via env so operators can adjust without code changes.
@@ -221,6 +336,7 @@ module.exports = env;
 // Exposed for unit testing (pure, no side effects).
 module.exports.getMissingProductionSecrets = getMissingProductionSecrets;
 module.exports.parseSafetyPolicyConfig = parseSafetyPolicyConfig;
+module.exports.parseDatabasePoolConfig = parseDatabasePoolConfig;
 module.exports.validateFeatureDependencies = validateFeatureDependencies;
 // Imperative hard validation. Runs automatically at module load for non-test
 // environments (so the app refuses to boot on bad config); exported so it can be

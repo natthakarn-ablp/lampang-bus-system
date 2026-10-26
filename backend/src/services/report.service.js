@@ -1,19 +1,51 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { todayBangkok } = require('../utils/thaiTime');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 /**
  * Build WHERE clause fragments for role-based scoping.
  * Returns { where, params } to append to queries involving students + schools.
+ *
+ * AUD-004 — the grade boundary is enforced here too. A school sub-account with
+ * users.grade_scope set (a homeroom teacher, e.g. 'ป.4') is pinned to its own
+ * grade in every /api/school read: routes/school.routes.js:68-73 resolves it and
+ * services/school.service.js:204-207 hard-pins `gradeFilter || grade || null` so
+ * the teacher cannot unlock another grade with a query param. Reports used to be
+ * the one module that did not agree, so the CSV/Excel/PDF export handed a
+ * single-grade teacher every student in the school — names, grades, bus plates
+ * and attendance — while the same account is deliberately 403'd from the school
+ * audit log, which carries strictly less about the children.
+ *
+ * The clause is appended to `where` rather than applied per query on purpose:
+ * four of the five report functions read their scope from here, so one clause
+ * covers daily, monthly, summary and every export. Two queries rewrite this
+ * string for a second student alias (`where.replace(/\bs\./g, 's2.')`); the
+ * clause is written with the `s.` prefix so it survives that rewrite.
+ *
+ * Grades are matched TOLERANTLY through gradeEquivalents() — students.grade is
+ * stored inconsistently ('ป.5', 'ประถมศึกษาปีที่ 5', 'ป. 5'), and an exact match
+ * would silently hide a teacher's own pupils rather than fail loudly.
  */
 function buildScopeFilter(user, { date, month, school_id, affiliation_id, vehicle_id }) {
-  let where = 's.is_deleted = FALSE';
+  // A student counts only while their school is still open. The per-school and
+  // per-affiliation breakdowns have always required sc.is_deleted = FALSE; the
+  // headline totals did not, so a closed school's pupils sat in the total and in
+  // no row beneath it, and the rows never added up to the figure above them.
+  // Every query that uses this clause already joins `schools sc`.
+  let where = 's.is_deleted = FALSE AND sc.is_deleted = FALSE';
   const params = [];
 
   // Role-based scoping
   if (user.role === 'school') {
     where += ' AND s.school_id = ?';
     params.push(user.scopeId);
+    if (user.gradeScope) {
+      const eq = gradeEquivalents(user.gradeScope);
+      where += ` AND s.grade IN (${eq.map(() => '?').join(',')})`;
+      params.push(...eq);
+    }
   } else if (user.role === 'affiliation') {
     where += ' AND sc.affiliation_id = ?';
     params.push(user.scopeId);
@@ -75,10 +107,13 @@ async function getDailyReport(user, filters) {
     [date, ...params]
   );
 
-  // Total vehicles
+  // Total vehicles — a deleted vehicle is left out, as it is from the per-vehicle
+  // table below; a forced delete can leave pupils still pointing at one.
   const [[{ total_vehicles }]] = await pool.query(
     `SELECT COUNT(DISTINCT s.vehicle_id) AS total_vehicles FROM students s
-     JOIN schools sc ON sc.id = s.school_id WHERE ${where} AND s.vehicle_id IS NOT NULL`, params
+     JOIN schools sc ON sc.id = s.school_id
+     JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
+     WHERE ${where}`, params
   );
 
   // Emergency count for this date
@@ -92,10 +127,16 @@ async function getDailyReport(user, filters) {
     [date, ...params]
   );
 
-  // Per-vehicle breakdown
+  // Per-vehicle and per-school breakdowns carry their own expected counts. The
+  // headline divides by the pupils who use each session (morning_total /
+  // evening_total); the rows used to divide by every pupil, so a school where
+  // one child rides only in the morning showed "ค้าง" every evening while the
+  // headline above it said everything was done.
   const [vehicles] = await pool.query(
     `SELECT v.id AS vehicle_id, v.plate_no,
             COUNT(DISTINCT s2.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN s2.morning_enabled = TRUE THEN s2.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s2.evening_enabled = TRUE THEN s2.id END) AS evening_expected,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
             COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
      FROM vehicles v
@@ -108,10 +149,11 @@ async function getDailyReport(user, filters) {
     [date, ...params]
   );
 
-  // Per-school breakdown
   const [schoolBreakdown] = await pool.query(
     `SELECT sc.id AS school_id, sc.name AS school_name,
             COUNT(DISTINCT s.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN s.morning_enabled = TRUE THEN s.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s.evening_enabled = TRUE THEN s.id END) AS evening_expected,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
             COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
      FROM schools sc
@@ -296,6 +338,8 @@ async function getMonthlyReport(user, filters) {
   const [vehicleAgg] = await pool.query(
     `SELECT v.id AS vehicle_id, v.plate_no,
             COUNT(DISTINCT s2.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN s2.morning_enabled = TRUE THEN s2.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s2.evening_enabled = TRUE THEN s2.id END) AS evening_expected,
             SUM(CASE WHEN ds.morning_done = TRUE THEN 1 ELSE 0 END) AS total_morning_done,
             SUM(CASE WHEN ds.evening_done = TRUE THEN 1 ELSE 0 END) AS total_evening_done,
             COUNT(DISTINCT ds.check_date) AS days_with_data
@@ -311,8 +355,10 @@ async function getMonthlyReport(user, filters) {
   );
 
   const enrichedVehicles = vehicleAgg.map((v) => {
-    const mExp = v.student_count * (v.days_with_data || 1);
-    const eExp = v.student_count * (v.days_with_data || 1);
+    // Same denominator as the per-school rows and the headline: riders of that
+    // session, not every pupil on the vehicle.
+    const mExp = v.morning_expected * (v.days_with_data || 1);
+    const eExp = v.evening_expected * (v.days_with_data || 1);
     return {
       ...v,
       morning_kpi: pct(v.total_morning_done, mExp),
@@ -353,28 +399,43 @@ async function getSummaryReport(user, filters) {
   daily.morning_kpi = pct(daily.morning_done, daily.morning_total);
   daily.evening_kpi = pct(daily.evening_done, daily.evening_total);
 
-  // Per-school KPI
+  // Per-school / per-vehicle KPI — same denominator as the headline: the pupils
+  // who use that session, not every pupil.
   if (daily.schools) {
     daily.schools = daily.schools.map((s) => ({
       ...s,
-      morning_kpi: pct(s.morning_done, s.student_count),
-      evening_kpi: pct(s.evening_done, s.student_count),
+      morning_kpi: pct(s.morning_done, s.morning_expected),
+      evening_kpi: pct(s.evening_done, s.evening_expected),
     }));
   }
 
-  // Per-vehicle KPI
   if (daily.vehicles) {
     daily.vehicles = daily.vehicles.map((v) => ({
       ...v,
-      morning_kpi: pct(v.morning_done, v.student_count),
-      evening_kpi: pct(v.evening_done, v.student_count),
+      morning_kpi: pct(v.morning_done, v.morning_expected),
+      evening_kpi: pct(v.evening_done, v.evening_expected),
     }));
   }
 
-  // Per-affiliation KPI (for province/admin users seeing multiple affiliations)
+  // Per-affiliation KPI — for province/admin users seeing multiple affiliations,
+  // as the comment has always said, and for an affiliation account, whose single
+  // row is correctly its own.
+  //
+  // A school account was getting a row too: its own school's numbers printed
+  // under the education service area's name — and, now that reports are
+  // grade-scoped, ONE CLASSROOM's numbers under the name of a whole area. A
+  // label that overstates its own figures by two levels is worse than no row,
+  // and for a single school the row never told anyone anything.
+  if (user.role === 'school') {
+    daily.affiliations = [];
+    return daily;
+  }
+
   const [affRows] = await pool.query(
     `SELECT a.id AS affiliation_id, a.name AS affiliation_name,
             COUNT(DISTINCT s.id) AS student_count,
+            COUNT(DISTINCT CASE WHEN s.morning_enabled = TRUE THEN s.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s.evening_enabled = TRUE THEN s.id END) AS evening_expected,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
             COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
      FROM affiliations a
@@ -389,8 +450,8 @@ async function getSummaryReport(user, filters) {
 
   daily.affiliations = affRows.map((a) => ({
     ...a,
-    morning_kpi: pct(a.morning_done, a.student_count),
-    evening_kpi: pct(a.evening_done, a.student_count),
+    morning_kpi: pct(a.morning_done, a.morning_expected),
+    evening_kpi: pct(a.evening_done, a.evening_expected),
   }));
 
   return daily;
@@ -399,12 +460,20 @@ async function getSummaryReport(user, filters) {
 /**
  * Build flat rows for CSV/Excel export from a daily report date.
  */
-async function getExportRows(user, filters) {
-  const date = filters.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+/**
+ * The export query, built once and shared by both readers below.
+ *
+ * getExportRows and streamExportRows must agree on the WHERE clause exactly:
+ * it is the scope boundary that keeps a school out of another school's data,
+ * and reportGradeScope.unit.test.js asserts it through getExportRows only. A
+ * second copy of this SQL for the streaming path would be a security boundary
+ * with no test on it, free to drift.
+ */
+function exportRowsQuery(user, filters) {
+  const date = filters.date || todayBangkok();
   const { where, params } = buildScopeFilter(user, filters);
 
-  const [rows] = await pool.query(
-    `SELECT s.id AS student_id,
+  const sql = `SELECT s.id AS student_id,
             CONCAT(IFNULL(s.prefix,''), s.first_name, ' ', s.last_name) AS student_name,
             s.grade, s.classroom,
             sc.name AS school_name,
@@ -422,11 +491,42 @@ async function getExportRows(user, filters) {
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
      LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
      WHERE ${where}
-     ORDER BY sc.name, v.plate_no, s.first_name`,
-    [date, ...params]
-  );
+     ORDER BY sc.name, v.plate_no, s.first_name`;
 
+  return { date, sql, params: [date, ...params] };
+}
+
+async function getExportRows(user, filters) {
+  const { date, sql, params } = exportRowsQuery(user, filters);
+  const [rows] = await pool.query(sql, params);
   return { date, rows };
+}
+
+/**
+ * The same rows, one at a time, for exports that write as they read.
+ *
+ * A province-scope export is every student in the province; loading that into
+ * an array and then building the whole file from it holds the dataset twice in
+ * memory at once, and there is no LIMIT on this query to bound it.
+ *
+ * The connection is DESTROYED rather than released when iteration stops early —
+ * a client that cancels a download, or a write that fails. Returning a
+ * connection to the pool while its result set is still arriving would hand the
+ * next borrower rows from this query.
+ */
+async function* streamExportRows(user, filters) {
+  const { sql, params } = exportRowsQuery(user, filters);
+  const conn = await pool.getConnection();
+  let drained = false;
+  try {
+    for await (const row of conn.connection.query(sql, params).stream()) {
+      yield row;
+    }
+    drained = true;
+  } finally {
+    if (drained) conn.release();
+    else conn.destroy();
+  }
 }
 
 /**
@@ -497,6 +597,8 @@ module.exports = {
   getDailyReport,
   getMonthlyReport,
   getSummaryReport,
+  exportRowsQuery,
   getExportRows,
+  streamExportRows,
   getPolicyReport,
 };

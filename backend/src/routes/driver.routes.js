@@ -16,6 +16,7 @@
 
 const express = require('express');
 const multer  = require('multer');
+const { multipartLimits } = require('../utils/multipartLimits');
 const path    = require('path');
 const fs      = require('fs');
 const rateLimit = require('express-rate-limit');
@@ -26,8 +27,10 @@ const { authenticate }  = require('../middleware/auth');
 const { requireRole }   = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit }      = require('../utils/audit');
+const { readIdParam } = require('../utils/pathParams');
 const { validatePassword } = require('../utils/passwordPolicy');
 const { isAllowedImage } = require('../utils/fileType');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
 const checkinSvc        = require('../services/checkin.service');
 const ppSvc             = require('../services/pickupPoint.service');
 const leaveSvc          = require('../services/leave.service');
@@ -44,10 +47,11 @@ const emergencySvc      = require('../services/emergency.service');
 const etaSvc  = env.features.eta           ? require('../services/eta.service')           : null;
 const gfSvc   = env.features.geofence      ? require('../services/geofence.service')      : null;
 const devSvc  = env.features.routeDeviation ? require('../services/routeDeviation.service') : null;
+const { toBangkokDate, todayBangkok, toBangkokSqlDateTime } = require('../utils/thaiTime');
 
 function dateOnly(value) {
   if (!value) return null;
-  if (value instanceof Date) return value.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  if (value instanceof Date) return toBangkokDate(value);
   return String(value).slice(0, 10);
 }
 
@@ -74,7 +78,7 @@ const upload = multer({
     destination: (_req, _file, cb) => cb(null, uploadDir),
     filename: (req, file, cb) => cb(null, `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`),
   }),
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  limits: multipartLimits(2 * 1024 * 1024), // 2MB
   fileFilter: (_req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.webp'];
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
@@ -155,6 +159,9 @@ router.get('/active-shift', async (req, res, next) => {
 
 router.post('/shifts/start', async (req, res, next) => {
   try {
+    if (!await consumePolicyAction(req, res, {
+      context: 'driver.shift_start', subjectType: 'vehicle', subjectId: req.body.vehicle_id,
+    })) return;
     // SECURITY (L5) — startShift FIRST validates the driver's own AUTHORIZED
     // assignment (driver_vehicle_assignments … authorization_status='AUTHORIZED',
     // FOR UPDATE) and throws DRIVER_NOT_AUTHORIZED before any audit write. Only
@@ -184,9 +191,12 @@ router.post('/shifts/start', async (req, res, next) => {
 
 router.post('/shifts/:id/end', async (req, res, next) => {
   try {
+    const shiftId = readIdParam(req, res);
+    if (shiftId === null) return;
+
     const data = await driverShiftSvc.endShift(pool, {
       driverId: req.user.driver_id,
-      shiftId: Number(req.params.id),
+      shiftId,
       userId: req.user.id,
       note: req.body.note || null,
     });
@@ -213,7 +223,7 @@ router.get('/roster', async (req, res, next) => {
         plate_no: vehicle.plate_no,
       },
       session:  session || 'all',
-      date:     new Date().toISOString().split('T')[0],
+      date:     todayBangkok(),
       students,
     });
   } catch (err) {
@@ -336,8 +346,8 @@ router.post('/pickup-points', async (req, res, next) => {
 // Driver self-service cleanup. Scoped to the driver's own active vehicle.
 router.delete('/pickup-points/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res);
+    if (id === null) return;
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
@@ -365,8 +375,8 @@ router.delete('/pickup-points/:id', async (req, res, next) => {
 // in conflict with another point's session.
 router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res);
+    if (pointId === null) return;
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
@@ -389,8 +399,8 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
 // OTHER points (this point is excluded from the conflict check).
 router.put('/pickup-points/:id/students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res);
+    if (pointId === null) return;
 
     if (!Array.isArray(req.body.student_ids)) {
       return sendError(res, 'student_ids must be an array', [], 400);
@@ -715,7 +725,7 @@ router.get('/status-today', async (req, res, next) => {
         id:       vehicle.vehicle_id,
         plate_no: vehicle.plate_no,
       },
-      date: new Date().toISOString().split('T')[0],
+      date: todayBangkok(),
       ...status,
     });
   } catch (err) {
@@ -942,8 +952,13 @@ router.delete('/leave/:id', async (req, res, next) => {
   try {
     // Phase 10.12E — scope cancellation to the driver's active vehicle (H4):
     // a driver may only cancel a leave belonging to their own vehicle.
+    const leaveId = readIdParam(req, res);
+    if (leaveId === null) return;
+
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
-    const result = await leaveSvc.cancelLeave(parseInt(req.params.id, 10), req.user.id, vehicle.vehicle_id);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+
+    const result = await leaveSvc.cancelLeave(leaveId, req.user.id, vehicle.vehicle_id);
     return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
   } catch (err) { return next(err); }
 });
@@ -1174,9 +1189,11 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
     const driverId = await vllSvc.getActiveDriverIdForVehicle(vehicle.vehicle_id);
     if (!driverId) return sendError(res, 'ไม่พบการมอบหมายคนขับสำหรับรถคันนี้', [], 400);
 
-    const recordedAtSql = recorded_at
-      ? new Date(recorded_at).toISOString().slice(0, 23).replace('T', ' ')
-      : new Date().toISOString().slice(0, 23).replace('T', ' ');
+    // The pooled connection runs at +07:00, so MySQL reads a DATETIME literal
+    // as Bangkok wall-clock time. Passing a UTC wall clock stored every GPS
+    // fix seven hours behind the instant it happened — verified in production,
+    // where recorded_at trailed received_at by exactly 420 minutes.
+    const recordedAtSql = toBangkokSqlDateTime(recorded_at ? new Date(recorded_at) : new Date());
 
     await vllSvc.upsertLocation({
       vehicleId: vehicle.vehicle_id,
@@ -1276,9 +1293,12 @@ router.get('/applications', async (req, res, next) => {
 
 router.get('/applications/:id', async (req, res, next) => {
   try {
+    const applicationId = readIdParam(req, res);
+    if (applicationId === null) return;
+
     const verification = require('../services/vehicleVerification.service');
     const data = await verification.getApplication(pool, {
-      applicationId: Number(req.params.id),
+      applicationId,
       viewer: { role: 'driver', schoolId: null, userId: req.user.id },
     });
     return res.json({ success: true, data });

@@ -47,17 +47,17 @@ export default function VehicleSelect({ vehicles = [], value, onChange, placehol
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className={selected ? 'text-gray-800 truncate' : 'text-gray-400'}>
+        <span className={selected ? 'text-gray-800 truncate' : 'text-ink-muted'}>
           {selected ? label(selected) : '— ไม่มีรถ —'}
         </span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} strokeWidth={2} />
+        <ChevronDown className={`w-4 h-4 text-ink-muted shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} strokeWidth={2} />
       </button>
 
       {open && (
         <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
           <div className="p-2 border-b border-gray-100">
             <div className="relative">
-              <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth={2} />
+              <Search className="w-4 h-4 text-ink-muted absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth={2} />
               <input
                 ref={inputRef}
                 type="text"
@@ -72,7 +72,7 @@ export default function VehicleSelect({ vehicles = [], value, onChange, placehol
           <ul className="max-h-60 overflow-y-auto py-1" role="listbox">
             <li>
               <button type="button" onClick={() => pick('')}
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${!value ? 'text-blue-700 font-medium bg-blue-50' : 'text-gray-500'}`}>
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${!value ? 'text-blue-700 font-medium bg-blue-50' : 'text-ink-muted'}`}>
                 — ไม่มีรถ —
               </button>
             </li>
@@ -85,7 +85,7 @@ export default function VehicleSelect({ vehicles = [], value, onChange, placehol
               </li>
             ))}
             {filtered.length === 0 && (
-              <li className="px-3 py-3 text-sm text-gray-400 text-center">ไม่พบรถที่ตรงกับ “{query}”</li>
+              <li className="px-3 py-3 text-sm text-ink-muted text-center">ไม่พบรถที่ตรงกับ “{query}”</li>
             )}
           </ul>
         </div>

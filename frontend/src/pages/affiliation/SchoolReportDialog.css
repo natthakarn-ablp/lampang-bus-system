@@ -1,0 +1,23 @@
+.affiliation-school-report-print { display: none; }
+
+@media print {
+  @page { size: A4; margin: 15mm; }
+  body:has(.affiliation-school-report-print) > :not(.affiliation-school-report-print) {
+    display: none !important;
+  }
+  .affiliation-school-report-print {
+    display: block !important;
+    width: 100%;
+    color: #111827;
+    background: white;
+  }
+  .affiliation-school-report-dialog[open],
+  .affiliation-school-report-dialog::backdrop,
+  .school-report-actions { display: none !important; }
+  .affiliation-school-report-print article { padding: 0; }
+  .school-report-table { table-layout: fixed; }
+  .school-report-table th:first-child { width: 58%; }
+  .school-report-table thead { display: table-header-group; }
+  .school-report-table tfoot { display: table-row-group; }
+  .school-report-table tr { break-inside: avoid; }
+}

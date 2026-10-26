@@ -1,5 +1,8 @@
 # Phase 9 Closeout — Production Hardening Series
 
+> **Historical snapshot (ติดป้าย 5 ก.ย. 2569):** ปิดที่ `b520d58` (2026-05-14) ซึ่งห่างจาก production ปัจจุบันหลายร้อย commit — "Phase 9" ในชื่อเอกสารนี้คือชุด hardening เดือน พ.ค. 2569 ไม่ใช่ Phase 9 (capacity 1,000 users) ของแผนปิดโครงการ
+> สถานะจริงล่าสุด: `docs/project-closure/handoff-2026-09-05.md` · เหตุผลที่ติดป้าย: `docs/project-closure/current-status-2026-09-04.md` §5 (#21)
+
 *Closed: 2026-05-14*
 *Final production HEAD: `b520d58`*
 

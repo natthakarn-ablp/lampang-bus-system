@@ -7,6 +7,7 @@ const router = express.Router();
 const { pool } = require('../config/database');
 const { authenticate } = require('../middleware/auth');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const lineSvc = require('../services/line.service');
 const idTokenSvc = require('../services/lineIdToken.service');
 const tpl = require('../services/lineFlexTemplates.service');
@@ -99,7 +100,19 @@ async function requireParentLineAuth(req, res, next) {
 router.get('/children', requireParentLineAuth, async (req, res, next) => {
   try {
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
-    sendSuccess(res, children);
+
+    // This list carries plate_no and driver_name, so leaving it ungated made
+    // the consent gate defeatable by reading the list instead of the detail
+    // endpoints. When the gate is on and consent is missing, those two fields
+    // are redacted and `consent_required` tells the LIFF UI to prompt —
+    // returning an empty list instead would read as "you have no children".
+    const gate = await parentConsent.guardParentView(req.lineUserId);
+    const result = parentConsent.applyChildListGate(children, gate);
+
+    sendSuccess(res, result.children, 'OK', {
+      consent_required: result.consent_required,
+      consent_granted: result.consent_granted,
+    });
   } catch (err) { next(err); }
 });
 
@@ -107,13 +120,16 @@ router.get('/children', requireParentLineAuth, async (req, res, next) => {
 // Returns today's checkin/checkout status for a specific child.
 router.get('/children/:id/status', requireParentLineAuth, async (req, res, next) => {
   try {
+    const studentId = readIdParam(req, res);
+    if (studentId === null) return;
+
     // Verify the verified LINE user is linked to this student.
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
-    const child = children.find(c => c.id === parseInt(req.params.id));
+    const child = children.find(c => c.id === studentId);
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
     if (!(await ensureParentConsent(req, res))) return;
 
-    const status = await lineSvc.getChildStatusToday(parseInt(req.params.id));
+    const status = await lineSvc.getChildStatusToday(studentId);
     sendSuccess(res, { ...child, ...status });
   } catch (err) { next(err); }
 });
@@ -122,9 +138,12 @@ router.get('/children/:id/status', requireParentLineAuth, async (req, res, next)
 // Returns recent checkin/checkout history for a child (last 7 days).
 router.get('/children/:id/history', requireParentLineAuth, async (req, res, next) => {
   try {
+    const studentId = readIdParam(req, res);
+    if (studentId === null) return;
+
     // Verify linkage to the verified LINE user.
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
-    const child = children.find(c => c.id === parseInt(req.params.id));
+    const child = children.find(c => c.id === studentId);
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
     if (!(await ensureParentConsent(req, res))) return;
 
@@ -137,7 +156,7 @@ router.get('/children/:id/history', requireParentLineAuth, async (req, res, next
        WHERE student_id = ? AND check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
        ORDER BY check_date DESC, checked_at DESC
        LIMIT 500`,
-      [parseInt(req.params.id), days]
+      [studentId, days]
     );
 
     sendSuccess(res, { student: child, history: rows });
@@ -152,13 +171,16 @@ router.get('/children/:id/history', requireParentLineAuth, async (req, res, next
 // distance, and confidence.
 router.get('/children/:id/eta', requireParentLineAuth, async (req, res, next) => {
   try {
+    const studentId = readIdParam(req, res);
+    if (studentId === null) return;
+
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
-    const child = children.find(c => c.id === parseInt(req.params.id));
+    const child = children.find(c => c.id === studentId);
     if (!child) return sendError(res, 'Student not linked to this account', [], 403);
     if (!(await ensureParentConsent(req, res))) return;
 
     const etaSvc = require('../services/eta.service');
-    const eta = await etaSvc.getForStudent(parseInt(req.params.id));
+    const eta = await etaSvc.getForStudent(studentId);
     return sendSuccess(res, eta);
   } catch (err) { next(err); }
 });
@@ -213,7 +235,7 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
     // Phase 10.13C-4A — credential lockout (before the credential lookup), so a
     // brute-force can't be bypassed by rotating IPs.
     const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential });
-    const lock = bindGuard.checkLock(keys);
+    const lock = await bindGuard.checkLock(keys);
     if (lock.locked) {
       await lineSvc.auditBind({ phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
@@ -226,7 +248,7 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
     }
     const lineUserId = verify.userId;
     const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, sub: lineUserId });
-    const subLock = bindGuard.checkLock({ sub: subKeys.sub });
+    const subLock = await bindGuard.checkLock({ sub: subKeys.sub });
     if (subLock.locked) {
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: subLock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
@@ -242,12 +264,12 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
 
     const match = await lineSvc.findLinkableParent(cleanPhone, credential);
     if (!match.found) {
-      bindGuard.noteFailure(subKeys);
+      await bindGuard.noteFailure(subKeys);
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_PREVIEW_FAILED', reason: 'CREDENTIAL_MISMATCH', ...meta });
       return sendError(res, 'ไม่พบข้อมูลที่ตรงกัน กรุณาตรวจสอบรหัสนักเรียนและเบอร์โทรศัพท์', [], 404);
     }
 
-    bindGuard.noteSuccess(subKeys); // valid credential — clear the pair counter
+    await bindGuard.noteSuccess(subKeys); // valid credential — clear the pair counter
     console.log('[LINE_BIND_PREVIEW] ok', { hasStudent: true });
     return sendSuccess(res, {
       student: match.student,
@@ -272,7 +294,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
 
     // Credential lockout before lookup (see bind-preview).
     const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential });
-    const lock = bindGuard.checkLock(keys);
+    const lock = await bindGuard.checkLock(keys);
     if (lock.locked) {
       await lineSvc.auditBind({ phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
@@ -285,7 +307,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
     }
     const lineUserId = verify.userId;
     const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, sub: lineUserId });
-    const subLock = bindGuard.checkLock({ sub: subKeys.sub });
+    const subLock = await bindGuard.checkLock({ sub: subKeys.sub });
     if (subLock.locked) {
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: subLock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
@@ -298,7 +320,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
     }
     const match = await lineSvc.findLinkableParent(cleanPhone, credential);
     if (!match.found) {
-      bindGuard.noteFailure(subKeys);
+      await bindGuard.noteFailure(subKeys);
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_CONFIRM_FAILED', reason: 'CREDENTIAL_MISMATCH', ...meta });
       return sendError(res, 'ไม่พบข้อมูลที่ตรงกัน กรุณาตรวจสอบรหัสนักเรียนและเบอร์โทรศัพท์', [], 404);
     }
@@ -314,7 +336,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
       }
       throw bindErr;
     }
-    bindGuard.noteSuccess(subKeys);
+    await bindGuard.noteSuccess(subKeys);
     await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: match.studentCode || credential, action: 'LINE_BIND_SUCCESS', reason: 'SUCCESS', ...meta });
     await lineSvc.logMessage(lineUserId, 'system', 'bind_success_liff', 'ok', `parent_id=${match.parentId}`);
     console.log('[LINE_BIND_CONFIRM] linked', { parentId: match.parentId });

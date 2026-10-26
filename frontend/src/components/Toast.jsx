@@ -13,9 +13,13 @@ const ICONS = {
   info:    { Icon: Info,          label: 'ข้อมูล' },
 };
 
+// The `ink` half of each pair, not the fill half: every toast puts white text
+// on this background, and white on bg-success is 2.54:1 (bg-danger 3.76). On
+// the ink tones the same white is 5.48 and 6.47. brand-600 already carries
+// white at 5.17.
 const COLORS = {
-  success: 'bg-success',
-  error: 'bg-danger',
+  success: 'bg-success-ink',
+  error: 'bg-danger-ink',
   info: 'bg-brand-600',
 };
 

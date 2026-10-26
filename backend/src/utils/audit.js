@@ -13,7 +13,8 @@ const AUDIT_ACTIONS = [
 
 /**
  * Write a record to audit_logs.
- * Failures are logged to stderr but never throw — auditing must not break the main flow.
+ * Detached failures are best-effort. Transaction deadlocks must propagate:
+ * InnoDB has rolled back the caller's business writes as well as this audit.
  *
  * @param {object} opts
  * @param {number|null}  opts.userId      - users.id of the actor (null for unauthenticated)
@@ -25,6 +26,7 @@ const AUDIT_ACTIONS = [
  * @param {string|null}  opts.ipAddress   - req.ip
  * @param {string|null}  opts.userAgent   - req.headers['user-agent']
  * @param {object|null}  opts.conn        - Optional existing mysql2 connection (for transactions)
+ * @param {boolean}      opts.required    - Fail the operation if audit cannot be stored
  */
 async function logAudit({
   userId = null,
@@ -36,6 +38,7 @@ async function logAudit({
   ipAddress = null,
   userAgent = null,
   conn = null,
+  required = false,
 }) {
   if (!AUDIT_ACTIONS.includes(action)) {
     console.error(`[audit] Unknown action: ${action}`);
@@ -63,6 +66,7 @@ async function logAudit({
     await executor.query(sql, params);
   } catch (err) {
     console.error('[audit] Failed to write audit log:', err.message);
+    if (required || (conn && (err.code === 'ER_LOCK_DEADLOCK' || err.errno === 1213))) throw err;
   }
 }
 

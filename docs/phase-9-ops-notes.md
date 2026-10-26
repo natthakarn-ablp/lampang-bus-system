@@ -541,9 +541,15 @@ The constants are declared near the top of `scripts/health-smoke.sh`:
 | Condition | Result |
 |---|---|
 | 0 matches | `[PASS]` |
-| `count == 7` | `[BASELINE]` (historical entries; first 3 shown for traceability) |
+| `count == 7` | `[BASELINE]` (historical entries; count only) |
 | `count < 7` | `[BASELINE]` — logs likely rotated; operator should reset baseline |
-| `count > 7` | `[WARN]` — `(count − 7)` new critical entries; last 20 shown |
+| `count > 7` | `[WARN]` — `(count − 7)` new critical entries; count only |
+
+Matched PM2 log records are withheld from smoke output, including historical
+baseline records. They may contain personal data, SQL parameters or credentials;
+the alert wrapper includes the smoke tail in a technical notification. Authorized
+operators inspect source logs privately on the server when investigation is
+needed. Match thresholds and result/exit semantics remain unchanged.
 
 ### 13.4 NOT baselined (still WARN)
 

@@ -9,6 +9,8 @@ import EmptyState from '../../components/EmptyState';
 import {
   AppCard, AlertBanner, StatusBadge, DataTable, FormField, Modal, SectionTitle,
 } from '../../components/ui';
+import { snapshotPct, pctDelta, fmtSnapshotPct, fmtPctDelta } from '../../utils/kpi';
+import { describeBlockingReason } from '../../utils/evidenceStatus';
 
 // Metric definitions — edit here to add/change metrics
 const METRICS = [
@@ -22,20 +24,20 @@ const METRICS = [
   { key: 'active_users', label: 'ผู้ใช้ที่ active', num: 'active_users', den: 'total_users', pct: true, higher: true },
 ];
 
-function calcPct(num, den) {
-  if (!den || den === 0) return 0;
-  return Math.round((num / den) * 10000) / 100;
-}
-
-function calcDelta(current, baseline) {
-  return Math.round((current - baseline) * 100) / 100;
-}
+// Percentages and deltas come from utils/kpi.js (snapshotPct / pctDelta), the
+// same rule the backend research export uses: a zero or missing denominator
+// is null — shown as "ไม่มีข้อมูล" — never 0%, and a delta against it is null
+// rather than a trend.
 
 /**
  * The direction of a change was carried by a bare ▲ / ▼ / = glyph in a colour.
  * A screen reader read "black up-pointing triangle", and a red/green pair is
  * the only thing separating "ดีขึ้น" from "ลดลง" for a colour-blind reader.
  * Each trend now carries its own word and an icon marked decorative.
+ *
+ * Whether the direction may be shown at all is not decided here: the server
+ * decides that (see comparisonUsable below), and this function only describes a
+ * delta the server has already allowed to be read as a trend.
  */
 function trendMeta(delta, higher) {
   if (delta === 0) return { Icon: Minus, tone: 'neutral', cls: 'text-ink-muted', label: 'คงเดิม' };
@@ -50,10 +52,6 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function fmtDelta(delta) {
-  return `${delta > 0 ? '+' : ''}${delta}%`;
-}
-
 export default function ResearchMetrics() {
   const toast = useToast();
   const [snapshots, setSnapshots] = useState([]);
@@ -62,6 +60,10 @@ export default function ResearchMetrics() {
   // "ยังไม่มี snapshot" empty state — telling the admin there is no baseline
   // when there may well be one.
   const [error, setError] = useState(null);
+  // Whether the two ends of this page may be compared at all is a server
+  // decision (researchReadiness.service.js), so the page reads the readiness
+  // block alongside the snapshots instead of deciding for itself.
+  const [readiness, setReadiness] = useState(null);
   const [selectedBaselineId, setSelectedBaselineId] = useState(null);
   const [running, setRunning] = useState(false);
   const [showPreMeasure, setShowPreMeasure] = useState(false);
@@ -70,14 +72,23 @@ export default function ResearchMetrics() {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.get('/admin/snapshots?limit=50');
+      // The snapshots are the numbers; the evaluation summary carries the two
+      // flags that say whether their difference may be called a trend. A failed
+      // readiness call must not blank the page — but it must not license the
+      // claim either, so it leaves readiness null and the trend stays gated.
+      const [r, ev] = await Promise.all([
+        api.get('/admin/snapshots?limit=50'),
+        api.get('/admin/evaluation-summary').catch(() => null),
+      ]);
       const data = Array.isArray(r.data?.data) ? r.data.data : [];
       setSnapshots(data);
+      setReadiness(ev?.data?.data?.evidence_readiness || null);
       const firstBaseline = data.find(s => s.is_baseline);
       if (firstBaseline) setSelectedBaselineId(firstBaseline.id);
     } catch (err) {
       setError(err.response?.data?.message || 'โหลดข้อมูล snapshot ไม่สำเร็จ');
       setSnapshots([]);
+      setReadiness(null);
     } finally {
       setLoading(false);
     }
@@ -94,9 +105,15 @@ export default function ResearchMetrics() {
         research_phase: researchPhase,
       });
       toast.success(isBaseline ? 'สร้าง baseline สำเร็จ' : 'บันทึก snapshot สำเร็จ');
-      const r = await api.get('/admin/snapshots?limit=50');
+      // A new snapshot moves both flags (freshness, and the gap of the pair),
+      // so the readiness is re-read with the list rather than left stale.
+      const [r, ev] = await Promise.all([
+        api.get('/admin/snapshots?limit=50'),
+        api.get('/admin/evaluation-summary').catch(() => null),
+      ]);
       const data = Array.isArray(r.data?.data) ? r.data.data : [];
       setSnapshots(data);
+      setReadiness(ev?.data?.data?.evidence_readiness || null);
       if (isBaseline) {
         const nb = data.find(s => s.is_baseline);
         if (nb) setSelectedBaselineId(nb.id);
@@ -110,6 +127,26 @@ export default function ResearchMetrics() {
   const baseline = baselines.find(s => s.id === selectedBaselineId) || baselines[0] || null;
   const latest = snapshots.find(s => !s.is_baseline) || snapshots[0] || null;
 
+  // The project's own rule for comparing a baseline with a post snapshot lives
+  // on the server (researchReadiness.service.js): the pair is usable only when
+  // the gap reaches the minimum, the protocol is frozen and both ends fall
+  // inside the protocol window, and a snapshot past the freshness limit no
+  // longer describes the current period. The page cannot re-derive any of that
+  // from the snapshot rows, so it asks and obeys. A missing answer is not a
+  // yes — an unknown readiness gates the claim exactly like a refusal does.
+  const baselinePair = readiness?.baseline_pair || null;
+  const freshness = readiness?.snapshot_freshness || null;
+  const comparisonUsable = baselinePair?.usable === true && freshness?.fresh === true;
+  // The reason is the server's own code translated by the shared map, never a
+  // sentence invented here — the page must not explain the block differently
+  // from the export and the executive pages.
+  const blockingCode = baselinePair && !baselinePair.usable
+    ? baselinePair.reason
+    : (freshness && !freshness.fresh ? freshness.reason : null);
+  const comparisonBlockedReason = comparisonUsable
+    ? null
+    : (blockingCode ? describeBlockingReason(blockingCode) : 'ยังไม่ทราบสถานะความพร้อมของข้อมูล');
+
   // One row per metric, computed once and shared by the table and the cards so
   // the two cannot disagree.
   const comparison = METRICS.map(m => {
@@ -117,14 +154,17 @@ export default function ResearchMetrics() {
     const bDen = baseline?.[m.den] ?? 0;
     const cNum = latest?.[m.num] ?? 0;
     const cDen = latest?.[m.den] ?? 0;
-    const bVal = calcPct(bNum, bDen);
-    const cVal = calcPct(cNum, cDen);
-    const delta = baseline && latest ? calcDelta(cVal, bVal) : null;
+    // Raw values go in, so a missing snapshot or a zero denominator is null.
+    const bVal = baseline ? snapshotPct(baseline[m.num], baseline[m.den]) : null;
+    const cVal = latest ? snapshotPct(latest[m.num], latest[m.den]) : null;
+    const delta = pctDelta(bVal, cVal);
     return {
       ...m, bNum, bDen, cNum, cDen, bVal, cVal, delta,
       trend: delta !== null ? trendMeta(delta, m.higher) : null,
       hasBaseline: Boolean(baseline),
       hasLatest: Boolean(latest),
+      // Both snapshots exist but at least one side has no denominator.
+      notComparable: Boolean(baseline && latest) && delta === null,
     };
   });
 
@@ -132,26 +172,35 @@ export default function ResearchMetrics() {
     { key: 'label', header: 'ตัวชี้วัด', primary: true, cell: r => r.label },
     {
       key: 'baseline', header: 'Baseline', align: 'center', numeric: true,
-      cell: r => (r.hasBaseline ? `${r.bVal}% (${r.bNum}/${r.bDen})` : '-'),
+      cell: r => (r.hasBaseline ? `${fmtSnapshotPct(r.bVal)} (${r.bNum}/${r.bDen})` : '-'),
     },
     {
       key: 'current', header: 'ปัจจุบัน', align: 'center', numeric: true,
-      cell: r => (r.hasLatest ? <span className="font-semibold text-ink">{r.cVal}% ({r.cNum}/{r.cDen})</span> : '-'),
+      cell: r => (r.hasLatest ? <span className="font-semibold text-ink">{fmtSnapshotPct(r.cVal)} ({r.cNum}/{r.cDen})</span> : '-'),
     },
     {
       key: 'delta', header: 'เปลี่ยนแปลง', align: 'center', numeric: true,
-      cell: r => (r.delta === null ? '-' : (
-        <span className={`inline-flex items-center gap-1 font-semibold ${r.trend.cls}`}>
-          <r.trend.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
-          {fmtDelta(r.delta)}
-        </span>
-      )),
+      cell: r => (r.delta === null
+        ? <span className="text-ink-muted">{r.notComparable ? fmtPctDelta(null) : '-'}</span>
+        // When the comparison is gated the difference between the two numbers is
+        // still shown; what goes away is the arrow and the colour that read it as
+        // an improvement or a decline.
+        : comparisonUsable ? (
+          <span className={`inline-flex items-center gap-1 font-semibold ${r.trend.cls}`}>
+            <r.trend.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+            {fmtPctDelta(r.delta)}
+          </span>
+        ) : <span className="text-ink-muted tabular-nums">{fmtPctDelta(r.delta)}</span>),
     },
     {
       key: 'status', header: 'สถานะ', align: 'center', badge: true,
-      cell: r => (r.trend
+      cell: r => (r.trend && comparisonUsable
         ? <StatusBadge variant={r.trend.tone} size="sm">{r.trend.label}</StatusBadge>
-        : '-'),
+        : r.trend
+          ? <StatusBadge variant="neutral" size="sm">ยังเทียบไม่ได้</StatusBadge>
+          : r.notComparable
+            ? <StatusBadge variant="neutral" size="sm">ไม่มีข้อมูล</StatusBadge>
+            : '-'),
     },
   ];
 
@@ -238,23 +287,39 @@ export default function ResearchMetrics() {
         />
       ) : (
         <>
+          {/* The numbers stay on screen; only the claim about their difference
+              is withdrawn, together with the server's reason for withdrawing it. */}
+          {!comparisonUsable && (
+            <AlertBanner variant="warn" title="ยังอ่านส่วนต่างเป็นแนวโน้มไม่ได้" className="mb-5">
+              แสดงค่า baseline และค่าปัจจุบันตามจริง แต่ยังสรุปว่า “ดีขึ้น” หรือ “ลดลง” ไม่ได้ — {comparisonBlockedReason}
+            </AlertBanner>
+          )}
+
           {/* KPI comparison cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
             {comparison.map(r => (
               <AppCard key={r.key} padding="sm" className="text-center">
                 <p className="text-caption text-ink-muted mb-1">{r.label}</p>
                 <p className="text-2xl font-bold text-ink tabular-nums">
-                  {r.hasLatest ? `${r.cVal}%` : '-'}
+                  {r.hasLatest ? fmtSnapshotPct(r.cVal) : '-'}
                 </p>
-                {r.trend && r.delta !== null && (
+                {r.trend && r.delta !== null && comparisonUsable && (
                   <p className={`inline-flex items-center gap-1 text-sm font-medium mt-0.5 ${r.trend.cls}`}>
                     <r.trend.Icon className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
-                    <span className="tabular-nums">{fmtDelta(r.delta)}</span>
+                    <span className="tabular-nums">{fmtPctDelta(r.delta)}</span>
                     <span className="sr-only">{r.trend.label}</span>
                   </p>
                 )}
+                {r.delta !== null && !comparisonUsable && (
+                  <p className="text-sm text-ink-muted mt-0.5 tabular-nums">
+                    {fmtPctDelta(r.delta)} <span className="text-caption">(ยังเทียบไม่ได้)</span>
+                  </p>
+                )}
+                {r.notComparable && (
+                  <p className="text-sm text-ink-muted mt-0.5">ไม่มีข้อมูล</p>
+                )}
                 {r.hasBaseline && (
-                  <p className="text-caption text-ink-muted mt-0.5 tabular-nums">baseline: {r.bVal}%</p>
+                  <p className="text-caption text-ink-muted mt-0.5 tabular-nums">baseline: {fmtSnapshotPct(r.bVal)}</p>
                 )}
               </AppCard>
             ))}

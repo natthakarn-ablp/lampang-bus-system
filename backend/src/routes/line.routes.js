@@ -44,23 +44,18 @@ function safeKeyEqual(a, b) {
   return crypto.timingSafeEqual(ba, bb);
 }
 
-// In-memory dedup of recently seen LINE webhookEventIds (audit 2026-06-18,
-// line-integration): LINE retries deliveries, so without dedup a single event can
-// be processed multiple times. Bounded ring to cap memory; single-instance only.
-const SEEN_EVENTS = new Map(); // id -> timestamp
-const SEEN_EVENTS_MAX = 5000;
-function alreadyProcessed(eventId) {
-  if (!eventId) return false;
-  if (SEEN_EVENTS.has(eventId)) return true;
-  SEEN_EVENTS.set(eventId, Date.now());
-  if (SEEN_EVENTS.size > SEEN_EVENTS_MAX) {
-    // drop the oldest ~10%
-    const drop = Math.floor(SEEN_EVENTS_MAX * 0.1);
-    let i = 0;
-    for (const k of SEEN_EVENTS.keys()) { SEEN_EVENTS.delete(k); if (++i >= drop) break; }
-  }
-  return false;
-}
+// Dedup of LINE webhookEventIds (audit 2026-06-18, line-integration): LINE
+// retries deliveries, so without dedup a single event is processed more than
+// once.
+//
+// A1-9: this was a 5,000-entry in-memory ring, single-instance only. It let an
+// event through twice in two ways — a redelivery landing on a different
+// instance, and a redelivery of an event that had already fallen out of the
+// ring, which needs only one instance. Both mean a duplicate notification and a
+// duplicate row. It is now an INSERT IGNORE against line_webhook_events_seen
+// (migration 051): exactly one caller gets the insert, everyone else reads 0
+// affected rows and skips.
+const { alreadyProcessed } = require('../utils/sharedSecurityState');
 
 // LINE webhook — uses express.raw to get Buffer for signature verification
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -89,7 +84,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const events = body.events || [];
     for (const event of events) {
       // Skip a redelivered event we've already handled (replay/retry dedup).
-      if (alreadyProcessed(event.webhookEventId)) continue;
+      if (await alreadyProcessed(event.webhookEventId)) continue;
       await handleEvent(event).catch(err =>
         console.error('[LINE] Event error:', err.message)
       );
@@ -304,7 +299,7 @@ async function handleTextMessage(lineUserId, text) {
     // Same credential lockout as the LIFF bind endpoints (per phone / student /
     // pair / sub). The chat path is another guessing surface for the same pair.
     const guardKeys = bindGuard.keysFor({ phone: state.phone, studentKey: credential, sub: lineUserId });
-    const lock = bindGuard.checkLock(guardKeys);
+    const lock = await bindGuard.checkLock(guardKeys);
     if (lock.locked) {
       await lineSvc.auditBind({ sub: lineUserId, phone: state.phone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason });
       await lineSvc.pushParentFlex(lineUserId, {
@@ -318,7 +313,7 @@ async function handleTextMessage(lineUserId, text) {
     const result = await lineSvc.tryLinkByPhoneAndStudentId(lineUserId, state.phone, credential);
     lineSvc.clearLinkState(lineUserId);
     if (result.success) {
-      bindGuard.noteSuccess(guardKeys);
+      await bindGuard.noteSuccess(guardKeys);
       await lineSvc.auditBind({ sub: lineUserId, phone: state.phone, studentCode: credential, action: 'LINE_BIND_SUCCESS', reason: 'SUCCESS' });
       await lineSvc.logMessage(lineUserId, 'system', 'bind_success', 'ok', `parent_id=${result.parentId}`);
       const children = await lineSvc.getLinkedChildren(lineUserId);
@@ -329,7 +324,7 @@ async function handleTextMessage(lineUserId, text) {
       });
     } else {
       const isConflict = !!result.code; // PHONE_BOUND_TO_OTHER / USER_BOUND_TO_OTHER_PHONE
-      if (!isConflict) bindGuard.noteFailure(guardKeys);
+      if (!isConflict) await bindGuard.noteFailure(guardKeys);
       await lineSvc.auditBind({
         sub: lineUserId, phone: state.phone, studentCode: credential,
         action: isConflict ? 'LINE_BIND_DUPLICATE_OR_ALREADY_BOUND' : 'LINE_BIND_CONFIRM_FAILED',

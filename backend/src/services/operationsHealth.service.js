@@ -7,9 +7,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { getDeploymentReadiness } = require('./deploymentReadiness.service');
+const { getMigrationStatus } = require('./migrationStatus.service');
+const { probePolicyEvidenceTables } = require('../utils/policyEvidenceTables');
 
 const BACKUP_DIR = '/home/schoolbus/backups/lampang-bus';
-const MIGRATIONS_DIR = path.join(__dirname, '../../migrations');
 const CLEANUP_LOG = '/home/schoolbus/logs/import-cleanup.log';
 const DISK_PATH = '/home/schoolbus';
 const BACKUP_MAX_AGE_HOURS = 36;
@@ -94,17 +95,23 @@ async function computeOperationsHealth(pool) {
 
   // ── Migration tracking (untracked / checksum drift) ────────────────────────
   try {
-    const fileList = fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql'));
-    const [tracked] = await pool.query('SELECT filename, checksum FROM schema_migrations');
-    const byName = Object.fromEntries(tracked.map((t) => [t.filename, t.checksum]));
-    let untracked = 0, drift = 0;
-    for (const f of fileList) {
-      const sum = crypto.createHash('sha256').update(fs.readFileSync(path.join(MIGRATIONS_DIR, f))).digest('hex');
-      if (!(f in byName)) untracked++;
-      else if (byName[f] && byName[f] !== sum) drift++;
-    }
-    add('migration', 'การติดตามไมเกรชัน', drift > 0 ? 'CRITICAL' : untracked > 0 ? 'WARN' : 'OK', `${untracked} untracked / ${drift} drift`);
+    const migration = await getMigrationStatus(pool);
+    add('migration', 'การติดตามไมเกรชัน', migration.drift > 0 ? 'CRITICAL' : migration.pending > 0 ? 'WARN' : 'OK', `${migration.pending} untracked / ${migration.drift} drift`);
   } catch (e) { add('migration', 'การติดตามไมเกรชัน', 'WARN', null, 'check error: ' + e.code); }
+
+  // ── Policy-notice tables (migrations 052/053) ─────────────────────────────
+  // Their absence no longer stops the boot (utils/policyEvidenceTables.js), so
+  // this row is where an operator sees it. The probe never throws.
+  {
+    const { db } = require('../config/env');
+    const label = 'ตารางฟีเจอร์แจ้งนโยบาย (migration 052/053)';
+    const policy = await probePolicyEvidenceTables(pool, db.name);
+    if (policy.state === 'ready') add('policy_notice_tables', label, 'OK', 'present');
+    else if (policy.state === 'missing') {
+      add('policy_notice_tables', label, 'WARN', `missing: ${policy.missing.join(', ')}`,
+        'ยังไม่ได้รัน migration 052/053 — ฟีเจอร์แจ้งนโยบายจะตอบ 503 เมื่อเปิดใช้ ส่วนอื่นของระบบใช้งานได้ปกติ');
+    } else add('policy_notice_tables', label, 'WARN', null, 'check error: ' + policy.error);
+  }
 
   // ── Disk usage ─────────────────────────────────────────────────────────────
   try {

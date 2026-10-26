@@ -8,34 +8,21 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const reportSvc = require('../services/report.service');
 const { logAudit } = require('../utils/audit');
+const { Readable } = require('stream');
+const { pipeline } = require('stream/promises');
 const { csvCell, neutralizeSpreadsheetCell } = require('../utils/exportSecurity');
+const { abbreviateGrade } = require('../utils/gradeDisplay');
+const { DECISION_LOG_ROLES, validateDecisionLog } = require('../utils/decisionLog');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
+const { todayBangkok } = require('../utils/thaiTime');
 
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
 
-const DATE_RE  = /^\d{4}-\d{2}-\d{2}$/;
-const MONTH_RE = /^\d{4}-\d{2}$/;
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-
-function isLeapYear(year) {
-  return (year % 400 === 0) || (year % 4 === 0 && year % 100 !== 0);
-}
-
-function isValidMonth(value) {
-  if (!MONTH_RE.test(value)) return false;
-  const month = Number(value.slice(5, 7));
-  return month >= 1 && month <= 12;
-}
-
-function isValidDate(value) {
-  if (!DATE_RE.test(value)) return false;
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  if (month < 1 || month > 12) return false;
-  const maxDay = month === 2 && isLeapYear(year) ? 29 : DAYS_IN_MONTH[month - 1];
-  return day >= 1 && day <= maxDay;
-}
+// Moved to utils/calendarDate.js so admin, affiliation and province stop
+// carrying a weaker shape-only copy of the same idea. Behaviour here is
+// unchanged — this was the implementation the others are now adopting.
+const { isCalendarDate: isValidDate, isCalendarMonth: isValidMonth } = require('../utils/calendarDate');
 
 /**
  * Extract and validate common filter params from query string.
@@ -111,6 +98,24 @@ router.get('/policy', async (req, res, next) => {
 
 // ─── Export endpoints ───────────────────────────────────────────────────────
 
+// Every route below sends a file, and none of them carries a per-route limiter.
+// That is deliberate, not an oversight: app.js mounts this entire router behind
+// its own exportLimiter (40 requests / 5 min / IP, app.js:155-163), so a request
+// to any export here is already counted before it reaches this file.
+//
+// Adding importExportLimiter per route would make things worse, not safer. That
+// limiter is a single module-level instance (middleware/rateLimiters.js), so one
+// bucket per IP is shared by every consumer of it: student imports, the
+// school-account import and the admin research export. Pulling report downloads
+// into that bucket would let forty report downloads lock a school out of its own
+// student import for five minutes, on a school where everyone shares one address.
+//
+// This has been mistaken for a missing limiter twice, most recently on 8 Sep
+// 2026, because the guard is at the mount and not in this file. It is enforced
+// from the outside by tests/exportRateLimitCoverage.unit.test.js, which scans
+// every route file and every mount in app.js and fails if a route that builds an
+// export ends up with neither kind of cap.
+
 const CSV_HEADERS = [
   'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'ระดับชั้น', 'ห้อง',
   'โรงเรียน', 'เขตพื้นที่', 'ทะเบียนรถ',
@@ -124,6 +129,15 @@ const MONTHLY_HEADERS = [
   'รับเย็นแล้ว', 'รับเย็นคาดหวัง', 'KPI เย็น',
   'วันที่มีข้อมูล', 'วันส่งเช้าครบ 100%', 'วันรับเย็นครบ 100%',
 ];
+
+async function consumeReportExportPolicy(req, res, reportType, format) {
+  const value = reportType === 'daily'
+    ? (req.filters.date || todayBangkok())
+    : (req.filters.month || todayBangkok().slice(0, 7));
+  return consumePolicyAction(req, res, {
+    context: 'report.export', subjectType: 'report_export', subjectId: `${reportType}:${value}:${format}`,
+  });
+}
 
 function toNumber(value) {
   return Number(value || 0);
@@ -212,40 +226,66 @@ function monthlyRowValues(row) {
 /**
  * GET /api/reports/export/csv
  */
+/** One CSV line per row, in the column order of CSV_HEADERS. */
+function csvLine(r) {
+  // Phase 10.12G — every cell neutralised against CSV formula injection.
+  return [
+    csvCell(r.student_id),
+    csvCell(r.student_name),
+    csvCell(abbreviateGrade(r.grade)),
+    csvCell(r.classroom || ''),
+    csvCell(r.school_name),
+    csvCell(r.affiliation_name),
+    csvCell(r.plate_no),
+    csvCell(r.morning_service),
+    csvCell(r.evening_service),
+    csvCell(r.morning_status),
+    csvCell(r.morning_time || ''),
+    csvCell(r.evening_status),
+    csvCell(r.evening_time || ''),
+  ].join(',') + '\n';
+}
+
+/**
+ * A failure after the first byte is on the wire cannot be answered with a JSON
+ * error — the client is already receiving a file. Destroying the response
+ * aborts the chunked body, which browsers and curl report as a failed download.
+ * The alternative is worse: a 200 and a file that looks complete and is not.
+ */
+function abortStreamedExport(res, err, next) {
+  if (res.headersSent) {
+    // eslint-disable-next-line no-console
+    console.error('[export] failed after headers were sent:', err && err.message);
+    res.destroy(err);
+    return;
+  }
+  next(err);
+}
+
 router.get('/export/csv', async (req, res, next) => {
   try {
-    const { date, rows } = await reportSvc.getExportRows(req.user, req.filters);
+    if (!await consumeReportExportPolicy(req, res, 'daily', 'csv')) return;
+    // Resolved before any header goes out, so a bad filter still answers JSON.
+    const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
     const filename = `report-${date}.csv`;
-
-    const BOM = '\uFEFF';
-    let csv = BOM + CSV_HEADERS.join(',') + '\n';
-    for (const r of rows) {
-      // Phase 10.12G — every cell neutralised against CSV formula injection.
-      const line = [
-        csvCell(r.student_id),
-        csvCell(r.student_name),
-        csvCell(r.grade || ''),
-        csvCell(r.classroom || ''),
-        csvCell(r.school_name),
-        csvCell(r.affiliation_name),
-        csvCell(r.plate_no),
-        csvCell(r.morning_service),
-        csvCell(r.evening_service),
-        csvCell(r.morning_status),
-        csvCell(r.morning_time || ''),
-        csvCell(r.evening_status),
-        csvCell(r.evening_time || ''),
-      ].join(',');
-      csv += line + '\n';
-    }
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_csv', entityId: date,
       newValue: { format: 'csv', role: req.user.role, scope: req.user.scopeId },
       ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
-    return res.send(csv);
-  } catch (err) { next(err); }
+
+    async function* body() {
+      yield '\uFEFF' + CSV_HEADERS.join(',') + '\n';
+      for await (const r of reportSvc.streamExportRows(req.user, req.filters)) {
+        yield csvLine(r);
+      }
+    }
+
+    // pipeline handles backpressure and, on failure, destroys both ends — which
+    // is what closes the connection rather than sending a truncated file.
+    await pipeline(Readable.from(body()), res);
+  } catch (err) { abortStreamedExport(res, err, next); }
 });
 
 /**
@@ -253,10 +293,24 @@ router.get('/export/csv', async (req, res, next) => {
  */
 router.get('/export/excel', async (req, res, next) => {
   try {
-    const { date, rows } = await reportSvc.getExportRows(req.user, req.filters);
+    if (!await consumeReportExportPolicy(req, res, 'daily', 'excel')) return;
+    const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
     const filename = `report-${date}.xlsx`;
 
-    const workbook = new ExcelJS.Workbook();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_excel', entityId: date,
+      newValue: { format: 'excel', role: req.user.role, scope: req.user.scopeId },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
+
+    // WorkbookWriter writes each row to the response as it is committed, so the
+    // whole workbook is never held in memory. useStyles keeps the header format
+    // the buffered writer produced; shared strings stay off because they would
+    // require holding every distinct string until the end, which is the thing
+    // being avoided.
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream: res, useStyles: true, useSharedStrings: false,
+    });
     workbook.creator = 'ระบบรถรับส่งนักเรียนจังหวัดลำปาง';
     const sheet = workbook.addWorksheet('รายงานประจำวัน');
 
@@ -273,13 +327,15 @@ router.get('/export/excel', async (req, res, next) => {
     headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
     headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
+    headerRow.commit();
+
     // Data rows
-    for (const r of rows) {
+    for await (const r of reportSvc.streamExportRows(req.user, req.filters)) {
       // Phase 10.12G — neutralise user-sourced text cells (defense-in-depth).
       sheet.addRow({
         col0: r.student_id,
         col1: neutralizeSpreadsheetCell(r.student_name),
-        col2: neutralizeSpreadsheetCell(r.grade || ''),
+        col2: neutralizeSpreadsheetCell(abbreviateGrade(r.grade)),
         col3: neutralizeSpreadsheetCell(r.classroom || ''),
         col4: neutralizeSpreadsheetCell(r.school_name),
         col5: neutralizeSpreadsheetCell(r.affiliation_name),
@@ -290,17 +346,12 @@ router.get('/export/excel', async (req, res, next) => {
         col10: neutralizeSpreadsheetCell(r.morning_time || ''),
         col11: r.evening_status,
         col12: neutralizeSpreadsheetCell(r.evening_time || ''),
-      });
+      }).commit();
     }
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_excel', entityId: date,
-      newValue: { format: 'excel', role: req.user.role, scope: req.user.scopeId },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (err) { next(err); }
+    await sheet.commit();
+    await workbook.commit();
+  } catch (err) { abortStreamedExport(res, err, next); }
 });
 
 /**
@@ -309,6 +360,7 @@ router.get('/export/excel', async (req, res, next) => {
  */
 router.get('/export/pdf', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'daily', 'pdf')) return;
     const report = await reportSvc.getDailyReport(req.user, req.filters);
     const thaiDate = new Date(report.date).toLocaleDateString('th-TH', {
       year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Bangkok',
@@ -400,8 +452,8 @@ router.get('/export/pdf', async (req, res, next) => {
           { v: `${s.student_count}`, a: 'center' },
           { v: `${s.morning_done}`, a: 'center' },
           { v: `${s.evening_done}`, a: 'center' },
-          { v: `${(s.student_count || 0) - (s.morning_done || 0)}`, a: 'center' },
-          { v: `${(s.student_count || 0) - (s.evening_done || 0)}`, a: 'center' },
+          { v: `${(s.morning_expected ?? s.student_count ?? 0) - (s.morning_done || 0)}`, a: 'center' },
+          { v: `${(s.evening_expected ?? s.student_count ?? 0) - (s.evening_done || 0)}`, a: 'center' },
         ];
         for (let i = 0; i < cols.length; i++) {
           doc.text(vals[i].v, tx, rowY + 1, { width: cols[i].w, align: vals[i].a });
@@ -440,8 +492,8 @@ router.get('/export/pdf', async (req, res, next) => {
           { v: `${v.student_count}`, a: 'center' },
           { v: `${v.morning_done}`, a: 'center' },
           { v: `${v.evening_done}`, a: 'center' },
-          { v: `${(v.student_count || 0) - (v.morning_done || 0)}`, a: 'center' },
-          { v: `${(v.student_count || 0) - (v.evening_done || 0)}`, a: 'center' },
+          { v: `${(v.morning_expected ?? v.student_count ?? 0) - (v.morning_done || 0)}`, a: 'center' },
+          { v: `${(v.evening_expected ?? v.student_count ?? 0) - (v.evening_done || 0)}`, a: 'center' },
         ];
         for (let i = 0; i < cols2.length; i++) {
           doc.text(vals[i].v, tx2, rowY + 1, { width: cols2[i].w, align: vals[i].a });
@@ -469,6 +521,7 @@ router.get('/export/pdf', async (req, res, next) => {
  */
 router.get('/export/monthly/csv', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'monthly', 'csv')) return;
     const report = await reportSvc.getMonthlyReport(req.user, req.filters);
     const rows = buildMonthlyExportRows(report);
     const filename = `monthly-report-${report.month}.csv`;
@@ -494,6 +547,7 @@ router.get('/export/monthly/csv', async (req, res, next) => {
  */
 router.get('/export/monthly/excel', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'monthly', 'excel')) return;
     const report = await reportSvc.getMonthlyReport(req.user, req.filters);
     const rows = buildMonthlyExportRows(report);
     const filename = `monthly-report-${report.month}.xlsx`;
@@ -532,6 +586,7 @@ router.get('/export/monthly/excel', async (req, res, next) => {
  */
 router.get('/export/monthly/pdf', async (req, res, next) => {
   try {
+    if (!await consumeReportExportPolicy(req, res, 'monthly', 'pdf')) return;
     const report = await reportSvc.getMonthlyReport(req.user, req.filters);
     const rows = buildMonthlyExportRows(report);
     const monthLabel = new Date(`${report.month}-01`).toLocaleDateString('th-TH', {
@@ -648,16 +703,30 @@ router.get('/export/monthly/pdf', async (req, res, next) => {
 });
 
 // ─── POST /decision-log — Log province decision before export ────────────────
+// Validation rules and rationale live in utils/decisionLog.js.
 router.post('/decision-log', async (req, res, next) => {
   try {
-    const { decision_type, decision_note, report_type, report_date } = req.body;
+    if (!DECISION_LOG_ROLES.includes(req.user.role)) {
+      return sendError(res, 'บทบาทนี้ไม่มีสิทธิ์บันทึกการตัดสินใจ', [], 403);
+    }
+
+    const parsed = validateDecisionLog(req.body || {});
+    if (parsed.error) return sendError(res, parsed.error, [], 400);
+    const { decisionType, reportType, reportDate, note } = parsed.value;
 
     await logAudit({
       userId: req.user.id,
       action: 'CREATE',
       entityType: 'decision_log',
-      entityId: `${report_type || 'report'}_${report_date || 'unknown'}`,
-      newValue: { decision_type, decision_note, report_type, report_date, role: req.user.role },
+      entityId: `${reportType}_${reportDate}`,
+      newValue: {
+        decision_type: decisionType,
+        decision_note: note,
+        report_type: reportType,
+        report_date: reportDate,
+        role: req.user.role,
+        scope_id: req.user.scopeId ?? null,
+      },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -665,5 +734,6 @@ router.post('/decision-log', async (req, res, next) => {
     return sendSuccess(res, { logged: true }, 'บันทึกการตัดสินใจสำเร็จ', null, 201);
   } catch (err) { next(err); }
 });
+
 
 module.exports = router;

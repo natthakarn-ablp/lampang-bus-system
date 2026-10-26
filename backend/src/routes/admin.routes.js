@@ -2,10 +2,12 @@
 
 const express = require('express');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const adminSvc = require('../services/admin.service');
@@ -15,11 +17,290 @@ const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ExcelJS = require('exceljs');
 const { csvCell, neutralizeSpreadsheetCell, redactAuditValue } = require('../utils/exportSecurity');
+const { rejectOverLongFields } = require('../utils/fieldLength');
+const { isCalendarDate } = require('../utils/calendarDate');
+const researchReadinessSvc = require('../services/researchReadiness.service');
+const { RESEARCH_PROTOCOL, EXTERNAL_EVIDENCE_REGISTRY } = require('../config/researchProtocol');
+const { METRICS: RESEARCH_METRICS } = require('../config/researchMetrics');
+const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
 
-function calcDelta(baseline, latest, numField, denField) {
-  const bPct = baseline[denField] > 0 ? (baseline[numField] / baseline[denField]) * 100 : 0;
-  const cPct = latest[denField] > 0 ? (latest[numField] / latest[denField]) * 100 : 0;
-  return Math.round((cPct - bPct) * 100) / 100;
+/**
+ * Audit entity types that stand in for the named events each metric requires.
+ * Kept next to the query that reads them so a new required_event in the metric
+ * registry fails loudly here instead of silently counting as "no evidence".
+ */
+const RESEARCH_EVENT_ENTITY_TYPES = [
+  ...new Set(RESEARCH_METRICS.flatMap((m) => m.required_events || [])),
+];
+
+/**
+ * Builds the evidence context for the readiness service from live data.
+ * Read-only: it counts rows, it never asserts a readiness value itself.
+ */
+async function loadResearchEvidenceContext() {
+  const [[snapAgg]] = await pool.query(
+    `SELECT MAX(snapshot_date) AS latest_date,
+            MAX(CASE WHEN is_baseline = TRUE THEN snapshot_date END) AS baseline_date,
+            COUNT(*) AS snapshot_count
+       FROM daily_snapshots`
+  );
+
+  let auditEventCounts = {};
+  let auditEventLatestDate = {};
+  if (RESEARCH_EVENT_ENTITY_TYPES.length) {
+    const placeholders = RESEARCH_EVENT_ENTITY_TYPES.map(() => '?').join(',');
+    const [eventRows] = await pool.query(
+      `SELECT entity_type, COUNT(*) AS cnt, MAX(created_at) AS latest
+         FROM audit_logs WHERE entity_type IN (${placeholders})
+        GROUP BY entity_type`,
+      RESEARCH_EVENT_ENTITY_TYPES
+    );
+    for (const row of eventRows) {
+      auditEventCounts[row.entity_type] = Number(row.cnt) || 0;
+      auditEventLatestDate[row.entity_type] = row.latest ? todayBangkok(row.latest) : null;
+    }
+  }
+
+  const [roleTotals] = await pool.query(
+    `SELECT u.role AS role, COUNT(*) AS cnt
+       FROM audit_logs al LEFT JOIN users u ON u.id = al.user_id
+      WHERE u.role IS NOT NULL
+      GROUP BY u.role`
+  );
+  const roleActionTotals = {};
+  for (const r of roleTotals) roleActionTotals[r.role] = Number(r.cnt) || 0;
+
+  return {
+    latestSnapshotDate: snapAgg?.latest_date || null,
+    baselineSnapshotDate: snapAgg?.baseline_date || null,
+    snapshotCount: Number(snapAgg?.snapshot_count) || 0,
+    auditEventCounts,
+    auditEventLatestDate,
+    roleActionTotals,
+    externalEvidence: EXTERNAL_EVIDENCE_REGISTRY,
+    protocol: RESEARCH_PROTOCOL,
+  };
+}
+
+// Snapshot percentages, baseline deltas and their dictionary rows come from
+// one registry so the JSON, CSV and Excel exports cannot disagree about a
+// formula or a missing-data rule. utils/researchSnapshotFields.js explains
+// why a delta is null (never 0) when either side has a zero denominator.
+const {
+  snapshotPercentages, snapshotDeltas, derivedFieldDictionary, DESCRIPTIVE_STATISTIC,
+} = require('../utils/researchSnapshotFields');
+
+/**
+ * The fields of `summary.dme_mie` whose value is an object, not a scalar. Any
+ * renderer that flattens the summary into label/value rows has to skip them
+ * and print them in a section of their own, or the row says "[object Object]".
+ *
+ * It lives here, once, because the CSV renderer and the Excel renderer each
+ * kept a private copy of this list and the copies drifted: `snapshot_freshness`
+ * and `baseline_pair` were added to the summary and to the CSV list, but not to
+ * the Excel one, so the workbook wrote both objects into a value cell as a JSON
+ * blob. Two lists of the same fact drift; one cannot.
+ */
+const DME_MIE_NESTED_FIELDS = new Set([
+  '_notes', 'delta', 'role_adoption', 'snapshot_freshness', 'baseline_pair',
+]);
+
+/**
+ * Shape version of the research-export payload, written into all three
+ * formats. 3.1 adds the integrity block — format version, data checksum and
+ * provenance — to 3.0's readiness and data-dictionary sections. No metric,
+ * formula, delta rule or readiness rule changed with it; the reader who sees
+ * 3.1 gets the same numbers as 3.0 plus the means to check them.
+ */
+const RESEARCH_EXPORT_FORMAT_VERSION = '3.1';
+
+/**
+ * The payload sections the checksum covers, in this order.
+ *
+ * `data_dictionary` is excluded because it is generated from the metric
+ * registry in code: it describes the numbers, it is not one of them, and it
+ * changes when the registry changes rather than when the data does.
+ */
+const RESEARCH_CHECKSUM_SECTIONS = ['snapshots', 'audit_logs', 'export_evidence', 'summary'];
+
+/**
+ * The fields of `meta` the checksum also covers.
+ *
+ * Excluding all of `meta` was the first attempt and it was wrong. `meta` holds
+ * `evidence_readiness` and `research_claims_allowed` — the answer to "may this
+ * dataset be cited as a research result?" — which is the single most
+ * consequential statement in the whole export. Leaving it outside the hash
+ * meant a downloaded file could have `research_claims_allowed` flipped from
+ * false to true and still verify, which is precisely the tampering an integrity
+ * block exists to detect, and precisely the direction someone would tamper in.
+ *
+ * The rest of `meta` stays out for the reason the whole of it used to: it
+ * carries `generated_at`, `generated_by` and the integrity block itself, and a
+ * hash over its own output cannot be recomputed by anyone, us included.
+ */
+const RESEARCH_CHECKSUM_META_FIELDS = [
+  'format_version', 'date_range', 'included',
+  'evidence_readiness', 'research_claims_allowed', 'readiness_note',
+];
+
+/**
+ * Said the same way in all three formats, because the CSV and the workbook
+ * have no other place to explain what their checksum cell means.
+ */
+const RESEARCH_CHECKSUM_NOTE =
+  'data_checksum = sha256 ของ canonical JSON (เรียงคีย์ทุกชั้น, ลำดับแถวคงเดิม, วันที่เป็น ISO-8601) '
+  + 'ของส่วนข้อมูลที่ระบุใน covered_sections รวมกับฟิลด์ของ meta ที่ระบุใน covered_meta_fields '
+  + 'ซึ่งรวมคำตอบว่าชุดข้อมูลนี้อ้างเป็นผลวิจัยได้หรือไม่ — ไม่รวมเวลาที่ export ผู้สร้าง และตัวค่า checksum เอง '
+  + 'ตรวจซ้ำได้จากไฟล์ JSON ของช่วงวันที่เดียวกัน และเทียบกับค่าที่บันทึกไว้ใน audit log ของการ export ครั้งนี้';
+
+/**
+ * Canonical JSON for hashing: object keys sorted at every depth, array order
+ * preserved (row order is what the SQL ORDER BY produced, so it is part of the
+ * data), Date written as its ISO-8601 instant, undefined folded to null.
+ *
+ * The key sort is the whole point. Without it the checksum would depend on the
+ * order the driver happened to hand back a row's columns, which is not
+ * something a reader can reproduce a year later.
+ */
+function canonicalJson(value) {
+  if (value === undefined || value === null) return 'null';
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (typeof value === 'object') {
+    return `{${Object.keys(value).sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`)
+      .join(',')}}`;
+  }
+  // NaN, Infinity and anything JSON cannot represent become null, exactly as
+  // they would in the emitted JSON, so the hash matches the file.
+  return JSON.stringify(value) ?? 'null';
+}
+
+/**
+ * sha256 over the exported rows.
+ *
+ * WHAT IT COVERS: an object holding exactly the RESEARCH_CHECKSUM_SECTIONS
+ * this export actually contains, each section unchanged. Nothing else — not
+ * meta, not the data dictionary, and above all not generated_at.
+ *
+ * HOW TO RECOMPUTE from a downloaded JSON dataset:
+ *   const d = JSON.parse(file).data;            // the API wraps the payload in { data }
+ *   const integrity = d.meta.integrity;
+ *   const covered = {};
+ *   for (const s of integrity.covered_sections) {
+ *     if (s === 'meta_claims') continue;        // rebuilt from meta, below
+ *     covered[s] = d[s];
+ *   }
+ *   if (integrity.covered_meta_fields.length) {
+ *     covered.meta_claims = {};
+ *     for (const f of integrity.covered_meta_fields) covered.meta_claims[f] = d.meta[f];
+ *   }
+ *   crypto.createHash('sha256').update(canonicalJson(covered), 'utf8').digest('hex')
+ * must equal `integrity.data_checksum`, with canonicalJson as written above. A
+ * mismatch means a row, or the readiness claim, was changed after the file was
+ * written.
+ *
+ * The CSV and the workbook carry the same value, but they are renderings: they
+ * drop columns, so the hash cannot be recomputed from them. There it says
+ * which JSON dataset the sheet was rendered from — it does not attest to the
+ * sheet's own cells.
+ *
+ * The value is also written into the EXPORT audit row, so the checksum in the
+ * file can be compared against one recorded in the database at export time
+ * rather than being self-attested.
+ */
+function researchDataChecksum(payload) {
+  const covered = {};
+  for (const section of RESEARCH_CHECKSUM_SECTIONS) {
+    if (payload[section] !== undefined) covered[section] = payload[section];
+  }
+  // The readiness claim travels under `meta`, so it is gathered separately and
+  // hashed under a key of its own. Naming the key rather than folding the fields
+  // in at the top level keeps the recompute recipe unambiguous: a verifier
+  // rebuilds exactly this shape and nothing else.
+  const meta = payload.meta || {};
+  const coveredMeta = {};
+  for (const field of RESEARCH_CHECKSUM_META_FIELDS) {
+    if (meta[field] !== undefined) coveredMeta[field] = meta[field];
+  }
+  if (Object.keys(coveredMeta).length) covered.meta_claims = coveredMeta;
+
+  return {
+    algorithm: 'sha256',
+    canonicalisation: 'json; object keys sorted at every depth; array order preserved; dates as ISO-8601',
+    covered_sections: Object.keys(covered),
+    covered_meta_fields: Object.keys(coveredMeta),
+    data_checksum: crypto.createHash('sha256').update(canonicalJson(covered), 'utf8').digest('hex'),
+    note: RESEARCH_CHECKSUM_NOTE,
+  };
+}
+
+/**
+ * Excel rejects a cell longer than 32,767 characters, and a CSV cell that long
+ * is unreadable anyway. A default export covers every snapshot ever taken, so
+ * the id list grows by one entry a day and will eventually reach that. The
+ * complete list always travels in the JSON payload; the two spreadsheet
+ * renderings fall back to the first and last id plus the count rather than
+ * writing a cell the reader's Excel refuses to open.
+ */
+const SPREADSHEET_CELL_MAX = 30000;
+function idListCell(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return '';
+  const joined = ids.join(' | ');
+  if (joined.length <= SPREADSHEET_CELL_MAX) return joined;
+  return `${ids[0]} … ${ids[ids.length - 1]} (${ids.length} ids; รายการเต็มอยู่ในไฟล์ JSON)`;
+}
+
+/**
+ * Where the numbers came from: the requested window, and the identity of the
+ * rows that answered it. It lets a reader name the snapshots a percentage was
+ * computed from without re-querying a database that has moved on, and it
+ * distinguishes "this section was not requested" from "there were no rows" —
+ * an absent section otherwise reads as an empty one.
+ *
+ * Provenance sits in meta and is therefore outside the checksum, by design: it
+ * is derived from the covered rows (the ids are the ids of the rows in the
+ * `snapshots` section), so it can be re-derived from them and checked.
+ */
+function buildResearchProvenance(payload, { from, to, include }) {
+  const rowSpan = (rows) => (Array.isArray(rows)
+    ? {
+      included: true,
+      row_count: rows.length,
+      first_id: rows.length ? rows[0].id : null,
+      last_id: rows.length ? rows[rows.length - 1].id : null,
+    }
+    : { included: false, row_count: null, first_id: null, last_id: null });
+
+  const snapshots = payload.snapshots || [];
+  const snapshotDates = snapshots.map((s) => toBangkokDate(s.snapshot_date)).filter(Boolean).sort();
+  const dme = payload.summary?.dme_mie || null;
+
+  return {
+    date_range: { from, to },
+    requested_sections: include,
+    snapshots: {
+      ...rowSpan(payload.snapshots),
+      // The ids are the provenance proper: they say WHICH rows, where a count
+      // only says how many.
+      ids: payload.snapshots ? snapshots.map((s) => s.id) : null,
+      baseline_ids: payload.snapshots ? snapshots.filter((s) => s.is_baseline).map((s) => s.id) : null,
+      first_snapshot_date: snapshotDates[0] ?? null,
+      last_snapshot_date: snapshotDates.length ? snapshotDates[snapshotDates.length - 1] : null,
+    },
+    audit_logs: rowSpan(payload.audit_logs),
+    export_evidence: rowSpan(payload.export_evidence),
+    // The two snapshots every delta in summary.dme_mie is measured between.
+    // Repeated here so the pair travels with the provenance and not only with
+    // the numbers it produced.
+    computed_from: dme ? {
+      baseline_snapshot_id: dme.baseline_snapshot_id ?? null,
+      baseline_date: toBangkokDate(dme.baseline_date),
+      current_snapshot_id: dme.current_snapshot_id ?? null,
+      current_date: toBangkokDate(dme.current_date),
+    } : null,
+  };
 }
 
 const BCRYPT_COST = 12;
@@ -81,6 +362,10 @@ router.post('/users', async (req, res, next) => {
     if (!VALID_ROLES.includes(role)) {
       return sendError(res, `role ไม่ถูกต้อง ต้องเป็น: ${VALID_ROLES.join(', ')}`, [], 400);
     }
+    // users.username varchar(100), display_name varchar(200), scope_id varchar(20).
+    if (rejectOverLongFields(res, req.body, {
+      username: 100, display_name: 200, scope_id: 20,
+    })) return;
     const pwCheck = validatePassword(password, { username: String(username).trim() });
     if (!pwCheck.ok) {
       return sendError(res, pwCheck.message, [], 400);
@@ -114,9 +399,29 @@ router.post('/users', async (req, res, next) => {
       gradeScopeValue = String(grade_scope).trim();
     }
 
-    // Check duplicate username
-    const [[existing]] = await pool.query('SELECT id FROM users WHERE username = ? AND is_deleted = FALSE', [username.trim()]);
-    if (existing) return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+    // Check duplicate username.
+    //
+    // `uq_users_username` is a plain UNIQUE index, so it also covers rows that
+    // were soft-deleted. Filtering those out here (as this did until
+    // 2026-09-07) let the INSERT through to the database, which rejected it
+    // and surfaced as the untranslated "Duplicate entry — record already
+    // exists" from the error handler, with no hint of what to do. Production
+    // holds 40 soft-deleted users, so this was reachable simply by reusing the
+    // name of a removed account.
+    const [[existing]] = await pool.query(
+      'SELECT id, is_deleted FROM users WHERE username = ?', [username.trim()]
+    );
+    if (existing && !existing.is_deleted) {
+      return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+    }
+    if (existing) {
+      return sendError(
+        res,
+        `ชื่อผู้ใช้นี้เคยถูกใช้โดยบัญชีที่ถูกลบไปแล้ว (รหัสบัญชี ${existing.id}) ระบบไม่อนุญาตให้ชื่อซ้ำแม้บัญชีจะถูกลบ — กรุณาใช้ชื่ออื่น หรือกู้คืนบัญชีเดิมที่เมนูจัดการผู้ใช้งาน`,
+        [{ code: 'USERNAME_TAKEN_BY_DELETED', field: 'username', deleted_user_id: existing.id }],
+        409
+      );
+    }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST);
     const [result] = await pool.query(
@@ -140,8 +445,10 @@ router.post('/users', async (req, res, next) => {
 // ─── PUT /api/admin/users/:id ───────────────────────────────────────────────
 router.put('/users/:id', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id, 10);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
     const { display_name, is_active, role, scope_id } = req.body;
+    if (rejectOverLongFields(res, req.body, { display_name: 200, scope_id: 20 })) return;
 
     const [[user]] = await pool.query('SELECT id, username, role, scope_type, scope_id, display_name, is_active, driver_id FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
@@ -216,7 +523,8 @@ router.put('/users/:id', async (req, res, next) => {
 // ─── POST /api/admin/users/:id/reset-password ───────────────────────────────
 router.post('/users/:id/reset-password', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id, 10);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
     const { password } = req.body;
 
     if (!password) {
@@ -254,21 +562,56 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
 // ─── DELETE /api/admin/users/:id ────────────────────────────────────────────
 router.delete('/users/:id', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id, 10);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
     if (userId === req.user.id) return sendError(res, 'ไม่สามารถลบตัวเองได้', [], 400);
 
     const [[user]] = await pool.query('SELECT id, username FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
 
-    await pool.query('UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [userId]);
+    // Deleting the account must also release its account-recovery binding.
+    //
+    // user_recovery_channels has UNIQUE (provider, provider_subject), so one
+    // LINE identity can be bound to one account across the whole system, and
+    // the only way to release it is the owner unbinding it while signed in
+    // (handleUnlinkLine works on req.user and requires is_active AND
+    // NOT is_deleted). A soft-deleted account can never sign in again, so
+    // before 2026-09-07 deleting an admin stranded that LINE identity
+    // permanently: it could not be bound to any other account and nobody
+    // could free it. Removing the channel, the unused codes and any pending
+    // reset request here is the same cleanup the owner's own unlink performs.
+    const conn = await pool.getConnection();
+    let released = 0;
+    try {
+      await conn.beginTransaction();
+      await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
+      await conn.query('DELETE FROM password_reset_requests WHERE user_id = ? AND used_at IS NULL', [userId]);
+      await conn.query('DELETE FROM user_recovery_codes WHERE user_id = ?', [userId]);
+      const [chan] = await conn.query('DELETE FROM user_recovery_channels WHERE user_id = ?', [userId]);
+      released = chan.affectedRows || 0;
+      await conn.query('UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [userId]);
+      await conn.commit();
+    } catch (e) {
+      try { await conn.rollback(); } catch { /* keep the original error */ }
+      throw e;
+    } finally {
+      conn.release();
+    }
 
     await logAudit({
       userId: req.user.id, action: 'DELETE', entityType: 'user', entityId: userId,
       oldValue: { username: user.username },
+      newValue: { recovery_channels_released: released },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
-    return sendSuccess(res, null, 'ลบผู้ใช้สำเร็จ');
+    return sendSuccess(
+      res,
+      { recovery_channels_released: released },
+      released
+        ? 'ลบผู้ใช้สำเร็จ และปลดการผูกบัญชี LINE สำหรับกู้คืนรหัสผ่านแล้ว (บัญชี LINE นี้นำไปผูกกับผู้ใช้อื่นได้)'
+        : 'ลบผู้ใช้สำเร็จ'
+    );
   } catch (err) { next(err); }
 });
 
@@ -278,8 +621,8 @@ router.delete('/users/:id', async (req, res, next) => {
 // 23C-guarded driver lifecycle restore (duplicate-reactivation guard).
 router.post('/users/:id/restore', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
 
     const [[u]] = await pool.query('SELECT id, role FROM users WHERE id = ?', [userId]);
     if (!u) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
@@ -394,8 +737,8 @@ router.post('/pickup-points', async (req, res, next) => {
 // PUT /api/admin/pickup-points/:id
 router.put('/pickup-points/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
 
     const errors = validatePickupPointInput(req.body, { partial: true });
     if (errors.length > 0) return sendError(res, 'ข้อมูลจุดรับส่งไม่ถูกต้อง', errors, 400);
@@ -420,8 +763,8 @@ router.put('/pickup-points/:id', async (req, res, next) => {
 // DELETE /api/admin/pickup-points/:id (soft-delete)
 router.delete('/pickup-points/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
 
     const oldRow = await ppSvc.getPickupPointById(id);
     if (!oldRow) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
@@ -439,9 +782,9 @@ router.delete('/pickup-points/:id', async (req, res, next) => {
 // POST /api/admin/pickup-points/:id/students  { student_id }
 router.post('/pickup-points/:id/students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
     const studentId = parseInt(req.body.student_id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid pickup point id', [], 400);
     if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid student_id', [], 400);
 
     const point = await ppSvc.getPickupPointById(pointId);
@@ -464,10 +807,10 @@ router.post('/pickup-points/:id/students', async (req, res, next) => {
 // DELETE /api/admin/pickup-points/:id/students/:studentId
 router.delete('/pickup-points/:id/students/:studentId', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    const studentId = parseInt(req.params.studentId, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid pickup point id', [], 400);
-    if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid student id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
+    const studentId = readIdParam(req, res, 'studentId');
+    if (studentId === null) return;
 
     const removed = await ppSvc.unassignStudentFromPoint(pointId, studentId);
     if (!removed) return sendError(res, 'ไม่พบการผูกนักเรียนกับจุดนี้', [], 404);
@@ -489,8 +832,8 @@ router.delete('/pickup-points/:id/students/:studentId', async (req, res, next) =
 // the modal pre-checks them.
 router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
 
     const point = await ppSvc.getPickupPointById(pointId);
     if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
@@ -507,8 +850,8 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
 // excluded from the duplicate check).
 router.put('/pickup-points/:id/students', async (req, res, next) => {
   try {
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
 
     if (!Array.isArray(req.body.student_ids)) {
       return sendError(res, 'student_ids must be an array', [], 400);
@@ -546,7 +889,10 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
 
-    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // Was /^\d{4}-\d{2}-\d{2}$/, which accepts 2026-13-45. Same predicate as
+     // /api/reports uses, so the four routers no longer disagree. The
+     // ignore-if-invalid behaviour below is unchanged.
+    const isValidDate = isCalendarDate;
     let where = '1=1';
     const params = [];
     if (action) { where += ' AND al.action = ?'; params.push(action); }
@@ -577,7 +923,7 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
       if (truncated) lines.push(esc('# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14'));
       const csv = [header, ...lines].join('\n');
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=audit_admin_${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader('Content-Disposition', `attachment; filename=audit_admin_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
       return res.send('\uFEFF' + csv);
     }
@@ -722,6 +1068,12 @@ router.get('/system-health', async (req, res, next) => {
       daily_activity: dailyActivity,
       role_activity: roleActivity,
       visits: {
+        // Counted from an unauthenticated public endpoint deduped only by the
+        // browser's sessionStorage. Useful as a rough traffic signal, but it is
+        // not attributable to a person and can be inflated by anyone, so it
+        // must never be used as a research or participation metric.
+        evidence_class: 'non_attributable_traffic_counter',
+        research_usable: false,
         today: { total: Number(visitsToday?.total || 0), public: Number(visitsToday?.public_v || 0), logged_in: Number(visitsToday?.logged_v || 0) },
         last_7d: { total: Number(visits7d?.total || 0), public: Number(visits7d?.public_v || 0), logged_in: Number(visits7d?.logged_v || 0) },
         last_30d: { total: Number(visits30d?.total || 0), public: Number(visits30d?.public_v || 0), logged_in: Number(visits30d?.logged_v || 0) },
@@ -881,12 +1233,33 @@ router.get('/evaluation-summary', async (req, res, next) => {
     const exportMap = {};
     for (const e of exportsByRole) exportMap[e.role || 'unknown'] = e.cnt;
 
+    // Evidence coverage is computed here so no client can re-derive readiness
+    // from action volume. `role_actions` stays for the usage breakdown the
+    // dashboard still shows, but it no longer decides any status.
+    const evidenceCtx = await loadResearchEvidenceContext();
+    const evidenceReadiness = researchReadinessSvc.buildEvidenceReadiness(evidenceCtx);
+
     return sendSuccess(res, {
       baseline: baseline ? { id: baseline.id, date: baseline.snapshot_date, note: baseline.baseline_note, research_phase: baseline.research_phase, data: baseline } : null,
       latest: latest ? { id: latest.id, date: latest.snapshot_date, data: latest } : null,
       snapshot_count: snaps.length,
       role_actions: roleMap,
       role_exports: exportMap,
+      evidence_readiness: {
+        schema_version: evidenceReadiness.schema_version,
+        snapshot_freshness: evidenceReadiness.snapshot_freshness,
+        baseline_pair: evidenceReadiness.baseline_pair,
+        protocol: evidenceReadiness.protocol,
+        summary: evidenceReadiness.summary,
+        roles: evidenceReadiness.roles,
+        metrics: evidenceReadiness.metrics.map((m) => ({
+          key: m.key, role: m.role, title_th: m.title_th, category: m.category,
+          status: m.status, status_label_th: m.status_label_th,
+          blocking_reasons: m.blocking_reasons, latest_evidence_date: m.latest_evidence_date,
+        })),
+        research_claims_allowed: evidenceReadiness.research_claims_allowed,
+        blocking_reasons: evidenceReadiness.blocking_reasons,
+      },
     });
   } catch (err) { next(err); }
 });
@@ -896,17 +1269,48 @@ router.get('/evaluation-summary', async (req, res, next) => {
 // Privacy: excludes ip_address, user_agent, old_value; includes user_id (admin-only access).
 router.get('/research-export', importExportLimiter, async (req, res, next) => {
   try {
+    // A1-11 S6. These two values are not only filters: they are written into
+    // the dataset's own meta.date_range, into the entity_id of the EXPORT
+    // audit row (`${from}_to_${to}`) that the dataset later cites as evidence
+    // of its own export, and into the Content-Disposition filename. An
+    // unchecked value therefore makes the dataset and its audit trail
+    // impossible to reconcile, and a value containing a quote malforms the
+    // header. /api/reports has validated its dates since it was written; this
+    // route was the one that did not.
     const from = req.query.from || '2020-01-01';
     const to = req.query.to || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    for (const [field, value] of [['from', from], ['to', to]]) {
+      if (!isCalendarDate(value)) {
+        return sendError(res, 'รูปแบบวันที่ไม่ถูกต้อง',
+          [{ field, message: 'ต้องเป็นรูปแบบ YYYY-MM-DD และเป็นวันที่ที่มีอยู่จริง' }], 400);
+      }
+    }
+    if (from > to) {
+      return sendError(res, 'ช่วงวันที่ไม่ถูกต้อง',
+        [{ field: 'from', message: 'วันเริ่มต้นต้องไม่อยู่หลังวันสิ้นสุด' }], 400);
+    }
     const include = (req.query.include || 'snapshots,audit,exports,summary').split(',');
+    const format = (req.query.format || 'json').toLowerCase();
+    const policySubject = `${from}:${to}:${format}:${[...include].sort().join(',')}`;
+    if (!await consumePolicyAction(req, res, {
+      context: 'admin.research_export', subjectType: 'research_export', subjectId: policySubject,
+    })) return;
+
+    // Evidence readiness is derived per metric from data that exists. The old
+    // `dme_mie_ready: true` constant is gone: it asserted the dataset was fit
+    // for evaluation while 11 of 24 metrics still had no evidence at all.
+    const evidenceCtx = await loadResearchEvidenceContext();
+    const evidenceReadiness = researchReadinessSvc.buildEvidenceReadiness(evidenceCtx);
 
     const result = { meta: {
       generated_at: new Date().toISOString(),
       generated_by: req.user.username,
       date_range: { from, to },
       included: include,
-      format_version: '2.0',
-      dme_mie_ready: true,
+      format_version: RESEARCH_EXPORT_FORMAT_VERSION,
+      evidence_readiness: evidenceReadiness,
+      research_claims_allowed: evidenceReadiness.research_claims_allowed,
+      readiness_note: 'ชุดข้อมูลนี้เป็นหลักฐานเชิงระบบ ไม่ใช่ผลการวิจัย และยังไม่ผ่านการรับรองโดย Research lead',
     }};
 
     if (include.includes('snapshots')) {
@@ -990,14 +1394,10 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
 
       const dmeFields = {
         // DME: Digital Maturity Evaluation — system-derivable
-        data_completeness_pct: latestSnap && latestSnap.total_students > 0 ? Math.round((latestSnap.students_with_vehicle / latestSnap.total_students) * 10000) / 100 : null,
-        parent_coverage_pct: latestSnap && latestSnap.total_students > 0 ? Math.round((latestSnap.students_with_parent / latestSnap.total_students) * 10000) / 100 : null,
-        insurance_coverage_pct: latestSnap && latestSnap.total_vehicles > 0 ? Math.round((latestSnap.vehicles_with_insurance / latestSnap.total_vehicles) * 10000) / 100 : null,
-        inspection_coverage_pct: latestSnap && latestSnap.total_vehicles > 0 ? Math.round((latestSnap.vehicles_inspected / latestSnap.total_vehicles) * 10000) / 100 : null,
-        inspection_pass_pct: latestSnap && latestSnap.total_vehicles > 0 ? Math.round((latestSnap.vehicles_passed / latestSnap.total_vehicles) * 10000) / 100 : null,
-        morning_completion_pct: latestSnap && latestSnap.morning_total > 0 ? Math.round((latestSnap.morning_done / latestSnap.morning_total) * 10000) / 100 : null,
-        evening_completion_pct: latestSnap && latestSnap.evening_total > 0 ? Math.round((latestSnap.evening_done / latestSnap.evening_total) * 10000) / 100 : null,
-        active_user_pct: latestSnap && latestSnap.total_users > 0 ? Math.round((latestSnap.active_users / latestSnap.total_users) * 10000) / 100 : null,
+        // One entry per field in utils/researchSnapshotFields.js — null on a
+        // zero denominator, per that field's missing-data rule, and described
+        // in data_dictionary.derived_fields below.
+        ...snapshotPercentages(latestSnap),
         total_audit_actions: Number(counts.audit_count) || 0,
         total_exports: Number(counts.export_count) || 0,
         role_adoption: roleBreakdown,
@@ -1015,33 +1415,77 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         current_snapshot_id: latestSnap?.id || null,
         current_date: latestSnap?.snapshot_date || null,
 
-        // Delta from baseline (if both exist)
-        delta: baselineSnap && latestSnap ? {
-          data_completeness: calcDelta(baselineSnap, latestSnap, 'students_with_vehicle', 'total_students'),
-          parent_coverage: calcDelta(baselineSnap, latestSnap, 'students_with_parent', 'total_students'),
-          insurance_coverage: calcDelta(baselineSnap, latestSnap, 'vehicles_with_insurance', 'total_vehicles'),
-          inspection_coverage: calcDelta(baselineSnap, latestSnap, 'vehicles_inspected', 'total_vehicles'),
-          morning_completion: calcDelta(baselineSnap, latestSnap, 'morning_done', 'morning_total'),
-          evening_completion: calcDelta(baselineSnap, latestSnap, 'evening_done', 'evening_total'),
-        } : null,
+        // Delta from baseline (if both exist). A field whose denominator is
+        // 0 on either side is null here as well: "+85 pp" against a baseline
+        // of zero students is not an improvement, it is a missing baseline.
+        delta: snapshotDeltas(baselineSnap, latestSnap),
+
+        // Snapshot age travels with the numbers it qualifies. Percentages
+        // computed from a stale snapshot describe the day it was taken, not
+        // today, and the reader has no way to know that from the value alone.
+        snapshot_freshness: evidenceReadiness.snapshot_freshness,
+        baseline_pair: evidenceReadiness.baseline_pair,
 
         _notes: {
           dme: 'DME fields are computed from system snapshots and audit logs — fully automated',
           mie: 'MIE fields require external evidence (surveys, interviews, financial data) — return null until collected',
-          delta: 'Delta values show percentage point change from baseline to current snapshot',
+          delta: 'Delta values show percentage point change from baseline to current snapshot; ' +
+            'null (never 0) when either snapshot has a zero denominator for that field — see data_dictionary.derived_fields',
+          freshness: `ค่าที่คำนวณจาก snapshot ใช้ได้เมื่อ snapshot ใหม่กว่า ${evidenceReadiness.snapshot_freshness.max_age_days} วัน; ปัจจุบันอายุ ${evidenceReadiness.snapshot_freshness.age_days ?? 'ไม่ทราบ'} วัน`,
+          delta_validity: evidenceReadiness.baseline_pair.usable
+            ? 'baseline/post pair อยู่ในช่วง protocol ที่ freeze แล้ว'
+            : `ห้ามตีความ delta เป็นผลวิจัย เหตุผล: ${evidenceReadiness.baseline_pair.reason}`,
         },
       };
 
       result.summary = { counts, action_breakdown: actionBreakdown, role_breakdown: roleBreakdown, dme_mie: dmeFields };
+
+      // Data dictionary ships with the dataset so every metric can be traced to
+      // its formula, denominator and missing-data rule without a second file.
+      result.data_dictionary = {
+        schema_version: '1.0',
+        categories: {
+          operational_kpi: 'ตัวชี้วัดการดำเนินงาน คำนวณจากระบบได้โดยตรง',
+          participation_kpi: 'ตัวชี้วัดการมีส่วนร่วม ต้องมีเหตุการณ์เสนอ/พิจารณา/มติ/แจ้งผลกลับ',
+          research_outcome: 'ผลลัพธ์เชิงวิจัย ต้องมี protocol, baseline และช่วงสังเกตที่กำหนด',
+          external_evidence: 'ต้องใช้เครื่องมือภายนอก เช่น แบบสอบถาม สัมภาษณ์ บันทึกประชุม',
+          [DESCRIPTIVE_STATISTIC]: 'สถิติเชิงบรรยายจาก snapshot ที่ export แต่ไม่มี metric ใน registry — ห้ามใช้เป็นผลวิจัยหรือ KPI',
+        },
+        metrics: evidenceReadiness.metrics.map((m) => ({
+          key: m.key, role: m.role, title: m.title, title_th: m.title_th,
+          category: m.category, formula: m.formula,
+          numerator: m.numerator, denominator: m.denominator,
+          missing_data_rule: m.missing_data_rule, sources: m.sources,
+          instrument: m.instrument, evidence_status: m.status,
+          blocking_reasons: m.blocking_reasons,
+          latest_evidence_date: m.latest_evidence_date,
+        })),
+        // The snapshot-derived fields in summary.dme_mie, each with its own
+        // formula and missing-data rule, and a pointer to the registry metric
+        // it reads for — or a descriptive_statistic label when there is none.
+        derived_fields: derivedFieldDictionary(),
+      };
     }
 
-    const format = (req.query.format || 'json').toLowerCase();
+    // Integrity and provenance are computed here, once, before the format
+    // branches: the JSON, the CSV and the workbook must carry the SAME
+    // checksum for the same rows, and the EXPORT audit row below has to record
+    // it. A checksum only present inside the file it describes proves nothing;
+    // one the database recorded independently at export time is what lets a
+    // later reader say the rows were not edited afterwards.
+    const integrity = researchDataChecksum(result);
+    result.meta.provenance = buildResearchProvenance(result, { from, to, include });
+    result.meta.integrity = integrity;
 
     // Log this export action
     await logAudit({
       userId: req.user.id, action: 'EXPORT', entityType: 'research_dataset',
       entityId: `${from}_to_${to}`,
-      newValue: { from, to, included: include, format },
+      newValue: {
+        from, to, included: include, format,
+        format_version: RESEARCH_EXPORT_FORMAT_VERSION,
+        data_checksum: integrity.data_checksum,
+      },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
@@ -1055,6 +1499,42 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r') ? `"${s.replace(/"/g, '""')}"` : s;
       };
       let csv = BOM;
+
+      // Provenance leads the file. A spreadsheet that cannot say which
+      // snapshots produced its numbers, or whether its rows are still the rows
+      // that were exported, is not evidence — and the reader who opens the CSV
+      // first is the one who most needs to be told.
+      if (result.meta?.provenance) {
+        const p = result.meta.provenance;
+        const ig = result.meta.integrity;
+        csv += '=== Export Provenance ===\n';
+        csv += 'field,value\n';
+        csv += `format_version,${esc(result.meta.format_version)}\n`;
+        csv += `checksum_algorithm,${esc(ig.algorithm)}\n`;
+        csv += `data_checksum,${esc(ig.data_checksum)}\n`;
+        csv += `checksum_covers,${esc((ig.covered_sections || []).join(' | '))}\n`;
+        csv += `checksum_covers_meta,${esc((ig.covered_meta_fields || []).join(' | '))}\n`;
+        csv += `checksum_canonicalisation,${esc(ig.canonicalisation)}\n`;
+        csv += `checksum_note,${esc(ig.note)}\n`;
+        csv += `date_range_from,${esc(p.date_range.from)}\n`;
+        csv += `date_range_to,${esc(p.date_range.to)}\n`;
+        csv += `requested_sections,${esc((p.requested_sections || []).join(' | '))}\n`;
+        csv += `snapshot_row_count,${esc(p.snapshots.row_count)}\n`;
+        csv += `snapshot_ids,${esc(idListCell(p.snapshots.ids))}\n`;
+        csv += `baseline_snapshot_ids,${esc(idListCell(p.snapshots.baseline_ids))}\n`;
+        csv += `snapshot_date_first,${esc(p.snapshots.first_snapshot_date)}\n`;
+        csv += `snapshot_date_last,${esc(p.snapshots.last_snapshot_date)}\n`;
+        csv += `audit_log_row_count,${esc(p.audit_logs.row_count)}\n`;
+        csv += `audit_log_id_first,${esc(p.audit_logs.first_id)}\n`;
+        csv += `audit_log_id_last,${esc(p.audit_logs.last_id)}\n`;
+        csv += `export_evidence_row_count,${esc(p.export_evidence.row_count)}\n`;
+        // The pair every delta below is measured between, named rather than implied.
+        csv += `delta_baseline_snapshot_id,${esc(p.computed_from?.baseline_snapshot_id)}\n`;
+        csv += `delta_baseline_date,${esc(p.computed_from?.baseline_date)}\n`;
+        csv += `delta_current_snapshot_id,${esc(p.computed_from?.current_snapshot_id)}\n`;
+        csv += `delta_current_date,${esc(p.computed_from?.current_date)}\n`;
+        csv += '\n';
+      }
 
       if (result.snapshots?.length) {
         const cols = ['snapshot_date','total_students','students_with_vehicle','students_with_parent',
@@ -1093,10 +1573,63 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         if (s.dme_mie) {
           csv += '\n=== DME Metrics ===\n';
           csv += 'metric,value\n';
+          // Nested objects would serialise as "[object Object]"; they get their
+          // own sections below instead of a meaningless cell. The list is
+          // shared with the Excel renderer so the two cannot disagree about
+          // which fields are objects.
           for (const [k, v] of Object.entries(s.dme_mie)) {
-            if (k === '_notes' || k === 'delta' || k === 'role_adoption') continue;
+            if (DME_MIE_NESTED_FIELDS.has(k)) continue;
             csv += `${esc(k)},${esc(v)}\n`;
           }
+          // Deltas get their own section so a null (zero denominator on either
+          // side) is an empty cell, not a 0.
+          if (s.dme_mie.delta) {
+            csv += '\n=== Delta From Baseline (percentage points) ===\n';
+            csv += 'field,delta_pp\n';
+            for (const [k, v] of Object.entries(s.dme_mie.delta)) csv += `${esc(k)},${esc(v)}\n`;
+          }
+        }
+      }
+
+      // Readiness travels with the CSV so a spreadsheet copy cannot be read as
+      // a clean dataset when 11 of 24 metrics still lack evidence.
+      if (result.meta?.evidence_readiness) {
+        const er = result.meta.evidence_readiness;
+        csv += '\n=== Evidence Readiness ===\n';
+        csv += `research_claims_allowed,${esc(er.research_claims_allowed)}\n`;
+        csv += `blocking_reasons,${esc((er.blocking_reasons || []).join(' | '))}\n`;
+        csv += `snapshot_latest,${esc(er.snapshot_freshness?.latest_snapshot_date)}\n`;
+        csv += `snapshot_age_days,${esc(er.snapshot_freshness?.age_days)}\n`;
+        csv += `snapshot_fresh,${esc(er.snapshot_freshness?.fresh)}\n`;
+        // Whether the baseline/post pair may carry a delta at all, and why not
+        // when it may not. Both renderers state it here, in words, rather than
+        // dropping the object into a value cell.
+        csv += `baseline_pair_usable,${esc(er.baseline_pair?.usable)}\n`;
+        csv += `baseline_pair_reason,${esc(er.baseline_pair?.reason)}\n`;
+        csv += `protocol_frozen,${esc(er.protocol?.frozen)}\n`;
+        csv += '\nmetric_key,category,evidence_status,blocking_reasons,latest_evidence_date\n';
+        for (const m of er.metrics || []) {
+          csv += [m.key, m.category, m.status, (m.blocking_reasons || []).join(' | '), m.latest_evidence_date]
+            .map(esc).join(',') + '\n';
+        }
+      }
+
+      // The dictionary travels with the CSV for the same reason readiness
+      // does: a spreadsheet copy has to carry the formula, denominator and
+      // missing-data rule of every number in it, or the number is unsourced.
+      if (result.data_dictionary) {
+        const dd = result.data_dictionary;
+        csv += '\n=== Data Dictionary (metrics) ===\n';
+        csv += 'key,role,category,formula,numerator,denominator,missing_data_rule,instrument,evidence_status\n';
+        for (const m of dd.metrics || []) {
+          csv += [m.key, m.role, m.category, m.formula, m.numerator, m.denominator, m.missing_data_rule, m.instrument, m.evidence_status]
+            .map(esc).join(',') + '\n';
+        }
+        csv += '\n=== Data Dictionary (snapshot-derived fields in dme_mie) ===\n';
+        csv += 'key,delta_key,category,formula,numerator,denominator,missing_data_rule,delta_rule,registry_metric,note\n';
+        for (const f of dd.derived_fields || []) {
+          csv += [f.key, f.delta_key, f.category, f.formula, f.numerator, f.denominator, f.missing_data_rule, f.delta_rule, f.registry_metric, f.note]
+            .map(esc).join(',') + '\n';
         }
       }
 
@@ -1115,6 +1648,42 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         const row = sheet.getRow(1);
         row.font = { bold: true, color: { argb: 'FFFFFFFF' } };
         row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+      }
+
+      // First sheet on purpose: the reader who opens the workbook meets the
+      // date range, the snapshot ids and the checksum before any number.
+      if (result.meta?.provenance) {
+        const p = result.meta.provenance;
+        const ig = result.meta.integrity;
+        const ws = wb.addWorksheet('Provenance');
+        ws.columns = [
+          { header: 'รายการ', key: 'label', width: 30 },
+          { header: 'ค่า', key: 'value', width: 80 },
+        ];
+        ws.addRow({ label: 'format_version', value: result.meta.format_version });
+        ws.addRow({ label: 'checksum_algorithm', value: ig.algorithm });
+        ws.addRow({ label: 'data_checksum', value: ig.data_checksum });
+        ws.addRow({ label: 'checksum_covers', value: (ig.covered_sections || []).join(' | ') });
+        ws.addRow({ label: 'checksum_covers_meta', value: (ig.covered_meta_fields || []).join(' | ') });
+        ws.addRow({ label: 'checksum_canonicalisation', value: ig.canonicalisation });
+        ws.addRow({ label: 'checksum_note', value: ig.note });
+        ws.addRow({ label: 'date_range_from', value: p.date_range.from });
+        ws.addRow({ label: 'date_range_to', value: p.date_range.to });
+        ws.addRow({ label: 'requested_sections', value: (p.requested_sections || []).join(' | ') });
+        ws.addRow({ label: 'snapshot_row_count', value: p.snapshots.row_count ?? '' });
+        ws.addRow({ label: 'snapshot_ids', value: idListCell(p.snapshots.ids) });
+        ws.addRow({ label: 'baseline_snapshot_ids', value: idListCell(p.snapshots.baseline_ids) });
+        ws.addRow({ label: 'snapshot_date_first', value: p.snapshots.first_snapshot_date ?? '' });
+        ws.addRow({ label: 'snapshot_date_last', value: p.snapshots.last_snapshot_date ?? '' });
+        ws.addRow({ label: 'audit_log_row_count', value: p.audit_logs.row_count ?? '' });
+        ws.addRow({ label: 'audit_log_id_first', value: p.audit_logs.first_id ?? '' });
+        ws.addRow({ label: 'audit_log_id_last', value: p.audit_logs.last_id ?? '' });
+        ws.addRow({ label: 'export_evidence_row_count', value: p.export_evidence.row_count ?? '' });
+        ws.addRow({ label: 'delta_baseline_snapshot_id', value: p.computed_from?.baseline_snapshot_id ?? '' });
+        ws.addRow({ label: 'delta_baseline_date', value: p.computed_from?.baseline_date ?? '' });
+        ws.addRow({ label: 'delta_current_snapshot_id', value: p.computed_from?.current_snapshot_id ?? '' });
+        ws.addRow({ label: 'delta_current_date', value: p.computed_from?.current_date ?? '' });
+        styleHeader(ws);
       }
 
       if (result.snapshots?.length) {
@@ -1190,10 +1759,82 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
         ws.addRow({ label: '--- DME Metrics ---', value: '' });
         if (s.dme_mie) {
           for (const [k, v] of Object.entries(s.dme_mie)) {
-            if (k === '_notes' || k === 'delta' || k === 'role_adoption') continue;
+            // Same list as the CSV renderer. It used to be a private copy that
+            // named only three of the five object fields, so snapshot_freshness
+            // and baseline_pair were written into this sheet as JSON blobs;
+            // both are stated as readable rows on the Evidence Readiness sheet.
+            if (DME_MIE_NESTED_FIELDS.has(k)) continue;
             ws.addRow({ label: k, value: v != null ? v : 'pending' });
           }
+          if (s.dme_mie.delta) {
+            ws.addRow({ label: '', value: '' });
+            ws.addRow({ label: '--- Delta from baseline (percentage points) ---', value: '' });
+            for (const [k, v] of Object.entries(s.dme_mie.delta)) {
+              // null means a zero denominator on one side; say so, never 0.
+              ws.addRow({ label: `delta.${k}`, value: v != null ? v : 'null (ตัวส่วนเป็น 0 ฝั่งใดฝั่งหนึ่ง)' });
+            }
+          }
         }
+        styleHeader(ws);
+      }
+
+      // Readiness and the dictionary travel with the workbook for the same
+      // reason they travel with the CSV: without them a sheet of percentages
+      // reads as a clean dataset. The JSON had both; the CSV had readiness
+      // only; the workbook had neither.
+      if (result.meta?.evidence_readiness) {
+        const er = result.meta.evidence_readiness;
+        const ws = wb.addWorksheet('Evidence Readiness');
+        ws.columns = [
+          { header: 'รายการ', key: 'label', width: 34 },
+          { header: 'ค่า', key: 'value', width: 70 },
+        ];
+        ws.addRow({ label: 'research_claims_allowed', value: String(er.research_claims_allowed) });
+        ws.addRow({ label: 'blocking_reasons', value: (er.blocking_reasons || []).join(' | ') });
+        ws.addRow({ label: 'snapshot_latest', value: er.snapshot_freshness?.latest_snapshot_date ?? '' });
+        ws.addRow({ label: 'snapshot_age_days', value: er.snapshot_freshness?.age_days ?? '' });
+        ws.addRow({ label: 'snapshot_fresh', value: String(er.snapshot_freshness?.fresh) });
+        ws.addRow({ label: 'baseline_pair_usable', value: String(er.baseline_pair?.usable) });
+        ws.addRow({ label: 'baseline_pair_reason', value: er.baseline_pair?.reason ?? '' });
+        ws.addRow({ label: 'protocol_frozen', value: String(er.protocol?.frozen) });
+        ws.addRow({ label: 'note', value: er.note || '' });
+        styleHeader(ws);
+
+        const wm = wb.addWorksheet('Readiness by Metric');
+        wm.columns = [
+          { header: 'metric_key', key: 'key', width: 36 },
+          { header: 'category', key: 'category', width: 20 },
+          { header: 'evidence_status', key: 'status', width: 20 },
+          { header: 'blocking_reasons', key: 'blocking_reasons', width: 50 },
+          { header: 'latest_evidence_date', key: 'latest_evidence_date', width: 20 },
+        ];
+        for (const m of er.metrics || []) {
+          wm.addRow({ ...m, blocking_reasons: (m.blocking_reasons || []).join(' | ') });
+        }
+        styleHeader(wm);
+      }
+
+      if (result.data_dictionary) {
+        const dd = result.data_dictionary;
+        const ws = wb.addWorksheet('Data Dictionary');
+        ws.columns = [
+          { header: 'kind', key: 'kind', width: 10 },
+          { header: 'key', key: 'key', width: 36 },
+          { header: 'role', key: 'role', width: 12 },
+          { header: 'category', key: 'category', width: 22 },
+          { header: 'formula', key: 'formula', width: 50 },
+          { header: 'numerator', key: 'numerator', width: 36 },
+          { header: 'denominator', key: 'denominator', width: 36 },
+          { header: 'missing_data_rule', key: 'missing_data_rule', width: 60 },
+          { header: 'instrument', key: 'instrument', width: 12 },
+          { header: 'evidence_status', key: 'evidence_status', width: 20 },
+          { header: 'delta_key', key: 'delta_key', width: 22 },
+          { header: 'delta_rule', key: 'delta_rule', width: 60 },
+          { header: 'registry_metric', key: 'registry_metric', width: 32 },
+          { header: 'note', key: 'note', width: 80 },
+        ];
+        for (const m of dd.metrics || []) ws.addRow({ kind: 'metric', ...m });
+        for (const f of dd.derived_fields || []) ws.addRow({ kind: 'derived', ...f });
         styleHeader(ws);
       }
 
@@ -1232,7 +1873,24 @@ router.get('/research-export/preview', async (req, res, next) => {
       [from, to, from, to, from, to, from, to]
     );
 
-    return sendSuccess(res, { from, to, ...counts });
+    // Row counts alone read as "the dataset is this big"; the limits belong in
+    // the same answer so nobody exports first and reads the caveats later.
+    const evidenceCtx = await loadResearchEvidenceContext();
+    const readiness = researchReadinessSvc.buildEvidenceReadiness(evidenceCtx);
+
+    return sendSuccess(res, {
+      from,
+      to,
+      ...counts,
+      evidence_readiness: {
+        snapshot_freshness: readiness.snapshot_freshness,
+        baseline_pair: readiness.baseline_pair,
+        protocol: readiness.protocol,
+        summary: readiness.summary,
+        research_claims_allowed: readiness.research_claims_allowed,
+        blocking_reasons: readiness.blocking_reasons,
+      },
+    });
   } catch (err) { next(err); }
 });
 
@@ -1276,17 +1934,21 @@ router.get('/student-transfer-requests', async (req, res, next) => {
 
 router.get('/student-transfer-requests/:id', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const transfer = require('../services/studentTransfer.service');
-    const out = await transfer.getDetailForAdmin(pool, { requestId: parseInt(req.params.id, 10) });
+    const out = await transfer.getDetailForAdmin(pool, { requestId });
     return sendSuccess(res, out);
   } catch (err) { next(err); }
 });
 
 router.post('/student-transfer-requests/:id/approve', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const transfer = require('../services/studentTransfer.service');
-    const out = await transfer.approveAndApply(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+    const out = await transfer.approveAndApply(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(requestId),
       newValue: { result: out.status, applied_student_id: out.applied_student_id || null }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     const msg = out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
       : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
@@ -1298,9 +1960,11 @@ router.post('/student-transfer-requests/:id/approve', async (req, res, next) => 
 
 router.post('/student-transfer-requests/:id/reject', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const transfer = require('../services/studentTransfer.service');
-    const out = await transfer.reject(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(req.params.id), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    const out = await transfer.reject(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }
 });
@@ -1314,15 +1978,19 @@ router.get('/vehicle-requests', async (req, res, next) => {
 });
 router.get('/vehicle-requests/:id', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    return sendSuccess(res, await vr.getAdminVehicleRequest(pool, { requestId: parseInt(req.params.id, 10) }));
+    return sendSuccess(res, await vr.getAdminVehicleRequest(pool, { requestId }));
   } catch (err) { next(err); }
 });
 router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    const out = await vr.approveVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(req.params.id),
+    const out = await vr.approveVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(requestId),
       newValue: { result: out.status, vehicle_id: out.vehicle_id || null }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     const msg = out.status === 'APPLIED' ? (out.informational ? 'อนุมัติคำขอแล้ว' : 'อนุมัติและกู้คืนรถสำเร็จ')
       : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
@@ -1333,9 +2001,11 @@ router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
 });
 router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    const out = await vr.rejectVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(req.params.id), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    const out = await vr.rejectVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(requestId), newValue: { result: 'REJECTED' }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }
 });
@@ -1346,6 +2016,26 @@ router.get('/operations/health', async (req, res, next) => {
     const { computeOperationsHealth } = require('../services/operationsHealth.service');
     return sendSuccess(res, await computeOperationsHealth(pool));
   } catch (err) { next(err); }
+});
+// ─── Phase 9 — capacity sample (admin-only, read-only, no PII) ─────────────
+// Polled by backend/scripts/load-test.js every few seconds during a run so the
+// report can carry the server-side numbers the closure plan asks for: DB pool
+// utilisation, slow queries, CPU/RAM/swap, LINE queue depth. Cheap on purpose
+// (SHOW STATUS, one indexed COUNT, in-process counters) — it runs under load.
+// operations/health above is the wrong tool for that: a dozen integrity
+// COUNTs and a backup hash every five seconds would be its own load test.
+router.get('/operations/capacity-sample', async (req, res, next) => {
+  try {
+    const { computeCapacitySample } = require('../services/capacitySample.service');
+    return sendSuccess(res, await computeCapacitySample(pool));
+  } catch (err) { next(err); }
+});
+
+// Process-local, PII-free route histograms. The router-level admin guard above
+// applies here too; snapshots are cumulative and reset after PM2 restarts.
+router.get('/operations/route-latency', (_req, res) => {
+  const { snapshot } = require('../services/routeLatency.service');
+  return sendSuccess(res, snapshot());
 });
 
 // ─── Phase 10.13B-8 — Driver lifecycle & assignment wizard (admin-only) ──────
@@ -1364,29 +2054,35 @@ router.post('/drivers/preflight', async (req, res, next) => {
 });
 router.post('/drivers/:userId/restore', async (req, res, next) => {
   try {
+    const driverUserId = readIdParam(req, res, 'userId');
+    if (driverUserId === null) return;
     const reason = (req.body || {}).reason;
     if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
     const dl = require('../services/driverLifecycle.service');
-    const out = await dl.restoreDriver(pool, { userId: parseInt(req.params.userId, 10), reason, actorId: req.user.id });
+    const out = await dl.restoreDriver(pool, { userId: driverUserId, reason, actorId: req.user.id });
     return sendSuccess(res, out, out.status === 'RESTORED' ? 'กู้คืนบัญชีคนขับสำเร็จ' : 'บัญชีนี้ใช้งานอยู่แล้ว');
   } catch (err) { next(err); }
 });
 router.post('/drivers/:userId/deactivate', async (req, res, next) => {
   try {
+    const driverUserId = readIdParam(req, res, 'userId');
+    if (driverUserId === null) return;
     const reason = (req.body || {}).reason;
     if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
     const dl = require('../services/driverLifecycle.service');
-    const out = await dl.deactivateDriver(pool, { userId: parseInt(req.params.userId, 10), reason, actorId: req.user.id });
+    const out = await dl.deactivateDriver(pool, { userId: driverUserId, reason, actorId: req.user.id });
     return sendSuccess(res, out, out.status === 'DEACTIVATED' ? 'ปิดใช้งานบัญชีคนขับแล้ว' : 'บัญชีนี้ถูกปิดใช้งานอยู่แล้ว');
   } catch (err) { next(err); }
 });
 router.post('/drivers/:userId/reassign-vehicle', async (req, res, next) => {
   try {
+    const driverUserId = readIdParam(req, res, 'userId');
+    if (driverUserId === null) return;
     const b = req.body || {};
     if (!b.vehicle_id) return sendError(res, 'กรุณาระบุรถปลายทาง', [], 400);
     if (!String(b.reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
     const dl = require('../services/driverLifecycle.service');
-    const out = await dl.reassignDriverVehicle(pool, { userId: parseInt(req.params.userId, 10), vehicleId: b.vehicle_id, endTargetExisting: !!b.end_target_existing, reason: b.reason, actorId: req.user.id });
+    const out = await dl.reassignDriverVehicle(pool, { userId: driverUserId, vehicleId: b.vehicle_id, endTargetExisting: !!b.end_target_existing, reason: b.reason, actorId: req.user.id });
     const msg = out.status === 'REASSIGNED' ? 'ย้ายคนขับไปยังรถใหม่สำเร็จ'
       : out.status === 'TARGET_VEHICLE_HAS_ACTIVE_DRIVER' ? 'รถคันนี้มีคนขับที่ใช้งานอยู่แล้ว กรุณายืนยันการสิ้นสุดงานเดิม'
       : out.status === 'DRIVER_ALREADY_ASSIGNED' ? 'คนขับนี้อยู่กับรถคันนี้อยู่แล้ว' : 'ดำเนินการแล้ว';
@@ -1395,8 +2091,10 @@ router.post('/drivers/:userId/reassign-vehicle', async (req, res, next) => {
 });
 router.post('/driver-assignments/:assignmentId/end', async (req, res, next) => {
   try {
+    const assignmentId = readIdParam(req, res, 'assignmentId');
+    if (assignmentId === null) return;
     const dl = require('../services/driverLifecycle.service');
-    const out = await dl.endAssignment(pool, { assignmentId: parseInt(req.params.assignmentId, 10), reason: (req.body || {}).reason, actorId: req.user.id });
+    const out = await dl.endAssignment(pool, { assignmentId, reason: (req.body || {}).reason, actorId: req.user.id });
     return sendSuccess(res, out, out.status === 'ENDED' ? 'สิ้นสุดงานมอบหมายแล้ว' : 'งานนี้สิ้นสุดไปแล้ว');
   } catch (err) { next(err); }
 });
@@ -1408,9 +2106,11 @@ router.post('/driver-assignments/:assignmentId/end', async (req, res, next) => {
 // Operators previously had to hand-edit the DB to clear a stuck application.
 router.post('/verification/applications/:id/cancel', async (req, res, next) => {
   try {
+    const applicationId = readIdParam(req, res, 'id');
+    if (applicationId === null) return;
     const verification = require('../services/vehicleVerification.service');
     const data = await verification.cancelApplication(pool, {
-      applicationId: Number(req.params.id),
+      applicationId,
       schoolId: null,
       userId: req.user.id,
       reason: (req.body || {}).reason || null,
@@ -1488,6 +2188,8 @@ router.post('/vehicles/:id/merge', async (req, res, next) => {
 // date, in one transaction. Reason required; never hard-deletes the original log.
 router.post('/checkin/:logId/void', async (req, res, next) => {
   try {
+    const logId = readIdParam(req, res, 'logId');
+    if (logId === null) return;
     const checkinSvc = require('../services/checkin.service');
     const reason = (req.body || {}).reason;
     if (!String(reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผล', [], 400);
@@ -1498,7 +2200,7 @@ router.post('/checkin/:logId/void', async (req, res, next) => {
       userDisplayName: req.user.displayName || req.user.username || null,
       ipAddress:       req.ip,
       userAgent:       req.headers['user-agent'],
-      logId:           req.params.logId,
+      logId,
       reason,
       scope:           { kind: 'admin' },
     });
@@ -1541,8 +2243,8 @@ router.get('/emergencies', async (req, res, next) => {
 
 router.patch('/emergencies/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
     const { result, note } = req.body || {};
     if (result !== undefined && result !== null && !VALID_EMERGENCY_RESULTS.includes(result)) {
       return sendError(res, `result ต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_EMERGENCY_RESULTS.join(', ')}`, [], 400);
@@ -1562,8 +2264,8 @@ router.patch('/emergencies/:id', async (req, res, next) => {
 
 router.delete('/emergencies/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
     const emSvc = require('../services/emergencyAdmin.service');
     const out = await emSvc.softDeleteEmergency(pool, {
       id, reason: (req.body || {}).reason || null,
@@ -1602,3 +2304,18 @@ router.post('/terms/:id/current', async (req, res, next) => {
 });
 
 module.exports = router;
+
+// Exposed for unit testing only. These are PURE functions over an already-built
+// payload — the integrity contract of the research export — so they are tested
+// directly rather than re-implemented in the test, which would only prove that
+// two copies of the same mistake agree. Attaching them to the router object
+// does not affect `app.use('/api/admin', router)`.
+module.exports._test = {
+  DME_MIE_NESTED_FIELDS,
+  RESEARCH_EXPORT_FORMAT_VERSION,
+  RESEARCH_CHECKSUM_SECTIONS,
+  idListCell,
+  canonicalJson,
+  researchDataChecksum,
+  buildResearchProvenance,
+};

@@ -7,6 +7,7 @@
 > `docs/PRODUCTION_GOVERNANCE_CHECKLIST_2026-08.md`,
 > `docs/UAT_SIGNOFF_2026-08.md`, `docs/TRAINING_PACK_2026-08.md`,
 > และ `docs/OPERATOR_RUNBOOK.md`
+> สถานะจริงล่าสุด (ติดป้ายเพิ่ม 5 ก.ย. 2569): `docs/project-closure/handoff-2026-09-05.md` · เหตุผล: `docs/project-closure/current-status-2026-09-04.md` §5 (#20)
 
 ---
 
@@ -16,11 +17,11 @@
 |---|---|
 | Project | **Lampang Bus System** (ระบบรถรับส่งนักเรียนจังหวัดลำปาง) |
 | Public URL | **https://schoolbuslampang.com** |
-| Backend health | `/health` (loopback) + `/api/health` (public) |
+| Backend health | `/health` (loopback, operator detail) + `/api/health` (public, rate-limited minimal JSON with `Cache-Control: no-store`; HTTP 200 = ready, HTTP 503 = not ready) |
 | Historical readiness (2026-06) | 🟢 **READY FOR CONTROLLED GO-LIVE WITH OFF-HOST BACKUP PENDING** |
 | Closeout date | 2026-06-02 |
 | Latest documentation commit | `67e5966` (`docs: add final UAT and handoff documentation`) |
-| Latest application commit serving production | `cdc0ec0` (`feat(line): switch notification resolver to phone-based binding`) |
+| Latest application commit serving production | `cdc0ec0` (`feat(line): switch notification resolver to phone-based binding`) — *historical 2026-06; ณ 5 ก.ย. 2569 production runtime คือ `208e883` (`handoff-2026-09-05.md` §3)* |
 | Latest frontend bundle | built from `2a802b2` (`fix(parent): make LIFF bind route tolerant of endpoint config`) — subsequent commits are scripts/docs only |
 | Main caveat (historical 2026-06) | 🟡 Off-host backup destination not yet configured (Phase 10.10F-2 pending operator decision) |
 
@@ -161,6 +162,7 @@
 
 ### 6.1 Before go-live
 - [ ] Backend `/health` returns `success: true` with DB connected
+- [ ] Public `/api/health` returns HTTP 200 when `status: "ok"` and HTTP 503 when status is not `"ok"`; both responses keep the same body with only `status`, 7-character `commit`, `database.connected`, `migrations.latest` and `migrations.pending`, plus `Cache-Control: no-store`
 - [ ] `systemctl is-active pm2-schoolbus` = `active`, `is-enabled` = `enabled`
 - [ ] `./scripts/health-check.sh` exits 0 with 8/8 OK
 - [ ] Latest backup exists in `/home/schoolbus/backups/lampang-bus/`
@@ -237,6 +239,7 @@
 ```bash
 # Is the backend healthy?
 curl -s http://127.0.0.1:3000/health
+curl -i https://schoolbuslampang.com/api/health
 ./scripts/health-check.sh
 
 # Are PM2 + systemd OK?

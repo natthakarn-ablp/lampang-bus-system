@@ -19,6 +19,7 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendError } = require('../utils/response');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { readIdParam } = require('../utils/pathParams');
 const checkinSvc = require('../services/checkin.service');
 const docSvc = require('../services/driverDocuments.service');
 
@@ -30,8 +31,10 @@ const NOT_FOUND = (res) => sendError(res, 'ไม่พบเอกสาร ห
 router.get('/:docType/:id/file', async (req, res, next) => {
   try {
     const { docType } = req.params;
-    const id = Number(req.params.id);
     if (docType !== 'vehicle' && docType !== 'driver') return NOT_FOUND(res);
+
+    const id = readIdParam(req, res);
+    if (id === null) return;
 
     // Resolve the driver's active vehicle once (used only by the driver scope
     // branch). Best-effort: a driver with no resolvable vehicle gets null and
@@ -55,13 +58,17 @@ router.get('/:docType/:id/file', async (req, res, next) => {
     catch { return NOT_FOUND(res); }
     if (!stat.isFile()) return NOT_FOUND(res);
 
-    // Audit the view (best-effort; EXPORT = data left the system to a user).
-    logAudit({
+    // A document contains personal data and leaves the system when viewed.
+    // Store the audit row before any response headers or bytes are released.
+    // If audit storage is unavailable, fail closed instead of creating an
+    // unrecorded sensitive-data access.
+    await logAudit({
       userId: req.user.id, action: 'EXPORT',
       entityType: docType === 'vehicle' ? 'vehicle_document' : 'driver_document',
       entityId: String(id),
       newValue: { action: 'view_document', doc_type: row.doc_type },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      required: true,
     });
 
     // Content-Type: the STORED mime is the CLIENT-DECLARED multipart type, so a

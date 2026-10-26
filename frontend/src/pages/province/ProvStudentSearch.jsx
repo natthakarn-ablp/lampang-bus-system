@@ -6,6 +6,7 @@ import ErrorState from '../../components/ErrorState';
 import PageHeader from '../../components/PageHeader';
 import { DataTable, FilterBar, StatusBadge } from '../../components/ui';
 import Pagination from '../../components/Pagination';
+import { formatGradeClass } from '../../utils/student';
 
 export default function ProvStudentSearch() {
   const navigate = useNavigate();
@@ -18,6 +19,9 @@ export default function ProvStudentSearch() {
   const [grade, setGrade] = useState('');
   const [affFilter, setAffFilter] = useState('');
   const [schoolFilter, setSchoolFilter] = useState('');
+  const [hasVehicle, setHasVehicle] = useState(
+    () => new URLSearchParams(window.location.search).get('has_vehicle') || ''
+  );
   const [affiliations, setAffiliations] = useState([]);
   const [schools, setSchools] = useState([]);
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -48,6 +52,7 @@ export default function ProvStudentSearch() {
       if (grade) params.set('grade', grade);
       if (affFilter) params.set('affiliation_id', affFilter);
       if (schoolFilter) params.set('school_id', schoolFilter);
+      if (hasVehicle) params.set('has_vehicle', hasVehicle);
 
       const res = await api.get(`/province/students?${params}`);
       setStudents(Array.isArray(res.data.data) ? res.data.data : []);
@@ -57,7 +62,7 @@ export default function ProvStudentSearch() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, grade, affFilter, schoolFilter]);
+  }, [debouncedSearch, grade, affFilter, schoolFilter, hasVehicle]);
 
   useEffect(() => {
     fetchStudents(1);
@@ -83,6 +88,8 @@ export default function ProvStudentSearch() {
           label: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส',
         }}
         filters={[
+          { key: 'hasVehicle', label: 'กรองตามการผูกรถ', value: hasVehicle, onChange: setHasVehicle,
+            options: [['', 'ทุกสถานะการผูกรถ'], ['no', 'ยังไม่ผูกรถ'], ['yes', 'ผูกรถแล้ว']] },
           { key: 'grade', label: 'กรองตามระดับชั้น', value: grade, onChange: setGrade,
             options: [['', 'ทุกชั้น'], ...['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => [g, g])] },
           { key: 'affiliation', label: 'กรองตามสังกัด', value: affFilter,
@@ -93,7 +100,7 @@ export default function ProvStudentSearch() {
         ]}
         count={meta.total}
         countLabel="คน"
-        onClear={() => { setSearch(''); setGrade(''); setAffFilter(''); setSchoolFilter(''); }}
+        onClear={() => { setSearch(''); setGrade(''); setAffFilter(''); setSchoolFilter(''); setHasVehicle(''); }}
       />
 
       {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}
@@ -107,7 +114,7 @@ export default function ProvStudentSearch() {
           { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
             cell: s => <span className="font-medium text-ink">{s.prefix}{s.first_name} {s.last_name}</span> },
           { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
-            cell: s => (s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-') },
+            cell: s => formatGradeClass(s.grade, s.classroom) },
           { key: 'id', header: 'รหัส', cell: s => <span className="tabular-nums">{s.id}</span> },
           { key: 'school', header: 'โรงเรียน', cell: s => s.school_name || '-' },
           { key: 'affiliation', header: 'สังกัด', cell: s => s.affiliation_name || '-' },

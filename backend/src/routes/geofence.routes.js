@@ -28,6 +28,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit } = require('../utils/audit');
+const { readIdParam } = require('../utils/pathParams');
 const env = require('../config/env');
 const gfSvc = require('../services/geofence.service');
 
@@ -155,8 +156,8 @@ router.post('/', async (req, res, next) => {
 // GET /api/geofences/:id
 router.get('/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'รหัสไม่ถูกต้อง', [], 400);
+    const id = readIdParam(req, res);
+    if (id === null) return;
     const [[row]] = await pool.query(
       `SELECT g.*, v.plate_no
          FROM geofences g
@@ -172,8 +173,8 @@ router.get('/:id', async (req, res, next) => {
 // PUT /api/geofences/:id
 router.put('/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'รหัสไม่ถูกต้อง', [], 400);
+    const id = readIdParam(req, res);
+    if (id === null) return;
 
     const allowed = [
       'name', 'target_type', 'target_id', 'vehicle_id',
@@ -249,8 +250,8 @@ router.put('/:id', async (req, res, next) => {
 // DELETE /api/geofences/:id (soft-delete via is_active=FALSE)
 router.delete('/:id', async (req, res, next) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'รหัสไม่ถูกต้อง', [], 400);
+    const id = readIdParam(req, res);
+    if (id === null) return;
     const [r] = await pool.query(
       `UPDATE geofences SET is_active = FALSE WHERE id = ?`,
       [id]

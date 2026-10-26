@@ -8,6 +8,7 @@ import ErrorState from '../../components/ErrorState';
 import { useToast } from '../../components/Toast';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
+import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../../utils/passwordPolicy';
 
 /**
  * Phase 7.11.5 — school main account manages grade-teacher sub-accounts
@@ -37,7 +38,7 @@ function TeacherDeniedCard() {
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       <AppCard padding="lg">
         <div className="flex items-start gap-3">
-          <ShieldAlert className="w-6 h-6 text-warn shrink-0" strokeWidth={2} />
+          <ShieldAlert className="w-6 h-6 text-warn-ink shrink-0" strokeWidth={2} />
           <div>
             <h1 className="text-lg font-semibold text-ink mb-1">
               ไม่มีสิทธิ์เข้าถึงข้อมูลนี้
@@ -159,7 +160,7 @@ export default function SchoolTeacherAccounts() {
   const handleCreate = async () => {
     if (!form.username?.trim()) { toast.error('กรุณากรอกชื่อผู้ใช้'); return; }
     if (!form.grade_scope)      { toast.error('กรุณาเลือกระดับชั้น'); return; }
-    if (!form.password || form.password.length < 6) { toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
+    if (!form.password || form.password.length < PASSWORD_MIN_LENGTH) { toast.error(PASSWORD_TOO_SHORT); return; }
     if (form.password !== form.confirm)              { toast.error('รหัสผ่านยืนยันไม่ตรงกัน'); return; }
     setSaving(true);
     try {
@@ -187,7 +188,7 @@ export default function SchoolTeacherAccounts() {
   };
 
   const handleReset = async () => {
-    if (!form.password || form.password.length < 6) { toast.error('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร'); return; }
+    if (!form.password || form.password.length < PASSWORD_MIN_LENGTH) { toast.error(PASSWORD_TOO_SHORT); return; }
     if (form.password !== form.confirm)              { toast.error('รหัสผ่านยืนยันไม่ตรงกัน'); return; }
     setSaving(true);
     try {
@@ -259,7 +260,7 @@ export default function SchoolTeacherAccounts() {
             <button
               type="button"
               onClick={() => setModal('bulkDelete')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-danger hover:bg-danger/90 text-white"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-danger-ink hover:bg-danger-ink/90 text-white"
             >
               <Trash2 className="w-3.5 h-3.5" strokeWidth={2.5} />
               ลบบัญชีที่เลือก
@@ -311,7 +312,6 @@ export default function SchoolTeacherAccounts() {
           ]}
           actions={a => (
             <>
-              <TableAction tone="brand" onClick={() => openEdit(a)}>แก้ไข</TableAction>
               <TableAction tone="neutral" onClick={() => openReset(a)}>รีเซ็ตรหัส</TableAction>
               <TableAction tone="danger" disabled={!isDeletable(a)} onClick={() => openDelete(a)}>ลบ</TableAction>
             </>
@@ -336,7 +336,7 @@ export default function SchoolTeacherAccounts() {
                 {GRADES.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
-            <TextField label="รหัสผ่าน * (อย่างน้อย 6 ตัว)" type="password"
+            <TextField label={`รหัสผ่าน * (${PASSWORD_HELPER})`} type="password"
               value={form.password} onChange={v => setForm({...form, password: v})} />
             <TextField label="ยืนยันรหัสผ่าน *" type="password"
               value={form.confirm} onChange={v => setForm({...form, confirm: v})} />
@@ -503,7 +503,7 @@ function BulkDeleteConfirmModal({ items, totalSelected, onClose, onDone, toast }
           type="button"
           onClick={handleConfirm}
           disabled={busy || totalSelected === 0}
-          className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-danger hover:bg-danger/90 text-white disabled:opacity-60 min-h-[40px]"
+          className="px-4 py-2.5 sm:py-2 text-sm rounded-lg bg-danger-ink hover:bg-danger-ink/90 text-white disabled:opacity-60 min-h-[40px]"
         >
           {busy ? 'กำลังลบ…' : `ยืนยันลบ ${totalSelected} รายการ`}
         </button>

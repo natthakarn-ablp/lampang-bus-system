@@ -66,4 +66,57 @@ async function guardParentView(lineUserId, { db = pool, featureEnabled = env.fea
   return { allowed: isParentViewAllowed({ featureEnabled, consentGranted }), featureEnabled: true, consentGranted };
 }
 
-module.exports = { PARENT_CONSENT_TYPES, isParentViewAllowed, hasParentTrackingConsent, guardParentView };
+/**
+ * Fields on a linked child that describe the TRACKING service rather than the
+ * guardian relationship. The relationship itself is already established — a
+ * school approved this person as this child's guardian, and LINE verified
+ * them — so the consent being asked for is about vehicle and driver data, not
+ * about whether the child exists.
+ *
+ * `/api/parent/children` returned these unconditionally, which meant turning
+ * the consent gate on still handed a non-consented parent the plate number and
+ * driver name of their child's bus. Gating only the detail endpoints left the
+ * gate defeatable by reading the list.
+ */
+const TRACKING_FIELDS = ['plate_no', 'driver_name'];
+
+/**
+ * Strips tracking fields from a child row, keeping enough identity for the UI
+ * to say which child the consent prompt is about.
+ */
+function redactUnconsentedChild(child) {
+  const out = { ...child };
+  for (const field of TRACKING_FIELDS) out[field] = null;
+  out.tracking_redacted = true;
+  return out;
+}
+
+/**
+ * Applies the gate to a list of linked children.
+ *
+ * Returns the list unchanged when the feature is dark or consent is granted;
+ * otherwise returns identity-only rows plus `consent_required` so the LIFF UI
+ * can render the consent prompt instead of an empty screen. An empty list
+ * would be indistinguishable from "you have no children", which is a worse
+ * answer than "you need to consent".
+ */
+function applyChildListGate(children, gate) {
+  if (!gate.featureEnabled || gate.allowed) {
+    return { children, consent_required: false, consent_granted: gate.consentGranted ?? null };
+  }
+  return {
+    children: children.map(redactUnconsentedChild),
+    consent_required: true,
+    consent_granted: false,
+  };
+}
+
+module.exports = {
+  PARENT_CONSENT_TYPES,
+  TRACKING_FIELDS,
+  isParentViewAllowed,
+  hasParentTrackingConsent,
+  guardParentView,
+  redactUnconsentedChild,
+  applyChildListGate,
+};

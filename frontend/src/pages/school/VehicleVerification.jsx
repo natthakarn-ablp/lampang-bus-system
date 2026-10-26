@@ -270,7 +270,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
               type="button"
               disabled={busy}
               onClick={() => onReview(true)}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-success-ink px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
               <CheckCircle2 className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
               ตรวจสอบถูกต้อง

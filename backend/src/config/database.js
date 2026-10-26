@@ -24,8 +24,21 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
   timezone: DB_TIMEZONE,
   waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
+  // ── Pool sizing (config-infra) ─────────────────────────────────────────────
+  // These were the literals 10 and 0 until 2026-09-08. The capacity rehearsal
+  // on a development machine measured this pool at utilisation 1.0, with callers
+  // already queueing, at 20 simulated users
+  // (docs/performance/load-test-local-2026-09-05.md §5 — a rehearsal, not a
+  // capacity result), which makes the pool the first thing an operator has to turn when the
+  // province goes live — and turning a literal means an edit plus a redeploy on
+  // a system that is already struggling. They now come from
+  // DB_POOL_CONNECTION_LIMIT / DB_POOL_QUEUE_LIMIT, defaulting to exactly the
+  // old values, so an untouched deployment behaves as before. env.js refuses a
+  // bad value at boot rather than coercing it. OPS: the running values are
+  // visible in the capacity sample (services/capacitySample.service.js reports
+  // pool limit/in_use/queued/utilisation), so a change can be measured.
+  connectionLimit: env.db.pool.connectionLimit,
+  queueLimit: env.db.pool.queueLimit,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
   // Fail fast instead of hanging forever if the DB is unreachable (config-infra).

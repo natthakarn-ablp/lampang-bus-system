@@ -3,6 +3,7 @@ import { Bus, ChevronDown, User } from 'lucide-react';
 import api from '../api/axios';
 import { VehicleSafetySection } from './VehicleSafety';
 import { AppCard, StatusBadge, DataTable } from './ui';
+import { formatGradeClass } from '../utils/student';
 
 /**
  * VehicleRosterCard — one vehicle, with an expandable pupil roster.
@@ -64,7 +65,7 @@ export default function VehicleRosterCard({
     name:   { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
               cell: s => `${s.prefix || ''}${s.first_name} ${s.last_name}` },
     grade:  { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
-              cell: s => (s.grade && s.classroom ? `${s.grade}/${s.classroom}` : s.grade || '-') },
+              cell: s => formatGradeClass(s.grade, s.classroom) },
     school: { key: 'school', header: 'โรงเรียน', cell: s => s.school_name || '-' },
     parent: { key: 'parent', header: 'ผู้ปกครอง', cell: s => s.parent_name || '-' },
     phone:  { key: 'phone', header: 'เบอร์โทร', cell: s => s.parent_phone || '-' },
@@ -72,15 +73,15 @@ export default function VehicleRosterCard({
 
   return (
     <AppCard padding="md">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+        <div className="min-w-0 flex-1 basis-40">
           <h2 className="font-semibold text-ink">{v.plate_no}</h2>
           <p className="text-caption text-ink-muted">{v.vehicle_type || 'ไม่ระบุประเภท'}</p>
           {v.school_names && (
             <p className="text-caption text-brand-700 mt-0.5">{v.school_names}</p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 min-w-0 max-w-full">
           <StatusBadge variant="brand" size="lg">
             <span className="tabular-nums">{v.student_count ?? 0}</span> คน
           </StatusBadge>

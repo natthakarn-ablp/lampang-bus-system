@@ -54,7 +54,7 @@ export default function AttentionQueue({ signals = [], className = '' }) {
       {clear.length > 0 && (
         <AppCard padding="sm">
           <div className="flex items-start gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-success shrink-0 mt-0.5" strokeWidth={2.2} aria-hidden="true" />
+            <CheckCircle2 className="w-4 h-4 text-success-ink shrink-0 mt-0.5" strokeWidth={2.2} aria-hidden="true" />
             <p className="text-sm text-ink-muted leading-relaxed">
               <span className="font-medium text-ink">เรียบร้อย</span>
               {' · '}

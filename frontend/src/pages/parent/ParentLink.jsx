@@ -4,6 +4,7 @@ import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT
 import { resolveLineUserId, getLiffIdToken, isInLiffClient } from '../../utils/liff';
 import PageHeader from '../../components/PageHeader';
 import { AlertBanner, FormField } from '../../components/ui';
+import { formatGradeClass } from '../../utils/student';
 
 // Phase 10.3E-UX1 — parent account linking via LIFF form.
 //
@@ -136,7 +137,7 @@ export default function ParentLink() {
   if (!liffReady) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-6">
-        <div className="text-gray-500 text-sm">กำลังเริ่มต้น LIFF…</div>
+        <div className="text-ink-muted text-sm">กำลังเริ่มต้น LIFF…</div>
       </div>
     );
   }
@@ -144,9 +145,9 @@ export default function ParentLink() {
   if (step === STEP.SUCCESS) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6">
-        <CheckCircle2 className="w-16 h-16 mb-5 text-success" strokeWidth={2} aria-hidden="true" />
+        <CheckCircle2 className="w-16 h-16 mb-5 text-success-ink" strokeWidth={2} aria-hidden="true" />
         <h2 className="text-xl font-bold text-ink mb-2">ผูกบัญชีสำเร็จ</h2>
-        <p className="text-gray-500 text-sm text-center max-w-xs mb-8">
+        <p className="text-ink-muted text-sm text-center max-w-xs mb-8">
           ระบบได้เชื่อมต่อบัญชี LINE ของคุณกับข้อมูลบุตรหลานเรียบร้อยแล้ว
         </p>
         <p className="text-ink-muted text-caption text-center max-w-xs">
@@ -160,7 +161,7 @@ export default function ParentLink() {
   if (step === STEP.PREVIEW) {
     const s = previewStudent || {};
     const fullName = [s.prefix, s.first_name, s.last_name].filter(Boolean).join('');
-    const gradeRoom = [s.grade, s.classroom].filter(Boolean).join(' / ');
+    const gradeRoom = formatGradeClass(s.grade, s.classroom, '');
     return (
       <div className="min-h-screen bg-surface p-4 sm:p-6">
         <div className="max-w-lg mx-auto">
@@ -177,7 +178,7 @@ export default function ParentLink() {
               <span className="font-bold text-ink">{maskedPhone}</span>
             </div>
             {serverErr && (
-              <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+              <p className="text-danger-ink text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-2">
                 {serverErr}
               </p>
             )}

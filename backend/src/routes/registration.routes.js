@@ -11,12 +11,14 @@
 
 const express = require('express');
 const multer  = require('multer');
+const { multipartLimits } = require('../utils/multipartLimits');
 const path    = require('path');
 const fs      = require('fs');
 const crypto  = require('crypto');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { isAllowedDocument } = require('../utils/fileType');
 const checkinSvc = require('../services/checkin.service');
@@ -34,7 +36,7 @@ const docUpload = multer({
     destination: (_req, _file, cb) => cb(null, docUploadDir),
     filename: (req, file, cb) => cb(null, `${req.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname).toLowerCase()}`),
   }),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: multipartLimits(5 * 1024 * 1024), // 5MB
   fileFilter: (_req, file, cb) => {
     const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
     cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
@@ -97,10 +99,13 @@ driverRouter.get('/', async (req, res, next) => {
 
 driverRouter.delete('/students/:id', async (req, res, next) => {
   try {
+    const rosterId = readIdParam(req, res);
+    if (rosterId === null) return;
+
     const vehicleId = await resolveDriverVehicleId(req);
     if (!vehicleId) return sendError(res, 'ไม่พบรถที่ผูกกับบัญชีคนขับ', [{ code: 'NO_VEHICLE' }], 400);
     const out = await reg.deleteRosterStudent(pool, {
-      rosterId: Number(req.params.id), driverUserId: req.user.id, vehicleId,
+      rosterId, driverUserId: req.user.id, vehicleId,
     });
     return sendSuccess(res, out, 'ลบรายการแล้ว');
   } catch (error) { return next(error); }
@@ -159,8 +164,11 @@ driverRouter.get('/documents', async (req, res, next) => {
 // DELETE /documents/:kind/:id — soft-delete own doc.
 driverRouter.delete('/documents/:kind/:id', async (req, res, next) => {
   try {
+    const docId = readIdParam(req, res);
+    if (docId === null) return;
+
     const kind = req.params.kind === 'driver' ? 'driver' : 'vehicle';
-    const out = await docSvc.softDeleteDocument(pool, { kind, id: Number(req.params.id), userId: req.user.id, isAdmin: false });
+    const out = await docSvc.softDeleteDocument(pool, { kind, id: docId, userId: req.user.id, isAdmin: false });
     return sendSuccess(res, out, 'ลบเอกสารแล้ว');
   } catch (error) { return next(error); }
 });
@@ -169,10 +177,23 @@ driverRouter.delete('/documents/:kind/:id', async (req, res, next) => {
 const schoolRouter = express.Router();
 schoolRouter.use(authenticate, requireRole('school', 'admin'));
 
-// Grade-teacher (sub-role) accounts are read-only: they may VIEW the roster and
-// documents but must not match/approve/reject/review. Enforce at the backend so
-// the frontend `!isTeacher` gate is not the only line of defence (CLAUDE.md §12.9).
-// admin has no gradeScope, full-school accounts have a falsy one — both pass.
+// Grade-teacher (sub-role) accounts are blocked from this module entirely.
+//
+// They were read-only here: allowed to VIEW the roster and documents, blocked
+// from match/approve/reject/review. But the thing on view is a driver's rider
+// list for a whole bus, plus that application's school-wide rider totals — so a
+// teacher pinned to ป.4 was reading every grade's names, which contradicts the
+// rule that a teacher sees only their own grade (owner decision, 28 ส.ค. 2569).
+//
+// Filtering was the alternative and was rejected: the roster is reviewed as one
+// document, a partial one cannot be judged, the aps.*_rider_count totals have no
+// grade dimension to filter by at all, and a teacher can take no action here
+// anyway. Blocking matches how /school/audit-logs already treats this account —
+// and that page holds strictly less about the children than this one does.
+//
+// Enforced at the backend so the frontend `!isTeacher` gate is not the only line
+// of defence (CLAUDE.md §12.9). admin has no gradeScope, full-school accounts
+// have a falsy one — both pass.
 function requireFullSchoolScope(req, res, next) {
   if (req.user.role === 'school' && req.user.gradeScope) {
     return sendError(res, 'บัญชีครูประจำสายชั้นดูได้อย่างเดียว ไม่มีสิทธิ์ดำเนินการนี้',
@@ -180,6 +201,12 @@ function requireFullSchoolScope(req, res, next) {
   }
   return next();
 }
+
+// Applied to the whole school-facing router rather than route by route: this
+// module has no grade dimension anywhere, so there is no read here a grade
+// teacher should reach, and a route added later inherits the guard instead of
+// having to remember it.
+schoolRouter.use(requireFullSchoolScope);
 
 // ─── Documents (school reviews evidence for vehicles/drivers in its scope) ────
 schoolRouter.get('/documents/vehicle/:vehicleId', async (req, res, next) => {
@@ -198,7 +225,8 @@ schoolRouter.get('/documents/driver/:driverId', async (req, res, next) => {
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
-    const driverId = Number(req.params.driverId);
+    const driverId = readIdParam(req, res, 'driverId');
+    if (driverId === null) return;
     if (req.user.role !== 'admin' && !(await docSvc.schoolOwnsDriver(pool, { schoolId, driverId }))) {
       return sendError(res, 'ไม่มีสิทธิ์เข้าถึงเอกสารของคนขับรายนี้', [{ code: 'OUT_OF_SCOPE' }], 403);
     }
@@ -210,15 +238,18 @@ schoolRouter.post('/documents/:kind/:id/review', requireFullSchoolScope, async (
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
+    const docId = readIdParam(req, res);
+    if (docId === null) return;
+
     const kind = req.params.kind === 'driver' ? 'driver' : 'vehicle';
-    const doc = await docSvc.getDocument(pool, { kind, id: Number(req.params.id) });
+    const doc = await docSvc.getDocument(pool, { kind, id: docId });
     if (!doc) return sendError(res, 'ไม่พบเอกสาร', [{ code: 'DOC_NOT_FOUND' }], 404);
     const inScope = req.user.role === 'admin' || (kind === 'driver'
       ? await docSvc.schoolOwnsDriver(pool, { schoolId, driverId: doc.owner_id })
       : await docSvc.schoolOwnsVehicle(pool, { schoolId, vehicleId: doc.owner_id }));
     if (!inScope) return sendError(res, 'ไม่มีสิทธิ์ตรวจเอกสารนี้', [{ code: 'OUT_OF_SCOPE' }], 403);
     return sendSuccess(res, await docSvc.reviewDocument(pool, {
-      kind, id: Number(req.params.id),
+      kind, id: docId,
       decision: req.body.decision, note: req.body.note, reviewerUserId: req.user.id,
     }), 'บันทึกผลการตรวจเอกสารแล้ว');
   } catch (error) { return next(error); }
@@ -236,8 +267,11 @@ schoolRouter.get('/:applicationId', async (req, res, next) => {
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
+    const applicationId = readIdParam(req, res, 'applicationId');
+    if (applicationId === null) return;
+
     return sendSuccess(res, await reg.getSchoolRegistrationDetail(pool, {
-      applicationId: Number(req.params.applicationId), schoolId,
+      applicationId, schoolId,
     }));
   } catch (error) { return next(error); }
 });
@@ -246,10 +280,15 @@ schoolRouter.post('/:applicationId/students/:rosterId/match', requireFullSchoolS
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
+    const applicationId = readIdParam(req, res, 'applicationId');
+    if (applicationId === null) return;
+    const rosterId = readIdParam(req, res, 'rosterId');
+    if (rosterId === null) return;
+
     return sendSuccess(res, await reg.matchRosterStudent(pool, {
-      applicationId: Number(req.params.applicationId),
+      applicationId,
       schoolId,
-      rosterId: Number(req.params.rosterId),
+      rosterId,
       matchedStudentId: Number(req.body.matched_student_id),
       userId: req.user.id,
     }), 'จับคู่นักเรียนแล้ว');
@@ -260,10 +299,15 @@ schoolRouter.patch('/:applicationId/students/:rosterId', requireFullSchoolScope,
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
+    const applicationId = readIdParam(req, res, 'applicationId');
+    if (applicationId === null) return;
+    const rosterId = readIdParam(req, res, 'rosterId');
+    if (rosterId === null) return;
+
     return sendSuccess(res, await reg.patchRosterStudent(pool, {
-      applicationId: Number(req.params.applicationId),
+      applicationId,
       schoolId,
-      rosterId: Number(req.params.rosterId),
+      rosterId,
       fields: req.body || {},
       userId: req.user.id,
     }), 'แก้ไขรายการแล้ว');
@@ -274,8 +318,11 @@ schoolRouter.post('/:applicationId/approve', requireFullSchoolScope, async (req,
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
+    const applicationId = readIdParam(req, res, 'applicationId');
+    if (applicationId === null) return;
+
     return sendSuccess(res, await reg.approveRegistration(pool, {
-      applicationId: Number(req.params.applicationId), schoolId, userId: req.user.id,
+      applicationId, schoolId, userId: req.user.id,
     }), 'อนุมัติคำขอแล้ว');
   } catch (error) { return next(error); }
 });
@@ -284,8 +331,11 @@ schoolRouter.post('/:applicationId/reject', requireFullSchoolScope, async (req, 
   try {
     const schoolId = schoolScope(req);
     if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
+    const applicationId = readIdParam(req, res, 'applicationId');
+    if (applicationId === null) return;
+
     return sendSuccess(res, await reg.rejectRegistration(pool, {
-      applicationId: Number(req.params.applicationId), schoolId, userId: req.user.id, reason: req.body.reason,
+      applicationId, schoolId, userId: req.user.id, reason: req.body.reason,
     }), 'ส่งกลับให้แก้ไขแล้ว');
   } catch (error) { return next(error); }
 });

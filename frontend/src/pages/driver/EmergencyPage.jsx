@@ -115,9 +115,9 @@ export default function EmergencyPage() {
   if (success) {
     return (
       <div className="p-3 sm:p-6 max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-        <CheckCircle2 className="w-16 h-16 mx-auto mb-5 text-success" strokeWidth={2} aria-hidden="true" />
+        <CheckCircle2 className="w-16 h-16 mx-auto mb-5 text-success-ink" strokeWidth={2} aria-hidden="true" />
         <h2 className="text-xl font-bold text-gray-800 mb-2">แจ้งเหตุฉุกเฉินแล้ว</h2>
-        <p className="text-gray-500 text-sm mb-8">ทีมงานจะดำเนินการโดยเร็ว</p>
+        <p className="text-ink-muted text-sm mb-8">ทีมงานจะดำเนินการโดยเร็ว</p>
         <button
           onClick={() => navigate('/driver', { replace: true })}
           className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-8 py-2.5 rounded-lg transition"
@@ -132,7 +132,7 @@ export default function EmergencyPage() {
     switch (gpsStatus) {
       case 'requesting':
         return {
-          tone: 'border-info bg-info-soft text-info',
+          tone: 'border-info bg-info-soft text-info-ink',
           icon: Satellite,
           title: 'กำลังขอตำแหน่ง GPS…',
           body: 'กรุณาอนุญาตการเข้าถึงตำแหน่งเมื่อเบราว์เซอร์ถาม',
@@ -141,7 +141,7 @@ export default function EmergencyPage() {
         };
       case 'granted':
         return {
-          tone: 'border-success bg-success-soft text-success',
+          tone: 'border-success bg-success-soft text-success-ink',
           icon: MapPin,
           title: 'ระบุตำแหน่งได้แล้ว',
           body: `ความแม่นยำ ±${Math.round(position?.accuracy ?? 0)} เมตร`,
@@ -150,7 +150,7 @@ export default function EmergencyPage() {
         };
       case 'denied':
         return {
-          tone: 'border-warn bg-warn-soft text-warn',
+          tone: 'border-warn bg-warn-soft text-warn-ink',
           icon: MapPinOff,
           title: 'ปฏิเสธการเข้าถึงตำแหน่ง',
           body: 'เปิดสิทธิ์ตำแหน่งใน Safari → Settings → Privacy แล้วกดลองอีกครั้ง',
@@ -159,7 +159,7 @@ export default function EmergencyPage() {
         };
       case 'timeout':
         return {
-          tone: 'border-warn bg-warn-soft text-warn',
+          tone: 'border-warn bg-warn-soft text-warn-ink',
           icon: MapPinOff,
           title: 'ระบุตำแหน่งไม่สำเร็จ',
           body: 'ลองออกไปนอกอาคารแล้วกดลองอีกครั้ง หรือส่งโดยไม่มี GPS ก็ได้',
@@ -169,7 +169,7 @@ export default function EmergencyPage() {
       case 'unsupported':
       default:
         return {
-          tone: 'border-warn bg-warn-soft text-warn',
+          tone: 'border-warn bg-warn-soft text-warn-ink',
           icon: MapPinOff,
           title: 'อุปกรณ์ไม่รองรับ GPS',
           body: 'จะส่งโดยไม่มีตำแหน่ง',

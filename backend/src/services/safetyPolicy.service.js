@@ -1,5 +1,7 @@
 'use strict';
 
+const { toBangkokDate, todayBangkok } = require('../utils/thaiTime');
+
 const EXPLICIT_VEHICLE_BLOCKERS = new Set([
   'VEHICLE_SUSPENDED',
   'INSPECTION_FAILED',
@@ -64,16 +66,16 @@ function evaluateSafetyPolicy(input = {}) {
   };
 }
 
-// Date-only string ('YYYY-MM-DD'), consistent with driverShift.service.js dateOnly().
-function dateOnly(value = new Date()) {
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
+// Bangkok calendar date, consistent with driverShift.service.js dateOnly().
+// No default, for the reason given there.
+function dateOnly(value) {
+  return toBangkokDate(value);
 }
 
 // Derive the effective qualification status: a VERIFIED license that is missing
 // or expired (license_expiry < today, date-only) is treated as EXPIRED so it
 // hard-BLOCKs in both OBSERVE and ENFORCE — matching driverShift.startShift.
-function effectiveQualificationStatus(qualificationStatus, licenseExpiry, today = dateOnly()) {
+function effectiveQualificationStatus(qualificationStatus, licenseExpiry, today = todayBangkok()) {
   if (qualificationStatus !== 'VERIFIED') return qualificationStatus;
   if (!licenseExpiry || dateOnly(licenseExpiry) < today) return 'EXPIRED';
   return qualificationStatus;

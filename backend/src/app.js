@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
+const { routeLatencyMiddleware } = require('./services/routeLatency.service');
 
 const env = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
@@ -32,6 +33,8 @@ const GLOBAL_API_LIMITED_PREFIXES = [
   '/api/eta',
   '/api/geofences',
   '/api/route-deviations',
+  '/api/participation',
+  '/api/policy-notices',
 ];
 
 // ─── Proxy trust ────────────────────────────────────────────────────────────
@@ -105,6 +108,34 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+// Public uptime probe: deliberately narrower than loopback /health. It exposes
+// only release identity, DB reachability and migration ledger freshness.
+const publicHealthLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { status: 'rate_limited', commit: null, database: { connected: false }, migrations: { latest: null, pending: null } },
+});
+function publicHealthNoStore(_req, res, next) {
+  res.set('Cache-Control', 'no-store');
+  next();
+}
+app.get('/api/health', publicHealthNoStore, publicHealthLimiter, async (_req, res, next) => {
+  try {
+    const { getPublicHealth } = require('./services/publicHealth.service');
+    const health = await getPublicHealth();
+    return res.status(health.status === 'ok' ? 200 : 503).json(health);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Aggregate timing for operator API routes only. Labels come from registered
+// route templates; raw URLs, params and response bodies are never retained.
+app.use(routeLatencyMiddleware);
+
 // ─── Global rate-limit floor (Medium fix) ───────────────────────────────────
 // A single authenticated token should not be able to hammer any API endpoint
 // unchecked. The per-route limiters (login/refresh/export/webhook) stay in
@@ -127,6 +158,8 @@ app.use(GLOBAL_API_LIMITED_PREFIXES, globalApiLimiter);
 
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/auth',   authRoutes);
+app.use('/api/policy-notices', require('./routes/policyNotice.routes'));
+app.use('/api/auth/recovery', require('./routes/adminPasswordRecovery.routes'));
 
 // ─── Phase 10.14 — Driver-initiated vehicle registration (feature-flagged) ───
 // Mounted BEFORE the broad /api/driver and /api/school routers so the more
@@ -166,16 +199,54 @@ app.use('/api/verification', require('./routes/verification.routes'));
 app.use('/api/parent',    require('./routes/parent.routes'));
 app.use('/api/line',      require('./routes/line.routes'));
 app.use('/api/admin',     require('./routes/admin.routes'));
-app.use('/api/visits',    require('./routes/visits.routes'));
+
+// `/api/visits/track` is public and unauthenticated by design (aggregate
+// counter, no PII, deduped per browser session by the frontend). That also made
+// it the only completely unlimited write path in the API: a curl loop could
+// inflate daily_visits without bound and write a row per request against a
+// single 2 GB instance. It gets its own limiter rather than joining the
+// operator floor, so anonymous public traffic and authenticated operator
+// traffic from one NAT'd school do not share a bucket. The UI fires this about
+// once per browser session, so 30/min per IP is far above real usage.
+const visitsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { success: false, message: 'คำขอถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+});
+app.use('/api/visits', visitsLimiter, require('./routes/visits.routes'));
 app.use('/api/readiness', require('./routes/readiness.routes'));
 app.use('/api/terms',     require('./routes/terms.routes'));
+
+// ─── Participatory administration (feature-flagged; dark by default) ─────────
+// One router and one inbox rather than a menu entry per action: the role-menu
+// audit found the system already has too many entry points, and a page per
+// metric is what made the admin area unusable.
+if (env.features.participationCases) {
+  app.use('/api/participation', require('./routes/participation.routes'));
+}
 
 // ─── Vehicle QR + consent (feature-flagged; dark by default) ─────────────────
 // Mounted ONLY when FEATURE_VEHICLE_QR=true. When off, these paths 404 and the
 // existing system is byte-for-byte unchanged (true dark launch).
 if (env.features.vehicleQr) {
   app.use('/api/qr',      require('./routes/qr.routes'));
-  app.use('/api/consent', require('./routes/consent.routes'));
+  // Every parent-facing consent request costs an outbound LINE id_token
+  // verification, so an unlimited consent router would let anyone spend the
+  // channel's quota. `qr.routes.js` already carries its own limiter; consent
+  // shipped without one and must not stay that way when Phase 7 turns the flag
+  // on. Sized for a real parent session (grant, withdraw, re-read), not a loop.
+  const consentLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => process.env.NODE_ENV === 'test',
+    message: { success: false, message: 'คำขอถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+  });
+  app.use('/api/consent', consentLimiter, require('./routes/consent.routes'));
 }
 
 // ─── Phase 11A — Intelligent Tracking Layer (2026-06-23) ─────────────────────
@@ -194,6 +265,19 @@ if (env.features.geofence) {
 if (env.features.routeDeviation) {
   app.use('/api/route-deviations', require('./routes/routeDeviation.routes'));
 }
+
+// Unknown API paths must remain API responses in production. Without this
+// boundary, the SPA catch-all below returns index.html with HTTP 200 for a
+// misspelled /api URL, which hides client and monitoring failures.
+function apiNotFound(_req, res) {
+  return res.status(404).json({
+    success: false,
+    message: 'Route not found',
+    errors: [],
+    data: null,
+  });
+}
+app.use('/api', apiNotFound);
 
 // ─── Serve frontend build in production ──────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
@@ -216,3 +300,6 @@ module.exports = app;
 // Exposed for unit testing the CORS allow-list.
 module.exports.isOriginAllowed = isOriginAllowed;
 module.exports.GLOBAL_API_LIMITED_PREFIXES = GLOBAL_API_LIMITED_PREFIXES;
+module.exports.apiNotFound = apiNotFound;
+module.exports.publicHealthLimiter = publicHealthLimiter;
+module.exports.publicHealthNoStore = publicHealthNoStore;

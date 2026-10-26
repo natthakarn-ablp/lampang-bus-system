@@ -145,13 +145,13 @@ export default function StudentTransferRequests() {
                 <>
                   <button
                     onClick={() => setAction('reject')}
-                    className="focus-ring min-h-[44px] text-sm bg-danger hover:bg-danger/90 text-white font-semibold px-4 rounded-lg transition"
+                    className="focus-ring min-h-[44px] text-sm bg-danger-ink hover:bg-danger-ink/90 text-white font-semibold px-4 rounded-lg transition"
                   >
                     ไม่อนุมัติคำขอ
                   </button>
                   <button
                     onClick={() => setAction('approve')}
-                    className="focus-ring min-h-[44px] text-sm bg-success hover:bg-success/90 text-white font-semibold px-4 rounded-lg transition"
+                    className="focus-ring min-h-[44px] text-sm bg-success-ink hover:bg-success-ink/90 text-white font-semibold px-4 rounded-lg transition"
                   >
                     อนุมัติและดำเนินการโอนย้าย
                   </button>

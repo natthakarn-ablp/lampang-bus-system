@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, Bell, ChevronDown, LogOut, KeyRound, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Menu, Bell, ChevronDown, LogOut, KeyRound, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { getGradeScope } from '../utils/authScope';
 import api from '../api/axios';
 import { PulseDot } from '../lib/motion';
 
@@ -48,11 +49,18 @@ function useDismissable(open, setOpen, ref) {
 }
 
 export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollapsed = false }) {
-  const { user, logout } = useAuth();
+  const { user, features, logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
   const isAdmin = user?.role === 'admin';
+  // Roles that may hold a LINE binding for password recovery. The menu entry
+  // shows for them; the page itself asks the server whether recovery is open
+  // for that role and explains when it is not, so a role whose decision gates
+  // are still unconfirmed sees a clear message instead of a dead end.
+  const RECOVERY_ROLES = ['admin', 'province', 'affiliation', 'transport'];
+  const canBindRecovery = RECOVERY_ROLES.includes(user?.role)
+    && (user?.role !== 'admin' || features?.adminPasswordRecovery);
 
   // Pending-requests bell (admin only) — aggregates transfer + vehicle + roster.
   const [bellOpen, setBellOpen] = useState(false);
@@ -81,7 +89,14 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
 
   const displayName = user?.display_name || user?.username || '';
   const initial = displayName.charAt(0).toUpperCase();
-  const scopeLabel = user?.scope_type ? SCOPE_LABEL[user.scope_type] : null;
+  // scope_type is 'SCHOOL' for a full school account AND for a homeroom-teacher
+  // sub-account, so this badge told a teacher their scope was the whole school —
+  // the opposite of what it is, in the one spot whose job is to state the scope.
+  // grade_scope is the only field that separates them.
+  const teacherGrade = getGradeScope(user);
+  const scopeLabel = teacherGrade
+    ? `ขอบเขตสายชั้น ${teacherGrade}`
+    : (user?.scope_type ? SCOPE_LABEL[user.scope_type] : null);
 
   return (
     <header className="sticky top-0 z-sticky h-topbar shrink-0 bg-surface-raised/90 backdrop-blur border-b border-surface-border">
@@ -134,7 +149,7 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
             >
               <Bell className="w-5 h-5" strokeWidth={2} />
               {pending.total > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] font-semibold inline-flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-danger-ink text-white text-[10px] font-semibold inline-flex items-center justify-center">
                   {pending.total > 9 ? '9+' : pending.total}
                   <PulseDot color="bg-danger" size="sm" className="-top-1 -right-1" />
                 </span>
@@ -209,6 +224,16 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
                 <KeyRound className="w-4 h-4 text-ink-muted" strokeWidth={2} />
                 เปลี่ยนรหัสผ่าน
               </button>
+              {canBindRecovery && (
+                <button
+                  role="menuitem"
+                  onClick={() => { setMenuOpen(false); navigate('/parent/link/admin-recovery'); }}
+                  className="focus-ring w-full flex items-center gap-2 px-4 py-2.5 min-h-[44px] text-sm text-ink hover:bg-surface active:bg-surface-border transition"
+                >
+                  <ShieldCheck className="w-4 h-4 text-ink-muted" strokeWidth={2} />
+                  ความปลอดภัยบัญชี
+                </button>
+              )}
               <button
                 role="menuitem"
                 onClick={handleLogout}

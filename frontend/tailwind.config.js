@@ -45,7 +45,14 @@ export default {
         },
         ink: {
           DEFAULT: '#0F172A',
-          muted:   '#64748B',
+          // slate-600, not slate-500. Measured: #64748B reaches 4.76:1 on white
+          // — which is why it was chosen — but the muted tone is also the body
+          // text of every AlertBanner, KPI caption and card subtitle, and those
+          // sit on the `soft` surfaces, not on white. There it was
+          // 4.20 / 4.27 / 3.90 / 4.15 (success / warn / danger / info), every
+          // one under the 4.5 floor, and 2.54 wherever a raw text-gray-400 had
+          // been used instead. #475569 is >= 6.16 on all of them.
+          muted:   '#475569',
         },
         // DEFAULT = the fill (bars, dots, solid buttons — large shapes, where a
         // vivid tone is legible). `ink` = the TEXT tone for use on the matching
@@ -55,6 +62,18 @@ export default {
         // one below the WCAG AA 4.5:1 floor for body text, and `warn` at 1.93
         // was very close to unreadable. The `ink` tones are 4.84 / 6.37 / 5.30 /
         // 5.17 on soft and 5.48 / 7.09 / 6.47 / 5.93 on white.
+        //
+        // `ink` is also the SOLID BACKGROUND for anything with white text on
+        // it — a confirm button, a count badge. White on the DEFAULT tone is
+        // 2.54 / 2.15 / 3.76 / 2.77, and white on `ink` is the 5.48 / 7.09 /
+        // 6.47 / 5.93 above. So the rule for the whole pair is: DEFAULT for
+        // shapes with no text (bars, dots, chart fills), `ink` the moment text
+        // is involved — as the text on a light surface, or as the surface
+        // under white text.
+        //
+        // Enforced, not just written down: scripts/ui-redesign/capture.mjs
+        // measures every text node against its resolved background and fails
+        // the run below 4.5 (3 for large text).
         success: { DEFAULT: '#10B981', soft: '#D1FAE5', ink: '#047857' },
         warn:    { DEFAULT: '#F59E0B', soft: '#FEF3C7', ink: '#92400E' },
         danger:  { DEFAULT: '#EF4444', soft: '#FEE2E2', ink: '#B91C1C' },

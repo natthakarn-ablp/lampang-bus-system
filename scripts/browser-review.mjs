@@ -40,10 +40,21 @@ function injectScript(user) {
   `;
 }
 
+// A2-3 in the closure execution plan asks for 390 / 768 / 1440, and this was
+// the script it names. It was running 375 / 768 / 1280 — a mobile width that
+// matches neither the plan nor scripts/ui-redesign/capture.mjs (390), and no
+// 1440 at all. 375 (iPhone SE/8) is a narrower class than 390 (iPhone 12-15),
+// so a target-size or overflow finding at one width need not reproduce at the
+// other, and the two tools could disagree without either being wrong.
+//
+// `desktop` stays at 1280 because docs/ui-baseline was captured there and
+// changing it would silently invalidate the before/after comparison. 1440 is
+// added alongside as its own entry instead.
 const VIEWPORTS = {
-  mobile:  { width: 375,  height: 812 },
+  mobile:  { width: 390,  height: 844 },
   tablet:  { width: 768,  height: 1024 },
   desktop: { width: 1280, height: 800 },
+  wide:    { width: 1440, height: 900 },
 };
 
 async function shoot(page, name) {

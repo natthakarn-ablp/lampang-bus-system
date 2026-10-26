@@ -14,9 +14,9 @@ import { Inbox } from 'lucide-react';
 
 const VARIANTS = {
   default: { iconBg: 'bg-surface',      iconColor: 'text-ink-muted' },
-  success: { iconBg: 'bg-success-soft', iconColor: 'text-success' },
-  warn:    { iconBg: 'bg-warn-soft',    iconColor: 'text-warn' },
-  info:    { iconBg: 'bg-info-soft',    iconColor: 'text-info' },
+  success: { iconBg: 'bg-success-soft', iconColor: 'text-success-ink' },
+  warn:    { iconBg: 'bg-warn-soft',    iconColor: 'text-warn-ink' },
+  info:    { iconBg: 'bg-info-soft',    iconColor: 'text-info-ink' },
 };
 
 export default function EmptyState({

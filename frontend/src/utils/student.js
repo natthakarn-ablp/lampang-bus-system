@@ -21,9 +21,28 @@
  *   "ป.4/1" is the conventional Thai school notation. Adding "ห้อง"
  *   would be redundant.
  */
+export function abbreviateGrade(value) {
+  if (value === null || value === undefined) return '';
+
+  return String(value)
+    .replace(/ประถมศึกษาปีที่\s*/g, 'ป.')
+    .replace(/อนุบาล(?:ปีที่)?\s*/g, 'อ.')
+    .trim();
+}
+
+export function formatGradeClass(grade, classroom, fallback = '-') {
+  const gradeLabel = abbreviateGrade(grade);
+  const classroomText = classroom === null || classroom === undefined
+    ? ''
+    : String(classroom).trim();
+
+  if (gradeLabel && classroomText) return `${gradeLabel}/${classroomText}`;
+  return gradeLabel || classroomText || fallback;
+}
+
 export function classroomLabel(student) {
   if (!student) return null;
-  const grade = student.grade && String(student.grade).trim();
+  const grade = abbreviateGrade(student.grade);
   const classroom = student.classroom && String(student.classroom).trim();
   if (grade && classroom) return `${grade}/${classroom}`;
   if (classroom)          return `ห้อง ${classroom}`;

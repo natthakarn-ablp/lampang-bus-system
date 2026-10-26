@@ -1,6 +1,9 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { gradeEquivalents } = require('../utils/gradeScope');
+const { VEHICLE_DATE_FIELDS, mapCalendarDates } = require('../utils/vehicleDates');
+const { toBangkokDate } = require('../utils/thaiTime');
 
 // Phase 10.7C-1 — match province.service.js window so "ยังไม่เริ่มใช้ระบบ"
 // means the same thing at both scopes. School is "used recently" if it has
@@ -26,10 +29,13 @@ async function getDashboard(affiliationId) {
     [affiliationId]
   );
 
-  // Total students across all schools
+  // Total students across all schools. Every count here uses the same set the
+  // per-school list (getSchools) shows — open schools, live pupils, live
+  // vehicles — so the rows add up to the headline. Vehicles are counted once
+  // each, so a bus shared by two schools appears in both rows but once above.
   const [[{ total_students }]] = await pool.query(
     `SELECT COUNT(*) AS total_students FROM students s
-     JOIN schools sc ON sc.id = s.school_id
+     JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
      WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE`,
     [affiliationId]
   );
@@ -37,8 +43,9 @@ async function getDashboard(affiliationId) {
   // Total vehicles
   const [[{ total_vehicles }]] = await pool.query(
     `SELECT COUNT(DISTINCT s.vehicle_id) AS total_vehicles FROM students s
-     JOIN schools sc ON sc.id = s.school_id
-     WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL`,
+     JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+     JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
+     WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE`,
     [affiliationId]
   );
 
@@ -49,7 +56,7 @@ async function getDashboard(affiliationId) {
        COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
      FROM daily_status ds
      JOIN students s ON s.id = ds.student_id
-     JOIN schools sc ON sc.id = s.school_id
+     JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
      WHERE ds.check_date = ? AND sc.affiliation_id = ? AND s.is_deleted = FALSE`,
     [today, affiliationId]
   );
@@ -57,13 +64,13 @@ async function getDashboard(affiliationId) {
   // Morning/evening totals
   const [[{ morning_total }]] = await pool.query(
     `SELECT COUNT(*) AS morning_total FROM students s
-     JOIN schools sc ON sc.id = s.school_id
+     JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
      WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE AND s.morning_enabled = TRUE`,
     [affiliationId]
   );
   const [[{ evening_total }]] = await pool.query(
     `SELECT COUNT(*) AS evening_total FROM students s
-     JOIN schools sc ON sc.id = s.school_id
+     JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
      WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE AND s.evening_enabled = TRUE`,
     [affiliationId]
   );
@@ -74,7 +81,7 @@ async function getDashboard(affiliationId) {
      FROM emergency_logs el
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE
-     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
+     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ? AND sc.is_deleted = FALSE
      WHERE el.reported_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
        AND el.is_deleted = FALSE`,
     [affiliationId]
@@ -88,7 +95,7 @@ async function getDashboard(affiliationId) {
        COUNT(DISTINCT CASE WHEN sl.session IN ('evening','both') THEN sl.student_id END) AS evening_leave
      FROM student_leaves sl
      JOIN students s ON s.id = sl.student_id
-     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
+     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ? AND sc.is_deleted = FALSE
      WHERE sl.leave_date = ? AND sl.cancelled = FALSE AND s.is_deleted = FALSE`,
     [affiliationId, today]
   );
@@ -213,13 +220,17 @@ async function getDashboard(affiliationId) {
 /**
  * List schools in an affiliation with student/vehicle counts.
  */
-async function getSchools(affiliationId) {
-  const [schools] = await pool.query(
+async function getSchools(affiliationId, executor = pool) {
+  const [schools] = await executor.query(
     `SELECT sc.id, sc.name,
             (SELECT COUNT(*) FROM students s
              WHERE s.school_id = sc.id AND s.is_deleted = FALSE) AS student_count,
             (SELECT COUNT(DISTINCT s.vehicle_id) FROM students s
-             WHERE s.school_id = sc.id AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL) AS vehicle_count
+             JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
+             WHERE s.school_id = sc.id AND s.is_deleted = FALSE) AS vehicle_count,
+            (SELECT MAX(u.last_login) FROM users u
+             WHERE u.scope_type = 'SCHOOL' AND u.scope_id = sc.id
+               AND u.role = 'school' AND u.is_deleted = FALSE) AS last_login_at
      FROM schools sc
      WHERE sc.affiliation_id = ? AND sc.is_deleted = FALSE
      ORDER BY sc.name`,
@@ -230,14 +241,68 @@ async function getSchools(affiliationId) {
 }
 
 /**
+ * Current master-data overview, not a school submission/attestation report.
+ * Keep school rows and the deduplicated fleet count in one read-only snapshot.
+ */
+async function getSchoolsReport(affiliationId) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+    await connection.query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
+    const generatedAt = new Date().toISOString();
+    const [[affiliation]] = await connection.query(
+      'SELECT id, name FROM affiliations WHERE id = ? AND is_deleted = FALSE',
+      [affiliationId]
+    );
+    if (!affiliation) {
+      const error = new Error('ไม่พบข้อมูลสังกัด');
+      error.statusCode = 404;
+      throw error;
+    }
+    const schoolRows = await getSchools(affiliationId, connection);
+    const [[{ total_vehicles }]] = await connection.query(
+      `SELECT COUNT(DISTINCT s.vehicle_id) AS total_vehicles FROM students s
+       JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+       JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
+       WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE`,
+      [affiliationId]
+    );
+    const schools = schoolRows.map(row => ({
+      ...row,
+      student_count: Number(row.student_count),
+      vehicle_count: Number(row.vehicle_count),
+    }));
+    const report = {
+      affiliation,
+      generated_at: generatedAt,
+      summary: {
+        total_schools: schools.length,
+        total_students: schools.reduce((total, school) => total + school.student_count, 0),
+        // Shared vehicles appear in multiple school rows but only once here.
+        total_vehicles: Number(total_vehicles),
+      },
+      schools,
+    };
+    await connection.commit();
+    return report;
+  } catch (err) {
+    // Preserve the original query error even if cleanup also fails.
+    try { await connection.rollback(); } catch { /* preserve original error */ }
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
+/**
  * Search/list students across all schools in an affiliation.
  */
-async function getStudents(affiliationId, { search, grade, school_id, vehicle_id, page = 1, per_page = 20, sort = 'first_name', order = 'asc' }) {
+async function getStudents(affiliationId, { search, grade, school_id, vehicle_id, has_vehicle, page = 1, per_page = 20, sort = 'first_name', order = 'asc' }) {
   const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'school_id', 'vehicle_id'];
   const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
   const sortDir = order === 'desc' ? 'DESC' : 'ASC';
 
-  let where = 'sc.affiliation_id = ? AND s.is_deleted = FALSE';
+  let where = 'sc.affiliation_id = ? AND sc.is_deleted = FALSE AND s.is_deleted = FALSE';
   const params = [affiliationId];
 
   if (search) {
@@ -246,8 +311,12 @@ async function getStudents(affiliationId, { search, grade, school_id, vehicle_id
     params.push(like, like, like);
   }
   if (grade) {
-    where += ' AND s.grade = ?';
-    params.push(grade);
+    // Tolerant grade match, same as the school student search. students.grade is
+    // stored in several spellings, so an exact match makes the same dropdown give
+    // a different answer here than it does inside the school module.
+    const eq = gradeEquivalents(grade);
+    where += ` AND s.grade IN (${eq.map(() => '?').join(',')})`;
+    params.push(...eq);
   }
   if (school_id) {
     where += ' AND s.school_id = ?';
@@ -257,6 +326,10 @@ async function getStudents(affiliationId, { search, grade, school_id, vehicle_id
     where += ' AND s.vehicle_id = ?';
     params.push(vehicle_id);
   }
+  // ตัวกรอง "ยังไม่ผูกรถ" — ใช้ has_vehicle แทนการส่ง vehicle_id ว่าง
+  // เพราะ `if (vehicle_id)` ข้างบนตีความค่าว่างเป็น "ไม่กรอง"
+  if (has_vehicle === 'no') where += ' AND s.vehicle_id IS NULL';
+  else if (has_vehicle === 'yes') where += ' AND s.vehicle_id IS NOT NULL';
 
   const [[{ total }]] = await pool.query(
     `SELECT COUNT(*) AS total FROM students s
@@ -310,11 +383,11 @@ async function getVehicles(affiliationId) {
              WHERE va.vehicle_id = v.id LIMIT 1) AS attendant_phone,
             (SELECT COUNT(*) FROM students s2
              JOIN schools sc2 ON sc2.id = s2.school_id
-             WHERE s2.vehicle_id = v.id AND sc2.affiliation_id = ? AND s2.is_deleted = FALSE) AS student_count,
+             WHERE s2.vehicle_id = v.id AND sc2.affiliation_id = ? AND sc2.is_deleted = FALSE AND s2.is_deleted = FALSE) AS student_count,
             (SELECT GROUP_CONCAT(DISTINCT sc3.name ORDER BY sc3.name SEPARATOR ', ')
              FROM students s3
              JOIN schools sc3 ON sc3.id = s3.school_id
-             WHERE s3.vehicle_id = v.id AND sc3.affiliation_id = ? AND s3.is_deleted = FALSE) AS school_names,
+             WHERE s3.vehicle_id = v.id AND sc3.affiliation_id = ? AND sc3.is_deleted = FALSE AND s3.is_deleted = FALSE) AS school_names,
             (SELECT vi.result FROM vehicle_inspections vi
              WHERE vi.vehicle_id = v.id ORDER BY vi.inspection_date DESC LIMIT 1) AS latest_inspection_result,
             (SELECT vi.inspection_date FROM vehicle_inspections vi
@@ -324,13 +397,13 @@ async function getVehicles(affiliationId) {
        AND v.id IN (
          SELECT DISTINCT s.vehicle_id FROM students s
          JOIN schools sc ON sc.id = s.school_id
-         WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL
+         WHERE sc.affiliation_id = ? AND sc.is_deleted = FALSE AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL
        )
      ORDER BY v.plate_no`,
     [affiliationId, affiliationId, affiliationId]
   );
 
-  return vehicles;
+  return mapCalendarDates(vehicles, VEHICLE_DATE_FIELDS);
 }
 
 /**
@@ -351,7 +424,7 @@ async function getStatusToday(affiliationId) {
      JOIN schools sc ON sc.id = s.school_id
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
      LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
-     WHERE sc.affiliation_id = ? AND s.is_deleted = FALSE
+     WHERE sc.affiliation_id = ? AND sc.is_deleted = FALSE AND s.is_deleted = FALSE
      ORDER BY sc.name, v.plate_no, s.first_name`,
     [today, affiliationId]
   );
@@ -407,7 +480,7 @@ async function getEmergencies(affiliationId, { page = 1, per_page = 20 }) {
      FROM emergency_logs el
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE
-     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
+     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ? AND sc.is_deleted = FALSE
      WHERE el.is_deleted = FALSE`,
     [affiliationId]
   );
@@ -420,7 +493,7 @@ async function getEmergencies(affiliationId, { page = 1, per_page = 20 }) {
      FROM emergency_logs el
      JOIN vehicles v ON v.id = el.vehicle_id
      JOIN students s ON s.vehicle_id = v.id AND s.is_deleted = FALSE
-     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
+     JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ? AND sc.is_deleted = FALSE
      LEFT JOIN users u ON u.id = el.reported_by
      WHERE el.is_deleted = FALSE
      ORDER BY el.reported_at DESC
@@ -511,8 +584,12 @@ async function getVehiclesAtRisk(affiliationId, { limit = 10 } = {}) {
       driver_name: v.driver_name || '-',
       student_count: v.student_count || 0,
       latest_inspection_result: insp,
-      latest_inspection_date: v.latest_inspection_date,
-      insurance_expiry: v.insurance_expiry,
+      // Converted here, at the output, and not in the scoring above: `expiry`
+      // there is compared against a local midnight that is already Bangkok
+      // midnight, so that comparison is right as it stands and rewriting it
+      // would be a change with no defect behind it.
+      latest_inspection_date: toBangkokDate(v.latest_inspection_date),
+      insurance_expiry: toBangkokDate(v.insurance_expiry),
       risk_score: score,
       risk_reasons: reasons,
     };
@@ -527,6 +604,7 @@ async function getVehiclesAtRisk(affiliationId, { limit = 10 } = {}) {
 module.exports = {
   getDashboard,
   getSchools,
+  getSchoolsReport,
   getStudents,
   getVehicles,
   getStatusToday,

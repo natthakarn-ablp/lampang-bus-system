@@ -1,5 +1,6 @@
 import { Users } from 'lucide-react';
 import { DataTable, StatusBadge } from './ui';
+import { formatGradeClass } from '../utils/student';
 
 /**
  * StudentStatusTable — per-pupil morning/evening check status for one vehicle.
@@ -55,7 +56,7 @@ export default function StudentStatusTable({
       columns={[
         { key: 'name', header: 'ชื่อ', primary: true, cell: st => st.name },
         { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
-          cell: st => (st.grade && st.classroom ? `${st.grade}/${st.classroom}` : st.grade || st.classroom || '-') },
+          cell: st => formatGradeClass(st.grade, st.classroom) },
         { key: 'morning', header: 'ส่งเช้า', align: 'center', cell: st => cell(st, 'morning') },
         { key: 'evening', header: 'รับเย็น', align: 'center', cell: st => cell(st, 'evening') },
       ]}

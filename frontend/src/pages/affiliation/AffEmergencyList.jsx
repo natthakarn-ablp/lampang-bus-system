@@ -18,8 +18,12 @@ export default function AffEmergencyList() {
     setError('');
     try {
       const res = await api.get(`/affiliation/emergencies?page=${page}&per_page=20`);
-      setEmergencies(res.data.data);
-      setMeta(res.data.meta);
+      // A response without `meta` (or without `data`) must not blank the page:
+      // `meta.total` is read on every render, so storing undefined here threw
+      // and the ErrorBoundary replaced the whole list.
+      const rows = Array.isArray(res.data.data) ? res.data.data : [];
+      setEmergencies(rows);
+      setMeta(res.data.meta || { page, per_page: 20, total: rows.length });
     } catch (err) {
       setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
     } finally {
@@ -66,7 +70,7 @@ export default function AffEmergencyList() {
                       {em.channel === 'line' ? 'LINE' : 'เว็บ'}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-ink-muted">
                     {new Date(em.reported_at).toLocaleString('th-TH', {
                       year: 'numeric', month: 'short', day: 'numeric',
                       hour: '2-digit', minute: '2-digit',
@@ -77,17 +81,17 @@ export default function AffEmergencyList() {
                 <p className="text-sm text-gray-700 mb-2">{em.detail}</p>
 
                 {em.note && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-ink-muted">
                     <span className="font-medium">หมายเหตุ:</span> {em.note}
                   </p>
                 )}
                 {em.result && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-ink-muted mt-1">
                     <span className="font-medium">ผลลัพธ์:</span> {em.result}
                   </p>
                 )}
                 {em.reported_by_name && (
-                  <p className="text-xs text-gray-400 mt-2">
+                  <p className="text-xs text-ink-muted mt-2">
                     รายงานโดย: {em.reported_by_name}
                   </p>
                 )}

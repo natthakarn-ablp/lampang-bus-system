@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast';
 import {
   AlertBanner, ConfirmDialog, DataTable, FilterBar, FormField, Modal, StatusBadge,
 } from '../../components/ui';
+import usePolicyAction from '../../hooks/usePolicyAction';
 
 const THAI_MON = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 function fmtThaiDate(isoYmd) {
@@ -109,6 +110,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   const [requestedVehicle, setRequestedVehicle] = useState(() => new Set());   // 10.13B-7 restore-requested rows
   const [autoCreateVehicle, setAutoCreateVehicle] = useState(false);
   const [term, setTerm] = useState(null);          // current academic term (date-derived)
+  const { runWithPolicy, policyActionDialog } = usePolicyAction();
 
   // Tell schools which term today's rows will be tagged as — the term is derived
   // server-side from the entry date, so this banner is the only place they see it.
@@ -174,13 +176,21 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
       const confirmG = selGuardian.size > 0, confirmR = selReactivate.size > 0;
       const mode = (confirmG || confirmR) ? 'mixed_confirmed' : 'insert_ready';
       const shouldAutoCreateVehicle = autoCreateVehicle || autoVehicleRows > 0;
-      const res = await api.post(`/school/students/import/${batchId}/apply`, {
+      const res = await runWithPolicy({
+        context: 'school.student_import_apply', subjectType: 'import_batch', subjectId: batchId,
+        claim: {
+          ready_count: canApplyCount, guardian_update_count: selGuardian.size,
+          reactivate_count: selReactivate.size, auto_vehicle_count: autoVehicleRows,
+          skipped_count: summary?.skip ?? 0, error_count: errorCount,
+        },
+      }, (token) => api.post(`/school/students/import/${batchId}/apply`, {
         mode,
         selected_row_ids: [...selGuardian, ...selReactivate],
         confirm_guardian_update: confirmG,
         confirm_reactivate: confirmR,
         auto_create_vehicle: shouldAutoCreateVehicle,
-      });
+      }, token ? { headers: { 'X-Policy-Action-Token': token } } : undefined));
+      if (res?.cancelled) return;
       setApplyResult(res.data.data);
       // Refresh row statuses from the persisted report.
       const rep = await api.get(`/school/students/import/${batchId}/report`);
@@ -339,7 +349,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
                 type="button"
                 onClick={() => setConfirming(true)}
                 disabled={busy || (canApplyCount === 0 && selGuardian.size === 0 && selReactivate.size === 0)}
-                className="focus-ring text-sm bg-success hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
+                className="focus-ring text-sm bg-success-ink hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold px-4 min-h-[44px] rounded-lg transition"
               >
                 ยืนยันนำเข้า
               </button>
@@ -356,7 +366,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
         ) : undefined}
       >
         <p className="text-sm text-ink-muted mb-4">
-          {rows
+          {applied ? 'บันทึกรายการที่สำเร็จแล้ว ตรวจสอบผลด้านล่างได้เลย' : rows
             ? 'ขั้นตอนนี้เป็นการตรวจสอบข้อมูลเท่านั้น ระบบยังไม่บันทึกข้อมูลนักเรียน'
             : 'อัปโหลดไฟล์ CSV หรือ Excel (.xlsx) เพื่อตรวจสอบรายแถวก่อนนำเข้าจริง'}
         </p>
@@ -515,6 +525,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
           <ConfirmRow label="มีปัญหา/ผิดพลาด (ไม่นำเข้า)" value={errorCount} tone="text-danger-ink font-semibold" />
         </dl>
       </ConfirmDialog>
+      {policyActionDialog}
     </>
   );
 }

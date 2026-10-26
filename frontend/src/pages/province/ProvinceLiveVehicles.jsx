@@ -121,8 +121,8 @@ export default function ProvinceLiveVehicles() {
         <AppCard padding="sm" className="bg-surface-alt">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm tabular-nums">
             <span className="font-semibold text-ink">รวมระดับจังหวัด</span>
-            <span className="text-success">● ออนไลน์ {counts.online}</span>
-            <span className="text-warn">● สัญญาณเก่า {counts.stale}</span>
+            <span className="text-success-ink">● ออนไลน์ {counts.online}</span>
+            <span className="text-warn-ink">● สัญญาณเก่า {counts.stale}</span>
             <span className="text-ink-muted">● หยุดส่ง {counts.paused}</span>
             <span className="text-ink-muted">● ออฟไลน์ {counts.offline}</span>
           </div>

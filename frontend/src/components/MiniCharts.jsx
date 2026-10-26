@@ -19,12 +19,12 @@ export function DonutChart({ segments = [], size = 120, thickness = 20, label, s
             <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#f1f5f9" strokeWidth={thickness} />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <p className="text-xs text-gray-400">ไม่มีข้อมูล</p>
+            <p className="text-xs text-ink-muted">ไม่มีข้อมูล</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 justify-center">
           {segments.map((seg, i) => (
-            <div key={i} className="flex items-center gap-1 text-[10px] text-gray-400">
+            <div key={i} className="flex items-center gap-1 text-[10px] text-ink-muted">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
               {seg.label} 0
             </div>
@@ -62,13 +62,13 @@ export function DonutChart({ segments = [], size = 120, thickness = 20, label, s
         {/* Center label — positioned absolutely over SVG */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {label && <p className="text-lg font-bold text-gray-800 leading-tight">{label}</p>}
-          {sublabel && <p className="text-[10px] text-gray-400 leading-tight">{sublabel}</p>}
+          {sublabel && <p className="text-[10px] text-ink-muted leading-tight">{sublabel}</p>}
         </div>
       </div>
       {/* Legend */}
       <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 justify-center">
         {segments.map((seg, i) => (
-          <div key={i} className="flex items-center gap-1 text-[10px] text-gray-500">
+          <div key={i} className="flex items-center gap-1 text-[10px] text-ink-muted">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
             {seg.label} {seg.value}
           </div>
@@ -85,15 +85,15 @@ export function HBarChart({ items = [], maxValue, label, valueLabel = '', barHei
   if (!items.length) {
     return (
       <div>
-        {label && <p className="text-xs font-semibold text-gray-500 mb-2">{label}</p>}
-        <p className="text-xs text-gray-400 py-4 text-center">ไม่มีข้อมูล</p>
+        {label && <p className="text-xs font-semibold text-ink-muted mb-2">{label}</p>}
+        <p className="text-xs text-ink-muted py-4 text-center">ไม่มีข้อมูล</p>
       </div>
     );
   }
 
   return (
     <div>
-      {label && <p className="text-xs font-semibold text-gray-500 mb-2">{label}</p>}
+      {label && <p className="text-xs font-semibold text-ink-muted mb-2">{label}</p>}
       <div className="space-y-1.5">
         {items.map((item, i) => {
           const pct = max > 0 ? Math.min((item.value / max) * 100, 100) : 0;
@@ -106,7 +106,7 @@ export function HBarChart({ items = [], maxValue, label, valueLabel = '', barHei
                   style={{ width: `${pct}%`, backgroundColor: item.color || '#3b82f6' }}
                 />
               </div>
-              {showValue && <span className="text-[11px] text-gray-500 w-12 text-right shrink-0">{item.value}{valueLabel}</span>}
+              {showValue && <span className="text-[11px] text-ink-muted w-12 text-right shrink-0">{item.value}{valueLabel}</span>}
             </div>
           );
         })}
@@ -120,7 +120,7 @@ export function SparkProgress({ value = 0, max = 100, color = '#3b82f6', label, 
   const pct = max > 0 ? Math.min(Math.round((value / max) * 100), 100) : 0;
   return (
     <div>
-      {label && <div className="flex justify-between text-[10px] text-gray-500 mb-0.5"><span>{label}</span><span>{pct}%</span></div>}
+      {label && <div className="flex justify-between text-[10px] text-ink-muted mb-0.5"><span>{label}</span><span>{pct}%</span></div>}
       <div className="w-full bg-gray-100 rounded-full overflow-hidden" style={{ height }}>
         <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
@@ -133,8 +133,8 @@ export function TrendChart({ series = [], labels = [], height = 140, title }) {
   if (!labels.length) {
     return (
       <div>
-        {title && <p className="text-xs font-semibold text-gray-500 mb-2">{title}</p>}
-        <p className="text-xs text-gray-400 py-6 text-center">ไม่มีข้อมูลแนวโน้ม</p>
+        {title && <p className="text-xs font-semibold text-ink-muted mb-2">{title}</p>}
+        <p className="text-xs text-ink-muted py-6 text-center">ไม่มีข้อมูลแนวโน้ม</p>
       </div>
     );
   }
@@ -155,7 +155,7 @@ export function TrendChart({ series = [], labels = [], height = 140, title }) {
 
   return (
     <div>
-      {title && <p className="text-xs font-semibold text-gray-500 mb-2">{title}</p>}
+      {title && <p className="text-xs font-semibold text-ink-muted mb-2">{title}</p>}
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full" style={{ height }}>
         {/* Grid lines */}
         {[0, 25, 50, 75, 100].map(pct => {
@@ -183,13 +183,13 @@ export function TrendChart({ series = [], labels = [], height = 140, title }) {
       {/* X-axis labels */}
       <div className="flex justify-between mt-1">
         {labels.map((l, i) => (
-          <span key={i} className="text-[9px] text-gray-400">{l}</span>
+          <span key={i} className="text-[9px] text-ink-muted">{l}</span>
         ))}
       </div>
       {/* Legend */}
       <div className="flex gap-3 mt-1.5 justify-center">
         {series.map((s, i) => (
-          <div key={i} className="flex items-center gap-1 text-[10px] text-gray-500">
+          <div key={i} className="flex items-center gap-1 text-[10px] text-ink-muted">
             <span className="w-3 h-0.5 rounded" style={{ backgroundColor: s.color }} />
             {s.label}
           </div>

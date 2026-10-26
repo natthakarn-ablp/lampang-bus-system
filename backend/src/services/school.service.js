@@ -3,6 +3,7 @@
 const { pool } = require('../config/database');
 const { gradeEquivalents } = require('../utils/gradeScope');
 const { logAudit } = require('../utils/audit');
+const { toBangkokDate } = require('../utils/thaiTime');
 
 /**
  * Phase 7.11.3 — every school.service read accepts an optional
@@ -43,10 +44,12 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
     ga(schoolId)
   );
 
-  // Total vehicles serving this school
+  // Total vehicles serving this school — deleted vehicles left out, as the
+  // vehicle list (getVehicles) leaves them out.
   const [[{ total_vehicles }]] = await pool.query(
     `SELECT COUNT(DISTINCT vehicle_id) AS total_vehicles FROM students
-     WHERE school_id = ? AND is_deleted = FALSE AND vehicle_id IS NOT NULL${gradeAndNoAlias}`,
+     WHERE school_id = ? AND is_deleted = FALSE${gradeAndNoAlias}
+       AND vehicle_id IN (SELECT id FROM vehicles WHERE is_deleted = FALSE)`,
     ga(schoolId)
   );
 
@@ -181,7 +184,7 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
 /**
  * Search/list students for a school with optional filters.
  */
-async function getStudents(schoolId, { search, grade, vehicle_id, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
+async function getStudents(schoolId, { search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
   const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'vehicle_id'];
   const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
   const sortDir = order === 'desc' ? 'DESC' : 'ASC';
@@ -218,6 +221,10 @@ async function getStudents(schoolId, { search, grade, vehicle_id, morning_enable
     where += ' AND s.vehicle_id = ?';
     params.push(vehicle_id);
   }
+  // ตัวกรอง "ยังไม่ผูกรถ" — ใช้ has_vehicle แทนการส่ง vehicle_id ว่าง
+  // เพราะ `if (vehicle_id)` ข้างบนตีความค่าว่างเป็น "ไม่กรอง"
+  if (has_vehicle === 'no') where += ' AND s.vehicle_id IS NULL';
+  else if (has_vehicle === 'yes') where += ' AND s.vehicle_id IS NOT NULL';
   if (morning_enabled !== undefined) {
     where += ' AND s.morning_enabled = ?';
     params.push(morning_enabled === 'true' || morning_enabled === true ? 1 : 0);
@@ -310,13 +317,26 @@ async function getVehicles(schoolId, { gradeFilter = null } = {}) {
     params
   );
 
+  // CS5-02 — emit DATE columns as Bangkok calendar dates, not instants.
+  // mysql2 parses a DATE against the connection timezone (+07:00), so
+  // 2026-08-05 arrives as the instant 2026-08-04T17:00:00.000Z and
+  // JSON.stringify hands that shape to the client. The edit form prefills
+  // itself with the first ten characters of what it is given, so an instant
+  // walks the date back one day on every save. Same guard as the driver
+  // profile route (driver.routes.js dateOnly()).
+  const dated = vehicles.map((v) => ({
+    ...v,
+    insurance_expiry: toBangkokDate(v.insurance_expiry),
+    latest_inspection_date: toBangkokDate(v.latest_inspection_date),
+  }));
+
   // Phase 7.11.3 — strip vehicle-side phone fields for teacher
   // accounts. Full school account still gets owner_phone /
   // driver_phone / attendant_phone (parent-contact loop).
   if (gradeFilter) {
-    return vehicles.map(({ owner_phone, driver_phone, attendant_phone, ...rest }) => rest);
+    return dated.map(({ owner_phone, driver_phone, attendant_phone, ...rest }) => rest);
   }
-  return vehicles;
+  return dated;
 }
 
 /**

@@ -44,34 +44,34 @@ if (!['sandbox', 'read-only-production'].includes(mode)) {
 }
 
 const roles = [
-  ['admin', 'Admin', ['/admin', '/admin/users', '/admin/audit', '/admin/readiness'], [
+  ['admin', 'Admin', ['/admin', '/admin/users', '/admin/audit-logs', '/admin/readiness'], [
     'Login with admin account and confirm dashboard loads within 5 seconds.',
     'Confirm user management is visible only to admin.',
     'Review audit log for recent export/action records without exposing secrets.',
     'Open readiness/system health page and capture non-secret health evidence.',
-    'Try a province-only or school-only URL and confirm access is denied or redirected.',
+    'Confirm admin can open school/province views allowed by App.jsx, while a driver-only URL denies access.',
   ], 'Read-only in production. User edits must be sandbox-only unless separately approved.'],
-  ['province', 'Province', ['/province', '/province/reports', '/province/status', '/reports/policy'], [
+  ['province', 'Province', ['/province', '/reports/daily', '/province/status', '/reports/policy'], [
     'Confirm province dashboard KPIs load.',
     'Open daily status and confirm province-level scope only.',
     'Open report views and verify export buttons are available as policy allows.',
     'Confirm policy report is visible to province/admin only.',
     'Capture redacted evidence without student-level PII.',
   ], 'Read-only for production UAT; report exports must follow PDPA handling policy.'],
-  ['affiliation', 'Affiliation', ['/affiliation', '/affiliation/status', '/affiliation/reports'], [
+  ['affiliation', 'Affiliation', ['/affiliation', '/affiliation/status', '/reports/daily'], [
     'Confirm only own affiliation is visible.',
     'Compare school counts with expected affiliation scope.',
     'Verify cross-affiliation data is not visible.',
     'Attempt a province/admin-only URL and confirm access is denied or redirected.',
   ], 'Read-only for production UAT; data corrections must be recorded for data owners.'],
-  ['school-full', 'School full', ['/school', '/school/students', '/school/vehicles', '/school/import', '/school/reports'], [
+  ['school-full', 'School full', ['/school', '/school/students', '/school/vehicles', '/school/audit-log', '/reports/daily'], [
     'Confirm school dashboard loads.',
     'Review students, vehicles, drivers, and parent records for own school only.',
     'Run import preview in sandbox with a test file; do not import into production.',
     'Open daily/monthly/summary reports and confirm school scope.',
     'Open school audit log and capture redacted evidence.',
   ], 'Any add/edit/import/delete workflow must be sandbox-only during UAT.'],
-  ['school-teacher', 'School teacher', ['/school', '/school/students', '/school/reports'], [
+  ['school-teacher', 'School teacher', ['/school', '/school/students', '/reports/daily'], [
     'Confirm teacher-scoped dashboard loads.',
     'Verify visible students match assigned grade/scope only.',
     'Confirm critical write actions are hidden or denied.',
@@ -97,8 +97,10 @@ const roles = [
     'Test unbind/rebind with test account if policy requires it.',
     'Confirm routine status is LIFF pull first; push messages only follow province policy.',
   ], 'Binding/unbinding must use test accounts and sandbox/test data unless formally approved.'],
-  ['operator', 'Operator', ['/health', '/api/auth/me', '/parent', '/parent/link'], [
+  ['operator', 'Operator', ['/', '/api/auth/me', '/parent', '/parent/link'], [
     'Run public gate against https://schoolbuslampang.com and attach gate log.',
+    'On the server, verify http://127.0.0.1:3000/health returns success, the expected commit and database.connected=true. Public /health or /api/health may return SPA HTML with HTTP 200; that is not backend health evidence.',
+    'For /api/auth/me without a session, expect HTTP 401 JSON; with a session, verify only the authenticated account. Do not treat a SPA HTTP 200 as a passing API check.',
     'Run production read-only gate on server when owner approves.',
     'Verify latest local backup and off-host evidence.',
     'Run restore drill only against lampang_bus_restore_drill after approval.',
@@ -156,6 +158,8 @@ function roleChecklist(role) {
 - Do not write production data during UAT unless a separate approved operation explicitly allows it.
 - Do not record passwords, tokens, LINE user IDs, full CID, raw student lists, or unredacted parent data.
 - Write workflows must use sandbox/UAT data.
+- Read-only production checks do not replace sandbox write tests. Leave sandbox checks pending until separate sandbox evidence exists.
+- HTTP 200 alone does not prove that a page or API is correct. Verify the rendered page, role scope and expected JSON response where applicable.
 - ${role.writePolicy}
 
 ## Route Smoke
@@ -199,6 +203,9 @@ function readme() {
 - It does not call APIs, deploy, restore, migrate, import, change feature flags, or write any database.
 - Keep screenshots and notes redacted. Do not store secrets or raw student/parent PII in this folder.
 - Production testing is read-only unless a separate owner/operator approval explicitly allows a named operation.
+- A read-only production pack still lists sandbox-only checks; keep them pending until separate sandbox evidence is available. Generating or validating this pack does not complete UAT.
+- Match UI routes and role access to the current frontend App.jsx. Verify the rendered page or expected JSON, not HTTP status alone: unknown routes can return the SPA with HTTP 200.
+- Backend health is checked on the server at http://127.0.0.1:3000/health. Do not use public /health or /api/health as proof of backend health.
 
 ## Files
 

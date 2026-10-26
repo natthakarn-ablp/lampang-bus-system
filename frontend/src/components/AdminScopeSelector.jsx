@@ -95,7 +95,7 @@ export function AdminNoScopeMessage({ type }) {
     <div className="text-center py-16">
       <Search className="w-10 h-10 mx-auto mb-4 text-ink-muted" strokeWidth={1.6} />
       <p className="text-lg font-semibold text-gray-600 mb-2">กรุณาเลือก{label}ก่อน</p>
-      <p className="text-sm text-gray-400">เลือก{label}จากเมนูด้านบนเพื่อดูข้อมูล</p>
+      <p className="text-sm text-ink-muted">เลือก{label}จากเมนูด้านบนเพื่อดูข้อมูล</p>
     </div>
   );
 }

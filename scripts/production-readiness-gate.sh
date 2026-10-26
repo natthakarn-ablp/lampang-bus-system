@@ -29,7 +29,7 @@ FAIL=0
 SKIP=0
 
 cleanup() {
-  rm -f "$TMP_BODY" "$TMP_HEALTH_BODY" "$TMP_BACKEND_AUDIT" "$TMP_FRONTEND_AUDIT" 2>/dev/null || true
+  rm -f "$TMP_BODY" "$TMP_HEALTH_BODY" "$TMP_BACKEND_AUDIT" "$TMP_FRONTEND_AUDIT" "$TMP_BACKEND_AUDIT.err" "$TMP_FRONTEND_AUDIT.err" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -51,6 +51,78 @@ run_check() {
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+# `npm audit --json >file` alone conflated three different outcomes into one
+# [fail]: real vulnerabilities, an unreachable registry, and a clean audit that
+# still exited non-zero. The captured JSON was never read, so a gate operator
+# could not tell "you have a critical CVE" from "npm could not reach
+# registry.npmjs.org". Parse the report and say which one happened.
+#
+# Reading the report alone is not enough either. `npm audit` can exit non-zero
+# for reasons that have nothing to do with the vulnerability count - a partial
+# registry failure, an EAUDITNOPJSON, a lockfile it refused to finish reading -
+# and still leave a `total: 0` report behind. Treating that as [pass] is the
+# false green this gate exists to prevent, so the exit code and the report must
+# BOTH say the dependencies were checked and clean.
+#
+# An unevaluated audit is a WARN, not a PASS: the gate does not fail on a
+# network outage, but the summary line never claims the dependencies were
+# checked when they were not.
+#
+# The report is handed to node on stdin rather than as a path argument. The
+# caller controls $out, and it may contain spaces or be a Windows-style path;
+# a redirect is resolved by the shell that created the file, so no second
+# process has to agree on how to interpret it.
+check_npm_audit() {
+  local label="$1"
+  local dir="$2"
+  local out="$3"
+  local audit_status
+  local summary
+  local parse_status
+  local total
+  echo "[gate] $label"
+  (cd "$dir" && npm audit --json) >"$out" 2>"$out.err"
+  audit_status=$?
+  summary="$(node -e '
+const fs = require("fs");
+let raw;
+try { raw = fs.readFileSync(0, "utf8"); } catch (err) { process.exit(3); }
+let report;
+try { report = JSON.parse(raw); } catch (err) { process.exit(3); }
+const counts = report && report.metadata && report.metadata.vulnerabilities;
+if (!counts || counts.total === undefined || counts.total === null) process.exit(3);
+const total = Number(counts.total);
+if (!Number.isFinite(total)) process.exit(3);
+const detail = ["critical", "high", "moderate", "low", "info"]
+  .map((level) => `${level}=${Number(counts[level] || 0)}`)
+  .join(" ");
+process.stdout.write(`total=${total} ${detail}`);
+' <"$out" 2>/dev/null)"
+  parse_status=$?
+
+  if [ "$parse_status" -ne 0 ] || [ -z "$summary" ]; then
+    warn "$label NOT EVALUATED: npm audit produced no readable report (npm exit=$audit_status; registry unreachable, npm error, or missing metadata); dependencies were not checked"
+    return
+  fi
+
+  total="${summary#total=}"
+  total="${total%% *}"
+  case "$total" in
+    ''|*[!0-9]*)
+      warn "$label NOT EVALUATED: npm audit report had a non-numeric vulnerability total (npm exit=$audit_status); dependencies were not checked"
+      return
+      ;;
+  esac
+
+  if [ "$total" -gt 0 ]; then
+    fail "$label vulnerable $summary (npm exit=$audit_status)"
+  elif [ "$audit_status" -ne 0 ]; then
+    warn "$label NOT EVALUATED: npm audit reported $summary but exited $audit_status; a clean report from a failed run is not evidence that dependencies were checked"
+  else
+    pass "$label clean $summary"
+  fi
 }
 
 check_http() {
@@ -155,8 +227,8 @@ check_git_clean() {
 run_local_mode() {
   echo "[gate] mode=local root=$ROOT"
   run_check "backend unit tests" bash -c "cd '$ROOT/backend' && npm run test:unit"
-  run_check "backend npm audit" bash -c "cd '$ROOT/backend' && npm audit --json >'$TMP_BACKEND_AUDIT'"
-  run_check "frontend npm audit" bash -c "cd '$ROOT/frontend' && npm audit --json >'$TMP_FRONTEND_AUDIT'"
+  check_npm_audit "backend npm audit" "$ROOT/backend" "$TMP_BACKEND_AUDIT"
+  check_npm_audit "frontend npm audit" "$ROOT/frontend" "$TMP_FRONTEND_AUDIT"
   run_check "frontend production build" bash -c "cd '$ROOT/frontend' && npm run build"
   run_check "frontend UI labels" bash -c "cd '$ROOT/frontend' && npm run check:labels"
   run_check "frontend hybrid UI guard" bash -c "cd '$ROOT/frontend' && npm run check:hybrid-ui"
@@ -167,7 +239,7 @@ run_local_mode() {
   run_check "shell syntax: restore drill" bash -n "$ROOT/scripts/restore-drill-db.sh"
   run_check "shell syntax: readiness gate" bash -n "$ROOT/scripts/production-readiness-gate.sh"
   run_check "node syntax: production UAT scripts" bash -c "cd '$ROOT/backend' && node --check scripts/seed-production-uat-users.js >/dev/null && node --check scripts/run-uat-live-check.js >/dev/null"
-  run_check "node syntax: readiness helpers" bash -c "cd '$ROOT' && for file in scripts/create-uat-evidence-pack.js scripts/validate-uat-evidence-pack.js scripts/summarize-uat-evidence.js scripts/scan-uat-evidence-safety.js scripts/create-go-live-signoff-draft.js scripts/create-ops-signoff-draft.js scripts/create-restore-drill-evidence-pack.js scripts/validate-restore-drill-evidence.js scripts/create-operator-gate-evidence-pack.js scripts/validate-operator-gate-evidence.js scripts/validate-go-live-signoff.js scripts/verify-100-readiness.js scripts/create-go-live-bundle.js scripts/validate-go-live-bundle.js scripts/summarize-go-live-closure.js scripts/validate-go-live-closure-status.js scripts/collect-automated-readiness-evidence.js; do node --check \"\$file\" >/dev/null || exit 1; done"
+  run_check "node syntax: readiness helpers" bash -c "cd '$ROOT' && for file in scripts/create-uat-evidence-pack.js scripts/validate-uat-evidence-pack.js scripts/summarize-uat-evidence.js scripts/scan-uat-evidence-safety.js scripts/create-go-live-signoff-draft.js scripts/create-ops-signoff-draft.js scripts/create-restore-drill-evidence-pack.js scripts/validate-restore-drill-evidence.js scripts/create-operator-gate-evidence-pack.js scripts/validate-operator-gate-evidence.js scripts/validate-go-live-signoff.js scripts/verify-100-readiness.js scripts/create-go-live-bundle.js scripts/validate-go-live-bundle.js scripts/summarize-go-live-closure.js scripts/validate-go-live-closure-status.js scripts/collect-automated-readiness-evidence.js scripts/lib/closure-report-schema.js; do node --check \"\$file\" >/dev/null || exit 1; done"
 }
 
 run_public_mode() {
@@ -209,6 +281,21 @@ run_production_mode() {
     check_health_commit_optional
   fi
 }
+
+# Tests source this file to exercise one check in isolation. Without a guard the
+# mode dispatch below would run a whole gate on import.
+#
+# Executed rather than sourced, the same variable would make the gate exit 0
+# having run nothing - a clean summary from a run that never happened, which is
+# the exact failure mode this gate exists to prevent. So it is only honoured for
+# a sourced file, and refused loudly otherwise.
+if [ -n "${READINESS_GATE_LIB_ONLY:-}" ]; then
+  if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    return 0
+  fi
+  echo "[gate] refusing to run: READINESS_GATE_LIB_ONLY is set but this script was executed, not sourced; no check ran" >&2
+  exit 2
+fi
 
 case "$MODE" in
   local)

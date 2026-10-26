@@ -10,10 +10,11 @@
 #
 # Env:
 #   OFFHOST_CHECK_READ_ONLY=true  # validate config/commands only; skip dry-run
+#   OFFHOST_BACKUP_CONFIG_FILE=/path/to/config  # optional override (mainly for isolated tests)
 # ─────────────────────────────────────────────────────────────
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CFG="$ROOT/scripts/offhost-backup-sync.env"
+CFG="${OFFHOST_BACKUP_CONFIG_FILE:-$ROOT/scripts/offhost-backup-sync.env}"
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 : "${OFFHOST_CHECK_READ_ONLY:=false}"
 note() { echo "[offhost-check] $*"; }

@@ -53,6 +53,15 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
+    const mustChangePassword = error.response?.status === 403
+      && error.response?.data?.errors?.some((entry) => entry?.code === 'MUST_CHANGE_PASSWORD');
+    if (mustChangePassword && window.location.pathname !== '/change-password') {
+      // Preserve the authenticated session: the change-password endpoint is
+      // deliberately allow-listed by the server and needs the current token.
+      window.location.href = '/change-password';
+      return Promise.reject(error);
+    }
+
     if (
       error.response?.status === 401 &&
       !original._retry &&
@@ -83,6 +92,15 @@ api.interceptors.response.use(
         });
         const newToken = res.data.data.access_token;
         localStorage.setItem('access_token', newToken);
+        // Store the rotated refresh token too. /api/auth/refresh-token revokes
+        // the token it was given and issues a new one, so keeping the old one
+        // here means the NEXT refresh presents a token the server revoked hours
+        // ago. That used to be a plain 401 and one re-login; since replay
+        // detection landed it is read as two parties holding the same token and
+        // ends every session for the account. The server has always returned the
+        // new token in this response — it was only ever being dropped.
+        const rotated = res.data.data.refresh_token;
+        if (rotated) localStorage.setItem('refresh_token', rotated);
         processQueue(null, newToken);
         original.headers = original.headers || {};
         original.headers.Authorization = `Bearer ${newToken}`;

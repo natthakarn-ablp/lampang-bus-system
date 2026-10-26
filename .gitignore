@@ -33,3 +33,9 @@ scripts/restore-test.env
 /outputs/
 /task_plan.md
 /notes.md
+
+# Signed government working documents the owner drops in the repository root.
+# They are not source, they are large (tens of MB), and one of them carries real
+# names and signatures — never commit them.
+/*.docx
+/*.doc

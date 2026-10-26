@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { Map as MapIcon, Bus, Users, Clock } from 'lucide-react';
 import { AppCard, AlertBanner, DashboardSection } from './ui';
 import LoadingState from './LoadingState';
+import { abbreviateGrade } from '../utils/student';
 import './PickupMap.css';
 
 // Vite + Leaflet default-icon workaround — same as PickupMap.jsx
@@ -23,8 +24,8 @@ function formatSession(s) {
 }
 
 function formatGradeSummary(g) {
-  if (Array.isArray(g)) return g.length ? g.join(', ') : 'ไม่ระบุ';
-  if (typeof g === 'string' && g.trim()) return g;
+  if (Array.isArray(g)) return g.length ? g.map(abbreviateGrade).join(', ') : 'ไม่ระบุ';
+  if (typeof g === 'string' && g.trim()) return abbreviateGrade(g);
   return 'ไม่ระบุ';
 }
 

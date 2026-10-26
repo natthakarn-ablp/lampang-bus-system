@@ -142,6 +142,25 @@ describe('progressive deployment policy config', () => {
     expect(() => validateFeatureDependencies({ FEATURE_VEHICLE_QR: 'false', FEATURE_QR_LEVEL3: 'true' }))
       .toThrow(/FEATURE_QR_LEVEL3/);
   });
+
+  test('admin recovery requires LIFF, LINE push, and an HTTPS public URL', () => {
+    const base = { FEATURE_ADMIN_PASSWORD_RECOVERY: 'true' };
+    expect(() => validateFeatureDependencies(base)).toThrow(/LINE_LIFF_ID/);
+    expect(() => validateFeatureDependencies({ ...base, LINE_LIFF_ID: '123-test' }))
+      .toThrow(/LINE_CHANNEL_ACCESS_TOKEN/);
+    expect(() => validateFeatureDependencies({
+      ...base,
+      LINE_LIFF_ID: '123-test',
+      LINE_CHANNEL_ACCESS_TOKEN: 'token',
+      PUBLIC_APP_URL: 'http://schoolbuslampang.com',
+    })).toThrow(/HTTPS URL/);
+    expect(validateFeatureDependencies({
+      ...base,
+      LINE_LIFF_ID: '123-test',
+      LINE_CHANNEL_ACCESS_TOKEN: 'token',
+      PUBLIC_APP_URL: 'https://schoolbuslampang.com',
+    })).toBe(true);
+  });
 });
 
 // ─── 4. validateEnvOrExit — fail-closed without killing the test worker ──────

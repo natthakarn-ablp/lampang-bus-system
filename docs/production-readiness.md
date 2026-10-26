@@ -1,5 +1,8 @@
 # Production Readiness — Lampang Bus System
 
+> **Historical snapshot (ติดป้าย 5 ก.ย. 2569):** snapshot 2026-06-02 ที่ HEAD `6a5fd7d`; `cdc0ec0` ที่ระบุว่า deploy อยู่ห่างจาก production ปัจจุบันหลายร้อย commit และข้อความ "restore-drill closed GREEN" ไม่มีหลักฐานในเครื่องนี้ (`outputs/restore-drill` ว่าง — ดู AUD-042)
+> สถานะจริงล่าสุด: `docs/project-closure/handoff-2026-09-05.md` · เหตุผลที่ติดป้าย: `docs/project-closure/current-status-2026-09-04.md` §5 (#17–#19)
+
 > สถานะความพร้อมเปิดใช้งานจริง (go-live readiness)
 > Phase 10.11A • Snapshot date: 2026-06-02
 > HEAD: `6a5fd7d` (latest 10.10H-B reset script commit)

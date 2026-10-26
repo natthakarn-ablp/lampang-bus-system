@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
@@ -11,10 +11,13 @@ import {
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 import StudentTransferModal from './StudentTransferModal';
+import AddStudentModal from './AddStudentModal';
+import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import VehicleSelect from '../../components/VehicleSelect';
 import Pagination from '../../components/Pagination';
 import { useAuth } from '../../hooks/useAuth';
 import { isGradeTeacher } from '../../utils/authScope';
+import { formatGradeClass } from '../../utils/student';
 
 // Mask parent phone in list views for PDPA compliance — shows first 3 and
 // last 2 digits only (e.g. 081****67). The edit form shows the full number
@@ -33,6 +36,14 @@ export default function StudentSearch() {
   const toast = useToast();
   const { user } = useAuth();
   const isTeacher = isGradeTeacher(user); // read-only for grade teacher
+  const [params, setParams] = useSearchParams();
+  const [showAdd, setShowAdd] = useState(false);
+  useEffect(() => { if (!isTeacher && params.get('add') === 'one') setShowAdd(true); }, [isTeacher, params]);
+  function closeAdd() {
+    setShowAdd(false);
+    const next = new URLSearchParams(params); next.delete('add'); next.delete('vehicle_id');
+    setParams(next, { replace: true });
+  }
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -40,14 +51,23 @@ export default function StudentSearch() {
 
   const [search, setSearch] = useState('');
   const [grade, setGrade] = useState('');
+  // การ์ด "ความครบถ้วนข้อมูล" บนหน้าภาพรวมลิงก์มาที่นี่พร้อม ?has_vehicle=no
+  // เพื่อให้กด "ดูรายชื่อ" แล้วเห็นเฉพาะคนที่ยังไม่ผูกรถทันที
+  const [hasVehicle, setHasVehicle] = useState(
+    () => new URLSearchParams(window.location.search).get('has_vehicle') || ''
+  );
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Edit modal state
   const [editStudent, setEditStudent] = useState(null);
+  const [editMode, setEditMode] = useState('profile');
   const [form, setForm] = useState({});
   const [vehicles, setVehicles] = useState([]);
+  const [vehiclesLoading, setVehiclesLoading] = useState(false);
+  const [vehiclesError, setVehiclesError] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
 
   // Import state
   const [showImport, setShowImport] = useState(false);
@@ -72,6 +92,7 @@ export default function StudentSearch() {
       params.set('per_page', '20');
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (grade) params.set('grade', grade);
+      if (hasVehicle) params.set('has_vehicle', hasVehicle);
 
       const res = await api.get(`/school/students?${params}`);
       setStudents(Array.isArray(res.data.data) ? res.data.data : []);
@@ -81,13 +102,23 @@ export default function StudentSearch() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, grade]);
+  }, [debouncedSearch, grade, hasVehicle]);
 
   useEffect(() => {
     fetchStudents(1);
   }, [fetchStudents]);
 
-  function openEdit(student) {
+  function loadVehicles() {
+    setVehiclesLoading(true); setVehiclesError('');
+    api.get('/school/vehicles/all')
+      .then(r => { if (!Array.isArray(r.data?.data)) throw new Error('invalid vehicles'); setVehicles(r.data.data); })
+      .catch(() => setVehiclesError('โหลดรายการรถไม่สำเร็จ กรุณาลองอีกครั้ง'))
+      .finally(() => setVehiclesLoading(false));
+  }
+
+  function openEdit(student, mode = 'profile') {
+    if (isTeacher) return;
+    setEditMode(mode);
     setEditStudent(student);
     setForm({
       prefix: student.prefix || '',
@@ -101,11 +132,7 @@ export default function StudentSearch() {
       parent_phone: student.parent_phone || '',
     });
     setSelectedVehicle(student.vehicle_id || '');
-    api.get('/school/vehicles/all')
-      // A non-array payload used to reach vehicles.some() below and crash the
-      // whole page into the error boundary the moment the edit panel opened.
-      .then(r => setVehicles(Array.isArray(r.data?.data) ? r.data.data : []))
-      .catch(() => setVehicles([]));
+    if (mode === 'vehicle') loadVehicles();
   }
 
   function closeEdit() {
@@ -120,14 +147,14 @@ export default function StudentSearch() {
     // parent reassignment (detach + create new parent + link this student
     // only). No more shared-parent UPDATE from the student-edit screen, so
     // there are no longer separate "edit shared" vs "reassign" buttons.
-    if (!editStudent) return;
+    if (!editStudent || saveLock.current) return;
     if (!form.first_name.trim()) { toast.error('กรุณากรอกชื่อนักเรียน'); return; }
     if (!form.last_name.trim()) { toast.error('กรุณากรอกนามสกุลนักเรียน'); return; }
     if (form.parent_phone && !/^\d{9,10}$/.test(form.parent_phone)) {
       toast.error('เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก');
       return;
     }
-    setSaving(true);
+    saveLock.current = true; setSaving(true);
     try {
       const res = await api.put(`/school/students/${editStudent.id}`, form);
       toast.success('บันทึกข้อมูลนักเรียนเรียบร้อยแล้ว');
@@ -145,12 +172,12 @@ export default function StudentSearch() {
       fetchStudents(meta.page);
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถบันทึกได้');
-    } finally { setSaving(false); }
+    } finally { saveLock.current = false; setSaving(false); }
   }
 
   async function handleSaveVehicle() {
-    if (!editStudent) return;
-    setSaving(true);
+    if (!editStudent || saveLock.current || vehiclesLoading || vehiclesError) return;
+    saveLock.current = true; setSaving(true);
     try {
       await api.post('/school/students/move', {
         student_id: editStudent.id,
@@ -163,7 +190,7 @@ export default function StudentSearch() {
       fetchStudents(meta.page);
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถบันทึกได้');
-    } finally { setSaving(false); }
+    } finally { saveLock.current = false; setSaving(false); }
   }
 
   // Replaces window.confirm, which could not show the pupil being withdrawn in
@@ -214,35 +241,37 @@ export default function StudentSearch() {
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
-  const hasFilter = Boolean(debouncedSearch || grade);
+  const hasFilter = Boolean(debouncedSearch || grade || hasVehicle);
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <SchoolWorkflowNav current="students" />
       <PageHeader
-        title="ข้อมูลนักเรียน"
-        subtitle="นักเรียนที่ใช้บริการรถรับส่งของโรงเรียน"
+        title="นักเรียน"
+        subtitle="เพิ่มชื่อพร้อมเลือกรถในครั้งเดียว แล้วไปเช็กชื่อได้เลย"
         actions={!isTeacher ? (
           <div className="flex flex-wrap gap-2">
-            <button onClick={handleDownloadTemplate}
-              className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition">
-              ดาวน์โหลดตัวอย่าง
+            <button onClick={() => setShowAdd(true)}
+              className="focus-ring text-sm bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-medium px-4 min-h-[44px] rounded-lg transition">
+              เพิ่มนักเรียนทีละคน
             </button>
             <button onClick={() => setShowPreview(true)}
-              className="focus-ring text-sm bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-medium px-4 min-h-[44px] rounded-lg transition">
-              นำเข้าข้อมูล
-            </button>
-            <button onClick={() => setShowHistory(true)}
               className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition">
-              ประวัติการนำเข้า
-            </button>
-            <button onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }}
-              title="นำเข้าแบบเดิม (สำรอง)"
-              className="focus-ring text-sm text-ink-muted hover:text-ink hover:bg-surface px-3 min-h-[44px] rounded-lg transition">
-              แบบเดิม
+              เพิ่มหลายคนจากไฟล์
             </button>
           </div>
         ) : undefined}
       />
+
+      {!isTeacher && <details className="mb-4 rounded-lg border border-surface-border p-3">
+        <summary className="focus-ring cursor-pointer text-sm text-ink min-h-[44px] flex items-center">ประวัติและเครื่องมือนำเข้าเพิ่มเติม</summary>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <button type="button" onClick={() => setShowHistory(true)} className="focus-ring min-h-[44px] px-3 text-brand-700">ประวัติการนำเข้า</button>
+          <button type="button" onClick={handleDownloadTemplate} className="focus-ring min-h-[44px] px-3 text-brand-700">ดาวน์โหลดไฟล์ตัวอย่าง</button>
+          <button type="button" onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }} className="focus-ring min-h-[44px] px-3 text-ink-muted">นำเข้าแบบเดิม (สำรอง)</button>
+        </div>
+      </details>}
+      {showAdd && !isTeacher && <AddStudentModal initialVehicleId={params.get('vehicle_id') || ''} onClose={closeAdd} onApplied={() => fetchStudents(1)} />}
 
       <FilterBar
         className="mb-5"
@@ -253,12 +282,15 @@ export default function StudentSearch() {
           label: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส',
         }}
         filters={[{
+          key: 'hasVehicle', label: 'กรองตามการผูกรถ', value: hasVehicle, onChange: setHasVehicle,
+          options: [['', 'ทุกสถานะการผูกรถ'], ['no', 'ยังไม่ผูกรถ'], ['yes', 'ผูกรถแล้ว']] },
+        {
           key: 'grade', label: 'กรองตามระดับชั้น', value: grade, onChange: setGrade,
           options: [['', 'ทุกระดับชั้น'], ...['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => [g, g])],
         }]}
         count={meta.total}
         countLabel="คน"
-        onClear={() => { setSearch(''); setGrade(''); }}
+        onClear={() => { setSearch(''); setGrade(''); setHasVehicle(''); }}
       />
 
       {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}
@@ -272,7 +304,7 @@ export default function StudentSearch() {
           { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
             cell: s2 => <span className="font-medium text-ink">{s2.prefix}{s2.first_name} {s2.last_name}</span> },
           { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
-            cell: s2 => (s2.grade && s2.classroom ? `${s2.grade}/${s2.classroom}` : s2.grade || s2.classroom || '-') },
+            cell: s2 => formatGradeClass(s2.grade, s2.classroom) },
           { key: 'code', header: 'รหัส', cell: s2 => <span className="tabular-nums">{s2.student_code ?? s2.id}</span> },
           { key: 'plate', header: 'ทะเบียนรถ', align: 'center',
             cell: s2 => (s2.plate_no
@@ -301,7 +333,10 @@ export default function StudentSearch() {
               : <span className="text-ink-muted">-</span>) },
         ]}
         actions={!isTeacher ? (s2 => (
-          <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ไข</TableAction>
+          <>
+            <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
+            <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
+          </>
         )) : undefined}
         empty={{
           icon: GraduationCap,
@@ -353,11 +388,11 @@ export default function StudentSearch() {
                 </div>
                 <div className="flex gap-2">
                   <button onClick={handleImport} disabled={importing || !importFile}
-                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium py-3 rounded-lg transition">
+                    className="flex-1 bg-green-700 hover:bg-green-800 disabled:opacity-40 text-white text-sm font-medium py-3 rounded-lg transition">
                     {importing ? 'กำลังนำเข้า…' : 'นำเข้าข้อมูล'}
                   </button>
                   <button onClick={() => setShowImport(false)}
-                    className="px-4 text-gray-500 hover:text-gray-700 text-sm py-3 transition">ยกเลิก</button>
+                    className="px-4 text-ink-muted hover:text-gray-700 text-sm py-3 transition">ยกเลิก</button>
                 </div>
                 <button onClick={handleDownloadTemplate}
                   className="w-full text-sm text-blue-600 hover:text-blue-800 py-1">
@@ -393,11 +428,12 @@ export default function StudentSearch() {
 
       {/* ── Edit Modal ── */}
       {editStudent && (
-        <Modal size="lg" title="แก้ไขข้อมูลนักเรียน" onClose={closeEdit}>
+        <Modal size="lg" title={editMode === 'vehicle' ? 'เลือกรถรับส่งให้นักเรียน' : 'แก้ไขข้อมูลนักเรียน'} dismissible={!saving} onClose={closeEdit}>
             <p className="text-sm text-ink-muted mb-5 tabular-nums">รหัส: {editStudent.student_code ?? editStudent.id}</p>
 
+            {editMode === 'profile' && <>
             {/* Section 1: ข้อมูลนักเรียน */}
-            <fieldset className="space-y-3 mb-6">
+            <fieldset disabled={saving} className="space-y-3 mb-6">
               <legend className="text-sm font-semibold text-ink mb-2">ข้อมูลนักเรียน</legend>
 
               <FormField label="คำนำหน้า">
@@ -447,7 +483,7 @@ export default function StudentSearch() {
                 parent reassignment by the backend. No buttons / no shared-edit
                 workflow — the standard "บันทึกข้อมูลนักเรียน" button below
                 handles save + reassign atomically. */}
-            <fieldset className="space-y-3 mb-6">
+            <fieldset disabled={saving} className="space-y-3 mb-6">
               <legend className="text-sm font-semibold text-ink mb-2">ผู้ปกครอง</legend>
               <div className="bg-brand-50 border border-brand-200 text-brand-800 rounded-lg px-3 py-2 text-caption leading-snug">
                 ℹ️ หากเปลี่ยนเบอร์โทรหรือชื่อผู้ปกครอง ระบบจะถือว่าเป็นการ
@@ -468,8 +504,12 @@ export default function StudentSearch() {
               </div>
             </fieldset>
 
-            {/* Section 3: รถรับส่ง */}
-            <fieldset className="space-y-3 mb-6">
+            </>}
+            {editMode === 'vehicle' && <>
+            <p className="font-semibold mb-3">{editStudent.prefix}{editStudent.first_name} {editStudent.last_name}</p>
+            {/* Vehicle assignment is a separate task; there are no unsaved
+                profile fields to discard when this endpoint completes. */}
+            <fieldset disabled={saving} className="space-y-3 mb-6">
               <legend className="text-sm font-semibold text-ink mb-2">รถรับส่ง</legend>
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">
@@ -478,25 +518,30 @@ export default function StudentSearch() {
                 {/* Phase 10.13C — searchable combobox (type to filter 100+ vehicles);
                     canonical display_plate; hides province-variant duplicates but keeps
                     the currently-assigned vehicle visible. value '' = ไม่มีรถ. */}
-                <VehicleSelect vehicles={vehicles} value={selectedVehicle} onChange={setSelectedVehicle} />
+                {vehiclesLoading ? <p role="status">กำลังโหลดรถ…</p> : vehiclesError
+                  ? <ErrorState message={vehiclesError} onRetry={loadVehicles} />
+                  : <VehicleSelect vehicles={vehicles} value={selectedVehicle} onChange={setSelectedVehicle} />}
                 {vehicles.some(v => v.duplicate_candidate && v.id !== selectedVehicle) && (
                   <p className="mt-1 text-caption text-ink-muted">แสดงเฉพาะรถที่ใช้งานจริง ไม่รวมรายการซ้ำที่รอจัดเก็บ</p>
                 )}
               </div>
             </fieldset>
+            </>}
 
             {/* Actions */}
             <div className="flex flex-col gap-2">
-              <button onClick={handleSaveProfile} disabled={saving}
+              {editMode === 'profile' && <button onClick={handleSaveProfile} disabled={saving}
                 className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-40 disabled:pointer-events-none text-white font-medium min-h-[48px] rounded-lg transition">
                 {saving ? 'กำลังบันทึก…' : 'บันทึกข้อมูลนักเรียน'}
-              </button>
-              {selectedVehicle !== (editStudent.vehicle_id || '') && (
-                <button onClick={handleSaveVehicle} disabled={saving}
-                  className="focus-ring w-full bg-success hover:bg-success/90 disabled:opacity-40 disabled:pointer-events-none text-white font-medium min-h-[48px] rounded-lg transition">
+              </button>}
+              {editMode === 'vehicle' && (
+                <button onClick={handleSaveVehicle} disabled={saving || vehiclesLoading || !!vehiclesError || selectedVehicle === (editStudent.vehicle_id || '')}
+                  className="focus-ring w-full bg-success-ink hover:bg-success-ink/90 disabled:opacity-40 disabled:pointer-events-none text-white font-medium min-h-[48px] rounded-lg transition">
                   {saving ? 'กำลังบันทึก…' : selectedVehicle ? (editStudent.vehicle_id ? 'เปลี่ยนรถ' : 'เพิ่มเข้ารถ') : 'ลบออกจากรถ'}
                 </button>
               )}
+              {editMode === 'profile' && <details className="border border-surface-border rounded-lg p-3">
+              <summary className="focus-ring min-h-[44px] flex items-center cursor-pointer text-sm">ย้ายโรงเรียน / นำรายชื่อออก</summary>
               <button onClick={() => setTransferStudent(editStudent)} disabled={saving}
                 className="focus-ring w-full bg-warn-soft hover:bg-warn-soft/70 text-warn-ink border border-warn/30 min-h-[44px] rounded-lg transition disabled:opacity-40 disabled:pointer-events-none">
                 ขอโอนย้ายนักเรียน
@@ -505,7 +550,9 @@ export default function StudentSearch() {
                 className="focus-ring w-full bg-danger-soft hover:bg-danger-soft/70 text-danger-ink border border-danger/30 min-h-[44px] rounded-lg transition disabled:opacity-40 disabled:pointer-events-none">
                 ลาออก / ลบออกจากระบบ
               </button>
+              </details>}
               <button onClick={closeEdit}
+                disabled={saving}
                 className="focus-ring w-full text-ink-muted hover:text-ink hover:bg-surface min-h-[44px] rounded-lg transition">
                 ยกเลิก
               </button>

@@ -1,0 +1,33 @@
+{
+  "_comment": "สถานะ feature flag บน production ตามความจริง ใช้เป็นแหล่งเดียวสำหรับเครื่องมือที่ต้องจำลอง production เช่นฮาร์เนสถ่ายภาพคู่มือ แก้ไฟล์นี้ทุกครั้งที่เปิดหรือปิดสวิตช์จริง มิฉะนั้นภาพในคู่มือจะเป็นหน้าจอที่ผู้ใช้ไม่มีวันเห็น",
+  "_how_to_verify": "อ่านจากเซิร์ฟเวอร์ด้วย grep '^FEATURE_' /home/schoolbus/apps/lampang-bus-system/backend/.env หรือดูเท่าที่เปิดสาธารณะที่ GET /api/auth/recovery/config",
+  "verified_at": "2026-09-08",
+  "verified_by": "GET https://schoolbuslampang.com/api/auth/recovery/config (admin_password_recovery, requires_recovery_code) และ docs/project-closure/owner-answers-2026-09-07.md สำหรับอีกสองรายการ",
+  "flags": {
+    "driverRegistration":    { "env": "FEATURE_DRIVER_REGISTRATION",     "enabled": true,  "since": "ก่อน 2026-09-04" },
+    "adminPasswordRecovery": { "env": "FEATURE_ADMIN_PASSWORD_RECOVERY", "enabled": true,  "since": "2026-09-07 09:39 น." },
+    "participationCases":    { "env": "FEATURE_PARTICIPATION_CASES",     "enabled": true,  "since": "2026-09-07 12:55 น." },
+    "vehicleQr":             { "env": "FEATURE_VEHICLE_QR",              "enabled": false, "since": null },
+    "driverShiftSelection":  { "env": "FEATURE_DRIVER_SHIFT_SELECTION",  "enabled": false, "since": null },
+    "qrLevel3":              { "env": "FEATURE_QR_LEVEL3",               "enabled": false, "since": null },
+    "eta":                   { "env": "FEATURE_ETA",                     "enabled": false, "since": null },
+    "geofence":              { "env": "FEATURE_GEOFENCE",                "enabled": false, "since": null },
+    "routeDeviation":        { "env": "FEATURE_ROUTE_DEVIATION",         "enabled": false, "since": null },
+    "parentConsentRequired": { "env": "FEATURE_PARENT_CONSENT_REQUIRED", "enabled": false, "since": null }
+  },
+  "settings": {
+    "adminRecoveryRequireCode": {
+      "env": "ADMIN_RECOVERY_REQUIRE_CODE",
+      "value": false,
+      "note": "ไม่ใช่ feature flag แต่เปลี่ยนหน้าจอ เมื่อเป็น false ระบบไม่ออกรหัสกู้คืนและหน้าจอไม่แสดงรหัส ตัดสินใจเมื่อ 2026-09-07 ดู docs/project-closure/decision-2026-09-07-admin-recovery-single-factor.md"
+    }
+  },
+  "roles_recovery_closed": {
+    "_comment": "บทบาทที่กลไกกู้รหัสผ่านพร้อมแล้วแต่ยังปิดด้วยเหตุ decision_gates_unconfirmed ไม่ใช่ข้อจำกัดทางเทคนิค",
+    "province": false,
+    "affiliation": false,
+    "school": false,
+    "transport": false,
+    "driver": false
+  }
+}

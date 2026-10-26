@@ -26,11 +26,37 @@ function errorHandler(err, req, res, next) {
   // JWT-specific errors
   if (err.name === 'JsonWebTokenError') { status = 401; message = 'Invalid token'; }
   else if (err.name === 'TokenExpiredError') { status = 401; message = 'Token expired'; }
+  else if (err.name === 'MulterError' &&
+    (/^LIMIT_/.test(err.code || '') || ['MISSING_FIELD_NAME', 'INVALID_FIELD_NAME'].includes(err.code))) {
+    status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+    message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'ไฟล์มีขนาดเกินที่กำหนด กรุณาลดขนาดแล้วอัปโหลดใหม่'
+      : 'ข้อมูลอัปโหลดไม่ถูกต้อง กรุณาตรวจสอบไฟล์และลองใหม่';
+    // Do not echo attacker-controlled field names or uploaded filenames.
+    errors = [{ code: err.code }];
+  }
   // MySQL duplicate entry
   else if (err.code === 'ER_DUP_ENTRY') { status = 409; message = 'Duplicate entry — record already exists'; }
   // MySQL foreign key violation
   else if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_NO_REFERENCED_ROW_2') {
     status = 400; message = 'Referenced record does not exist or is still in use';
+  }
+  // MySQL column overflow. Bad input, not a server fault: MySQL runs in
+  // STRICT_TRANS_TABLES so an over-long value is an error rather than a silent
+  // truncation, and every route that writes a user-supplied string without its
+  // own length check reached this handler as a 500. A 500 is wrong twice — the
+  // caller is told nothing it can act on, and the error log records a server
+  // problem that is really a form that needs shortening.
+  //
+  // The message stays generic on purpose. err.sqlMessage names the column
+  // ("Data too long for column 'name'") but not the table, so it cannot be
+  // mapped to a field label without guessing, and echoing it would put schema
+  // detail in a client response. Routes that know which field it is say so
+  // themselves before the query runs.
+  else if (err.code === 'ER_DATA_TOO_LONG' || err.code === 'WARN_DATA_TRUNCATED') {
+    status = 400;
+    message = 'ข้อมูลบางช่องยาวเกินที่ระบบรองรับ กรุณาย่อให้สั้นลงแล้วบันทึกใหม่';
+    errors = [{ code: 'FIELD_TOO_LONG' }];
   }
   // Validation errors thrown from routes with a statusCode property
   else if (err.statusCode) {

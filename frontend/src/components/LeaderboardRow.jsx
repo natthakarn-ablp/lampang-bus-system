@@ -65,7 +65,7 @@ function KpiPill({ label, value }) {
   const variant = kpiVariant(value);
   return (
     <StatusBadge variant={variant} size="sm">
-      <span className="text-ink-muted/70 mr-0.5">{label}</span>
+      <span className="text-ink-muted mr-0.5">{label}</span>
       <span className="tabular-nums">{safePct(value)}</span>
     </StatusBadge>
   );

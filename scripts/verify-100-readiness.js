@@ -221,6 +221,7 @@ function checkRequiredFiles() {
     'scripts/validate-go-live-closure-status.js',
     'scripts/collect-automated-readiness-evidence.js',
     'scripts/verify-100-readiness.js',
+    'scripts/lib/closure-report-schema.js',
   ];
 
   const missing = required.filter((rel) => !fs.existsSync(path.join(ROOT, rel)));

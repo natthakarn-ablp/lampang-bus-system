@@ -24,6 +24,7 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, relative, join } from 'node:path';
+import { evaluatePartialRatchet } from './partial-ratchet.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..');
@@ -158,6 +159,7 @@ const EXEMPT = {
     header: 'production-approved login page (commit d9485ec); deliberately branded and outside the shell',
     form: 'the login form is the page; its fields carry autocomplete and wired labels already, verified in the baseline audit',
     modal: 'the contact-admin panel is inline on the page, not a dialog',
+    states: 'its only api.get is the public /auth/recovery/config probe, and its .catch deliberately hides the admin recovery link ("ผู้ดูแลระบบ: รีเซ็ตผ่าน LINE" → /forgot-password) when the policy cannot be read; failing closed is the intended state, so the login form shows no loading or error UI for it',
   },
   // ExecutivePrint is not a screen page that also prints — it IS the print
   // artifact the report pages hand off to (their own screen tables already go
@@ -232,7 +234,12 @@ if (process.argv.includes('--json')) {
   console.log(`Native confirm/prompt: ${nativeDialogs.length}${nativeDialogs.length ? ` → ${nativeDialogs.join(', ')}` : ''}`);
 }
 
-// Exit non-zero while anything is still Partial or any native blocking dialog
-// remains anywhere in the frontend, so shared components cannot evade the
-// per-page classifier.
+if (process.argv.includes('--gate')) {
+  const result = evaluatePartialRatchet({ counts, nativeDialogs, rows });
+  process.exit(result.ok ? 0 : 1);
+}
+
+// The reporting command keeps its original strict exit contract. CI uses the
+// explicit ratchet gate above while the eight recorded Partial pages are paid
+// down; callers that relied on the old zero-Partial check still get it.
 process.exit((counts.Partial || 0) === 0 && nativeDialogs.length === 0 ? 0 : 1);

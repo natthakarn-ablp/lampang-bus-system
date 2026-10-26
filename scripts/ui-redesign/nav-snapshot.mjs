@@ -9,12 +9,19 @@
  * Used to prove the redesign changes only GROUPING and PRESENTATION, never the
  * set of reachable routes or the set of menu entries a role can see.
  *
+ * The baseline lives in the repo (scripts/ui-redesign/baselines/nav-baseline.json)
+ * so a clean clone can run the gate. --compare never writes it: a missing
+ * baseline is a failure, not something to paper over by snapshotting the very
+ * code under test.
+ *
  * Usage:
- *   node scripts/ui-redesign/nav-snapshot.mjs > outputs/ui-redesign/nav-before.json
- *   node scripts/ui-redesign/nav-snapshot.mjs --compare outputs/ui-redesign/nav-before.json
+ *   node scripts/ui-redesign/nav-snapshot.mjs                    # print snapshot
+ *   node scripts/ui-redesign/nav-snapshot.mjs --compare          # gate against the tracked baseline
+ *   node scripts/ui-redesign/nav-snapshot.mjs --compare <file>   # gate against another snapshot
+ *   node scripts/ui-redesign/nav-snapshot.mjs --write-baseline   # deliberately (re)record the baseline
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -22,6 +29,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..');
 const APP     = resolve(root, 'frontend/src/App.jsx');
 const SIDEBAR = resolve(root, 'frontend/src/components/Sidebar.jsx');
+const BASELINE = resolve(here, 'baselines/nav-baseline.json');
 
 // ── 1. Route inventory ──────────────────────────────────────────────────────
 // App.jsx nests child <Route path="x"> under a parent <Route path="/parent">.
@@ -155,7 +163,16 @@ const snapshot = {
 // ── compare mode ────────────────────────────────────────────────────────────
 const compareIdx = process.argv.indexOf('--compare');
 if (compareIdx !== -1) {
-  const prev = JSON.parse(readFileSync(process.argv[compareIdx + 1], 'utf8'));
+  const arg = process.argv[compareIdx + 1];
+  const file = arg && !arg.startsWith('--') ? resolve(arg) : BASELINE;
+  if (!existsSync(file)) {
+    console.error(`✗ nav baseline not found: ${file}`);
+    console.error('  Record it deliberately from a known-good commit, review the diff, and commit it:');
+    console.error('    node scripts/ui-redesign/nav-snapshot.mjs --write-baseline');
+    process.exit(1);
+  }
+  const prev = JSON.parse(readFileSync(file, 'utf8'));
+  console.log(`baseline: ${file}`);
   let failures = 0;
 
   const setOf = arr => new Set(arr.map(r => r.path));
@@ -186,6 +203,14 @@ if (compareIdx !== -1) {
 
   console.log(`\n${failures === 0 ? '✓ PASS — no route or menu entry lost' : `✗ FAIL — ${failures} problem(s)`}`);
   process.exit(failures === 0 ? 0 : 1);
+}
+
+if (process.argv.includes('--write-baseline')) {
+  mkdirSync(dirname(BASELINE), { recursive: true });
+  writeFileSync(BASELINE, JSON.stringify(snapshot, null, 2) + '\n', 'utf8');
+  const menus = Object.values(snapshot.nav).reduce((n, items) => n + items.length, 0);
+  console.log(`wrote ${BASELINE}: ${snapshot.routes.length} routes / ${menus} menus`);
+  process.exit(0);
 }
 
 console.log(JSON.stringify(snapshot, null, 2));

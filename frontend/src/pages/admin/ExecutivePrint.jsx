@@ -4,8 +4,10 @@ import api from '../../api/axios';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
+import { roleEvidenceMeta, describeBlockingReason, EVIDENCE_STATUS } from '../../utils/evidenceStatus';
+import { snapshotPct, pctDelta, fmtSnapshotPct, fmtPctDelta } from '../../utils/kpi';
+import { improvementSummary, riskHeading } from '../../utils/summaryWording';
 
-function pct(n, d) { return d > 0 ? Math.round((n / d) * 10000) / 100 : 0; }
 function fmtDate(d) { return d ? new Date(d).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'; }
 function fmtNow() { return new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'long', timeStyle: 'short' }); }
 
@@ -29,11 +31,13 @@ const ROLES = [
   { id: 'admin', name: 'แอดมิน', focus: 'สุขภาพระบบ' },
 ];
 
-function roleStatus(actions, hasSnap) {
-  const t = actions?.total || 0;
-  if (!hasSnap || t < 5) return 'ยังต้องเพิ่มหลักฐาน';
-  if (t >= 20) return 'พร้อมประเมิน';
-  return 'ประเมินได้บางส่วน';
+/**
+ * A printed briefing outlives the screen it came from, so the status it prints
+ * has to be the one the evidence supports. The old rule promoted a role to
+ * "พร้อมประเมิน" at 20 raw audit actions (audit 2026-09-04, Major 1).
+ */
+function roleStatus(roleCoverage) {
+  return roleEvidenceMeta(roleCoverage).label;
 }
 
 export default function ExecutivePrint() {
@@ -70,26 +74,61 @@ export default function ExecutivePrint() {
   const role_exports = data.role_exports || {};
   const bD = baseline?.data || {};
   const lD = latest?.data || {};
-  const hasSnap = !!baseline && !!latest;
+
+  const readiness = data.evidence_readiness || null;
+  const roleCoverage = readiness?.roles || {};
+  const freshness = readiness?.snapshot_freshness || null;
+  const baselinePair = readiness?.baseline_pair || null;
+  const blockingReasons = readiness?.blocking_reasons || [];
+
+  // A printed page is quoted without its caveats, so the direction of a change
+  // is printed only when the server allows the two ends to be compared:
+  // researchReadiness.service.js requires a usable baseline/post pair (minimum
+  // gap, frozen protocol, both ends inside the protocol window) and a snapshot
+  // that is still fresh. A missing readiness block is not permission either.
+  const comparisonUsable = baselinePair?.usable === true && freshness?.fresh === true;
+  // The printed reason is the server's own code translated by the shared map,
+  // so the paper says exactly what the screen and the export say.
+  const blockingCode = baselinePair && !baselinePair.usable
+    ? baselinePair.reason
+    : (freshness && !freshness.fresh ? freshness.reason : null);
+  const comparisonBlockedReason = comparisonUsable
+    ? null
+    : (blockingCode ? describeBlockingReason(blockingCode) : 'ยังไม่ทราบสถานะความพร้อมของข้อมูล');
+  const comparisonBlockedNote = `แสดงค่า baseline และค่าปัจจุบันตามจริง แต่ยังสรุปเป็น “ดีขึ้น” หรือ “ลดลง” ไม่ได้ — ${comparisonBlockedReason}`;
 
   const roleStats = ROLES.map(r => ({
     ...r,
-    status: roleStatus(role_actions[r.id], hasSnap),
+    coverage: roleCoverage[r.id] || null,
+    status: roleStatus(roleCoverage[r.id]),
     actions: role_actions[r.id]?.total || 0,
     exports: role_exports[r.id] || 0,
   }));
-  const readyCount = roleStats.filter(r => r.status === 'พร้อมประเมิน').length;
-  const partialCount = roleStats.filter(r => r.status === 'ประเมินได้บางส่วน').length;
+  const readyCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.SYSTEM_EVIDENCE).length;
+  const partialCount = roleStats.filter(r => r.coverage?.status === EVIDENCE_STATUS.PARTIAL).length;
 
+  // Same rule as the screen version and the backend export: a zero or
+  // missing denominator is null, and a null delta is "cannot compare yet",
+  // never 0 and never a trend.
   const metricChanges = METRICS.map(m => {
-    const bv = pct(bD[m.num] || 0, bD[m.den] || 0);
-    const cv = pct(lD[m.num] || 0, lD[m.den] || 0);
-    const d = Math.round((cv - bv) * 100) / 100;
-    return { ...m, baseline: bv, current: cv, delta: d, improved: d > 0, declined: d < 0 };
+    const bv = snapshotPct(bD[m.num], bD[m.den]);
+    const cv = snapshotPct(lD[m.num], lD[m.den]);
+    const d = pctDelta(bv, cv);
+    const comparable = d !== null;
+    return { ...m, baseline: bv, current: cv, delta: d, comparable, improved: comparable && d > 0, declined: comparable && d < 0 };
   });
-  const improvements = metricChanges.filter(m => m.improved);
-  const risks = metricChanges.filter(m => m.declined);
-  const lowCoverage = metricChanges.filter(m => m.current < 50);
+  // Direction needs the server's permission as well as a delta, so while the
+  // comparison is gated these two lists stay empty and the report prints the
+  // values with the reason instead of a trend.
+  const improvements = comparisonUsable ? metricChanges.filter(m => m.improved) : [];
+  const risks = comparisonUsable ? metricChanges.filter(m => m.declined) : [];
+  const notComparable = metricChanges.filter(m => !m.comparable);
+  // `null < 50` is true in JavaScript; a metric with no denominator is not "low".
+  const lowCoverage = metricChanges.filter(m => m.current !== null && m.current < 50);
+  // With no comparable metric there is nothing to conclude: the printout
+  // must say "not enough data", never "no change" or "no risk".
+  const comparableCount = metricChanges.filter(m => m.comparable).length;
+  const wording = { improvements: improvements.length, risks: risks.length, lowCoverage: lowCoverage.length, comparable: comparableCount };
 
   return (
     <>
@@ -117,8 +156,8 @@ export default function ExecutivePrint() {
         {/* 1. Header */}
         <div className="border-b-4 border-blue-800 pb-3 mb-4">
           <h1 className="text-xl font-semibold text-blue-800">สรุปผลการประเมินระบบรถรับส่งนักเรียน</h1>
-          <p className="text-sm text-gray-500">ระบบรถรับส่งนักเรียนจังหวัดลำปาง — สำหรับการประชุมผู้บริหาร</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-xs text-gray-500">
+          <p className="text-sm text-ink-muted">ระบบรถรับส่งนักเรียนจังหวัดลำปาง — สำหรับการประชุมผู้บริหาร</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 mt-2 text-xs text-ink-muted">
             <span>Baseline: {baseline ? fmtDate(baseline.date) : 'ยังไม่มี'}</span>
             <span>Snapshot ล่าสุด: {latest ? fmtDate(latest.date) : 'ยังไม่มี'}</span>
             <span>จัดทำเมื่อ: {fmtNow()}</span>
@@ -128,19 +167,45 @@ export default function ExecutivePrint() {
         {/* 2. Executive summary box */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm">
           <p className="font-semibold text-blue-800 mb-1">สรุปสำหรับผู้บริหาร</p>
-          <p>จาก 6 สิทธิ์ในระบบ มี <strong>{readyCount} สิทธิ์</strong>ที่พร้อมประเมินผล, <strong>{partialCount} สิทธิ์</strong>ประเมินได้บางส่วน
-            {improvements.length > 0 ? ` — มี ${improvements.length} ตัวชี้วัดที่ดีขึ้นจาก baseline` : ' — ยังไม่มีการเปลี่ยนแปลงจาก baseline (อาจเพิ่งเริ่มเก็บข้อมูล)'}
+          <p>จาก 6 สิทธิ์ในระบบ มี <strong>{readyCount} สิทธิ์</strong>ที่มีหลักฐานระบบครบทุกตัวชี้วัด, <strong>{partialCount} สิทธิ์</strong>มีหลักฐานบางส่วน
+            {/* The one-line verdict is the strongest sentence on the page, so it
+                may not summarise a comparison the server has not allowed. */}
+            {comparisonUsable ? ` — ${improvementSummary(wording)}` : ` — ${comparisonBlockedNote}`}
             {lowCoverage.length > 0 ? ` · ${lowCoverage.length} ตัวชี้วัดที่ยังต่ำกว่า 50%` : ''}.
           </p>
         </div>
 
+        {/* A printed page is quoted out of context, so its limits are printed
+            on it rather than left to the reader to remember. */}
+        <div className="border border-amber-300 bg-amber-50 rounded-lg p-3 mb-4 text-xs text-amber-900">
+          <p className="font-semibold">ข้อจำกัดของรายงานฉบับนี้</p>
+          <p className="mt-0.5">สถานะรายสิทธิ์คือความพร้อมของหลักฐานเชิงระบบ ไม่ใช่ผลการวิจัย และจำนวน action ไม่ใช่เกณฑ์ความพร้อมประเมิน</p>
+          {freshness && (
+            <p className="mt-0.5">
+              Snapshot ล่าสุด {freshness.latest_snapshot_date || 'ยังไม่มี'}
+              {freshness.age_days != null && ` อายุ ${freshness.age_days} วัน (เกณฑ์ ${freshness.max_age_days} วัน)`}
+              {freshness.fresh ? '' : ' — เก่าเกินเกณฑ์ ตัวเลขในรายงานอธิบายวันที่เก็บ ไม่ใช่สถานะปัจจุบัน'}
+            </p>
+          )}
+          {/* Covers both flags now: a stale snapshot blocks the trend reading
+              exactly as an unusable baseline/post pair does. */}
+          {!comparisonUsable && (
+            <p className="mt-0.5">ห้ามตีความคอลัมน์ “เปลี่ยนแปลง” เป็นแนวโน้มหรือผลการวิจัย: {comparisonBlockedReason}</p>
+          )}
+          {blockingReasons.length > 0 && (
+            <p className="mt-0.5">ยังอ้างผลวิจัยไม่ได้ เพราะ: {blockingReasons.map(describeBlockingReason).join(' · ')}</p>
+          )}
+        </div>
+
         {/* 3. KPI strip */}
         <div className="grid grid-cols-6 gap-2 mb-4">
-          <KpiCell label="พร้อมประเมิน" value={readyCount} />
+          <KpiCell label="หลักฐานระบบครบ" value={readyCount} />
           <KpiCell label="บางส่วน" value={partialCount} />
           <KpiCell label="ยังต้องเพิ่ม" value={6 - readyCount - partialCount} />
-          <KpiCell label="ดีขึ้น" value={improvements.length} />
-          <KpiCell label="ลดลง" value={risks.length} />
+          {/* "0 ดีขึ้น / 0 ลดลง" would read as a finding; a gated comparison has
+              no such count, so the cells print a dash. */}
+          <KpiCell label="ดีขึ้น" value={comparisonUsable ? improvements.length : '—'} />
+          <KpiCell label="ลดลง" value={comparisonUsable ? risks.length : '—'} />
           <KpiCell label="ต่ำ (<50%)" value={lowCoverage.length} />
         </div>
 
@@ -152,8 +217,9 @@ export default function ExecutivePrint() {
               <tr className="bg-gray-100">
                 <th className="border border-gray-300 px-2 py-1 text-left">สิทธิ์</th>
                 <th className="border border-gray-300 px-2 py-1 text-left">เน้นวัด</th>
-                <th className="border border-gray-300 px-2 py-1 text-center">สถานะ</th>
-                <th className="border border-gray-300 px-2 py-1 text-center">Actions</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">สถานะหลักฐาน</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">ตัวชี้วัดที่มีหลักฐานครบ</th>
+                <th className="border border-gray-300 px-2 py-1 text-center">Actions (ปริมาณใช้งาน)</th>
                 <th className="border border-gray-300 px-2 py-1 text-center">Exports</th>
               </tr>
             </thead>
@@ -163,6 +229,9 @@ export default function ExecutivePrint() {
                   <td className="border border-gray-300 px-2 py-1 font-medium">{r.name}</td>
                   <td className="border border-gray-300 px-2 py-1 text-gray-600">{r.focus}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{r.status}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">
+                    {r.coverage ? `${r.coverage.system_evidence}/${r.coverage.metric_total}` : '-'}
+                  </td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{r.actions}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">{r.exports}</td>
                 </tr>
@@ -188,14 +257,20 @@ export default function ExecutivePrint() {
               {metricChanges.map(m => (
                 <tr key={m.label}>
                   <td className="border border-gray-300 px-2 py-1">{m.label}</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center">{m.baseline}%</td>
-                  <td className="border border-gray-300 px-2 py-1 text-center font-medium">{m.current}%</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center">{fmtSnapshotPct(m.baseline)}</td>
+                  <td className="border border-gray-300 px-2 py-1 text-center font-medium">{fmtSnapshotPct(m.current)}</td>
                   <td className="border border-gray-300 px-2 py-1 text-center">
-                    {m.delta > 0 ? '+' : ''}{m.delta}%
+                    {fmtPctDelta(m.delta)}
                   </td>
                   <td className="border border-gray-300 px-2 py-1 text-center">
-                    <span aria-hidden="true">{m.improved ? '▲' : m.declined ? '▼' : '='}</span>
-                    {' '}{m.improved ? 'ดีขึ้น' : m.declined ? 'ลดลง' : 'คงเดิม'}
+                    {/* Both columns above keep their numbers; this one carries
+                        the claim, so it is the one the gate empties. */}
+                    {m.comparable && comparisonUsable ? (
+                      <>
+                        <span aria-hidden="true">{m.improved ? '▲' : m.declined ? '▼' : '='}</span>
+                        {' '}{m.improved ? 'ดีขึ้น' : m.declined ? 'ลดลง' : 'คงเดิม'}
+                      </>
+                    ) : <span className="text-ink-muted">{m.comparable ? 'ยังเทียบไม่ได้' : 'ไม่มีข้อมูล'}</span>}
                   </td>
                 </tr>
               ))}
@@ -208,13 +283,15 @@ export default function ExecutivePrint() {
           <div className="border border-gray-300 rounded-lg p-3">
             <p className="font-semibold text-sm text-success-ink mb-1 inline-flex items-center gap-1.5">
               <Check className="w-4 h-4 shrink-0" strokeWidth={2.5} aria-hidden="true" />
-              ประเด็นที่ดีขึ้น
+              {comparisonUsable ? 'ประเด็นที่ดีขึ้น' : 'Baseline เทียบปัจจุบัน — ยังสรุปแนวโน้มไม่ได้'}
             </p>
-            {improvements.length > 0 ? (
+            {!comparisonUsable ? (
+              <p className="text-xs text-ink-muted">{comparisonBlockedNote}</p>
+            ) : improvements.length > 0 ? (
               <ul className="text-xs space-y-0.5">
-                {improvements.map(m => <li key={m.label}>• {m.label}: +{m.delta}%</li>)}
+                {improvements.map(m => <li key={m.label}>• {m.label}: {fmtPctDelta(m.delta)}</li>)}
               </ul>
-            ) : <p className="text-xs text-gray-500">ยังไม่มีการเปลี่ยนแปลงจาก baseline</p>}
+            ) : <p className="text-xs text-ink-muted">{improvementSummary(wording)}</p>}
           </div>
           <div className="border border-gray-300 rounded-lg p-3">
             <p className="font-semibold text-sm text-danger-ink mb-1 inline-flex items-center gap-1.5">
@@ -222,9 +299,13 @@ export default function ExecutivePrint() {
               ประเด็นที่ต้องติดตาม
             </p>
             <ul className="text-xs space-y-0.5">
-              {risks.map(m => <li key={m.label}>• {m.label}: {m.delta}%</li>)}
-              {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {m.current}%</li>)}
-              {risks.length === 0 && lowCoverage.length === 0 && <li className="text-gray-500">ไม่พบจุดเสี่ยงจากข้อมูลปัจจุบัน</li>}
+              {risks.map(m => <li key={m.label}>• {m.label}: {fmtPctDelta(m.delta)}</li>)}
+              {lowCoverage.map(m => <li key={`l-${m.label}`}>• {m.label} ยังต่ำ: {fmtSnapshotPct(m.current)}</li>)}
+              {/* An empty risk list under a gated comparison is not "no risk" —
+                  the declines were never allowed to be counted. */}
+              {!comparisonUsable && <li className="text-ink-muted">• {comparisonBlockedNote}</li>}
+              {comparisonUsable && risks.length === 0 && lowCoverage.length === 0 && <li className="text-ink-muted">{riskHeading(wording)}</li>}
+              {notComparable.length > 0 && <li className="text-ink-muted">• ยังเทียบไม่ได้ (ตัวส่วนเป็น 0 หรือไม่มีข้อมูล): {notComparable.map(m => m.label).join(', ')}</li>}
             </ul>
           </div>
         </div>
@@ -237,17 +318,18 @@ export default function ExecutivePrint() {
             {lowCoverage.length > 0 && <li>• เร่งเพิ่ม coverage ใน: {lowCoverage.map(m => m.label).join(', ')}</li>}
             {risks.length > 0 && <li>• ตรวจสอบ metric ที่ลดลง: {risks.map(m => m.label).join(', ')}</li>}
             {partialCount > 0 && <li>• ให้ {partialCount} สิทธิ์ที่ประเมินได้บางส่วนเพิ่มการใช้งานระบบ</li>}
+            {!comparisonUsable && <li>• แก้เงื่อนไขที่ทำให้ยังเทียบ baseline กับปัจจุบันไม่ได้: {comparisonBlockedReason}</li>}
             <li>• ให้รัน snapshot ใหม่เป็นประจำเพื่อเห็นแนวโน้มการเปลี่ยนแปลง</li>
           </ul>
         </div>
 
         {/* Footer */}
-        <div className="border-t-2 border-gray-300 pt-3 mt-4 text-xs text-gray-400">
+        <div className="border-t-2 border-gray-300 pt-3 mt-4 text-xs text-ink-muted">
           <p><strong>หมายเหตุ:</strong> รายงานนี้สรุปจาก snapshot, logs และ export evidence ในระบบ — บางตัวชี้วัดยังต้องใช้หลักฐานภายนอก (แบบสอบถาม, สัมภาษณ์, บันทึกประชุม) ร่วมด้วยจึงจะประเมินได้ครบถ้วน</p>
           <div className="flex justify-between mt-4">
             <div>
-              <p className="text-gray-500">ผู้จัดทำ: .......................................</p>
-              <p className="text-gray-500 mt-3">ผู้ตรวจสอบ: .......................................</p>
+              <p className="text-ink-muted">ผู้จัดทำ: .......................................</p>
+              <p className="text-ink-muted mt-3">ผู้ตรวจสอบ: .......................................</p>
             </div>
             <div className="text-right">
               <p>ระบบรถรับส่งนักเรียนจังหวัดลำปาง</p>
@@ -275,7 +357,7 @@ function KpiCell({ label, value }) {
   return (
     <div className="border border-gray-300 rounded p-2 text-center">
       <p className="text-lg font-semibold text-gray-800">{value}</p>
-      <p className="text-[10px] text-gray-500">{label}</p>
+      <p className="text-[10px] text-ink-muted">{label}</p>
     </div>
   );
 }

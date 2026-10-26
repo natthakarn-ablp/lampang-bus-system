@@ -5,13 +5,17 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
+const { multipartLimits } = require('../utils/multipartLimits');
 const ExcelJS = require('exceljs');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
-const { importExportLimiter } = require('../middleware/rateLimiters');
+const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
 const { sendSuccess, sendError } = require('../utils/response');
+const { isCalendarDate } = require('../utils/calendarDate');
+const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
+const { buildAffiliationSchoolsWorkbook } = require('../utils/affiliationSchoolsWorkbook');
 const affAdminSvc = require('../services/affiliationAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
@@ -20,6 +24,7 @@ const { isOle2, isAllowedImport } = require('../utils/fileType');
 const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
 const { parseCsvRecords } = require('../utils/csv');
 const { readWorkbookSafely } = require('../utils/xlsxPreflight');
+const { todayBangkok } = require('../utils/thaiTime');
 
 // ─── Bulk-import upload (Phase 10.2A) ────────────────────────────────────────
 // Disk-backed multer config mirroring backend/src/routes/school.routes.js.
@@ -32,7 +37,7 @@ const importUpload = multer({
     destination: (_req, _file, cb) => cb(null, importUploadDir),
     filename: (_req, file, cb) => cb(null, `aff-import-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname).toLowerCase()}`),
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: multipartLimits(5 * 1024 * 1024),
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ext === '.xlsx' || ext === '.csv') cb(null, true);
@@ -142,7 +147,7 @@ const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
   const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
-  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ' };
+  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ' };
   // Phase 10.12G — neutralise every cell + redact PII from audit values.
   const esc = csvCell;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
@@ -196,6 +201,41 @@ router.get('/schools', async (req, res, next) => {
 });
 
 /**
+ * GET /api/affiliation/schools/report
+ * Current master-data counts only; zero does not mean a school failed to report.
+ */
+router.get('/schools/report', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
+
+    const report = await affSvc.getSchoolsReport(affId);
+    res.setHeader('Cache-Control', 'no-store');
+    return sendSuccess(res, report);
+  } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/affiliation/schools/report/excel
+ * Genuine XLSX using the same scoped report snapshot as the JSON endpoint.
+ */
+router.get('/schools/report/excel', importExportLimiter, async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
+
+    const report = await affSvc.getSchoolsReport(affId);
+    const workbook = buildAffiliationSchoolsWorkbook(report);
+    // Finish serialization before sending attachment headers so errors remain JSON.
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="affiliation-schools-report.xlsx"');
+    return res.send(Buffer.from(buffer));
+  } catch (err) { next(err); }
+});
+
+/**
  * GET /api/affiliation/students
  * Query: search, grade, school_id, page, per_page, sort, order
  */
@@ -204,12 +244,12 @@ router.get('/students', async (req, res, next) => {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
-    const { search, grade, school_id, vehicle_id, sort, order } = req.query;
+    const { search, grade, school_id, vehicle_id, has_vehicle, sort, order } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
 
     const result = await affSvc.getStudents(affId, {
-      search, grade, school_id, vehicle_id, page, per_page, sort, order,
+      search, grade, school_id, vehicle_id, has_vehicle, page, per_page, sort, order,
     });
     return sendSuccess(res, result.students, 'OK', result.meta);
   } catch (err) {
@@ -303,7 +343,7 @@ router.get('/missing', async (req, res, next) => {
               s.morning_enabled, s.evening_enabled,
               ds.morning_done, ds.evening_done
        FROM students s
-       JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ?
+       JOIN schools sc ON sc.id = s.school_id AND sc.affiliation_id = ? AND sc.is_deleted = FALSE
        LEFT JOIN vehicles v ON v.id = s.vehicle_id
        LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
        LEFT JOIN student_leaves sl ON sl.student_id = s.id AND sl.leave_date = ? AND sl.cancelled = FALSE
@@ -370,11 +410,13 @@ router.post('/school-accounts/:id/reset-password', async (req, res, next) => {
   try {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
     const { password } = req.body;
     if (!password) return sendError(res, 'password จำเป็น', [], 400);
 
     const result = await affAdminSvc.resetSchoolPassword({
-      affiliationId: affId, accountId: parseInt(req.params.id, 10),
+      affiliationId: affId, accountId,
       newPassword: password, userId: req.user.id,
     });
     return sendSuccess(res, result, 'รีเซ็ตรหัสผ่านสำเร็จ');
@@ -385,10 +427,12 @@ router.put('/school-accounts/:id', async (req, res, next) => {
   try {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
     const { is_active } = req.body;
 
     const result = await affAdminSvc.toggleSchoolAccount({
-      affiliationId: affId, accountId: parseInt(req.params.id, 10),
+      affiliationId: affId, accountId,
       isActive: is_active, userId: req.user.id,
     });
     return sendSuccess(res, result, 'อัปเดตสำเร็จ');
@@ -542,7 +586,7 @@ router.post('/school-accounts/import/commit', importExportLimiter, importUpload.
 
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 
-router.get('/audit-logs', async (req, res, next) => {
+router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
   try {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
@@ -568,7 +612,9 @@ router.get('/audit-logs', async (req, res, next) => {
     )`;
     const params = [affId, affId, affId, affId];
 
-    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // Shared with /api/reports and admin: a shape-only regex accepted
+    // 2026-13-45. Ignore-if-invalid behaviour below is unchanged.
+    const isValidDate = isCalendarDate;
     if (action) { scopeWhere += ' AND al.action = ?'; params.push(action); }
     if (date_from && isValidDate(date_from)) { scopeWhere += ' AND al.created_at >= ?'; params.push(`${date_from} 00:00:00`); }
     if (date_to && isValidDate(date_to)) { scopeWhere += ' AND al.created_at <= ?'; params.push(`${date_to} 23:59:59`); }
@@ -587,7 +633,7 @@ router.get('/audit-logs', async (req, res, next) => {
       const truncated = rows.length > 5000;
       const csv = auditRowsToCsv(rows.slice(0, 5000));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=audit_affiliation_${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader('Content-Disposition', `attachment; filename=audit_affiliation_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
       logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'audit_csv', entityId: 'affiliation',
         newValue: { role: req.user.role, truncated }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
@@ -742,7 +788,9 @@ router.get('/transfer-requests/:id', async (req, res, next) => {
     const transfer = require('../services/studentTransfer.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    const data = await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    const data = await transfer.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
     return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
@@ -752,10 +800,12 @@ router.post('/transfer-requests/:id/approve', async (req, res, next) => {
     const transfer = require('../services/studentTransfer.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     // Verify the request belongs to this affiliation
-    await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
-    const out = await transfer.approveAndApply(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+    await transfer.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
+    const out = await transfer.approveAndApply(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(requestId),
       newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     const msg = out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
       : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
@@ -770,9 +820,11 @@ router.post('/transfer-requests/:id/reject', async (req, res, next) => {
     const transfer = require('../services/studentTransfer.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    await transfer.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
-    const out = await transfer.reject(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(req.params.id),
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    await transfer.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
+    const out = await transfer.reject(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId),
       newValue: { result: 'REJECTED', rejected_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }
@@ -794,7 +846,9 @@ router.get('/vehicle-requests/:id', async (req, res, next) => {
     const vr = require('../services/vehicleRequest.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    const data = await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    const data = await vr.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
     return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
@@ -804,9 +858,11 @@ router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
     const vr = require('../services/vehicleRequest.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
-    const out = await vr.approveVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(req.params.id),
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    await vr.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
+    const out = await vr.approveVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(requestId),
       newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }
@@ -817,9 +873,11 @@ router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
     const vr = require('../services/vehicleRequest.service');
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'กรุณาระบุสังกัด', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 400);
-    await vr.getDetailForAffiliation(pool, { requestId: parseInt(req.params.id, 10), affiliationId: affId });
-    const out = await vr.rejectVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
-    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(req.params.id),
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    await vr.getDetailForAffiliation(pool, { requestId, affiliationId: affId });
+    const out = await vr.rejectVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'vehicle_request', entityId: String(requestId),
       newValue: { result: 'REJECTED', rejected_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
   } catch (err) { next(err); }

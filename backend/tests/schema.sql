@@ -1200,6 +1200,149 @@ ALTER TABLE audit_logs
        'GEOFENCE_ENTER','GEOFENCE_EXIT','ROUTE_DEVIATION','ETA_REFRESH')
   NOT NULL, ALGORITHM=INSTANT;
 
+-- Migration 049: admin password recovery (dark by default)
+CREATE TABLE IF NOT EXISTS user_recovery_channels (
+  id bigint NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  provider enum('LINE') NOT NULL,
+  provider_subject varchar(100) NOT NULL,
+  is_verified tinyint(1) NOT NULL DEFAULT '1',
+  verified_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_recovery_channel_user_provider (user_id, provider),
+  UNIQUE KEY uq_recovery_channel_subject (provider, provider_subject),
+  CONSTRAINT fk_recovery_channel_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_recovery_codes (
+  id bigint NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  code_hash char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  used_at timestamp NULL,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_recovery_code_hash (code_hash),
+  KEY idx_recovery_code_user_unused (user_id, used_at),
+  CONSTRAINT fk_recovery_code_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS password_reset_requests (
+  id char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  user_id int NOT NULL,
+  token_hash char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  expires_at timestamp NOT NULL,
+  used_at timestamp NULL,
+  delivery_status enum('PENDING','SENT','FAILED') NOT NULL DEFAULT 'PENDING',
+  failed_attempts tinyint unsigned NOT NULL DEFAULT '0',
+  request_ip_hash char(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  active_user_id int GENERATED ALWAYS AS ((case when (`used_at` is null) then `user_id` else NULL end)) STORED,
+  created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_password_reset_token_hash (token_hash),
+  UNIQUE KEY uq_password_reset_one_active_per_user (active_user_id),
+  KEY idx_password_reset_user_active (user_id, used_at, expires_at),
+  KEY idx_password_reset_expiry (expires_at),
+  CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+--
+-- Migration 050 — participatory-administration cases.
+-- Added here so the disposable test database matches the repository's
+-- migration set: without it, integration tests could never exercise the
+-- participation workflow that migration 050 introduces. Kept byte-compatible
+-- with migrations/050_participation_cases.sql.
+--
+DROP TABLE IF EXISTS `participation_case_events`;
+DROP TABLE IF EXISTS `participation_cases`;
+CREATE TABLE `participation_cases` (
+  id                 BIGINT NOT NULL AUTO_INCREMENT,
+  case_no            VARCHAR(32) NOT NULL,
+  case_type          ENUM('POLICY_PROPOSAL','SERVICE_ISSUE','SAFETY_CONCERN','DATA_QUALITY','RESOURCE_REQUEST','OTHER') NOT NULL,
+  subject            VARCHAR(200) NOT NULL,
+  body               TEXT NULL,
+  scope_type         ENUM('SCHOOL','AFFILIATION','PROVINCE','TRANSPORT') NOT NULL,
+  scope_id           VARCHAR(20) NULL,
+  initiated_by       INT NULL,
+  initiated_role     ENUM('driver','school','affiliation','province','transport','admin','parent') NOT NULL,
+  linked_entity_type VARCHAR(50) NULL,
+  linked_entity_id   VARCHAR(64) NULL,
+  status             ENUM('SUBMITTED','ACKNOWLEDGED','IN_CONSULTATION','DECIDED','ASSIGNED','COMPLETED','CLOSED','WITHDRAWN') NOT NULL DEFAULT 'SUBMITTED',
+  decision           ENUM('APPROVED','REJECTED','DEFERRED','NO_ACTION_NEEDED') NULL,
+  decision_rationale TEXT NULL,
+  decided_by         INT NULL,
+  decided_at         TIMESTAMP NULL,
+  assigned_to        INT NULL,
+  due_at             TIMESTAMP NULL,
+  completed_at       TIMESTAMP NULL,
+  feedback_sent_at   TIMESTAMP NULL,
+  created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_participation_case_no (case_no),
+  KEY idx_participation_case_scope (scope_type, scope_id, status),
+  KEY idx_participation_case_status (status, created_at),
+  KEY idx_participation_case_assigned (assigned_to, status),
+  KEY idx_participation_case_linked (linked_entity_type, linked_entity_id),
+  CONSTRAINT fk_participation_case_initiator FOREIGN KEY (initiated_by) REFERENCES users (id),
+  CONSTRAINT fk_participation_case_decider FOREIGN KEY (decided_by) REFERENCES users (id),
+  CONSTRAINT fk_participation_case_assignee FOREIGN KEY (assigned_to) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `participation_case_events` (
+  id            BIGINT NOT NULL AUTO_INCREMENT,
+  case_id       BIGINT NOT NULL,
+  event_type    ENUM('SUBMITTED','ACKNOWLEDGED','COMMENTED','CONSULTED','DECIDED','ASSIGNED','COMPLETED','FEEDBACK_SENT','WITHDRAWN') NOT NULL,
+  actor_user_id INT NULL,
+  actor_role    ENUM('driver','school','affiliation','province','transport','admin','parent') NOT NULL,
+  note          TEXT NULL,
+  evidence_ref  VARCHAR(200) NULL,
+  occurred_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_participation_event_case (case_id, occurred_at),
+  KEY idx_participation_event_type (event_type, occurred_at),
+  KEY idx_participation_event_actor (actor_user_id, occurred_at),
+  CONSTRAINT fk_participation_event_case FOREIGN KEY (case_id) REFERENCES participation_cases (id),
+  CONSTRAINT fk_participation_event_actor FOREIGN KEY (actor_user_id) REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Migration 051 — shared security state (task A1-9).
+-- The test database is built from THIS file, not from migrations/, so a new
+-- table has to be added here too or every login in the suite queries a table
+-- that does not exist.
+--
+DROP TABLE IF EXISTS `login_lockouts`;
+CREATE TABLE login_lockouts (
+  key_hash      CHAR(64) NOT NULL,
+  fail_count    INT NOT NULL DEFAULT 0,
+  window_start  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (key_hash),
+  KEY idx_ll_window (window_start)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `line_webhook_events_seen`;
+CREATE TABLE line_webhook_events_seen (
+  event_id   VARCHAR(64) NOT NULL,
+  seen_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id),
+  KEY idx_lwes_seen (seen_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `line_bind_lockouts`;
+CREATE TABLE line_bind_lockouts (
+  lock_type     ENUM('phone','student','pair','sub') NOT NULL,
+  key_hash      CHAR(64) NOT NULL,
+  attempt_count INT NOT NULL DEFAULT 0,
+  window_start  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  locked_until  TIMESTAMP NULL DEFAULT NULL,
+  PRIMARY KEY (lock_type, key_hash),
+  KEY idx_lbl_window (window_start),
+  KEY idx_lbl_locked (locked_until)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;

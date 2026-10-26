@@ -12,6 +12,7 @@ const { authenticate } = require('../middleware/auth');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit } = require('../utils/audit');
 const { validatePassword } = require('../utils/passwordPolicy');
+const { sessionResetJti, durationMs, recordSessionReset, issuedBeforeReset } = require('../utils/sessionReset');
 
 const router = express.Router();
 
@@ -28,28 +29,21 @@ const JWT_ALG = 'HS256';
 // is a constant that no real password equals.
 const DUMMY_BCRYPT_HASH = bcrypt.hashSync('lampang-login-timing-equaliser', BCRYPT_COST);
 
-// In-process per-(username+IP) failed-login lockout, layered on top of the
-// per-IP rate limiter. Stops sustained guessing against a single account even
-// when the attacker stays under the IP limit. Single-instance (pm2 fork); for a
-// multi-instance deployment move this to a shared store (Redis / DB table).
-const LOGIN_FAILS = new Map();
-const LOGIN_LOCK = { THRESHOLD: 10, WINDOW_MS: 15 * 60 * 1000 };
-function loginKey(username, ip) {
-  return `${String(username || '').trim().toLowerCase()}|${ip || ''}`;
-}
-function isLoginLocked(key) {
-  const e = LOGIN_FAILS.get(key);
-  if (!e) return false;
-  if (Date.now() - e.first > LOGIN_LOCK.WINDOW_MS) { LOGIN_FAILS.delete(key); return false; }
-  return e.count >= LOGIN_LOCK.THRESHOLD;
-}
-function noteLoginFail(key) {
-  const now = Date.now();
-  const e = LOGIN_FAILS.get(key);
-  if (!e || now - e.first > LOGIN_LOCK.WINDOW_MS) LOGIN_FAILS.set(key, { count: 1, first: now });
-  else e.count += 1;
-}
-function clearLoginFails(key) { LOGIN_FAILS.delete(key); }
+// Per-(username+IP) failed-login lockout, layered on top of the per-IP rate
+// limiter. Stops sustained guessing against a single account even when the
+// attacker stays under the IP limit.
+//
+// A1-9: this used to be a Map in this process, with a comment saying it had to
+// move before running more than one instance. It has. The counter now lives in
+// login_lockouts (migration 051) so N instances enforce one ceiling of 10
+// rather than N ceilings of 10, and it survives a restart — a deploy no longer
+// releases every account an attacker was working on.
+const {
+  loginLockKey: loginKey,
+  isLoginLocked,
+  noteLoginFail,
+  clearLoginFails,
+} = require('../utils/sharedSecurityState');
 
 // ─── Rate limiters ──────────────────────────────────────────────────────────
 const loginLimiter = rateLimit({
@@ -59,6 +53,12 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: 'มีการพยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 15 นาที', errors: [], data: null },
 });
+
+// How long after rotation a re-presented refresh token is still read as a
+// client retry rather than a replay. Long enough for a mobile client to resend a
+// request whose response was lost, short enough that a stolen token used later
+// — the ordinary case — is caught.
+const REPLAY_GRACE_MS = 10 * 1000;
 
 const refreshLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -130,7 +130,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     }
 
     const lockKey = loginKey(username, req.ip);
-    if (isLoginLocked(lockKey)) {
+    if (await isLoginLocked(lockKey)) {
       return sendError(res, 'มีการพยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 15 นาที', [], 429);
     }
 
@@ -148,7 +148,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
       // Run a dummy bcrypt compare so the not-found path costs the same as a real
       // one — removes the timing oracle for username enumeration (auth-crypto).
       await bcrypt.compare(String(password), DUMMY_BCRYPT_HASH);
-      noteLoginFail(lockKey);
+      await noteLoginFail(lockKey);
       await logAudit({ userId: null, action: 'LOGIN', entityType: 'user', entityId: null,
         newValue: { username: String(username).trim(), result: 'failed', reason: 'user_not_found' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
@@ -159,7 +159,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     if (!user.is_active) {
       await bcrypt.compare(String(password), DUMMY_BCRYPT_HASH); // equalise timing
-      noteLoginFail(lockKey);
+      await noteLoginFail(lockKey);
       await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
         newValue: { username: user.username, result: 'failed', reason: 'account_disabled' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
@@ -171,14 +171,14 @@ router.post('/login', loginLimiter, async (req, res, next) => {
 
     const passwordMatch = await bcrypt.compare(String(password), user.password_hash);
     if (!passwordMatch) {
-      noteLoginFail(lockKey);
+      await noteLoginFail(lockKey);
       await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
         newValue: { username: user.username, result: 'failed', reason: 'wrong_password' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
       return sendError(res, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', [], 401);
     }
 
-    clearLoginFails(lockKey);
+    await clearLoginFails(lockKey);
 
     // Update last_login
     await pool.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
@@ -330,13 +330,52 @@ router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
       return sendError(res, 'Invalid or expired refresh token', [], 401);
     }
 
-    // Check revocation list
-    const [revoked] = await pool.query(
-      'SELECT jti FROM revoked_tokens WHERE jti = ? LIMIT 1',
-      [payload.jti]
+    // Check the revocation list, and read this user's session-reset cutoff in
+    // the same round trip.
+    const [revokedRows] = await pool.query(
+      'SELECT jti, revoked_at FROM revoked_tokens WHERE jti IN (?, ?)',
+      [payload.jti, sessionResetJti(payload.sub)]
     );
-    if (revoked.length > 0) {
-      return sendError(res, 'Refresh token has been revoked', [], 401);
+    const revoked = revokedRows.find((r) => r.jti === payload.jti) || null;
+    const resetRow = revokedRows.find((r) => r.jti === sessionResetJti(payload.sub)) || null;
+
+    // A reset already fired for this account; anything minted before it is gone.
+    if (issuedBeforeReset(payload.iat, resetRow && resetRow.revoked_at)) {
+      return sendError(res, 'เซสชันถูกยกเลิกเพื่อความปลอดภัย กรุณาเข้าสู่ระบบใหม่', [{ code: 'SESSION_REVOKED' }], 401);
+    }
+
+    if (revoked) {
+      // Rotation puts the previous token here on every legitimate refresh, so a
+      // hit is not automatically theft: a client that retried a request whose
+      // response it never saw sends the same token again, seconds later, in good
+      // faith. Inside REPLAY_GRACE_MS that is treated as the retry it almost
+      // certainly is — a plain 401, and the client logs in again.
+      //
+      // Past the grace window there is no benign reading. A well-behaved client
+      // does not hold a token it exchanged minutes ago, so two parties held it,
+      // and rotation alone would leave whichever one won the race rotating a
+      // valid token forever while the victim saw a single logout. Every session
+      // for the account ends here, and both sides have to authenticate again.
+      const revokedAgeMs = Date.now() - new Date(revoked.revoked_at).getTime();
+      if (revokedAgeMs > REPLAY_GRACE_MS) {
+        await recordSessionReset(pool, payload.sub, durationMs(env.jwt.refreshExpiresIn));
+        await logAudit({
+          userId: payload.sub,
+          action: 'LOGIN',
+          entityType: 'refresh_token_replay',
+          entityId: String(payload.sub),
+          newValue: { jti: payload.jti, revoked_age_seconds: Math.round(revokedAgeMs / 1000) },
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        });
+        return sendError(
+          res,
+          'ตรวจพบการใช้โทเคนซ้ำ ระบบได้ยกเลิกทุกเซสชันของบัญชีนี้เพื่อความปลอดภัย กรุณาเข้าสู่ระบบใหม่',
+          [{ code: 'REFRESH_TOKEN_REPLAY' }],
+          401
+        );
+      }
+      return sendError(res, 'Refresh token has been revoked', [{ code: 'REFRESH_TOKEN_REVOKED' }], 401);
     }
 
     // Check user still active

@@ -7,8 +7,13 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const { logAudit } = require('../utils/audit');
+const { readIdParam } = require('../utils/pathParams');
 const transportSvc = require('../services/transport.service');
 const ppSvc = require('../services/pickupPoint.service');
+const { importExportLimiter } = require('../middleware/rateLimiters');
+const { COLUMNS: SAFETY_EXPORT_COLUMNS, encodeSafetyCsv } = require('../utils/transportSafetyCsv');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
+const incidentSvc = require('../services/transportIncident.service');
 
 // All routes require transport or admin role
 router.use(authenticate, requireRole('transport', 'admin'));
@@ -135,6 +140,25 @@ router.get('/dashboard', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Separate from /api/reports: transport never receives student/phone exports.
+router.get('/export/vehicles.csv', importExportLimiter, async (req, res, next) => {
+  try {
+    if (!await consumePolicyAction(req, res, {
+      context: 'transport.vehicle_export', subjectType: 'transport_safety_report', subjectId: 'vehicles',
+    })) return;
+    const rows = await transportSvc.getSafetyExportRows();
+    await logAudit({
+      userId: req.user.id, action: 'EXPORT', entityType: 'transport_safety_report',
+      entityId: 'vehicles', newValue: { rows: rows.length, fields: SAFETY_EXPORT_COLUMNS.map(([key]) => key) },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'], required: true,
+    });
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', 'attachment; filename="transport-vehicle-safety.csv"');
+    return res.send(encodeSafetyCsv(rows));
+  } catch (err) { return next(err); }
+});
+
 // ─── GET /api/transport/vehicles ────────────────────────────────────────────
 router.get('/vehicles', async (req, res, next) => {
   try {
@@ -184,6 +208,25 @@ router.get('/vehicles/expiring', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Dedicated incident view; do not broaden school, driver or export routes.
+router.get('/vehicles/:id/incident-roster', async (req, res, next) => {
+  res.set('Cache-Control', 'no-store, private');
+  try {
+    const data = await incidentSvc.getIncidentVehicle({
+      vehicleId: req.params.id, date: req.query.date, session: req.query.session,
+      role: req.user.role,
+    });
+    await logAudit({
+      userId: req.user.id, action: 'VIEW', entityType: 'transport_incident_roster',
+      entityId: req.params.id,
+      newValue: { date: data.date, session: data.session,
+        roster_count: data.current_roster.length, event_count: data.recorded_events.length },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'], required: true,
+    });
+    return sendSuccess(res, data);
+  } catch (err) { return next(err); }
+});
+
 // ─── GET /api/transport/vehicles/:id ────────────────────────────────────────
 router.get('/vehicles/:id', async (req, res, next) => {
   try {
@@ -217,6 +260,9 @@ router.post('/inspections', async (req, res, next) => {
     if (!validResults.includes(result)) {
       return sendError(res, `result must be one of: ${validResults.join(', ')}`, [], 400);
     }
+    if (!await consumePolicyAction(req, res, {
+      context: 'transport.inspection_create', subjectType: 'vehicle', subjectId: vehicle_id,
+    })) return;
 
     // Date-bound validation + audit + eligibility refresh all happen atomically
     // inside the service (CLAUDE.md rule 7). Do not audit here.
@@ -239,8 +285,8 @@ router.post('/inspections', async (req, res, next) => {
 // ─── PUT /api/transport/inspections/:id ─────────────────────────────────────
 router.put('/inspections/:id', async (req, res, next) => {
   try {
-    const inspectionId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(inspectionId) || inspectionId <= 0) return sendError(res, 'invalid id', [], 400);
+    const inspectionId = readIdParam(req, res);
+    if (inspectionId === null) return;
 
     const { expiry_date, result, notes } = req.body;
     if (!result) return sendError(res, 'result is required', [], 400);
@@ -248,6 +294,9 @@ router.put('/inspections/:id', async (req, res, next) => {
     if (!validResults.includes(result)) {
       return sendError(res, `result must be one of: ${validResults.join(', ')}`, [], 400);
     }
+    if (!await consumePolicyAction(req, res, {
+      context: 'transport.inspection_update', subjectType: 'vehicle_inspection', subjectId: inspectionId,
+    })) return;
 
     // Ownership check, date-bound validation, audit and eligibility refresh all
     // happen atomically inside the service (rule 7). 404/403 surface from there.
@@ -269,17 +318,12 @@ router.put('/inspections/:id', async (req, res, next) => {
 // ─── DELETE /api/transport/inspections/:id — ลบผลตรวจที่ลงผิด (แก้เอง) ────────
 router.delete('/inspections/:id', async (req, res, next) => {
   try {
-    const inspectionId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(inspectionId) || inspectionId <= 0) return sendError(res, 'invalid id', [], 400);
+    const inspectionId = readIdParam(req, res);
+    if (inspectionId === null) return;
 
-    const old = await transportSvc.deleteInspection({
+    await transportSvc.deleteInspection({
       inspectionId, userId: req.user.id, isAdmin: req.user.role === 'admin',
-    });
-
-    await logAudit({
-      userId: req.user.id, action: 'DELETE', entityType: 'vehicle_inspection', entityId: inspectionId,
-      oldValue: { vehicle_id: old.vehicle_id, result: old.result, expiry_date: old.expiry_date, inspection_date: old.inspection_date, notes: old.notes },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      ip: req.ip, userAgent: req.headers['user-agent'],
     });
 
     sendSuccess(res, null, 'ลบผลตรวจสำเร็จ');

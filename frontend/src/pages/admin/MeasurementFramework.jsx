@@ -1,6 +1,8 @@
-import { ChevronDown, AlertTriangle } from 'lucide-react';
+import { ChevronDown, AlertTriangle, ClipboardCheck } from 'lucide-react';
 import { useState } from 'react';
-import { ROLES, TAB_IDS, READINESS, SOURCE_TAGS } from '../../config/measurementFramework';
+import { Link } from 'react-router-dom';
+import { AlertBanner } from '../../components/ui';
+import { ROLES, TAB_IDS, PROPOSED_DATA_BASIS, SOURCE_TAGS } from '../../config/measurementFramework';
 
 const TABS = Object.values(TAB_IDS);
 const COLOR_MAP = {
@@ -13,6 +15,14 @@ const CODE_BG = {
 };
 const THRESHOLD_COLOR = { green: 'bg-green-50 text-green-700 border-green-200', amber: 'bg-amber-50 text-amber-700 border-amber-200', red: 'bg-red-50 text-red-700 border-red-200' };
 
+/**
+ * Renders the measurement plan from `config/measurementFramework.js`. Every
+ * value on this page is hand-written in that file, so the page must never let
+ * a reader mistake it for the system's evaluation readiness — that number is
+ * computed from evidence on the server and shown at /admin/evaluation. The
+ * banner below is the page's own disclaimer and belongs above the content, not
+ * in a document beside it.
+ */
 export default function MeasurementFramework() {
   const [expanded, setExpanded] = useState(ROLES[0]?.id || '');
 
@@ -22,8 +32,8 @@ export default function MeasurementFramework() {
       <div className="bg-navy-700 text-white rounded-xl px-5 py-5 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <p className="text-caption text-navy-200 uppercase tracking-wider">Measurement & Evaluation</p>
-            <h1 className="text-lg font-semibold">คู่มือวัดผลระบบ — แยกตามสิทธิ์ผู้ใช้</h1>
+            <p className="text-caption text-navy-200 uppercase tracking-wider">Measurement Plan (Proposed)</p>
+            <h1 className="text-lg font-semibold">แผนการวัดผลระบบ — แยกตามสิทธิ์ผู้ใช้</h1>
             <p className="text-sm text-navy-200 mt-1">ตัวชี้วัด • เกณฑ์ • การปรับระบบ • ข้อพึงระวัง</p>
           </div>
           <span className="bg-white/15 text-white text-sm font-medium px-4 py-2 rounded-full shrink-0">
@@ -31,6 +41,23 @@ export default function MeasurementFramework() {
           </span>
         </div>
       </div>
+
+      {/* The disclaimer that makes this page honest. */}
+      <AlertBanner variant="warn" className="mb-5"
+        title="หน้านี้คือแผนที่ตั้งใจจะวัด ไม่ใช่ความพร้อมของระบบ">
+        <p>
+          ตัวชี้วัด เป้าหมาย เกณฑ์ และข้อมูลที่ต้องใช้ทั้งหมดในหน้านี้ เขียนไว้ล่วงหน้าในไฟล์ตั้งค่า
+          ไม่ได้คำนวณจากข้อมูลจริง และยังไม่ผ่านการอนุมัติ จึงใช้ตอบไม่ได้ว่าตัวชี้วัดใดมีหลักฐานเพียงพอแล้ว
+          และห้ามนำตัวเลขเป้าหมาย/เกณฑ์ในหน้านี้ไปอ้างในรายงาน สรุปผู้บริหาร หรือชุดหลักฐานใด
+        </p>
+        <p className="mt-1.5">
+          สถานะที่คำนวณจากหลักฐานจริงอยู่ที่{' '}
+          <Link to="/admin/evaluation" className="inline-flex items-center gap-1 font-medium text-ink underline underline-offset-2">
+            <ClipboardCheck className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+            แดชบอร์ดประเมินผลแยกตามสิทธิ์
+          </Link>
+        </p>
+      </AlertBanner>
 
       {/* Intro */}
       <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-5 text-sm text-gray-600 space-y-1.5">
@@ -53,7 +80,7 @@ export default function MeasurementFramework() {
         <h3 className="text-sm font-semibold text-gray-700 mb-3">คำอธิบายสัญลักษณ์</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">แหล่งข้อมูล (Source Tags)</p>
+            <p className="text-xs font-semibold text-ink-muted mb-1.5">แหล่งข้อมูล (Source Tags)</p>
             <div className="flex flex-wrap gap-1.5">
               {Object.values(SOURCE_TAGS).map(s => (
                 <span key={s.label} className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.cls}`} title={s.full}>
@@ -63,10 +90,10 @@ export default function MeasurementFramework() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 mb-1.5">ความพร้อมในการวัด (Readiness)</p>
+            <p className="text-xs font-semibold text-ink-muted mb-1.5">ข้อมูลที่ตัวชี้วัดจะใช้ตามแผน (ข้อเสนอ ยังไม่อนุมัติ)</p>
             <div className="flex flex-wrap gap-1.5">
-              {Object.values(READINESS).map(r => (
-                <span key={r.label} className={`text-xs font-medium px-2 py-0.5 rounded-full ${r.cls}`}>{r.label}</span>
+              {Object.values(PROPOSED_DATA_BASIS).map(b => (
+                <span key={b.label} className={`text-xs font-medium px-2 py-0.5 rounded-full ${b.cls}`}>{b.label}</span>
               ))}
             </div>
           </div>
@@ -91,7 +118,7 @@ function RoleAccordion({ role, isOpen, onToggle }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-800">{role.name}</p>
-          <p className="text-xs text-gray-500">{role.subtitle}</p>
+          <p className="text-xs text-ink-muted">{role.subtitle}</p>
         </div>
         <ChevronDown
           className={`w-5 h-5 text-ink-muted shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -126,6 +153,12 @@ function RoleAccordion({ role, isOpen, onToggle }) {
 
           {activeTab === 'thresholds' && (
             <div className="space-y-2">
+              {/* The threshold numbers have no documented source; saying so
+                  here keeps the caveat next to them when someone screenshots
+                  just this tab. */}
+              <p className="text-xs text-ink-muted">
+                เกณฑ์ด้านล่างเป็นข้อเสนอในไฟล์ตั้งค่า ยังไม่มีเอกสารอ้างอิงและยังไม่ผ่านการอนุมัติ
+              </p>
               {role.thresholds.map((t, i) => (
                 <div key={i} className={`rounded-lg border px-4 py-2.5 ${THRESHOLD_COLOR[t.color] || 'bg-gray-50 text-gray-700 border-gray-200'}`}>
                   <span className="font-semibold text-sm">{t.level}:</span>
@@ -164,18 +197,23 @@ function RoleAccordion({ role, isOpen, onToggle }) {
 
 /* ── Metric Card ── */
 function MetricCard({ metric, index }) {
-  const r = READINESS[metric.readiness] || READINESS.partial;
+  // An unknown key used to fall back to the "partial" badge, which invented a
+  // claim about a metric whose data basis nobody had written down. A metric
+  // with no stated basis now shows no badge at all.
+  const basis = PROPOSED_DATA_BASIS[metric.data_basis] || null;
   return (
     <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
       <div className="flex items-start justify-between gap-2 mb-1">
         <div>
           <p className="text-sm font-semibold text-gray-800">
-            <span className="text-gray-400 mr-1">{index}.</span>
+            <span className="text-ink-muted mr-1">{index}.</span>
             {metric.title}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">{metric.desc}</p>
+          <p className="text-xs text-ink-muted mt-0.5">{metric.desc}</p>
         </div>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${r.cls}`}>{r.label}</span>
+        {basis && (
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${basis.cls}`}>{basis.label}</span>
+        )}
       </div>
       {metric.why && (
         <p className="text-xs text-teal-700 bg-teal-50 rounded px-2 py-1 mt-1 mb-1">
@@ -189,7 +227,7 @@ function MetricCard({ metric, index }) {
       )}
       <div className="flex flex-wrap items-center gap-2 mt-2">
         <span className="text-sm font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg">
-          เป้าหมาย: {metric.target}
+          เป้าหมายที่เสนอ: {metric.target}
         </span>
         {metric.sources.map(s => {
           const tag = SOURCE_TAGS[s];
@@ -198,7 +236,7 @@ function MetricCard({ metric, index }) {
           ) : null;
         })}
         {metric.forms?.length > 0 && metric.forms.map(f => (
-          <span key={f} className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{f}</span>
+          <span key={f} className="text-xs text-ink-muted bg-gray-100 px-1.5 py-0.5 rounded">{f}</span>
         ))}
       </div>
     </div>

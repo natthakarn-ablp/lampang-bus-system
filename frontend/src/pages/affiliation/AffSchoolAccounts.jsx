@@ -11,6 +11,7 @@ const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-b
 import { useToast } from '../../components/Toast';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../../utils/passwordPolicy';
 
 const ACCOUNTS_PAGE_SIZE = 10;
 
@@ -78,7 +79,7 @@ export default function AffSchoolAccounts() {
 
   // ─── Reset password ───────────────────────────────────────────────────
   async function handleReset() {
-    if (!resetForm.password || resetForm.password.length < 8) { toast.error('รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร'); return; }
+    if (!resetForm.password || resetForm.password.length < PASSWORD_MIN_LENGTH) { toast.error(PASSWORD_TOO_SHORT); return; }
     if (resetForm.password !== resetForm.confirm) { toast.error('รหัสผ่านยืนยันไม่ตรงกัน'); return; }
     setResetting(true);
     try {
@@ -399,7 +400,7 @@ export default function AffSchoolAccounts() {
                 <button
                   type="button" onClick={() => setConfirmCommit(true)}
                   disabled={committing || preview.summary.valid === 0}
-                  className="focus-ring text-sm font-semibold px-4 min-h-[44px] rounded-lg bg-success hover:opacity-90 text-white disabled:opacity-50 disabled:pointer-events-none transition"
+                  className="focus-ring text-sm font-semibold px-4 min-h-[44px] rounded-lg bg-success-ink hover:opacity-90 text-white disabled:opacity-50 disabled:pointer-events-none transition"
                 >
                   {committing ? 'กำลังนำเข้า…' : `ยืนยันนำเข้าเฉพาะรายการที่ผ่าน (${preview.summary.valid})`}
                 </button>
@@ -418,15 +419,15 @@ export default function AffSchoolAccounts() {
               {/* Summary cards */}
               <div className="grid grid-cols-3 gap-3 mt-4">
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
-                  <p className="text-xs text-gray-500">จำนวนทั้งหมด</p>
+                  <p className="text-xs text-ink-muted">จำนวนทั้งหมด</p>
                   <p className="text-xl font-bold text-gray-800">{preview.summary.total}</p>
                 </div>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-                  <p className="text-xs text-green-600">ผ่าน</p>
+                  <p className="text-xs text-success-ink">ผ่าน</p>
                   <p className="text-xl font-bold text-green-700">{preview.summary.valid}</p>
                 </div>
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-                  <p className="text-xs text-red-600">ไม่ผ่าน</p>
+                  <p className="text-xs text-danger-ink">ไม่ผ่าน</p>
                   <p className="text-xl font-bold text-red-700">{preview.summary.invalid}</p>
                 </div>
               </div>
@@ -508,7 +509,7 @@ export default function AffSchoolAccounts() {
         )}
         {accounts.length > ACCOUNTS_PAGE_SIZE && (
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-ink-muted">
               แสดง {accountRangeStart}-{accountRangeEnd} จากทั้งหมด {accounts.length} บัญชี
             </p>
             <div className="flex flex-wrap items-center justify-end gap-1.5">
@@ -567,7 +568,7 @@ export default function AffSchoolAccounts() {
             <button
               type="submit"
               form="reset-password-form"
-              disabled={resetting || resetForm.password.length < 8 || resetForm.password !== resetForm.confirm}
+              disabled={resetting || resetForm.password.length < PASSWORD_MIN_LENGTH || resetForm.password !== resetForm.confirm}
               className="focus-ring text-sm font-semibold px-4 min-h-[44px] rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white transition disabled:opacity-50 disabled:pointer-events-none"
             >
               {resetting ? 'กำลังรีเซ็ต…' : 'รีเซ็ตรหัสผ่าน'}
@@ -588,10 +589,10 @@ export default function AffSchoolAccounts() {
             type="password"
             required
             autoComplete="new-password"
-            helper="อย่างน้อย 8 ตัวอักษร"
+            helper={PASSWORD_HELPER}
             value={resetForm.password}
             onChange={v => setResetForm({ ...resetForm, password: v })}
-            error={resetForm.password && resetForm.password.length < 8 ? 'ต้องมีอย่างน้อย 8 ตัวอักษร' : undefined}
+            error={resetForm.password && resetForm.password.length < PASSWORD_MIN_LENGTH ? `ต้อง${PASSWORD_HELPER}` : undefined}
           />
           <FormField
             label="ยืนยันรหัสผ่านใหม่"

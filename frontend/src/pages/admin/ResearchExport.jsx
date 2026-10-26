@@ -7,6 +7,8 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { AppCard, AlertBanner, StatusBadge, FormField, SectionTitle } from '../../components/ui';
+import { describeBlockingReason } from '../../utils/evidenceStatus';
+import usePolicyAction from '../../hooks/usePolicyAction';
 
 const DATASETS = [
   { key: 'snapshots', label: 'Snapshots',       desc: 'daily_snapshots' },
@@ -25,6 +27,7 @@ const EXT_MAP = { json: 'json', csv: 'csv', excel: 'xlsx' };
 
 export default function ResearchExport() {
   const toast = useToast();
+  const { runWithPolicy, policyActionDialog } = usePolicyAction();
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   const [from, setFrom] = useState('2026-01-01');
   const [to, setTo] = useState(today);
@@ -37,6 +40,10 @@ export default function ResearchExport() {
   const [exporting, setExporting] = useState(null); // null | 'json' | 'csv' | 'excel'
 
   const [included, setIncluded] = useState(() => new Set(DATASETS.map(d => d.key)));
+
+  // Server-computed. Absent from an older backend, in which case no readiness
+  // claim is rendered at all rather than an assumed-good one.
+  const readiness = preview?.evidence_readiness || null;
 
   const fetchPreview = useCallback(async () => {
     setLoading(true);
@@ -66,26 +73,36 @@ export default function ResearchExport() {
     const include = DATASETS.filter(d => included.has(d.key)).map(d => d.key);
     if (include.length === 0) { toast.error('กรุณาเลือกอย่างน้อย 1 ชุดข้อมูล'); return; }
 
-    setExporting(format);
     try {
-      const token = localStorage.getItem('access_token');
-      const dateTag = `${from.replace(/-/g, '')}-${to.replace(/-/g, '')}`;
-      const url = `/api/admin/research-export?from=${from}&to=${to}&include=${include.join(',')}&download=true&format=${format}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `research-dataset-${dateTag}.${EXT_MAP[format]}`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast.success('ดาวน์โหลดสำเร็จ');
+      const sortedInclude = [...include].sort();
+      const result = await runWithPolicy({
+        context: 'admin.research_export', subjectType: 'research_export',
+        subjectId: `${from}:${to}:${format}:${sortedInclude.join(',')}`,
+        claim: { from, to, format, include: sortedInclude },
+      }, async (policyToken) => {
+        setExporting(format);
+        const token = localStorage.getItem('access_token');
+        const dateTag = `${from.replace(/-/g, '')}-${to.replace(/-/g, '')}`;
+        const url = `/api/admin/research-export?from=${from}&to=${to}&include=${include.join(',')}&download=true&format=${format}`;
+        const headers = { Authorization: `Bearer ${token}` };
+        if (policyToken) headers['X-Policy-Action-Token'] = policyToken;
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error('Export failed');
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `research-dataset-${dateTag}.${EXT_MAP[format]}`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        return { downloaded: true };
+      });
+      if (!result?.cancelled) toast.success('ดาวน์โหลดสำเร็จ');
     } catch {
       toast.error('ดาวน์โหลดไม่สำเร็จ');
     } finally { setExporting(null); }
   }
 
-  return (
+  return (<>
     <div className="p-3 sm:p-6 max-w-4xl mx-auto pb-10">
       <PageHeader
         icon={Download}
@@ -137,7 +154,7 @@ export default function ResearchExport() {
             })}
           </div>
           {included.size === 0 && (
-            <p className="mt-2 text-caption text-danger">เลือกอย่างน้อย 1 ชุดข้อมูลจึงจะส่งออกได้</p>
+            <p className="mt-2 text-caption text-danger-ink">เลือกอย่างน้อย 1 ชุดข้อมูลจึงจะส่งออกได้</p>
           )}
         </fieldset>
       </AppCard>
@@ -163,6 +180,38 @@ export default function ResearchExport() {
         ) : (
           <EmptyState title="ไม่มีข้อมูลในช่วงที่เลือก" description="ลองขยายช่วงวันที่" />
         )}
+
+        {/* Row counts read as "the dataset is this big". What the dataset can
+            and cannot support belongs next to them, not in a separate doc. */}
+        {readiness && (
+          <div className="mt-4">
+            <AlertBanner
+              variant={readiness.research_claims_allowed ? 'info' : 'warn'}
+              title={readiness.research_claims_allowed
+                ? 'ชุดข้อมูลนี้อยู่ในช่วง protocol ที่ freeze แล้ว'
+                : 'ชุดข้อมูลนี้ยังใช้อ้างผลวิจัยไม่ได้'}
+            >
+              {readiness.snapshot_freshness && (
+                <p>
+                  Snapshot ล่าสุด {readiness.snapshot_freshness.latest_snapshot_date || 'ยังไม่มี'}
+                  {readiness.snapshot_freshness.age_days != null
+                    && ` (อายุ ${readiness.snapshot_freshness.age_days} วัน, เกณฑ์ ${readiness.snapshot_freshness.max_age_days} วัน)`}
+                  {readiness.snapshot_freshness.fresh ? ' — อยู่ในเกณฑ์' : ' — เก่าเกินเกณฑ์'}
+                </p>
+              )}
+              {readiness.summary?.by_status && (
+                <p className="mt-1">
+                  ตัวชี้วัด: มีหลักฐานระบบเบื้องต้น {readiness.summary.by_status.system_evidence} ·
+                  {' '}มีหลักฐานบางส่วน {readiness.summary.by_status.partial_evidence} ·
+                  {' '}ยังไม่มีหลักฐานพอ {readiness.summary.by_status.evidence_missing} จาก {readiness.summary.total}
+                </p>
+              )}
+              {readiness.blocking_reasons?.length > 0 && (
+                <p className="mt-1">เหตุผล: {readiness.blocking_reasons.map(describeBlockingReason).join(' · ')}</p>
+              )}
+            </AlertBanner>
+          </div>
+        )}
       </AppCard>
 
       {/* Download */}
@@ -178,7 +227,7 @@ export default function ResearchExport() {
               className="focus-ring flex flex-col items-center justify-center gap-0.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold py-3 min-h-[56px] rounded-xl transition disabled:opacity-50 disabled:pointer-events-none"
             >
               <span className="text-base">{exporting === f.key ? 'กำลังสร้าง…' : f.label}</span>
-              <span className="text-caption font-normal text-white/80">{f.hint}</span>
+              <span className="text-caption font-normal text-white">{f.hint}</span>
             </button>
           ))}
         </div>
@@ -230,7 +279,8 @@ export default function ResearchExport() {
         ชุดข้อมูลมี audit log ระดับผู้ใช้ — โปรดตรวจสอบขอบเขตการเผยแพร่ก่อนนำออกนอกหน่วยงาน
       </AlertBanner>
     </div>
-  );
+    {policyActionDialog}
+  </>);
 }
 
 function fmtDate(d) {

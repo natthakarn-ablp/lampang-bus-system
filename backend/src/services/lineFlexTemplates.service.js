@@ -1,5 +1,7 @@
 'use strict';
 
+const { formatGradeClass } = require('../utils/gradeDisplay');
+
 /**
  * lineFlexTemplates.service.js — Phase 10.3E-HF4.2
  *
@@ -146,7 +148,7 @@ function separator(margin = 'md') {
 function childBullet(child) {
   const name = `${child.prefix || ''}${child.first_name} ${child.last_name}`.trim();
   const meta = [
-    [child.grade, child.classroom].filter(Boolean).join(' / '),
+    formatGradeClass(child.grade, child.classroom, ''),
     child.school_name,
   ].filter(Boolean).join(' · ');
   return {

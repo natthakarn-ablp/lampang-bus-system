@@ -3,10 +3,14 @@ import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { AlertBanner } from '../../components/ui';
 
 export default function SystemHealth() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Operations checks (integrity, backup, migrations, policy-notice tables…)
+  // load separately so a failure there never hides the usage statistics.
+  const [ops, setOps] = useState({ checks: null, failed: false });
 
   function refresh() {
     setLoading(true);
@@ -14,6 +18,9 @@ export default function SystemHealth() {
       .then(r => setData(r.data?.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+    api.get('/admin/operations/health')
+      .then(r => setOps({ checks: r.data?.data?.checks || [], failed: false }))
+      .catch(() => setOps({ checks: null, failed: true }));
   }
 
   useEffect(() => { refresh(); }, []);
@@ -36,6 +43,8 @@ export default function SystemHealth() {
           </button>
         }
       />
+
+      <OperationsAlerts ops={ops} />
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
@@ -77,7 +86,7 @@ export default function SystemHealth() {
                 max={data.top_features[0]?.cnt || 1} color="bg-green-500" />
             ))}
             {(!data.top_features || data.top_features.length === 0) && (
-              <p className="text-sm text-gray-400">ยังไม่มีข้อมูล</p>
+              <p className="text-sm text-ink-muted">ยังไม่มีข้อมูล</p>
             )}
           </div>
         </div>
@@ -91,7 +100,7 @@ export default function SystemHealth() {
                 max={data.top_features?.[0]?.cnt || 1} color="bg-gray-400" />
             ))}
             {(!data.bottom_features || data.bottom_features.length === 0) && (
-              <p className="text-sm text-gray-400">ยังไม่มีข้อมูล</p>
+              <p className="text-sm text-ink-muted">ยังไม่มีข้อมูล</p>
             )}
           </div>
         </div>
@@ -117,7 +126,7 @@ export default function SystemHealth() {
           {data.role_activity?.map(r => (
             <div key={r.role} className="bg-gray-50 rounded-lg px-4 py-2 text-center">
               <p className="text-lg font-semibold text-gray-700">{r.cnt}</p>
-              <p className="text-xs text-gray-500">{r.role || 'ไม่ระบุ'}</p>
+              <p className="text-xs text-ink-muted">{r.role || 'ไม่ระบุ'}</p>
             </div>
           ))}
         </div>
@@ -133,7 +142,7 @@ export default function SystemHealth() {
               const pct = maxCnt > 0 ? Math.round((d.cnt / maxCnt) * 100) : 0;
               return (
                 <div key={d.date} className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-500 w-20 shrink-0">
+                  <span className="text-ink-muted w-20 shrink-0">
                     {new Date(d.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
                   </span>
                   <div className="flex-1 bg-gray-100 rounded-full h-4">
@@ -145,14 +154,43 @@ export default function SystemHealth() {
             })}
           </div>
         ) : (
-          <p className="text-sm text-gray-400">ยังไม่มีข้อมูล</p>
+          <p className="text-sm text-ink-muted">ยังไม่มีข้อมูล</p>
         )}
       </div>
 
-      <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-gray-500">
+      <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs text-ink-muted">
         <p><strong>หมายเหตุ:</strong> Error count ประมาณจากล็อกอินล้มเหลว — ระบบยังไม่มี persistent error log ที่แยกเก็บ (partial)</p>
       </div>
     </div>
+  );
+}
+
+const SEVERITY_TH = { CRITICAL: 'วิกฤต', WARN: 'ควรตรวจสอบ' };
+
+/** Non-OK operations checks only; an all-clear stays quiet. */
+function OperationsAlerts({ ops }) {
+  if (ops.failed) {
+    return (
+      <AlertBanner variant="warn" title="ตรวจสภาพระบบไม่สำเร็จ" className="mb-6">
+        โหลดผลตรวจสภาพระบบไม่ได้ ข้อมูลการใช้งานด้านล่างยังแสดงตามปกติ
+      </AlertBanner>
+    );
+  }
+  const issues = (ops.checks || []).filter(c => c.severity === 'WARN' || c.severity === 'CRITICAL');
+  if (!issues.length) return null;
+  const critical = issues.some(c => c.severity === 'CRITICAL');
+  return (
+    <AlertBanner variant={critical ? 'danger' : 'warn'} title={`ผลตรวจสภาพระบบ: ${issues.length} รายการที่ต้องดูแล`} className="mb-6">
+      <ul className="space-y-1">
+        {issues.map(c => (
+          <li key={c.key}>
+            <span className="font-semibold">{SEVERITY_TH[c.severity]}</span> · {c.label}
+            {c.value != null && <span className="tabular-nums"> — {String(c.value)}</span>}
+            {c.detail && <span className="block text-caption">{c.detail}</span>}
+          </li>
+        ))}
+      </ul>
+    </AlertBanner>
   );
 }
 
@@ -176,7 +214,7 @@ function FeatureBar({ rank, label, count, max, color }) {
   const pct = max > 0 ? Math.round((count / max) * 100) : 0;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-gray-400 w-5">{rank}.</span>
+      <span className="text-xs text-ink-muted w-5">{rank}.</span>
       <span className="text-sm text-gray-700 w-32 truncate">{label}</span>
       <div className="flex-1 bg-gray-100 rounded-full h-3">
         <div className={`h-3 rounded-full ${color}`} style={{ width: `${pct}%` }} />

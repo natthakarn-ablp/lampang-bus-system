@@ -96,7 +96,7 @@ case "$OFFHOST_BACKUP_METHOD" in
     fi
     echo "[offhost-sync] remote:   $REMOTE"
 
-    RCLONE_FLAGS=( --include "lampang_bus_*.sql.gz" --include "lampang_bus_*.sql.gz.sha256" --exclude "*" )
+    RCLONE_FLAGS=( --filter "+ lampang_bus_*.sql.gz" --filter "+ lampang_bus_*.sql.gz.sha256" --filter "- *" )
     if [ "$DRY_RUN" = "1" ]; then
       RCLONE_FLAGS+=( --dry-run )
     fi

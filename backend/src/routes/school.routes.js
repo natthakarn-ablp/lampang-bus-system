@@ -2,6 +2,7 @@
 
 const express = require('express');
 const multer  = require('multer');
+const { multipartLimits } = require('../utils/multipartLimits');
 const path    = require('path');
 const fs      = require('fs');
 const ExcelJS = require('exceljs');
@@ -9,6 +10,8 @@ const router  = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
+const { isCalendarDate } = require('../utils/calendarDate');
+const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const env     = require('../config/env');
@@ -25,6 +28,7 @@ const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const checkinSvc = require('../services/checkin.service');
+const { consumePolicyAction } = require('../utils/policyActionEvidence');
 
 /**
  * Minimal RFC 4180 CSV parser — handles quoted fields with embedded commas
@@ -48,7 +52,8 @@ function resolveSchoolId(req) {
 
 // Phase 7.11.5 — extracted into shared util so admin.routes.js can
 // use the same whitelist.
-const { VALID_GRADE_SCOPES, isValidGradeScope } = require('../utils/gradeScope');
+const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents } = require('../utils/gradeScope');
+const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
 
 /**
  * Resolve grade scope for a school-scoped request.
@@ -104,7 +109,7 @@ const importUpload = multer({
     destination: (_req, _file, cb) => cb(null, importUploadDir),
     filename: (req, file, cb) => cb(null, `import-${req.user.id}-${Date.now()}${path.extname(file.originalname)}`),
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: multipartLimits(5 * 1024 * 1024),
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, ['.xlsx', '.xls', '.csv'].includes(ext));
@@ -132,11 +137,12 @@ function normalizePhone(raw) {
 }
 
 const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
+const { rejectOverLongFields } = require('../utils/fieldLength');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
   const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
-  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ' };
+  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ' };
   // Phase 10.12G — neutralise every cell + redact PII from audit values.
   const esc = csvCell;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
@@ -185,8 +191,12 @@ router.get('/no-show', async (req, res, next) => {
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const session = req.query.session === 'evening' ? 'evening' : 'morning';
     const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
-    const students = await checkinSvc.getNoShowStudents(pool, { schoolId, session, date });
-    return sendSuccess(res, { session, date: date || 'today', count: students.length, students });
+    // AUD-004 — this was the one read on the router that consulted neither
+    // resolveGradeScope nor requireFullSchoolScope, so a teacher pinned to one
+    // grade could name every child school-wide who missed the bus, on any date.
+    const gradeFilter = resolveGradeScope(req);
+    const students = await checkinSvc.getNoShowStudents(pool, { schoolId, session, date, gradeFilter });
+    return sendSuccess(res, { session, date: date || 'today', count: students.length, students, grade_scope: gradeFilter || null });
   } catch (err) { next(err); }
 });
 
@@ -195,7 +205,7 @@ router.get('/students', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const { search, grade, vehicle_id, morning_enabled, evening_enabled, sort, order } = req.query;
+    const { search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled, sort, order } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
     const include_deleted = req.query.include_deleted === '1' || req.query.include_deleted === 'true';
@@ -203,7 +213,7 @@ router.get('/students', async (req, res, next) => {
 
     const gradeFilter = resolveGradeScope(req);
     const result = await schoolSvc.getStudents(schoolId, {
-      search, grade, vehicle_id, morning_enabled, evening_enabled,
+      search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled,
       page, per_page, sort, order, gradeFilter, include_deleted, only_deleted,
     });
 
@@ -390,8 +400,8 @@ router.delete('/pickup-points/:id', requireFullSchoolScope, async (req, res, nex
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
 
     const point = await ppSvc.getPickupPointById(id);
     if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
@@ -422,8 +432,8 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
 
     const point = await ppSvc.getPickupPointById(pointId);
     if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
@@ -450,8 +460,8 @@ router.put('/pickup-points/:id/students', requireFullSchoolScope, async (req, re
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const pointId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(pointId) || pointId <= 0) return sendError(res, 'invalid id', [], 400);
+    const pointId = readIdParam(req, res, 'id');
+    if (pointId === null) return;
 
     if (!Array.isArray(req.body.student_ids)) {
       return sendError(res, 'student_ids must be an array', [], 400);
@@ -519,9 +529,14 @@ router.get('/missing', async (req, res, next) => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     const session = req.query.session; // optional: morning | evening
     const gradeFilter = resolveGradeScope(req);
-    const gradeAnd  = gradeFilter ? ' AND s.grade = ?' : '';
+    // Tolerant match, like every other grade filter in the school module. An
+    // exact `= ?` here hides a teacher's own pupils whenever their grade is
+    // stored in a variant spelling — the divergence gradeScopeCounts.test.js
+    // exists to catch, and the direction that fails silently.
+    const eqGrades = gradeFilter ? gradeEquivalents(gradeFilter) : null;
+    const gradeAnd  = eqGrades ? ` AND s.grade IN (${eqGrades.map(() => '?').join(',')})` : '';
     const baseParams = [today, today, session || 'morning', schoolId];
-    if (gradeFilter) baseParams.push(gradeFilter);
+    if (eqGrades) baseParams.push(...eqGrades);
     baseParams.push(session, session, session);
 
     const [rows] = await pool.query(
@@ -590,8 +605,8 @@ router.delete('/leaves/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const id = parseInt(req.params.id, 10);
-    if (!Number.isInteger(id) || id <= 0) return sendError(res, 'invalid id', [], 400);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
     const result = await leaveSvc.cancelLeaveBySchool(id, req.user.id, schoolId);
     return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
   } catch (err) { next(err); }
@@ -654,6 +669,144 @@ router.post('/checkin-override', requireFullSchoolScope, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// ─── POST /checkin-override/all ──────────────────────────────────────────────
+// School confirms a whole session on behalf of the driver, ticking only the
+// pupils who did NOT board. Everyone else eligible is confirmed present.
+// Same guard as the single-student path: grade-scoped teachers are blocked.
+
+router.post('/checkin-override/all', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) {
+      return sendError(
+        res,
+        req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียนที่ผูกกับบัญชีนี้',
+        [],
+        req.user.role === 'admin' ? 400 : 403
+      );
+    }
+
+    const { session, status, reason, absent_student_ids } = req.body || {};
+    const errors = [];
+    if (!['morning', 'evening'].includes(session)) {
+      errors.push({ field: 'session', message: "session ต้องเป็น 'morning' หรือ 'evening'" });
+    }
+    const finalStatus = status || 'CHECKED_IN';
+    if (!['CHECKED_IN', 'CHECKED_OUT'].includes(finalStatus)) {
+      errors.push({ field: 'status', message: "status ต้องเป็น 'CHECKED_IN' หรือ 'CHECKED_OUT'" });
+    }
+    const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+    if (!trimmedReason) {
+      errors.push({ field: 'reason', message: 'กรุณาระบุเหตุผลการยืนยันแทน' });
+    } else if (trimmedReason.length > 500) {
+      errors.push({ field: 'reason', message: 'เหตุผลต้องไม่เกิน 500 ตัวอักษร' });
+    }
+    // Cap the exception list. It names pupils who will NOT be confirmed, so an
+    // unbounded array is a way to make the request do nothing while looking
+    // like it worked; a school roster never legitimately needs more than this.
+    if (absent_student_ids !== undefined) {
+      if (!Array.isArray(absent_student_ids)) {
+        errors.push({ field: 'absent_student_ids', message: 'absent_student_ids ต้องเป็น array' });
+      } else if (absent_student_ids.length > 2000) {
+        errors.push({ field: 'absent_student_ids', message: 'รายชื่อที่ไม่ยืนยันยาวเกินกำหนด' });
+      }
+    }
+    if (errors.length) return sendError(res, 'ข้อมูลไม่ครบถ้วน', errors, 400);
+
+    const result = await checkinSvc.processSchoolOverrideAll(pool, {
+      userId:          req.user.id,
+      userRole:        req.user.role,
+      userDisplayName: req.user.displayName || req.user.username || null,
+      ipAddress:       req.ip,
+      userAgent:       req.headers['user-agent'],
+      schoolId,
+      session,
+      status:            finalStatus,
+      reason:            trimmedReason,
+      absentStudentIds:  absent_student_ids || [],
+    });
+
+    return sendSuccess(
+      res,
+      result,
+      `ยืนยันการรับ-ส่งแล้ว ${result.confirmed_count} คน · ไม่ยืนยัน ${result.absent_marked_count} คน`,
+      null,
+      201
+    );
+  } catch (err) { next(err); }
+});
+
+// ─── Teacher check (term 2, phase 1) ─────────────────────────────────────────
+// Teachers record arrivals (morning) and boardings (evening) at the school as
+// routine work. Unlike /checkin-override these are OPEN to grade teachers,
+// limited to their own grade by resolveGradeScope, and need no reason — the
+// audit row records who tapped. Full school accounts see the whole school.
+
+function teacherActor(req, schoolId) {
+  return {
+    userId:          req.user.id,
+    userRole:        req.user.role,
+    userDisplayName: req.user.displayName || req.user.username || null,
+    ipAddress:       req.ip,
+    userAgent:       req.headers['user-agent'],
+    schoolId,
+    gradeFilter:     resolveGradeScope(req),
+  };
+}
+
+function sendNoSchool(req, res) {
+  return sendError(
+    res,
+    req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียนที่ผูกกับบัญชีนี้',
+    [],
+    req.user.role === 'admin' ? 400 : 403
+  );
+}
+
+router.get('/teacher-check', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const session = req.query.session;
+    if (!['morning', 'evening'].includes(session)) {
+      return sendError(res, "session ต้องเป็น 'morning' หรือ 'evening'", [], 400);
+    }
+    const data = await checkinSvc.getTeacherRoster(pool, {
+      schoolId, gradeFilter: resolveGradeScope(req), session, userId: req.user.id,
+    });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+router.post('/teacher-check', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const { session, student_ids } = req.body || {};
+    if (!['morning', 'evening'].includes(session)) {
+      return sendError(res, "session ต้องเป็น 'morning' หรือ 'evening'", [], 400);
+    }
+    if (!Array.isArray(student_ids) || !student_ids.length) {
+      return sendError(res, 'กรุณาเลือกนักเรียน', [{ field: 'student_ids', message: 'ต้องเป็น array ที่ไม่ว่าง' }], 400);
+    }
+    const result = await checkinSvc.processTeacherCheck(pool, {
+      ...teacherActor(req, schoolId), session, studentIds: student_ids,
+    });
+    return sendSuccess(res, result, `บันทึกแล้ว ${result.recorded} คน`, null, 201);
+  } catch (err) { next(err); }
+});
+
+router.post('/teacher-check/:logId/undo', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const logId = readIdParam(req, res, 'logId');
+    if (logId === null) return;
+    const result = await checkinSvc.undoTeacherCheck(pool, { ...teacherActor(req, schoolId), logId });
+    return sendSuccess(res, result, 'ยกเลิกรายการแล้ว');
+  } catch (err) { next(err); }
+});
+
 // ─── GET /roster-requests ────────────────────────────────────────────────────
 
 router.get('/roster-requests', async (req, res, next) => {
@@ -675,11 +828,13 @@ router.put('/roster-requests/:id', requireFullSchoolScope, async (req, res, next
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const { status, review_note } = req.body;
     if (!['approved', 'rejected'].includes(status)) return sendError(res, "status ต้องเป็น 'approved' หรือ 'rejected'", [], 400);
 
     const result = await rosterReqSvc.reviewRequest({
-      requestId: parseInt(req.params.id, 10),
+      requestId,
       schoolId, status, reviewNote: review_note, userId: req.user.id,
     });
     return sendSuccess(res, result, status === 'approved' ? 'อนุมัติสำเร็จ' : 'ปฏิเสธสำเร็จ');
@@ -692,7 +847,8 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const studentId = parseInt(req.params.id, 10);
+    const studentId = readIdParam(req, res, 'id');
+    if (studentId === null) return;
 
     // Verify student belongs to this school + fetch old values for audit
     const [[st]] = await pool.query(
@@ -719,14 +875,12 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
       return sendError(res, 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก (รองรับรูปแบบ 0XX-XXXXXXX)', [], 400);
     }
     // Audit 2026-06-18 (limitations): reject over-length values with a clean 400
-    // instead of letting MySQL raise a 500 on column overflow.
-    const LEN_LIMITS = { prefix: 20, first_name: 100, last_name: 100, grade: 20, classroom: 20 };
-    for (const [field, max] of Object.entries(LEN_LIMITS)) {
-      const v = req.body[field];
-      if (v != null && String(v).length > max) {
-        return sendError(res, `ข้อมูล "${field}" ยาวเกินกำหนด (ไม่เกิน ${max} ตัวอักษร)`, [], 400);
-      }
-    }
+    // instead of letting MySQL raise a 500 on column overflow. parent_name is in
+    // the list because this handler inserts it into parents.name (varchar 100)
+    // further down — a different table from the rest.
+    if (rejectOverLongFields(res, req.body, {
+      prefix: 20, first_name: 100, last_name: 100, grade: 20, classroom: 20, parent_name: 100,
+    })) return;
 
     const conn = await pool.getConnection();
     try {
@@ -899,7 +1053,8 @@ router.delete('/students/:id', requireFullSchoolScope, async (req, res, next) =>
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const studentId = parseInt(req.params.id, 10);
+    const studentId = readIdParam(req, res, 'id');
+    if (studentId === null) return;
 
     const [[st]] = await pool.query(
       `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
@@ -938,8 +1093,8 @@ router.post('/students/:id/restore', requireFullSchoolScope, async (req, res, ne
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
-    const studentId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(studentId) || studentId <= 0) return sendError(res, 'invalid id', [], 400);
+    const studentId = readIdParam(req, res, 'id');
+    if (studentId === null) return;
 
     const result = await schoolSvc.restoreStudent(pool, {
       schoolId, studentId, actorId: req.user.id,
@@ -1136,6 +1291,27 @@ router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// CS5-02 — normalise a client-supplied value into a Bangkok calendar date
+// before it reaches a DATE column.
+//
+// The two shapes are NOT interchangeable and must not be collapsed by
+// slicing. A bare 'YYYY-MM-DD' is already a calendar date, and re-parsing it
+// would reinterpret it as UTC midnight and shift it back a day. Anything else
+// is an instant — including the '2026-08-04T17:00:00.000Z' that a stale
+// frontend bundle still sends for 2026-08-05 — and the Bangkok date of that
+// instant is what belongs in the column. `toBangkokDate` is not enough on its
+// own here: its date-prefix rule slices an instant string rather than
+// converting it, which is the very off-by-one this route is fixing.
+// Returns undefined for input that is neither, so the caller can answer 400
+// rather than silently storing a wrong or NULL date.
+function toCalendarDate(value) {
+  const s = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const parsed = new Date(s);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return toBangkokDate(parsed);
+}
+
 // ─── PUT /vehicles/:id — แก้ไขข้อมูลรถในขอบเขตโรงเรียน (ลดการพึ่งแอดมิน) ─────────
 // School self-service: edit vehicle type / owner / insurance for a vehicle that
 // serves this school. Does NOT touch plate identity or driver assignment (Tier 3).
@@ -1170,7 +1346,10 @@ router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
     strField('insurance_status', 50);
     strField('insurance_type', 50);
     if (b.insurance_expiry !== undefined) {
-      const v = b.insurance_expiry || null;
+      // CS5-02 — pin the write boundary to a Bangkok calendar date so the
+      // round trip through the edit form cannot walk the date backwards.
+      const v = b.insurance_expiry ? toCalendarDate(b.insurance_expiry) : null;
+      if (v === undefined) return sendError(res, 'รูปแบบวันหมดอายุประกันไม่ถูกต้อง', [{ field: 'insurance_expiry', message: 'ต้องเป็นวันที่ในรูปแบบ YYYY-MM-DD' }], 400);
       sets.push('insurance_expiry = ?'); params.push(v); newVal.insurance_expiry = v;
     }
     if (!sets.length) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
@@ -1182,7 +1361,10 @@ router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
       userId: req.user.id, action: 'UPDATE', entityType: 'vehicle', entityId: vehicleId,
       oldValue: {
         vehicle_type: old.vehicle_type, owner_name: old.owner_name, owner_phone: old.owner_phone,
-        insurance_status: old.insurance_status, insurance_type: old.insurance_type, insurance_expiry: old.insurance_expiry,
+        // CS5-02 — the audit row is the record of what the value HAD been;
+        // storing the instant made it read one day early.
+        insurance_status: old.insurance_status, insurance_type: old.insurance_type,
+        insurance_expiry: toBangkokDate(old.insurance_expiry),
       },
       newValue: newVal, ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
@@ -1202,7 +1384,9 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 30));
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
-    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // Shared with /api/reports and the other three routers: a shape-only
+    // regex accepted 2026-13-45. Ignore-if-invalid behaviour is unchanged.
+    const isValidDate = isCalendarDate;
 
     // Match each entity_type against its OWN id space: 'student' ids live in
     // students, 'roster_request' ids live in roster_change_requests (a separate
@@ -1236,7 +1420,7 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
       const truncated = rows.length > 5000;
       const csv = auditRowsToCsv(rows.slice(0, 5000));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=audit_school_${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader('Content-Disposition', `attachment; filename=audit_school_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
       return res.send('\uFEFF' + csv +
         (truncated ? '\n"# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14"' : ''));
@@ -1258,7 +1442,33 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
       [...params, per_page, offset]
     );
 
-    return sendSuccess(res, rows, 'OK', { page, per_page, total });
+    // Redact PII in old_value/new_value before returning JSON, matching the CSV
+    // branch above and the province, affiliation and admin handlers — school was
+    // the only one of the four still returning them raw. Verified against the
+    // sandbox: an audit row carrying parent_phone and line_user_id came back as
+    // "0812345678" and "U1234567890abcdef" here, and as "081****678" and
+    // "U1234567…[redacted]" everywhere else.
+    //
+    // A school does see its own students' guardian phones through
+    // /api/school/students, so the phone is not new exposure there — but
+    // line_user_id is not surfaced to this role anywhere else, and the scope
+    // filter admits transfer and roster rows whose values describe another
+    // school's record.
+    //
+    // redactAuditValue is imported at module scope. Do NOT re-declare it inside
+    // this handler: a function-scoped const shadows it for the whole function and
+    // puts the CSV branch above into a temporal dead zone, which is how the same
+    // change turned ?format=csv into a 500 in admin.routes.js.
+    const redactVal = (v) => {
+      if (v === null || v === undefined) return v;
+      const t = redactAuditValue(v);
+      try { return JSON.parse(t); } catch { return t; }
+    };
+    const safeRows = rows.map((r) => ({
+      ...r, old_value: redactVal(r.old_value), new_value: redactVal(r.new_value),
+    }));
+
+    return sendSuccess(res, safeRows, 'OK', { page, per_page, total });
   } catch (err) { next(err); }
 });
 
@@ -1649,8 +1859,10 @@ router.get('/students/import/batches', requireFullSchoolScope, async (req, res, 
 router.get('/students/import/:batchId', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
+    const batchId = readIdParam(req, res, 'batchId');
+    if (batchId === null) return;
     const importPreview = require('../services/studentImportPreview.service');
-    const out = await importPreview.getBatchDetail(pool, { batchId: parseInt(req.params.batchId, 10), schoolId });
+    const out = await importPreview.getBatchDetail(pool, { batchId, schoolId });
     return sendSuccess(res, out);
   } catch (err) { next(err); }
 });
@@ -1688,11 +1900,15 @@ router.post('/students/import/preview', importExportLimiter, requireFullSchoolSc
 router.post('/students/import/:batchId/apply', importExportLimiter, requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
-    const batchId = parseInt(req.params.batchId, 10);
+    const batchId = readIdParam(req, res, 'batchId');
+    if (batchId === null) return;
     // Phase 10.13B-4 — explicit apply modes; risky modes act only on selected rows.
     const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate, auto_create_vehicle } = req.body || {};
     const VALID_MODES = ['insert_ready', 'update_guardian_confirmed', 'reactivate_student_confirmed', 'mixed_confirmed'];
     if (!VALID_MODES.includes(mode)) return sendError(res, 'โหมดการนำเข้าไม่ถูกต้อง', [], 400);
+    if (!await consumePolicyAction(req, res, {
+      context: 'school.student_import_apply', subjectType: 'import_batch', subjectId: batchId,
+    })) return;
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.applyBatch(pool, {
       batchId, schoolId, userId: req.user.id, mode,
@@ -1722,7 +1938,8 @@ router.post('/students/import/:batchId/apply', importExportLimiter, requireFullS
 router.get('/students/import/:batchId/report', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
-    const batchId = parseInt(req.params.batchId, 10);
+    const batchId = readIdParam(req, res, 'batchId');
+    if (batchId === null) return;
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.getReport(pool, { batchId, schoolId });
     return sendSuccess(res, out);
@@ -1734,7 +1951,8 @@ router.get('/students/import/:batchId/report', requireFullSchoolScope, async (re
 router.post('/students/import/:batchId/rollback', importExportLimiter, requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
-    const batchId = parseInt(req.params.batchId, 10);
+    const batchId = readIdParam(req, res, 'batchId');
+    if (batchId === null) return;
     const { selected_row_ids, reason } = req.body || {};
     const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.rollbackBatch(pool, {
@@ -1769,18 +1987,22 @@ router.get('/students/transfer-requests', requireFullSchoolScope, async (req, re
 
 router.post('/students/transfer-requests/:id/cancel', requireFullSchoolScope, async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const transfer = require('../services/studentTransfer.service');
-    const out = await transfer.cancelRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req), userId: req.user.id });
+    const out = await transfer.cancelRequest(pool, { requestId, schoolId: resolveSchoolId(req), userId: req.user.id });
     return sendSuccess(res, out, 'ยกเลิกคำขอแล้ว');
   } catch (err) { next(err); }
 });
 
 router.post('/students/:studentId/transfer-request', requireFullSchoolScope, async (req, res, next) => {
   try {
+    const studentId = readIdParam(req, res, 'studentId');
+    if (studentId === null) return;
     const transfer = require('../services/studentTransfer.service');
     const { destination_school_id, reason, evidence_note, request_type } = req.body || {};
     const out = await transfer.createRequest(pool, {
-      studentId: parseInt(req.params.studentId, 10), schoolId: resolveSchoolId(req), userId: req.user.id,
+      studentId, schoolId: resolveSchoolId(req), userId: req.user.id,
       destinationSchoolId: destination_school_id, reason, evidenceNote: evidence_note, requestType: request_type || 'TRANSFER_TO_SCHOOL',
     });
     return sendSuccess(res, out, 'ส่งคำขอโอนย้ายแล้ว · รอผู้ดูแลระบบตรวจสอบ', null, 201);
@@ -1797,14 +2019,18 @@ router.get('/vehicles/requests', requireFullSchoolScope, async (req, res, next) 
 });
 router.get('/vehicles/requests/:id', requireFullSchoolScope, async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    return sendSuccess(res, await vr.getSchoolVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req) }));
+    return sendSuccess(res, await vr.getSchoolVehicleRequest(pool, { requestId, schoolId: resolveSchoolId(req) }));
   } catch (err) { next(err); }
 });
 router.post('/vehicles/requests/:id/cancel', requireFullSchoolScope, async (req, res, next) => {
   try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
     const vr = require('../services/vehicleRequest.service');
-    return sendSuccess(res, await vr.cancelVehicleRequest(pool, { requestId: parseInt(req.params.id, 10), schoolId: resolveSchoolId(req), userId: req.user.id }), 'ยกเลิกคำขอแล้ว');
+    return sendSuccess(res, await vr.cancelVehicleRequest(pool, { requestId, schoolId: resolveSchoolId(req), userId: req.user.id }), 'ยกเลิกคำขอแล้ว');
   } catch (err) { next(err); }
 });
 router.post('/vehicles/requests', requireFullSchoolScope, async (req, res, next) => {
@@ -1889,6 +2115,8 @@ router.post('/teacher-accounts', requireFullSchoolScope, async (req, res, next) 
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
     const { username, password, display_name, grade_scope } = req.body || {};
+    // users.username is varchar(100), users.display_name varchar(200).
+    if (rejectOverLongFields(res, req.body, { username: 100, display_name: 200 })) return;
     const errors = [];
     if (!username || !String(username).trim()) errors.push({ field: 'username', message: 'จำเป็นต้องระบุชื่อผู้ใช้' });
     if (!password) errors.push({ field: 'password', message: 'จำเป็นต้องระบุรหัสผ่าน' });
@@ -1903,9 +2131,23 @@ router.post('/teacher-accounts', requireFullSchoolScope, async (req, res, next) 
 
     const uname = String(username).trim();
 
-    // Duplicate username check (active users only)
-    const [[existing]] = await pool.query('SELECT id FROM users WHERE username = ? AND is_deleted = FALSE', [uname]);
-    if (existing) return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+    // Duplicate username check. The unique index covers soft-deleted rows too,
+    // so checking only active users pushed the collision down to the database
+    // and back up as an untranslated "Duplicate entry" (fixed 2026-09-07).
+    const [[existing]] = await pool.query(
+      'SELECT id, is_deleted FROM users WHERE username = ?', [uname]
+    );
+    if (existing && !existing.is_deleted) {
+      return sendError(res, 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว', [], 409);
+    }
+    if (existing) {
+      return sendError(
+        res,
+        'ชื่อผู้ใช้นี้เคยถูกใช้โดยบัญชีที่ถูกลบไปแล้ว กรุณาใช้ชื่ออื่น หรือแจ้งผู้ดูแลระบบให้กู้คืนบัญชีเดิม',
+        [{ code: 'USERNAME_TAKEN_BY_DELETED', field: 'username' }],
+        409
+      );
+    }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST_TEACHER);
     const [result] = await pool.query(
@@ -1935,8 +2177,8 @@ router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, asyn
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const userId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
 
     const { password } = req.body || {};
     if (!password) {
@@ -1985,8 +2227,8 @@ router.delete('/teacher-accounts/:id', requireFullSchoolScope, async (req, res, 
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const userId = parseInt(req.params.id, 10);
-    if (!Number.isInteger(userId) || userId <= 0) return sendError(res, 'invalid id', [], 400);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
 
     const [[target]] = await pool.query(
       `SELECT id, username, grade_scope FROM users
@@ -2031,6 +2273,9 @@ router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, nex
       );
     }
 
+    const logId = readIdParam(req, res, 'logId');
+    if (logId === null) return;
+
     const reason = (req.body || {}).reason;
     if (!String(reason || '').trim()) {
       return sendError(res, 'กรุณาระบุเหตุผล', [{ field: 'reason', message: 'จำเป็นต้องระบุเหตุผล' }], 400);
@@ -2042,7 +2287,7 @@ router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, nex
       userDisplayName: req.user.displayName || req.user.username || null,
       ipAddress:       req.ip,
       userAgent:       req.headers['user-agent'],
-      logId:           req.params.logId,
+      logId,
       reason,
       scope:           { kind: 'school', schoolId },
     });

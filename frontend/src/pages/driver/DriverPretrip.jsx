@@ -158,7 +158,7 @@ export default function DriverPretrip() {
           <ul className="space-y-2 text-base text-gray-700 mb-4">
             {CHECKLIST.map(c => (
               <li key={c.id} className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-success" strokeWidth={2.4} aria-hidden="true" />
+                <Check className="w-4 h-4 text-success-ink" strokeWidth={2.4} aria-hidden="true" />
                 <span>{c.label}</span>
               </li>
             ))}
@@ -167,7 +167,7 @@ export default function DriverPretrip() {
 
         {/* Big "All OK" button */}
         <button onClick={() => handleSubmit(true)} disabled={submitting}
-          className="w-full bg-green-600 hover:bg-green-700 active:bg-green-800 text-white font-semibold text-xl py-5 rounded-2xl shadow-lg transition disabled:opacity-50 mb-4">
+          className="w-full bg-green-700 hover:bg-green-800 active:bg-green-900 text-white font-semibold text-xl py-5 rounded-2xl shadow-lg transition disabled:opacity-50 mb-4">
           {submitting ? 'กำลังบันทึก...' : 'ทุกรายการปกติ — ออกได้'}
         </button>
 
@@ -184,7 +184,7 @@ export default function DriverPretrip() {
   return (
     <div className="p-4 sm:p-5 max-w-lg mx-auto pb-8">
       <h2 className="text-xl font-semibold text-ink mb-1">ตรวจรถก่อนออก</h2>
-      <p className="text-sm text-gray-500 mb-4">กดรายการที่ <strong>ผิดปกติ</strong> เพื่อระบุปัญหา</p>
+      <p className="text-sm text-ink-muted mb-4">กดรายการที่ <strong>ผิดปกติ</strong> เพื่อระบุปัญหา</p>
 
       <div className="space-y-2 mb-5">
         {items.map(item => (
@@ -198,8 +198,8 @@ export default function DriverPretrip() {
                  "white heavy check mark" and a colour-blind reader had only
                  the green/red fill to go on. */}
             {item.ok
-              ? <CheckCircle2 className="w-7 h-7 shrink-0 text-success" strokeWidth={2.2} aria-hidden="true" />
-              : <XCircle className="w-7 h-7 shrink-0 text-danger" strokeWidth={2.2} aria-hidden="true" />}
+              ? <CheckCircle2 className="w-7 h-7 shrink-0 text-success-ink" strokeWidth={2.2} aria-hidden="true" />
+              : <XCircle className="w-7 h-7 shrink-0 text-danger-ink" strokeWidth={2.2} aria-hidden="true" />}
             <span>{item.label}</span>
             <span className="sr-only">{item.ok ? '— ปกติ' : '— ผิดปกติ'}</span>
           </button>
@@ -225,13 +225,13 @@ export default function DriverPretrip() {
         </button>
       ) : (
         <button onClick={() => handleSubmit(true)} disabled={submitting}
-          className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
+          className="w-full bg-green-700 hover:bg-green-800 text-white font-semibold text-lg py-4 rounded-2xl shadow-lg transition disabled:opacity-50 mb-3">
           {submitting ? 'กำลังบันทึก...' : 'ทุกรายการปกติ — ออกได้'}
         </button>
       )}
 
       <button onClick={() => { setShowDetail(false); setItems(CHECKLIST.map(c => ({ ...c, ok: true }))); setNote(''); }}
-        className="w-full text-gray-500 hover:text-gray-700 text-base py-3 transition">
+        className="w-full text-ink-muted hover:text-gray-700 text-base py-3 transition">
         ← กลับ
       </button>
     </div>

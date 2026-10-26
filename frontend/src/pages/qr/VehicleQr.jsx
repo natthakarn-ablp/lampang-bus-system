@@ -4,6 +4,7 @@ import axios from 'axios'; // raw axios — public page, no JWT auth
 import { getLiffIdToken } from '../../utils/liff';
 import ParentConsentModal from '../../components/consent/ParentConsentModal';
 import PublicPrivacyNotice from '../../components/consent/PublicPrivacyNotice';
+import { toBangkokDate } from '../../utils/thaiTime';
 
 // Phase QR-1 — public vehicle QR page. Renders Level-1 (anyone), then
 // progressively escalates to Level-2 if opened inside LINE by a verified parent
@@ -67,7 +68,7 @@ function formatThaiDate(value) {
   try {
     return new Intl.DateTimeFormat('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }).format(d);
   } catch {
-    return d.toISOString().slice(0, 10);
+    return toBangkokDate(d);
   }
 }
 
@@ -94,7 +95,7 @@ function Chip({ label, entry }) {
 function Row({ label, children }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-      <span className="text-sm text-gray-500">{label}</span>
+      <span className="text-sm text-ink-muted">{label}</span>
       <span>{children}</span>
     </div>
   );
@@ -154,8 +155,8 @@ export default function VehicleQr() {
     if (idToken) loadParent(idToken);
   }
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-400">กำลังโหลด…</div>;
-  if (error) return <div className="min-h-screen flex items-center justify-center text-gray-500 p-6 text-center">{error}</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-ink-muted">กำลังโหลด…</div>;
+  if (error) return <div className="min-h-screen flex items-center justify-center text-ink-muted p-6 text-center">{error}</div>;
   if (!data) return null;
 
   return (
@@ -204,7 +205,7 @@ export default function VehicleQr() {
 
             {docKeys.length > 0 && (
               <div className="py-3 border-b border-gray-50 last:border-0">
-                <span className="text-sm text-gray-500">สถานะเอกสาร</span>
+                <span className="text-sm text-ink-muted">สถานะเอกสาร</span>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {docKeys.map((k) => (
                     <Chip key={k} label={DOCUMENT_LABELS[k]} entry={DOCUMENT[docStatus[k]] || DOCUMENT.MISSING} />
@@ -224,7 +225,7 @@ export default function VehicleQr() {
                       >
                         {data.emergency_contact}
                       </a>
-                    : <span className="text-sm text-gray-400">—</span>}
+                    : <span className="text-sm text-ink-muted">—</span>}
                 </Row>
               </>
             )}
@@ -233,7 +234,7 @@ export default function VehicleQr() {
           })()}
 
           {data.level === 1 && (
-            <p className="text-xs text-gray-400 mt-4">เปิดผ่าน LINE และผูกบัญชีผู้ปกครองเพื่อดูชื่อคนขับและช่องทางติดต่อ</p>
+            <p className="text-xs text-ink-muted mt-4">เปิดผ่าน LINE และผูกบัญชีผู้ปกครองเพื่อดูชื่อคนขับและช่องทางติดต่อ</p>
           )}
         </div>
       </div>

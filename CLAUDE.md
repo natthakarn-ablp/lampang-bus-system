@@ -959,8 +959,8 @@ res.write(BOM + csvString);
 | ดูรายงาน (/api/reports) | ❌³ | ✅ own | ✅ เขต | ✅ ทั้งจังหวัด | ❌³ | ✅ |
 | Export (CSV/Excel/PDF) | ❌ | ✅ | ✅ | ✅ | ❌ | ✅ |
 | Audit log | ❌ | ✅ โรงเรียนตน | ✅ เขตตน | ✅ ทั้งระบบ | ❌ | ✅ |
-| โอนย้ายนักเรียนข้ามโรงเรียน | ❌ | ✅ ยื่น/ยกเลิก | ❌⁵ | ❌ | ❌ | ✅ อนุมัติ |
-| คำขอเกี่ยวกับรถ (กู้คืน/ใช้ร่วม) | ❌ | ✅ ยื่น | ❌⁵ | ❌ | ❌ | ✅ อนุมัติ |
+| โอนย้ายนักเรียนข้ามโรงเรียน | ❌ | ✅ ยื่น/ยกเลิก | ✅ อนุมัติในเขต⁵ | ❌ | ❌ | ✅ อนุมัติ |
+| คำขอเกี่ยวกับรถ (กู้คืน/ใช้ร่วม) | ❌ | ✅ ยื่น | ✅ อนุมัติในเขต⁵ | ❌ | ❌ | ✅ อนุมัติ |
 | ความพร้อมเปิดใช้ (readiness) | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
 | ลงทะเบียนรถ⁴ (Phase 10.14) | ✅ เพิ่ม roster | ✅ ตรวจ/อนุมัติ | ❌ | ❌ | ❌ | ✅ |
 
@@ -968,7 +968,7 @@ res.write(BOM + csvString);
 ² affiliation สร้าง/รีเซ็ตรหัสผ่าน/เปิด-ปิดบัญชีโรงเรียน + import บัญชีเป็นชุด (`affiliation.routes.js` `/school-accounts*`)
 ³ driver/transport ไม่อยู่ใน `/api/reports` — ดู "รายงาน" ของตนผ่านโมดูลตัวเอง (`/driver/status-today`, `/transport/dashboard`)
 ⁴ feature-flagged `FEATURE_DRIVER_REGISTRATION` (dark by default)
-⁵ ตามสเปกควรให้เขตอนุมัติคำขอในเขตได้ แต่ปัจจุบัน **ยังไม่ implement** — admin อนุมัติทั้งหมด (TODO)
+⁵ อัปเดต 2026-10-24: เขตอนุมัติ/ไม่อนุมัติคำขอของโรงเรียนในเขตตนได้แล้ว (`affiliation.routes.js` `/transfer-requests/:id/approve|reject`, `/vehicle-requests/:id/approve|reject`) — admin ยังอนุมัติได้ทุกเขต
 
 **Sub-role ในโรงเรียน:** `users.grade_scope` (ครูประจำสายชั้น) = `role='school'` ที่อ่านได้เฉพาะชั้นตน (read-only) — `requireFullSchoolScope` กัน write/จัดการออก.
 **parent** = ยืนยันผ่าน LINE id_token (ไม่ใช่ JWT role) เห็นเฉพาะบุตรหลานที่ผูกบัญชีไว้.

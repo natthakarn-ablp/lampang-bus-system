@@ -15,8 +15,8 @@ import AppCard from './AppCard';
  *   variant — 'success' | 'warn' | 'brand' | 'neutral' (default)
  */
 const TONE = {
-  success: 'text-success',
-  warn:    'text-warn',
+  success: 'text-success-ink',
+  warn:    'text-warn-ink',
   brand:   'text-brand',
   neutral: 'text-ink-muted',
 };

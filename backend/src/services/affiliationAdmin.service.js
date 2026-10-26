@@ -168,12 +168,16 @@ async function createSchoolWithAccount({ affiliationId, schoolCode, schoolName, 
       throw err;
     }
 
-    // Check duplicate username
+    // Check duplicate username. The unique index covers soft-deleted rows, so
+    // an active-only check let the collision reach the database and come back
+    // as an untranslated "Duplicate entry" (fixed 2026-09-07).
     const [[existingUser]] = await conn.query(
-      `SELECT id FROM users WHERE username = ? AND is_deleted = FALSE`, [username]
+      `SELECT id, is_deleted FROM users WHERE username = ?`, [username]
     );
     if (existingUser) {
-      const err = new Error(`ชื่อผู้ใช้ ${username} มีอยู่ในระบบแล้ว`);
+      const err = new Error(existingUser.is_deleted
+        ? `ชื่อผู้ใช้ ${username} เคยถูกใช้โดยบัญชีที่ถูกลบไปแล้ว กรุณาใช้ชื่ออื่น หรือแจ้งผู้ดูแลระบบให้กู้คืนบัญชีเดิม`
+        : `ชื่อผู้ใช้ ${username} มีอยู่ในระบบแล้ว`);
       err.statusCode = 409;
       throw err;
     }

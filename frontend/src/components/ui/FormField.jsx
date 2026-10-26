@@ -54,7 +54,7 @@ export default function FormField({
     <div className={className}>
       <label htmlFor={id} className={`block text-sm font-medium mb-1 ${labelClassName}`}>
         {label}
-        {required && <span className="text-danger ml-0.5" aria-hidden="true">*</span>}
+        {required && <span className="text-danger-ink ml-0.5" aria-hidden="true">*</span>}
         {required && <span className="sr-only"> (จำเป็น)</span>}
       </label>
 
@@ -79,7 +79,7 @@ export default function FormField({
         <p id={helperId} className="mt-1 text-caption text-ink-muted">{helper}</p>
       )}
       {error && (
-        <p id={errorId} className="mt-1 text-caption text-danger inline-flex items-start gap-1">
+        <p id={errorId} className="mt-1 text-caption text-danger-ink inline-flex items-start gap-1">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" strokeWidth={2.2} aria-hidden="true" />
           {error}
         </p>

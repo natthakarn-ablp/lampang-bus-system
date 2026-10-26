@@ -6,17 +6,21 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { exportFormatLimiter } = require('../middleware/rateLimiters');
 const { sendSuccess, sendError } = require('../utils/response');
+const { readIdParam } = require('../utils/pathParams');
+const { isCalendarDate } = require('../utils/calendarDate');
 const { pool } = require('../config/database');
 const provSvc = require('../services/province.service');
+const provAdminSvc = require('../services/provinceAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
 const { logAudit } = require('../utils/audit');
+const { todayBangkok } = require('../utils/thaiTime');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
   const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
-  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ' };
+  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ' };
   // Phase 10.12G — neutralise every cell + redact PII from audit values.
   const esc = csvCell;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
@@ -75,12 +79,12 @@ router.get('/schools', async (req, res, next) => {
  */
 router.get('/students', async (req, res, next) => {
   try {
-    const { search, grade, school_id, affiliation_id, vehicle_id, sort, order } = req.query;
+    const { search, grade, school_id, affiliation_id, vehicle_id, has_vehicle, sort, order } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
 
     const result = await provSvc.getStudents({
-      search, grade, school_id, affiliation_id, vehicle_id, page, per_page, sort, order,
+      search, grade, school_id, affiliation_id, vehicle_id, has_vehicle, page, per_page, sort, order,
     });
     return sendSuccess(res, result.students, 'OK', result.meta);
   } catch (err) { next(err); }
@@ -191,7 +195,9 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
     const offset = (page - 1) * per_page;
     const { action, date_from, date_to } = req.query;
 
-    const isValidDate = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+    // Shared with /api/reports and admin: a shape-only regex accepted
+    // 2026-13-45. Ignore-if-invalid behaviour below is unchanged.
+    const isValidDate = isCalendarDate;
     let where = '1=1';
     const params = [];
     if (action) { where += ' AND al.action = ?'; params.push(action); }
@@ -211,7 +217,7 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
       const truncated = rows.length > 5000;
       const csv = auditRowsToCsv(rows.slice(0, 5000));
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename=audit_province_${new Date().toISOString().split('T')[0]}.csv`);
+      res.setHeader('Content-Disposition', `attachment; filename=audit_province_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
       logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'audit_csv', entityId: 'province',
         newValue: { role: req.user.role, truncated }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
@@ -294,6 +300,40 @@ router.get('/pickup-map', async (req, res, next) => {
 
     return sendSuccess(res, data);
   } catch (err) { next(err); }
+});
+
+// ─── Account administration (2026-09-07) ─────────────────────────────────────
+// The hierarchy was one level short: an affiliation resets its schools and a
+// school resets its teachers, but an affiliation or transport account that
+// forgot its password had only the single admin to turn to. These two
+// endpoints close that gap. The service decides who is reachable — affiliation
+// and transport only — so the rule lives in one place.
+
+/** GET /api/province/unit-accounts — accounts this province may reset. */
+router.get('/unit-accounts', async (req, res, next) => {
+  try {
+    const rows = await provAdminSvc.listManagedAccounts();
+    return sendSuccess(res, rows, 'OK', { total: rows.length });
+  } catch (err) { return next(err); }
+});
+
+/** POST /api/province/unit-accounts/:id/reset-password */
+router.post('/unit-accounts/:id/reset-password', async (req, res, next) => {
+  try {
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
+    const { password } = req.body || {};
+    if (!password) return sendError(res, 'password จำเป็น', [], 400);
+
+    const result = await provAdminSvc.resetUnitAccountPassword({
+      accountId,
+      newPassword: password,
+      userId: req.user.id,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, result, 'รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้ต้องตั้งรหัสใหม่เมื่อเข้าสู่ระบบครั้งถัดไป');
+  } catch (err) { return next(err); }
 });
 
 module.exports = router;

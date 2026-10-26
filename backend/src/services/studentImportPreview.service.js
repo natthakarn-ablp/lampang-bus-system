@@ -132,6 +132,50 @@ async function parseImportFile(filePath, originalName) {
   return rows;
 }
 
+// ── Destination column widths, read from the live schema. ───────────────────
+// Preview must not call a row READY that the INSERT cannot store: MySQL runs in
+// STRICT_TRANS_TABLES, so an over-long value is ER_DATA_TOO_LONG at apply, not a
+// truncation. Reading the widths back from the table the migrations built keeps
+// one source of truth instead of a second copy of the schema in JS.
+const LENGTH_CHECKED_COLUMNS = ['student_code', 'prefix', 'first_name', 'last_name', 'grade', 'classroom'];
+async function studentColumnLimits(db) {
+  try {
+    const [rows] = await db.query(
+      `SELECT COLUMN_NAME AS name, CHARACTER_MAXIMUM_LENGTH AS max_len
+         FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME IN (?)`,
+      [LENGTH_CHECKED_COLUMNS]
+    );
+    const limits = {};
+    for (const c of Array.isArray(rows) ? rows : []) {
+      const max = Number(c && c.max_len);
+      if (Number.isInteger(max) && max > 0) limits[String(c.name)] = max;
+    }
+    return limits;
+  } catch {
+    return null;   // schema unreadable → skip the width check, never fail a preview over it
+  }
+}
+
+// parents.name is written by linkParent during apply, from the same file row, but
+// it is not one of the students columns the classifier checks — so a 150-character
+// ผู้ปกครอง previewed READY and then died at apply with ER_DATA_TOO_LONG, exactly
+// the defect the students-column check closed. Same check, different table.
+async function parentNameLimit(db) {
+  try {
+    const [[c]] = await db.query(
+      `SELECT CHARACTER_MAXIMUM_LENGTH AS max_len
+         FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'parents' AND COLUMN_NAME = 'name'`
+    );
+    const max = Number(c && c.max_len);
+    return Number.isInteger(max) && max > 0 ? max : null;
+  } catch {
+    return null;   // schema unreadable → skip the width check, as above
+  }
+}
+const charLength = (v) => Array.from(String(v == null ? '' : v).trim()).length;
+
 // ── Per-row analysis (DB lookups + pure classifier). Read-only. ──────────────
 async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
   const [allVehicles] = await db.query('SELECT id, plate_no, is_deleted FROM vehicles');
@@ -161,6 +205,8 @@ async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
     return { matched: false, code: c.code, vehicle_id: c.vehicle_id, display_plate: c.display_plate };
   };
 
+  const limits = await studentColumnLimits(db);
+  const parentMax = await parentNameLimit(db);
   const results = [];
   const seenInFile = new Map();   // 10.13B-5 Part F — first row_no per student_code in this file
   for (const row of rows) {
@@ -179,7 +225,7 @@ async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
       }
     }
     const vehicle = matchVehicle(row.plate_no);
-    const r = classifyImportRow({ row, schoolId, existing, crossSchool, vehicle });
+    const r = classifyImportRow({ row, schoolId, existing, crossSchool, vehicle, limits });
     // Phase 10.15A — if the caller opts in to auto-create vehicles, rows that are
     // only blocked by a missing vehicle become READY. The vehicle will be created
     // at apply time, so the school does not need to pre-register every plate.
@@ -193,6 +239,20 @@ async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
       r.action_required = null;
     }
     r.existing_student_id = existing ? existing.id : null;
+    // Guardian-name width. Checked here, not in the classifier, because it is the
+    // parents table and only the service knows its width. Applies to every row
+    // that would write a parent (insert / guardian update / reactivate) — those
+    // are the three paths that reach linkParent or the parents INSERT.
+    const parentLen = charLength(row.parent_name);
+    if (parentMax && parentLen > parentMax && (r.can_apply || r.can_confirm_guardian_update || r.can_confirm_reactivate)) {
+      r.classification = 'FIELD_TOO_LONG';
+      r.status = 'ERROR';
+      r.can_apply = false;
+      r.can_confirm_guardian_update = false;
+      r.can_confirm_reactivate = false;
+      r.message_th = `ชื่อผู้ปกครองยาวเกินที่ระบบรองรับ (${parentLen} ตัวอักษร สูงสุด ${parentMax})`;
+      r.action_required = `แก้ไขชื่อผู้ปกครองในไฟล์ให้ไม่เกิน ${parentMax} ตัวอักษร`;
+    }
     // Phase 10.13B-5 Part F — a student_code repeated within the same file: the
     // 2nd+ occurrence is flagged so it cannot silently double-import.
     if (code && seenInFile.has(code)) {
@@ -263,7 +323,10 @@ async function runPreview(pool, { schoolId, importedBy, filePath, originalName, 
          JSON.stringify({ prefix: norm.prefix || null, first_name: norm.first_name, last_name: norm.last_name, grade: norm.grade || null, classroom: norm.classroom || null, plate_no: norm.plate_no || null, parent_name: norm.parent_name || null, parent_phone: norm.parent_phone || null }),
          r.classification, r.status, r.message_th, r.student_code, r.existing_student_id || null,
          r.matched_vehicle_id, r.matched_display_plate,
-         JSON.stringify(r.guardian_mismatch ? { current: r.guardian_current, input: r.guardian_input } : null),
+         // JSON.stringify(null) is the string 'null', which CAST(? AS JSON) stores as the
+         // JSON literal null — NOT SQL NULL — so `guardian_diff_json IS NOT NULL` was true
+         // for every row ever written and every student looked like a guardian change.
+         r.guardian_mismatch ? JSON.stringify({ current: r.guardian_current, input: r.guardian_input }) : null,
          r.can_apply ? 1 : 0, r.error_detail]
       );
     }
@@ -386,10 +449,63 @@ async function lockPendingImportRow(conn, row, r) {
   return { ...row, ...locked };
 }
 
+// A status that replaces a failure must replace the failure's reason too. Both
+// message_th and error_detail were cleared only on SUCCESS, so a row that failed
+// once and was then blocked or staled on a retry kept showing the PREVIOUS
+// failure's text and code under its new status ("VEHICLE_BLOCKED · ER_DATA_TOO_LONG").
+// These two statuses are outcomes of the retry, so they carry their own reason.
+const VEHICLE_BLOCKED_TH = 'ยังนำเข้าไม่ได้ เพราะไม่พบรถทะเบียนนี้ที่ใช้งานอยู่ในระบบ กรุณาตรวจสอบข้อมูลรถแล้วนำเข้าใหม่';
+const STALE_TH = 'ข้อมูลนักเรียนเปลี่ยนไปหลังจากตรวจสอบไฟล์ กรุณาตรวจสอบไฟล์อีกครั้งก่อนนำเข้า';
+
 async function markVehicleBlocked(conn, row, r) {
-  await conn.query("UPDATE import_batch_rows SET status='VEHICLE_BLOCKED' WHERE id=?", [row.id]);
+  await conn.query(
+    "UPDATE import_batch_rows SET status='VEHICLE_BLOCKED', message_th=?, error_detail=NULL WHERE id=?",
+    [VEHICLE_BLOCKED_TH, row.id]
+  );
   r.vehicle_blocked++;
   r.details.push({ row: row.row_no, status: 'VEHICLE_BLOCKED' });
+}
+
+async function markStale(conn, row, r) {
+  await conn.query(
+    "UPDATE import_batch_rows SET status='STALE_NEEDS_REPREVIEW', message_th=?, error_detail=NULL WHERE id=?",
+    [STALE_TH, row.id]
+  );
+  r.stale++;
+  r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REPREVIEW' });
+}
+
+// ── A row that died inside apply. It used to keep the preview's message_th
+//    ("พร้อมนำเข้า") while its status said APPLY_FAILED, and neither the detail nor
+//    the report endpoint selected error_detail — the school saw a failure with no
+//    cause and no next step. error_detail keeps the raw code for whoever debugs it.
+const APPLY_FAILURE_TH = {
+  ER_DATA_TOO_LONG: 'นำเข้าไม่สำเร็จ เพราะข้อมูลบางช่องยาวเกินที่ระบบรองรับ กรุณาแก้ไขไฟล์แล้วนำเข้าใหม่',
+  ER_DUP_ENTRY: 'นำเข้าไม่สำเร็จ เพราะข้อมูลซ้ำกับที่มีอยู่แล้วในระบบ กรุณาตรวจสอบไฟล์แล้วนำเข้าใหม่',
+  ER_NO_REFERENCED_ROW_2: 'นำเข้าไม่สำเร็จ เพราะอ้างถึงข้อมูลที่ไม่มีในระบบ (เช่น รถหรือโรงเรียน) กรุณาตรวจสอบแล้วนำเข้าใหม่',
+};
+// A row that failed a previous apply and succeeds on a retry must not keep the
+// failure text and reason. MySQL assigns left to right, so error_detail still
+// holds its old value inside the IF: a row that never failed is left exactly as
+// it was, and only a row that did gets its message corrected.
+const CLEARS_FAILURE = "message_th = IF(error_detail IS NULL, message_th, 'นำเข้าสำเร็จหลังจากลองใหม่'), error_detail = NULL";
+
+// error_detail is shown to the school and returned by /report, an endpoint
+// documented as PII-safe, so only a code from the map above may be stored: a
+// mysql2 `code` is a fixed identifier, but the `message` this used to fall back
+// to carries row content (ER_DUP_ENTRY's text quotes the duplicated key, i.e. a
+// student_code). Anything unmapped becomes UNKNOWN_ERROR here and keeps its raw
+// text server-side in the log, where whoever debugs it can still read it.
+async function markRowApplyFailed(pool, rowId, e) {
+  const code = e && e.code;
+  const known = Object.prototype.hasOwnProperty.call(APPLY_FAILURE_TH, code);
+  const detail = known ? code : 'UNKNOWN_ERROR';
+  if (!known) console.error('[IMPORT_APPLY_FAILED]', { row_id: rowId, code: code || null, error: e && e.message });
+  const messageTh = (known && APPLY_FAILURE_TH[code]) || 'นำเข้าไม่สำเร็จ กรุณาตรวจสอบข้อมูลของแถวนี้ในไฟล์แล้วลองใหม่';
+  await pool.query(
+    "UPDATE import_batch_rows SET status='APPLY_FAILED', message_th=?, error_detail=? WHERE id=?",
+    [messageTh.slice(0, 300), detail, rowId]
+  );
 }
 
 // ── insert_ready row (INSERT_NEW / CROSS_SCHOOL) — atomic id, idempotent. ────
@@ -402,7 +518,7 @@ async function applyInsertRow(pool, { row, schoolId, userId, r, autoCreateVehicl
 
     const [[exist]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1 FOR UPDATE', [schoolId, row.student_code]);
     if (classifyStudentImport(exist) !== 'INSERT') {
-      await conn.query("UPDATE import_batch_rows SET status='ALREADY_APPLIED', applied_at=NOW() WHERE id=?", [row.id]);
+      await conn.query(`UPDATE import_batch_rows SET status='ALREADY_APPLIED', applied_at=NOW(), ${CLEARS_FAILURE} WHERE id=?`, [row.id]);
       await conn.commit(); r.already_applied++; r.details.push({ row: row.row_no, status: 'ALREADY_APPLIED' }); return;
     }
 
@@ -454,11 +570,11 @@ async function applyInsertRow(pool, { row, schoolId, userId, r, autoCreateVehicl
         source: 'import_apply', row_no: row.row_no, auto_created_vehicle: autoCreateVehicle && !row.matched_vehicle_id && !!vehicleId,
       },
     });
-    await conn.query("UPDATE import_batch_rows SET status='APPLIED', new_student_id=?, applied_at=NOW() WHERE id=?", [newId, row.id]);
+    await conn.query(`UPDATE import_batch_rows SET status='APPLIED', new_student_id=?, applied_at=NOW(), ${CLEARS_FAILURE} WHERE id=?`, [newId, row.id]);
     await conn.commit(); r.applied++; r.details.push({ row: row.row_no, status: 'APPLIED', student_id: newId });
   } catch (e) {
     await conn.rollback();
-    await pool.query("UPDATE import_batch_rows SET status='APPLY_FAILED', error_detail=? WHERE id=?", [String(e.code || e.message).slice(0, 500), row.id]);
+    await markRowApplyFailed(pool, row.id, e);
     r.failed++; r.details.push({ row: row.row_no, status: 'APPLY_FAILED' });
   } finally { conn.release(); }
 }
@@ -472,8 +588,8 @@ async function applyGuardianRow(pool, { row, schoolId, userId, batchId, r }) {
     if (!row) { await conn.commit(); return; }
     const [[st]] = await conn.query('SELECT id FROM students WHERE school_id = ? AND student_code = ? AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1 FOR UPDATE', [schoolId, row.student_code]);
     if (!st) {  // student gone / deleted / code reassigned since preview
-      await conn.query("UPDATE import_batch_rows SET status='STALE_NEEDS_REPREVIEW' WHERE id=?", [row.id]);
-      await conn.commit(); r.stale++; r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REPREVIEW' }); return;
+      await markStale(conn, row, r);
+      await conn.commit(); return;
     }
     const n = normOf(row);
     const newName = n.parent_name || null, newPhone = n.parent_phone || null;
@@ -505,11 +621,11 @@ async function applyGuardianRow(pool, { row, schoolId, userId, batchId, r }) {
       oldValue: { guardian_name: cur ? cur.old_name : null, guardian_phone: maskPhone(cur ? cur.old_phone : null) },
       newValue: { guardian_name: newName, guardian_phone: maskPhone(newPhone), batch_id: batchId, row_no: row.row_no, mode: 'update_guardian_confirmed' },
     });
-    await conn.query("UPDATE import_batch_rows SET status='GUARDIAN_UPDATED', new_student_id=?, applied_at=NOW() WHERE id=?", [st.id, row.id]);
+    await conn.query(`UPDATE import_batch_rows SET status='GUARDIAN_UPDATED', new_student_id=?, applied_at=NOW(), ${CLEARS_FAILURE} WHERE id=?`, [st.id, row.id]);
     await conn.commit(); r.guardian_updated++; r.details.push({ row: row.row_no, status: 'GUARDIAN_UPDATED', student_id: st.id });
   } catch (e) {
     await conn.rollback();
-    await pool.query("UPDATE import_batch_rows SET status='APPLY_FAILED', error_detail=? WHERE id=?", [String(e.code || e.message).slice(0, 500), row.id]);
+    await markRowApplyFailed(pool, row.id, e);
     r.failed++; r.details.push({ row: row.row_no, status: 'APPLY_FAILED' });
   } finally { conn.release(); }
 }
@@ -524,11 +640,11 @@ async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
     if (!row) { await conn.commit(); return; }
     const [[st]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1 FOR UPDATE', [schoolId, row.student_code]);
     if (!st) {
-      await conn.query("UPDATE import_batch_rows SET status='STALE_NEEDS_REPREVIEW' WHERE id=?", [row.id]);
-      await conn.commit(); r.stale++; r.details.push({ row: row.row_no, status: 'STALE_NEEDS_REPREVIEW' }); return;
+      await markStale(conn, row, r);
+      await conn.commit(); return;
     }
     if (!st.is_deleted) {  // already active (restored or re-inserted since preview)
-      await conn.query("UPDATE import_batch_rows SET status='ALREADY_APPLIED', applied_at=NOW() WHERE id=?", [row.id]);
+      await conn.query(`UPDATE import_batch_rows SET status='ALREADY_APPLIED', applied_at=NOW(), ${CLEARS_FAILURE} WHERE id=?`, [row.id]);
       await conn.commit(); r.already_applied++; r.details.push({ row: row.row_no, status: 'ALREADY_APPLIED' }); return;
     }
     // Vehicle re-check: never reactivate onto a missing/soft-deleted vehicle.
@@ -536,8 +652,8 @@ async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
     if (vehicleId) {
       const [[v]] = await conn.query('SELECT id FROM vehicles WHERE id = ? AND is_deleted = FALSE LIMIT 1', [vehicleId]);
       if (!v) {
-        await conn.query("UPDATE import_batch_rows SET status='VEHICLE_BLOCKED' WHERE id=?", [row.id]);
-        await conn.commit(); r.vehicle_blocked++; r.details.push({ row: row.row_no, status: 'VEHICLE_BLOCKED' }); return;
+        await markVehicleBlocked(conn, row, r);
+        await conn.commit(); return;
       }
     }
     const n = normOf(row);
@@ -552,17 +668,25 @@ async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
       oldValue: { is_deleted: true },
       newValue: { is_deleted: false, vehicle_id: vehicleId, batch_id: batchId, row_no: row.row_no, mode: 'reactivate_student_confirmed' },
     });
-    await conn.query("UPDATE import_batch_rows SET status='REACTIVATED', new_student_id=?, applied_at=NOW() WHERE id=?", [st.id, row.id]);
+    await conn.query(`UPDATE import_batch_rows SET status='REACTIVATED', new_student_id=?, applied_at=NOW(), ${CLEARS_FAILURE} WHERE id=?`, [st.id, row.id]);
     await conn.commit(); r.reactivated++; r.details.push({ row: row.row_no, status: 'REACTIVATED', student_id: st.id });
   } catch (e) {
     await conn.rollback();
-    await pool.query("UPDATE import_batch_rows SET status='APPLY_FAILED', error_detail=? WHERE id=?", [String(e.code || e.message).slice(0, 500), row.id]);
+    await markRowApplyFailed(pool, row.id, e);
     r.failed++; r.details.push({ row: row.row_no, status: 'APPLY_FAILED' });
   } finally { conn.release(); }
 }
 
 // ── Apply with explicit modes (Phase 10.13B-4). insert_ready is the default and
 //    preserves prior behavior; risky modes act ONLY on explicitly selected rows.
+// The row statuses every batch counter is derived from. A row either went in
+// (four ways), was skipped, or is UNRESOLVED — and an unresolved row must stay
+// visible: VEHICLE_BLOCKED and STALE_NEEDS_REPREVIEW were counted nowhere, so a
+// row whose vehicle disappeared between preview and apply vanished from the
+// history counts and left the batch reading APPLIED.
+const SUCCESS_ROW_STATUSES = ['APPLIED', 'GUARDIAN_UPDATED', 'REACTIVATED', 'ALREADY_APPLIED'];
+const UNRESOLVED_ROW_STATUSES = ['ERROR', 'APPLY_FAILED', 'VEHICLE_BLOCKED', 'STALE_NEEDS_REPREVIEW'];
+
 const RISKY_GUARDIAN = new Set(['update_guardian_confirmed', 'mixed_confirmed']);
 const RISKY_REACTIVATE = new Set(['reactivate_student_confirmed', 'mixed_confirmed']);
 const DOES_INSERT = new Set(['insert_ready', 'mixed_confirmed']);
@@ -592,14 +716,39 @@ async function applyBatch(pool, { batchId, schoolId, userId, mode = 'insert_read
     for (const row of rows) if (sel.has(Number(row.row_no))) await applyReactivateRow(pool, { row, schoolId, userId, batchId, r });
   }
 
-  const status = r.failed > 0 ? 'APPLIED_PARTIAL' : 'APPLIED';
   const successRows = r.applied + r.guardian_updated + r.reactivated + r.already_applied;
+  // insert_count / skip_count / error_rows were written once at preview and never
+  // touched again, so the history screen kept reporting the preview's optimism
+  // (3 ready, 0 errors) for a batch that had actually failed a row, contradicting
+  // the detail screen. EVERY counter — b.status and success_rows included — is now
+  // derived from the rows, the same place getBatchDetail derives its summary from.
+  // Those last two came from THIS pass's tallies, so a second pass that imported
+  // nothing reset a batch that had already reported a success and a failure: a
+  // history screen that forgets a failure it has shown is worse than one that
+  // never showed it. Derived counters can only move when the rows move.
   await pool.query(
-    'UPDATE import_batches SET status = ?, applied_at = NOW(), success_rows = ?, completed_at = NOW() WHERE id = ?',
-    [status, successRows, batchId]
+    `UPDATE import_batches b
+        SET b.status = IF((SELECT COUNT(*) FROM import_batch_rows r WHERE r.batch_id = b.id
+                             AND r.status IN (?)) > 0, 'APPLIED_PARTIAL', 'APPLIED'),
+            b.applied_at = NOW(), b.completed_at = NOW(),
+            b.success_rows = (SELECT COUNT(*) FROM import_batch_rows r WHERE r.batch_id = b.id
+                                AND r.status IN (?)),
+            b.insert_count = (SELECT COUNT(*) FROM import_batch_rows r WHERE r.batch_id = b.id
+                                AND r.status IN (?)),
+            b.skip_count   = (SELECT COUNT(*) FROM import_batch_rows r WHERE r.batch_id = b.id
+                                AND r.status = 'SKIP'),
+            b.error_rows   = (SELECT COUNT(*) FROM import_batch_rows r WHERE r.batch_id = b.id
+                                AND r.status IN (?))
+      WHERE b.id = ?`,
+    [UNRESOLVED_ROW_STATUSES, SUCCESS_ROW_STATUSES, SUCCESS_ROW_STATUSES, UNRESOLVED_ROW_STATUSES, batchId]
   );
   return { ...r, success_rows: successRows };
 }
+
+// Rows written before the guardian_diff_json fix hold the JSON literal null, for
+// which `IS NOT NULL` is true. Both shapes must read as "no guardian change", or
+// every batch already imported keeps showing "ผู้ปกครองเปลี่ยน" on every row.
+const GUARDIAN_CHANGED_SQL = "(guardian_diff_json IS NOT NULL AND JSON_TYPE(guardian_diff_json) <> 'NULL')";
 
 // ── Report: row-level results (phones never included; PII-safe). ─────────────
 async function getReport(pool, { batchId, schoolId }) {
@@ -607,8 +756,8 @@ async function getReport(pool, { batchId, schoolId }) {
   if (!batch) { const e = new Error('ไม่พบชุดข้อมูลนำเข้า'); e.statusCode = 404; throw e; }
   if (String(batch.school_id) !== String(schoolId)) { const e = new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลนี้'); e.statusCode = 403; throw e; }
   const [rows] = await pool.query(
-    `SELECT row_no, student_code, classification, status, message_th, matched_display_plate,
-            (guardian_diff_json IS NOT NULL) AS guardian_mismatch,
+    `SELECT row_no, student_code, classification, status, message_th, matched_display_plate, error_detail,
+            ${GUARDIAN_CHANGED_SQL} AS guardian_mismatch,
             JSON_UNQUOTE(JSON_EXTRACT(raw_json,'$.student_name')) AS student_name,
             JSON_UNQUOTE(JSON_EXTRACT(raw_json,'$.plate')) AS input_vehicle_plate
      FROM import_batch_rows WHERE batch_id = ? ORDER BY row_no`, [batchId]);
@@ -619,6 +768,7 @@ async function getReport(pool, { batchId, schoolId }) {
       classification: r.classification, status: r.status, message_th: r.message_th,
       input_vehicle_plate: r.input_vehicle_plate, matched_display_plate: r.matched_display_plate,
       guardian_mismatch: r.guardian_mismatch ? 'yes' : 'no',
+      error_detail: r.error_detail || null,
     })),
   };
 }
@@ -659,7 +809,7 @@ async function getBatchDetail(pool, { batchId, schoolId }) {
   if (String(batch.school_id) !== String(schoolId)) { const e = new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลนี้'); e.statusCode = 403; throw e; }
   const [rows] = await pool.query(
     `SELECT row_no, student_code, classification, status, rollback_status, message_th, matched_display_plate, matched_vehicle_id,
-            (guardian_diff_json IS NOT NULL) AS guardian_mismatch, (new_student_id IS NOT NULL) AS has_new_student, can_apply, applied_at,
+            ${GUARDIAN_CHANGED_SQL} AS guardian_mismatch, (new_student_id IS NOT NULL) AS has_new_student, can_apply, applied_at, error_detail,
             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.student_name')) AS student_name,
             JSON_UNQUOTE(JSON_EXTRACT(raw_json, '$.plate')) AS input_vehicle_plate,
             JSON_UNQUOTE(JSON_EXTRACT(guardian_diff_json, '$.current')) AS guardian_current,
@@ -667,16 +817,19 @@ async function getBatchDetail(pool, { batchId, schoolId }) {
      FROM import_batch_rows WHERE batch_id = ? ORDER BY row_no`, [batchId]);
   const summary = { total: rows.length, ready: 0, warning: 0, skip: 0, error: 0, applied: 0, rolled_back: 0 };
   const out = rows.map((r) => {
-    if (['APPLIED', 'GUARDIAN_UPDATED', 'REACTIVATED', 'ALREADY_APPLIED'].includes(r.status)) summary.applied++;
+    if (SUCCESS_ROW_STATUSES.includes(r.status)) summary.applied++;
     if (r.rollback_status === 'ROLLED_BACK') summary.rolled_back++;
-    if (r.status === 'ERROR' || r.status === 'APPLY_FAILED') summary.error++;
+    // Same set the batch counters use — a blocked or staled row is not "ready",
+    // it is a row that did not go in, and both screens have to say so.
+    if (UNRESOLVED_ROW_STATUSES.includes(r.status)) summary.error++;
     else if (r.status === 'WARNING') summary.warning++;
     else if (r.status === 'SKIP') summary.skip++;
     else if (r.can_apply && !r.applied_at) summary.ready++;
     return {
       row_number: r.row_no, student_code: r.student_code, student_name: r.student_name,
       classification: r.classification, status: r.status, rollback_status: r.rollback_status,
-      message_th: r.message_th, input_vehicle_plate: r.input_vehicle_plate, matched_display_plate: r.matched_display_plate,
+      message_th: r.message_th, error_detail: r.error_detail || null,
+      input_vehicle_plate: r.input_vehicle_plate, matched_display_plate: r.matched_display_plate,
       guardian_mismatch: !!r.guardian_mismatch, guardian_current: r.guardian_current, guardian_input: r.guardian_input,
       can_apply: !!r.can_apply && !r.applied_at,
       can_confirm_guardian_update: r.classification === 'GUARDIAN_MISMATCH' && !r.applied_at,

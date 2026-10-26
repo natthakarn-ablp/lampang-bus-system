@@ -12,8 +12,8 @@ const ICON_BG = {
 };
 
 const TREND_STYLE = {
-  up:   { icon: TrendingUp,   className: 'text-success' },
-  down: { icon: TrendingDown, className: 'text-danger' },
+  up:   { icon: TrendingUp,   className: 'text-success-ink' },
+  down: { icon: TrendingDown, className: 'text-danger-ink' },
   flat: { icon: Minus,        className: 'text-ink-muted' },
 };
 

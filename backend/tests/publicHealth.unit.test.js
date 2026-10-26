@@ -30,7 +30,7 @@ beforeEach(() => {
   });
 });
 
-test('GET /api/health returns only the approved public shape with no-store', async () => {
+test('GET /api/health returns 200 for ok with only the approved public shape and no-store', async () => {
   const response = await request(app).get('/api/health');
 
   expect(response.status).toBe(200);
@@ -51,7 +51,7 @@ test('public response omits runtime, environment, paths, DB identity and raw err
   expect(serialized).not.toMatch(/node_version|uptime|environment|path|database_name|db_name|error|stack/i);
 });
 
-test('migration failure degrades safely without exposing the underlying error', async () => {
+test('migration failure returns 503 degraded safely without exposing the underlying error', async () => {
   pool.query.mockImplementation(async (sql) => {
     if (/SELECT 1 AS ok/.test(sql)) return [[{ ok: 1 }]];
     if (/FROM schema_migrations/.test(sql)) throw new Error('synthetic path and database detail');
@@ -60,7 +60,7 @@ test('migration failure degrades safely without exposing the underlying error', 
 
   const response = await request(app).get('/api/health');
 
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(503);
   expect(response.headers['cache-control']).toBe('no-store');
   expect(response.body).toEqual({
     status: 'degraded',

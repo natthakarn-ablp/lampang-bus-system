@@ -125,7 +125,8 @@ function publicHealthNoStore(_req, res, next) {
 app.get('/api/health', publicHealthNoStore, publicHealthLimiter, async (_req, res, next) => {
   try {
     const { getPublicHealth } = require('./services/publicHealth.service');
-    return res.json(await getPublicHealth());
+    const health = await getPublicHealth();
+    return res.status(health.status === 'ok' ? 200 : 503).json(health);
   } catch (error) {
     return next(error);
   }

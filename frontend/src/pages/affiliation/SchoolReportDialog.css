@@ -15,9 +15,11 @@
   .affiliation-school-report-dialog::backdrop,
   .school-report-actions { display: none !important; }
   .affiliation-school-report-print article { padding: 0; }
-  .school-report-table { table-layout: fixed; }
+  .affiliation-school-report-print .school-report-table > div { display: block !important; }
+  .affiliation-school-report-print .school-report-table > ul { display: none !important; }
+  .school-report-table table { table-layout: fixed; }
   .school-report-table th:first-child { width: 58%; }
   .school-report-table thead { display: table-header-group; }
-  .school-report-table tfoot { display: table-row-group; }
   .school-report-table tr { break-inside: avoid; }
+  .school-report-total { break-inside: avoid; }
 }

@@ -1,8 +1,15 @@
 import { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import DataTable from '../../components/ui/DataTable';
 import './SchoolReportDialog.css';
 
 const number = new Intl.NumberFormat('th-TH');
+
+const SCHOOL_COLUMNS = [
+  { key: 'name', header: 'โรงเรียน', primary: true, cell: school => school.name },
+  { key: 'students', header: 'นักเรียน (คน)', numeric: true, cell: school => number.format(school.student_count) },
+  { key: 'vehicles', header: 'รถรับส่ง (คัน)', numeric: true, cell: school => number.format(school.vehicle_count) },
+];
 
 export default function SchoolReportDialog({ report, onClose }) {
   const dialogRef = useRef(null);
@@ -51,30 +58,19 @@ function ReportContents({ report, titleId }) {
           <div><dt className="text-ink-muted">นักเรียน</dt><dd className="mt-1 text-lg font-bold">{number.format(report.summary.total_students)} คน</dd></div>
           <div><dt className="text-ink-muted">รถรับส่ง (ไม่ซ้ำ)</dt><dd className="mt-1 text-lg font-bold">{number.format(report.summary.total_vehicles)} คัน</dd></div>
         </dl>
-        <table className="school-report-table w-full border-collapse text-sm">
-          <caption className="mb-2 text-left font-medium">ข้อมูลแยกรายโรงเรียน</caption>
-          <thead><tr className="bg-brand-50 text-brand-800">
-            <th scope="col" className="border border-surface-border px-3 py-3 text-left">โรงเรียน</th>
-            <th scope="col" className="border border-surface-border px-3 py-3 text-right">นักเรียน (คน)</th>
-            <th scope="col" className="border border-surface-border px-3 py-3 text-right">รถรับส่ง (คัน)</th>
-          </tr></thead>
-          <tbody>
-            {report.schools.length === 0 ? (
-              <tr><td colSpan={3} className="border border-surface-border p-4 text-center text-ink-muted">ยังไม่มีโรงเรียนในสังกัด</td></tr>
-            ) : report.schools.map((school) => (
-              <tr key={school.id}>
-                <td className="border border-surface-border px-3 py-3 break-words">{school.name}</td>
-                <td className="border border-surface-border px-3 py-3 text-right tabular-nums">{number.format(school.student_count)}</td>
-                <td className="border border-surface-border px-3 py-3 text-right tabular-nums">{number.format(school.vehicle_count)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot><tr className="bg-brand-50 font-bold">
-            <td className="border border-surface-border px-3 py-3">รวมทั้งสังกัด (รถไม่นับซ้ำ)</td>
-            <td className="border border-surface-border px-3 py-3 text-right tabular-nums">{number.format(report.summary.total_students)}</td>
-            <td className="border border-surface-border px-3 py-3 text-right tabular-nums">{number.format(report.summary.total_vehicles)}</td>
-          </tr></tfoot>
-        </table>
+        <DataTable
+          className="school-report-table"
+          caption="ข้อมูลแยกรายโรงเรียน"
+          columns={SCHOOL_COLUMNS}
+          rows={report.schools}
+          rowKey={school => school.id}
+          empty={{ title: 'ยังไม่มีโรงเรียนในสังกัด' }}
+        />
+        <dl className="school-report-total mt-3 grid grid-cols-3 gap-3 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm font-bold">
+          <div><dt>รวมทั้งสังกัด</dt><dd className="text-xs font-normal text-ink-muted">รถไม่นับซ้ำ</dd></div>
+          <div className="text-right"><dt className="text-ink-muted">นักเรียน</dt><dd className="tabular-nums">{number.format(report.summary.total_students)}</dd></div>
+          <div className="text-right"><dt className="text-ink-muted">รถรับส่ง</dt><dd className="tabular-nums">{number.format(report.summary.total_vehicles)}</dd></div>
+        </dl>
         <p className="mt-3 text-xs text-ink-muted">หมายเหตุ: รถคันเดียวอาจรับส่งหลายโรงเรียน ยอดรถรวมทั้งสังกัดจึงนับแต่ละคันเพียงครั้งเดียว และอาจน้อยกว่าผลรวมรายโรงเรียน</p>
         <p className="mt-2 text-xs text-ink-muted">รายงานนี้สรุปข้อมูลปัจจุบันในระบบ ไม่ใช่สถานะยืนยันการส่งข้อมูลรายภาคเรียน</p>
       </article>

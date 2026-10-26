@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Copy, Download, KeyRound, Link2, RefreshCw, ShieldCheck, Unlink } from 'lucide-react';
 import api from '../../api/axios';
+import ErrorState from '../../components/ErrorState';
+import LoadingState from '../../components/LoadingState';
 import PageHeader from '../../components/PageHeader';
 import { AlertBanner, AppCard, ConfirmDialog, FormField } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
@@ -32,8 +34,9 @@ export default function AdminAccountSecurity() {
   const [codes, setCodes] = useState([]);
   const [lineIdToken, setLineIdToken] = useState('');
 
-  async function loadStatus() {
+  const loadStatus = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
       const response = await api.get('/auth/recovery/self/status');
       setStatus(response.data.data);
@@ -42,7 +45,7 @@ export default function AdminAccountSecurity() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,6 +200,10 @@ export default function AdminAccountSecurity() {
         <AlertBanner variant="warn" title="ยังไม่เปิดใช้การกู้คืนรหัสผ่าน">
           ผู้ดูแลระบบต้องติดตั้ง migration 049 และเปิด feature flag หลังผ่านการทดสอบ LINE OA จริง
         </AlertBanner>
+      ) : loading ? (
+        <LoadingState message="กำลังตรวจสอบสถานะความปลอดภัยบัญชี…" />
+      ) : !status ? (
+        <ErrorState message={error} onRetry={loadStatus} />
       ) : (
         <div className="space-y-5">
           <AppCard className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">

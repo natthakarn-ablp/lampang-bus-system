@@ -63,7 +63,7 @@ const USERS = {
   affiliation: { username: 'affiliation01', display_name: 'สังกัดตัวอย่าง เขต 1',   role: 'affiliation', scope_type: 'AFFILIATION', scope_id: 'AFF001' },
   school:      { username: 'school01',      display_name: 'โรงเรียนตัวอย่าง',       role: 'school',      scope_type: 'SCHOOL',      scope_id: 'SCH0001' },
   teacher:     { username: 'teacher_p1',    display_name: 'ครูประจำชั้น ป.1',       role: 'school',      scope_type: 'SCHOOL',      scope_id: 'SCH0001', grade_scope: 'ป.1' },
-  transport:   { username: 'transport01',   display_name: 'ขนส่งจังหวัด (ตัวอย่าง)', role: 'transport' },
+  transport:   { id: 6, username: 'transport01', display_name: 'ขนส่งจังหวัด (ตัวอย่าง)', role: 'transport' },
   driver:      { username: 'driver01',      display_name: 'คนขับ ตัวอย่าง',         role: 'driver',      driver_id: 1 },
 };
 
@@ -1087,8 +1087,10 @@ function mockFor(url, scenario, user) {
     }
     if (/^\/api\/verification\/transport\/applications\/(\d+)\/start$/.test(u.pathname)) {
       const appId = Number(u.pathname.match(/applications\/(\d+)\/start/)[1]);
+      // inspected_by is the signed-in officer: VerificationQueue only renders the
+      // checklist for the attempt's owner.
       inspectionAttempt = { id: 77001, application_id: appId, result: 'IN_PROGRESS',
-                            inspected_by: 1, started_at: '2026-08-27T02:00:00Z' };
+                            inspected_by: user?.id ?? null, started_at: '2026-08-27T02:00:00Z' };
       return { data: { attempt_id: 77001, result: 'IN_PROGRESS' } };
     }
     if (/^\/api\/verification\/transport\/attempts\/\d+\/(finalize|abort)$/.test(u.pathname)) {
@@ -1390,7 +1392,11 @@ const SHOTS = [
   // ยืนยันแทนคนขับแบบยกชุด — การติ๊กกลับด้าน (ติ๊ก = ไม่ได้ขึ้นรถ) ต้องอ่านไม่ผิด
   // จึงยืนยันว่าคำอธิบายและตัวนับทั้งสองฝั่งปรากฏพร้อมกันบนหน้าจอ
   { id: '09b-school-override-bulk', url: '/school', user: 'school', vps: ['desktop'],
+    // The button lives inside the collapsed "งานแก้ไขรายการพิเศษ" disclosure on
+    // SchoolDashboard, so it exists in the DOM but is not clickable until the
+    // summary is opened.
     act: async (page) => {
+      await page.locator('summary', { hasText: 'งานแก้ไขรายการพิเศษ' }).first().click();
       const btn = page.locator('button:has-text("ยืนยันแทนคนขับ")').first();
       if (await btn.count()) { await btn.click(); await page.waitForTimeout(600); }
     },
@@ -1437,13 +1443,17 @@ const SHOTS = [
   // them. A build passes with an undefined identifier inside a modal body;
   // only rendering it catches that.
   { id: '79-import-preview', url: '/school/students', user: 'school', vps: ['mobile', 'desktop'],
-    act: async page => { await page.getByRole('button', { name: 'นำเข้าข้อมูล' }).first().click(); },
+    act: async page => { await page.getByRole('button', { name: 'เพิ่มหลายคนจากไฟล์' }).first().click(); },
     expect: ['[role=dialog]', 'input[type=file]', 'text=ตรวจสอบไฟล์ก่อนนำเข้า', 'text=ภาคเรียนที่จะบันทึก'] },
   { id: '80-import-history', url: '/school/students', user: 'school', vps: ['mobile', 'desktop'],
-    act: async page => { await page.getByRole('button', { name: 'ประวัติการนำเข้า' }).first().click(); },
+    act: async page => {
+      await page.locator('summary', { hasText: 'ประวัติและเครื่องมือนำเข้าเพิ่มเติม' }).first().click();
+      await page.getByRole('button', { name: 'ประวัติการนำเข้า' }).first().click();
+    },
     expect: ['[role=dialog]', 'text=ประวัติการนำเข้า', 'text=students-aug.csv'] },
   { id: '81-import-history-detail', url: '/school/students', user: 'school', vps: ['desktop'],
     act: async page => {
+      await page.locator('summary', { hasText: 'ประวัติและเครื่องมือนำเข้าเพิ่มเติม' }).first().click();
       await page.getByRole('button', { name: 'ประวัติการนำเข้า' }).first().click();
       await page.waitForTimeout(400);
       await page.getByRole('button', { name: 'เปิดดู' }).first().click();
@@ -1454,8 +1464,9 @@ const SHOTS = [
              'button:has-text("ดาวน์โหลดรายงาน (CSV)")'] },
   { id: '82-student-transfer', url: '/school/students', user: 'school', vps: ['mobile', 'desktop'],
     act: async page => {
-      await page.getByRole('button', { name: 'แก้ไข' }).first().click();
+      await page.getByRole('button', { name: 'แก้ข้อมูล' }).first().click();
       await page.waitForTimeout(400);
+      await page.locator('summary', { hasText: 'ย้ายโรงเรียน / นำรายชื่อออก' }).first().click();
       await page.getByRole('button', { name: 'ขอโอนย้ายนักเรียน' }).first().click();
     },
     expect: ['[role=dialog]', 'text=รหัสโรงเรียนปลายทาง', 'text=คำขอนี้ยังไม่ย้ายข้อมูล',

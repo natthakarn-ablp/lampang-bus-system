@@ -1041,6 +1041,8 @@ const COMMON = {
   } },
   // สรุปโรงเรียนในสังกัด (SchoolList.jsx) — ตัวเลขสมมุติ
   '/api/affiliation/schools/report': { data: {
+    affiliation: { id: 'AFF001', name: 'สังกัดตัวอย่าง จังหวัดลำปาง' },
+    generated_at: '2026-08-27T02:15:00Z',
     summary: { total_schools: 2, total_students: 186, total_vehicles: 9 },
     schools: [
       { id: 'SC-1', name: 'โรงเรียนบ้านตัวอย่าง', student_count: 124, vehicle_count: 6 },

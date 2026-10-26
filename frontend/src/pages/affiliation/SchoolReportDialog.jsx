@@ -18,7 +18,9 @@ export default function SchoolReportDialog({ report, onClose }) {
   useEffect(() => {
     const dialog = dialogRef.current;
     dialog.showModal();
-    return () => { if (dialog.open) dialog.close(); };
+    // Removing a dialog from the DOM closes it automatically. Calling close()
+    // from the StrictMode effect cleanup also fires onClose, which unmounted
+    // the second development render before a user could see the report.
   }, []);
 
   return createPortal(
@@ -65,8 +67,13 @@ function ReportContents({ report, titleId }) {
           rows={report.schools}
           rowKey={school => school.id}
           empty={{ title: 'ยังไม่มีโรงเรียนในสังกัด' }}
+          footer={<tr className="bg-brand-50 font-bold">
+            <td className="px-4 py-3">รวมทั้งสังกัด (รถไม่นับซ้ำ)</td>
+            <td className="px-4 py-3 text-right tabular-nums">{number.format(report.summary.total_students)}</td>
+            <td className="px-4 py-3 text-right tabular-nums">{number.format(report.summary.total_vehicles)}</td>
+          </tr>}
         />
-        <dl className="school-report-total mt-3 grid grid-cols-3 gap-3 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm font-bold">
+        <dl className="school-report-total mt-3 grid grid-cols-3 gap-3 rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm font-bold md:hidden">
           <div><dt>รวมทั้งสังกัด</dt><dd className="text-xs font-normal text-ink-muted">รถไม่นับซ้ำ</dd></div>
           <div className="text-right"><dt className="text-ink-muted">นักเรียน</dt><dd className="tabular-nums">{number.format(report.summary.total_students)}</dd></div>
           <div className="text-right"><dt className="text-ink-muted">รถรับส่ง</dt><dd className="tabular-nums">{number.format(report.summary.total_vehicles)}</dd></div>

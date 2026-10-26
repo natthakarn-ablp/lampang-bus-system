@@ -27,6 +27,8 @@ import EmptyState from '../EmptyState';
  * }]
  *
  * `actions(row)` renders in the last table column and along the card footer.
+ * `footer` is an optional semantic <tr> (or rows) for desktop/print totals;
+ * callers can pair it with a separate mobile summary when needed.
  */
 
 const ALIGN = { left: 'text-left', center: 'text-center', right: 'text-right' };
@@ -105,13 +107,14 @@ export default function DataTable({
   caption,
   rowClassName,
   selection,
+  footer,
   className = '',
 }) {
   if (loading) return <LoadingState />;
   if (error) {
     return <ErrorState title={empty.errorTitle || 'โหลดข้อมูลไม่สำเร็จ'} message={typeof error === 'string' ? error : undefined} onRetry={onRetry} />;
   }
-  if (!rows.length) {
+  if (!rows.length && !footer) {
     return (
       <EmptyState
         icon={empty.icon}
@@ -131,6 +134,14 @@ export default function DataTable({
 
   return (
     <div className={className}>
+      {!rows.length && (
+        <EmptyState
+          icon={empty.icon}
+          title={empty.title || 'ยังไม่มีข้อมูล'}
+          description={empty.description}
+          action={empty.action}
+        />
+      )}
       {/* Desktop — the horizontal scroll lives here, never on <body>.
           A scrollable region has to be reachable and operable by keyboard
           (WCAG 2.1.1), and it needs a name so a screen reader can say what is
@@ -189,6 +200,7 @@ export default function DataTable({
                 </tr>
               ))}
             </tbody>
+            {footer && <tfoot>{footer}</tfoot>}
           </table>
         </div>
       </AppCard>

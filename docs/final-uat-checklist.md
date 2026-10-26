@@ -24,7 +24,7 @@
 |---|---|
 | Production URL | https://schoolbuslampang.com |
 | Backend health endpoint (loopback) | http://127.0.0.1:3000/health |
-| Backend health endpoint (public) | ยังไม่มี endpoint นี้ที่ยืนยันว่าให้ JSON health; `/health` หรือ `/api/health` อาจตอบ SPA HTML 200 จึงไม่นับเป็น health PASS ให้ตรวจ loopback ด้านบน |
+| Backend health endpoint (public) | https://schoolbuslampang.com/api/health — JSON แบบจำกัดข้อมูลและ rate limit; HTTP 200 หมายถึงพร้อม (`status: "ok"`), HTTP 503 หมายถึงไม่พร้อม (`status` ไม่ใช่ `"ok"`); ต้องมี `Cache-Control: no-store` และเฉพาะ `status`, commit 7 ตัวอักษร, `database.connected`, `migrations.latest`, `migrations.pending` |
 | Current HEAD ที่ทดสอบ | `6a5fd7d` (frontend bundle from 2a802b2 — script-only commits since then) |
 | Frontend build | `frontend/dist/assets/index-Ct8cd_LJ.js` |
 | Database | MySQL 8.0 — `lampang_bus` |
@@ -242,6 +242,7 @@ Evidence/Notes:
 | O3 | Gzip integrity | `gzip -t <latest>.sql.gz` → silent (success) | ▢ |
 | O4 | Restore drill | `./scripts/restore-drill-db.sh` → restored table count = production table count; row count summary ปรินต์ครบ; production DB ไม่เปลี่ยน | ▢ |
 | O5 | Health check | `./scripts/health-check.sh` → 8/8 OK, exit 0 | ▢ |
+| O5a | Public health | `curl -i https://schoolbuslampang.com/api/health` → HTTP 200 เมื่อพร้อม / HTTP 503 เมื่อไม่พร้อม, body JSON รูปร่างเดิม, `Cache-Control: no-store`, ตรง §2 และไม่คืน runtime/environment/path/error ดิบ | ▢ |
 | O6 | Cron scheduled | `crontab -l` → backup 02:30 + health 5-min present; `systemctl is-active cron` → active | ▢ |
 | O7 | PM2 systemd | `systemctl is-active pm2-schoolbus` → active; `pm2 list` → backend + logrotate online | ▢ |
 | O8 | Off-host backup | (pending operator config) → ดู §9 ของเอกสารนี้ ถ้ายัง YELLOW ระบุไว้ | ▢ |

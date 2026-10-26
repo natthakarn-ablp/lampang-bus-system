@@ -7,10 +7,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { getDeploymentReadiness } = require('./deploymentReadiness.service');
+const { getMigrationStatus } = require('./migrationStatus.service');
 const { probePolicyEvidenceTables } = require('../utils/policyEvidenceTables');
 
 const BACKUP_DIR = '/home/schoolbus/backups/lampang-bus';
-const MIGRATIONS_DIR = path.join(__dirname, '../../migrations');
 const CLEANUP_LOG = '/home/schoolbus/logs/import-cleanup.log';
 const DISK_PATH = '/home/schoolbus';
 const BACKUP_MAX_AGE_HOURS = 36;
@@ -95,16 +95,8 @@ async function computeOperationsHealth(pool) {
 
   // ── Migration tracking (untracked / checksum drift) ────────────────────────
   try {
-    const fileList = fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql'));
-    const [tracked] = await pool.query('SELECT filename, checksum FROM schema_migrations');
-    const byName = Object.fromEntries(tracked.map((t) => [t.filename, t.checksum]));
-    let untracked = 0, drift = 0;
-    for (const f of fileList) {
-      const sum = crypto.createHash('sha256').update(fs.readFileSync(path.join(MIGRATIONS_DIR, f))).digest('hex');
-      if (!(f in byName)) untracked++;
-      else if (byName[f] && byName[f] !== sum) drift++;
-    }
-    add('migration', 'การติดตามไมเกรชัน', drift > 0 ? 'CRITICAL' : untracked > 0 ? 'WARN' : 'OK', `${untracked} untracked / ${drift} drift`);
+    const migration = await getMigrationStatus(pool);
+    add('migration', 'การติดตามไมเกรชัน', migration.drift > 0 ? 'CRITICAL' : migration.pending > 0 ? 'WARN' : 'OK', `${migration.pending} untracked / ${migration.drift} drift`);
   } catch (e) { add('migration', 'การติดตามไมเกรชัน', 'WARN', null, 'check error: ' + e.code); }
 
   // ── Policy-notice tables (migrations 052/053) ─────────────────────────────

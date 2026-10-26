@@ -108,6 +108,30 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+// Public uptime probe: deliberately narrower than loopback /health. It exposes
+// only release identity, DB reachability and migration ledger freshness.
+const publicHealthLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { status: 'rate_limited', commit: null, database: { connected: false }, migrations: { latest: null, pending: null } },
+});
+function publicHealthNoStore(_req, res, next) {
+  res.set('Cache-Control', 'no-store');
+  next();
+}
+app.get('/api/health', publicHealthNoStore, publicHealthLimiter, async (_req, res, next) => {
+  try {
+    const { getPublicHealth } = require('./services/publicHealth.service');
+    const health = await getPublicHealth();
+    return res.status(health.status === 'ok' ? 200 : 503).json(health);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 // Aggregate timing for operator API routes only. Labels come from registered
 // route templates; raw URLs, params and response bodies are never retained.
 app.use(routeLatencyMiddleware);
@@ -277,3 +301,5 @@ module.exports = app;
 module.exports.isOriginAllowed = isOriginAllowed;
 module.exports.GLOBAL_API_LIMITED_PREFIXES = GLOBAL_API_LIMITED_PREFIXES;
 module.exports.apiNotFound = apiNotFound;
+module.exports.publicHealthLimiter = publicHealthLimiter;
+module.exports.publicHealthNoStore = publicHealthNoStore;

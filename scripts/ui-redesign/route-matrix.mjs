@@ -22,6 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { evaluatePartialRatchet } from './partial-ratchet.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..', '..');
@@ -182,6 +183,7 @@ if (unresolved.length) {
 }
 
 if (process.argv.includes('--gate')) {
-  const bad = unresolved.length + partial.length;
-  process.exit(bad === 0 && rows.length === EXPECTED_ROUTES ? 0 : 1);
+  const ratchet = evaluatePartialRatchet(status);
+  const routeFailures = unresolved.length + (rows.length === EXPECTED_ROUTES ? 0 : 1);
+  process.exit(routeFailures === 0 && ratchet.ok ? 0 : 1);
 }

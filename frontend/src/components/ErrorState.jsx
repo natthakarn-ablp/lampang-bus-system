@@ -30,7 +30,7 @@ export default function ErrorState({
           <button
             type="button"
             onClick={onRetry}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-danger-ink underline-offset-2 hover:underline"
+            className="focus-ring inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-danger-ink underline-offset-2 hover:bg-danger-soft hover:underline"
           >
             ลองใหม่อีกครั้ง
           </button>

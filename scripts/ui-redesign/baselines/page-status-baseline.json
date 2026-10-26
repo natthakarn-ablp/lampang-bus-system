@@ -26,21 +26,6 @@
       "file": "pages/ResetPassword.jsx",
       "patterns": ["header", "states"],
       "reason": "Known standalone recovery-page header and async-state migration debt; temporary acceptance must only shrink."
-    },
-    {
-      "file": "pages/school/AddStudentModal.jsx",
-      "patterns": ["states"],
-      "reason": "Known modal async-state migration debt at the recorded baseline; temporary acceptance must only shrink."
-    },
-    {
-      "file": "pages/school/TeacherCheck.jsx",
-      "patterns": ["filter", "form", "states"],
-      "reason": "Known teacher-check filter, form and async-state migration debt; temporary acceptance must only shrink."
-    },
-    {
-      "file": "pages/transport/TransportIncidentRoster.jsx",
-      "patterns": ["header", "form"],
-      "reason": "Known incident-roster header and form migration debt at the recorded baseline; temporary acceptance must only shrink."
     }
   ]
 }

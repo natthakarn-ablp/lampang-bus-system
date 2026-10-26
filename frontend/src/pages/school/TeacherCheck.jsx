@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Sunrise, Sunset, Bus, CheckCircle2, Undo2, Users, Search } from 'lucide-react';
+import { Sunrise, Sunset, Bus, CheckCircle2, Undo2, Users } from 'lucide-react';
 import api from '../../api/axios';
+import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
+import LoadingState from '../../components/LoadingState';
 import PageHeader from '../../components/PageHeader';
 import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import { useToast } from '../../components/Toast';
-import { AppCard, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { AppCard, ConfirmDialog, FilterBar, StatusBadge } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
 import { getGradeScope } from '../../utils/authScope';
 import { formatGradeClass } from '../../utils/student';
@@ -291,68 +294,43 @@ export default function TeacherCheck() {
 
         {data && vehicles.length > 0 && (
           <AppCard padding="md" className="space-y-3">
-            <label htmlFor="teacher-check-search" className="block text-sm font-semibold text-ink">ค้นหานักเรียนหรือรถ</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-3.5 w-5 h-5 text-ink-muted" aria-hidden="true" />
-              <input
-                id="teacher-check-search"
-                type="search"
-                value={search}
-                onChange={event => setSearch(event.target.value)}
-                disabled={interactionLocked}
-                placeholder="ชื่อ ชั้น ห้อง หรือทะเบียนรถ"
-                className="focus-ring w-full min-h-[48px] pl-10 pr-3 rounded-xl border border-surface-border bg-surface-raised text-ink disabled:opacity-60"
+            <fieldset disabled={interactionLocked}>
+              <FilterBar
+                search={{
+                  value: search,
+                  onChange: setSearch,
+                  label: 'ค้นหานักเรียนหรือรถ',
+                  placeholder: 'ชื่อ ชั้น ห้อง หรือทะเบียนรถ',
+                }}
+                chips={{
+                  label: 'กรองรายชื่อ',
+                  value: showPending ? 'pending' : 'all',
+                  onChange: value => setShowPending(value === 'pending'),
+                  options: [
+                    ['pending', 'ยังไม่เช็ก', totals.expected - totals.done],
+                    ['all', 'ทั้งหมด', allCount],
+                  ],
+                }}
+                count={visibleCount}
+                countLabel="คน"
+                onClear={() => { setSearch(''); setShowPending(true); }}
               />
-            </div>
-            <div role="group" aria-label="กรองรายชื่อ" className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                aria-pressed={showPending}
-                onClick={() => setShowPending(true)}
-                disabled={interactionLocked}
-                className={`focus-ring min-h-[44px] rounded-xl px-2 text-sm font-semibold border disabled:opacity-60 ${showPending ? 'bg-brand-50 border-brand-600 text-brand-700' : 'bg-surface-raised border-surface-border text-ink-muted'}`}
-              >
-                ยังไม่เช็ก ({totals.expected - totals.done})
-              </button>
-              <button
-                type="button"
-                aria-pressed={!showPending}
-                onClick={() => setShowPending(false)}
-                disabled={interactionLocked}
-                className={`focus-ring min-h-[44px] rounded-xl px-2 text-sm font-semibold border disabled:opacity-60 ${!showPending ? 'bg-brand-50 border-brand-600 text-brand-700' : 'bg-surface-raised border-surface-border text-ink-muted'}`}
-              >
-                ทั้งหมด ({allCount})
-              </button>
-            </div>
-            <p className="text-sm text-ink-muted" aria-live="polite">
-              แสดง {visibleCount} คน · เลือก “ทั้งหมด” เพื่อดูรายการที่บันทึกแล้ว ลา หรือไม่มีรถ
-            </p>
+            </fieldset>
+            <p className="text-sm text-ink-muted">เลือก “ทั้งหมด” เพื่อดูรายการที่บันทึกแล้ว ลา หรือไม่มีรถ</p>
             {query && <p className="text-sm text-ink-muted">ขณะค้นหา บันทึกได้ทีละคน หากต้องการบันทึกทั้งคัน ให้ล้างคำค้นหาก่อน</p>}
           </AppCard>
         )}
 
-        {error && (
-          <AppCard padding="md" className="space-y-3">
-            <p role="alert" className="text-danger-ink">{error}</p>
-            <button
-              type="button"
-              onClick={() => load()}
-              disabled={interactionLocked || loading}
-              className="focus-ring min-h-[44px] px-4 rounded-xl bg-brand-700 text-white font-semibold disabled:opacity-60"
-            >
-              โหลดรายชื่ออีกครั้ง
-            </button>
-          </AppCard>
-        )}
-        {loading && <p role="status" className="text-center text-ink-muted py-10">กำลังโหลดรายชื่อรอบ{s.label}…</p>}
+        {error && <ErrorState title="โหลดรายชื่อไม่สำเร็จ" message={error} onRetry={() => load()} />}
+        {loading && <LoadingState message={`กำลังโหลดรายชื่อรอบ${s.label}…`} />}
         {data && vehicles.length === 0 && (
-          <AppCard padding="lg" className="text-center text-ink-muted">ไม่มีนักเรียนที่ใช้รถรับส่งรอบนี้</AppCard>
+          <EmptyState title="ไม่มีนักเรียนที่ใช้รถรับส่งรอบนี้" description="ลองเลือกรอบอื่น หรือตรวจสอบการจัดรถของนักเรียน" />
         )}
         {data && vehicles.length > 0 && visibleCount === 0 && (
-          <AppCard padding="lg" className="text-center space-y-2">
-            <p className="font-semibold text-ink">{query ? 'ไม่พบรายชื่อตามคำค้นหา' : 'ไม่มีรายชื่อที่ต้องเช็กเพิ่มในรอบนี้'}</p>
-            <p className="text-sm text-ink-muted">{query ? 'ลองค้นหาชื่อ ชั้น ห้อง หรือทะเบียนรถใหม่ หรือเลือก “ทั้งหมด”' : 'เลือก “ทั้งหมด” เพื่อดูสถานะนักเรียนแต่ละคนและยกเลิกรายการที่คุณบันทึกได้'}</p>
-          </AppCard>
+          <EmptyState
+            title={query ? 'ไม่พบรายชื่อตามคำค้นหา' : 'ไม่มีรายชื่อที่ต้องเช็กเพิ่มในรอบนี้'}
+            description={query ? 'ลองค้นหาชื่อ ชั้น ห้อง หรือทะเบียนรถใหม่ หรือเลือก “ทั้งหมด”' : 'เลือก “ทั้งหมด” เพื่อดูสถานะนักเรียนแต่ละคนและยกเลิกรายการที่คุณบันทึกได้'}
+          />
         )}
 
         {visibleVehicles.map(v => {

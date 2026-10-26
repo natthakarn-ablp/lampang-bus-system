@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { getDeploymentReadiness } = require('./deploymentReadiness.service');
+const { probePolicyEvidenceTables } = require('../utils/policyEvidenceTables');
 
 const BACKUP_DIR = '/home/schoolbus/backups/lampang-bus';
 const MIGRATIONS_DIR = path.join(__dirname, '../../migrations');
@@ -105,6 +106,20 @@ async function computeOperationsHealth(pool) {
     }
     add('migration', 'การติดตามไมเกรชัน', drift > 0 ? 'CRITICAL' : untracked > 0 ? 'WARN' : 'OK', `${untracked} untracked / ${drift} drift`);
   } catch (e) { add('migration', 'การติดตามไมเกรชัน', 'WARN', null, 'check error: ' + e.code); }
+
+  // ── Policy-notice tables (migrations 052/053) ─────────────────────────────
+  // Their absence no longer stops the boot (utils/policyEvidenceTables.js), so
+  // this row is where an operator sees it. The probe never throws.
+  {
+    const { db } = require('../config/env');
+    const label = 'ตารางฟีเจอร์แจ้งนโยบาย (migration 052/053)';
+    const policy = await probePolicyEvidenceTables(pool, db.name);
+    if (policy.state === 'ready') add('policy_notice_tables', label, 'OK', 'present');
+    else if (policy.state === 'missing') {
+      add('policy_notice_tables', label, 'WARN', `missing: ${policy.missing.join(', ')}`,
+        'ยังไม่ได้รัน migration 052/053 — ฟีเจอร์แจ้งนโยบายจะตอบ 503 เมื่อเปิดใช้ ส่วนอื่นของระบบใช้งานได้ปกติ');
+    } else add('policy_notice_tables', label, 'WARN', null, 'check error: ' + policy.error);
+  }
 
   // ── Disk usage ─────────────────────────────────────────────────────────────
   try {

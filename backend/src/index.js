@@ -6,6 +6,7 @@ process.env.TZ = 'Asia/Bangkok';
 const env = require('./config/env');
 const { testConnection, pool } = require('./config/database');
 const app = require('./app');
+const { getPolicyEvidenceStatus } = require('./utils/policyEvidenceTables');
 
 // Audit 2026-06-18 (config-infra-dos): bind to loopback by default so only the
 // local nginx reverse proxy can reach the backend. Binding to 0.0.0.0 let a
@@ -117,6 +118,23 @@ async function assertSharedSecurityStateMigrationPresent() {
     process.exit(1);
   }
   console.log('[app] Shared security state check passed (migration 051 tables present)');
+}
+
+// ─── Policy notice tables check (migrations 052 + 053) — warn, never exit ────
+// /api/policy-notices reads policy_acknowledgements (052) and writes
+// policy_action_evidence (053). Unlike the 051 guard above, a missing table is
+// NOT fatal: whether 052/053 are on production is unconfirmed, and the policy
+// feature is not core work, so it must not keep the whole app from booting.
+// Instead the boot logs a warning, every /api/policy-notices route answers 503
+// (utils/policyEvidenceTables.js), and /admin/system-health shows a WARN row.
+// The status is cached for at most 60 s and re-probed on demand, so applying
+// the migrations re-enables the feature without a restart.
+async function checkPolicyEvidenceTables() {
+  const status = await getPolicyEvidenceStatus({ force: true });
+  if (status.state === 'ready') {
+    console.log('[app] Policy-notice tables present (migration 052/053)');
+  }
+  // 'missing' and 'unknown' are logged by getPolicyEvidenceStatus itself.
 }
 
 // ─── Phase 11A — Intelligent Tracking migration guard (2026-06-23) ───────────
@@ -258,6 +276,7 @@ async function assertParticipationCasesMigrationPresent() {
 async function start() {
   await testConnection();
   await assertSharedSecurityStateMigrationPresent();
+  await checkPolicyEvidenceTables();
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();
   await assertAdminRecoveryMigrationPresent();

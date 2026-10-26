@@ -3,10 +3,14 @@ import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
+import { AlertBanner } from '../../components/ui';
 
 export default function SystemHealth() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Operations checks (integrity, backup, migrations, policy-notice tables…)
+  // load separately so a failure there never hides the usage statistics.
+  const [ops, setOps] = useState({ checks: null, failed: false });
 
   function refresh() {
     setLoading(true);
@@ -14,6 +18,9 @@ export default function SystemHealth() {
       .then(r => setData(r.data?.data))
       .catch(() => {})
       .finally(() => setLoading(false));
+    api.get('/admin/operations/health')
+      .then(r => setOps({ checks: r.data?.data?.checks || [], failed: false }))
+      .catch(() => setOps({ checks: null, failed: true }));
   }
 
   useEffect(() => { refresh(); }, []);
@@ -36,6 +43,8 @@ export default function SystemHealth() {
           </button>
         }
       />
+
+      <OperationsAlerts ops={ops} />
 
       {/* KPI Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
@@ -153,6 +162,35 @@ export default function SystemHealth() {
         <p><strong>หมายเหตุ:</strong> Error count ประมาณจากล็อกอินล้มเหลว — ระบบยังไม่มี persistent error log ที่แยกเก็บ (partial)</p>
       </div>
     </div>
+  );
+}
+
+const SEVERITY_TH = { CRITICAL: 'วิกฤต', WARN: 'ควรตรวจสอบ' };
+
+/** Non-OK operations checks only; an all-clear stays quiet. */
+function OperationsAlerts({ ops }) {
+  if (ops.failed) {
+    return (
+      <AlertBanner variant="warn" title="ตรวจสภาพระบบไม่สำเร็จ" className="mb-6">
+        โหลดผลตรวจสภาพระบบไม่ได้ ข้อมูลการใช้งานด้านล่างยังแสดงตามปกติ
+      </AlertBanner>
+    );
+  }
+  const issues = (ops.checks || []).filter(c => c.severity === 'WARN' || c.severity === 'CRITICAL');
+  if (!issues.length) return null;
+  const critical = issues.some(c => c.severity === 'CRITICAL');
+  return (
+    <AlertBanner variant={critical ? 'danger' : 'warn'} title={`ผลตรวจสภาพระบบ: ${issues.length} รายการที่ต้องดูแล`} className="mb-6">
+      <ul className="space-y-1">
+        {issues.map(c => (
+          <li key={c.key}>
+            <span className="font-semibold">{SEVERITY_TH[c.severity]}</span> · {c.label}
+            {c.value != null && <span className="tabular-nums"> — {String(c.value)}</span>}
+            {c.detail && <span className="block text-caption">{c.detail}</span>}
+          </li>
+        ))}
+      </ul>
+    </AlertBanner>
   );
 }
 

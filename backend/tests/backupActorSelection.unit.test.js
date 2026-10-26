@@ -23,7 +23,11 @@ sed -n 's/^user=/actor=/p' "$defaults"
   });
   afterEach(() => fs.rmSync(base, { recursive: true, force: true }));
   function run(extra = {}) {
-    const env = { ...process.env, APP_DIR: posix(app), BACKUP_DIR: posix(backups), DB_BACKUP_ENV_FILE: posix(preferred), PATH: posix(bin) + path.delimiter + process.env.PATH, ...extra };
+    // backup-db.sh uses `grep -P`, which refuses to run without a UTF-8 locale.
+    // Linux CI and the server have one; a bash spawned from Node on Windows
+    // does not, so give it one unless the caller already set a locale.
+    const locale = process.env.LC_ALL || process.env.LANG ? {} : { LANG: 'C.UTF-8' };
+    const env = { ...process.env, ...locale, APP_DIR: posix(app), BACKUP_DIR: posix(backups), DB_BACKUP_ENV_FILE: posix(preferred), PATH: posix(bin) + path.delimiter + process.env.PATH, ...extra };
     delete env.ENV_FILE;
     if (Object.hasOwn(extra, 'ENV_FILE')) env.ENV_FILE = extra.ENV_FILE;
     return spawnSync(bash, [posix(script)], { env, encoding: 'utf8', timeout: 15000 });

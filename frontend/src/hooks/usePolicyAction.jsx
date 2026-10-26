@@ -14,7 +14,17 @@ export default function usePolicyAction() {
   const [error, setError] = useState('');
 
   const runWithPolicy = useCallback(async (request, execute) => {
-    const response = await api.get(`/policy-notices/action/${encodeURIComponent(request.context)}`);
+    let response;
+    try {
+      response = await api.get(`/policy-notices/action/${encodeURIComponent(request.context)}`);
+    } catch (err) {
+      // 503 = the policy-notice tables (migration 052/053) are not installed.
+      // The notice feature is not core work, so the action itself must not be
+      // blocked by it: continue without a token and let the server's own
+      // consumePolicyAction decide, exactly as when no policy is enabled.
+      if (err.response?.status === 503) return execute(null);
+      throw err;
+    }
     if (!response.data?.data?.enabled) return execute(null);
     return new Promise((resolve, reject) => {
       setError('');

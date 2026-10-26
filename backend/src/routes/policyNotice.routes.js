@@ -12,10 +12,18 @@ const {
   APPROVED, REVIEW_MODE, noticesForRole, actionPolicyForRole, catalogForRole,
 } = require('../config/policyNotices');
 const { tokenDigest, consumePolicyAction } = require('../utils/policyActionEvidence');
+const { requirePolicyEvidenceTables } = require('../utils/policyEvidenceTables');
 
 const router = express.Router();
 const STAFF_ROLES = ['school', 'driver', 'transport', 'affiliation', 'province', 'admin'];
 router.use(authenticate);
+// The migration 052/053 tables are only read or written once a policy is
+// APPROVED; until then every route answers from config without touching the
+// database, and keeps doing so. Once APPROVED, a missing table makes every
+// route here answer 503 with a Thai message instead of ER_NO_SUCH_TABLE (see
+// utils/policyEvidenceTables.js). Placed after authenticate so an anonymous
+// caller still gets 401 and learns nothing about the schema.
+router.use((req, res, next) => (APPROVED ? requirePolicyEvidenceTables(req, res, next) : next()));
 
 function digest(notice) {
   return crypto.createHash('sha256').update(JSON.stringify(notice)).digest('hex');

@@ -119,6 +119,54 @@ async function assertSharedSecurityStateMigrationPresent() {
   console.log('[app] Shared security state check passed (migration 051 tables present)');
 }
 
+// ─── Policy notice evidence guard (migrations 052 + 053) ─────────────────────
+// Same shape as the 051 guard, and for the same reason: no feature flag.
+// app.js mounts /api/policy-notices unconditionally, and its routes read
+// policy_acknowledgements (052) and write policy_action_evidence (053). Without
+// them every acknowledgement and every certified action fails per request with
+// ER_NO_SUCH_TABLE. deploy-backend.sh does not apply migrations, so exiting at
+// boot turns that ordering mistake into a failed deploy that pm2 survives on the
+// previous process, instead of a broken feature in production.
+//
+// 053 says it must be applied together with 052, so both are checked together.
+// Same resilience rule: a genuinely-missing table is fatal, but a probe that
+// fails for an unrelated reason only warns.
+const REQUIRED_POLICY_EVIDENCE_TABLES = ['policy_acknowledgements', 'policy_action_evidence'];
+
+async function assertPolicyEvidenceMigrationPresent() {
+  let presentTables;
+  try {
+    const [rows] = await pool.query(
+      `SELECT table_name AS table_name
+         FROM information_schema.tables
+        WHERE table_schema = ?
+          AND table_name IN (?, ?)`,
+      [env.db.name, ...REQUIRED_POLICY_EVIDENCE_TABLES]
+    );
+    presentTables = new Set(rows.map((r) => String(r.table_name).toLowerCase()));
+  } catch (err) {
+    console.warn(
+      `[app] WARNING: could not verify policy-evidence migration presence (${err.message}). ` +
+      'Continuing startup; verify migrations 052 and 053 were applied.'
+    );
+    return;
+  }
+
+  const missing = REQUIRED_POLICY_EVIDENCE_TABLES.filter((t) => !presentTables.has(t));
+  if (missing.length > 0) {
+    console.error(
+      '[app] FATAL: this build requires migrations 052 and 053 — ' +
+      `missing table(s): ${missing.join(', ')}. ` +
+      'Apply backend/migrations/052_policy_acknowledgements.sql and then ' +
+      '053_policy_action_evidence.sql BEFORE starting this version; without them ' +
+      'every /api/policy-notices acknowledgement and certified action fails. To go ' +
+      'back instead, deploy the previous release — the schema change is additive.'
+    );
+    process.exit(1);
+  }
+  console.log('[app] Policy evidence check passed (migration 052/053 tables present)');
+}
+
 // ─── Phase 11A — Intelligent Tracking migration guard (2026-06-23) ───────────
 // Same pattern as the driver-shift guard: if any of FEATURE_ETA /
 // FEATURE_GEOFENCE / FEATURE_ROUTE_DEVIATION is on, migration 040 must have
@@ -258,6 +306,7 @@ async function assertParticipationCasesMigrationPresent() {
 async function start() {
   await testConnection();
   await assertSharedSecurityStateMigrationPresent();
+  await assertPolicyEvidenceMigrationPresent();
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();
   await assertAdminRecoveryMigrationPresent();

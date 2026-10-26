@@ -2,7 +2,7 @@
 
 Range from the last recorded production deploy (`14f30bcaab72cb3be51bcbf72d31996c7e5a4a12`, see `deploy-2026-10-13-high-risk.md`) to the current head of `feat/tracking-security-hardening`, `ccb7d124a1ca852820dbb037d857f98950d56938` (merge of PR #35).
 
-This record was written from the repository only. Nothing below was read from the server or the production database. Every field that needs server evidence is left blank on purpose and must be filled by whoever holds that evidence. A blank field means "not known", not "did not happen".
+This record was written from the repository only. Nothing below was read from the server or the production database. Every field that needs server evidence reads "(รอกรอก)" (to be filled) and must be filled by whoever holds that evidence. "(รอกรอก)" means "not known", not "did not happen".
 
 **Production status of migrations 052/053: ยังไม่ยืนยัน (unconfirmed).**
 
@@ -59,29 +59,29 @@ The PR #23 title says "Deploy …". That is the PR's intent, not evidence of a p
 
 ## Production operations (UTC)
 
-To be filled from server evidence only. Leave a row blank rather than estimate it.
+To be filled from server evidence only. Write "(รอกรอก)" (to be filled) rather than estimate a value.
 
 | Time | Evidence |
 |---|---|
-|  | Pre-deploy `/health` commit: |
-|  | Deploy lock absent in `deploy-state`: |
-|  | Pre-release database backup (file name, verified how): |
-|  | SHA-256 of `deploy-state/deploy-backend.sh` matches repo `scripts/deploy-backend.sh`: |
-|  | Migration 052 applied (how verified, `schema_migrations` row / DDL comparison): |
-|  | Migration 053 applied (how verified, `schema_migrations` row / DDL comparison): |
-|  | Backend deploy result (`deploy-history.log` line, server test count): |
-|  | Frontend publish result (`DEPLOY_FRONTEND=1`, `dist.prev-*` backup path): |
-|  | Post-deploy `/health` commit: |
-|  | Post-deploy health smoke (PASS / WARN / FAIL counts): |
-|  | `/manual/` and a protected API returning 401: |
+| (รอกรอก) | Pre-deploy `/health` commit: (รอกรอก) |
+| (รอกรอก) | Deploy lock absent in `deploy-state`: (รอกรอก) |
+| (รอกรอก) | Pre-release database backup (file name, verified how): (รอกรอก) |
+| (รอกรอก) | SHA-256 of `deploy-state/deploy-backend.sh` matches repo `scripts/deploy-backend.sh`: (รอกรอก) |
+| (รอกรอก) | Migration 052 applied (how verified, `schema_migrations` row / DDL comparison): (รอกรอก) |
+| (รอกรอก) | Migration 053 applied (how verified, `schema_migrations` row / DDL comparison): (รอกรอก) |
+| (รอกรอก) | Backend deploy result (`deploy-history.log` line, server test count): (รอกรอก) |
+| (รอกรอก) | Frontend publish result (`DEPLOY_FRONTEND=1`, `dist.prev-*` backup path): (รอกรอก) |
+| (รอกรอก) | Post-deploy `/health` commit: (รอกรอก) |
+| (รอกรอก) | Post-deploy health smoke (PASS / WARN / FAIL counts): (รอกรอก) |
+| (รอกรอก) | `/manual/` and a protected API returning 401: (รอกรอก) |
 
-Deployed commit: 
-Deploy date: 
-Operator: 
+Deployed commit: (รอกรอก)
+Deploy date: (รอกรอก)
+Operator: (รอกรอก)
 
 ## Verification limits and remaining work
 
-- Whether any commit after `14f30bc` is live in production is not established by this record.
+- Whether any commit after `14f30bc` is live in production is not established by this record. External evidence recorded in `deploy-658f908.md` points to `658f908`, which contains this whole range, being live on 26 October 2026; the server-side rows above are still (รอกรอก).
 - The status of 052/053 on production stays **ยังไม่ยืนยัน** until the rows above are filled from the database. Until then no build that requires those tables should be deployed.
 - No server, database, LINE channel or production data was touched to write this record.
 

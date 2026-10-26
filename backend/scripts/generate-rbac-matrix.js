@@ -37,7 +37,7 @@ const NON_ROLE_AUTH = [
   { prefix: '/api/consent', mechanism: 'LINE id_token via requireParentLineAuth' },
   { prefix: '/api/line', mechanism: 'LINE webhook signature' },
   { prefix: '/api/qr', mechanism: 'signed QR token' },
-  { prefix: '/api/health', mechanism: 'public health probe' },
+  { prefix: '/api/health', mechanism: 'rate-limited public health probe (minimal release/DB/migration fields)' },
 ];
 
 /**

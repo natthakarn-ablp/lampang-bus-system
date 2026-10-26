@@ -17,7 +17,7 @@
 |---|---|
 | Project | **Lampang Bus System** (ระบบรถรับส่งนักเรียนจังหวัดลำปาง) |
 | Public URL | **https://schoolbuslampang.com** |
-| Backend health | `/health` (loopback) + `/api/health` (public) |
+| Backend health | `/health` (loopback, operator detail) + `/api/health` (public, rate-limited minimal JSON with `Cache-Control: no-store`) |
 | Historical readiness (2026-06) | 🟢 **READY FOR CONTROLLED GO-LIVE WITH OFF-HOST BACKUP PENDING** |
 | Closeout date | 2026-06-02 |
 | Latest documentation commit | `67e5966` (`docs: add final UAT and handoff documentation`) |
@@ -162,6 +162,7 @@
 
 ### 6.1 Before go-live
 - [ ] Backend `/health` returns `success: true` with DB connected
+- [ ] Public `/api/health` returns only `status`, 7-character `commit`, `database.connected`, `migrations.latest` and `migrations.pending`; response includes `Cache-Control: no-store`
 - [ ] `systemctl is-active pm2-schoolbus` = `active`, `is-enabled` = `enabled`
 - [ ] `./scripts/health-check.sh` exits 0 with 8/8 OK
 - [ ] Latest backup exists in `/home/schoolbus/backups/lampang-bus/`
@@ -238,6 +239,7 @@
 ```bash
 # Is the backend healthy?
 curl -s http://127.0.0.1:3000/health
+curl -i https://schoolbuslampang.com/api/health
 ./scripts/health-check.sh
 
 # Are PM2 + systemd OK?

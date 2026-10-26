@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "0ac329d14e37ebf2e1b5b8ee340d52dc5059d266",
+  "acceptedPartial": [
+    {
+      "file": "pages/admin/AdminAccountSecurity.jsx",
+      "patterns": ["states"],
+      "reason": "Known page-level async-state migration debt at the recorded baseline; temporary acceptance must only shrink."
+    },
+    {
+      "file": "pages/affiliation/SchoolReportDialog.jsx",
+      "patterns": ["table"],
+      "reason": "Known legacy report-dialog table awaiting DataTable migration; temporary acceptance must only shrink."
+    },
+    {
+      "file": "pages/ForgotPassword.jsx",
+      "patterns": ["header", "states"],
+      "reason": "Known standalone recovery-page header and async-state migration debt; temporary acceptance must only shrink."
+    },
+    {
+      "file": "pages/participation/ParticipationCaseDetail.jsx",
+      "patterns": ["states"],
+      "reason": "Known page-level async-state migration debt at the recorded baseline; temporary acceptance must only shrink."
+    },
+    {
+      "file": "pages/ResetPassword.jsx",
+      "patterns": ["header", "states"],
+      "reason": "Known standalone recovery-page header and async-state migration debt; temporary acceptance must only shrink."
+    },
+    {
+      "file": "pages/school/AddStudentModal.jsx",
+      "patterns": ["states"],
+      "reason": "Known modal async-state migration debt at the recorded baseline; temporary acceptance must only shrink."
+    },
+    {
+      "file": "pages/school/TeacherCheck.jsx",
+      "patterns": ["filter", "form", "states"],
+      "reason": "Known teacher-check filter, form and async-state migration debt; temporary acceptance must only shrink."
+    },
+    {
+      "file": "pages/transport/TransportIncidentRoster.jsx",
+      "patterns": ["header", "form"],
+      "reason": "Known incident-roster header and form migration debt at the recorded baseline; temporary acceptance must only shrink."
+    }
+  ]
+}

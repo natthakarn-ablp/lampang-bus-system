@@ -3,12 +3,11 @@
 /**
  * Migrations 052 + 053 at boot (src/index.js).
  *
- * Whether 052/053 are on production is unconfirmed and the policy-notice
- * feature is not core work, so a missing table must NOT stop the app. This
- * boots the real index.js with the database, env and Express app replaced and
- * checks all three outcomes of the table probe:
+ * The build mounts policy-notice routes unconditionally, so a confirmed absent
+ * table must stop boot just like migration 051. This boots the real index.js
+ * with the database, env and Express app replaced and checks all outcomes:
  *   - both tables present    -> listens, no exit, says so
- *   - a table missing        -> listens, no exit, warns naming the table(s)
+ *   - a table missing        -> refuses to listen and exits with a useful fatal
  *   - the probe itself fails -> listens, no exit, warns that it could not check
  */
 
@@ -46,7 +45,7 @@ function bootIndex({ missing = [], probeError = null } = {}) {
 // start() is async and not exported; let its awaited probes settle.
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-describe('migration 052/053 check at boot never stops the app', () => {
+describe('migration 052/053 boot guard', () => {
   let exitSpy;
   let errorSpy;
   let warnSpy;
@@ -59,11 +58,9 @@ describe('migration 052/053 check at boot never stops the app', () => {
     for (const evt of ['SIGTERM', 'SIGINT', 'unhandledRejection', 'uncaughtException']) {
       signalListeners[evt] = process.listeners(evt).slice();
     }
-    // A real exit would stop start(); throwing reproduces that so an exit
-    // anywhere in the boot path shows up as "never listened".
-    exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => {
-      throw new Error(`process.exit(${code})`);
-    });
+    // The guard returns immediately after process.exit. Keeping this mock a
+    // no-op lets the test observe both the exit code and that listen is skipped.
+    exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -93,18 +90,18 @@ describe('migration 052/053 check at boot never stops the app', () => {
     [['policy_acknowledgements']],
     [['policy_action_evidence']],
     [POLICY_TABLES],
-  ])('tables missing (%j): still starts, warns, never exits', async (missing) => {
+  ])('tables missing (%j): refuses to start and names the repair', async (missing) => {
     const { listen } = bootIndex({ missing });
     await settle();
 
-    expect(exitSpy).not.toHaveBeenCalled();
-    expect(listen).toHaveBeenCalledTimes(1);
-    const warning = warnSpy.mock.calls.flat().join('\n');
-    expect(warning).toMatch(/policy-notice tables missing/);
-    for (const t of missing) expect(warning).toContain(t);
-    expect(warning).toMatch(/503/);
-    expect(warning).toMatch(/052_policy_acknowledgements\.sql/);
-    expect(warning).toMatch(/053_policy_action_evidence\.sql/);
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(listen).not.toHaveBeenCalled();
+    const fatal = errorSpy.mock.calls.flat().join('\n');
+    expect(fatal).toMatch(/FATAL/);
+    for (const t of missing) expect(fatal).toContain(t);
+    expect(fatal).toMatch(/052_policy_acknowledgements\.sql/);
+    expect(fatal).toMatch(/053_policy_action_evidence\.sql/);
+    expect(fatal).toMatch(/previous release/);
   });
 
   it('probe fails: still starts and warns that it could not check', async () => {

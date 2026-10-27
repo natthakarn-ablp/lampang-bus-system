@@ -120,21 +120,34 @@ async function assertSharedSecurityStateMigrationPresent() {
   console.log('[app] Shared security state check passed (migration 051 tables present)');
 }
 
-// ─── Policy notice tables check (migrations 052 + 053) — warn, never exit ────
-// /api/policy-notices reads policy_acknowledgements (052) and writes
-// policy_action_evidence (053). Unlike the 051 guard above, a missing table is
-// NOT fatal: whether 052/053 are on production is unconfirmed, and the policy
-// feature is not core work, so it must not keep the whole app from booting.
-// Instead the boot logs a warning, every /api/policy-notices route answers 503
-// (utils/policyEvidenceTables.js), and /admin/system-health shows a WARN row.
-// The status is cached for at most 60 s and re-probed on demand, so applying
-// the migrations re-enables the feature without a restart.
-async function checkPolicyEvidenceTables() {
+// ─── Policy notice tables guard (migrations 052 + 053) ───────────────────────
+// The policy-notice routes are mounted on every boot and directly depend on
+// policy_acknowledgements (052) and policy_action_evidence (053). Match the
+// unconditional migration-051 guard above: a confirmed missing table is fatal
+// so pm2 keeps the previous process serving instead of publishing a build with
+// a known-incomplete schema. An ambiguous information_schema probe still only
+// warns, because a probe permission/network error is not proof of absence.
+async function assertPolicyEvidenceMigrationsPresent() {
   const status = await getPolicyEvidenceStatus({ force: true });
   if (status.state === 'ready') {
     console.log('[app] Policy-notice tables present (migration 052/053)');
+    return true;
   }
-  // 'missing' and 'unknown' are logged by getPolicyEvidenceStatus itself.
+  if (status.state === 'missing') {
+    console.error(
+      '[app] FATAL: this build requires migrations 052 and 053 — ' +
+      `missing table(s): ${status.missing.join(', ')}. ` +
+      'Apply backend/migrations/052_policy_acknowledgements.sql and ' +
+      'backend/migrations/053_policy_action_evidence.sql BEFORE starting this ' +
+      'version. To go back instead, deploy the previous release; both schema ' +
+      'changes are additive and safe to leave in place.'
+    );
+    process.exit(1);
+    return false;
+  }
+  // 'unknown' is already logged by getPolicyEvidenceStatus. Continue because
+  // the probe itself failed and therefore did not confirm a missing table.
+  return true;
 }
 
 // ─── Phase 11A — Intelligent Tracking migration guard (2026-06-23) ───────────
@@ -276,7 +289,7 @@ async function assertParticipationCasesMigrationPresent() {
 async function start() {
   await testConnection();
   await assertSharedSecurityStateMigrationPresent();
-  await checkPolicyEvidenceTables();
+  if (!await assertPolicyEvidenceMigrationsPresent()) return;
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();
   await assertAdminRecoveryMigrationPresent();

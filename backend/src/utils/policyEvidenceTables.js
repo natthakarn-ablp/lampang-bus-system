@@ -1,10 +1,10 @@
 'use strict';
 
 // Migrations 052 + 053 create the two tables the policy-notice feature reads
-// and writes. Whether they exist on production is not confirmed, and the
-// feature is not core work, so their absence must never stop the app: boot
-// logs a warning, /api/policy-notices answers 503 with a Thai message, and the
-// operations health report shows a WARN row.
+// and writes. Startup now refuses a build when either table is confirmed
+// absent, matching the migration-051 guard. The cached status and route-level
+// 503 remain useful if a table disappears after boot, while operations health
+// continues to expose the degraded state.
 //
 // The answer is cached for at most CACHE_TTL_MS and then re-probed on demand,
 // so running the migrations brings the feature back without a restart.

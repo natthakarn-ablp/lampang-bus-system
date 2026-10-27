@@ -24,7 +24,15 @@ const checkinSvc = require('../services/checkin.service');
 const docSvc = require('../services/driverDocuments.service');
 
 const router = express.Router();
-router.use(authenticate, requireRole('driver', 'school', 'transport', 'admin'));
+router.use(authenticate, requireRole('driver', 'school', 'transport', 'admin'), requireFullSchoolScope);
+
+function requireFullSchoolScope(req, res, next) {
+  if (req.user.role === 'school' && req.user.gradeScope) {
+    return sendError(res, 'บัญชีครูประจำสายชั้นดูได้อย่างเดียว ไม่มีสิทธิ์ดำเนินการนี้',
+      [{ code: 'FULL_SCHOOL_SCOPE_REQUIRED' }], 403);
+  }
+  return next();
+}
 
 const NOT_FOUND = (res) => sendError(res, 'ไม่พบเอกสาร หรือคุณไม่มีสิทธิ์เข้าถึง', [{ code: 'DOCUMENT_NOT_FOUND' }], 404);
 
@@ -47,7 +55,12 @@ router.get('/:docType/:id/file', async (req, res, next) => {
       } catch { driverVehicleId = null; }
     }
 
-    const viewer = { role: req.user.role, userId: req.user.id, schoolId: req.user.scopeId || null };
+    const viewer = {
+      role: req.user.role,
+      userId: req.user.id,
+      schoolId: req.user.scopeId || null,
+      gradeScope: req.user.gradeScope || null,
+    };
     const { row, absPath } = await docSvc.resolveDocumentForViewer(pool, {
       docType, id, viewer, driverVehicleId,
     });

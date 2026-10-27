@@ -381,6 +381,9 @@ async function resolveDocumentForViewer(pool, { docType, id, viewer, driverVehic
   if (docType !== 'vehicle' && docType !== 'driver') throw notFound();
   if (!Number.isInteger(id) || id <= 0) throw notFound();
   if (!viewer || !viewer.role) throw appError('ข้อมูลผู้ดูไม่ครบถ้วน', 400, 'INVALID_VIEWER');
+  if (viewer.role === 'school' && viewer.gradeScope) {
+    throw appError('บัญชีครูประจำสายชั้นดูได้อย่างเดียว ไม่มีสิทธิ์ดำเนินการนี้', 403, 'FULL_SCHOOL_SCOPE_REQUIRED');
+  }
 
   const row = docType === 'vehicle'
     ? await loadVehicleDoc(pool, { id, viewer, driverVehicleId })

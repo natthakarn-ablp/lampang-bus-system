@@ -84,6 +84,8 @@ test('full-school account keeps access to scoped documents', async () => {
 test('audit failure prevents the document from being released', async () => {
   logAudit.mockRejectedValueOnce(new Error('audit unavailable'));
   const response = await request(app()).get('/api/documents/vehicle/22/file').set('x-test-role', 'transport');
-  expect(response.status).toBe(500);
+  expect(response.status).toBe(503);
+  expect(response.headers['content-disposition']).toBeUndefined();
+  expect(response.body.errors[0].code).toBe('EXPORT_AUDIT_UNAVAILABLE');
   expect(fs.createReadStream).not.toHaveBeenCalled();
 });

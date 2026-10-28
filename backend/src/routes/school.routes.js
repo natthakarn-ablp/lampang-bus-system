@@ -14,6 +14,7 @@ const { isCalendarDate } = require('../utils/calendarDate');
 const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { auditExportBeforeSend } = require('../utils/exportAudit');
 const env     = require('../config/env');
 const { getCurrentTermCachedSync } = require('../services/term.service');
 const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
@@ -1419,6 +1420,10 @@ router.get('/audit-logs', requireFullSchoolScope, exportFormatLimiter, async (re
       );
       const truncated = rows.length > 5000;
       const csv = auditRowsToCsv(rows.slice(0, 5000));
+      if (!await auditExportBeforeSend(req, res, {
+        entityType: 'audit_csv', entityId: schoolId,
+        metadata: { format: 'csv', role: req.user.role, scope: schoolId, truncated },
+      })) return;
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=audit_school_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');

@@ -10,6 +10,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { auditExportBeforeSend } = require('../utils/exportAudit');
 const adminSvc = require('../services/admin.service');
 const termSvc = require('../services/term.service');
 const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
@@ -922,6 +923,10 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
       ].join(','));
       if (truncated) lines.push(esc('# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14'));
       const csv = [header, ...lines].join('\n');
+      if (!await auditExportBeforeSend(req, res, {
+        entityType: 'audit_csv', entityId: 'admin',
+        metadata: { format: 'csv', role: req.user.role, truncated },
+      })) return;
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=audit_admin_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
@@ -1477,17 +1482,14 @@ router.get('/research-export', importExportLimiter, async (req, res, next) => {
     result.meta.provenance = buildResearchProvenance(result, { from, to, include });
     result.meta.integrity = integrity;
 
-    // Log this export action
-    await logAudit({
-      userId: req.user.id, action: 'EXPORT', entityType: 'research_dataset',
-      entityId: `${from}_to_${to}`,
-      newValue: {
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'research_dataset', entityId: `${from}_to_${to}`,
+      metadata: {
         from, to, included: include, format,
         format_version: RESEARCH_EXPORT_FORMAT_VERSION,
         data_checksum: integrity.data_checksum,
       },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
+    })) return;
 
     // ── CSV format ──────────────────────────────────────────────────────────
     if (format === 'csv') {

@@ -8,6 +8,7 @@ const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const reportSvc = require('../services/report.service');
 const { logAudit } = require('../utils/audit');
+const { auditExportBeforeSend } = require('../utils/exportAudit');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 const { csvCell, neutralizeSpreadsheetCell } = require('../utils/exportSecurity');
@@ -269,11 +270,12 @@ router.get('/export/csv', async (req, res, next) => {
     const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
     const filename = `report-${date}.csv`;
 
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'report_csv', entityId: date,
+      metadata: { format: 'csv', role: req.user.role, scope: req.user.scopeId },
+    })) return;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_csv', entityId: date,
-      newValue: { format: 'csv', role: req.user.role, scope: req.user.scopeId },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
 
     async function* body() {
       yield '\uFEFF' + CSV_HEADERS.join(',') + '\n';
@@ -297,11 +299,12 @@ router.get('/export/excel', async (req, res, next) => {
     const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
     const filename = `report-${date}.xlsx`;
 
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'report_excel', entityId: date,
+      metadata: { format: 'excel', role: req.user.role, scope: req.user.scopeId },
+    })) return;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_excel', entityId: date,
-      newValue: { format: 'excel', role: req.user.role, scope: req.user.scopeId },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
 
     // WorkbookWriter writes each row to the response as it is committed, so the
     // whole workbook is never held in memory. useStyles keeps the header format
@@ -370,6 +373,10 @@ router.get('/export/pdf', async (req, res, next) => {
     const PDFDocument = require('pdfkit');
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
 
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'report_pdf', entityId: report.date,
+      metadata: { format: 'pdf', role: req.user.role, scope: req.user.scopeId },
+    })) return;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     doc.pipe(res);
@@ -508,9 +515,6 @@ router.get('/export/pdf', async (req, res, next) => {
     doc.font(fontName).fontSize(8).fillColor('#999999')
       .text(`พิมพ์จากระบบรถรับส่งนักเรียนจังหวัดลำปาง — ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`, { align: 'center' });
 
-    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_pdf', entityId: report.date,
-      newValue: { format: 'pdf', role: req.user.role, scope: req.user.scopeId },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
     doc.end();
   } catch (err) { next(err); }
 });
@@ -532,11 +536,12 @@ router.get('/export/monthly/csv', async (req, res, next) => {
       csv += monthlyRowValues(row).map(csvCell).join(',') + '\n';
     }
 
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'report_monthly_csv', entityId: report.month,
+      metadata: { format: 'csv', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
+    })) return;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_monthly_csv', entityId: report.month,
-      newValue: { format: 'csv', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
     return res.send(csv);
   } catch (err) { next(err); }
 });
@@ -570,11 +575,12 @@ router.get('/export/monthly/excel', async (req, res, next) => {
       sheet.addRow(Object.fromEntries(values.map((v, i) => [`col${i}`, v])));
     }
 
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'report_monthly_excel', entityId: report.month,
+      metadata: { format: 'excel', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
+    })) return;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_monthly_excel', entityId: report.month,
-      newValue: { format: 'excel', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) { next(err); }
@@ -597,6 +603,10 @@ router.get('/export/monthly/pdf', async (req, res, next) => {
     const PDFDocument = require('pdfkit');
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
 
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'report_monthly_pdf', entityId: report.month,
+      metadata: { format: 'pdf', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
+    })) return;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     doc.pipe(res);
@@ -695,9 +705,6 @@ router.get('/export/monthly/pdf', async (req, res, next) => {
     doc.font(fontName).fontSize(8).fillColor('#999999')
       .text(`พิมพ์จากระบบรถรับส่งนักเรียนจังหวัดลำปาง — ${new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}`, { align: 'center' });
 
-    logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'report_monthly_pdf', entityId: report.month,
-      newValue: { format: 'pdf', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
     doc.end();
   } catch (err) { next(err); }
 });

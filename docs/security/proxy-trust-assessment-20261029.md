@@ -24,6 +24,31 @@ Express proxy trust, nginx, Cloudflare, firewall rules, or production.
   directives. Therefore the actual socket peer, header chain, and
   `req.ip` observed in production remain NOT VERIFIED.
 
+## Synthetic Supertest observations
+
+`backend/tests/proxyTrustHopCount.unit.test.js` copies the actual Express
+`trust proxy` setting from `backend/src/app.js` into a probe app and reports
+both `req.ip` and the socket peer. The table below records the behavior
+verified by Supertest. `peer` means the probe's `req.socket.remoteAddress`;
+these tests exercise Express hop semantics only and do not establish which
+peer or headers nginx supplies in production.
+
+| Client-supplied headers in the synthetic request | `req.ip` with `trust proxy = 1` | Interpretation |
+|---|---|---|
+| none | socket `peer` | No forwarded address is trusted; Express uses the direct peer. |
+| `X-Forwarded-For: 198.51.100.77` | `198.51.100.77` | A single XFF value is accepted when the socket peer occupies the one trusted hop. This is a hop-semantics result, not proof this request can reach production. |
+| `X-Forwarded-For: 198.51.100.77, 203.0.113.24` | `203.0.113.24` | Express selects the rightmost forwarded value for one trusted hop; the leftmost value is not selected. |
+| `CF-Connecting-IP: 198.51.100.77` only | socket `peer` | Express does not read this header directly. |
+| `X-Real-IP: 198.51.100.77` only | socket `peer` | Express does not read this header directly. |
+| `Forwarded: for=198.51.100.77` only | socket `peer` | Express does not read this header directly. |
+| `X-Forwarded-For: 198.51.100.77, 203.0.113.24` plus `CF-Connecting-IP: 198.51.100.88` | `203.0.113.24` | `req.ip` follows XFF; the separate CF header does not override it. |
+| `X-Forwarded-For: 2001:db8::77, 2001:db8::24` | `2001:db8::24` | IPv6 uses the same rightmost-value behavior. |
+
+The test is synthetic and intentionally makes no claim that any of these
+header combinations was observed on the production host. Exact active nginx
+`real_ip`/`proxy_set_header` settings, the socket peer, Cloudflare CIDRs,
+origin reachability, and production `req.ip` remain **NOT VERIFIED**.
+
 ## Required configuration evidence before changing the trust setting
 
 An operator with server access should capture, without secrets:
@@ -74,4 +99,3 @@ rate-limit/audit IP attribution or trust spoofable forwarding headers.
 Record the app SHA, nginx config revision, the four observed `req.ip` results,
 and the result of `nginx -t`. Keep staging values synthetic. This repository
 does not contain evidence that these checks have been run against production.
-

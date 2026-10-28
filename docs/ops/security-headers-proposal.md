@@ -63,6 +63,7 @@ style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
 font-src 'self' data: https://fonts.gstatic.com;
 img-src 'self' data: blob: https://*.tile.openstreetmap.org;
 connect-src 'self' https://api.line.me https://liff.line.me https://*.tile.openstreetmap.org;
+report-uri /__csp-report;
 ```
 
 `frame-ancestors` is enforced from an HTTP header; a meta CSP cannot provide
@@ -93,6 +94,8 @@ served directly by nginx.
 
 ## Staging checks and rollback
 
+- After `npm run build`, run `node scripts/security/check-csp-report-only.mjs` from the repository root. It serves `frontend/dist` locally with the candidate report-only header, seeds a synthetic browser session, answers `/api/**` with generic synthetic JSON, intercepts external requests in Playwright instead of sending them, and reports only directive names plus normalized blocked origins. It does not record full URLs, queries, referrers, cookies, tokens, or API bodies. The default paths include role-scoped pickup maps and parent/QR pages; override them with `CSP_PROBE_PATHS=/login,/school/pickup-map,/parent/link` as needed. Missing Playwright/Chrome is a local environment limitation; the script prints that the browser check could not run rather than implying no CSP violations.
+- A clean result from that local probe covers only the paths it actually visited and their synthetic API responses. It does not verify real LIFF login/redirects or a staging/production configuration; exercise those flows with synthetic accounts in staging.
 - `curl -sS -D - -o /dev/null https://<staging-host>/` records the HTML response
   headers; repeat for a JS asset and font. Use a synthetic staging hostname.
 - Browser checks cover a clean load, route navigation, map tiles, API reads,

@@ -5,6 +5,8 @@ const env = require('../config/env');
 const { pool } = require('../config/database');
 const idTokenSvc = require('../services/lineIdToken.service');
 const { sessionResetJti, issuedBeforeReset } = require('../utils/sessionReset');
+const { sendError } = require('../utils/response');
+const { isVerificationUnavailable } = require('../utils/lineVerificationError');
 
 // Phase QR-1 — "auth if present, never 401". Attaches whatever identity it can
 // prove so a handler can ESCALATE the access level; missing/invalid credentials
@@ -15,7 +17,7 @@ const { sessionResetJti, issuedBeforeReset } = require('../utils/sessionReset');
 // Both a staff JWT and a LIFF id_token can arrive in the Authorization header.
 // We try the JWT first (a LIFF token can't verify as our HS256 JWT); if that
 // doesn't resolve a live user, we try the same value as a LIFF id_token.
-async function optionalAuth(req, _res, next) {
+async function optionalAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   const idTokenParam =
@@ -64,6 +66,11 @@ async function optionalAuth(req, _res, next) {
       try {
         const verify = await idTokenSvc.verifyIdToken(candidate);
         if (verify && verify.valid) req.lineUserId = verify.userId;
+        else if (isVerificationUnavailable(verify)) {
+          return sendError(res, 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่', [
+            { code: 'LINE_VERIFY_UNAVAILABLE' },
+          ], 503);
+        }
       } catch { /* not a valid LIFF token — stay anonymous */ }
     }
   }

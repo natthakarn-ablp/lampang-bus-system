@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 5068)
+Total output lines: 378
+
 'use strict';
 
 const express = require('express');
@@ -209,10 +212,7 @@ function validateStudentId(raw) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-// Phase 10.13C-4A — the credential is the VISIBLE รหัสนักเรียน (student_code), which
-// may be non-numeric for newly-imported students. Accept a trimmed 1–50 char code.
-// The frontend currently posts it in the `studentId` field; a `student_code` field
-// is preferred and takes precedence when present.
+// Phase 10.13C-4A — the credential …68 tokens truncated…precedence when present.
 function validateStudentCredential(raw) {
   if (raw == null) return null;
   const s = String(raw).trim();
@@ -249,6 +249,11 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
 
     const verify = await idTokenSvc.verifyIdToken(idToken);
     if (!verify.valid) {
+      if (isVerificationUnavailable(verify)) {
+        return sendError(res, 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่', [
+          { code: 'LINE_VERIFY_UNAVAILABLE' },
+        ], 503);
+      }
       console.warn('[LINE_BIND_PREVIEW] id_token_invalid', { error: verify.error });
       return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ของคุณได้ กรุณาเปิดผ่านลิงก์ใน LINE OA อีกครั้ง', [], 401);
     }
@@ -308,6 +313,11 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
 
     const verify = await idTokenSvc.verifyIdToken(idToken);
     if (!verify.valid) {
+      if (isVerificationUnavailable(verify)) {
+        return sendError(res, 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่', [
+          { code: 'LINE_VERIFY_UNAVAILABLE' },
+        ], 503);
+      }
       console.warn('[LINE_BIND_CONFIRM] id_token_invalid', { error: verify.error });
       return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ของคุณได้ กรุณาเปิดผ่านลิงก์ใน LINE OA อีกครั้ง', [], 401);
     }

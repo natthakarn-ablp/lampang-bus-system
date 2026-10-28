@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 5068)
-Total output lines: 378
-
 'use strict';
 
 const express = require('express');
@@ -212,7 +209,10 @@ function validateStudentId(raw) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-// Phase 10.13C-4A — the credential …68 tokens truncated…precedence when present.
+// Phase 10.13C-4A — the credential is the VISIBLE รหัสนักเรียน (student_code), which
+// may be non-numeric for newly-imported students. Accept a trimmed 1–50 char code.
+// The frontend currently posts it in the `studentId` field; a `student_code` field
+// is preferred and takes precedence when present.
 function validateStudentCredential(raw) {
   if (raw == null) return null;
   const s = String(raw).trim();
@@ -358,21 +358,3 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
     console.log('[LINE_BIND_CONFIRM] linked', { parentId: match.parentId });
 
     // Push the standard HF4.2 success Flex card to the OA so the chat thread
-    // also reflects the binding (parent sees both in-LIFF success + the OA
-    // card). Best-effort: a push failure here does NOT undo the bind.
-    try {
-      const children = await lineSvc.getLinkedChildren(lineUserId);
-      await lineSvc.pushParentFlex(lineUserId, {
-        flex:         tpl.buildParentBindSuccessCard(children),
-        fallbackText: tpl.fallbackBindSuccess(children),
-        logPrefix:    '[LINE_PARENT_BIND_FLEX]',
-      });
-    } catch (pushErr) {
-      console.warn('[LINE_BIND_CONFIRM] post_push_failed', { error: pushErr.message });
-    }
-
-    return sendSuccess(res, { ok: true }, 'ผูกบัญชีสำเร็จ', null, 201);
-  } catch (err) { return next(err); }
-});
-
-module.exports = router;

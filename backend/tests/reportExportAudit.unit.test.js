@@ -27,6 +27,7 @@ const express = require('express');
 const request = require('supertest');
 const { logAudit } = require('../src/utils/audit');
 const reports = require('../src/routes/report.routes');
+const syntheticAuditRows = [];
 
 function app() {
   const instance = express();
@@ -36,7 +37,11 @@ function app() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  logAudit.mockResolvedValue();
+  syntheticAuditRows.length = 0;
+  logAudit.mockImplementation(async (entry) => {
+    syntheticAuditRows.push({ ...entry });
+    return true;
+  });
 });
 
 test('monthly CSV waits for a required audit and returns the export after it succeeds', async () => {
@@ -46,6 +51,9 @@ test('monthly CSV waits for a required audit and returns the export after it suc
   expect(response.headers['content-disposition']).toContain('monthly-report-2026-09.csv');
   expect(response.text).toContain('2026-09');
   expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+    action: 'EXPORT', entityType: 'report_monthly_csv', entityId: '2026-09', required: true,
+  }));
+  expect(syntheticAuditRows).toContainEqual(expect.objectContaining({
     action: 'EXPORT', entityType: 'report_monthly_csv', entityId: '2026-09', required: true,
   }));
 });

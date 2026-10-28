@@ -20,10 +20,14 @@ function makeResponse() {
   return res;
 }
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
+});
+afterEach(() => jest.restoreAllMocks());
 
 test.each(['timeout', 'network_error', 'upstream_unavailable', 'verification_busy'])(
-  'optional authentication returns 503 for transient LINE verification result %s',
+  'optional authentication stays anonymous for transient LINE verification result %s',
   async (error) => {
     idTokenSvc.verifyIdToken.mockResolvedValueOnce({ valid: false, error });
     const req = makeRequest();
@@ -32,13 +36,12 @@ test.each(['timeout', 'network_error', 'upstream_unavailable', 'verification_bus
 
     await optionalAuth(req, res, next);
 
-    expect(res.status).toHaveBeenCalledWith(503);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      success: false,
-      errors: [{ code: 'LINE_VERIFY_UNAVAILABLE' }],
-    }));
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).not.toHaveBeenCalled();
     expect(req.lineUserId).toBeUndefined();
-    expect(next).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(console.warn).toHaveBeenCalledWith('[OPTIONAL_AUTH] LINE verification unavailable', { error });
+    expect(JSON.stringify(console.warn.mock.calls)).not.toContain('synthetic-token');
   }
 );
 

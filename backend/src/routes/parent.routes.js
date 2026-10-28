@@ -358,3 +358,21 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
     console.log('[LINE_BIND_CONFIRM] linked', { parentId: match.parentId });
 
     // Push the standard HF4.2 success Flex card to the OA so the chat thread
+    // also reflects the binding (parent sees both in-LIFF success + the OA
+    // card). Best-effort: a push failure here does NOT undo the bind.
+    try {
+      const children = await lineSvc.getLinkedChildren(lineUserId);
+      await lineSvc.pushParentFlex(lineUserId, {
+        flex:         tpl.buildParentBindSuccessCard(children),
+        fallbackText: tpl.fallbackBindSuccess(children),
+        logPrefix:    '[LINE_PARENT_BIND_FLEX]',
+      });
+    } catch (pushErr) {
+      console.warn('[LINE_BIND_CONFIRM] post_push_failed', { error: pushErr.message });
+    }
+
+    return sendSuccess(res, { ok: true }, 'ผูกบัญชีสำเร็จ', null, 201);
+  } catch (err) { return next(err); }
+});
+
+module.exports = router;

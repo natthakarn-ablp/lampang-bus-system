@@ -10,6 +10,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { readIdParam } = require('../utils/pathParams');
 const lineSvc = require('../services/line.service');
 const idTokenSvc = require('../services/lineIdToken.service');
+const { isVerificationUnavailable } = require('../utils/lineVerificationError');
 const tpl = require('../services/lineFlexTemplates.service');
 const bindGuard = require('../services/lineBindGuard');
 const parentConsent = require('../services/parentConsentGate');
@@ -83,6 +84,11 @@ async function requireParentLineAuth(req, res, next) {
     }
 
     const verify = await idTokenSvc.verifyIdToken(token);
+    if (!verify.valid && isVerificationUnavailable(verify)) {
+      return sendError(res, 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่', [
+        { code: 'LINE_VERIFY_UNAVAILABLE' },
+      ], 503);
+    }
     if (!verify.valid) {
       console.warn('[PARENT_API] id_token_invalid', { error: verify.error });
       return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ได้ กรุณาเปิดผ่านลิงก์ใน LINE OA อีกครั้ง', [], 401);

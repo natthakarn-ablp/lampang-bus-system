@@ -96,6 +96,15 @@ function parseDatabasePoolConfig(source = process.env) {
   };
 }
 
+function parseBoundedInteger(source, key, fallback, min, max) {
+  const raw = String(source[key] ?? '').trim();
+  if (!raw) return fallback;
+  if (!/^[0-9]+$/.test(raw) || Number(raw) < min || Number(raw) > max) {
+    throw new Error(`${key} must be a whole number between ${min} and ${max}`);
+  }
+  return Number(raw);
+}
+
 function validateFeatureDependencies(source = process.env) {
   if (source.FEATURE_QR_LEVEL3 === 'true' && source.FEATURE_VEHICLE_QR !== 'true') {
     throw new Error('FEATURE_QR_LEVEL3 requires FEATURE_VEHICLE_QR=true');
@@ -242,6 +251,8 @@ const env = {
     channelSecret: process.env.LINE_CHANNEL_SECRET || '',
     liffId: process.env.LINE_LIFF_ID || '',
     groupId: process.env.LINE_GROUP_ID || '',
+    idTokenVerifyTimeoutMs: parseBoundedInteger(process.env, 'LINE_ID_TOKEN_VERIFY_TIMEOUT_MS', 5000, 1000, 30000),
+    idTokenVerifyMaxConcurrent: parseBoundedInteger(process.env, 'LINE_ID_TOKEN_VERIFY_MAX_CONCURRENT', 20, 1, 100),
   },
   app: {
     port: parseInt(process.env.PORT || '3000', 10),

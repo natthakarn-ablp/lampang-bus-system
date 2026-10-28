@@ -7,6 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendSuccess, sendError } = require('../utils/response');
 const idTokenSvc = require('../services/lineIdToken.service');
+const { isVerificationUnavailable } = require('../utils/lineVerificationError');
 const consentSvc = require('../services/consent.service');
 const { getConsentText, isValidConsentType } = require('../config/consentText');
 
@@ -22,6 +23,11 @@ async function requireParentLineAuth(req, res, next) {
       (req.body && typeof req.body.id_token === 'string' ? req.body.id_token : '') || '';
     if (!token) return sendError(res, 'กรุณาเปิดผ่าน LINE ก่อนใช้งาน', [], 401);
     const verify = await idTokenSvc.verifyIdToken(token);
+    if (!verify.valid && isVerificationUnavailable(verify)) {
+      return sendError(res, 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่', [
+        { code: 'LINE_VERIFY_UNAVAILABLE' },
+      ], 503);
+    }
     if (!verify.valid) return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ได้', [], 401);
     req.lineUserId = verify.userId;
     return next();

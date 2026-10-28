@@ -131,6 +131,22 @@ describe('admin password recovery routes', () => {
     expect(codeInsert[1][0][0][1]).not.toBe(res.body.data.recovery_codes[0]);
   });
 
+  test('LINE verification outage returns 503 before sending a message or changing recovery state', async () => {
+    mockQuery.mockResolvedValueOnce([[
+      { id: 7, username: 'admin-test', display_name: 'Admin', password_hash: '$2b$12$old' },
+    ]]);
+    verifyIdToken.mockResolvedValueOnce({ valid: false, error: 'timeout' });
+
+    const res = await request(app)
+      .post('/api/auth/recovery/admin/link-line')
+      .send({ current_password: 'current-secret', id_token: 'synthetic-timeout-token' });
+
+    expect(res.status).toBe(503);
+    expect(res.body.errors?.[0]?.code).toBe('LINE_VERIFY_UNAVAILABLE');
+    expect(sendTextMessage).not.toHaveBeenCalled();
+    expect(mockConn.beginTransaction).not.toHaveBeenCalled();
+  });
+
   test('returns the same generic response for an unknown username', async () => {
     mockQuery.mockResolvedValueOnce([[]]);
     const res = await request(app).post('/api/auth/recovery/request').send({ username: 'missing' });

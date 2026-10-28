@@ -21,8 +21,10 @@
  */
 
 const env = require('../config/env');
+const { isVerificationUnavailable } = require('../utils/lineVerificationError');
 
 const VERIFY_URL = 'https://api.line.me/oauth2/v2.1/verify';
+let activeVerifications = 0;
 
 // Channel id is the first segment of LIFF_ID (channel-id-dash-liff-id).
 function getLiffChannelId() {
@@ -46,12 +48,23 @@ async function verifyIdToken(idToken) {
   if (!clientId) {
     return { valid: false, error: 'liff_channel_not_configured' };
   }
+  const maxConcurrent = env.line.idTokenVerifyMaxConcurrent || 20;
+  if (activeVerifications >= maxConcurrent) {
+    return { valid: false, error: 'verification_busy' };
+  }
+
+  const controller = new AbortController();
+  const timeoutMs = env.line.idTokenVerifyTimeoutMs || 5000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof timeout.unref === 'function') timeout.unref();
+  activeVerifications += 1;
   try {
     const body = new URLSearchParams({ id_token: idToken, client_id: clientId });
     const res = await fetch(VERIFY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
+      signal: controller.signal,
     });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -61,6 +74,7 @@ async function verifyIdToken(idToken) {
         status: res.status,
         code:   payload.error || 'unknown',
       });
+      if (res.status >= 500) return { valid: false, error: 'upstream_unavailable' };
       return { valid: false, error: payload.error || `http_${res.status}` };
     }
     if (!payload.sub) {
@@ -73,9 +87,16 @@ async function verifyIdToken(idToken) {
     }
     return { valid: true, userId: payload.sub, payload };
   } catch (err) {
+    if (controller.signal.aborted) {
+      console.warn('[LINE_ID_TOKEN_VERIFY] timeout', { timeoutMs });
+      return { valid: false, error: 'timeout' };
+    }
     console.error('[LINE_ID_TOKEN_VERIFY] network_error', { error: err.message });
     return { valid: false, error: 'network_error' };
+  } finally {
+    clearTimeout(timeout);
+    activeVerifications -= 1;
   }
 }
 
-module.exports = { verifyIdToken };
+module.exports = { verifyIdToken, isVerificationUnavailable };

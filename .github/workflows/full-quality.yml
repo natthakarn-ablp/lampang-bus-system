@@ -153,7 +153,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          "${RUNNER_TEMP}/gitleaks" git . --redact --no-banner --log-level error --report-format json --report-path "${RUNNER_TEMP}/gitleaks-report.json" >"${RUNNER_TEMP}/gitleaks-output.log" 2>&1
+          "${RUNNER_TEMP}/gitleaks" git . --log-opts='--no-textconv' --redact --no-banner --log-level error --report-format json --report-path "${RUNNER_TEMP}/gitleaks-report.json" >"${RUNNER_TEMP}/gitleaks-output.log" 2>&1
           scan_status=$?
           set -e
           python3 - "${RUNNER_TEMP}/gitleaks-report.json" "$scan_status" <<'PY'

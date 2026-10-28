@@ -8,6 +8,20 @@ The UI runtime job uses Playwright `1.64.1` as an exact frontend dev dependency,
 
 ## Gitleaks history scan
 
-On 2026-10-28, Gitleaks `8.30.1` scanned the complete history and all refs in the full, non-shallow clone at base `fb1a461e22d791c434263ee747c6464e102bde77` (756 reachable commits at scan time). The official Windows release archive checksum was verified before running the scan. Result: **0 findings; exit code 0**. No report containing matched values was retained or committed.
+On 2026-10-28, Gitleaks `8.30.1` scanned the complete history and all refs in the full, non-shallow clone at base `fb1a461e22d791c434263ee747c6464e102bde77`. The official Windows release archive checksum was verified before running the scan. The initial scan identified 14 candidates (exit 1); review of their source context classified them as synthetic test fixtures or documented shell-variable placeholders, not live credentials. No matched values were retained or committed. The exact commit, file, rule, and line fingerprints are listed in `.gitleaksignore`; no path-wide or rule-wide exemptions were added. The repeat scan with these exact fingerprints ignored passed with exit 0 and 0 remaining findings.
 
-The `secret-scan` CI job fetches full history, downloads the exact Gitleaks `8.30.1` Linux x64 archive, verifies its pinned SHA-256 checksum, and scans all refs with redaction enabled. It prints only grouped counts, file paths, and rule types if findings occur. Reports and raw scanner output stay in the ephemeral runner and are not uploaded. If a scan finds a candidate, treat the check as failed, review only redacted metadata to determine whether it is real, stop release work for a real secret, and do not rewrite Git history as part of this workflow.
+| File | Rule | Reviewed candidates |
+|---|---|---:|
+| `backend/tests/applyMigration050Script.unit.test.js` | `generic-api-key` | 1 |
+| `backend/tests/enableFeatureFlagScript.unit.test.js` | `generic-api-key` | 1 |
+| `backend/tests/numericPathParamValidation.test.js` | `generic-api-key` | 3 |
+| `backend/tests/routeLatency.unit.test.js` | `generic-api-key` | 1 |
+| `backend/tests/secretScan.unit.test.js` | `generic-api-key` | 3 |
+| `backend/tests/secretScan.unit.test.js` | `curl-auth-header` | 1 |
+| `backend/tests/secretScan.unit.test.js` | `jwt` | 1 |
+| `docs/production-launch-checklist.md` | `curl-auth-header` | 1 |
+| `docs/uat-deployment-guide.md` | `curl-auth-header` | 1 |
+| `scripts/ui-redesign/capture.mjs` | `generic-api-key` | 1 |
+| **Total** |  | **14** |
+
+The `secret-scan` CI job fetches full history, downloads the exact Gitleaks `8.30.1` Linux x64 archive, verifies its pinned SHA-256 checksum, and scans all refs with redaction enabled. It prints only grouped counts, file paths, and rule types if findings occur. Reports and raw scanner output stay in the ephemeral runner and are not uploaded. The fingerprint file exempts only the 14 reviewed historical findings above; new findings still fail the check. If a scan finds a new candidate, review only redacted metadata to determine whether it is real, stop release work for a real secret, and do not rewrite Git history as part of this workflow.

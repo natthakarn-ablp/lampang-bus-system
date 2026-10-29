@@ -49,6 +49,15 @@ beforeEach(() => {
 });
 
 describe('GET /api/parent/children/:id/status — consent gate wiring', () => {
+  test('LINE verification outage returns 503 without reading parent or child data', async () => {
+    idTokenSvc.verifyIdToken.mockResolvedValue({ valid: false, error: 'timeout' });
+    const res = await request(app).get('/api/parent/children/101/status').set('Authorization', `Bearer ${VALID}`);
+    expect(res.status).toBe(503);
+    expect(res.body.errors?.[0]?.code).toBe('LINE_VERIFY_UNAVAILABLE');
+    expect(lineSvc.getChildStatusToday).not.toHaveBeenCalled();
+    expect(gate.guardParentView).not.toHaveBeenCalled();
+  });
+
   test('gate allows → 200 and the gate was asked about the verified user', async () => {
     gate.guardParentView.mockResolvedValue({ allowed: true, featureEnabled: true, consentGranted: true });
     const res = await request(app).get('/api/parent/children/101/status').set('Authorization', `Bearer ${VALID}`);

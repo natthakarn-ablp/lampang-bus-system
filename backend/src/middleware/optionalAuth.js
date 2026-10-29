@@ -5,6 +5,7 @@ const env = require('../config/env');
 const { pool } = require('../config/database');
 const idTokenSvc = require('../services/lineIdToken.service');
 const { sessionResetJti, issuedBeforeReset } = require('../utils/sessionReset');
+const { isVerificationUnavailable } = require('../utils/lineVerificationError');
 
 // Phase QR-1 — "auth if present, never 401". Attaches whatever identity it can
 // prove so a handler can ESCALATE the access level; missing/invalid credentials
@@ -15,7 +16,7 @@ const { sessionResetJti, issuedBeforeReset } = require('../utils/sessionReset');
 // Both a staff JWT and a LIFF id_token can arrive in the Authorization header.
 // We try the JWT first (a LIFF token can't verify as our HS256 JWT); if that
 // doesn't resolve a live user, we try the same value as a LIFF id_token.
-async function optionalAuth(req, _res, next) {
+async function optionalAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   const idTokenParam =
@@ -64,7 +65,16 @@ async function optionalAuth(req, _res, next) {
       try {
         const verify = await idTokenSvc.verifyIdToken(candidate);
         if (verify && verify.valid) req.lineUserId = verify.userId;
-      } catch { /* not a valid LIFF token — stay anonymous */ }
+        else if (isVerificationUnavailable(verify)) {
+          // Optional auth must preserve its anonymous fallback during a LINE
+          // outage. Log only the classified error; never include the token.
+          console.warn('[OPTIONAL_AUTH] LINE verification unavailable', { error: verify.error });
+        }
+      } catch {
+        // Verification failures on optional routes remain anonymous. Do not
+        // log the error object because it may contain request details.
+        console.warn('[OPTIONAL_AUTH] LINE verification failed; staying anonymous');
+      }
     }
   }
 

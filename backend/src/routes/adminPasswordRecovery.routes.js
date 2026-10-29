@@ -10,6 +10,7 @@ const env = require('../config/env');
 const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { verifyIdToken } = require('../services/lineIdToken.service');
+const { isVerificationUnavailable } = require('../utils/lineVerificationError');
 const { sendTextMessage } = require('../services/line.service');
 const { logAudit } = require('../utils/audit');
 const { validatePassword } = require('../utils/passwordPolicy');
@@ -180,6 +181,11 @@ async function handleLinkLine(req, res, next) {
 
     const verified = await verifyIdToken(String(idToken));
     if (!verified.valid || !verified.userId) {
+      if (isVerificationUnavailable(verified)) {
+        return sendError(res, 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่', [
+          { code: 'LINE_VERIFY_UNAVAILABLE' },
+        ], 503);
+      }
       return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ได้ กรุณาเปิดใหม่ผ่าน LINE OA', [], 400);
     }
 

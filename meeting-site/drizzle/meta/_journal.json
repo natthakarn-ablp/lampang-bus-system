@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1792518800501,
+      "tag": "0000_nice_ser_duncan",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792523165929,
+      "tag": "0001_busy_rhodey",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792544031084,
+      "tag": "0002_tired_glorian",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792545116043,
+      "tag": "0003_friendly_james_howlett",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792833487726,
+      "tag": "0004_superb_galactus",
+      "breakpoints": true
+    }
+  ]
+}

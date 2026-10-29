@@ -66,7 +66,11 @@ async function verifyIdToken(idToken) {
       body: body.toString(),
       signal: controller.signal,
     });
-    const payload = await res.json().catch(() => ({}));
+    const payload = await res.json().catch((err) => {
+      // Malformed JSON stays invalid; body abort/network failures stay unavailable.
+      if (err instanceof SyntaxError) return {};
+      throw err;
+    });
     if (!res.ok) {
       // LINE returns { error, error_description } for 4xx.
       // Token-redacted log: we log error code only, never the token itself.

@@ -9,7 +9,7 @@ jest.mock('../src/config/env', () => ({
 }));
 
 const env = require('../src/config/env');
-const { verifyIdToken } = require('../src/services/lineIdToken.service');
+const { verifyIdToken, isVerificationUnavailable } = require('../src/services/lineIdToken.service');
 const nativeFetch = global.fetch;
 
 const jsonResponse = (status, payload) => ({ ok: status >= 200 && status < 300, status, json: async () => payload });
@@ -55,6 +55,57 @@ test('network failures and upstream 5xx are unavailable, not valid identities', 
   global.fetch.mockResolvedValueOnce(jsonResponse(503, { error: 'maintenance' }));
   await expect(verifyIdToken('synthetic-token')).resolves.toEqual({ valid: false, error: 'upstream_unavailable' });
   expect(error).toHaveBeenCalled();
+});
+
+test('a body stalled after response headers is aborted and classified as unavailable', async () => {
+  const readBody = jest.fn();
+  global.fetch.mockImplementationOnce(async (_url, { signal }) => ({
+    ok: true,
+    status: 200,
+    json: () => new Promise((_resolve, reject) => {
+      readBody();
+      signal.addEventListener('abort', () => reject(new Error('synthetic body abort')), { once: true });
+    }),
+  }));
+
+  const result = await verifyIdToken('synthetic-token');
+
+  expect(readBody).toHaveBeenCalledTimes(1);
+  expect(result).toEqual({ valid: false, error: 'timeout' });
+  expect(isVerificationUnavailable(result)).toBe(true);
+  expect(warn).toHaveBeenCalledWith('[LINE_ID_TOKEN_VERIFY] timeout', { timeoutMs: env.line.idTokenVerifyTimeoutMs });
+});
+
+test('a body network failure is unavailable and releases its verification slot', async () => {
+  global.fetch.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => { throw new TypeError('synthetic body network failure'); },
+  });
+
+  const result = await verifyIdToken('synthetic-token');
+
+  expect(result).toEqual({ valid: false, error: 'network_error' });
+  expect(isVerificationUnavailable(result)).toBe(true);
+  global.fetch.mockResolvedValueOnce(jsonResponse(200, { sub: 'synthetic-line-subject', aud: '2000000000' }));
+  await expect(verifyIdToken('synthetic-next-token')).resolves.toMatchObject({ valid: true });
+});
+
+test.each([
+  [200, 'no_sub_in_payload', false],
+  [400, 'http_400', false],
+  [503, 'upstream_unavailable', true],
+])('malformed JSON at HTTP %s preserves its existing classification', async (status, expectedError, unavailable) => {
+  global.fetch.mockResolvedValueOnce({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => { throw new SyntaxError('synthetic malformed JSON'); },
+  });
+
+  const result = await verifyIdToken('synthetic-token');
+
+  expect(result).toEqual({ valid: false, error: expectedError });
+  expect(isVerificationUnavailable(result)).toBe(unavailable);
 });
 
 test('LINE 4xx rejection remains an invalid token and is not logged with the token', async () => {

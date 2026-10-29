@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, MessageSquare } from 'lucide-react';
 import api from '../../api/axios';
+import EmptyState from '../../components/EmptyState';
+import ErrorState from '../../components/ErrorState';
+import LoadingState from '../../components/LoadingState';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../components/Toast';
 import PageHeader from '../../components/PageHeader';
@@ -113,7 +116,7 @@ export default function ParticipationCaseDetail() {
   if (loading) {
     return (
       <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-        <p className="text-sm text-ink-muted">กำลังโหลด…</p>
+        <LoadingState message="กำลังโหลดรายละเอียดเรื่อง…" />
       </div>
     );
   }
@@ -121,7 +124,7 @@ export default function ParticipationCaseDetail() {
   if (error || !data) {
     return (
       <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-        <AlertBanner variant="danger" title="เปิดเรื่องนี้ไม่ได้">{error}</AlertBanner>
+        <ErrorState title="เปิดเรื่องนี้ไม่ได้" message={error} onRetry={load} />
         <Link
           to="/participation"
           className="focus-ring mt-4 inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg border border-surface-border bg-surface-raised text-sm text-ink hover:bg-surface transition"
@@ -180,7 +183,7 @@ export default function ParticipationCaseDetail() {
           ลำดับเหตุการณ์ ({events.length})
         </h2>
         {events.length === 0 ? (
-          <p className="text-sm text-ink-muted">ยังไม่มีเหตุการณ์</p>
+          <EmptyState compact title="ยังไม่มีเหตุการณ์" description="เหตุการณ์ที่บันทึกใหม่จะแสดงตามลำดับเวลาในส่วนนี้" />
         ) : (
           <ol className="space-y-3">
             {events.map((ev) => (

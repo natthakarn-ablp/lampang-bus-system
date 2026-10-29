@@ -48,9 +48,9 @@ export default function PageHeader({
         <nav aria-label="breadcrumb" className="mb-2 flex items-center gap-1.5 text-caption text-ink-muted">
           {breadcrumb.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1.5">
-              {i > 0 && <span className="text-surface-border">/</span>}
+              {i > 0 && <span className="text-ink-muted">/</span>}
               {crumb.to ? (
-                <Link to={crumb.to} className="focus-ring rounded hover:text-brand-600 transition">{crumb.label}</Link>
+                <Link to={crumb.to} className="focus-ring inline-flex min-h-[44px] items-center rounded px-1 hover:text-brand-600 transition">{crumb.label}</Link>
               ) : (
                 <span>{crumb.label}</span>
               )}

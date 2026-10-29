@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Search } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { Bus, RefreshCw, Search } from 'lucide-react';
 import api from '../../api/axios';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
-import { AlertBanner, AppCard } from '../../components/ui';
+import PageHeader from '../../components/PageHeader';
+import { AlertBanner, AppCard, FormField } from '../../components/ui';
 import { bangkokDateDaysAgo, todayBangkok } from '../../utils/thaiTime';
 import { filterIncidentRows, incidentDateError, incidentErrorMessage, incidentPhase } from '../../utils/transportIncidentView';
 import IncidentPassengerCards, { incidentTime } from './IncidentPassengerCards';
@@ -54,31 +55,31 @@ export default function TransportIncidentRoster() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-4">
-      <Link to="/transport/vehicles" className="inline-flex min-h-11 items-center gap-2 text-brand-700 font-medium focus-ring rounded-lg">
-        <ArrowLeft size={18} aria-hidden="true" /> ค้นรถคันอื่น
-      </Link>
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm text-ink-muted">ข้อมูลรถและนักเรียนเมื่อเกิดเหตุ</p>
-          <h1 className="text-2xl sm:text-3xl font-bold leading-relaxed text-ink break-words">{vehicle?.plate_no || 'ข้อมูลรถที่เลือก'}</h1>
-          {data && <p className="text-sm text-ink-muted">ดึงข้อมูล {incidentTime(data.fetched_at)}</p>}
-        </div>
-        <button type="button" disabled={busy || !!dateError} onClick={() => setRetry(value => value + 1)}
+      <PageHeader
+        title={vehicle?.plate_no || 'ข้อมูลรถที่เลือก'}
+        subtitle="ข้อมูลรถและนักเรียนเมื่อเกิดเหตุ"
+        meta={data ? `ดึงข้อมูล ${incidentTime(data.fetched_at)}` : undefined}
+        icon={Bus}
+        iconColor="amber"
+        breadcrumb={[{ label: 'รถรับส่ง', to: '/transport/vehicles' }, { label: 'รายชื่อเมื่อเกิดเหตุ' }]}
+        actions={<button type="button" disabled={busy || !!dateError} onClick={() => setRetry(value => value + 1)}
           className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-surface-border bg-surface-raised px-4 font-medium text-ink disabled:opacity-50">
           <RefreshCw size={18} aria-hidden="true" /> อัปเดตข้อมูล
-        </button>
-      </header>
+        </button>}
+      />
       <AppCard padding="md">
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="incident-date" className="block text-sm font-semibold text-ink">วันที่ของบันทึกขึ้น–ลง</label>
-            <input id="incident-date" type="date" value={date} min={earliest} max={today} required
-              aria-invalid={!!dateError} aria-describedby="incident-date-help"
-              onChange={event => setDate(event.target.value)} className="mt-2 block w-full min-h-12 min-w-0 rounded-xl border border-surface-border bg-surface-raised px-3 text-base focus-ring" />
-            <p id="incident-date-help" className={`mt-1 text-sm ${dateError ? 'text-danger-ink' : 'text-ink-muted'}`}>
-              {dateError || 'เลือกย้อนหลังได้ 30 วัน เปลี่ยนแล้วแสดงข้อมูลทันที'}
-            </p>
-          </div>
+          <FormField
+            label="วันที่ของบันทึกขึ้น–ลง"
+            type="date"
+            value={date}
+            onChange={setDate}
+            min={earliest}
+            max={today}
+            required
+            error={dateError || undefined}
+            helper="เลือกย้อนหลังได้ 30 วัน เปลี่ยนแล้วแสดงข้อมูลทันที"
+          />
           <fieldset className="min-w-0">
             <legend className="text-sm font-semibold text-ink">รอบรถ</legend>
             <div className="mt-2 grid grid-cols-2 gap-2">

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
+import LoadingState from '../../components/LoadingState';
 import { AlertBanner, FormField, Modal } from '../../components/ui';
 import VehicleSelect from '../../components/VehicleSelect';
 
@@ -126,7 +127,7 @@ export default function AddStudentModal({ initialVehicleId = '', onClose, onAppl
         </fieldset>
         <fieldset disabled={busy || loadingVehicles} className="space-y-3">
           <legend className="font-semibold mb-3">2. เลือกรถรับส่ง</legend>
-          {loadingVehicles ? <p role="status">กำลังโหลดรถ…</p> : <VehicleSelect vehicles={vehicles} value={vehicleId} onChange={setVehicleId} />}
+          {loadingVehicles ? <LoadingState message="กำลังโหลดรายการรถ…" /> : <VehicleSelect vehicles={vehicles} value={vehicleId} onChange={setVehicleId} />}
           {vehicleError && <AlertBanner variant="danger" title="เลือกรถไม่สำเร็จ">{vehicleError}<button type="button" className={`${SECONDARY} block mt-2`} onClick={() => setVehicleAttempt(n => n + 1)}>โหลดรถอีกครั้ง</button></AlertBanner>}
           <p className="text-sm text-ink-muted">ใช้รถรอบเช้าและเย็นเป็นค่าเริ่มต้น หากยังไม่ทราบรถ บันทึกชื่อไว้ก่อนแล้วเลือกรถภายหลังได้</p>
         </fieldset>

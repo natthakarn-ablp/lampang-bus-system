@@ -908,6 +908,17 @@ const COMMON = {
   '/api/reports/monthly': { data: { month: '2026-08', rows: STATUS_TODAY.rows, daily_trend: RECENT_DAYS } },
   '/api/province/trend':  { data: RECENT_DAYS },
   '/api/school/teacher-check': { data: TEACHER_CHECK },
+  '/api/auth/recovery/config': { data: {
+    admin_password_recovery: true,
+    requires_recovery_code: true,
+    policy: { roles: { admin: { enabled: true } } },
+  } },
+  '/api/auth/recovery/self/status': { data: {
+    line_linked: true,
+    verified_at: '2026-08-26T01:10:00Z',
+    requires_recovery_code: true,
+    recovery_codes_remaining: 6,
+  } },
   '/api/reports/summary': { data: { term: '1/2569', rows: STATUS_TODAY.rows, totals: { students: 4696, checkins: 128400 } } },
   // analytics ping — ไม่มีผลต่อภาพ แต่ถ้าไม่ตอบจะขึ้นในรายงาน fixture ที่ขาด
   '/api/visits/track': { data: { ok: true } },
@@ -1030,6 +1041,8 @@ const COMMON = {
   } },
   // สรุปโรงเรียนในสังกัด (SchoolList.jsx) — ตัวเลขสมมุติ
   '/api/affiliation/schools/report': { data: {
+    affiliation: { id: 'AFF001', name: 'สังกัดตัวอย่าง จังหวัดลำปาง' },
+    generated_at: '2026-08-27T02:15:00Z',
     summary: { total_schools: 2, total_students: 186, total_vehicles: 9 },
     schools: [
       { id: 'SC-1', name: 'โรงเรียนบ้านตัวอย่าง', student_count: 124, vehicle_count: 6 },
@@ -1511,6 +1524,27 @@ const SHOTS = [
       if (!result.required || result.valid) throw new Error('required FormField controls do not block an empty form');
     },
     expect: ['input[type=password][required]'] },
+  // Eight pages in the final Partial-page migration. Every one is captured at
+  // phone and desktop widths; modal/report components are opened through the
+  // same controls a user reaches rather than rendered in isolation.
+  { id: '96-teacher-check', url: '/school/teacher-check?session=morning', user: 'school', vps: ['mobile', 'desktop'],
+    expect: ['text=เช็กชื่อวันนี้', '[role=radiogroup]', 'input[type=search]'] },
+  { id: '97-incident-roster', url: '/transport/vehicles/V-1/incident-roster', user: 'transport', vps: ['mobile', 'desktop'],
+    expect: ['text=ข้อมูลรถและนักเรียนเมื่อเกิดเหตุ', 'input[type=date][required]', 'input[type=search]'] },
+  { id: '98-add-student', url: '/school/students', user: 'school', vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: 'เพิ่มนักเรียนทีละคน' }).first().click(); },
+    expect: ['[role=dialog]', 'text=1. ข้อมูลนักเรียน', 'input[required]'] },
+  { id: '99-account-security', url: '/parent/link/admin-recovery', user: 'admin', vps: ['mobile', 'desktop'],
+    expect: ['text=ความปลอดภัยบัญชี', 'text=ผูก LINE แล้ว', 'input[type=password][required]'] },
+  { id: '100-participation-detail', url: '/participation/cases/9101', user: 'admin', vps: ['mobile', 'desktop'],
+    expect: ['text=ลำดับเหตุการณ์', 'text=บันทึกเหตุการณ์ใหม่', 'select[required]'] },
+  { id: '101-school-report', url: '/affiliation/schools', user: 'affiliation', vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: 'ดูรายงาน' }).click(); },
+    expect: ['dialog[open]', 'text=ข้อมูลแยกรายโรงเรียน', 'text=รวมทั้งสังกัด'] },
+  { id: '102-forgot-password', url: '/forgot-password', user: null, vps: ['mobile', 'desktop'],
+    expect: ['text=ลืมรหัสผ่าน', 'input[required]', 'button:has-text("ส่งลิงก์ไปยัง LINE")'] },
+  { id: '103-reset-password', url: '/reset-password#token=fixture-token', user: null, vps: ['mobile', 'desktop'],
+    expect: ['text=ตั้งรหัสผ่านใหม่', 'input[type=password][required]', 'button:has-text("ยืนยันรหัสผ่านใหม่")'] },
   { id: '86-aff-accounts', url: '/affiliation/accounts', user: 'affiliation', vps: ['mobile', 'desktop'],
     act: async page => { await page.getByRole('button', { name: 'เปิดฟอร์ม' }).first().click(); },
     expect: ['text=รหัสโรงเรียน', 'text=ชื่อผู้ใช้', 'text=บัญชีที่สร้างล่าสุด', 'text=520341'] },

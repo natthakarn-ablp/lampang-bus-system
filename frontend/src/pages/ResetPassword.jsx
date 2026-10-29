@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
+import LoadingState from '../components/LoadingState';
 import { AlertBanner, FormField } from '../components/ui';
 import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../utils/passwordPolicy';
 
@@ -19,6 +20,8 @@ export default function ResetPassword() {
   // defaults to true so a failed lookup shows the field rather than hiding a
   // requirement the server will then reject.
   const [requiresCode, setRequiresCode] = useState(true);
+  const [configLoading, setConfigLoading] = useState(true);
+  const [configError, setConfigError] = useState(false);
 
   useEffect(() => {
     if (token) window.history.replaceState({}, document.title, '/reset-password');
@@ -32,7 +35,8 @@ export default function ResetPassword() {
         const value = res.data?.data?.requires_recovery_code;
         if (typeof value === 'boolean') setRequiresCode(value);
       })
-      .catch(() => { /* keep the safe default */ });
+      .catch(() => { if (!cancelled) setConfigError(true); })
+      .finally(() => { if (!cancelled) setConfigLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -75,7 +79,15 @@ export default function ResetPassword() {
           </AlertBanner>
         )}
 
-        {token && !done && (
+        {token && !done && configLoading && <LoadingState compact message="กำลังตรวจสอบรูปแบบการกู้คืน…" />}
+
+        {token && !done && configError && (
+          <AlertBanner variant="warn" className="mt-6" title="ตรวจสอบรูปแบบรหัสกู้คืนไม่ได้">
+            ระบบจะแสดงช่องรหัสกู้คืนไว้เพื่อความปลอดภัย หากไม่มีรหัส กรุณาขอลิงก์ใหม่ภายหลัง
+          </AlertBanner>
+        )}
+
+        {token && !done && !configLoading && (
           <form onSubmit={submit} className="mt-6 space-y-4">
             {requiresCode && (
               <FormField
@@ -110,9 +122,11 @@ export default function ResetPassword() {
               error={form.confirm && form.confirm !== form.new_password ? 'รหัสผ่านไม่ตรงกัน' : undefined}
             />
             {error && <AlertBanner variant="danger">{error}</AlertBanner>}
-            <button type="submit" disabled={busy} className="focus-ring min-h-[48px] w-full rounded-lg bg-brand-600 px-4 font-bold text-white hover:bg-brand-700 disabled:opacity-50">
-              {busy ? 'กำลังเปลี่ยนรหัสผ่าน…' : 'ยืนยันรหัสผ่านใหม่'}
-            </button>
+            {busy ? <LoadingState compact message="กำลังเปลี่ยนรหัสผ่าน…" /> : (
+              <button type="submit" className="focus-ring min-h-[48px] w-full rounded-lg bg-brand-600 px-4 font-bold text-white hover:bg-brand-700">
+                ยืนยันรหัสผ่านใหม่
+              </button>
+            )}
           </form>
         )}
 

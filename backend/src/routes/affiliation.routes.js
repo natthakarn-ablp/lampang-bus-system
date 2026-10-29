@@ -20,6 +20,7 @@ const affAdminSvc = require('../services/affiliationAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const ppSvc = require('../services/pickupPoint.service');
 const { logAudit } = require('../utils/audit');
+const { auditExportBeforeSend } = require('../utils/exportAudit');
 const { isOle2, isAllowedImport } = require('../utils/fileType');
 const { decodeCsvBuffer } = require('../utils/readCsvWithEncoding');
 const { parseCsvRecords } = require('../utils/csv');
@@ -228,6 +229,10 @@ router.get('/schools/report/excel', importExportLimiter, async (req, res, next) 
     const workbook = buildAffiliationSchoolsWorkbook(report);
     // Finish serialization before sending attachment headers so errors remain JSON.
     const buffer = await workbook.xlsx.writeBuffer();
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'affiliation_schools_report', entityId: affId,
+      metadata: { format: 'xlsx', role: req.user.role, scope: affId },
+    })) return;
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="affiliation-schools-report.xlsx"');
@@ -632,11 +637,13 @@ router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {
       );
       const truncated = rows.length > 5000;
       const csv = auditRowsToCsv(rows.slice(0, 5000));
+      if (!await auditExportBeforeSend(req, res, {
+        entityType: 'audit_csv', entityId: 'affiliation',
+        metadata: { role: req.user.role, truncated },
+      })) return;
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=audit_affiliation_${todayBangkok()}.csv`);
       if (truncated) res.setHeader('X-Truncated', 'true');
-      logAudit({ userId: req.user.id, action: 'EXPORT', entityType: 'audit_csv', entityId: 'affiliation',
-        newValue: { role: req.user.role, truncated }, ipAddress: req.ip, userAgent: req.headers['user-agent'] }).catch(() => {});
       return res.send('\uFEFF' + csv +
         (truncated ? '\n"# \u0E41\u0E2A\u0E14\u0E07 5000 \u0E41\u0E16\u0E27\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E30\u0E1A\u0E38\u0E0A\u0E48\u0E27\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48 (date_from/date_to) \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E39\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14"' : ''));
     }

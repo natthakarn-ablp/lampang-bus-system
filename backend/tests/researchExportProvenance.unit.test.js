@@ -295,7 +295,7 @@ describe('the documented recipe is the one that was used', () => {
   });
 
   it('is recorded in the EXPORT audit row, not only inside the file it describes', () => {
-    expect(after('action: \'EXPORT\', entityType: \'research_dataset\'')).toMatch(/data_checksum: integrity\.data_checksum/);
+    expect(after('entityType: \'research_dataset\'')).toMatch(/data_checksum: integrity\.data_checksum/);
   });
 });
 

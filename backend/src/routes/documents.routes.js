@@ -18,7 +18,7 @@ const { authenticate } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roleGuard');
 const { sendError } = require('../utils/response');
 const { pool } = require('../config/database');
-const { logAudit } = require('../utils/audit');
+const { auditExportBeforeSend } = require('../utils/exportAudit');
 const { readIdParam } = require('../utils/pathParams');
 const checkinSvc = require('../services/checkin.service');
 const docSvc = require('../services/driverDocuments.service');
@@ -75,14 +75,11 @@ router.get('/:docType/:id/file', async (req, res, next) => {
     // Store the audit row before any response headers or bytes are released.
     // If audit storage is unavailable, fail closed instead of creating an
     // unrecorded sensitive-data access.
-    await logAudit({
-      userId: req.user.id, action: 'EXPORT',
+    if (!await auditExportBeforeSend(req, res, {
       entityType: docType === 'vehicle' ? 'vehicle_document' : 'driver_document',
-      entityId: String(id),
-      newValue: { action: 'view_document', doc_type: row.doc_type },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
-      required: true,
-    });
+      entityId: id,
+      metadata: { action: 'view_document', doc_type: row.doc_type },
+    })) return;
 
     // Content-Type: the STORED mime is the CLIENT-DECLARED multipart type, so a
     // polyglot could declare text/html. Uploads are magic-byte-gated to exactly

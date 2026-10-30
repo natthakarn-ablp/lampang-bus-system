@@ -53,7 +53,7 @@ function resolveSchoolId(req) {
 
 // Phase 7.11.5 — extracted into shared util so admin.routes.js can
 // use the same whitelist.
-const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents } = require('../utils/gradeScope');
+const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
 const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
 
 /**
@@ -79,11 +79,12 @@ function resolveGradeScope(req) {
   return req.user.gradeScope || null;
 }
 
+const teacherGradeScope = (req) => req.user?.role === 'school' ? req.user.gradeScope || null : null;
+
 /**
- * Phase 7.11.3 — write-side safety net. Blocks any school-role
- * teacher (grade_scope != null) from a route. Used on every write
- * + on read endpoints that are inherently full-school (audit log,
- * unscoped vehicle dropdown, bulk import).
+ * Full-school safety net for operations that cannot be scoped to one grade.
+ * Grade teachers may use the few explicitly scoped entry and assignment
+ * routes; every other school-wide mutation still uses this guard.
  *
  * Cleanly 403s with a Thai-language reason so a teacher tapping a
  * stale frontend button sees a meaningful toast — but no data leaks.
@@ -94,7 +95,7 @@ function requireFullSchoolScope(req, res, next) {
   if (req.user?.role === 'school' && req.user?.gradeScope) {
     return sendError(
       res,
-      'บัญชีครูประจำสายชั้นเข้าถึงได้เฉพาะข้อมูลในการดูเท่านั้น',
+      'บัญชีครูประจำสายชั้นไม่มีสิทธิ์ดำเนินการนี้',
       [],
       403
     );
@@ -1016,7 +1017,7 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
 
 // ─── POST /students/move ─────────────────────────────────────────────────────
 
-router.post('/students/move', requireFullSchoolScope, async (req, res, next) => {
+router.post('/students/move', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -1029,13 +1030,22 @@ router.post('/students/move', requireFullSchoolScope, async (req, res, next) => 
        WHERE s.id = ? AND s.school_id = ? AND s.is_deleted = FALSE`, [student_id, schoolId]
     );
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
+    if (teacherGradeScope(req) && normalizeGrade(st.grade) !== teacherGradeScope(req)) {
+      return sendError(res, 'ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ', [], 404);
+    }
 
     if (vehicle_id) {
       const [[veh]] = await pool.query('SELECT id FROM vehicles WHERE id = ? AND is_deleted = FALSE', [vehicle_id]);
       if (!veh) return sendError(res, 'ไม่พบรถที่ระบุ', [], 404);
     }
 
-    await pool.query(`UPDATE students SET vehicle_id = ? WHERE id = ?`, [vehicle_id || null, student_id]);
+    // Recheck the same school and stored grade in the write itself. A concurrent
+    // grade/school change must not turn the earlier read into cross-scope write.
+    const [updated] = await pool.query(
+      'UPDATE students SET vehicle_id = ? WHERE id = ? AND school_id = ? AND grade <=> ? AND is_deleted = FALSE',
+      [vehicle_id || null, student_id, schoolId, st.grade]
+    );
+    if (!updated.affectedRows) return sendError(res, 'ข้อมูลนักเรียนเปลี่ยนไป กรุณาโหลดรายชื่อใหม่', [], 409);
 
     await logAudit({
       userId: req.user.id, action: 'UPDATE', entityType: 'student', entityId: student_id,
@@ -1108,7 +1118,7 @@ router.post('/students/:id/restore', requireFullSchoolScope, async (req, res, ne
 
 // ─── GET /vehicles/all (for vehicle dropdown) ───────────────────────────────
 
-router.get('/vehicles/all', requireFullSchoolScope, async (req, res, next) => {
+router.get('/vehicles/all', async (req, res, next) => {
   try {
     // Phase 10.13A-22A — include active_students so province-variant duplicates
     // (0 students, with a canonical sibling) can be marked for the UI to hide.
@@ -1130,7 +1140,7 @@ router.get('/vehicles/all', requireFullSchoolScope, async (req, res, next) => {
 // ─── GET /vehicles/check-plate (Phase 10.13A-15) ────────────────────────────
 // Read-only duplicate preflight: warns the UI about existing exact/normalized/
 // province-variant vehicles BEFORE the operator saves. Never writes.
-router.get('/vehicles/check-plate', requireFullSchoolScope, async (req, res, next) => {
+router.get('/vehicles/check-plate', async (req, res, next) => {
   try {
     const { findPlateMatches, classifyPlateAgainstDb } = require('../services/vehicleDedup.service');
     const { buildDisplayPlate } = require('../utils/plateIdentity');
@@ -1161,11 +1171,14 @@ router.get('/vehicles/check-plate', requireFullSchoolScope, async (req, res, nex
 
 // ─── POST /vehicles ──────────────────────────────────────────────────────────
 
-router.post('/vehicles', requireFullSchoolScope, async (req, res, next) => {
+router.post('/vehicles', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const { plate_no, plate_prefix, plate_number, plate_province, vehicle_type, driver_name, driver_phone, owner_name } = req.body;
+    if (teacherGradeScope(req) && [driver_name, driver_phone, owner_name].some(v => String(v || '').trim())) {
+      return sendError(res, 'ครูประจำสายชั้นเพิ่มได้เฉพาะข้อมูลรถ กรุณาให้บัญชีหลักโรงเรียนจัดการคนขับและเจ้าของรถ', [], 403);
+    }
 
     // Phase 10.13A-22 — prefer structured plate fields (หมวดอักษร / เลขทะเบียน /
     // จังหวัด); the backend builds the canonical display plate_no so operators
@@ -1878,7 +1891,7 @@ router.get('/students/import/:batchId', requireFullSchoolScope, async (req, res,
 
 // POST /students/import/preview — analyse rows row-by-row, persist batch + rows,
 // return summary + classifications. Writes NO student/vehicle/parent data.
-router.post('/students/import/preview', importExportLimiter, requireFullSchoolScope, importUpload.single('file'), async (req, res, next) => {
+router.post('/students/import/preview', importExportLimiter, importUpload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return sendError(res, 'ไม่พบไฟล์ที่อัปโหลด', [], 400);
     // Phase 10.13B-1 — retained preview files may contain guardian PII; keep them
@@ -1888,9 +1901,10 @@ router.post('/students/import/preview', importExportLimiter, requireFullSchoolSc
     const importPreview = require('../services/studentImportPreview.service');
     // Phase 10.15A — schools can opt in to auto-create missing vehicles during import.
     const autoCreateVehicle = req.body && (req.body.auto_create_vehicle === 'true' || req.body.auto_create_vehicle === true);
+    if (teacherGradeScope(req) && autoCreateVehicle) return sendError(res, 'กรุณาเพิ่มรถแยกก่อนเพิ่มนักเรียน', [], 403);
     const out = await importPreview.runPreview(pool, {
       schoolId, importedBy: req.user.id, filePath: req.file.path, originalName: decodeUploadFilename(req.file.originalname),
-      autoCreateVehicle,
+      autoCreateVehicle, gradeScope: teacherGradeScope(req),
     });
     await logAudit({
       userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(out.batch_id),
@@ -1902,7 +1916,7 @@ router.post('/students/import/preview', importExportLimiter, requireFullSchoolSc
 });
 
 // POST /students/import/:batchId/apply — apply can_apply (INSERT) rows, idempotent.
-router.post('/students/import/:batchId/apply', importExportLimiter, requireFullSchoolScope, async (req, res, next) => {
+router.post('/students/import/:batchId/apply', importExportLimiter, async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     const batchId = readIdParam(req, res, 'batchId');
@@ -1911,16 +1925,22 @@ router.post('/students/import/:batchId/apply', importExportLimiter, requireFullS
     const { mode = 'insert_ready', selected_row_ids, confirm_guardian_update, confirm_reactivate, auto_create_vehicle } = req.body || {};
     const VALID_MODES = ['insert_ready', 'update_guardian_confirmed', 'reactivate_student_confirmed', 'mixed_confirmed'];
     if (!VALID_MODES.includes(mode)) return sendError(res, 'โหมดการนำเข้าไม่ถูกต้อง', [], 400);
+    if (teacherGradeScope(req) && (mode !== 'insert_ready' || !!confirm_guardian_update || !!confirm_reactivate || !!auto_create_vehicle || (Array.isArray(selected_row_ids) && selected_row_ids.length))) {
+      return sendError(res, 'ครูประจำสายชั้นเพิ่มนักเรียนใหม่ได้ครั้งละหนึ่งคนเท่านั้น', [], 403);
+    }
+    const importPreview = require('../services/studentImportPreview.service');
+    if (teacherGradeScope(req)) await importPreview.assertScopedBatch(pool, {
+      batchId, schoolId, userId: req.user.id, gradeScope: teacherGradeScope(req),
+    });
     if (!await consumePolicyAction(req, res, {
       context: 'school.student_import_apply', subjectType: 'import_batch', subjectId: batchId,
     })) return;
-    const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.applyBatch(pool, {
       batchId, schoolId, userId: req.user.id, mode,
       selectedRowIds: Array.isArray(selected_row_ids) ? selected_row_ids : [],
       confirmGuardianUpdate: !!confirm_guardian_update,
       confirmReactivate: !!confirm_reactivate,
-      autoCreateVehicle: !!auto_create_vehicle,
+      autoCreateVehicle: !!auto_create_vehicle, gradeScope: teacherGradeScope(req),
     });
     await logAudit({
       userId: req.user.id, action: 'IMPORT', entityType: 'import_batch', entityId: String(batchId),
@@ -1940,13 +1960,13 @@ router.post('/students/import/:batchId/apply', importExportLimiter, requireFullS
 });
 
 // GET /students/import/:batchId/report — row-level results (PII-safe).
-router.get('/students/import/:batchId/report', requireFullSchoolScope, async (req, res, next) => {
+router.get('/students/import/:batchId/report', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     const batchId = readIdParam(req, res, 'batchId');
     if (batchId === null) return;
     const importPreview = require('../services/studentImportPreview.service');
-    const out = await importPreview.getReport(pool, { batchId, schoolId });
+    const out = await importPreview.getReport(pool, { batchId, schoolId, userId: req.user.id, gradeScope: teacherGradeScope(req) });
     return sendSuccess(res, out);
   } catch (err) { next(err); }
 });

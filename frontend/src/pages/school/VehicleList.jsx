@@ -77,7 +77,7 @@ export default function VehicleList() {
       <PageHeader
         title="รถรับส่ง"
         subtitle="รถที่นักเรียนของโรงเรียนเลือกใช้ พร้อมรายชื่อเด็กในแต่ละคัน"
-        actions={canEditVehicles ? (
+        actions={user?.role === 'school' || user?.role === 'admin' ? (
           <Link to="/school/bulk-vehicles" className="focus-ring inline-flex items-center justify-center gap-2 min-h-[44px] px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold">
             <Plus className="w-4 h-4" aria-hidden="true" /> เพิ่มรถรับส่ง
           </Link>
@@ -89,10 +89,10 @@ export default function VehicleList() {
           <PlateSearchInput value={plateSearch} onChange={setPlateSearch} suggestions={vehicles} />
         </div>
         <Link to="/school/students" className="focus-ring inline-flex items-center min-h-[44px] px-3 rounded-lg text-brand-700 hover:bg-brand-50 text-sm font-medium">
-          {canEditVehicles ? 'เลือกรถให้นักเรียนที่มีรายชื่อแล้ว' : 'ดูรายชื่อนักเรียน'}
+          {user?.role === 'school' || user?.role === 'admin' ? 'เลือกรถให้นักเรียนที่มีรายชื่อแล้ว' : 'ดูรายชื่อนักเรียน'}
         </Link>
       </div>
-      {canEditVehicles && (
+      {(user?.role === 'school' || user?.role === 'admin') && (
         <p className="text-sm text-ink-muted mb-4">เพิ่มรถไว้แล้วแต่ยังไม่เห็นที่นี่? ไปที่นักเรียนแล้วเลือกรถให้เด็ก รถจะปรากฏเมื่อมีนักเรียนของโรงเรียนใช้บริการ</p>
       )}
 

@@ -19,6 +19,7 @@ const { logAudit } = require('../utils/audit');
 const { getCurrentTerm } = require('./term.service');
 const { generateVehicleId } = require('../utils/hash');
 const { validatePlateNo } = require('../utils/vehiclePlate');
+const { normalizeGrade } = require('../utils/gradeScope');
 
 /**
  * Minimal RFC 4180 CSV parser — handles quoted fields with embedded commas
@@ -291,12 +292,29 @@ function publicRow(r) {
 }
 
 // ── Preview: persist batch + rows. No student/vehicle/parent writes. ─────────
-async function runPreview(pool, { schoolId, importedBy, filePath, originalName, autoCreateVehicle = false }) {
+async function runPreview(pool, { schoolId, importedBy, filePath, originalName, autoCreateVehicle = false, gradeScope = null }) {
   const rows = await parseImportFile(filePath, originalName);
   if (rows.length > MAX_IMPORT_ROWS) {
     const e = new Error('ไฟล์มีจำนวนแถวมากเกินไป (เกิน 5000 แถว) กรุณาแบ่งไฟล์');
     e.statusCode = 400;
     throw e;
+  }
+  if (gradeScope) {
+    if (autoCreateVehicle || rows.length !== 1 || normalizeGrade(rows[0].grade) !== gradeScope) {
+      const e = new Error('ครูประจำสายชั้นเพิ่มนักเรียนได้ครั้งละหนึ่งคนในสายชั้นที่รับผิดชอบ');
+      e.statusCode = 403;
+      throw e;
+    }
+    // A reused code must not reveal a pupil or guardian from another grade.
+    const [[existing]] = await pool.query(
+      'SELECT grade FROM students WHERE school_id = ? AND student_code = ? LIMIT 1',
+      [schoolId, String(rows[0].student_code || '').trim()]
+    );
+    if (existing && normalizeGrade(existing.grade) !== gradeScope) {
+      const e = new Error('รหัสนักเรียนนี้ไม่พร้อมใช้งาน กรุณาให้บัญชีหลักโรงเรียนตรวจสอบ');
+      e.statusCode = 409;
+      throw e;
+    }
   }
   const results = await analyzeRows(pool, schoolId, rows, autoCreateVehicle);
   const summary = summarize(results);
@@ -691,7 +709,24 @@ const RISKY_GUARDIAN = new Set(['update_guardian_confirmed', 'mixed_confirmed'])
 const RISKY_REACTIVATE = new Set(['reactivate_student_confirmed', 'mixed_confirmed']);
 const DOES_INSERT = new Set(['insert_ready', 'mixed_confirmed']);
 
-async function applyBatch(pool, { batchId, schoolId, userId, mode = 'insert_ready', selectedRowIds = [], confirmGuardianUpdate = false, confirmReactivate = false, autoCreateVehicle = false }) {
+async function assertScopedBatch(pool, { batchId, schoolId, userId, gradeScope }) {
+  const [[batch]] = await pool.query('SELECT school_id, imported_by, total_rows FROM import_batches WHERE id = ?', [batchId]);
+  if (!batch || String(batch.school_id) !== String(schoolId) || String(batch.imported_by) !== String(userId) || Number(batch.total_rows) !== 1) {
+    const e = new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลนี้'); e.statusCode = 403; throw e;
+  }
+  const [rows] = await pool.query('SELECT normalized_json FROM import_batch_rows WHERE batch_id = ?', [batchId]);
+  if (rows.length !== 1 || normalizeGrade(jsonOf(rows[0].normalized_json).grade) !== gradeScope) {
+    const e = new Error('ชุดข้อมูลนี้ไม่อยู่ในสายชั้นที่รับผิดชอบ'); e.statusCode = 403; throw e;
+  }
+}
+
+async function applyBatch(pool, { batchId, schoolId, userId, mode = 'insert_ready', selectedRowIds = [], confirmGuardianUpdate = false, confirmReactivate = false, autoCreateVehicle = false, gradeScope = null }) {
+  if (gradeScope) {
+    if (mode !== 'insert_ready' || selectedRowIds.length || confirmGuardianUpdate || confirmReactivate || autoCreateVehicle) {
+      const e = new Error('ครูประจำสายชั้นเพิ่มนักเรียนใหม่ได้ครั้งละหนึ่งคนเท่านั้น'); e.statusCode = 403; throw e;
+    }
+    await assertScopedBatch(pool, { batchId, schoolId, userId, gradeScope });
+  }
   const [[batch]] = await pool.query('SELECT id, school_id FROM import_batches WHERE id = ?', [batchId]);
   if (!batch) { const e = new Error('ไม่พบชุดข้อมูลนำเข้า'); e.statusCode = 404; throw e; }
   if (String(batch.school_id) !== String(schoolId)) { const e = new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลนี้'); e.statusCode = 403; throw e; }
@@ -751,7 +786,8 @@ async function applyBatch(pool, { batchId, schoolId, userId, mode = 'insert_read
 const GUARDIAN_CHANGED_SQL = "(guardian_diff_json IS NOT NULL AND JSON_TYPE(guardian_diff_json) <> 'NULL')";
 
 // ── Report: row-level results (phones never included; PII-safe). ─────────────
-async function getReport(pool, { batchId, schoolId }) {
+async function getReport(pool, { batchId, schoolId, userId = null, gradeScope = null }) {
+  if (gradeScope) await assertScopedBatch(pool, { batchId, schoolId, userId, gradeScope });
   const [[batch]] = await pool.query('SELECT id, school_id, filename, status, total_rows, created_at FROM import_batches WHERE id = ?', [batchId]);
   if (!batch) { const e = new Error('ไม่พบชุดข้อมูลนำเข้า'); e.statusCode = 404; throw e; }
   if (String(batch.school_id) !== String(schoolId)) { const e = new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลนี้'); e.statusCode = 403; throw e; }
@@ -893,4 +929,4 @@ async function rollbackBatch(pool, { batchId, schoolId, userId, selectedRowIds =
   return r;
 }
 
-module.exports = { parseImportFile, analyzeRows, runPreview, applyBatch, getReport, listBatches, getBatchDetail, rollbackBatch, classifyImportRow, maskPhone };
+module.exports = { parseImportFile, analyzeRows, runPreview, assertScopedBatch, applyBatch, getReport, listBatches, getBatchDetail, rollbackBatch, classifyImportRow, maskPhone };

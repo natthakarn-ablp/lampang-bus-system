@@ -199,6 +199,41 @@ describe('teacher check — recording', () => {
   });
 });
 
+describe('grade teacher marks leave from the classroom check', () => {
+  const leave = (token, body) => request(app).post('/api/school/leave')
+    .set('Authorization', `Bearer ${token}`).send(body);
+
+  test('own-grade leave for this round is recorded and excluded from attendance', async () => {
+    const res = await leave(t1, { student_id: STUDENT_ID, session: 'morning' });
+    expect(res.status).toBe(201);
+    const roster = await request(app).get('/api/school/teacher-check?session=morning')
+      .set('Authorization', `Bearer ${t1}`);
+    const pupil = roster.body.data.vehicles.flatMap(v => v.students).find(st => st.id === STUDENT_ID);
+    expect(pupil.on_leave).toBe(true);
+    const check = await post(t1, { session: 'morning', student_ids: [STUDENT_ID] });
+    expect(check.body.data.results[0].result).toBe('on_leave');
+  });
+
+  test('another grade and another school cannot mark this pupil on leave', async () => {
+    expect((await leave(t2, { student_id: STUDENT_ID, session: 'morning' })).status).toBe(404);
+    expect((await leave(t1, { student_id: OTHER_STUDENT, session: 'morning' })).status).toBe(404);
+    const conn = await db();
+    const [[count]] = await conn.query('SELECT COUNT(*) n FROM student_leaves WHERE student_id IN (?, ?) AND leave_date = CURDATE()', [STUDENT_ID, OTHER_STUDENT]);
+    await conn.end();
+    expect(count.n).toBe(0);
+  });
+
+  test('teacher cannot backdate or mark both rounds from this screen', async () => {
+    expect((await leave(t1, { student_id: STUDENT_ID, session: 'morning', leave_date: '2000-01-01' })).status).toBe(403);
+    expect((await leave(t1, { student_id: STUDENT_ID, session: 'both' })).status).toBe(403);
+  });
+
+  test('teacher cannot mark leave after attendance was recorded', async () => {
+    expect((await post(t1, { session: 'morning', student_ids: [STUDENT_ID] })).status).toBe(201);
+    expect((await leave(t1, { student_id: STUDENT_ID, session: 'morning' })).status).toBe(409);
+  });
+});
+
 describe('teacher check — first record wins against the driver', () => {
   test('evening: driver already boarded the child → teacher tap is "already"', async () => {
     const conn = await db();

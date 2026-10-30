@@ -1529,6 +1529,17 @@ const SHOTS = [
   // same controls a user reaches rather than rendered in isolation.
   { id: '96-teacher-check', url: '/school/teacher-check?session=morning', user: 'school', vps: ['mobile', 'desktop'],
     expect: ['text=เช็กชื่อวันนี้', '[role=radiogroup]', 'input[type=search]'] },
+  { id: '96b-teacher-classroom', url: '/school/teacher-check?session=morning', user: 'teacher', vps: ['mobile', 'desktop'],
+    act: async page => {
+      const first = page.getByRole('heading', { name: 'ป.1 / ห้อง 1' });
+      if (await first.count() !== 1) throw new Error('classroom must combine pupils from both vehicles');
+      const room = first.locator('xpath=../..');
+      if (await room.getByText('เด็กชายภูมิ แสงทอง').count() !== 1) throw new Error('second vehicle pupil missing from room');
+      await page.getByRole('button', { name: 'เลือกลา เด็กชายภูมิ แสงทอง' }).click();
+      await room.getByRole('button', { name: /บันทึกทั้งห้อง/ }).click();
+      if (await page.getByText('มา 0 คน · ลา 1 คน').count() !== 1) throw new Error('leave selection not reflected in confirmation');
+    },
+    expect: ['text=เช็กชื่อรายห้อง', 'text=ป.1 / ห้อง 1', 'button[aria-pressed="true"]', '[role=alertdialog]'] },
   { id: '97-incident-roster', url: '/transport/vehicles/V-1/incident-roster', user: 'transport', vps: ['mobile', 'desktop'],
     expect: ['text=ข้อมูลรถและนักเรียนเมื่อเกิดเหตุ', 'input[type=date][required]', 'input[type=search]'] },
   { id: '98-add-student', url: '/school/students', user: 'school', vps: ['mobile', 'desktop'],

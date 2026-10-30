@@ -13,6 +13,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { getGradeScope } from '../../utils/authScope';
 import { formatGradeClass } from '../../utils/student';
 import { PageTransition } from '../../lib/motion';
+import ClassroomCheck from './ClassroomCheck';
 
 /**
  * เช็กชื่อขึ้น-ลงรถ — term 2, phase 1: teachers record attendance themselves.
@@ -48,6 +49,11 @@ function whoLabel(st) {
 }
 
 export default function TeacherCheck() {
+  const { user } = useAuth();
+  return user?.role === 'school' && getGradeScope(user) ? <ClassroomCheck /> : <VehicleTeacherCheck />;
+}
+
+function VehicleTeacherCheck() {
   const { user } = useAuth();
   const toast = useToast();
   const grade = getGradeScope(user);

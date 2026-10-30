@@ -11,6 +11,7 @@ const mockQuery = jest.fn();
 const mockGetConnection = jest.fn();
 jest.mock('../src/config/database', () => ({ pool: { query: (...args) => mockQuery(...args), getConnection: (...args) => mockGetConnection(...args) } }));
 jest.mock('../src/utils/audit', () => ({ logAudit: jest.fn().mockResolvedValue() }));
+jest.mock('../src/utils/policyActionEvidence', () => ({ consumePolicyAction: jest.fn().mockResolvedValue(true) }));
 jest.mock('../src/services/vehicleDedup.service', () => ({
   annotateVehicleList: rows => rows,
   classifyPlateAgainstDb: jest.fn().mockResolvedValue({ code: 'VALID_NEW_VEHICLE' }),
@@ -24,6 +25,15 @@ app.use('/api/school', require('../src/routes/school.routes'));
 app.use(require('../src/middleware/errorHandler'));
 
 beforeEach(() => { mockQuery.mockReset(); mockGetConnection.mockReset(); });
+
+test('foreign batch is rejected before recording policy evidence', async () => {
+  const { consumePolicyAction } = require('../src/utils/policyActionEvidence');
+  consumePolicyAction.mockClear();
+  mockQuery.mockResolvedValueOnce([[{ school_id: 'SCH1', imported_by: 8, total_rows: 1 }]]);
+  const res = await request(app).post('/api/school/students/import/1/apply').send({ mode: 'insert_ready' });
+  expect(res.status).toBe(403);
+  expect(consumePolicyAction).not.toHaveBeenCalled();
+});
 
 test('teacher cannot move a student in another grade; no vehicle lookup or update follows', async () => {
   mockQuery.mockResolvedValueOnce([[{ id: 12, grade: 'ป.5', vehicle_id: null }]]);

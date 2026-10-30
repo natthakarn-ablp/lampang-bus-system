@@ -929,4 +929,4 @@ async function rollbackBatch(pool, { batchId, schoolId, userId, selectedRowIds =
   return r;
 }
 
-module.exports = { parseImportFile, analyzeRows, runPreview, applyBatch, getReport, listBatches, getBatchDetail, rollbackBatch, classifyImportRow, maskPhone };
+module.exports = { parseImportFile, analyzeRows, runPreview, assertScopedBatch, applyBatch, getReport, listBatches, getBatchDetail, rollbackBatch, classifyImportRow, maskPhone };

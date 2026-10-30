@@ -1928,10 +1928,13 @@ router.post('/students/import/:batchId/apply', importExportLimiter, async (req, 
     if (teacherGradeScope(req) && (mode !== 'insert_ready' || !!confirm_guardian_update || !!confirm_reactivate || !!auto_create_vehicle || (Array.isArray(selected_row_ids) && selected_row_ids.length))) {
       return sendError(res, 'ครูประจำสายชั้นเพิ่มนักเรียนใหม่ได้ครั้งละหนึ่งคนเท่านั้น', [], 403);
     }
+    const importPreview = require('../services/studentImportPreview.service');
+    if (teacherGradeScope(req)) await importPreview.assertScopedBatch(pool, {
+      batchId, schoolId, userId: req.user.id, gradeScope: teacherGradeScope(req),
+    });
     if (!await consumePolicyAction(req, res, {
       context: 'school.student_import_apply', subjectType: 'import_batch', subjectId: batchId,
     })) return;
-    const importPreview = require('../services/studentImportPreview.service');
     const out = await importPreview.applyBatch(pool, {
       batchId, schoolId, userId: req.user.id, mode,
       selectedRowIds: Array.isArray(selected_row_ids) ? selected_row_ids : [],

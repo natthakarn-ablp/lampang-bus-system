@@ -53,7 +53,7 @@ function resolveSchoolId(req) {
 
 // Phase 7.11.5 — extracted into shared util so admin.routes.js can
 // use the same whitelist.
-const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents } = require('../utils/gradeScope');
+const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
 const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
 
 /**
@@ -579,23 +579,32 @@ router.get('/leaves', async (req, res, next) => {
 
 // ─── POST /leave ─────────────────────────────────────────────────────────────
 
-router.post('/leave', requireFullSchoolScope, async (req, res, next) => {
+router.post('/leave', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const { student_id, vehicle_id, leave_date, session, reason } = req.body;
     if (!student_id || !session) return sendError(res, 'student_id and session are required', [], 400);
+    const gradeScope = req.user.role === 'school' ? req.user.gradeScope || null : null;
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    if (gradeScope && (leave_date && leave_date !== today || !['morning', 'evening'].includes(session))) {
+      return sendError(res, 'ครูประจำสายชั้นบันทึกการลาได้เฉพาะรอบวันนี้', [], 403);
+    }
 
     // Verify student belongs to this school
     const [[st]] = await pool.query(
-      `SELECT vehicle_id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE`, [student_id, schoolId]
+      `SELECT vehicle_id, grade, morning_enabled, evening_enabled FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE`, [student_id, schoolId]
     );
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
+    if (gradeScope && normalizeGrade(st.grade) !== gradeScope) return sendError(res, 'ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ', [], 404);
+    if (gradeScope && (!st.vehicle_id || !(session === 'morning' ? st.morning_enabled : st.evening_enabled))) {
+      return sendError(res, 'นักเรียนไม่ได้ใช้รถในรอบนี้', [], 409);
+    }
 
-    const date = leave_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    const date = gradeScope ? today : leave_date || today;
     const result = await leaveSvc.createLeave({
-      studentId: student_id, vehicleId: vehicle_id || st.vehicle_id,
-      leaveDate: date, session, reason, userId: req.user.id, userRole: 'school',
+      studentId: student_id, vehicleId: gradeScope ? st.vehicle_id : vehicle_id || st.vehicle_id,
+      leaveDate: date, session, reason, userId: req.user.id, userRole: 'school', schoolId, gradeScope,
     });
     return sendSuccess(res, result, 'บันทึกการลาสำเร็จ', null, 201);
   } catch (err) { next(err); }

@@ -1,12 +1,10 @@
 /**
  * Phase 7.11.4 — frontend helpers for the new school grade-teacher
- * sub-account. The backend already enforces every scope decision
- * (Phase 7.11.3 wired `requireFullSchoolScope` + per-service
- * gradeFilter); these helpers exist only so the UI can match the
+ * sub-account. The backend enforces scope decisions per route and service;
+ * these helpers exist only so the UI can match the
  * backend behaviour and avoid showing affordances that will 403.
  *
- * Backend is the source of truth. If a write button is accidentally
- * left visible, `requireFullSchoolScope` still returns 403.
+ * Backend is the source of truth for every write.
  */
 
 /**
@@ -20,7 +18,7 @@ export function getGradeScope(user) {
 
 /**
  * True when the user is a school account scoped to a single grade
- * (i.e. a homeroom teacher sub-account). Read-only in MVP.
+ * (i.e. a homeroom teacher sub-account).
  */
 export function isGradeTeacher(user) {
   return user?.role === 'school' && !!getGradeScope(user);

@@ -162,7 +162,6 @@ const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATI
  */
 const TEACHER_BLOCKED_PATHS = new Set([
   '/school/audit-log',
-  '/school/bulk-vehicles',
   '/school/teacher-accounts',
   '/participation',
   '/participation/summary',

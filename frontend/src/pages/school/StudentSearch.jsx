@@ -35,10 +35,10 @@ export default function StudentSearch() {
   const navigate = useNavigate();
   const toast = useToast();
   const { user } = useAuth();
-  const isTeacher = isGradeTeacher(user); // read-only for grade teacher
+  const isTeacher = isGradeTeacher(user);
   const [params, setParams] = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
-  useEffect(() => { if (!isTeacher && params.get('add') === 'one') setShowAdd(true); }, [isTeacher, params]);
+  useEffect(() => { if (params.get('add') === 'one') setShowAdd(true); }, [params]);
   function closeAdd() {
     setShowAdd(false);
     const next = new URLSearchParams(params); next.delete('add'); next.delete('vehicle_id');
@@ -117,7 +117,7 @@ export default function StudentSearch() {
   }
 
   function openEdit(student, mode = 'profile') {
-    if (isTeacher) return;
+    if (isTeacher && mode !== 'vehicle') return;
     setEditMode(mode);
     setEditStudent(student);
     setForm({
@@ -249,18 +249,18 @@ export default function StudentSearch() {
       <PageHeader
         title="นักเรียน"
         subtitle="เพิ่มชื่อพร้อมเลือกรถในครั้งเดียว แล้วไปเช็กชื่อได้เลย"
-        actions={!isTeacher ? (
+        actions={(
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setShowAdd(true)}
               className="focus-ring text-sm bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-medium px-4 min-h-[44px] rounded-lg transition">
               เพิ่มนักเรียนทีละคน
             </button>
-            <button onClick={() => setShowPreview(true)}
+            {!isTeacher && <button onClick={() => setShowPreview(true)}
               className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition">
               เพิ่มหลายคนจากไฟล์
-            </button>
+            </button>}
           </div>
-        ) : undefined}
+        )}
       />
 
       {!isTeacher && <details className="mb-4 rounded-lg border border-surface-border p-3">
@@ -271,7 +271,7 @@ export default function StudentSearch() {
           <button type="button" onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }} className="focus-ring min-h-[44px] px-3 text-ink-muted">นำเข้าแบบเดิม (สำรอง)</button>
         </div>
       </details>}
-      {showAdd && !isTeacher && <AddStudentModal initialVehicleId={params.get('vehicle_id') || ''} onClose={closeAdd} onApplied={() => fetchStudents(1)} />}
+      {showAdd && <AddStudentModal initialVehicleId={params.get('vehicle_id') || ''} onClose={closeAdd} onApplied={() => fetchStudents(1)} />}
 
       <FilterBar
         className="mb-5"
@@ -332,12 +332,12 @@ export default function StudentSearch() {
               ? <span>{s2.parent_name}{s2.parent_phone && <span className="text-ink-muted tabular-nums"> {maskPhone(s2.parent_phone)}</span>}</span>
               : <span className="text-ink-muted">-</span>) },
         ]}
-        actions={!isTeacher ? (s2 => (
+        actions={s2 => (
           <>
-            <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
+            {!isTeacher && <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>}
             <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
           </>
-        )) : undefined}
+        )}
         empty={{
           icon: GraduationCap,
           title: hasFilter ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้',

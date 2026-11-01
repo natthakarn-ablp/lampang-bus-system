@@ -4,6 +4,8 @@ import api from '../../api/axios';
 import LoadingState from '../../components/LoadingState';
 import { AlertBanner, FormField, Modal } from '../../components/ui';
 import VehicleSelect from '../../components/VehicleSelect';
+import { useAuth } from '../../hooks/useAuth';
+import { getGradeScope } from '../../utils/authScope';
 
 const GRADES = ['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'];
 const INPUT = 'focus-ring w-full border border-surface-border bg-surface-raised rounded-lg px-3 min-h-[44px] text-base';
@@ -14,7 +16,9 @@ const EMPTY = { code: '', prefix: 'เด็กชาย', first: '', last: '', 
 // Reuse the existing import validator and idempotent apply. No new create API,
 // automatic guardian replacement, pupil reactivation, or vehicle creation.
 export default function AddStudentModal({ initialVehicleId = '', onClose, onApplied }) {
-  const [form, setForm] = useState(EMPTY);
+  const { user } = useAuth();
+  const gradeScope = user?.role === 'school' ? getGradeScope(user) : null;
+  const [form, setForm] = useState({ ...EMPTY, grade: gradeScope || '' });
   const [vehicles, setVehicles] = useState([]);
   const [vehicleId, setVehicleId] = useState('');
   const [vehicleError, setVehicleError] = useState('');
@@ -123,7 +127,7 @@ export default function AddStudentModal({ initialVehicleId = '', onClose, onAppl
           <FormField label="รหัสนักเรียน" required inputMode="numeric" value={form.code} onChange={update('code')} helper="ใช้รหัสประจำตัวนักเรียนของโรงเรียน" />
           <FormField label="คำนำหน้า">{ctl => <select {...ctl} className={INPUT} value={form.prefix} onChange={e => update('prefix')(e.target.value)}>{['เด็กชาย','เด็กหญิง','นาย','นางสาว','นาง'].map(v => <option key={v}>{v}</option>)}</select>}</FormField>
           <div className="grid sm:grid-cols-2 gap-3"><FormField label="ชื่อ" required value={form.first} onChange={update('first')} /><FormField label="นามสกุล" required value={form.last} onChange={update('last')} /></div>
-          <div className="grid grid-cols-2 gap-3"><FormField label="ชั้น">{ctl => <select {...ctl} className={INPUT} value={form.grade} onChange={e => update('grade')(e.target.value)}><option value="">เลือกชั้น</option>{GRADES.map(v => <option key={v}>{v}</option>)}</select>}</FormField><FormField label="ห้อง" value={form.classroom} onChange={update('classroom')} /></div>
+          <div className="grid grid-cols-2 gap-3"><FormField label="ชั้น">{ctl => <select {...ctl} className={INPUT} value={form.grade} onChange={e => update('grade')(e.target.value)} disabled={!!gradeScope}><option value="">เลือกชั้น</option>{(gradeScope ? [gradeScope] : GRADES).map(v => <option key={v}>{v}</option>)}</select>}</FormField><FormField label="ห้อง" value={form.classroom} onChange={update('classroom')} /></div>
         </fieldset>
         <fieldset disabled={busy || loadingVehicles} className="space-y-3">
           <legend className="font-semibold mb-3">2. เลือกรถรับส่ง</legend>

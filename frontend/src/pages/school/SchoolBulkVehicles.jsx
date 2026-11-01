@@ -9,7 +9,7 @@ import { AlertBanner, FormField } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { AppCard } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
-import { isFullSchoolAccount } from '../../utils/authScope';
+import { isFullSchoolAccount, isGradeTeacher } from '../../utils/authScope';
 import { THAI_PROVINCES, buildPlateNo } from '../../constants/provinces';
 
 // Phase 10.13A-22 — structured plate parts (หมวดอักษร / เลขทะเบียน / จังหวัด).
@@ -27,7 +27,7 @@ function TeacherDeniedCard() {
           <div>
             <h1 className="text-lg font-semibold text-ink mb-1">ไม่สามารถเข้าถึงหน้านี้ได้</h1>
             <p className="text-sm text-ink-muted">
-              การเพิ่มรถใช้บัญชีหลักของโรงเรียน กรุณาแจ้งผู้ดูแลข้อมูลโรงเรียน
+              ใช้บัญชีโรงเรียนเพื่อเพิ่มรถรับส่ง
             </p>
           </div>
         </div>
@@ -41,7 +41,9 @@ const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-b
 
 export default function SchoolBulkVehicles() {
   const { user } = useAuth();
-  const canManage = user?.role === 'admin' || isFullSchoolAccount(user);
+  const isTeacher = isGradeTeacher(user);
+  const canManage = user?.role === 'admin' || user?.role === 'school';
+  const canRestore = user?.role === 'admin' || isFullSchoolAccount(user);
   const navigate = useNavigate();
   const [rows, setRows] = useState([{ ...EMPTY_ROW, key: 'row-1' }]);
   const nextRow = useRef(2);
@@ -184,9 +186,9 @@ export default function SchoolBulkVehicles() {
           plate_province: row.plate_province,
           plate_no: plate, // backend rebuilds canonically from the structured parts
           vehicle_type: row.vehicle_type,
-          driver_name: row.driver_name.trim(),
-          driver_phone: row.driver_phone.trim(),
-          owner_name: (row.owner_name || '').trim(),
+          driver_name: isTeacher ? '' : row.driver_name.trim(),
+          driver_phone: isTeacher ? '' : row.driver_phone.trim(),
+          owner_name: isTeacher ? '' : (row.owner_name || '').trim(),
         });
         const saved = { vehicle_id: res.data?.data?.vehicle_id || null, plate_no: res.data?.data?.plate_no || plate };
         setRows(prev => prev.map(r => r.key === idx ? { ...r, saved } : r));
@@ -200,7 +202,7 @@ export default function SchoolBulkVehicles() {
           // locked and direct the user to search instead of posting again.
           setRows(prev => prev.map(r => r.key === idx ? { ...r, uncertain: true } : r));
           setRowErrors(p => ({ ...p, [idx]: 'ยังยืนยันผลบันทึกไม่ได้ กรุณาค้นหาทะเบียนด้านบนก่อนดำเนินการต่อ รายการนี้จะไม่ถูกส่งซ้ำ' }));
-        } else if (e0?.code === 'SOFT_DELETED_VEHICLE_EXISTS' && e0.vehicle_id) {
+        } else if (canRestore && e0?.code === 'SOFT_DELETED_VEHICLE_EXISTS' && e0.vehicle_id) {
           // Dead-end → offer the admin-approved restore request (10.13B-7), no auto-restore.
           setRestorePrompt((p) => ({ ...p, [idx]: { vehicle_id: e0.vehicle_id, existing_plate: e0.existing_plate || plate, plate } }));
         } else {
@@ -226,7 +228,7 @@ export default function SchoolBulkVehicles() {
   // Phase 10.13C — from a soft-deleted-plate collision, request a vehicle restore
   // (admin-approved, 10.13B-7). Never auto-restores; mirrors ImportPreviewModal.
   async function requestRestore(i, info) {
-    if (!canManage || !info || savingRef.current || restoringRef.current.has(i) || requestedRestore.has(i)) return;
+    if (!canRestore || !info || savingRef.current || restoringRef.current.has(i) || requestedRestore.has(i)) return;
     restoringRef.current.add(i);
     setRestoring(p => ({ ...p, [i]: true }));
     try {
@@ -397,7 +399,7 @@ export default function SchoolBulkVehicles() {
                 : <p className="mt-1 text-xs text-ink-muted">กรอกหมวดอักษร เลขทะเบียน และจังหวัดให้ครบถ้วน</p>}
 
               <details className="mt-3 rounded-lg border border-surface-border bg-surface-raised px-3">
-                <summary className="focus-ring cursor-pointer min-h-[44px] py-3 text-sm font-medium text-ink">รายละเอียดรถและคนขับ (กรอกเพิ่มเติมได้)</summary>
+                <summary className="focus-ring cursor-pointer min-h-[44px] py-3 text-sm font-medium text-ink">{isTeacher ? 'ประเภทรถ (กรอกเพิ่มเติมได้)' : 'รายละเอียดรถและคนขับ (กรอกเพิ่มเติมได้)'}</summary>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
                 <FormField label="ประเภทรถ">
                   {ctl => (
@@ -414,29 +416,29 @@ export default function SchoolBulkVehicles() {
                     </select>
                   )}
                 </FormField>
-                <FormField
+                {!isTeacher && <FormField
                   label="ชื่อคนขับ"
                   value={r.driver_name}
                   onChange={(v) => updateRow(i, 'driver_name', v)}
-                />
-                <FormField
+                />}
+                {!isTeacher && <FormField
                   label="เบอร์โทรคนขับ"
                   type="tel"
                   inputMode="numeric"
                   value={r.driver_phone}
                   onChange={(v) => updateRow(i, 'driver_phone', v)}
-                />
+                />}
               </div>
 
-              <FormField
+              {!isTeacher && <FormField
                 className="mt-3"
                 label="ชื่อผู้ครอบครองรถ (เจ้าของรถ)"
                 value={r.owner_name}
                 maxLength={100}
                 onChange={(v) => updateRow(i, 'owner_name', v)}
                 placeholder="เว้นว่างได้ หากเป็นคนเดียวกับคนขับ"
-              />
-              <p className="text-sm text-ink-muted my-3">เมื่อระบุชื่อคนขับ ระบบจะจัดเตรียมบัญชีคนขับให้ตามข้อมูลรถนี้</p>
+              />}
+              {!isTeacher && <p className="text-sm text-ink-muted my-3">เมื่อระบุชื่อคนขับ ระบบจะจัดเตรียมบัญชีคนขับให้ตามข้อมูลรถนี้</p>}
               </details>
               </fieldset>
 
@@ -446,11 +448,13 @@ export default function SchoolBulkVehicles() {
                   <div className="mt-0.5">ต้องการใช้งานต่อ ส่งคำขอให้ผู้ดูแลระบบกู้คืนรถคันนี้ (ไม่กู้คืนทันที)</div>
                   {requestedRestore.has(i) ? (
                     <div className="mt-1.5 font-medium text-success-ink">ส่งคำขอแล้ว · รอผู้ดูแลระบบอนุมัติ</div>
-                  ) : (
+                  ) : canRestore ? (
                     <button type="button" onClick={() => requestRestore(i, restoreInfo)} disabled={saving || restoring[i]}
                       className="focus-ring mt-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 min-h-[44px] rounded-lg transition disabled:opacity-50">
                       {restoring[i] ? 'กำลังส่งคำขอ…' : 'ส่งคำขอกู้คืนรถนี้'}
                     </button>
+                  ) : (
+                    <div className="mt-1.5">กรุณาแจ้งบัญชีหลักโรงเรียนให้ส่งคำขอกู้คืนรถ</div>
                   )}
                 </div>
               ) : !r.uncertain && warnings[i]?.status === 'DUPLICATE_OR_SIMILAR' ? (

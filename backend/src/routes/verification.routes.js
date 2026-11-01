@@ -22,16 +22,20 @@ function schoolIdFor(req) {
 }
 
 function requireFullSchoolScope(req, res, next) {
-  if (req.user.role === 'school' && req.user.gradeScope) {
+  if (req.user.role === 'school' && (req.user.gradeScope || req.user.grade_scope)) {
     return sendError(
       res,
-      'บัญชีครูประจำสายชั้นไม่มีสิทธิ์สร้างหรือเปลี่ยนคำขอส่งตรวจรถ',
+      'งานส่งตรวจและรับรองรถใช้บัญชีหลักของโรงเรียน',
       [{ code: 'FULL_SCHOOL_SCOPE_REQUIRED' }],
       403
     );
   }
   return next();
 }
+
+// Applications and timelines cover a vehicle across grades. This module is
+// school-wide, so grade teachers must be denied before reads as well as writes.
+router.use(requireFullSchoolScope);
 
 router.post(
   '/school/applications',

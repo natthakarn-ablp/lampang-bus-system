@@ -1529,6 +1529,24 @@ const SHOTS = [
   // Eight pages in the final Partial-page migration. Every one is captured at
   // phone and desktop widths; modal/report components are opened through the
   // same controls a user reaches rather than rendered in isolation.
+  { id: 'teacher-verification-denied', url: '/school', user: 'teacher', vps: ['mobile', 'desktop'],
+    act: async page => {
+      const menu = page.getByRole('button', { name: 'เปิดเมนู', exact: true });
+      if (await menu.isVisible()) await menu.click();
+      if (await page.getByRole('link', { name: 'ส่งตรวจและรับรองรถ', exact: true }).count()) throw new Error('teacher inspection link visible');
+      let verificationRequests = 0;
+      await page.route('**/api/verification/**', async route => {
+        verificationRequests += 1;
+        await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ success: false, message: 'ไม่มีสิทธิ์' }) });
+      });
+      await page.goto(BASE + '/school/vehicle-verification', { waitUntil: 'networkidle' });
+      await page.getByRole('heading', { name: 'ไม่มีสิทธิ์เข้าถึง', exact: true }).waitFor();
+      if (verificationRequests) throw new Error('denied page mounted inspection API');
+      if (await page.getByRole('link', { name: 'ส่งตรวจและรับรองรถ', exact: true }).count()) throw new Error('direct-route teacher link visible');
+    },
+    expect: ['text=ไม่มีสิทธิ์เข้าถึง'] },
+  { id: 'school-verification-allowed', url: '/school/vehicle-verification', user: 'school', vps: ['mobile', 'desktop'],
+    expect: ['text=ส่งตรวจและรับรองรถ', 'text=รถที่โรงเรียนใช้งาน'] },
   { id: '96-teacher-check', url: '/school/teacher-check?session=morning', user: 'school', vps: ['mobile', 'desktop'],
     act: async page => {
       if (await page.getByRole('heading', { name: 'ป.1 / ห้อง 1' }).count()) throw new Error('choose a grade before rendering pupils');

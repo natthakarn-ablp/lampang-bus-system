@@ -46,8 +46,7 @@ jest.mock('../src/middleware/auth', () => ({
       scopeId: 'x-test-scope' in req.headers ? req.headers['x-test-scope'] : 'SCH0001',
       // HTTP headers are latin-1, so the Thai grade cannot travel in one. The
       // header is a flag; the value it stands for is what a real teacher token
-      // carries. Which grade it is does not matter to this route — only that
-      // gradeScope is set, since the school clamp keys on role, not sub-role.
+      // carries. Any assigned grade denies access to this school-wide module.
       gradeScope: req.headers['x-test-grade'] ? 'ป.4' : null,
     };
     next();
@@ -97,10 +96,11 @@ describe('timeline — a school may only read applications its own school is lin
     expect(mockCalls[0].sql).toMatch(/aps\.school_id\s*=\s*\?/);
   });
 
-  test('a grade teacher is scoped the same way — role, not sub-role, decides', async () => {
-    await timeline({ 'x-test-role': 'school', 'x-test-scope': 'SCH0001', 'x-test-grade': '1' });
-    expect(mockCalls[0].sql).toMatch(SCHOOL_GUARD);
-    expect(mockCalls[0].params).toEqual(['4321', 'SCH0001']);
+  test('a grade teacher cannot read the school-wide timeline', async () => {
+    const res = await timeline({ 'x-test-role': 'school', 'x-test-scope': 'SCH0001', 'x-test-grade': '1' });
+    expect(res.status).toBe(403);
+    expect(res.body.errors[0].code).toBe('FULL_SCHOOL_SCOPE_REQUIRED');
+    expect(mockCalls).toHaveLength(0);
   });
 
   test('a school account with no scope fails closed rather than open', async () => {

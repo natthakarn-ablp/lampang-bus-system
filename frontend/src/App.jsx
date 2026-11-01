@@ -268,7 +268,7 @@ export default function App() {
             <Route path="teacher-check" element={<TeacherCheck />} />
             <Route path="students"     element={<StudentSearch />} />
             <Route path="vehicles"     element={<VehicleList />} />
-            <Route path="vehicle-verification" element={<VehicleVerification />} />
+            <Route path="vehicle-verification" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><VehicleVerification /></PrivateRoute>} />
             <Route path="status"       element={<Navigate to="/school" replace />} />
             <Route path="emergencies"  element={<EmergencyList />} />
             <Route path="missing"      element={<Navigate to="/school" replace />} />

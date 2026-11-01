@@ -348,6 +348,7 @@ async function _buildCheckinTransaction(conn, {
   status,           // 'CHECKED_IN' | 'CHECKED_OUT'
   termId,
   source,
+  refuseLeave = false,
 }) {
   // 1. Verify student belongs to this vehicle
   // CS5-04 — FOR UPDATE makes this row the per-student mutex for the whole
@@ -367,6 +368,17 @@ async function _buildCheckinTransaction(conn, {
   }
   const student = students[0];
   const studentName = `${student.first_name} ${student.last_name}`;
+
+  // The roster's earlier leave lookup can become stale while a teacher waits
+  // for the student lock. Recheck under that same lock before writing a tap.
+  if (refuseLeave) {
+    const [activeLeave] = await conn.query(
+      `SELECT id FROM student_leaves WHERE student_id = ? AND leave_date = CURDATE()
+         AND cancelled = FALSE AND session IN (?, 'both') LIMIT 1`,
+      [student.id, session]
+    );
+    if (activeLeave.length) throw makeError('นักเรียนลารอบนี้แล้ว', 409, 'ON_LEAVE');
+  }
 
   // 1b. Idempotency guard (audit 2026-06-18, business-logic-txn). Reject an exact
   // duplicate of the same session+status for today so a double-tap or network
@@ -1533,7 +1545,7 @@ async function processTeacherCheck(pool, {
     try {
       const r = await _buildCheckinTransaction(conn, {
         userId, vehicleId: st.vehicle_id, plateNo: st.plate_no || null,
-        studentId: st.id, session, status, termId, source: 'web',
+        studentId: st.id, session, status, termId, source: 'web', refuseLeave: true,
       });
       await logAudit({
         conn, userId, action: 'CREATE', entityType: 'checkin_teacher', entityId: String(r.log_id),
@@ -1550,7 +1562,8 @@ async function processTeacherCheck(pool, {
       await conn.rollback();
       // 409 = already recorded (by the driver or another teacher) or the
       // session is already finished — first record wins, so it is a skip.
-      if (err.statusCode === 409) results.push({ student_id: id, result: 'already' });
+      if (err.errors?.some(item => item.code === 'ON_LEAVE')) results.push({ student_id: id, result: 'on_leave' });
+      else if (err.statusCode === 409) results.push({ student_id: id, result: 'already' });
       else throw err;
     } finally {
       conn.release();

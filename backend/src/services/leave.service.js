@@ -1,27 +1,54 @@
 'use strict';
 
 const { pool } = require('../config/database');
-const { toBangkokDate } = require('../utils/thaiTime');
+const { toBangkokDate, todayBangkok } = require('../utils/thaiTime');
 const { logAudit } = require('../utils/audit');
-const { gradeEquivalents } = require('../utils/gradeScope');
+const { gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
 
 /**
  * Create a student leave record.
  */
-async function createLeave({ studentId, vehicleId, leaveDate, session, reason, userId, userRole }) {
+async function createLeave({ studentId, vehicleId, leaveDate, session, reason, userId, userRole, schoolId = null, gradeScope = null }) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
     // Verify student belongs to vehicle
     const [[student]] = await conn.query(
-      `SELECT id, school_id FROM students WHERE id = ? AND vehicle_id = ? AND is_deleted = FALSE`,
+      `SELECT id, school_id, grade, morning_enabled, evening_enabled FROM students
+        WHERE id = ? AND vehicle_id = ? AND is_deleted = FALSE FOR UPDATE`,
       [studentId, vehicleId]
     );
     if (!student) {
       const err = new Error('นักเรียนไม่อยู่ในรถคันนี้');
       err.statusCode = 404;
       throw err;
+    }
+    if (gradeScope) {
+      if (String(student.school_id) !== String(schoolId) || normalizeGrade(student.grade) !== gradeScope) {
+        const err = new Error('ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ'); err.statusCode = 404; throw err;
+      }
+      const today = todayBangkok();
+      if (leaveDate !== today || !['morning', 'evening'].includes(session)) {
+        const err = new Error('บันทึกการลาได้เฉพาะรอบวันนี้'); err.statusCode = 403; throw err;
+      }
+      if (!(session === 'morning' ? student.morning_enabled : student.evening_enabled)) {
+        const err = new Error('นักเรียนไม่ได้ใช้รถในรอบนี้'); err.statusCode = 409; throw err;
+      }
+      const [[checked]] = await conn.query(
+        `SELECT status FROM checkin_logs WHERE student_id = ? AND session = ?
+          AND check_date = CURDATE() ORDER BY id DESC LIMIT 1`, [studentId, session]
+      );
+      if (checked && checked.status !== 'CANCELLED') {
+        const err = new Error('มีการเช็กชื่อนักเรียนคนนี้แล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err;
+      }
+      const [[leave]] = await conn.query(
+        `SELECT id FROM student_leaves WHERE student_id = ? AND leave_date = CURDATE()
+          AND cancelled = FALSE AND session IN (?, 'both') LIMIT 1`, [studentId, session]
+      );
+      if (leave) {
+        const err = new Error('บันทึกการลารอบนี้แล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err;
+      }
     }
 
     let result;

@@ -8,7 +8,7 @@ import LoadingState from '../../components/LoadingState';
 import PageHeader from '../../components/PageHeader';
 import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import { useToast } from '../../components/Toast';
-import { AppCard, ConfirmDialog, StatusBadge } from '../../components/ui';
+import { AppCard, ConfirmDialog, FormField, StatusBadge } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
 import { getGradeScope } from '../../utils/authScope';
 import { groupTeacherClassrooms, classroomPlan } from '../../utils/classroomAttendance';
@@ -29,6 +29,7 @@ function initialSession(params) {
 export default function ClassroomCheck() {
   const { user } = useAuth();
   const grade = getGradeScope(user);
+  const [selectedGrade, setSelectedGrade] = useState('');
   const toast = useToast();
   const [params] = useSearchParams();
   const [session, setSession] = useState(() => initialSession(params));
@@ -69,6 +70,9 @@ export default function ClassroomCheck() {
 
   const data = roster?.session === session ? roster : null;
   const rooms = useMemo(() => groupTeacherClassrooms(data?.vehicles || []), [data]);
+  const grades = useMemo(() => [...new Set(rooms.map(room => room.grade))], [rooms]);
+  const activeGrade = grade || (grades.includes(selectedGrade) ? selectedGrade : '');
+  const visibleRooms = rooms.filter(room => room.grade === activeGrade);
   const locked = saving || !!confirmRoom;
 
   function changeSession(next) {
@@ -90,10 +94,10 @@ export default function ClassroomCheck() {
   }
 
   function prepareSave(room) {
-    if (locked || loading || !data || writeInFlight.current) return;
+    if (locked || loading || !data || writeInFlight.current || room.grade !== activeGrade) return;
     const plan = classroomPlan(room, leaveIds);
     if (!plan.presentIds.length && !plan.leaveIds.length) return;
-    setConfirmRoom({ ...plan, session, room: room.classroom || 'ไม่ระบุห้อง' });
+    setConfirmRoom({ ...plan, session, grade: room.grade, room: room.classroom || 'ไม่ระบุห้อง' });
   }
 
   async function saveRoom() {
@@ -115,7 +119,7 @@ export default function ClassroomCheck() {
           throw new Error('บางรายชื่อยังบันทึกไม่สำเร็จ กรุณาตรวจสอบสถานะใหม่');
         }
       }
-      toast.success(`บันทึกห้อง ${snapshot.room} แล้ว · มา ${snapshot.presentIds.length} · ลา ${snapshot.leaveIds.length}`);
+      toast.success(`บันทึก ${snapshot.grade} ห้อง ${snapshot.room} แล้ว · มา ${snapshot.presentIds.length} · ลา ${snapshot.leaveIds.length}`);
     } catch (err) {
       toast.error(err.response?.data?.message || err.message || 'บันทึกไม่ครบ กรุณาตรวจสอบสถานะใหม่ก่อนลองอีกครั้ง');
     } finally {
@@ -143,7 +147,7 @@ export default function ClassroomCheck() {
   return (
     <PageTransition>
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
-        <PageHeader title="เช็กชื่อรายห้อง" subtitle={`นักเรียนชั้น ${grade} ที่ใช้รถรับส่ง`} icon={GraduationCap} iconColor="teal" />
+        <PageHeader title="เช็กชื่อรายห้อง" subtitle={grade ? `นักเรียนชั้น ${grade} ที่ใช้รถรับส่ง` : 'เลือกสายชั้น แล้วเช็กชื่อทีละห้องเรียน'} icon={GraduationCap} iconColor="teal" />
         <SchoolWorkflowNav current="attendance" />
         <AppCard padding="md" className="space-y-1">
           <p className="font-semibold text-ink">เริ่มต้นถือว่ามาทุกคน เลือก “ลา” เฉพาะคนที่ไม่มา</p>
@@ -162,18 +166,30 @@ export default function ClassroomCheck() {
           })}
         </div>
 
+        {!grade && data && grades.length > 0 && <FormField label="สายชั้นที่ต้องการเช็กชื่อ" disabled={locked}>
+          {props => <select {...props} value={activeGrade} onChange={event => {
+            if (locked || writeInFlight.current) return;
+            setSelectedGrade(event.target.value);
+            setLeaveIds(new Set());
+          }} className="focus-ring w-full min-h-[44px] px-3 rounded-lg border border-surface-border bg-surface-raised text-base text-ink disabled:opacity-60">
+            <option value="">เลือกสายชั้น</option>
+            {grades.map(value => <option key={value} value={value}>{value}</option>)}
+          </select>}
+        </FormField>}
+
         {error && <ErrorState title="โหลดรายชื่อไม่สำเร็จ" message={error} onRetry={() => load()} />}
         {loading && <LoadingState message="กำลังโหลดรายชื่อห้องเรียน…" />}
         {data && rooms.length === 0 && <EmptyState title="ไม่มีนักเรียนที่ใช้รถรับส่งรอบนี้" description="ตรวจสอบรอบที่เลือกหรือการจัดรถของนักเรียน" />}
+        {data && rooms.length > 0 && !activeGrade && <EmptyState title="เลือกสายชั้นเพื่อเช็กชื่อ" description="รายชื่อจะแยกเป็นห้องเรียนในสายชั้นที่เลือก" />}
 
-        {rooms.map(room => {
+        {visibleRooms.map(room => {
           const plan = classroomPlan(room, leaveIds);
           const pending = plan.presentIds.length + plan.leaveIds.length;
           const done = room.students.filter(st => st.done).length;
           const onLeave = room.students.filter(st => st.on_leave).length;
           return <AppCard key={room.key} padding="none" className="overflow-hidden">
             <div className="px-4 py-4 bg-surface border-b border-surface-border">
-              <h2 className="text-lg font-bold text-ink">{grade} / {room.classroom ? `ห้อง ${room.classroom}` : 'ไม่ระบุห้อง'}</h2>
+              <h2 className="text-lg font-bold text-ink">{room.grade} / {room.classroom ? `ห้อง ${room.classroom}` : 'ไม่ระบุห้อง'}</h2>
               <p className="text-sm text-ink-muted">{room.students.length} คน · บันทึกแล้ว {done} · ลาแล้ว {onLeave} · รอบันทึก {pending}</p>
             </div>
             <ul className="divide-y divide-surface-border">
@@ -216,7 +232,7 @@ export default function ClassroomCheck() {
         })}
 
         <ConfirmDialog open={Boolean(confirmRoom)} tone="brand" title="บันทึกทั้งห้อง?"
-          description={confirmRoom ? `ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: มา ${confirmRoom.presentIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็ก` : ''}
+          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: มา ${confirmRoom.presentIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็ก` : ''}
           confirmLabel="ยืนยันบันทึกทั้งห้อง" loading={saving} onConfirm={saveRoom}
           onCancel={() => { if (!saving) setConfirmRoom(null); }} />
       </div>

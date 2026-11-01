@@ -50,7 +50,7 @@ function whoLabel(st) {
 
 export default function TeacherCheck() {
   const { user } = useAuth();
-  return user?.role === 'school' && getGradeScope(user) ? <ClassroomCheck /> : <VehicleTeacherCheck />;
+  return user?.role === 'school' ? <ClassroomCheck /> : <VehicleTeacherCheck />;
 }
 
 function VehicleTeacherCheck() {

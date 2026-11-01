@@ -789,9 +789,11 @@ const TEACHER_CHECK = {
         status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
     ] },
     { vehicle_id: 'V-2', plate_no: 'นข-2210 ลำปาง', students: [
-      { id: 105, name: 'เด็กชายภูมิ แสงทอง', grade: 'ป.1', classroom: '1', on_leave: false, no_vehicle: false,
+      { id: 105, name: 'เด็กชายภูมิ แสงทอง', grade: 'ป. 1', classroom: '1', on_leave: false, no_vehicle: false,
         status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
       { id: 106, name: 'เด็กหญิงมณี ทองคำ', grade: 'ป.1', classroom: '3', on_leave: false, no_vehicle: false,
+        status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
+      { id: 107, name: 'นักเรียน ทดสอบชั้นสอง', grade: 'ป.2', classroom: '1', on_leave: false, no_vehicle: false,
         status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
     ] },
   ],
@@ -1528,7 +1530,35 @@ const SHOTS = [
   // phone and desktop widths; modal/report components are opened through the
   // same controls a user reaches rather than rendered in isolation.
   { id: '96-teacher-check', url: '/school/teacher-check?session=morning', user: 'school', vps: ['mobile', 'desktop'],
-    expect: ['text=เช็กชื่อวันนี้', '[role=radiogroup]', 'input[type=search]'] },
+    act: async page => {
+      if (await page.getByRole('heading', { name: 'ป.1 / ห้อง 1' }).count()) throw new Error('choose a grade before rendering pupils');
+      await page.getByLabel('สายชั้นที่ต้องการเช็กชื่อ').selectOption('ป.1');
+      if (await page.getByText('นักเรียน ทดสอบชั้นสอง', { exact: true }).count()) throw new Error('other grade pupil visible');
+    },
+    expect: ['text=เช็กชื่อรายห้อง', 'text=ป.1 / ห้อง 1', 'text=เด็กชายภูมิ แสงทอง', 'select'] },
+  { id: '96c-school-grade-save', url: '/school/teacher-check?session=morning', user: 'school', vps: ['mobile', 'desktop'],
+    act: async page => {
+      const writes = [];
+      page.on('request', req => { if (req.method() === 'POST' && /\/school\/(teacher-check|leave)$/.test(new URL(req.url()).pathname)) writes.push({ path: new URL(req.url()).pathname, body: req.postDataJSON() }); });
+      await page.route('**/api/school/teacher-check', async route => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        const { student_ids } = route.request().postDataJSON();
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { results: student_ids.map(id => ({ student_id: id, result: 'ok' })) } }) });
+      });
+      await page.getByLabel('สายชั้นที่ต้องการเช็กชื่อ').selectOption('ป.1');
+      await page.getByRole('button', { name: 'เลือกลา เด็กชายภูมิ แสงทอง' }).click();
+      await page.getByLabel('สายชั้นที่ต้องการเช็กชื่อ').selectOption('ป.2');
+      if (await page.locator('button[aria-pressed="true"]').count()) throw new Error('leave draft leaked across grades');
+      if (await page.getByRole('heading', { name: 'ป.1 / ห้อง 1' }).count()) throw new Error('previous grade still visible');
+      await page.getByRole('button', { name: /บันทึกทั้งห้อง/ }).click();
+      if (await page.getByRole('combobox', { name: 'สายชั้นที่ต้องการเช็กชื่อ' }).isEnabled()) throw new Error('grade can change during confirmation');
+      if (await page.getByText(/ป.2 ห้อง 1 รอบเช้า: มา 1 คน · ลา 0 คน/).count() !== 1) throw new Error('wrong grade confirmation');
+      const saved = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/api/school/teacher-check'));
+      await page.getByRole('button', { name: 'ยืนยันบันทึกทั้งห้อง' }).click();
+      await saved;
+      if (writes.length !== 1 || JSON.stringify(writes[0].body) !== JSON.stringify({ session: 'morning', student_ids: [107] })) throw new Error('save crossed grade or retained leave draft');
+    },
+    expect: ['text=เช็กชื่อรายห้อง', 'text=ป.2 / ห้อง 1'] },
   { id: '96b-teacher-classroom', url: '/school/teacher-check?session=morning', user: 'teacher', vps: ['mobile', 'desktop'],
     act: async page => {
       const first = page.getByRole('heading', { name: 'ป.1 / ห้อง 1' });

@@ -1,4 +1,18 @@
-import { abbreviateGrade } from './student.js';
+// Match the stored-grade variants accepted by backend/utils/gradeScope.
+// Display grouping must not hide pupils whose grade is stored as e.g. 'ป. 5'.
+function attendanceGrade(value) {
+  const raw = String(value || '').trim();
+  const compact = raw.replace(/[๐-๙]/g, digit => '๐๑๒๓๔๕๖๗๘๙'.indexOf(digit)).replace(/\s+/g, '');
+  for (const [pattern, prefix] of [
+    [/^(?:อ\.?|อนุบาล(?:ปีที่)?|อบ\.?)(\d{1,2})$/, 'อ'],
+    [/^(?:ป\.?|ประถมศึกษาปีที่|ประถม)(\d{1,2})$/, 'ป'],
+    [/^(?:ม\.?|มัธยมศึกษาปีที่|มัธยม)(\d{1,2})$/, 'ม'],
+  ]) {
+    const match = compact.match(pattern);
+    if (match) return `${prefix}.${match[1]}`;
+  }
+  return raw || 'ไม่ระบุชั้น';
+}
 
 // The roster API stays vehicle-based; group each grade and classroom across
 // vehicles without combining rooms with the same name in other grades.
@@ -7,7 +21,7 @@ export function groupTeacherClassrooms(vehicles = []) {
   for (const vehicle of vehicles) {
     for (const student of vehicle.students || []) {
       const classroom = String(student.classroom || '').trim();
-      const grade = abbreviateGrade(student.grade) || 'ไม่ระบุชั้น';
+      const grade = attendanceGrade(student.grade);
       const key = JSON.stringify([grade, classroom]);
       if (!rooms.has(key)) rooms.set(key, { key, grade, classroom, students: [] });
       rooms.get(key).students.push({ ...student, plate_no: vehicle.plate_no || null });

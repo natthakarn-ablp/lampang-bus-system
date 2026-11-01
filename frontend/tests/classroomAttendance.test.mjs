@@ -40,3 +40,11 @@ test('same room number in different grades never shares a save plan', () => {
   assert.deepEqual(classroomPlan(secondGrade, new Set([3])), { presentIds: [2], leaveIds: [] });
   assert.equal(rooms.find(room => room.grade === 'ไม่ระบุชั้น').students[0].id, 4);
 });
+
+test('stored grade spelling variants remain in the correct grade teacher classroom', () => {
+  const grades = ['ป.5', 'ป. 5', 'ป5', 'ประถมศึกษาปีที่ ๕', 'อบ.2', 'อนุบาล 2', 'มัธยมศึกษาปีที่ 1', 'ม. 1'];
+  const rooms = groupTeacherClassrooms([{ students: grades.map((grade, id) => ({ id, grade, classroom: '1' })) }]);
+  assert.deepEqual(rooms.find(room => room.grade === 'ป.5').students.map(st => st.id), [0, 1, 2, 3]);
+  assert.deepEqual(rooms.find(room => room.grade === 'อ.2').students.map(st => st.id), [4, 5]);
+  assert.deepEqual(rooms.find(room => room.grade === 'ม.1').students.map(st => st.id), [6, 7]);
+});

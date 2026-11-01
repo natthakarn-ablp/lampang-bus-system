@@ -789,7 +789,7 @@ const TEACHER_CHECK = {
         status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
     ] },
     { vehicle_id: 'V-2', plate_no: 'นข-2210 ลำปาง', students: [
-      { id: 105, name: 'เด็กชายภูมิ แสงทอง', grade: 'ป.1', classroom: '1', on_leave: false, no_vehicle: false,
+      { id: 105, name: 'เด็กชายภูมิ แสงทอง', grade: 'ป. 1', classroom: '1', on_leave: false, no_vehicle: false,
         status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },
       { id: 106, name: 'เด็กหญิงมณี ทองคำ', grade: 'ป.1', classroom: '3', on_leave: false, no_vehicle: false,
         status: null, done: false, checked_at: null, checked_by_role: null, checked_by_name: null, can_undo: false, log_id: null },

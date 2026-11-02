@@ -548,12 +548,12 @@ export default function StudentSearch() {
                   {saving ? 'กำลังบันทึก…' : selectedVehicle ? (editStudent.vehicle_id ? 'เปลี่ยนรถ' : 'เพิ่มเข้ารถ') : 'ลบออกจากรถ'}
                 </button>
               )}
-              {editMode === 'profile' && !isTeacher && <details className="border border-surface-border rounded-lg p-3">
-              <summary className="focus-ring min-h-[44px] flex items-center cursor-pointer text-sm">ย้ายโรงเรียน / นำรายชื่อออก</summary>
-              <button onClick={() => setTransferStudent(editStudent)} disabled={saving}
+              {editMode === 'profile' && <details className="border border-surface-border rounded-lg p-3">
+              <summary className="focus-ring min-h-[44px] flex items-center cursor-pointer text-sm">{isTeacher ? 'นำรายชื่อออก' : 'ย้ายโรงเรียน / นำรายชื่อออก'}</summary>
+              {!isTeacher && <button onClick={() => setTransferStudent(editStudent)} disabled={saving}
                 className="focus-ring w-full bg-warn-soft hover:bg-warn-soft/70 text-warn-ink border border-warn/30 min-h-[44px] rounded-lg transition disabled:opacity-40 disabled:pointer-events-none">
                 ขอโอนย้ายนักเรียน
-              </button>
+              </button>}
               <button onClick={() => setConfirmWithdraw(true)} disabled={saving}
                 className="focus-ring w-full bg-danger-soft hover:bg-danger-soft/70 text-danger-ink border border-danger/30 min-h-[44px] rounded-lg transition disabled:opacity-40 disabled:pointer-events-none">
                 ลาออก / ลบออกจากระบบ

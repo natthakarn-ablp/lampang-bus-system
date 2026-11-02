@@ -1114,28 +1114,33 @@ router.post('/students/move', async (req, res, next) => {
 
 // ─── DELETE /students/:id (soft delete — ลาออก) ─────────────────────────────
 
-router.delete('/students/:id', requireFullSchoolScope, async (req, res, next) => {
+router.delete('/students/:id', async (req, res, next) => {
+  let conn;
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const studentId = readIdParam(req, res, 'id');
     if (studentId === null) return;
 
-    const [[st]] = await pool.query(
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [[st]] = await conn.query(
       `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
               s.vehicle_id, v.plate_no
        FROM students s
        LEFT JOIN vehicles v ON v.id = s.vehicle_id
-       WHERE s.id = ? AND s.school_id = ? AND s.is_deleted = FALSE`,
+       WHERE s.id = ? AND s.school_id = ? AND s.is_deleted = FALSE FOR UPDATE`,
       [studentId, schoolId]
     );
-    if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
+    if (!st || (teacherGradeScope(req) && normalizeGrade(st.grade) !== teacherGradeScope(req))) {
+      await conn.rollback();
+      return sendError(res, 'ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ', [], 404);
+    }
 
-    await pool.query(
-      `UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL WHERE id = ?`,
-      [studentId]
+    await conn.query(
+      `UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL WHERE id = ? AND school_id = ? AND is_deleted = FALSE`,
+      [studentId, schoolId]
     );
-
     await logAudit({
       userId: req.user.id, action: 'DELETE', entityType: 'student', entityId: studentId,
       oldValue: {
@@ -1144,11 +1149,15 @@ router.delete('/students/:id', requireFullSchoolScope, async (req, res, next) =>
         vehicle_id: st.vehicle_id, plate_no: st.plate_no,
       },
       newValue: { action: 'withdraw', is_deleted: true },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      ipAddress: req.ip, userAgent: req.headers['user-agent'], conn, required: true,
     });
+    await conn.commit();
 
     return sendSuccess(res, { student_id: studentId }, 'ลบนักเรียนออกจากระบบเรียบร้อยแล้ว');
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    next(err);
+  } finally { if (conn) conn.release(); }
 });
 
 // ─── POST /students/:id/restore — กู้คืนนักเรียนที่ถูกลบ (ในขอบเขตโรงเรียน) ─────

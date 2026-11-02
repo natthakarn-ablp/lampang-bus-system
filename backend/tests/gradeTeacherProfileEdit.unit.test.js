@@ -140,8 +140,31 @@ test('full-school vehicle edit retains school membership check', async () => {
   expect(mockServes).toHaveBeenCalledWith('V1', 'SCH1'); expect(mockGetConnection).not.toHaveBeenCalled();
 });
 
-test('teacher still cannot delete a pupil or restore one', async () => {
-  expect((await request(app).delete('/api/school/students/12')).status).toBe(403);
+test('teacher withdraws only a currently assigned-grade pupil with required audit', async () => {
+  expect((await request(app).delete('/api/school/students/12')).status).toBe(200);
+  expect(conn.query.mock.calls[0][0]).toMatch(/school_id = \?.*FOR UPDATE/s);
+  expect(conn.query.mock.calls[0][1]).toEqual([12, 'SCH1']);
+  expect(writes()).toEqual([[expect.stringContaining('is_deleted = TRUE'), [12, 'SCH1']]]);
+  expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ conn, required: true, entityId: 12 }));
+  expect(conn.commit).toHaveBeenCalledTimes(1);
+});
+
+test.each([null, { ...student, grade: 'ป.6' }])('teacher cannot withdraw missing or moved pupil', async current => {
+  mockCurrentStudent = current;
+  expect((await request(app).delete('/api/school/students/12')).status).toBe(404);
+  expect(writes()).toHaveLength(0);
+  expect(conn.rollback).toHaveBeenCalled();
+  expect(mockAudit).not.toHaveBeenCalled();
+});
+
+test('withdraw audit failure rolls back instead of hiding an unaudited deletion', async () => {
+  mockAudit.mockRejectedValueOnce(new Error('audit unavailable'));
+  expect((await request(app).delete('/api/school/students/12')).status).toBe(500);
+  expect(conn.rollback).toHaveBeenCalled();
+  expect(conn.commit).not.toHaveBeenCalled();
+});
+
+test('teacher still cannot restore a withdrawn pupil', async () => {
   expect((await request(app).post('/api/school/students/12/restore')).status).toBe(403);
   expect(mockPoolQuery).not.toHaveBeenCalled(); expect(mockGetConnection).not.toHaveBeenCalled();
 });

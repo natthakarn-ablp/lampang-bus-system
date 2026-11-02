@@ -1712,8 +1712,17 @@ const SHOTS = [
     act: async page => { await page.getByRole('button', { name: /เพิ่มชื่อเด็ก/ }).first().click(); },
     expect: ['[role=radiogroup]', 'text=1. ชื่อเด็ก', 'text=2. โรงเรียน', 'text=3. ขึ้นรถรอบไหน'] },
   { id: '83-inspection-form', url: '/transport/inspections', user: 'transport', vps: ['mobile', 'desktop'],
-    act: async page => { await page.getByRole('button', { name: 'บันทึกผลตรวจเดิม' }).first().click(); },
-    expect: ['text=เลือกรถ', 'text=ผลตรวจ', 'text=วันที่ตรวจ', 'text=หน้านี้เป็นบันทึกแบบเดิม'] },
+    act: async page => {
+      await page.getByRole('button', { name: 'บันทึกผลตรวจเดิม' }).first().click();
+      await page.getByRole('combobox', { name: 'เลือกรถ' }).selectOption('__other__');
+      await page.getByRole('textbox', { name: 'หมวดทะเบียน' }).fill('10');
+      await page.getByRole('textbox', { name: 'หมายเลข' }).fill('3070');
+      await page.getByText('10 3070 ลำปาง', { exact: true }).waitFor();
+      await page.getByRole('textbox', { name: 'หมวดทะเบียน' }).fill('1กข');
+      await page.getByText('1กข 3070 ลำปาง', { exact: true }).waitFor();
+      await page.getByRole('textbox', { name: 'หมวดทะเบียน' }).fill('10');
+    },
+    expect: ['text=เลือกรถ', 'text=หมวดทะเบียน', 'text=10 3070 ลำปาง', 'text=ผลตรวจ', 'text=วันที่ตรวจ', 'text=หน้านี้เป็นบันทึกแบบเดิม'] },
   // ── ขั้นตอนที่เขียนข้อมูลจริงของขนส่ง — ทดสอบด้วย fixture ไม่แตะ production ──
   // 1) เลือกคำขอจากคิว  2) กด "เริ่มตรวจรถคันนี้"  3) ต้องได้รายการตรวจให้ลง
   { id: '84b-transport-start-inspection', url: '/transport/verification', user: 'transport', vps: ['desktop'],

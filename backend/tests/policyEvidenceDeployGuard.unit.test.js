@@ -14,9 +14,20 @@
 
 const POLICY_TABLES = ['policy_acknowledgements', 'policy_action_evidence'];
 
-function bootIndex({ missing = [], probeError = null } = {}) {
+function bootIndex({ missing = [], probeError = null, attendanceReady = true } = {}) {
   const listen = jest.fn((port, host, cb) => { if (cb) cb(); return { close: (done) => done && done() }; });
   const query = jest.fn(async (sql, params = []) => {
+    //054 is core attendance schema. Supply it independently so these tests
+    // continue exercising the optional052/053 behavior rather than stopping
+    // earlier at the unrelated mandatory attendance guard.
+    if (/information_schema\.COLUMNS/i.test(sql)) return [attendanceReady ? [
+      { COLUMN_NAME: 'attendance_kind', COLUMN_TYPE: "enum('LEAVE','SELF')", IS_NULLABLE: 'NO', COLUMN_DEFAULT: 'LEAVE' },
+      ...['morning_enabled_snapshot', 'evening_enabled_snapshot'].map(COLUMN_NAME => ({ COLUMN_NAME, COLUMN_TYPE: 'tinyint(1)', IS_NULLABLE: 'YES', COLUMN_DEFAULT: null })),
+      { COLUMN_NAME: 'active_session', COLUMN_TYPE: 'varchar(7)', IS_NULLABLE: 'YES', EXTRA: 'STORED GENERATED', GENERATION_EXPRESSION: 'CASE WHEN cancelled=0 THEN session ELSE NULL END' },
+    ] : []];
+    if (/information_schema\.STATISTICS/i.test(sql)) return [['leave_date', 'student_id', 'active_session'].map((COLUMN_NAME, index) => ({
+      INDEX_NAME: 'uk_sl_active_date_student_session', COLUMN_NAME, NON_UNIQUE: 0, SEQ_IN_INDEX: index + 1,
+    }))];
     if (/information_schema\.tables/.test(sql)) {
       const asked = params.slice(1);
       if (probeError && asked.some((t) => POLICY_TABLES.includes(t))) throw probeError;
@@ -114,5 +125,13 @@ describe('migration 052/053 check at boot never stops the app', () => {
     expect(exitSpy).not.toHaveBeenCalled();
     expect(listen).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls.flat().join('\n')).toMatch(/could not verify policy-notice tables/);
+  });
+  it('missing mandatory054 refuses boot independently of optional policy tables', async () => {
+    exitSpy.mockImplementation(() => {});
+    const { listen } = bootIndex({ attendanceReady: false });
+    await settle();
+    expect(listen).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy.mock.calls.flat().join('\n')).toMatch(/Migration054.*refusing startup/);
   });
 });

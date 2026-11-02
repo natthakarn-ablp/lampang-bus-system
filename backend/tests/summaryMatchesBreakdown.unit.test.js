@@ -99,6 +99,7 @@ describe('cause 1 — rows use the headline denominator', () => {
 
   test('summary report: per-school, per-vehicle and per-affiliation KPI are 100%, not 80%', async () => {
     mockResponder = (sql) => {
+      if (sql.includes("'BUS_DATE'")) return [[{ attendance_kind: 'BUS_DATE', check_date: '2026-10-02', school_id: 'SCH1', vehicle_id: 'V-1', affiliation_id: 'AFF001', morning_done: ROW.morning_done, evening_done: ROW.evening_done }]];
       if (/GROUP BY sc\.id, sc\.name/.test(sql)) return [[{ school_id: 'SCH1', school_name: 'A', ...ROW }]];
       if (/GROUP BY v\.id, v\.plate_no/.test(sql)) return [[{ vehicle_id: 'V-1', plate_no: 'x', ...ROW }]];
       if (/GROUP BY a\.id, a\.name/.test(sql)) return [[{ affiliation_id: 'AFF001', affiliation_name: 'B', ...ROW }]];
@@ -123,6 +124,7 @@ describe('cause 1 — rows use the headline denominator', () => {
 
   test('monthly report: a vehicle is measured against its riders of each session', async () => {
     mockResponder = (sql) => {
+      if (sql.includes("'BUS_DATE'")) return [[1,2].map(day => ({ attendance_kind: 'BUS_DATE', check_date: `2026-10-0${day}`, school_id: 'SCH1', vehicle_id: 'V-1', affiliation_id: 'AFF001', morning_done: 8, evening_done: 10 }))];
       if (/GROUP BY v\.id, v\.plate_no/.test(sql)) {
         return [[{ vehicle_id: 'V-1', plate_no: 'x', student_count: 10, morning_expected: 8,
           evening_expected: 10, total_morning_done: 16, total_evening_done: 20, days_with_data: 2 }]];

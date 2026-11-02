@@ -1,3 +1,4 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -51,8 +52,8 @@ const isEveningLeave = (s) => s.leave_session === 'evening' || s.leave_session =
 function vehicleRound(vehicle, session) {
   const students = vehicle.students || [];
   const expected = session === 'evening'
-    ? students.filter(s => s.evening_enabled && !isEveningLeave(s))
-    : students.filter(s => s.morning_enabled && !isMorningLeave(s));
+    ? students.filter(s => s.evening_enabled && !isEveningLeave(s) && !s.evening_self)
+    : students.filter(s => s.morning_enabled && !isMorningLeave(s) && !s.morning_self);
   const done = expected.filter(s => (session === 'evening' ? s.evening_done : s.morning_done)).length;
   return { expected: expected.length, done, pending: expected.length - done };
 }
@@ -255,6 +256,7 @@ export default function SchoolDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+      <AttendanceBreakdown data={failed.dashboard ? {} : data} />
       <div className="space-y-2">
         <RoleChip role="school" />
         <PageHeader
@@ -546,10 +548,10 @@ function CompletenessCard({ c }) {
 function VehicleRow({ vehicle, isExpanded, onToggle }) {
   const isMorningLeave = (s) => s.leave_session === 'morning' || s.leave_session === 'both';
   const isEveningLeave = (s) => s.leave_session === 'evening' || s.leave_session === 'both';
-  const mEnabled = vehicle.students.filter(s => s.morning_enabled && !isMorningLeave(s));
+  const mEnabled = vehicle.students.filter(s => s.morning_enabled && !isMorningLeave(s) && !s.morning_self);
   const mDone = mEnabled.filter(s => s.morning_done).length;
   const mPending = mEnabled.length - mDone;
-  const eEnabled = vehicle.students.filter(s => s.evening_enabled && !isEveningLeave(s));
+  const eEnabled = vehicle.students.filter(s => s.evening_enabled && !isEveningLeave(s) && !s.evening_self);
   const eDone = eEnabled.filter(s => s.evening_done).length;
   const ePending = eEnabled.length - eDone;
   const leaveCount = vehicle.students.filter(s => s.leave_session).length;
@@ -600,8 +602,8 @@ function VehicleRow({ vehicle, isExpanded, onToggle }) {
             rowClassName={s => (s.leave_session ? 'bg-warn-soft/40' : '')}
             renderStatus={(s, session) => (
               session === 'morning'
-                ? <StudentStatus enabled={s.morning_enabled} done={s.morning_done} ts={s.morning_ts} leave={isMorningLeave(s)} />
-                : <StudentStatus enabled={s.evening_enabled} done={s.evening_done} ts={s.evening_ts} leave={isEveningLeave(s)} />
+                ? <StudentStatus enabled={s.morning_enabled} done={s.morning_done} ts={s.morning_ts} leave={isMorningLeave(s)} selfLabel={s.morning_self ? 'มาเอง' : null} />
+                : <StudentStatus enabled={s.evening_enabled} done={s.evening_done} ts={s.evening_ts} leave={isEveningLeave(s)} selfLabel={s.evening_self ? 'กลับเอง' : null} />
             )}
           />
         </div>
@@ -621,7 +623,8 @@ function SessionPill({ label, done, total, pending }) {
   );
 }
 
-function StudentStatus({ enabled, done, ts, leave }) {
+function StudentStatus({ enabled, done, ts, leave, selfLabel }) {
+  if (selfLabel) return <StatusBadge variant="neutral" size="sm">{selfLabel}</StatusBadge>;
   if (!enabled) return <span className="text-ink-muted text-xs">-</span>;
   if (leave) return <StatusBadge variant="warn" size="sm">{STATUS.LEAVE}</StatusBadge>;
   if (done) return (

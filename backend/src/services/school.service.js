@@ -154,7 +154,7 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
     gradeFilter ? [schoolId, eq, schoolId, eq] : [schoolId, schoolId]
   );
 
-  return {
+  const dashboard = {
     school: school || null,
     date: today,
     total_students,
@@ -179,6 +179,20 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
       vehicles_inspected: Number(vehicleCompleteness.inspected) || 0,
     },
   };
+  const ledger = await require('./report.service').reportLedger({ role: 'school', scopeId: schoolId, gradeScope: gradeFilter }, { date: today });
+  const accounting = require('./attendanceStatistics.service');
+  const result = accounting.decorateDaily(dashboard, ledger);
+  if (result.schools_not_complete) result.schools_not_complete = result.schools_not_complete
+    .map(row => accounting.decorateRow(row, ledger.filter(item => String(item.school_id) === String(row.school_id))))
+    .filter(row => row.morning_pending > 0 || row.evening_pending > 0);
+  for (const session of ['morning', 'evening']) {
+    if (`${session}_kpi` in result) result[`${session}_kpi`] = !result[`${session}_total`] || result[`${session}_conflict`] ? null
+      : Math.round(Number(result[`${session}_done`] || 0) / result[`${session}_total`] * 10000) / 100;
+  }
+  const people = new Set(ledger.filter(row => row.attendance_kind === 'LEAVE').map(row => row.student_id));
+  result.leave_count = people.size; result.leave_today = people.size;
+  return result;
+
 }
 
 /**
@@ -346,13 +360,15 @@ async function getStatusToday(schoolId, { gradeFilter = null } = {}) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
   const gradeAnd = gradeFilter ? ' AND s.grade IN (?)' : '';
-  const params   = gradeFilter ? [today, today, schoolId, eq]
-                               : [today, today, schoolId];
+  const params   = gradeFilter ? [today, today, today, today, schoolId, eq]
+                               : [today, today, today, today, schoolId];
 
   const [rows] = await pool.query(
     `SELECT s.id AS student_id, s.prefix, s.first_name, s.last_name,
             s.grade, s.classroom, s.vehicle_id, v.plate_no,
             s.morning_enabled, s.evening_enabled,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = ? AND sx.cancelled = FALSE AND sx.attendance_kind = 'SELF' AND sx.session = 'morning') AS morning_self,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = ? AND sx.cancelled = FALSE AND sx.attendance_kind = 'SELF' AND sx.session = 'evening') AS evening_self,
             ds.morning_done, ds.morning_ts,
             ds.evening_done, ds.evening_ts,
             (SELECT CASE
@@ -362,7 +378,7 @@ async function getStatusToday(schoolId, { gradeFilter = null } = {}) {
                ELSE MAX(sl2.session)
              END
              FROM student_leaves sl2
-             WHERE sl2.student_id = s.id AND sl2.leave_date = ? AND sl2.cancelled = FALSE
+             WHERE sl2.student_id = s.id AND sl2.leave_date = ? AND sl2.cancelled = FALSE AND sl2.attendance_kind = 'LEAVE'
             ) AS leave_session
      FROM students s
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
@@ -390,6 +406,8 @@ async function getStatusToday(schoolId, { gradeFilter = null } = {}) {
       classroom: row.classroom,
       morning_enabled: row.morning_enabled,
       evening_enabled: row.evening_enabled,
+      morning_self: !!row.morning_self,
+      evening_self: !!row.evening_self,
       morning_done: !!row.morning_done,
       morning_ts: row.morning_ts,
       evening_done: !!row.evening_done,

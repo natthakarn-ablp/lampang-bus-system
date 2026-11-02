@@ -28,6 +28,7 @@ const POLL_INTERVAL = 30_000;
 const LEAVE_LABEL = { morning: 'ลาเช้า', evening: 'ลาเย็น', both: 'ลาทั้งวัน' };
 
 function isOnLeave(student, session) {
+  if (student[`${session}_self`]) return true;
   if (!student.leave_session) return false;
   if (student.leave_session === 'both') return true;
   return student.leave_session === session;
@@ -145,7 +146,8 @@ export default function DriverDashboard() {
 
   // Derived state
   const students = roster?.students || [];
-  const onLeave = students.filter((st) => isOnLeave(st, session));
+  const onLeave = students.filter((st) => isOnLeave(st, session) && !st[`${session}_self`]);
+  const selfStudents = students.filter(st => !!st[`${session}_self`]);
   const notOnLeave = students.filter((st) => !isOnLeave(st, session));
   const pending = notOnLeave.filter((st) => (session === 'morning' ? !st.morning_done : !st.evening_done));
   const done = notOnLeave.filter((st) => (session === 'morning' ? !!st.morning_done : !!st.evening_done));
@@ -512,6 +514,10 @@ export default function DriverDashboard() {
             </section>
           )}
 
+          {selfStudents.length > 0 && <section className="mb-6" aria-label={session === 'morning' ? 'มาเอง' : 'กลับเอง'}>
+            <h2 className="text-base font-semibold text-ink mb-3">{session === 'morning' ? 'มาเอง' : 'กลับเอง'} ({selfStudents.length})</h2>
+            <div className="space-y-2">{selfStudents.map(st => <StudentCard key={st.id} student={st} session={session} state="leave" />)}</div>
+          </section>}
           {/* ── On leave ── */}
           {onLeave.length > 0 && (
             <section className="mb-6">
@@ -577,7 +583,7 @@ function StudentCard({ student, session, state, onCheckin, onLeave, checkinLoadi
   const [showLeave, setShowLeave] = useState(false);
 
   const doneText = session === 'morning' ? 'ส่งแล้ว' : 'รับแล้ว';
-  const leaveText = LEAVE_LABEL[student.leave_session] || 'ลา';
+  const leaveText = student[`${session}_self`] ? (session === 'morning' ? 'มาเอง' : 'กลับเอง') : LEAVE_LABEL[student.leave_session] || 'ลา';
 
   const borderCls = {
     pending: 'border-surface-border',

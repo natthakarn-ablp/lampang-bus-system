@@ -1,3 +1,4 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect } from 'react';
 import { Landmark } from 'lucide-react';
 import api from '../../api/axios';
@@ -31,6 +32,7 @@ export default function PolicyReport() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={false} />
       {/* Header */}
       <div className="flex flex-col gap-3 mb-6">
         <div>

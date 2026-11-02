@@ -1,3 +1,4 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -133,6 +134,7 @@ export default function AffiliationDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+      <AttendanceBreakdown data={failed.dashboard ? {} : data} />
       <div className="flex flex-col gap-2">
         <RoleChip role="affiliation" />
         <PageHeader

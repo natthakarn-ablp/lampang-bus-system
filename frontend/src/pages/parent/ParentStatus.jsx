@@ -322,7 +322,7 @@ export default function ParentStatus() {
                 done={status?.morning_done}
                 time={status?.morning_ts}
                 doneText={status?.morning_label || 'ส่งถึงแล้ว'}
-                pendingText="ยังไม่ส่ง"
+                pendingText={status?.morning_exception ? (status.morning_exception === 'SELF' ? 'มาเอง' : 'ลา') : 'ยังไม่ส่ง'}
               />
               <StatusCard
                 label="รับเย็น"
@@ -330,11 +330,11 @@ export default function ParentStatus() {
                 done={status?.evening_done}
                 time={status?.evening_ts}
                 doneText={status?.evening_label || 'รับแล้ว'}
-                pendingText="ยังไม่รับ"
+                pendingText={status?.evening_exception ? (status.evening_exception === 'SELF' ? 'กลับเอง' : 'ลา') : 'ยังไม่รับ'}
               />
             </div>
 
-            {!status?.morning_done && !status?.evening_done && (
+            {!status?.morning_done && !status?.evening_done && !status?.morning_exception && !status?.evening_exception && (
               <p className="text-sm text-ink-muted text-center bg-surface rounded-xl py-3">
                 ยังไม่มีข้อมูลเช็คอินวันนี้
               </p>

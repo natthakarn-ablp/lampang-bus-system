@@ -39,7 +39,10 @@ export default function StudentStatusTable({
   renderStatus,
   rowClassName,
 }) {
-  const cell = (st, session) => (renderStatus
+  const cell = (st, session) => st[`${session}_self`]
+    ? <StatusBadge variant="neutral">{session === 'morning' ? 'มาเอง' : 'กลับเอง'}</StatusBadge>
+    : st[`${session}_leave`] ? <StatusBadge variant="warn">ลา</StatusBadge>
+    : (renderStatus
     ? renderStatus(st, session)
     : sessionCell(
         session === 'morning' ? st.morning_enabled : st.evening_enabled,

@@ -38,6 +38,7 @@ export default function ClassroomCheck() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [leaveIds, setLeaveIds] = useState(() => new Set());
+  const [selfIds, setSelfIds] = useState(() => new Set());
   const [confirmRoom, setConfirmRoom] = useState(null);
   const [saving, setSaving] = useState(false);
   const requestSeq = useRef(0);
@@ -57,7 +58,7 @@ export default function ClassroomCheck() {
       if (!mounted.current || request !== requestSeq.current || round !== sessionRef.current) return;
       if (!Array.isArray(response.data?.data?.vehicles)) throw new Error('invalid roster');
       setRoster({ session: round, vehicles: response.data.data.vehicles });
-      setLeaveIds(new Set());
+      setLeaveIds(new Set()); setSelfIds(new Set());
     } catch (err) {
       if (!mounted.current || request !== requestSeq.current || round !== sessionRef.current) return;
       setError(err.response?.data?.message || 'โหลดรายชื่อไม่สำเร็จ กรุณาลองอีกครั้ง');
@@ -79,12 +80,13 @@ export default function ClassroomCheck() {
     if (next === sessionRef.current || locked || writeInFlight.current) return;
     sessionRef.current = next;
     setSession(next);
-    setLeaveIds(new Set());
+    setLeaveIds(new Set()); setSelfIds(new Set());
     load(next);
   }
 
   function toggleLeave(student) {
-    if (locked || loading || !data || student.done || student.on_leave || student.no_vehicle) return;
+    if (locked || loading || !data || student.done || student.status || student.on_leave || student.no_vehicle) return;
+    setSelfIds(previous => { const next = new Set(previous); next.delete(student.id); return next; });
     setLeaveIds(previous => {
       const next = new Set(previous);
       if (next.has(student.id)) next.delete(student.id);
@@ -93,10 +95,16 @@ export default function ClassroomCheck() {
     });
   }
 
+  function toggleSelf(student) {
+    if (locked || loading || !data || student.done || student.status || student.on_leave || student.self_travel || student.no_vehicle) return;
+    setLeaveIds(previous => { const next = new Set(previous); next.delete(student.id); return next; });
+    setSelfIds(previous => { const next = new Set(previous); if (next.has(student.id)) next.delete(student.id); else next.add(student.id); return next; });
+  }
+
   function prepareSave(room) {
     if (locked || loading || !data || writeInFlight.current || room.grade !== activeGrade) return;
-    const plan = classroomPlan(room, leaveIds);
-    if (!plan.presentIds.length && !plan.leaveIds.length) return;
+    const plan = classroomPlan(room, leaveIds, selfIds);
+    if (!plan.presentIds.length && !plan.leaveIds.length && !plan.selfIds.length) return;
     setConfirmRoom({ ...plan, session, grade: room.grade, room: room.classroom || 'ไม่ระบุห้อง' });
   }
 
@@ -108,6 +116,9 @@ export default function ClassroomCheck() {
     try {
       // A single user action saves the selected absences first, so the normal
       // attendance call can never record one of those pupils as present.
+      for (const studentId of snapshot.selfIds) {
+        await api.post('/school/self-travel', { student_id: studentId, session: snapshot.session });
+      }
       for (const studentId of snapshot.leaveIds) {
         await api.post('/school/leave', { student_id: studentId, session: snapshot.session });
       }
@@ -119,7 +130,7 @@ export default function ClassroomCheck() {
           throw new Error('บางรายชื่อยังบันทึกไม่สำเร็จ กรุณาตรวจสอบสถานะใหม่');
         }
       }
-      toast.success(`บันทึก ${snapshot.grade} ห้อง ${snapshot.room} แล้ว · มา ${snapshot.presentIds.length} · ลา ${snapshot.leaveIds.length}`);
+      toast.success(`บันทึก ${snapshot.grade} ห้อง ${snapshot.room} แล้ว · ใช้รถ ${snapshot.presentIds.length} · ${snapshot.session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${snapshot.selfIds.length} · ลา ${snapshot.leaveIds.length}`);
     } catch (err) {
       toast.error(err.response?.data?.message || err.message || 'บันทึกไม่ครบ กรุณาตรวจสอบสถานะใหม่ก่อนลองอีกครั้ง');
     } finally {
@@ -130,10 +141,10 @@ export default function ClassroomCheck() {
   }
 
   async function undo(student) {
-    if (!student.can_undo || !student.log_id || locked || writeInFlight.current || !data) return;
+    if (!student.can_undo || !(student.self_id || student.log_id) || locked || writeInFlight.current || !data) return;
     writeInFlight.current = true; setSaving(true);
     try {
-      await api.post(`/school/teacher-check/${student.log_id}/undo`, {});
+      await api.post(student.self_travel ? `/school/self-travel/${student.self_id}/undo` : `/school/teacher-check/${student.log_id}/undo`, {});
       toast.success(`ยกเลิกรายการของ ${student.name} แล้ว`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'ยกเลิกไม่สำเร็จ');
@@ -150,7 +161,7 @@ export default function ClassroomCheck() {
         <PageHeader title="เช็กชื่อรายห้อง" subtitle={grade ? `นักเรียนชั้น ${grade} ที่ใช้รถรับส่ง` : 'เลือกสายชั้น แล้วเช็กชื่อทีละห้องเรียน'} icon={GraduationCap} iconColor="teal" />
         <SchoolWorkflowNav current="attendance" />
         <AppCard padding="md" className="space-y-1">
-          <p className="font-semibold text-ink">เริ่มต้นถือว่ามาทุกคน เลือก “ลา” เฉพาะคนที่ไม่มา</p>
+          <p className="font-semibold text-ink">เริ่มต้นใช้รถทุกคน เลือก “มาเอง/กลับเอง” หรือ “ลา” ตามจริง</p>
           <p className="text-sm text-ink-muted">ตรวจรายชื่อทีละห้อง แล้วกด “บันทึกทั้งห้อง” · การลาใช้เฉพาะรอบที่เลือก</p>
           <p className="text-sm text-ink-muted">เช้า: ถึงโรงเรียน · เย็น: ขึ้นรถกลับบ้าน · รายการที่คนขับหรือครูบันทึกแล้วจะไม่บันทึกซ้ำ</p>
         </AppCard>
@@ -170,7 +181,7 @@ export default function ClassroomCheck() {
           {props => <select {...props} value={activeGrade} onChange={event => {
             if (locked || writeInFlight.current) return;
             setSelectedGrade(event.target.value);
-            setLeaveIds(new Set());
+            setLeaveIds(new Set()); setSelfIds(new Set());
           }} className="focus-ring w-full min-h-[44px] px-3 rounded-lg border border-surface-border bg-surface-raised text-base text-ink disabled:opacity-60">
             <option value="">เลือกสายชั้น</option>
             {grades.map(value => <option key={value} value={value}>{value}</option>)}
@@ -183,34 +194,41 @@ export default function ClassroomCheck() {
         {data && rooms.length > 0 && !activeGrade && <EmptyState title="เลือกสายชั้นเพื่อเช็กชื่อ" description="รายชื่อจะแยกเป็นห้องเรียนในสายชั้นที่เลือก" />}
 
         {visibleRooms.map(room => {
-          const plan = classroomPlan(room, leaveIds);
-          const pending = plan.presentIds.length + plan.leaveIds.length;
+          const plan = classroomPlan(room, leaveIds, selfIds);
+          const pending = plan.presentIds.length + plan.leaveIds.length + plan.selfIds.length;
           const done = room.students.filter(st => st.done).length;
           const onLeave = room.students.filter(st => st.on_leave).length;
+          const selfCount = room.students.filter(st => st.self_travel).length;
           return <AppCard key={room.key} padding="none" className="overflow-hidden">
             <div className="px-4 py-4 bg-surface border-b border-surface-border">
               <h2 className="text-lg font-bold text-ink">{room.grade} / {room.classroom ? `ห้อง ${room.classroom}` : 'ไม่ระบุห้อง'}</h2>
-              <p className="text-sm text-ink-muted">{room.students.length} คน · บันทึกแล้ว {done} · ลาแล้ว {onLeave} · รอบันทึก {pending}</p>
+              <p className="text-sm text-ink-muted">{room.students.length} คน · ใช้รถ {done} · {session === 'morning' ? 'มาเอง' : 'กลับเอง'} {selfCount} · ลา {onLeave} · รอบันทึก {pending}</p>
             </div>
             <ul className="divide-y divide-surface-border">
               {room.students.map(student => {
-                const selectable = !student.done && !student.on_leave && !student.no_vehicle;
+                const selectable = !student.done && !student.on_leave && !student.self_travel && !student.no_vehicle;
                 const selectedLeave = leaveIds.has(student.id);
+                const selectedSelf = selfIds.has(student.id);
                 return <li key={student.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="flex-1 min-w-[10rem]">
                     <p className="font-semibold text-ink">{student.name}</p>
                     <p className="text-sm text-ink-muted">{student.plate_no || 'ยังไม่ได้ผูกรถ'}</p>
                   </div>
-                  {selectable ? <div className="flex items-center gap-2">
-                    <StatusBadge variant={selectedLeave ? 'warn' : 'success'}>{selectedLeave ? 'เลือกลา' : 'มา (ค่าเริ่มต้น)'}</StatusBadge>
+                  {selectable ? <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge variant={selectedLeave ? 'warn' : 'success'}>{selectedLeave ? 'เลือกลา' : selectedSelf ? (session === 'morning' ? 'มาเอง' : 'กลับเอง') : 'ใช้รถ (ค่าเริ่มต้น)'}</StatusBadge>
+                    <button type="button" aria-pressed={selectedSelf} onClick={() => toggleSelf(student)} disabled={locked || !!student.status}
+                      aria-label={`${session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${student.name}`}
+                      className="focus-ring min-h-[44px] px-4 rounded-lg border border-surface-border bg-surface-raised text-sm font-semibold text-ink disabled:opacity-60">
+                      {session === 'morning' ? 'มาเอง' : 'กลับเอง'}
+                    </button>
                     <button type="button" aria-pressed={selectedLeave} aria-label={`${selectedLeave ? 'ยกเลิกการเลือกลา' : 'เลือกลา'} ${student.name}`}
-                      onClick={() => toggleLeave(student)} disabled={locked}
+                      onClick={() => toggleLeave(student)} disabled={locked || !!student.status}
                       className={`focus-ring min-h-[44px] px-4 rounded-lg border text-sm font-semibold disabled:opacity-60 ${selectedLeave ? 'border-warn-ink bg-warn-soft text-warn-ink' : 'border-surface-border bg-surface-raised text-ink hover:bg-surface'}`}>
                       {selectedLeave ? 'ยกเลิกลา' : 'ลา'}
                     </button>
                   </div> : <div className="flex items-center gap-2">
                     <StatusBadge variant={student.on_leave ? 'warn' : student.done ? 'success' : 'neutral'}>
-                      {student.on_leave ? 'ลาแล้ว' : student.done ? 'บันทึกแล้ว' : 'ยังไม่มีรถ'}
+                      {student.self_travel ? (session === 'morning' ? 'มาเอง' : 'กลับเอง') : student.on_leave ? 'ลาแล้ว' : student.done ? 'บันทึกแล้ว' : 'ยังไม่มีรถ'}
                     </StatusBadge>
                     {student.can_undo && <button type="button" onClick={() => undo(student)} disabled={locked}
                       aria-label={`ยกเลิกรายการของ ${student.name}`}
@@ -225,14 +243,14 @@ export default function ClassroomCheck() {
             <div className="px-4 py-4 border-t border-surface-border">
               <button type="button" onClick={() => prepareSave(room)} disabled={!pending || locked || loading}
                 className="focus-ring w-full min-h-[48px] rounded-xl bg-brand-700 text-white font-semibold disabled:opacity-50">
-                {pending ? `บันทึกทั้งห้อง · มา ${plan.presentIds.length} · ลา ${plan.leaveIds.length}` : 'บันทึกครบแล้ว'}
+                {pending ? `บันทึกทั้งห้อง · ใช้รถ ${plan.presentIds.length} · ${session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${plan.selfIds.length} · ลา ${plan.leaveIds.length}` : 'บันทึกครบแล้ว'}
               </button>
             </div>
           </AppCard>;
         })}
 
         <ConfirmDialog open={Boolean(confirmRoom)} tone="brand" title="บันทึกทั้งห้อง?"
-          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: มา ${confirmRoom.presentIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็ก` : ''}
+          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: ใช้รถ ${confirmRoom.presentIds.length} คน · ${confirmRoom.session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${confirmRoom.selfIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็ก` : ''}
           confirmLabel="ยืนยันบันทึกทั้งห้อง" loading={saving} onConfirm={saveRoom}
           onCancel={() => { if (!saving) setConfirmRoom(null); }} />
       </div>

@@ -1,3 +1,4 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useCallback } from 'react';
 import { FileBarChart } from 'lucide-react';
 import api from '../../api/axios';
@@ -44,6 +45,7 @@ export default function MonthlyReport() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={true} />
 
       {/* ── HEADER ── */}
       <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">

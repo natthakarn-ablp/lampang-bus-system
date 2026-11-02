@@ -221,7 +221,7 @@ async function getDashboard() {
   const emergency_7d = recent_emergencies;
   const leave_today  = leave_count;
 
-  return {
+  const dashboard = {
     date: today,
     total_affiliations,
     total_schools,
@@ -258,6 +258,20 @@ async function getDashboard() {
     emergency_7d,
     leave_today,
   };
+  const ledger = await require('./report.service').reportLedger({ role: 'province' }, { date: today });
+  const accounting = require('./attendanceStatistics.service');
+  const result = accounting.decorateDaily(dashboard, ledger);
+  if (result.schools_not_complete) result.schools_not_complete = result.schools_not_complete
+    .map(row => accounting.decorateRow(row, ledger.filter(item => String(item.school_id) === String(row.school_id))))
+    .filter(row => row.morning_pending > 0 || row.evening_pending > 0);
+  for (const session of ['morning', 'evening']) {
+    if (`${session}_kpi` in result) result[`${session}_kpi`] = !result[`${session}_total`] || result[`${session}_conflict`] ? null
+      : Math.round(Number(result[`${session}_done`] || 0) / result[`${session}_total`] * 10000) / 100;
+  }
+  const people = new Set(ledger.filter(row => row.attendance_kind === 'LEAVE').map(row => row.student_id));
+  result.leave_count = people.size; result.leave_today = people.size;
+  return result;
+
 }
 
 /**
@@ -326,6 +340,8 @@ async function getAffiliations() {
     `SELECT sc.affiliation_id,
             v.id AS vehicle_id,
             COUNT(DISTINCT s.id) AS total,
+            COUNT(DISTINCT CASE WHEN s.morning_enabled THEN s.id END) AS m_expected,
+            COUNT(DISTINCT CASE WHEN s.evening_enabled THEN s.id END) AS e_expected,
             COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS m_done,
             COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS e_done
      FROM vehicles v
@@ -337,27 +353,34 @@ async function getAffiliations() {
     [today]
   );
 
+  const accounting = require('./attendanceStatistics.service');
+  const ledger = await require('./report.service').reportLedger({ role: 'province' }, { date: today });
+  const adjusted = (row, id) => accounting.decorateRow({ ...row, morning_expected: row.m_expected,
+    evening_expected: row.e_expected, morning_done: row.m_done, evening_done: row.e_done },
+    ledger.filter(item => String(item[id]) === String(row[id])));
+  const complete = row => row.morning_expected + row.evening_expected > 0 && !row.morning_conflict && !row.evening_conflict
+    && row.morning_done >= row.morning_expected && row.evening_done >= row.evening_expected;
   // Build per-affiliation 100% counts
   const aff100 = {};
   for (const s of schoolStatus) {
     const key = s.affiliation_id;
     if (!aff100[key]) aff100[key] = { schools100: 0, vehicles100: 0 };
-    if (s.m_expected > 0 && s.m_done >= s.m_expected && s.e_expected > 0 && s.e_done >= s.e_expected) {
+    if (complete(adjusted(s, 'school_id'))) {
       aff100[key].schools100++;
     }
   }
   for (const v of vehicleStatus) {
     const key = v.affiliation_id;
     if (!aff100[key]) aff100[key] = { schools100: 0, vehicles100: 0 };
-    if (v.total > 0 && v.m_done >= v.total && v.e_done >= v.total) {
+    if (complete(adjusted(v, 'vehicle_id'))) {
       aff100[key].vehicles100++;
     }
   }
 
-  return rows.map((r) => ({
+  return rows.map(row => accounting.decorateRow(row, ledger.filter(item => String(item.affiliation_id) === String(row.id)))).map((r) => ({
     ...r,
-    morning_kpi: r.morning_expected > 0 ? Math.round((r.morning_done / r.morning_expected) * 10000) / 100 : 0,
-    evening_kpi: r.evening_expected > 0 ? Math.round((r.evening_done / r.evening_expected) * 10000) / 100 : 0,
+    morning_kpi: r.morning_conflict || !r.morning_expected ? null : r.morning_expected > 0 ? Math.round((r.morning_done / r.morning_expected) * 10000) / 100 : 0,
+    evening_kpi: r.evening_conflict || !r.evening_expected ? null : r.evening_expected > 0 ? Math.round((r.evening_done / r.evening_expected) * 10000) / 100 : 0,
     schools_at_100: aff100[r.id]?.schools100 ?? 0,
     vehicles_at_100: aff100[r.id]?.vehicles100 ?? 0,
   }));
@@ -523,6 +546,10 @@ async function getStatusToday() {
             sc.affiliation_id, a.name AS affiliation_name,
             s.vehicle_id, v.plate_no,
             s.morning_enabled, s.evening_enabled,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE AND sx.attendance_kind = 'SELF' AND sx.session IN ('morning', 'both')) AS morning_self,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE AND sx.attendance_kind = 'LEAVE' AND sx.session IN ('morning', 'both')) AS morning_leave,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE AND sx.attendance_kind = 'SELF' AND sx.session IN ('evening', 'both')) AS evening_self,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE AND sx.attendance_kind = 'LEAVE' AND sx.session IN ('evening', 'both')) AS evening_leave,
             ds.morning_done, ds.morning_ts,
             ds.evening_done, ds.evening_ts
      FROM students s
@@ -569,6 +596,8 @@ async function getStatusToday() {
       classroom: row.classroom,
       morning_enabled: row.morning_enabled,
       evening_enabled: row.evening_enabled,
+      morning_self: !!row.morning_self, evening_self: !!row.evening_self,
+      morning_leave: !!row.morning_leave, evening_leave: !!row.evening_leave,
       morning_done: !!row.morning_done,
       morning_ts: row.morning_ts,
       evening_done: !!row.evening_done,

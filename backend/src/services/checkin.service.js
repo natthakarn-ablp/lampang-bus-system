@@ -244,6 +244,12 @@ async function getRoster(pool, vehicleId, session) {
             sc.name AS school_name,
             s.dropoff_address,
             s.morning_enabled,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id
+              AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE
+              AND sx.attendance_kind = 'SELF' AND sx.session = 'morning') AS morning_self,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id
+              AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE
+              AND sx.attendance_kind = 'SELF' AND sx.session = 'evening') AS evening_self,
             s.evening_enabled,
             COALESCE(ds.morning_done, FALSE) AS morning_done,
             ds.morning_ts,
@@ -256,10 +262,10 @@ async function getRoster(pool, vehicleId, session) {
                ELSE MAX(sl2.session)
              END
              FROM student_leaves sl2
-             WHERE sl2.student_id = s.id AND sl2.leave_date = CURDATE() AND sl2.cancelled = FALSE
+             WHERE sl2.student_id = s.id AND sl2.leave_date = CURDATE() AND sl2.cancelled = FALSE AND sl2.attendance_kind = 'LEAVE'
             ) AS leave_session,
             (SELECT sl3.id FROM student_leaves sl3
-             WHERE sl3.student_id = s.id AND sl3.leave_date = CURDATE() AND sl3.cancelled = FALSE
+             WHERE sl3.student_id = s.id AND sl3.leave_date = CURDATE() AND sl3.cancelled = FALSE AND sl3.attendance_kind = 'LEAVE'
              ORDER BY sl3.id DESC LIMIT 1
             ) AS leave_id,
             COALESCE(ov.morning_override_by_school, 0) AS morning_override_by_school,
@@ -368,6 +374,15 @@ async function _buildCheckinTransaction(conn, {
   }
   const student = students[0];
   const studentName = `${student.first_name} ${student.last_name}`;
+
+  // Independent travel and a bus journey are mutually exclusive. This must
+  // apply to driver, override and batch paths as well as classroom teachers.
+  const [selfTravel] = await conn.query(
+    `SELECT id FROM student_leaves WHERE student_id = ? AND leave_date = CURDATE()
+       AND cancelled = FALSE AND attendance_kind = 'SELF' AND session IN (?, 'both') LIMIT 1`,
+    [student.id, session]
+  );
+  if (selfTravel.length) throw makeError('นักเรียนเดินทางเองในรอบนี้แล้ว', 409, 'SELF_TRAVEL');
 
   // The roster's earlier leave lookup can become stale while a teacher waits
   // for the student lock. Recheck under that same lock before writing a tap.
@@ -1437,12 +1452,13 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
             s.vehicle_id, v.plate_no,
             cl.id AS log_id, cl.status AS log_status, cl.checked_at, cl.checked_by,
             u.role AS checked_by_role, u.display_name AS checked_by_name,
+            (sx.id IS NOT NULL) AS self_travel, sx.id AS self_id, sx.reported_by AS self_reported_by,
             (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
                          WHEN MAX(sl.session = 'both') = 1 THEN 'both'
                          WHEN COUNT(DISTINCT sl.session) > 1 THEN 'both'
                          ELSE MAX(sl.session) END
                FROM student_leaves sl
-              WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE
+              WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE AND sl.attendance_kind = 'LEAVE'
             ) AS leave_session
        FROM students s
        LEFT JOIN vehicles v ON v.id = s.vehicle_id
@@ -1451,6 +1467,8 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
                            WHERE c2.student_id = s.id AND c2.session = ?
                              AND c2.check_date = CURDATE())
        LEFT JOIN users u ON u.id = cl.checked_by
+       LEFT JOIN student_leaves sx ON sx.student_id = s.id AND sx.leave_date = CURDATE()
+         AND sx.cancelled = FALSE AND sx.attendance_kind = 'SELF' AND sx.session = '${session}'
       WHERE s.school_id = ? AND s.is_deleted = FALSE AND ${enabledCol} = TRUE${gradeAnd}
       ORDER BY v.plate_no IS NULL, v.plate_no, s.grade, s.classroom, s.first_name`,
     params
@@ -1474,6 +1492,8 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
       grade: r.grade,
       classroom: r.classroom,
       on_leave: onLeave,
+      self_travel: !!r.self_travel,
+      self_id: r.self_id || null,
       no_vehicle: !r.vehicle_id,
       status,
       done,
@@ -1481,7 +1501,7 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
       checked_by_role: status ? r.checked_by_role || null : null,
       checked_by_name: status ? r.checked_by_name || null : null,
       // Only the teacher's own, still-current tap can be undone from this page.
-      can_undo: !!status && status === target && r.checked_by === userId,
+      can_undo: r.self_travel ? r.self_reported_by === userId : !!status && status === target && r.checked_by === userId,
       log_id: status ? r.log_id : null,
     });
   }
@@ -1521,12 +1541,13 @@ async function processTeacherCheck(pool, {
   );
   const byId = new Map(students.map(s => [s.id, s]));
   const [leaves] = await pool.query(
-    `SELECT student_id FROM student_leaves
+    `SELECT student_id, attendance_kind FROM student_leaves
       WHERE student_id IN (?) AND leave_date = CURDATE() AND cancelled = FALSE
         AND session IN (?, 'both')`,
     [ids, session]
   );
-  const onLeave = new Set(leaves.map(l => l.student_id));
+  const selfTravelIds = new Set(leaves.filter(l => l.attendance_kind === 'SELF').map(l => l.student_id));
+  const onLeave = new Set(leaves.filter(l => l.attendance_kind !== 'SELF').map(l => l.student_id));
   const termId = await getCurrentTerm(pool);
 
   const results = [];
@@ -1538,11 +1559,20 @@ async function processTeacherCheck(pool, {
     const enabled = session === 'morning' ? st.morning_enabled : st.evening_enabled;
     if (!enabled) { results.push({ student_id: id, result: 'not_rider' }); continue; }
     if (!st.vehicle_id) { results.push({ student_id: id, result: 'no_vehicle' }); continue; }
+    if (selfTravelIds.has(id)) { results.push({ student_id: id, result: 'self_travel' }); continue; }
     if (onLeave.has(id)) { results.push({ student_id: id, result: 'on_leave' }); continue; }
 
     const conn = await pool.getConnection();
     await beginCheckinTransaction(conn);
     try {
+      const scopeParams = [id, schoolId, st.vehicle_id];
+      const lockedGrade = gradeFilter ? ' AND grade IN (?)' : '';
+      if (gradeFilter) scopeParams.push(gradeEquivalents(gradeFilter));
+      const [[current]] = await conn.query(
+        `SELECT id,morning_enabled,evening_enabled FROM students WHERE id=? AND school_id=?
+          AND vehicle_id=? AND is_deleted=FALSE${lockedGrade} FOR UPDATE`, scopeParams);
+      if (!current) throw makeError('ไม่พบนักเรียนในขอบเขตปัจจุบัน', 404, 'SCOPE_CHANGED');
+      if (!(session === 'morning' ? current.morning_enabled : current.evening_enabled)) throw makeError('ไม่ได้ใช้รถในรอบนี้', 409, 'NOT_RIDER');
       const r = await _buildCheckinTransaction(conn, {
         userId, vehicleId: st.vehicle_id, plateNo: st.plate_no || null,
         studentId: st.id, session, status, termId, source: 'web', refuseLeave: true,
@@ -1562,7 +1592,10 @@ async function processTeacherCheck(pool, {
       await conn.rollback();
       // 409 = already recorded (by the driver or another teacher) or the
       // session is already finished — first record wins, so it is a skip.
-      if (err.errors?.some(item => item.code === 'ON_LEAVE')) results.push({ student_id: id, result: 'on_leave' });
+      if (err.errors?.some(item => item.code === 'SCOPE_CHANGED')) results.push({ student_id: id, result: 'not_found' });
+      else if (err.errors?.some(item => item.code === 'NOT_RIDER')) results.push({ student_id: id, result: 'not_rider' });
+      else if (err.errors?.some(item => item.code === 'SELF_TRAVEL')) results.push({ student_id: id, result: 'self_travel' });
+      else if (err.errors?.some(item => item.code === 'ON_LEAVE')) results.push({ student_id: id, result: 'on_leave' });
       else if (err.statusCode === 409) results.push({ student_id: id, result: 'already' });
       else throw err;
     } finally {

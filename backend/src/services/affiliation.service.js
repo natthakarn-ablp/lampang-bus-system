@@ -177,7 +177,7 @@ async function getDashboard(affiliationId) {
     });
   }
 
-  return {
+  const dashboard = {
     affiliation: affiliation || null,
     date: today,
     total_schools,
@@ -215,6 +215,20 @@ async function getDashboard(affiliationId) {
     leave_today,
     at_risk_schools,
   };
+  const ledger = await require('./report.service').reportLedger({ role: 'affiliation', scopeId: affiliationId }, { date: today });
+  const accounting = require('./attendanceStatistics.service');
+  const result = accounting.decorateDaily(dashboard, ledger);
+  if (result.schools_not_complete) result.schools_not_complete = result.schools_not_complete
+    .map(row => accounting.decorateRow(row, ledger.filter(item => String(item.school_id) === String(row.school_id))))
+    .filter(row => row.morning_pending > 0 || row.evening_pending > 0);
+  for (const session of ['morning', 'evening']) {
+    if (`${session}_kpi` in result) result[`${session}_kpi`] = !result[`${session}_total`] || result[`${session}_conflict`] ? null
+      : Math.round(Number(result[`${session}_done`] || 0) / result[`${session}_total`] * 10000) / 100;
+  }
+  const people = new Set(ledger.filter(row => row.attendance_kind === 'LEAVE').map(row => row.student_id));
+  result.leave_count = people.size; result.leave_today = people.size;
+  return result;
+
 }
 
 /**
@@ -418,6 +432,10 @@ async function getStatusToday(affiliationId) {
             s.school_id, sc.name AS school_name,
             s.vehicle_id, v.plate_no,
             s.morning_enabled, s.evening_enabled,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE AND sx.attendance_kind = 'SELF' AND sx.session IN ('morning', 'both')) AS morning_self,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE AND sx.attendance_kind = 'LEAVE' AND sx.session IN ('morning', 'both')) AS morning_leave,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE AND sx.attendance_kind = 'SELF' AND sx.session IN ('evening', 'both')) AS evening_self,
+            EXISTS(SELECT 1 FROM student_leaves sx WHERE sx.student_id = s.id AND sx.leave_date = CURDATE() AND sx.cancelled = FALSE AND sx.attendance_kind = 'LEAVE' AND sx.session IN ('evening', 'both')) AS evening_leave,
             ds.morning_done, ds.morning_ts,
             ds.evening_done, ds.evening_ts
      FROM students s
@@ -455,6 +473,8 @@ async function getStatusToday(affiliationId) {
       classroom: row.classroom,
       morning_enabled: row.morning_enabled,
       evening_enabled: row.evening_enabled,
+      morning_self: !!row.morning_self, evening_self: !!row.evening_self,
+      morning_leave: !!row.morning_leave, evening_leave: !!row.evening_leave,
       morning_done: !!row.morning_done,
       morning_ts: row.morning_ts,
       evening_done: !!row.evening_done,

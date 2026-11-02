@@ -458,10 +458,19 @@ async function getChildStatusToday(studentId) {
      WHERE ds.student_id = ? AND ds.check_date = ?`,
     [studentId, today]
   );
+  const [exceptions] = await pool.query(
+    `SELECT session, attendance_kind FROM student_leaves WHERE student_id = ?
+      AND leave_date = ? AND cancelled = FALSE`, [studentId, today]);
+  const exceptionState = {};
+  for (const session of ['morning', 'evening']) {
+    const rows = exceptions.filter(row => [session, 'both'].includes(row.session));
+    if (rows.length) exceptionState[`${session}_exception`] = rows.some(row => row.attendance_kind === 'SELF') ? 'SELF' : 'LEAVE';
+  }
   // Phase 11A audit fix H6: include a status indicator so the caller / Flex
   // template can distinguish "no checkin today" from "checked in but not out".
   if (!status) {
     return {
+      ...exceptionState,
       morning_done: false, morning_ts: null,
       evening_done: false, evening_ts: null,
       has_checkin_today: false,
@@ -469,6 +478,7 @@ async function getChildStatusToday(studentId) {
   }
   return {
     ...status,
+    ...exceptionState,
     morning_label: status.morning_done ? sessionDoneLabel('morning', status.morning_last) : null,
     evening_label: status.evening_done ? sessionDoneLabel('evening', status.evening_last) : null,
     has_checkin_today: true,
@@ -923,11 +933,11 @@ function buildChildSection(child, status, idx, total) {
   const metaLine  = [gradeRoom, child.school_name].filter(Boolean).join(' · ');
 
   const mState = status.morning_done ? 'done' : 'pending';
-  const mLabel = status.morning_done
+  const mLabel = status.morning_exception ? (status.morning_exception === 'SELF' ? 'มาเอง' : 'ลา') : status.morning_done
     ? `${sessionDoneLabel('morning', status.morning_last)} ${formatTimeTH(status.morning_ts)}`.trim()
     : 'ยังไม่ขึ้นรถ';
   const eState = status.evening_done ? 'done' : 'pending';
-  const eLabel = status.evening_done
+  const eLabel = status.evening_exception ? (status.evening_exception === 'SELF' ? 'กลับเอง' : 'ลา') : status.evening_done
     ? `${sessionDoneLabel('evening', status.evening_last)} ${formatTimeTH(status.evening_ts)}`.trim()
     : 'ยังไม่ส่งถึงจุดรับ';
 
@@ -1161,10 +1171,10 @@ function buildParentStatusText(childrenWithStatus) {
   let msg = '📋 สถานะรับ-ส่งวันนี้\n';
   const total = childrenWithStatus.length;
   childrenWithStatus.forEach(({ child, status }, idx) => {
-    const mLabel = status.morning_done
+    const mLabel = status.morning_exception ? (status.morning_exception === 'SELF' ? 'มาเอง' : 'ลา') : status.morning_done
       ? `✅ ${sessionDoneLabel('morning', status.morning_last)} ${formatTimeTH(status.morning_ts)}`.trim()
       : '⏳ ยังไม่ขึ้นรถ';
-    const eLabel = status.evening_done
+    const eLabel = status.evening_exception ? (status.evening_exception === 'SELF' ? 'กลับเอง' : 'ลา') : status.evening_done
       ? `✅ ${sessionDoneLabel('evening', status.evening_last)} ${formatTimeTH(status.evening_ts)}`.trim()
       : '⏳ ยังไม่ส่งถึงจุดรับ';
     const gradeRoom = formatGradeClass(child.grade, child.classroom, '');

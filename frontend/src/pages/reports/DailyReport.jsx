@@ -1,3 +1,4 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileBarChart, Bus, GraduationCap, Sunrise, Sunset} from 'lucide-react';
 import api from '../../api/axios';
@@ -35,11 +36,12 @@ export default function DailyReport() {
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
   const thaiDate = date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) : '';
-  const mPct = data?.morning_total > 0 ? Math.round((data.morning_done / data.morning_total) * 100) : 0;
-  const ePct = data?.evening_total > 0 ? Math.round((data.evening_done / data.evening_total) * 100) : 0;
+  const mPct = data?.morning_conflict ? null : data?.morning_total > 0 ? Math.round((data.morning_done / data.morning_total) * 100) : 0;
+  const ePct = data?.evening_conflict ? null : data?.evening_total > 0 ? Math.round((data.evening_done / data.evening_total) * 100) : 0;
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
+      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={false} />
       {/* ── HEADER ── */}
       <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -73,10 +75,10 @@ export default function DailyReport() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
             <KpiBox icon={Bus} label="รถรับส่ง" value={data.total_vehicles} sub="คัน" tone="brand" />
             <KpiBox icon={GraduationCap} label="นักเรียน" value={data.total_students} sub="คน" tone="brand" />
-            <KpiBox icon={Sunrise} label="ส่งเช้าสำเร็จ" value={`${mPct}%`}
+            <KpiBox icon={Sunrise} label="ส่งเช้าสำเร็จ" value={mPct == null || !data.morning_total ? '—' : `${mPct}%`}
               sub={`${data.morning_done}/${data.morning_total} คน`}
               tone={mPct === 100 ? 'success' : mPct >= 80 ? 'warn' : 'danger'} />
-            <KpiBox icon={Sunset} label="รับเย็นสำเร็จ" value={`${ePct}%`}
+            <KpiBox icon={Sunset} label="รับเย็นสำเร็จ" value={ePct == null || !data.evening_total ? '—' : `${ePct}%`}
               sub={`${data.evening_done}/${data.evening_total} คน`}
               tone={ePct === 100 ? 'success' : ePct >= 80 ? 'warn' : 'danger'} />
           </div>
@@ -260,6 +262,8 @@ function CompletionTable({ caption, rows, rowKey, labelHeader, label }) {
         { key: 'evening', header: 'รับเย็น', numeric: true, cell: r => done(r.evening_done, eExp(r)) },
         { key: 'status', header: 'สถานะ', align: 'center', badge: true,
           cell: r => {
+            if (r.morning_conflict || r.evening_conflict) return <StatusBadge variant="danger">ข้อมูลขัดกัน</StatusBadge>;
+            if (!mExp(r) && !eExp(r)) return <StatusBadge variant="neutral">ไม่ใช้รถ</StatusBadge>;
             const ok = r.morning_done >= mExp(r) && r.evening_done >= eExp(r);
             return <StatusBadge variant={ok ? 'success' : 'warn'}>{ok ? 'ครบ' : 'ค้าง'}</StatusBadge>;
           } },

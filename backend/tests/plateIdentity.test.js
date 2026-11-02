@@ -10,6 +10,15 @@
 const PI = require('../src/utils/plateIdentity');
 
 describe('plate normalization is deterministic', () => {
+  test('numeric category keeps leading zero and detects the same vehicle across spacing variants', () => {
+    const plate = '36 0105 ลำปาง';
+    expect(PI.parseLegacyPlateText(plate)).toEqual({ plate_prefix: '36', plate_number: '0105', province: 'ลำปาง' });
+    expect(PI.canonicalPlateForStorage(plate)).toBe('360105ลำปาง');
+    expect(PI.comparePlateIdentity(plate, '360105ลำปาง')).toBe(true);
+    expect(PI.classifyVehiclePlateConflict(plate, []).code).toBe('VALID_NEW_VEHICLE');
+    expect(PI.classifyVehiclePlateConflict(plate, [{ id: 'V-1', plate_no: '360105ลำปาง', is_deleted: 0 }]).code)
+      .toBe('SAME_ACTIVE_VEHICLE_SAME_SCHOOL');
+  });
   test('spacing/dash variants → same canonical when province matches', () => {
     const a = PI.buildCanonicalPlate({ plate_prefix: 'นข', plate_number: '4031', province: 'ลำปาง' });
     expect(PI.comparePlateIdentity('นข4031ลำปาง', 'นข 4031 ลำปาง')).toBe(true);

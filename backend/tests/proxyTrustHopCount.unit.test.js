@@ -7,7 +7,7 @@ const productionApp = require('../src/app');
 function createProxyIpProbe() {
   const app = express();
   // Keep this fixture tied to the production setting instead of duplicating
-  // the hop count, so a change in app.js makes these expectations meaningful.
+  // the trusted peer setting, so a change in app.js makes these expectations meaningful.
   app.set('trust proxy', productionApp.get('trust proxy'));
   app.get('/ip', (req, res) => {
     res.json({ ip: req.ip, peer: req.socket.remoteAddress });
@@ -15,17 +15,26 @@ function createProxyIpProbe() {
   return app;
 }
 
-describe('Express trust proxy hop-count behavior', () => {
+describe('Express loopback proxy trust behavior', () => {
   const app = createProxyIpProbe();
 
   test('uses the production app trust-proxy setting and identifies the direct peer without forwarding headers', async () => {
-    expect(productionApp.get('trust proxy')).toBe(1);
+    expect(productionApp.get('trust proxy')).toBe('loopback');
 
     const response = await request(app).get('/ip').expect(200);
     expect(response.body.ip).toBe(response.body.peer);
   });
 
-  test('a single X-Forwarded-For value is trusted when the socket peer occupies the one trusted hop', async () => {
+  test('trusts loopback peers but not a directly connected public peer', () => {
+    const trust = productionApp.get('trust proxy fn');
+    expect(trust('127.0.0.1', 0)).toBe(true);
+    expect(trust('::1', 0)).toBe(true);
+    expect(trust('::ffff:127.0.0.1', 0)).toBe(true);
+    expect(trust('203.0.113.24', 0)).toBe(false);
+    expect(trust('2001:db8::24', 0)).toBe(false);
+  });
+
+  test('accepts one nginx-overwritten XFF value from the loopback peer', async () => {
     const response = await request(app)
       .get('/ip')
       .set('X-Forwarded-For', '198.51.100.77')
@@ -36,7 +45,7 @@ describe('Express trust proxy hop-count behavior', () => {
     expect(response.body.ip).toBe('198.51.100.77');
   });
 
-  test('with two forwarded addresses, one trusted hop selects the rightmost XFF value', async () => {
+  test('with an unsanitized two-address chain, the first untrusted address is the edge', async () => {
     const response = await request(app)
       .get('/ip')
       .set('X-Forwarded-For', '198.51.100.77, 203.0.113.24')
@@ -59,7 +68,7 @@ describe('Express trust proxy hop-count behavior', () => {
     expect(response.body.ip).toBe(response.body.peer);
   });
 
-  test('parses the rightmost IPv6 XFF address under the one-hop setting', async () => {
+  test('selects the edge address from an unsanitized IPv6 chain', async () => {
     const response = await request(app)
       .get('/ip')
       .set('X-Forwarded-For', '2001:db8::77, 2001:db8::24')

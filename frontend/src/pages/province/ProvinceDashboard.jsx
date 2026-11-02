@@ -1,3 +1,4 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, RotateCw, Truck, Building2, Wifi } from 'lucide-react';
@@ -179,6 +180,7 @@ export default function ProvinceDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
+      <AttendanceBreakdown data={error ? {} : data} />
       <div className="flex flex-col gap-2">
         <RoleChip role="province" />
         <PageHeader

@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const attendance = require('./attendanceStatistics.service');
 const { todayBangkok } = require('../utils/thaiTime');
 const { gradeEquivalents } = require('../utils/gradeScope');
 
@@ -75,6 +76,16 @@ function buildScopeFilter(user, { date, month, school_id, affiliation_id, vehicl
 /**
  * Daily report for a specific date.
  */
+
+async function reportLedger(user, filters, monthly = false) {
+  const scope = buildScopeFilter(user, filters);
+  const start = monthly ? `${filters.month || todayBangkok().slice(0, 7)}-01` : filters.date || todayBangkok();
+  const endDate = new Date(`${start}T00:00:00Z`);
+  if (monthly) endDate.setUTCMonth(endDate.getUTCMonth() + 1);
+  else endDate.setUTCDate(endDate.getUTCDate() + 1);
+  return attendance.readLedger(pool, { ...scope, start, end: [endDate.getUTCFullYear(), String(endDate.getUTCMonth() + 1).padStart(2, '0'), String(endDate.getUTCDate()).padStart(2, '0')].join('-') });
+}
+
 async function getDailyReport(user, filters) {
   const date = filters.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   const { where, params } = buildScopeFilter(user, filters);
@@ -165,7 +176,7 @@ async function getDailyReport(user, filters) {
     [date, ...params]
   );
 
-  return {
+  const report = {
     date,
     total_students,
     total_vehicles,
@@ -179,6 +190,7 @@ async function getDailyReport(user, filters) {
     vehicles,
     schools: schoolBreakdown,
   };
+  return attendance.decorateDaily(report, await reportLedger(user, filters, false));
 }
 
 /**
@@ -366,7 +378,7 @@ async function getMonthlyReport(user, filters) {
     };
   });
 
-  return {
+  const report = {
     month,
     total_students,
     morning_expected,
@@ -385,6 +397,7 @@ async function getMonthlyReport(user, filters) {
     schools: enrichedSchools,
     vehicles: enrichedVehicles,
   };
+  return attendance.decorateMonthly(report, await reportLedger(user, filters, true));
 }
 
 /**
@@ -396,8 +409,8 @@ async function getSummaryReport(user, filters) {
   const { where, params } = buildScopeFilter(user, filters);
 
   // Add KPI percentages
-  daily.morning_kpi = pct(daily.morning_done, daily.morning_total);
-  daily.evening_kpi = pct(daily.evening_done, daily.evening_total);
+  daily.morning_kpi = !daily.morning_total || daily.morning_conflict ? null : pct(daily.morning_done, daily.morning_total);
+  daily.evening_kpi = !daily.evening_total || daily.evening_conflict ? null : pct(daily.evening_done, daily.evening_total);
 
   // Per-school / per-vehicle KPI — same denominator as the headline: the pupils
   // who use that session, not every pupil.
@@ -428,7 +441,7 @@ async function getSummaryReport(user, filters) {
   // and for a single school the row never told anyone anything.
   if (user.role === 'school') {
     daily.affiliations = [];
-    return daily;
+    return attendance.decorateDaily(daily, await reportLedger(user, filters));
   }
 
   const [affRows] = await pool.query(
@@ -454,7 +467,8 @@ async function getSummaryReport(user, filters) {
     evening_kpi: pct(a.evening_done, a.evening_expected),
   }));
 
-  return daily;
+  const ledger = await reportLedger(user, filters);
+  return attendance.decorateDaily(daily, ledger);
 }
 
 /**
@@ -481,9 +495,27 @@ function exportRowsQuery(user, filters) {
             IFNULL(v.plate_no, '') AS plate_no,
             CASE WHEN s.morning_enabled THEN 'ใช่' ELSE 'ไม่' END AS morning_service,
             CASE WHEN s.evening_enabled THEN 'ใช่' ELSE 'ไม่' END AS evening_service,
-            CASE WHEN ds.morning_done THEN 'เสร็จ' ELSE 'รอ' END AS morning_status,
+            CASE WHEN ds.morning_done AND EXISTS(SELECT 1 FROM student_leaves sx
+                   WHERE sx.student_id = s.id AND sx.leave_date = ? AND sx.cancelled = FALSE
+                     AND sx.session IN ('morning', 'both')) THEN 'ข้อมูลขัดกัน'
+            ELSE COALESCE(
+              (SELECT CASE WHEN COUNT(DISTINCT sl.attendance_kind) > 1 THEN 'ข้อมูลขัดกัน'
+                           WHEN MAX(sl.attendance_kind = 'SELF') THEN 'มาเอง' ELSE 'ลา' END
+                 FROM student_leaves sl WHERE sl.student_id = s.id AND sl.leave_date = ?
+                  AND sl.cancelled = FALSE AND sl.session IN ('morning', 'both')
+                HAVING COUNT(*) > 0),
+              CASE WHEN ds.morning_done THEN 'เสร็จ' WHEN NOT s.morning_enabled THEN 'ไม่ใช้บริการ' ELSE 'รอ' END) END AS morning_status,
             IFNULL(ds.morning_ts, '') AS morning_time,
-            CASE WHEN ds.evening_done THEN 'เสร็จ' ELSE 'รอ' END AS evening_status,
+            CASE WHEN ds.evening_done AND EXISTS(SELECT 1 FROM student_leaves sx
+                   WHERE sx.student_id = s.id AND sx.leave_date = ? AND sx.cancelled = FALSE
+                     AND sx.session IN ('evening', 'both')) THEN 'ข้อมูลขัดกัน'
+            ELSE COALESCE(
+              (SELECT CASE WHEN COUNT(DISTINCT sl.attendance_kind) > 1 THEN 'ข้อมูลขัดกัน'
+                           WHEN MAX(sl.attendance_kind = 'SELF') THEN 'กลับเอง' ELSE 'ลา' END
+                 FROM student_leaves sl WHERE sl.student_id = s.id AND sl.leave_date = ?
+                  AND sl.cancelled = FALSE AND sl.session IN ('evening', 'both')
+                HAVING COUNT(*) > 0),
+              CASE WHEN ds.evening_done THEN 'เสร็จ' WHEN NOT s.evening_enabled THEN 'ไม่ใช้บริการ' ELSE 'รอ' END) END AS evening_status,
             IFNULL(ds.evening_ts, '') AS evening_time
      FROM students s
      JOIN schools sc ON sc.id = s.school_id
@@ -493,7 +525,7 @@ function exportRowsQuery(user, filters) {
      WHERE ${where}
      ORDER BY sc.name, v.plate_no, s.first_name`;
 
-  return { date, sql, params: [date, ...params] };
+  return { date, sql, params: [date, date, date, date, date, ...params] };
 }
 
 async function getExportRows(user, filters) {
@@ -578,15 +610,17 @@ async function getPolicyReport(user, filters) {
   );
 
   const pct = (n, d) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
+  const sessionReport = await getDailyReport(user, filters);
   return {
+    ...sessionReport,
     date,
     province_totals: totals,
     today: {
       tracked: today.tracked,
       morning_done: Number(today.morning_done),
       evening_done: Number(today.evening_done),
-      morning_pct: pct(Number(today.morning_done), today.tracked),
-      evening_pct: pct(Number(today.evening_done), today.tracked),
+      morning_pct: pct(sessionReport.morning_done, sessionReport.morning_total),
+      evening_pct: pct(sessionReport.evening_done, sessionReport.evening_total),
     },
     emergencies_30d,
     affiliations,
@@ -595,6 +629,7 @@ async function getPolicyReport(user, filters) {
 
 module.exports = {
   getDailyReport,
+  reportLedger,
   getMonthlyReport,
   getSummaryReport,
   exportRowsQuery,

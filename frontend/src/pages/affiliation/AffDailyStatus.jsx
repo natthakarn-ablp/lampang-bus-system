@@ -1,3 +1,5 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
+import { isBusRider, visibleAttendance } from '../../utils/attendance';
 import { Building2, Bus, ChevronDown, RefreshCw } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import api from '../../api/axios';
@@ -79,6 +81,7 @@ export default function AffDailyStatus() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
+      {data && <AttendanceBreakdown data={loading ? null : error ? {} : visibleAttendance(data)} />}
       <PageHeader
         title="สถานะวันนี้"
         subtitle="ความคืบหน้าการรับ-ส่งนักเรียนรายคันในสังกัด"
@@ -117,10 +120,10 @@ export default function AffDailyStatus() {
         <div className="space-y-3">
           {data.schools.map((school) => {
             const allStudents = school.vehicles.flatMap((v) => v.students);
-            const morningDone = allStudents.filter((s) => s.morning_enabled && s.morning_done).length;
-            const morningTotal = allStudents.filter((s) => s.morning_enabled).length;
-            const eveningDone = allStudents.filter((s) => s.evening_enabled && s.evening_done).length;
-            const eveningTotal = allStudents.filter((s) => s.evening_enabled).length;
+            const morningDone = allStudents.filter((s) => isBusRider(s, 'morning') && s.morning_done).length;
+            const morningTotal = allStudents.filter((s) => isBusRider(s, 'morning')).length;
+            const eveningDone = allStudents.filter((s) => isBusRider(s, 'evening') && s.evening_done).length;
+            const eveningTotal = allStudents.filter((s) => isBusRider(s, 'evening')).length;
             const isSchoolExpanded = expandedSchool === school.school_id;
 
             return (
@@ -155,10 +158,10 @@ export default function AffDailyStatus() {
                 {isSchoolExpanded && (
                   <div className="border-t border-gray-100">
                     {school.vehicles.filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase())).map((vehicle) => {
-                      const vMorningDone = vehicle.students.filter((s) => s.morning_enabled && s.morning_done).length;
-                      const vMorningTotal = vehicle.students.filter((s) => s.morning_enabled).length;
-                      const vEveningDone = vehicle.students.filter((s) => s.evening_enabled && s.evening_done).length;
-                      const vEveningTotal = vehicle.students.filter((s) => s.evening_enabled).length;
+                      const vMorningDone = vehicle.students.filter((s) => isBusRider(s, 'morning') && s.morning_done).length;
+                      const vMorningTotal = vehicle.students.filter((s) => isBusRider(s, 'morning')).length;
+                      const vEveningDone = vehicle.students.filter((s) => isBusRider(s, 'evening') && s.evening_done).length;
+                      const vEveningTotal = vehicle.students.filter((s) => isBusRider(s, 'evening')).length;
                       const vKey = `${school.school_id}-${vehicle.vehicle_id}`;
                       const isVehicleExpanded = expandedVehicle === vKey;
 

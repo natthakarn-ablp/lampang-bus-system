@@ -1,3 +1,4 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useRef } from 'react';
 import { FileBarChart } from 'lucide-react';
 import api from '../../api/axios';
@@ -75,6 +76,7 @@ export default function SummaryReport() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
+      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={false} />
 
       {/* ── SECTION 1 — Header ─────────────────────────────── */}
       <div className="flex flex-col gap-3 mb-6">

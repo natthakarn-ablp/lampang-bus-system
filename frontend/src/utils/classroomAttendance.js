@@ -39,10 +39,11 @@ export function groupTeacherClassrooms(vehicles = []) {
   });
 }
 
-export function classroomPlan(room, selectedLeaveIds) {
-  const pending = room.students.filter(st => !st.done && !st.on_leave && !st.no_vehicle);
+export function classroomPlan(room, selectedLeaveIds, selectedSelfIds = new Set()) {
+  const pending = room.students.filter(st => !st.done && !st.on_leave && !st.self_travel && !st.no_vehicle);
   return {
-    presentIds: pending.filter(st => !selectedLeaveIds.has(st.id)).map(st => st.id),
+    presentIds: pending.filter(st => !selectedLeaveIds.has(st.id) && !selectedSelfIds.has(st.id)).map(st => st.id),
     leaveIds: pending.filter(st => selectedLeaveIds.has(st.id)).map(st => st.id),
+    selfIds: pending.filter(st => selectedSelfIds.has(st.id) && !selectedLeaveIds.has(st.id)).map(st => st.id),
   };
 }

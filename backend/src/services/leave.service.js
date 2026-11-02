@@ -11,19 +11,25 @@ const { gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
 async function createLeave({ studentId, vehicleId, leaveDate, session, reason, userId, userRole, schoolId = null, gradeScope = null }) {
   const conn = await pool.getConnection();
   try {
+    await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await conn.beginTransaction();
 
     // Verify student belongs to vehicle
     const [[student]] = await conn.query(
       `SELECT id, school_id, grade, morning_enabled, evening_enabled FROM students
-        WHERE id = ? AND vehicle_id = ? AND is_deleted = FALSE FOR UPDATE`,
-      [studentId, vehicleId]
+        WHERE id = ? AND vehicle_id = ? AND is_deleted = FALSE${schoolId ? ' AND school_id = ?' : ''} FOR UPDATE`,
+      schoolId ? [studentId, vehicleId, schoolId] : [studentId, vehicleId]
     );
     if (!student) {
       const err = new Error('นักเรียนไม่อยู่ในรถคันนี้');
       err.statusCode = 404;
       throw err;
     }
+    const [[selfTravel]] = await conn.query(
+      `SELECT id FROM student_leaves WHERE student_id = ? AND leave_date = ? AND cancelled = FALSE
+        AND attendance_kind = 'SELF' AND (? = 'both' OR session IN (?, 'both')) LIMIT 1`,
+      [studentId, leaveDate, session, session]);
+    if (selfTravel) { const err = new Error('บันทึกการเดินทางเองแล้ว กรุณายกเลิกรายการเดิมก่อน'); err.statusCode = 409; throw err; }
     if (gradeScope) {
       if (String(student.school_id) !== String(schoolId) || normalizeGrade(student.grade) !== gradeScope) {
         const err = new Error('ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ'); err.statusCode = 404; throw err;
@@ -54,9 +60,9 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
     let result;
     try {
       [result] = await conn.query(
-        `INSERT INTO student_leaves (student_id, vehicle_id, leave_date, session, reason, reported_by, reported_role)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [studentId, vehicleId, leaveDate, session, reason || null, userId, userRole]
+        `INSERT INTO student_leaves (student_id, vehicle_id, leave_date, session, reason, reported_by, reported_role, morning_enabled_snapshot, evening_enabled_snapshot)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [studentId, vehicleId, leaveDate, session, reason || null, userId, userRole, student.morning_enabled ?? null, student.evening_enabled ?? null]
       );
     } catch (dbErr) {
       if (dbErr.code === 'ER_DUP_ENTRY') {
@@ -99,7 +105,7 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
 async function cancelLeave(leaveId, userId, vehicleId) {
   const [result] = await pool.query(
     `UPDATE student_leaves SET cancelled = TRUE, cancelled_by = ?, cancelled_at = NOW()
-     WHERE id = ? AND vehicle_id = ? AND cancelled = FALSE`,
+     WHERE id = ? AND vehicle_id = ? AND cancelled = FALSE AND attendance_kind = 'LEAVE'`,
     [userId, leaveId, vehicleId]
   );
   if (result.affectedRows === 0) {
@@ -125,7 +131,7 @@ async function cancelLeaveBySchool(leaveId, userId, schoolId) {
   const [[row]] = await pool.query(
     `SELECT sl.id FROM student_leaves sl
        JOIN students s ON s.id = sl.student_id
-      WHERE sl.id = ? AND s.school_id = ? AND sl.cancelled = FALSE`,
+      WHERE sl.id = ? AND s.school_id = ? AND sl.cancelled = FALSE AND sl.attendance_kind = 'LEAVE'`,
     [leaveId, schoolId]
   );
   if (!row) {
@@ -163,7 +169,7 @@ async function getLeavesForVehicle(vehicleId, date) {
             s.grade, s.classroom
      FROM student_leaves sl
      JOIN students s ON s.id = sl.student_id
-     WHERE sl.vehicle_id = ? AND sl.leave_date = ? AND sl.cancelled = FALSE
+     WHERE sl.vehicle_id = ? AND sl.leave_date = ? AND sl.cancelled = FALSE AND sl.attendance_kind = 'LEAVE'
      ORDER BY sl.created_at DESC`,
     [vehicleId, date]
   );
@@ -188,7 +194,7 @@ async function getLeavesForSchool(schoolId, date, { gradeFilter = null } = {}) {
      FROM student_leaves sl
      JOIN students s ON s.id = sl.student_id
      JOIN vehicles v ON v.id = sl.vehicle_id
-     WHERE s.school_id = ?${gradeAnd} AND sl.leave_date = ? AND sl.cancelled = FALSE
+     WHERE s.school_id = ?${gradeAnd} AND sl.leave_date = ? AND sl.cancelled = FALSE AND sl.attendance_kind = 'LEAVE'
      ORDER BY v.plate_no, sl.created_at DESC`,
     params
   );

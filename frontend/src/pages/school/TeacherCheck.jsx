@@ -117,7 +117,7 @@ function VehicleTeacherCheck() {
     let expected = 0; let done = 0;
     for (const v of vehicles) {
       for (const st of v.students) {
-        if (st.on_leave || st.no_vehicle) continue;
+        if (st.on_leave || st.self_travel || st.no_vehicle) continue;
         expected += 1;
         if (st.done) done += 1;
       }
@@ -128,7 +128,7 @@ function VehicleTeacherCheck() {
   const visibleVehicles = vehicles.map(v => ({
     ...v,
     visibleStudents: v.students.filter(st => {
-      if (showPending && (st.done || st.on_leave || st.no_vehicle)) return false;
+      if (showPending && (st.done || st.on_leave || st.self_travel || st.no_vehicle)) return false;
       const text = [st.name, st.grade, st.classroom, formatGradeClass(st.grade, st.classroom), v.plate_no]
         .filter(value => value !== null && value !== undefined).join(' ').toLocaleLowerCase('th-TH');
       return !query || query.split(/\s+/).every(word => text.includes(word));
@@ -157,7 +157,7 @@ function VehicleTeacherCheck() {
   }
 
   async function tapStudent(st) {
-    if (writeInFlight.current || confirmationRef.current || loading || !data || sessionRef.current !== session || st.done || st.on_leave || st.no_vehicle) return;
+    if (writeInFlight.current || confirmationRef.current || loading || !data || sessionRef.current !== session || st.done || st.on_leave || st.self_travel || st.no_vehicle) return;
     writeInFlight.current = true;
     setBusy(b => ({ ...b, [st.id]: true }));
     try {
@@ -172,11 +172,11 @@ function VehicleTeacherCheck() {
   }
 
   async function undo(st) {
-    if (!st.can_undo || !st.log_id || writeInFlight.current || confirmationRef.current || loading || !data || sessionRef.current !== session) return;
+    if (!st.can_undo || !(st.self_id || st.log_id) || writeInFlight.current || confirmationRef.current || loading || !data || sessionRef.current !== session) return;
     writeInFlight.current = true;
     setBusy(b => ({ ...b, [st.id]: true }));
     try {
-      await api.post(`/school/teacher-check/${st.log_id}/undo`, {});
+      await api.post(st.self_travel ? `/school/self-travel/${st.self_id}/undo` : `/school/teacher-check/${st.log_id}/undo`, {});
       toast.success(`ยกเลิกรายการของ ${st.name} แล้ว`);
       await load();
     } catch (err) {
@@ -191,7 +191,7 @@ function VehicleTeacherCheck() {
     if (writeInFlight.current || confirmationRef.current || loading || !data || query || sessionRef.current !== session) return;
     // Search hides the bulk action. In either list view, every remaining pupil
     // is visible, and this snapshot fixes both the exact IDs and the round.
-    const ids = v.students.filter(st => !st.done && !st.on_leave && !st.no_vehicle).map(st => st.id);
+    const ids = v.students.filter(st => !st.done && !st.on_leave && !st.self_travel && !st.no_vehicle).map(st => st.id);
     if (!ids.length) return;
     const confirmation = { plate_no: v.plate_no, ids, session };
     confirmationRef.current = confirmation;
@@ -225,6 +225,7 @@ function VehicleTeacherCheck() {
 
   function stateBadge(st) {
     if (busy[st.id]) return <span className="text-sm text-ink-muted">กำลังบันทึก…</span>;
+    if (st.self_travel) return <StatusBadge variant="neutral">{session === 'morning' ? 'มาเอง' : 'กลับเอง'}</StatusBadge>;
     if (st.on_leave) return <StatusBadge variant="neutral">ลา</StatusBadge>;
     if (st.no_vehicle) return <StatusBadge variant="neutral">ไม่มีรถ</StatusBadge>;
     if (st.done) {
@@ -340,8 +341,8 @@ function VehicleTeacherCheck() {
         )}
 
         {visibleVehicles.map(v => {
-          const pending = v.students.filter(st => !st.done && !st.on_leave && !st.no_vehicle);
-          const counted = v.students.filter(st => !st.on_leave && !st.no_vehicle);
+          const pending = v.students.filter(st => !st.done && !st.on_leave && !st.self_travel && !st.no_vehicle);
+          const counted = v.students.filter(st => !st.on_leave && !st.self_travel && !st.no_vehicle);
           return (
             <AppCard key={v.vehicle_id || 'none'} padding="none" className="overflow-hidden">
               <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-surface-border bg-surface">
@@ -363,7 +364,7 @@ function VehicleTeacherCheck() {
               </div>
               <ul className="divide-y divide-surface-border">
                 {v.visibleStudents.map(st => {
-                  const disabled = st.done || st.on_leave || st.no_vehicle;
+                  const disabled = st.done || st.on_leave || st.self_travel || st.no_vehicle;
                   return (
                     <li key={st.id} className="flex items-center gap-3 px-4 py-2">
                       <button

@@ -7,6 +7,7 @@ const env = require('./config/env');
 const { testConnection, pool } = require('./config/database');
 const app = require('./app');
 const { getPolicyEvidenceStatus } = require('./utils/policyEvidenceTables');
+const { assertAttendanceSchema } = require('./services/attendanceMigration.service');
 
 // Audit 2026-06-18 (config-infra-dos): bind to loopback by default so only the
 // local nginx reverse proxy can reach the backend. Binding to 0.0.0.0 let a
@@ -276,6 +277,7 @@ async function assertParticipationCasesMigrationPresent() {
 async function start() {
   await testConnection();
   await assertSharedSecurityStateMigrationPresent();
+  await assertAttendanceSchema(pool);
   await checkPolicyEvidenceTables();
   await assertDriverShiftMigrationPresent();
   await assertTrackingMigrationPresent();

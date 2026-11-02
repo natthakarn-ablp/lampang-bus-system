@@ -196,6 +196,15 @@ const EVAL_SUMMARY = {
 };
 
 const SCENARIOS = {
+  'attendance-monthly': {
+    '/api/reports/monthly': { data: { month: '2026-11', total_students: 3, days_with_data: 5,
+      morning_expected: 3, evening_expected: 3, total_morning_done: 7, total_evening_done: 10,
+      total_morning_expected: 7, total_evening_expected: 12, morning_kpi: 100, evening_kpi: 83.33,
+      days_morning_100: 2, days_evening_100: 1, emergency_count: 0,
+      morning_self: 5, morning_self_people: 1, morning_leave: 3, morning_leave_people: 2,
+      evening_self: 2, evening_self_people: 1, evening_leave: 1, evening_leave_people: 1,
+      morning_conflict: 0, evening_conflict: 0, schools: [], vehicles: [], daily_trend: [] } },
+  },
   'teacher-profile-edit': {
     '/api/school/students': { data: [{ id: 501, student_code: 'T501', prefix: 'เด็กชาย', first_name: 'นักเรียน', last_name: 'ทดสอบ', grade: 'ป.1', classroom: '1', morning_enabled: true, evening_enabled: true, vehicle_id: 'V1', parent_name: 'ผู้ปกครองตัวอย่าง' }], meta: { page: 1, per_page: 20, total: 1 } },
     '/api/school/vehicles': { data: [{ id: 'V1', plate_no: 'กข-9001 ลำปาง', vehicle_type: 'รถตู้', owner_name: 'เจ้าของตัวอย่าง', insurance_status: 'มีประกัน', insurance_type: 'ชั้น 1', insurance_expiry: '2026-12-31', student_count: 1 }] },
@@ -1345,16 +1354,20 @@ async function assertPartialFailureShown(page) {
       .find(sec => sec.querySelector(':scope > h2')?.textContent.trim() === 'ต้องทำวันนี้');
     const leaves = el => (el ? [...el.querySelectorAll('*')].filter(n => n.children.length === 0) : []);
     const texts = [...leaves(kpi), ...leaves(todo)].map(n => n.textContent.trim());
+    const attendance = document.querySelector('section[aria-label="แยกการเดินทางและการลา"]');
     const retry = [...document.querySelectorAll('[role=alert] button')]
       .find(b => b.textContent.includes('ลองใหม่'));
     return {
       kpiFound: Boolean(kpi), todoFound: Boolean(todo),
+      attendanceDashes: (attendance?.textContent.match(/—/g) || []).length,
+      attendanceZero: leaves(attendance).some(node => /^0\s*(คน|ครั้ง)/.test(node.textContent.trim())),
       zeros: texts.filter(t => /^0\s*(%|คน)?$/.test(t)),
       dashes: texts.filter(t => t === '—').length,
       nothingToDo: Boolean(todo && todo.textContent.includes('ไม่มีงานค้าง')),
       retryHeight: retry ? retry.getBoundingClientRect().height : 0,
     };
   });
+  if (found.attendanceDashes < 4 || found.attendanceZero) throw new Error('failed attendance breakdown must show unavailable values, never 0');
   if (!found.kpiFound || !found.todoFound) throw new Error('KPI or to-do section not rendered');
   if (found.zeros.length) throw new Error(`failed section shows 0: ${found.zeros.join(', ')}`);
   if (found.dashes === 0) throw new Error('no "—" placeholder for the failed sections');
@@ -1364,6 +1377,48 @@ async function assertPartialFailureShown(page) {
 
 // path, roles that may view it, which viewports, scenario
 const SHOTS = [
+  ...['school', 'teacher'].flatMap(user => ['morning', 'evening'].map(session => ({
+    id: `attendance-self-${user}-${session}`, url: `/school/teacher-check?session=${session}`, user, vps: ['mobile', 'desktop'],
+    act: async page => {
+      const writes = [];
+      let saved = false;
+      await page.route('**/api/school/teacher-check*', async route => {
+        if (route.request().method() === 'POST') {
+          const body = route.request().postDataJSON(); writes.push({ path: 'bus', body }); saved = true;
+          return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ success: true, data: { results: body.student_ids.map(id => ({ student_id: id, result: 'ok' })) } }) });
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { vehicles: [{ vehicle_id: 'V1', plate_no: 'กข-9001', students: [11,12,13].map((id,index) => ({ id, name: ['นักเรียนหนึ่ง','นักเรียนสอง','นักเรียนสาม'][index], grade: 'ป.1', classroom: '1', no_vehicle: false, on_leave: saved && id === 12, self_travel: saved && id === 11, done: saved && id === 13 })) }] } }) });
+      });
+      for (const [path, label] of [['self-travel','self'],['leave','leave']]) await page.route(`**/api/school/${path}`, async route => {
+        writes.push({ path: label, body: route.request().postDataJSON() });
+        await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ success: true, data: { id: 901 } }) });
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      if (user === 'school') await page.getByLabel('สายชั้นที่ต้องการเช็กชื่อ').selectOption('ป.1');
+      const selfLabel = session === 'morning' ? 'มาเอง' : 'กลับเอง';
+      await page.getByRole('button', { name: `${selfLabel} นักเรียนหนึ่ง`, exact: true }).click();
+      await page.getByRole('button', { name: 'เลือกลา นักเรียนสอง', exact: true }).click();
+      await page.getByRole('button', { name: /บันทึกทั้งห้อง/ }).click();
+      const completed = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/api/school/teacher-check'));
+      await page.getByRole('button', { name: 'ยืนยันบันทึกทั้งห้อง', exact: true }).click();
+      await completed;
+      const expected = [{ path: 'self', body: { student_id: 11, session } }, { path: 'leave', body: { student_id: 12, session } }, { path: 'bus', body: { session, student_ids: [13] } }];
+      if (JSON.stringify(writes) !== JSON.stringify(expected)) throw new Error('independent/leave pupils leaked into bus check payload');
+      await page.getByText(selfLabel, { exact: true }).waitFor();
+      await page.getByText('ลาแล้ว', { exact: true }).waitFor();
+      await page.getByText(/บันทึก ป\.1 ห้อง 1 แล้ว/).waitFor({ state: 'hidden' });
+      await page.getByRole('heading', { name: 'ป.1 / ห้อง 1', exact: true }).locator('xpath=../..').scrollIntoViewIfNeeded();
+    }, expect: ['text=บันทึกครบแล้ว'],
+  }))),
+  ...['school','teacher','affiliation','province','admin'].map(user => ({
+    id: `attendance-monthly-${user}`, url: '/reports/monthly', user, scenario: 'attendance-monthly', vps: ['mobile','desktop'],
+    act: async page => {
+      const summary = page.getByRole('region', { name: 'แยกการเดินทางและการลา', exact: true });
+      await summary.getByText('5 ครั้ง / 1 คนไม่ซ้ำ', { exact: true }).waitFor();
+      if (await summary.getByText('3 ครั้ง / 2 คนไม่ซ้ำ', { exact: true }).count() !== 1) throw new Error('leave frequency/distinct pupils missing');
+      if (await summary.getByText('มาเอง', { exact: true }).count() !== 1 || await summary.getByText('กลับเอง', { exact: true }).count() !== 1) throw new Error('round headings merged');
+    }, expect: ['text=แยกการเดินทางและการลารายเดือน'],
+  })),
   { id: '01-login',        url: '/login',       user: null,          vps: ['mobile', 'desktop'] },
   { id: '02-admin-dash',   url: '/admin',       user: 'admin',       vps: ['mobile', 'tablet', 'desktop', 'wide'] },
   { id: '03-admin-zero',   url: '/admin',       user: 'admin',       vps: ['desktop'], scenario: 'zero' },
@@ -1611,7 +1666,7 @@ const SHOTS = [
       if (await page.getByRole('heading', { name: 'ป.1 / ห้อง 1' }).count()) throw new Error('previous grade still visible');
       await page.getByRole('button', { name: /บันทึกทั้งห้อง/ }).click();
       if (await page.getByRole('combobox', { name: 'สายชั้นที่ต้องการเช็กชื่อ' }).isEnabled()) throw new Error('grade can change during confirmation');
-      if (await page.getByText(/ป.2 ห้อง 1 รอบเช้า: มา 1 คน · ลา 0 คน/).count() !== 1) throw new Error('wrong grade confirmation');
+      if (await page.getByText(/ป.2 ห้อง 1 รอบเช้า: ใช้รถ 1 คน · มาเอง 0 คน · ลา 0 คน/).count() !== 1) throw new Error('wrong grade confirmation');
       const saved = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/api/school/teacher-check'));
       await page.getByRole('button', { name: 'ยืนยันบันทึกทั้งห้อง' }).click();
       await saved;
@@ -1626,7 +1681,7 @@ const SHOTS = [
       if (await room.getByText('เด็กชายภูมิ แสงทอง').count() !== 1) throw new Error('second vehicle pupil missing from room');
       await page.getByRole('button', { name: 'เลือกลา เด็กชายภูมิ แสงทอง' }).click();
       await room.getByRole('button', { name: /บันทึกทั้งห้อง/ }).click();
-      if (await page.getByText('มา 0 คน · ลา 1 คน').count() !== 1) throw new Error('leave selection not reflected in confirmation');
+      if (await page.getByText('ใช้รถ 0 คน · มาเอง 0 คน · ลา 1 คน').count() !== 1) throw new Error('leave selection not reflected in confirmation');
     },
     expect: ['text=เช็กชื่อรายห้อง', 'text=ป.1 / ห้อง 1', 'button[aria-pressed="true"]', '[role=alertdialog]'] },
   { id: '97-incident-roster', url: '/transport/vehicles/V-1/incident-roster', user: 'transport', vps: ['mobile', 'desktop'],

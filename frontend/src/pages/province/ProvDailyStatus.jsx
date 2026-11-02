@@ -1,3 +1,5 @@
+import AttendanceBreakdown from '../../components/AttendanceBreakdown';
+import { isBusRider, visibleAttendance } from '../../utils/attendance';
 import { Building2, Bus } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import api from '../../api/axios';
@@ -38,10 +40,10 @@ export default function ProvDailyStatus() {
   }
 
   function countStatus(students) {
-    const mDone = students.filter((s) => s.morning_enabled && s.morning_done).length;
-    const mTotal = students.filter((s) => s.morning_enabled).length;
-    const eDone = students.filter((s) => s.evening_enabled && s.evening_done).length;
-    const eTotal = students.filter((s) => s.evening_enabled).length;
+    const mDone = students.filter((s) => isBusRider(s, 'morning') && s.morning_done).length;
+    const mTotal = students.filter((s) => isBusRider(s, 'morning')).length;
+    const eDone = students.filter((s) => isBusRider(s, 'evening') && s.evening_done).length;
+    const eTotal = students.filter((s) => isBusRider(s, 'evening')).length;
     return { mDone, mTotal, eDone, eTotal };
   }
 
@@ -67,6 +69,7 @@ export default function ProvDailyStatus() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
+      {data && <AttendanceBreakdown data={loading ? null : error ? {} : visibleAttendance(data)} />}
       <PageHeader
         title="สถานะวันนี้"
         subtitle="ความคืบหน้าการรับ-ส่งนักเรียนรายคันทั้งจังหวัด"

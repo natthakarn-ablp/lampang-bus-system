@@ -144,7 +144,7 @@ const { rejectOverLongFields } = require('../utils/fieldLength');
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
   const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
-  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ' };
+  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', self_travel: 'เดินทางเอง', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ' };
   // Phase 10.12G — neutralise every cell + redact PII from audit values.
   const esc = csvCell;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
@@ -773,6 +773,31 @@ function sendNoSchool(req, res) {
     req.user.role === 'admin' ? 400 : 403
   );
 }
+
+router.post('/self-travel', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const data = await require('../services/selfTravel.service').recordSelfTravel(pool, {
+      schoolId, gradeFilter: resolveGradeScope(req), userId: req.user.id,
+      studentId: req.body?.student_id, session: req.body?.session,
+    });
+    return sendSuccess(res, data, 'บันทึกการเดินทางเองแล้ว', null, 201);
+  } catch (err) { next(err); }
+});
+
+router.post('/self-travel/:id/undo', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const data = await require('../services/selfTravel.service').undoSelfTravel(pool, {
+      id, schoolId, gradeFilter: resolveGradeScope(req), userId: req.user.id,
+    });
+    return sendSuccess(res, data, 'ยกเลิกการเดินทางเองแล้ว');
+  } catch (err) { next(err); }
+});
 
 router.get('/teacher-check', async (req, res, next) => {
   try {

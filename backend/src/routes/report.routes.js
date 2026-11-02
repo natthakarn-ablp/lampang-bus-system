@@ -129,6 +129,8 @@ const MONTHLY_HEADERS = [
   'ส่งเช้าแล้ว', 'ส่งเช้าคาดหวัง', 'KPI เช้า',
   'รับเย็นแล้ว', 'รับเย็นคาดหวัง', 'KPI เย็น',
   'วันที่มีข้อมูล', 'วันส่งเช้าครบ 100%', 'วันรับเย็นครบ 100%',
+  'มาเอง (ครั้ง)', 'มาเอง (คนไม่ซ้ำ)', 'ลาเช้า (ครั้ง)', 'ลาเช้า (คนไม่ซ้ำ)',
+  'กลับเอง (ครั้ง)', 'กลับเอง (คนไม่ซ้ำ)', 'ลาเย็น (ครั้ง)', 'ลาเย็น (คนไม่ซ้ำ)',
 ];
 
 async function consumeReportExportPolicy(req, res, reportType, format) {
@@ -145,16 +147,21 @@ function toNumber(value) {
 }
 
 function percentCell(value) {
-  return `${toNumber(value).toFixed(2)}%`;
+  return value == null ? '—' : `${toNumber(value).toFixed(2)}%`;
 }
 
 function monthlyExpected(perDay, days) {
   return toNumber(perDay) * toNumber(days);
 }
 
+function attendanceExportFields(data) {
+  return Object.fromEntries(['morning_self', 'morning_self_people', 'morning_leave', 'morning_leave_people', 'evening_self', 'evening_self_people', 'evening_leave', 'evening_leave_people'].map(key => [key, data[key] ?? '']));
+}
+
 function buildMonthlyExportRows(report) {
   const rows = [
     {
+      ...attendanceExportFields(report),
       section: 'ภาพรวม',
       name: report.month,
       student_count: report.total_students,
@@ -172,14 +179,15 @@ function buildMonthlyExportRows(report) {
 
   for (const s of report.schools || []) {
     rows.push({
+      ...attendanceExportFields(s),
       section: 'โรงเรียน',
       name: s.school_name,
       student_count: s.student_count,
       morning_done: s.total_morning_done,
-      morning_expected: monthlyExpected(s.morning_expected, s.days_with_data),
+      morning_expected: s.total_morning_expected ?? monthlyExpected(s.morning_expected, s.days_with_data),
       morning_kpi: s.morning_kpi,
       evening_done: s.total_evening_done,
-      evening_expected: monthlyExpected(s.evening_expected, s.days_with_data),
+      evening_expected: s.total_evening_expected ?? monthlyExpected(s.evening_expected, s.days_with_data),
       evening_kpi: s.evening_kpi,
       days_with_data: s.days_with_data,
       days_morning_100: s.days_morning_100,
@@ -189,14 +197,15 @@ function buildMonthlyExportRows(report) {
 
   for (const v of report.vehicles || []) {
     rows.push({
+      ...attendanceExportFields(v),
       section: 'รถรับส่ง',
       name: v.plate_no || '-',
       student_count: v.student_count,
       morning_done: v.total_morning_done,
-      morning_expected: monthlyExpected(v.student_count, v.days_with_data),
+      morning_expected: v.total_morning_expected ?? monthlyExpected(v.morning_expected, v.days_with_data),
       morning_kpi: v.morning_kpi,
       evening_done: v.total_evening_done,
-      evening_expected: monthlyExpected(v.student_count, v.days_with_data),
+      evening_expected: v.total_evening_expected ?? monthlyExpected(v.evening_expected, v.days_with_data),
       evening_kpi: v.evening_kpi,
       days_with_data: v.days_with_data,
       days_morning_100: '',
@@ -221,6 +230,14 @@ function monthlyRowValues(row) {
     row.days_with_data,
     row.days_morning_100,
     row.days_evening_100,
+    row.morning_self,
+    row.morning_self_people,
+    row.morning_leave,
+    row.morning_leave_people,
+    row.evening_self,
+    row.evening_self_people,
+    row.evening_leave,
+    row.evening_leave_people,
   ];
 }
 
@@ -413,6 +430,10 @@ router.get('/export/pdf', async (req, res, next) => {
     doc.font(fontName).fontSize(11);
 
     const sumData = [
+      ['มาเอง', `${report.morning_self ?? '—'} คน`],
+      ['ลาเช้า', `${report.morning_leave ?? '—'} คน`],
+      ['กลับเอง', `${report.evening_self ?? '—'} คน`],
+      ['ลาเย็น', `${report.evening_leave ?? '—'} คน`],
       ['นักเรียนทั้งหมด', `${report.total_students} คน`],
       ['รถรับส่งทั้งหมด', `${report.total_vehicles} คัน`],
       ['ส่งเช้าแล้ว', `${report.morning_done} / ${report.morning_total} คน`],
@@ -636,6 +657,10 @@ router.get('/export/monthly/pdf', async (req, res, next) => {
     doc.moveDown(0.3);
     doc.font(fontName).fontSize(11);
     const summaryRows = [
+      ['มาเอง', `${report.morning_self ?? '—'} ครั้ง / ${report.morning_self_people ?? '—'} คนไม่ซ้ำ`],
+      ['ลาเช้า', `${report.morning_leave ?? '—'} ครั้ง / ${report.morning_leave_people ?? '—'} คนไม่ซ้ำ`],
+      ['กลับเอง', `${report.evening_self ?? '—'} ครั้ง / ${report.evening_self_people ?? '—'} คนไม่ซ้ำ`],
+      ['ลาเย็น', `${report.evening_leave ?? '—'} ครั้ง / ${report.evening_leave_people ?? '—'} คนไม่ซ้ำ`],
       ['นักเรียนทั้งหมด', `${report.total_students} คน`],
       ['ข้อมูลที่มีในเดือน', `${report.days_with_data} วัน`],
       ['KPI ส่งเช้า', `${percentCell(report.morning_kpi)} (${report.total_morning_done}/${report.total_morning_expected})`],

@@ -279,6 +279,9 @@ const SCENARIOS = {
     '/api/school/dashboard': { __status: 500, message: 'ระบบขัดข้องชั่วคราว' },
     '/api/school/leaves':    { __status: 500, message: 'ระบบขัดข้องชั่วคราว' },
   },
+  transport_vehicle_500: {
+    '/api/transport/vehicles': { __status: 500, message: 'ระบบขัดข้องชั่วคราว' },
+  },
 
   // บัญชีคนขับที่ยังไม่ผูกกับรถ (`driver_id` ว่าง) — พบจริงบน production
   // 27 ส.ค. 2569 บัญชีแบบนี้เคยติดกับดัก: PretripModal ที่ปิดไม่ได้เปิดขึ้นมา
@@ -1404,7 +1407,12 @@ const SHOTS = [
       await completed;
       const expected = [{ path: 'self', body: { student_id: 11, session } }, { path: 'leave', body: { student_id: 12, session } }, { path: 'bus', body: { session, student_ids: [13] } }];
       if (JSON.stringify(writes) !== JSON.stringify(expected)) throw new Error('independent/leave pupils leaked into bus check payload');
-      await page.getByRole('listitem').filter({ hasText: 'นักเรียนหนึ่ง' }).getByText(selfLabel, { exact: true }).waitFor();
+      const selfStudent = page.getByRole('listitem').filter({ hasText: 'นักเรียนหนึ่ง' });
+      // The selection badge and button both say "มาเอง/กลับเอง" until the
+      // saved state arrives. Wait for that button to disappear before checking
+      // the persisted status badge, so the assertion proves the UI refreshed.
+      await selfStudent.getByRole('button', { name: `${selfLabel} นักเรียนหนึ่ง`, exact: true }).waitFor({ state: 'detached' });
+      await selfStudent.locator('span').filter({ hasText: selfLabel }).first().waitFor();
       await page.getByText('ลาแล้ว', { exact: true }).waitFor();
       await page.getByText(/บันทึก ป\.1 ห้อง 1 แล้ว/).waitFor({ state: 'hidden' });
       await page.getByRole('heading', { name: 'ป.1 / ห้อง 1', exact: true }).locator('xpath=../..').scrollIntoViewIfNeeded();
@@ -1723,6 +1731,28 @@ const SHOTS = [
       await page.getByRole('textbox', { name: 'หมวดทะเบียน' }).fill('10');
     },
     expect: ['text=เลือกรถ', 'text=หมวดทะเบียน', 'text=10 3070 ลำปาง', 'text=ผลตรวจ', 'text=วันที่ตรวจ', 'text=หน้านี้เป็นบันทึกแบบเดิม'] },
+  { id: '83a-inspection-vehicle-load-error', url: '/transport/inspections', user: 'transport', scenario: 'transport_vehicle_500', vps: ['desktop'],
+    act: async page => {
+      await page.getByRole('button', { name: 'บันทึกผลตรวจเดิม' }).first().click();
+      const select = page.getByRole('combobox', { name: 'เลือกรถ' });
+      if (!(await select.isDisabled())) throw new Error('vehicle select must be disabled after a load failure');
+      if (await select.locator('option[value="__other__"]').count()) throw new Error('new vehicle option must be hidden after a load failure');
+    },
+    expect: ['text=โหลดรายชื่อรถไม่สำเร็จ', 'button:has-text("ลองใหม่")'] },
+  { id: '83b-inspection-vehicle-load-retry', url: '/transport/inspections', user: 'transport', scenario: 'transport_vehicle_500', vps: ['desktop'],
+    act: async page => {
+      await page.getByRole('button', { name: 'บันทึกผลตรวจเดิม' }).first().click();
+      await page.route('**/api/transport/vehicles*', route => route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, ...COMMON['/api/transport/vehicles'] }),
+      }));
+      await page.getByRole('button', { name: 'ลองใหม่' }).click();
+      const select = page.getByRole('combobox', { name: 'เลือกรถ' });
+      await select.locator('option[value="__other__"]').waitFor({ state: 'attached' });
+      if (!(await select.isEnabled())) throw new Error('vehicle select must be enabled after retry succeeds');
+      if (await page.getByText('โหลดรายชื่อรถไม่สำเร็จ').count()) throw new Error('load-error banner must clear after retry');
+    },
+    expect: ['option[value="__other__"]', 'text=กข-1111 ลำปาง'] },
   // ── ขั้นตอนที่เขียนข้อมูลจริงของขนส่ง — ทดสอบด้วย fixture ไม่แตะ production ──
   // 1) เลือกคำขอจากคิว  2) กด "เริ่มตรวจรถคันนี้"  3) ต้องได้รายการตรวจให้ลง
   { id: '84b-transport-start-inspection', url: '/transport/verification', user: 'transport', vps: ['desktop'],
@@ -1896,7 +1926,7 @@ if (IS_MAIN) await (async () => {
   const withErr  = report.filter(r => r.errors.length);
   // Scenarios that fail calls on purpose log browser-level "Failed to load
   // resource" lines that are the fixture working, not the page misbehaving.
-  const FAILS_BY_DESIGN = new Set(['error', 'driver_unlinked', 'aff_dash_partial_500', 'school_dash_partial_500']);
+  const FAILS_BY_DESIGN = new Set(['error', 'driver_unlinked', 'aff_dash_partial_500', 'school_dash_partial_500', 'transport_vehicle_500']);
   const unexpectedErr = report.filter(r => r.errors.length && !FAILS_BY_DESIGN.has(r.scenario));
   const failed   = report.filter(r => r.failed);
   const looping  = report.filter(r => r.renderLoops?.length);

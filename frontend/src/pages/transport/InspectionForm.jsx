@@ -58,6 +58,8 @@ export default function InspectionForm() {
   const prefillVehicleId = searchParams.get('vehicle_id') || '';
 
   const [vehicles, setVehicles] = useState([]);
+  const [vehicleLoading, setVehicleLoading] = useState(true);
+  const [vehicleLoadError, setVehicleLoadError] = useState('');
   const [schools, setSchools] = useState([]);
   const [inspections, setInspections] = useState([]);
   const [meta, setMeta] = useState({ page: 1, per_page: 20, total: 0 });
@@ -84,12 +86,25 @@ export default function InspectionForm() {
   const [newPlate, setNewPlate] = useState({ category: '', number: '', province: 'ลำปาง' });
   const { runWithPolicy, policyActionDialog } = usePolicyAction();
 
-  useEffect(() => {
-    // `|| []` only catches null; a non-array payload reached .filter() below
-    // and took the whole page into the error boundary.
-    api.get('/transport/vehicles?per_page=200').then(r => setVehicles(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => console.error('[InspectionForm] vehicles load failed:', err.message));
-    api.get('/transport/schools').then(r => setSchools(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => console.error('[InspectionForm] schools load failed:', err.message));
+  const loadVehicles = useCallback(async () => {
+    setVehicleLoading(true);
+    setVehicleLoadError('');
+    try {
+      const response = await api.get('/transport/vehicles?per_page=200');
+      if (!Array.isArray(response.data?.data)) throw new Error('Invalid vehicle list');
+      setVehicles(response.data.data);
+    } catch {
+      setVehicles([]);
+      setVehicleLoadError('โหลดรายชื่อรถไม่สำเร็จ กรุณาลองใหม่ก่อนเลือกรถหรือเพิ่มทะเบียนใหม่');
+    } finally {
+      setVehicleLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadVehicles();
+    api.get('/transport/schools').then(r => setSchools(Array.isArray(r.data?.data) ? r.data.data : [])).catch(err => console.error('[InspectionForm] schools load failed:', err.message));
+  }, [loadVehicles]);
 
   const fetchInspections = useCallback(async (page = 1) => {
     setLoading(true);
@@ -127,6 +142,10 @@ export default function InspectionForm() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (vehicleLoading || vehicleLoadError) {
+      toast.error('กรุณาโหลดรายชื่อรถให้สำเร็จก่อนบันทึก');
+      return;
+    }
     if (vehicles.find(v => v.id === form.vehicle_id)?.has_shared_inspection) {
       toast.error('รถคันนี้มีผลรับรองจากคิวแล้ว กรุณาตรวจรอบใหม่ในคิวรับรองรถ');
       return;
@@ -241,6 +260,15 @@ export default function InspectionForm() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Searchable vehicle select */}
             <div className="sm:col-span-2 space-y-2">
+              {vehicleLoadError && (
+                <AlertBanner variant="danger" title="โหลดรายชื่อรถไม่สำเร็จ">
+                  {vehicleLoadError}
+                  <button type="button" onClick={loadVehicles}
+                    className="focus-ring mt-2 block min-h-[44px] rounded-lg border border-current px-4 font-semibold">
+                    ลองใหม่
+                  </button>
+                </AlertBanner>
+              )}
               {!isOtherVehicle && (
                 <FormField
                   label="ค้นหาทะเบียนรถ"
@@ -254,13 +282,14 @@ export default function InspectionForm() {
                 {ctl => (
                   <select
                     {...ctl}
+                    disabled={vehicleLoading || Boolean(vehicleLoadError)}
                     value={form.vehicle_id}
                     onChange={e => { setForm({ ...form, vehicle_id: e.target.value }); if (e.target.value !== '__other__') setNewPlate({ category: '', number: '', province: 'ลำปาง' }); }}
                     className={CONTROL_CLS}
                   >
                     <option value="">— เลือกรถ —</option>
                     {filteredVehicles.map(v => <option key={v.id} value={v.id}>{v.plate_no}</option>)}
-                    <option value="__other__">อื่นๆ (เพิ่มทะเบียนรถใหม่)</option>
+                    {!vehicleLoading && !vehicleLoadError && <option value="__other__">อื่นๆ (เพิ่มทะเบียนรถใหม่)</option>}
                   </select>
                 )}
               </FormField>

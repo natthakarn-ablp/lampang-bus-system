@@ -15,6 +15,7 @@ describe('plate normalization is deterministic', () => {
     expect(PI.parseLegacyPlateText(plate)).toEqual({ plate_prefix: '36', plate_number: '0105', province: 'ลำปาง' });
     expect(PI.canonicalPlateForStorage(plate)).toBe('360105ลำปาง');
     expect(PI.comparePlateIdentity(plate, '360105ลำปาง')).toBe(true);
+    expect(PI.comparePlateIdentity('10-3070 ลำปาง', '10 3070 ลำปาง')).toBe(true);
     expect(PI.classifyVehiclePlateConflict(plate, []).code).toBe('VALID_NEW_VEHICLE');
     expect(PI.classifyVehiclePlateConflict(plate, [{ id: 'V-1', plate_no: '360105ลำปาง', is_deleted: 0 }]).code)
       .toBe('SAME_ACTIVE_VEHICLE_SAME_SCHOOL');

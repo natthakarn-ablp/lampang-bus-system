@@ -70,6 +70,7 @@ describe('buildStructuredPlate', () => {
     expect(built).toMatchObject({ valid: true, plateNo: '36 0105 ลำปาง', normalized: '360105ลำปาง' });
     expect(validatePlateNo(built.plateNo)).toMatchObject({ valid: true, trimmed: built.plateNo, normalized: built.normalized });
     expect(validatePlateNo('360105ลำปาง')).toMatchObject({ valid: true, trimmed: built.plateNo });
+    expect(validatePlateNo('10-3070 ลำปาง')).toMatchObject({ valid: true, trimmed: '10 3070 ลำปาง', normalized: '103070ลำปาง' });
   });
 
   test('numeric category must be exactly two digits', () => {

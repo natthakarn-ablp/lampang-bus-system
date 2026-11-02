@@ -16,7 +16,7 @@ import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import VehicleSelect from '../../components/VehicleSelect';
 import Pagination from '../../components/Pagination';
 import { useAuth } from '../../hooks/useAuth';
-import { isGradeTeacher } from '../../utils/authScope';
+import { getGradeScope, isGradeTeacher } from '../../utils/authScope';
 import { formatGradeClass } from '../../utils/student';
 
 // Mask parent phone in list views for PDPA compliance — shows first 3 and
@@ -61,6 +61,7 @@ export default function StudentSearch() {
   // Edit modal state
   const [editStudent, setEditStudent] = useState(null);
   const [editMode, setEditMode] = useState('profile');
+  const profileInitial = useRef({});
   const [form, setForm] = useState({});
   const [vehicles, setVehicles] = useState([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
@@ -117,20 +118,21 @@ export default function StudentSearch() {
   }
 
   function openEdit(student, mode = 'profile') {
-    if (isTeacher && mode !== 'vehicle') return;
     setEditMode(mode);
     setEditStudent(student);
-    setForm({
+    const values = {
       prefix: student.prefix || '',
       first_name: student.first_name || '',
       last_name: student.last_name || '',
-      grade: student.grade || '',
+      grade: isTeacher ? getGradeScope(user) : student.grade || '',
       classroom: student.classroom || '',
       morning_enabled: !!student.morning_enabled,
       evening_enabled: !!student.evening_enabled,
       parent_name: student.parent_name || '',
       parent_phone: student.parent_phone || '',
-    });
+    };
+    profileInitial.current = values;
+    setForm(values);
     setSelectedVehicle(student.vehicle_id || '');
     if (mode === 'vehicle') loadVehicles();
   }
@@ -138,6 +140,7 @@ export default function StudentSearch() {
   function closeEdit() {
     setEditStudent(null);
     setForm({});
+    profileInitial.current = {};
     setSelectedVehicle('');
   }
 
@@ -154,9 +157,13 @@ export default function StudentSearch() {
       toast.error('เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก');
       return;
     }
+    // Grade-teacher responses intentionally omit private phone fields. Send
+    // only edited values so saving a name/room cannot clear a hidden phone.
+    const payload = isTeacher ? Object.fromEntries(Object.entries(form).filter(([key, value]) => value !== profileInitial.current[key])) : form;
+    if (!Object.keys(payload).length) return;
     saveLock.current = true; setSaving(true);
     try {
-      const res = await api.put(`/school/students/${editStudent.id}`, form);
+      const res = await api.put(`/school/students/${editStudent.id}`, payload);
       toast.success('บันทึกข้อมูลนักเรียนเรียบร้อยแล้ว');
       // If the backend reassigned the parent (any change to name/phone),
       // surface a notice — the freshly-created parent row has no LINE
@@ -334,7 +341,7 @@ export default function StudentSearch() {
         ]}
         actions={s2 => (
           <>
-            {!isTeacher && <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>}
+            <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
             <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
           </>
         )}
@@ -451,11 +458,11 @@ export default function StudentSearch() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="ระดับชั้น">
+                <FormField label="ระดับชั้น" disabled={isTeacher}>
                   {ctl => (
                     <select {...ctl} value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
                       <option value="">-</option>
-                      {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => (
+                      {(isTeacher ? [getGradeScope(user)] : ['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6']).map(g => (
                         <option key={g} value={g}>{g}</option>
                       ))}
                     </select>
@@ -494,6 +501,7 @@ export default function StudentSearch() {
                 <FormField label="ชื่อผู้ปกครอง" value={form.parent_name} onChange={v => setForm({ ...form, parent_name: v })} />
                 <FormField
                   label="เบอร์โทรผู้ปกครอง"
+                  helper={isTeacher ? 'เบอร์เดิมไม่แสดง กรอกเบอร์ใหม่เฉพาะเมื่อต้องการเปลี่ยน เว้นว่างเพื่อคงเดิม' : undefined}
                   type="tel"
                   inputMode="numeric"
                   maxLength={10}
@@ -530,7 +538,7 @@ export default function StudentSearch() {
 
             {/* Actions */}
             <div className="flex flex-col gap-2">
-              {editMode === 'profile' && <button onClick={handleSaveProfile} disabled={saving}
+              {editMode === 'profile' && <button onClick={handleSaveProfile} disabled={saving || (isTeacher && Object.entries(form).every(([key, value]) => value === profileInitial.current[key]))}
                 className="focus-ring w-full bg-brand-600 hover:bg-brand-700 active:bg-brand-800 disabled:opacity-40 disabled:pointer-events-none text-white font-medium min-h-[48px] rounded-lg transition">
                 {saving ? 'กำลังบันทึก…' : 'บันทึกข้อมูลนักเรียน'}
               </button>}
@@ -540,7 +548,7 @@ export default function StudentSearch() {
                   {saving ? 'กำลังบันทึก…' : selectedVehicle ? (editStudent.vehicle_id ? 'เปลี่ยนรถ' : 'เพิ่มเข้ารถ') : 'ลบออกจากรถ'}
                 </button>
               )}
-              {editMode === 'profile' && <details className="border border-surface-border rounded-lg p-3">
+              {editMode === 'profile' && !isTeacher && <details className="border border-surface-border rounded-lg p-3">
               <summary className="focus-ring min-h-[44px] flex items-center cursor-pointer text-sm">ย้ายโรงเรียน / นำรายชื่อออก</summary>
               <button onClick={() => setTransferStudent(editStudent)} disabled={saving}
                 className="focus-ring w-full bg-warn-soft hover:bg-warn-soft/70 text-warn-ink border border-warn/30 min-h-[44px] rounded-lg transition disabled:opacity-40 disabled:pointer-events-none">

@@ -196,6 +196,10 @@ const EVAL_SUMMARY = {
 };
 
 const SCENARIOS = {
+  'teacher-profile-edit': {
+    '/api/school/students': { data: [{ id: 501, student_code: 'T501', prefix: 'เด็กชาย', first_name: 'นักเรียน', last_name: 'ทดสอบ', grade: 'ป.1', classroom: '1', morning_enabled: true, evening_enabled: true, vehicle_id: 'V1', parent_name: 'ผู้ปกครองตัวอย่าง' }], meta: { page: 1, per_page: 20, total: 1 } },
+    '/api/school/vehicles': { data: [{ id: 'V1', plate_no: 'กข-9001 ลำปาง', vehicle_type: 'รถตู้', owner_name: 'เจ้าของตัวอย่าง', insurance_status: 'มีประกัน', insurance_type: 'ชั้น 1', insurance_expiry: '2026-12-31', student_count: 1 }] },
+  },
   // round not started — the case the old UI wrongly showed as a big warning
   normal: {
     '/api/province/dashboard': { data: dash({ morning_done: 3980, morning_total: 4654, evening_total: 4651, morning_pending: 674 }) },
@@ -1529,6 +1533,43 @@ const SHOTS = [
   // Eight pages in the final Partial-page migration. Every one is captured at
   // phone and desktop widths; modal/report components are opened through the
   // same controls a user reaches rather than rendered in isolation.
+  { id: 'teacher-edit-pupil', url: '/school/students', user: 'teacher', scenario: 'teacher-profile-edit', vps: ['mobile', 'desktop'],
+    act: async page => {
+      await page.route('**/api/school/students/501', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { student_id: 501, parent_reassigned: false } }) }));
+      await page.getByRole('button', { name: 'แก้ข้อมูล', exact: true }).click();
+      let modal = page.getByRole('dialog', { name: 'แก้ไขข้อมูลนักเรียน' });
+      if (await modal.getByLabel('ระดับชั้น', { exact: true }).isEnabled()) throw new Error('teacher can change grade');
+      if (await modal.getByLabel('ระดับชั้น', { exact: true }).inputValue() !== 'ป.1') throw new Error('wrong teacher grade');
+      if (await modal.getByText('ย้ายโรงเรียน / นำรายชื่อออก', { exact: true }).count()) throw new Error('teacher transfer/delete actions exposed');
+      await modal.getByRole('textbox', { name: /^ชื่อ(?:\s|$)/ }).fill('นักเรียนปรับปรุง');
+      await modal.getByLabel('ห้อง', { exact: true }).fill('9');
+      const saveRequest = page.waitForRequest(req => req.method() === 'PUT' && req.url().endsWith('/api/school/students/501'));
+      await modal.getByRole('button', { name: 'บันทึกข้อมูลนักเรียน', exact: true }).click();
+      const body = (await saveRequest).postDataJSON();
+      if (JSON.stringify(body) !== JSON.stringify({ first_name: 'นักเรียนปรับปรุง', classroom: '9' })) throw new Error('pupil save submitted hidden phone or unchanged fields');
+      await modal.waitFor({ state: 'hidden' });
+      await page.getByRole('button', { name: 'แก้ข้อมูล', exact: true }).click();
+    },
+    expect: ['[role=dialog]', 'text=เบอร์เดิมไม่แสดง', 'text=แก้ไขข้อมูลนักเรียน'] },
+  { id: 'teacher-edit-vehicle', url: '/school/vehicles', user: 'teacher', scenario: 'teacher-profile-edit', vps: ['mobile', 'desktop'],
+    act: async page => {
+      await page.route('**/api/school/vehicles/V1', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { vehicle_id: 'V1' } }) }));
+      await page.getByRole('button', { name: 'แก้ไขข้อมูลรถ', exact: true }).click();
+      let modal = page.getByRole('dialog', { name: 'แก้ไขข้อมูลรถ' });
+      await modal.getByLabel('ประเภทรถ', { exact: true }).fill('รถสองแถว');
+      const saveRequest = page.waitForRequest(req => req.method() === 'PUT' && req.url().endsWith('/api/school/vehicles/V1'));
+      await modal.getByRole('button', { name: 'บันทึก', exact: true }).click();
+      if (JSON.stringify((await saveRequest).postDataJSON()) !== JSON.stringify({ vehicle_type: 'รถสองแถว' })) throw new Error('vehicle save submitted hidden phone or unchanged fields');
+      await modal.waitFor({ state: 'hidden' });
+      await page.getByRole('button', { name: 'แก้ไขข้อมูลรถ', exact: true }).click();
+    },
+    expect: ['[role=dialog]', 'text=ข้อมูลรถเป็นข้อมูลกลาง', 'text=เบอร์เดิมไม่แสดง'] },
+  { id: 'school-edit-pupil-allowed', url: '/school/students', user: 'school', scenario: 'teacher-profile-edit', vps: ['mobile', 'desktop'],
+    act: async page => {
+      await page.getByRole('button', { name: 'แก้ข้อมูล', exact: true }).click();
+      if (!await page.getByRole('dialog').getByLabel('ระดับชั้น', { exact: true }).isEnabled()) throw new Error('full-school grade edit disabled');
+      if (await page.getByText('ย้ายโรงเรียน / นำรายชื่อออก', { exact: true }).count() !== 1) throw new Error('full-school actions missing');
+    }, expect: ['[role=dialog]', 'text=แก้ไขข้อมูลนักเรียน'] },
   { id: 'teacher-verification-denied', url: '/school', user: 'teacher', vps: ['mobile', 'desktop'],
     act: async page => {
       const menu = page.getByRole('button', { name: 'เปิดเมนู', exact: true });

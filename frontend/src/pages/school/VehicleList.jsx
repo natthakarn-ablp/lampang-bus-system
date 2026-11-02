@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Bus, Pencil, Plus } from 'lucide-react';
 import api from '../../api/axios';
@@ -12,11 +12,14 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import { FormField, Modal, TableAction } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
-import { isFullSchoolAccount } from '../../utils/authScope';
+import { isGradeTeacher } from '../../utils/authScope';
 
 export default function VehicleList() {
   const { user } = useAuth();
-  const canEditVehicles = user?.role === 'admin' || isFullSchoolAccount(user);
+  const canEditVehicles = user?.role === 'admin' || user?.role === 'school';
+  const isTeacher = isGradeTeacher(user);
+  const editInitial = useRef({});
+  const editSaveLock = useRef(false);
   const [searchParams] = useSearchParams();
   const toast = useToast();
   const [vehicles, setVehicles] = useState([]);
@@ -41,30 +44,34 @@ export default function VehicleList() {
   useEffect(() => { load(); }, [load]);
 
   function openEdit(v) {
-    if (!canEditVehicles) return;
+    if (!canEditVehicles || editSaveLock.current) return;
     setEditVehicle(v);
-    setEditForm({
+    const values = {
       vehicle_type: v.vehicle_type || '',
       owner_name: v.owner_name || '',
       owner_phone: v.owner_phone || '',
       insurance_status: v.insurance_status || '',
       insurance_type: v.insurance_type || '',
       insurance_expiry: v.insurance_expiry ? String(v.insurance_expiry).slice(0, 10) : '',
-    });
+    };
+    editInitial.current = values;
+    setEditForm(values);
   }
 
   async function handleSaveEdit(e) {
     e.preventDefault();
-    if (!canEditVehicles) return;
-    setSavingEdit(true);
+    if (!canEditVehicles || editSaveLock.current) return;
+    const payload = isTeacher ? Object.fromEntries(Object.entries(editForm).filter(([key, value]) => value !== editInitial.current[key])) : editForm;
+    if (!Object.keys(payload).length) return;
+    editSaveLock.current = true; setSavingEdit(true);
     try {
-      await api.put(`/school/vehicles/${editVehicle.id}`, editForm);
+      await api.put(`/school/vehicles/${editVehicle.id}`, payload);
       toast.success('แก้ไขข้อมูลรถสำเร็จ');
       setEditVehicle(null);
       load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'แก้ไขข้อมูลรถไม่สำเร็จ');
-    } finally { setSavingEdit(false); }
+    } finally { editSaveLock.current = false; setSavingEdit(false); }
   }
 
   const shown = vehicles.filter(
@@ -146,14 +153,15 @@ export default function VehicleList() {
       {canEditVehicles && editVehicle && (
         <Modal
           title="แก้ไขข้อมูลรถ"
-          onClose={() => setEditVehicle(null)}
+          dismissible={!savingEdit}
+          onClose={() => { if (!editSaveLock.current) setEditVehicle(null); }}
           footer={
             <>
-              <button type="button" onClick={() => setEditVehicle(null)}
+              <button type="button" disabled={savingEdit} onClick={() => setEditVehicle(null)}
                 className="focus-ring text-sm font-medium px-4 min-h-[44px] rounded-lg border border-surface-border bg-surface-raised text-ink hover:bg-surface active:bg-surface-border transition">
                 ยกเลิก
               </button>
-              <button type="submit" form="edit-vehicle-form" disabled={savingEdit}
+              <button type="submit" form="edit-vehicle-form" disabled={savingEdit || (isTeacher && Object.entries(editForm).every(([key, value]) => value === editInitial.current[key]))}
                 className="focus-ring text-sm font-semibold px-4 min-h-[44px] rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white disabled:opacity-50 disabled:pointer-events-none transition">
                 {savingEdit ? 'กำลังบันทึก…' : 'บันทึก'}
               </button>
@@ -161,6 +169,7 @@ export default function VehicleList() {
           }
         >
           <p className="text-sm text-ink-muted mb-4">{editVehicle.plate_no}</p>
+          {isTeacher && <p className="text-sm text-warn-ink mb-4">ข้อมูลรถเป็นข้อมูลกลาง การแก้ไขมีผลต่อทุกสายชั้นและโรงเรียนที่ใช้รถคันนี้</p>}
 
           <form id="edit-vehicle-form" onSubmit={handleSaveEdit} className="space-y-3">
             <FormField
@@ -177,6 +186,7 @@ export default function VehicleList() {
               />
               <FormField
                 label="เบอร์เจ้าของรถ"
+                helper={isTeacher ? 'เบอร์เดิมไม่แสดง กรอกเบอร์ใหม่เฉพาะเมื่อต้องการเปลี่ยน เว้นว่างเพื่อคงเดิม' : undefined}
                 type="tel"
                 inputMode="numeric"
                 value={editForm.owner_phone}

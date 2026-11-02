@@ -854,32 +854,40 @@ router.put('/roster-requests/:id', requireFullSchoolScope, async (req, res, next
 
 // ─── PUT /students/:id (update student profile + parent) ────────────────────
 
-router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
+router.put('/students/:id', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const studentId = readIdParam(req, res, 'id');
     if (studentId === null) return;
+    const gradeScope = teacherGradeScope(req);
+    if (gradeScope) {
+      const allowed = new Set(['prefix', 'first_name', 'last_name', 'grade', 'classroom', 'morning_enabled', 'evening_enabled', 'parent_name', 'parent_phone']);
+      if (Object.keys(req.body || {}).some(key => !allowed.has(key)) ||
+          (req.body.grade !== undefined && normalizeGrade(req.body.grade) !== gradeScope)) {
+        return sendError(res, 'แก้ไขได้เฉพาะข้อมูลนักเรียนในสายชั้นที่รับผิดชอบ ไม่สามารถย้ายข้ามสายชั้นได้', [], 403);
+      }
+    }
 
     // Verify student belongs to this school + fetch old values for audit
-    const [[st]] = await pool.query(
-      `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+    const profileSql = `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
               s.morning_enabled, s.evening_enabled, s.dropoff_address,
               p.name AS parent_name, p.phone AS parent_phone
        FROM students s
        LEFT JOIN parent_student ps ON ps.student_id = s.id
        LEFT JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
        WHERE s.id = ? AND s.school_id = ? AND s.is_deleted = FALSE
-       LIMIT 1`,
-      [studentId, schoolId]
-    );
+       ${gradeScope ? 'AND s.grade IN (?)' : ''} LIMIT 1`;
+    const profileParams = [studentId, schoolId, ...(gradeScope ? [gradeEquivalents(gradeScope)] : [])];
+    let [[st]] = await pool.query(profileSql, profileParams);
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
+    if (gradeScope && normalizeGrade(st.grade) !== gradeScope) return sendError(res, 'ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ', [], 404);
 
     const { prefix, first_name, last_name, grade, classroom, morning_enabled, evening_enabled, dropoff_address, parent_name, parent_phone } = req.body;
 
     // Validate required fields
-    if (first_name !== undefined && !first_name.trim()) return sendError(res, 'กรุณากรอกชื่อนักเรียน', [], 400);
-    if (last_name !== undefined && !last_name.trim()) return sendError(res, 'กรุณากรอกนามสกุลนักเรียน', [], 400);
+    if (first_name !== undefined && (typeof first_name !== 'string' || !first_name.trim())) return sendError(res, 'กรุณากรอกชื่อนักเรียน', [], 400);
+    if (last_name !== undefined && (typeof last_name !== 'string' || !last_name.trim())) return sendError(res, 'กรุณากรอกนามสกุลนักเรียน', [], 400);
     // Normalize phone (strip dashes) before validation
     const normalizedParentPhone = parent_phone !== undefined ? normalizePhone(parent_phone) : undefined;
     if (normalizedParentPhone && !/^\d{9,10}$/.test(normalizedParentPhone)) {
@@ -897,6 +905,17 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
     try {
       await conn.beginTransaction();
 
+      if (gradeScope) {
+        // Current locking read: a concurrent transfer/grade change cannot turn
+        // the earlier read into an out-of-scope student or guardian mutation.
+        const [[current]] = await conn.query(`${profileSql} FOR UPDATE`, profileParams);
+        if (!current || normalizeGrade(current.grade) !== gradeScope) {
+          const err = new Error('ข้อมูลนักเรียนเปลี่ยนไป กรุณาโหลดรายชื่อใหม่');
+          err.statusCode = 409; throw err;
+        }
+        st = current;
+      }
+
       // 1. Update student fields
       const updates = [];
       const params = [];
@@ -911,7 +930,8 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
 
       if (updates.length > 0) {
         params.push(studentId);
-        await conn.query(`UPDATE students SET ${updates.join(', ')} WHERE id = ?`, params);
+        if (gradeScope) params.push(schoolId, st.grade);
+        await conn.query(`UPDATE students SET ${updates.join(', ')} WHERE id = ?${gradeScope ? ' AND school_id = ? AND grade <=> ? AND is_deleted = FALSE' : ''}`, params);
       }
 
       // 2. Parent reassignment (Phase 10.3E final rule).
@@ -1003,7 +1023,7 @@ router.put('/students/:id', requireFullSchoolScope, async (req, res, next) => {
         await logAudit({
           userId: req.user.id, action: 'UPDATE', entityType: 'student', entityId: studentId,
           oldValue, newValue,
-          ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+          ipAddress: req.ip, userAgent: req.headers['user-agent'], conn, ...(gradeScope ? { required: true } : {}),
         });
       }
 
@@ -1338,24 +1358,17 @@ function toCalendarDate(value) {
 // ─── PUT /vehicles/:id — แก้ไขข้อมูลรถในขอบเขตโรงเรียน (ลดการพึ่งแอดมิน) ─────────
 // School self-service: edit vehicle type / owner / insurance for a vehicle that
 // serves this school. Does NOT touch plate identity or driver assignment (Tier 3).
-router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
+router.put('/vehicles/:id', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const vehicleId = req.params.id;
-
-    // Scope: the vehicle must serve this school
-    const serves = await ppSvc.validateVehicleServesSchool(vehicleId, schoolId);
-    if (!serves) return sendError(res, 'ไม่พบรถคันนี้ในโรงเรียนของท่าน', [], 404);
-
-    const [[old]] = await pool.query(
-      `SELECT id, vehicle_type, owner_name, owner_phone, insurance_status, insurance_type, insurance_expiry
-         FROM vehicles WHERE id = ? AND is_deleted = FALSE`,
-      [vehicleId]
-    );
-    if (!old) return sendError(res, 'ไม่พบรถในระบบ', [], 404);
-
+    const gradeScope = teacherGradeScope(req);
     const b = req.body || {};
+    const editable = new Set(['vehicle_type', 'owner_name', 'owner_phone', 'insurance_status', 'insurance_type', 'insurance_expiry']);
+    if (gradeScope && Object.keys(b).some(key => !editable.has(key))) {
+      return sendError(res, 'แก้ไขได้เฉพาะประเภท เจ้าของ และข้อมูลประกันรถ', [], 403);
+    }
     const sets = [], params = [], newVal = {};
     // whitelist of editable columns (column names are hardcoded → safe to interpolate)
     const strField = (key, max) => {
@@ -1377,21 +1390,53 @@ router.put('/vehicles/:id', requireFullSchoolScope, async (req, res, next) => {
     }
     if (!sets.length) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
 
-    params.push(vehicleId);
-    await pool.query(`UPDATE vehicles SET ${sets.join(', ')} WHERE id = ?`, params);
+    const conn = gradeScope ? await pool.getConnection() : null;
+    const db = conn || pool;
+    try {
+      if (conn) {
+        await conn.beginTransaction();
+        // Lock a current pupil link first, then the vehicle. Its existence in
+        // this school and grade authorizes shared-master edits (owner decision).
+        const [[rider]] = await conn.query(
+          `SELECT id FROM students WHERE vehicle_id = ? AND school_id = ?
+             AND grade IN (?) AND is_deleted = FALSE ORDER BY id LIMIT 1 FOR UPDATE`,
+          [vehicleId, schoolId, gradeEquivalents(gradeScope)]
+        );
+        if (!rider) {
+          const err = new Error('ไม่พบรถที่นักเรียนในสายชั้นของท่านใช้งาน');
+          err.statusCode = 404; throw err;
+        }
+      } else if (!await ppSvc.validateVehicleServesSchool(vehicleId, schoolId)) {
+        const err = new Error('ไม่พบรถคันนี้ในโรงเรียนของท่าน');
+        err.statusCode = 404; throw err;
+      }
+      const [[old]] = await db.query(
+        `SELECT id, vehicle_type, owner_name, owner_phone, insurance_status, insurance_type, insurance_expiry
+           FROM vehicles WHERE id = ? AND is_deleted = FALSE${conn ? ' FOR UPDATE' : ''}`,
+        [vehicleId]
+      );
+      if (!old) { const err = new Error('ไม่พบรถในระบบ'); err.statusCode = 404; throw err; }
+      params.push(vehicleId);
+      await db.query(`UPDATE vehicles SET ${sets.join(', ')} WHERE id = ?`, params);
 
-    await logAudit({
-      userId: req.user.id, action: 'UPDATE', entityType: 'vehicle', entityId: vehicleId,
-      oldValue: {
-        vehicle_type: old.vehicle_type, owner_name: old.owner_name, owner_phone: old.owner_phone,
-        // CS5-02 — the audit row is the record of what the value HAD been;
-        // storing the instant made it read one day early.
-        insurance_status: old.insurance_status, insurance_type: old.insurance_type,
-        insurance_expiry: toBangkokDate(old.insurance_expiry),
-      },
-      newValue: newVal, ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-    return sendSuccess(res, { vehicle_id: vehicleId }, 'แก้ไขข้อมูลรถสำเร็จ');
+      await logAudit({
+        userId: req.user.id, action: 'UPDATE', entityType: 'vehicle', entityId: vehicleId,
+        oldValue: {
+          vehicle_type: old.vehicle_type, owner_name: old.owner_name, owner_phone: old.owner_phone,
+          // CS5-02 — store the previous Bangkok calendar date in the audit.
+          insurance_status: old.insurance_status, insurance_type: old.insurance_type,
+          insurance_expiry: toBangkokDate(old.insurance_expiry),
+        },
+        newValue: newVal, ipAddress: req.ip, userAgent: req.headers['user-agent'], ...(conn ? { conn, required: true } : {}),
+      });
+      if (conn) await conn.commit();
+      return sendSuccess(res, { vehicle_id: vehicleId }, 'แก้ไขข้อมูลรถสำเร็จ');
+    } catch (err) {
+      if (conn) await conn.rollback();
+      throw err;
+    } finally {
+      if (conn) conn.release();
+    }
   } catch (err) { next(err); }
 });
 

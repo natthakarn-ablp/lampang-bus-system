@@ -11,12 +11,18 @@
 jest.mock('../src/config/database', () => ({ pool: { query: jest.fn() } }));
 
 const { pool } = require('../src/config/database');
-const { findPlateMatches } = require('../src/services/vehicleDedup.service');
+const { findPlateMatches, preflightStatus } = require('../src/services/vehicleDedup.service');
 
 const row = (plate_no, normalized_plate, vehicle_type = 'รถตู้', id = 'V-x') =>
   ({ id, plate_no, normalized_plate, vehicle_type });
 
 beforeEach(() => jest.clearAllMocks());
+
+test('invalid plate is not reported as an existing vehicle', () => {
+  expect(preflightStatus({ code: 'PLATE_FORMAT_INVALID', vehicle_id: null })).toBe('INVALID');
+  expect(preflightStatus({ code: 'VALID_NEW_VEHICLE', vehicle_id: null })).toBe('CLEAR');
+  expect(preflightStatus({ code: 'SAME_ACTIVE_VEHICLE_SAME_SCHOOL', vehicle_id: 'V-1' })).toBe('DUPLICATE_OR_SIMILAR');
+});
 
 describe('findPlateMatches — duplicate preflight', () => {
   test('1. CLEAR for a new valid plate (no matches)', async () => {
@@ -24,6 +30,18 @@ describe('findPlateMatches — duplicate preflight', () => {
     const res = await findPlateMatches('ผก 9999 ลำปาง');
     expect(res.status).toBe('CLEAR');
     expect(res.candidates).toEqual([]);
+  });
+
+  test('numeric category plate is clear without an existing vehicle', async () => {
+    pool.query.mockResolvedValue([[]]);
+    await expect(findPlateMatches('36 0105 ลำปาง')).resolves.toEqual({ status: 'CLEAR', candidates: [] });
+  });
+
+  test('numeric category plate still detects its actual duplicate', async () => {
+    pool.query.mockResolvedValue([[row('36 0105 ลำปาง', '360105ลำปาง')]]);
+    const res = await findPlateMatches('36 0105 ลำปาง');
+    expect(res.status).toBe('DUPLICATE_OR_SIMILAR');
+    expect(res.candidates[0].duplicate_type).toBe('EXACT');
   });
 
   test('2. EXACT candidate (plate_no identical)', async () => {

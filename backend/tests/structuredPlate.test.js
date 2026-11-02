@@ -8,7 +8,7 @@
  * canonical display plate_no + normalized key. No DB / no globalSetup.
  */
 
-const { buildStructuredPlate, normalizePlate, isProvinceVariant } = require('../src/utils/vehiclePlate');
+const { buildStructuredPlate, validatePlateNo, normalizePlate, isProvinceVariant } = require('../src/utils/vehiclePlate');
 
 describe('buildStructuredPlate', () => {
   test('1. valid parts build canonical display plate + normalized key', () => {
@@ -63,5 +63,17 @@ describe('buildStructuredPlate', () => {
   test('9. province-variant detection still works on structured output', () => {
     const withProv = buildStructuredPlate({ prefix: 'นข', number: '4337', province: 'ลำปาง' }).normalized;
     expect(isProvinceVariant(withProv, 'นข4337')).toBe(true); // vs a province-omitted dup
+  });
+
+  test('two-digit numeric category is valid through structured and legacy create paths', () => {
+    const built = buildStructuredPlate({ prefix: '36', number: '0105', province: 'ลำปาง' });
+    expect(built).toMatchObject({ valid: true, plateNo: '36 0105 ลำปาง', normalized: '360105ลำปาง' });
+    expect(validatePlateNo(built.plateNo)).toMatchObject({ valid: true, trimmed: built.plateNo, normalized: built.normalized });
+    expect(validatePlateNo('360105ลำปาง')).toMatchObject({ valid: true, trimmed: built.plateNo });
+    expect(validatePlateNo('10-3070 ลำปาง')).toMatchObject({ valid: true, trimmed: '10 3070 ลำปาง', normalized: '103070ลำปาง' });
+  });
+
+  test('numeric category must be exactly two digits', () => {
+    expect(buildStructuredPlate({ prefix: '123', number: '0105', province: 'ลำปาง' }).code).toBe('PLATE_FORMAT_INVALID');
   });
 });

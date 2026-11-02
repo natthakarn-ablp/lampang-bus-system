@@ -1223,14 +1223,22 @@ router.get('/vehicles/all', async (req, res, next) => {
 // province-variant vehicles BEFORE the operator saves. Never writes.
 router.get('/vehicles/check-plate', async (req, res, next) => {
   try {
-    const { findPlateMatches, classifyPlateAgainstDb } = require('../services/vehicleDedup.service');
+    const { findPlateMatches, classifyPlateAgainstDb, preflightStatus } = require('../services/vehicleDedup.service');
     const { buildDisplayPlate } = require('../utils/plateIdentity');
+    const { validatePlateNo } = require('../utils/vehiclePlate');
     const { plate_no, plate_prefix, plate_number, province } = req.query;
     const schoolId = resolveSchoolId(req);
     // Structured fields take precedence; fall back to legacy plate_no.
     const structured = (plate_prefix != null || plate_number != null || province != null);
     const plateInput = structured ? { plate_prefix, plate_number, province } : plate_no;
     const plateStr = structured ? buildDisplayPlate(plateInput) : plate_no;
+    const validation = validatePlateNo(plateStr);
+    if (!validation.valid) {
+      return sendSuccess(res, {
+        status: 'INVALID', candidates: [],
+        classification: { code: validation.code, message: validation.error },
+      });
+    }
 
     // Phase 10.13A-25B — status comes from the deterministic, province-alias-aware
     // classification (so กทม↔กรุงเทพมหานคร dups are flagged); findPlateMatches only
@@ -1242,7 +1250,7 @@ router.get('/vehicles/check-plate', async (req, res, next) => {
         && !candidates.some((c) => c.plate_no === classification.display_plate)) {
       candidates = [{ plate_no: classification.display_plate, duplicate_type: classification.code }, ...candidates];
     }
-    const status = classification.code === 'VALID_NEW_VEHICLE' ? 'CLEAR' : 'DUPLICATE_OR_SIMILAR';
+    const status = preflightStatus(classification);
     // Phase 10.13A-27 — don't reveal WHICH other school owns a conflicting plate
     // to a school user (the message + display_plate are enough). Admins keep it.
     if (req.user.role !== 'admin' && classification) { delete classification.school_id; delete classification.school_name; }

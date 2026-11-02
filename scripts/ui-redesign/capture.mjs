@@ -1404,7 +1404,7 @@ const SHOTS = [
       await completed;
       const expected = [{ path: 'self', body: { student_id: 11, session } }, { path: 'leave', body: { student_id: 12, session } }, { path: 'bus', body: { session, student_ids: [13] } }];
       if (JSON.stringify(writes) !== JSON.stringify(expected)) throw new Error('independent/leave pupils leaked into bus check payload');
-      await page.getByText(selfLabel, { exact: true }).waitFor();
+      await page.getByRole('listitem').filter({ hasText: 'นักเรียนหนึ่ง' }).getByText(selfLabel, { exact: true }).waitFor();
       await page.getByText('ลาแล้ว', { exact: true }).waitFor();
       await page.getByText(/บันทึก ป\.1 ห้อง 1 แล้ว/).waitFor({ state: 'hidden' });
       await page.getByRole('heading', { name: 'ป.1 / ห้อง 1', exact: true }).locator('xpath=../..').scrollIntoViewIfNeeded();

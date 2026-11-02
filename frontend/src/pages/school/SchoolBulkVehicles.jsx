@@ -176,7 +176,9 @@ export default function SchoolBulkVehicles() {
       const checked = await checkPlate(idx, plate);
       if (checked?.status !== 'CLEAR') {
         fail++;
-        setRowErrors(p => ({ ...p, [idx]: checked ? 'ตรวจสอบรถที่มีอยู่แล้วด้านล่างก่อนเพิ่มรถใหม่' : 'ตรวจสอบทะเบียนไม่สำเร็จ กรุณาลองบันทึกอีกครั้ง' }));
+        setRowErrors(p => ({ ...p, [idx]: checked?.status === 'INVALID'
+          ? (checked.classification?.message || 'กรุณาตรวจสอบรูปแบบทะเบียนรถ')
+          : checked ? 'ตรวจสอบรถที่มีอยู่แล้วด้านล่างก่อนเพิ่มรถใหม่' : 'ตรวจสอบทะเบียนไม่สำเร็จ กรุณาลองบันทึกอีกครั้ง' }));
         continue;
       }
       try {
@@ -366,11 +368,11 @@ export default function SchoolBulkVehicles() {
                 </legend>
                 <div className="grid grid-cols-3 gap-2">
                   <FormField
-                    label="หมวดอักษร"
+                    label="หมวดทะเบียน"
                     value={r.plate_prefix}
                     maxLength={4}
                     onChange={(v) => updateRow(i, 'plate_prefix', v)}
-                    placeholder="เช่น นข"
+                    placeholder="เช่น นข หรือ 36"
                   />
                   <FormField
                     label="เลขทะเบียน"
@@ -456,6 +458,10 @@ export default function SchoolBulkVehicles() {
                   ) : (
                     <div className="mt-1.5">กรุณาแจ้งบัญชีหลักโรงเรียนให้ส่งคำขอกู้คืนรถ</div>
                   )}
+                </div>
+              ) : !r.uncertain && warnings[i]?.status === 'INVALID' ? (
+                <div className="mt-2 text-xs bg-red-50 border border-red-300 text-red-700 rounded-lg px-3 py-2" role="alert">
+                  {warnings[i].classification?.message || 'กรุณาตรวจสอบรูปแบบทะเบียนรถ'}
                 </div>
               ) : !r.uncertain && warnings[i]?.status === 'DUPLICATE_OR_SIMILAR' ? (
                 <div className="mt-2 text-xs bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-3 py-2">

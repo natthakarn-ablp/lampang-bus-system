@@ -122,4 +122,9 @@ async function classifyPlateAgainstDb(db, plateInput, opts = {}) {
   return classifyVehiclePlateConflict(plateInput, vehicles, opts);
 }
 
-module.exports = { findPlateMatches, annotateVehicleList, classifyPlateAgainstDb };
+function preflightStatus(classification) {
+  if (classification.code === 'VALID_NEW_VEHICLE') return 'CLEAR';
+  return classification.vehicle_id ? 'DUPLICATE_OR_SIMILAR' : 'INVALID';
+}
+
+module.exports = { findPlateMatches, annotateVehicleList, classifyPlateAgainstDb, preflightStatus };

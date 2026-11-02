@@ -173,7 +173,7 @@ function buildDisplayPlate({ plate_prefix, plate_number, province } = {}) {
 // Best-effort split of a legacy free-text plate into structured parts.
 function parseLegacyPlateText(plate_no) {
   const m = String(plate_no == null ? '' : plate_no)
-    .match(/^\s*([0-9]?[\u0E00-\u0E7F]{1,3})[\s.．。_\-\u2010-\u2015]*([0-9]{1,4})(?:[\s.．。_\-\u2010-\u2015]*([\u0E00-\u0E7Fa-zA-Z][\u0E00-\u0E7Fa-zA-Z\s.．。]*))?\s*$/);
+    .match(/^\s*([0-9]?[\u0E00-\u0E7F]{1,3}|[0-9]{2})[\s.．。_\-\u2010-\u2015]*([0-9]{1,4})(?:[\s.．。_\-\u2010-\u2015]*([\u0E00-\u0E7Fa-zA-Z][\u0E00-\u0E7Fa-zA-Z\s.．。]*))?\s*$/);
   if (!m) return null;
   return { plate_prefix: m[1], plate_number: m[2], province: (m[3] || '').trim() };
 }

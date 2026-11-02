@@ -87,11 +87,12 @@ function isProvinceVariant(normA, normB) {
 
 // Phase 10.13A-22 — build a canonical display plate from structured parts so
 // operators can't free-type spacing/province variants. prefix = 1–3 Thai
-// letters (optional leading digit, e.g. "1นค"); number = 1–4 digits; province
+// letters (optional leading digit, e.g. "1นค") or a two-digit vehicle category;
+// number = 1–4 digits; province
 // = non-empty (chosen from a dropdown). Returns the human display plate
 // (`นข 4337 ลำปาง`) plus its normalized key; the route still re-normalizes and
 // runs the duplicate guard — backend stays the source of truth.
-const PLATE_PREFIX_RE = /^[0-9]?[\u0E00-\u0E7F]{1,3}$/;
+const PLATE_PREFIX_RE = /^(?:[0-9]?[\u0E00-\u0E7F]{1,3}|[0-9]{2})$/;
 const PLATE_NUMBER_RE = /^[0-9]{1,4}$/;
 
 function buildStructuredPlate({ prefix, number, province } = {}) {

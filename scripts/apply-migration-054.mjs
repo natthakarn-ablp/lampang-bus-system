@@ -10,31 +10,38 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // A reviewed server-only release-prep clone may reuse the unchanged locked
 // backend dependencies without advancing the live application checkout.
 const require = createRequire(resolve(process.env.MIGRATION_BACKEND_MODULES || resolve(root, 'backend'), 'package.json'));
-const { filename, applyAttendanceMigration } = require(resolve(root, 'backend/src/services/attendanceMigration.service.js'));
+const { filename, applyAttendanceMigration, verifyAttendanceMigration } = require(resolve(root, 'backend/src/services/attendanceMigration.service.js'));
 const sql = readFileSync(resolve(root, 'backend/migrations', filename), 'utf8');
 const checksum = createHash('sha256').update(sql).digest('hex');
 function preflight(message) { const error = new Error(message); error.code = 'OPERATOR_PREFLIGHT'; throw error; }
-if (!process.argv.includes('--apply')) {
+const applying = process.argv.includes('--apply');
+const verifying = process.argv.includes('--verify');
+if (!applying && !verifying) {
   console.log(JSON.stringify({ dry_run: true, filename, checksum, note: 'No DB, credentials, backup or lock operation performed' }));
 } else {
   let conn, held = false;
   const lock = process.env.SELF_TRAVEL_DEPLOY_LOCK || '/home/schoolbus/deploy-state/deploy-backend.lock';
   const owner = resolve(lock, 'owner.' + process.pid);
   try {
+    if (applying && verifying) preflight('Select only one mode: apply or read-only verify');
+    if (process.getuid?.() === 0) preflight('Do not run repository Node code as root; use the approved owner SQL operation separately');
     if (!process.env.ENV_FILE) preflight('ENV_FILE must select the existing private operator configuration');
     const cfg = require('dotenv').parse(readFileSync(process.env.ENV_FILE));
-    if (String(cfg.DB_CREDENTIAL_ROLE || '').trim().toLowerCase() === 'runtime') preflight('Runtime credentials cannot apply schema');
+    if (applying && String(cfg.DB_CREDENTIAL_ROLE || '').trim().toLowerCase() === 'runtime') preflight('Runtime credentials cannot apply schema; read-only verify is available');
     if (!cfg.DB_USER || !cfg.DB_NAME || !cfg.DB_PASSWORD) preflight('Operator configuration is incomplete');
-    mkdirSync(lock); held = true;
-    writeFileSync(owner + '.tmp', process.pid + ' ' + new Date().toISOString() + ' migration054\n', { mode: 0o600 });
-    renameSync(owner + '.tmp', owner);
-    // Verifier prints only server-local backup metadata, never dump contents.
-    execFileSync('bash', [resolve(root, 'scripts/verify-latest-backup.sh')], { cwd: root, stdio: 'inherit' });
+    if (applying) {
+      mkdirSync(lock); held = true;
+      writeFileSync(owner + '.tmp', process.pid + ' ' + new Date().toISOString() + ' migration054\n', { mode: 0o600 });
+      renameSync(owner + '.tmp', owner);
+      // Verifier prints only server-local backup metadata, never dump contents.
+      execFileSync('bash', [resolve(root, 'scripts/verify-latest-backup.sh')], { cwd: root, stdio: 'inherit' });
+    }
     conn = await require('mysql2/promise').createConnection({
       host: cfg.DB_HOST || '127.0.0.1', port: Number(cfg.DB_PORT || 3306), user: cfg.DB_USER,
       password: cfg.DB_PASSWORD, database: cfg.DB_NAME, multipleStatements: false,
     });
-    console.log(JSON.stringify(await applyAttendanceMigration(conn, { sql, checksum })));
+    console.log(JSON.stringify(applying ? await applyAttendanceMigration(conn, { sql, checksum })
+      : await verifyAttendanceMigration(conn, { checksum })));
   } catch (error) {
     // Do not echo connection errors: they can contain usernames and addresses.
     console.error('[054] refused/failed:', ['ATTENDANCE_MIGRATION_REFUSED', 'OPERATOR_PREFLIGHT'].includes(error.code) ? error.message : (error.code || 'operator preflight failed'));

@@ -46,12 +46,13 @@ function totals(rows) {
       continue;
     }
     for (const session of ['morning', 'evening']) {
-      if (!row[`${session}_enabled`] || ![session, 'both'].includes(row.session)) continue;
-      const key = JSON.stringify([calendar(row.check_date), row.student_id, session]);
+      if (!(Number(row[`${session}_enabled`]) > 0) || ![session, 'both'].includes(row.session)) continue;
+      const key = JSON.stringify([calendar(row.check_date), String(row.student_id), session]);
       if (!grouped.has(key)) grouped.set(key, { session, id: row.student_id, kinds: new Set(), bus: false });
       const item = grouped.get(key);
       item.kinds.add(row.attendance_kind);
-      item.bus ||= !!row[`${session}_done`];
+      // UNION with SUM returns DECIMAL strings in mysql2; "0" is truthy.
+      item.bus ||= Number(row[`${session}_done`] || 0) > 0;
     }
   }
   for (const item of grouped.values()) {

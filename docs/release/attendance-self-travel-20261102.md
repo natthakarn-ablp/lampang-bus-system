@@ -24,6 +24,12 @@ Migration054_attendance_kind.sql is required before deploying this build: startu
 4. Release the schema-operation lock, then deploy the pinned approved feat/tracking-security-hardening commit through scripts/deploy-backend.sh with EXPECTED_BRANCH and DEPLOY_FRONTEND=1. Its lock, syntax/unit checks and rollback flow must remain enabled; do not use detached HEAD. The SELF_TRAVEL_DEPLOY_LOCK path, if overridden, must match that deployer's lock.
 5. Verify public health commit against the exact target, DB connectivity, migration latest054 with only legal052/053 still pending, frontend asset hashes, process/lock and retained rollback backup. Do not infer whole UAT or legal approval from health200.
 
+### Existing production actor boundary
+
+Fresh read-only preflight found the application uses the runtime actor and054 is not applied. Runtime must retain its current CRUD-only grants. The existing schema-operator configuration is root-protected (see ops/database/README.md); do not copy it to schoolbus, loosen its permissions, reuse the backup actor for DDL, rerun the actor installer/recovery, or run this repository's Node code with sudo.
+
+For that production arrangement, the owner must perform the approved054 SQL through the existing privileged MySQL operator session, with the coordination reservation/deploy lock, verified backup and protected exact-SHA SQL copy. Apply only054 and record its exact file SHA256 in schema_migrations after metadata validation;052/053 remain untouched. After the owner operation, the unprivileged Node helper supports --verify with the runtime configuration: it only SELECTs metadata/ledger, performs no lock or write, and refuses missing/different ledger state. --apply remains for an already authorized non-root operator credential/session; it intentionally refuses runtime credentials and root execution. No additional database actor or grant is created by this release.
+
 ## Rollback boundary
 
 Keep the additive schema and cancellation history when rolling back; do not drop054 columns or recreate the old unique key over retained cancelled history. Before the first successful frontend/backend release completes, the SELF write guard uses the deploy lock and prevents new typed SELF records during automatic rollback.

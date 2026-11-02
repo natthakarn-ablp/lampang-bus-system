@@ -4,7 +4,7 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const { applyAttendanceMigration, assertAttendanceSchema, filename } = require('../src/services/attendanceMigration.service');
+const { applyAttendanceMigration, assertAttendanceSchema, verifyAttendanceMigration, filename } = require('../src/services/attendanceMigration.service');
 const sql = fs.readFileSync(path.join(__dirname, '../migrations', filename), 'utf8');
 const checksum = crypto.createHash('sha256').update(sql).digest('hex');
 const readyColumns = () => [
@@ -104,4 +104,15 @@ test('boot calls the attendance schema guard before opening the listener', () =>
   const index = fs.readFileSync(path.join(__dirname, '../src/index.js'), 'utf8');
   expect(index.indexOf('await assertAttendanceSchema(pool)')).toBeGreaterThan(index.indexOf('await testConnection()'));
   expect(index.indexOf('await assertAttendanceSchema(pool)')).toBeLessThan(index.indexOf('app.listen('));
+});
+test('runtime-compatible verification only reads metadata and ledger, never locks/stamps/applies DDL', async () => {
+  state = 'ready'; tracked = { filename, checksum };
+  expect(await verifyAttendanceMigration(conn, { checksum })).toMatchObject({ status: 'verified' });
+  expect(conn.query.mock.calls.every(([query]) => query.startsWith('SELECT'))).toBe(true);
+  expect(conn.query.mock.calls.some(([query]) => /GET_LOCK|RELEASE_LOCK|INSERT|ALTER/.test(query))).toBe(false);
+});
+test('read-only verification cannot silently repair a missing ledger', async () => {
+  state = 'ready';
+  await expect(verifyAttendanceMigration(conn, { checksum })).rejects.toThrow('ledger is missing');
+  expect(tracked).toBeNull();
 });

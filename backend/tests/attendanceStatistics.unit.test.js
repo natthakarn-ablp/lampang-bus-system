@@ -15,6 +15,11 @@ test('bus/exception and conflicting exception evidence are surfaced separately',
   expect(totals([event({ morning_done: 1 })])).toMatchObject({ morning_conflict: 1, morning_self: 0 });
   expect(totals([event(), event({ attendance_kind: 'LEAVE' })])).toMatchObject({ morning_conflict: 1, morning_self: 0, morning_leave: 0 });
 });
+test('MySQL UNION decimal strings do not turn morning zero into a bus/SELF conflict', () => {
+  expect(totals([event({ morning_done: '0', evening_done: '1' })])).toMatchObject({ morning_self: 1, morning_conflict: 0 });
+  expect(totals([event({ morning_done: '1' })])).toMatchObject({ morning_self: 0, morning_conflict: 1 });
+  expect(totals([event({ morning_enabled: '0' })])).toMatchObject({ morning_self: 0 });
+});
 test('daily totals and school/vehicle denominators reconcile, preserving other rows', () => {
   const result = decorateDaily({ morning_total: 5, morning_done: 2, morning_pending: 3,
     schools: [{ school_id: 'S1', morning_expected: 5, morning_done: 2 }, { school_id: 'S2', morning_expected: 3 }],

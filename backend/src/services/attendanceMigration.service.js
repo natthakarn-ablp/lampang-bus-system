@@ -51,4 +51,11 @@ async function assertAttendanceSchema(conn) {
   try { ready = await structure(conn) === 'ready'; } catch { /* metadata is not verified */ }
   if (!ready) refuse('Migration054 attendance schema is missing or could not be verified; refusing startup');
 }
-module.exports = { filename, structure, applyAttendanceMigration, assertAttendanceSchema };
+async function verifyAttendanceMigration(conn, { checksum }) {
+  if (!/^[a-f0-9]{64}$/.test(checksum || '')) refuse('Expected checksum is invalid');
+  await assertAttendanceSchema(conn);
+  const [[tracked]] = await conn.query('SELECT filename,checksum FROM schema_migrations WHERE filename=?', [filename]);
+  if (!tracked || tracked.checksum !== checksum) refuse('Schema verified but054 ledger is missing or checksum differs');
+  return { status: 'verified', filename, checksum };
+}
+module.exports = { filename, structure, applyAttendanceMigration, assertAttendanceSchema, verifyAttendanceMigration };

@@ -1407,7 +1407,12 @@ const SHOTS = [
       await completed;
       const expected = [{ path: 'self', body: { student_id: 11, session } }, { path: 'leave', body: { student_id: 12, session } }, { path: 'bus', body: { session, student_ids: [13] } }];
       if (JSON.stringify(writes) !== JSON.stringify(expected)) throw new Error('independent/leave pupils leaked into bus check payload');
-      await page.getByRole('listitem').filter({ hasText: 'นักเรียนหนึ่ง' }).getByText(selfLabel, { exact: true }).waitFor();
+      const selfStudent = page.getByRole('listitem').filter({ hasText: 'นักเรียนหนึ่ง' });
+      // The selection badge and button both say "มาเอง/กลับเอง" until the
+      // saved state arrives. Wait for that button to disappear before checking
+      // the persisted status badge, so the assertion proves the UI refreshed.
+      await selfStudent.getByRole('button', { name: `${selfLabel} นักเรียนหนึ่ง`, exact: true }).waitFor({ state: 'detached' });
+      await selfStudent.locator('span').filter({ hasText: selfLabel }).first().waitFor();
       await page.getByText('ลาแล้ว', { exact: true }).waitFor();
       await page.getByText(/บันทึก ป\.1 ห้อง 1 แล้ว/).waitFor({ state: 'hidden' });
       await page.getByRole('heading', { name: 'ป.1 / ห้อง 1', exact: true }).locator('xpath=../..').scrollIntoViewIfNeeded();

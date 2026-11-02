@@ -38,12 +38,12 @@ const GLOBAL_API_LIMITED_PREFIXES = [
 ];
 
 // ─── Proxy trust ────────────────────────────────────────────────────────────
-// Production chain: client → Cloudflare → nginx (127.0.0.1) → backend.
-// nginx appends `$remote_addr` (= Cloudflare edge IP) via
-// proxy_add_x_forwarded_for, so XFF arrives as `<client>, <cf-edge>`.
-// trust proxy = 1 strips the rightmost trusted entry (cf-edge), exposing the
-// real client IP as req.ip for rate-limit keys + audit logs.
-app.set('trust proxy', 1);
+// Production chain: client → Cloudflare → local nginx → loopback backend.
+// nginx must resolve CF-Connecting-IP only from reviewed Cloudflare CIDRs and
+// overwrite X-Forwarded-For with its verified $remote_addr (one address).
+// Express trusts only the loopback socket peer; an accidentally exposed Node
+// listener must not accept a remote client's self-supplied forwarding header.
+app.set('trust proxy', 'loopback');
 
 // ─── Security & parsing middleware ──────────────────────────────────────────
 app.use(helmet());

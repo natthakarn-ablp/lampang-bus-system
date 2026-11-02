@@ -81,7 +81,7 @@ export default function InspectionForm() {
   const [customSchoolName, setCustomSchoolName] = useState('');
   const isOtherSchool = form?.certifying_school_id === '__other__';
   const isOtherVehicle = form?.vehicle_id === '__other__';
-  const [newPlate, setNewPlate] = useState({ prefix: '', letters: '', number: '', province: 'ลำปาง' });
+  const [newPlate, setNewPlate] = useState({ category: '', number: '', province: 'ลำปาง' });
   const { runWithPolicy, policyActionDialog } = usePolicyAction();
 
   useEffect(() => {
@@ -121,12 +121,8 @@ export default function InspectionForm() {
   }
 
   function buildPlateNo() {
-    const { prefix, letters, number, province } = newPlate;
-    if (!letters || !number || !province) return '';
-    const parts = [];
-    if (prefix) parts.push(prefix);
-    parts.push(letters, number, province);
-    return parts.join(' ');
+    const { category, number, province } = newPlate;
+    return category && number && province ? `${category.trim()} ${number.trim()} ${province}` : '';
   }
 
   async function handleSubmit(e) {
@@ -137,10 +133,11 @@ export default function InspectionForm() {
     }
     if (!form.vehicle_id && !isOtherVehicle) { toast.error('กรุณาเลือกรถ'); return; }
     if (isOtherVehicle) {
-      if (!/^[ก-ฮ]{2}$/.test(newPlate.letters)) { toast.error('หมวดอักษรต้องเป็นอักษรไทย 2 ตัว'); return; }
+      if (!/^(?:[0-9]?[\u0E00-\u0E7F]{1,3}|[0-9]{2})$/.test(newPlate.category.trim())) {
+        toast.error('หมวดทะเบียนต้องเป็นอักษรไทย 1–3 ตัว (นำหน้าด้วยเลขได้ 1 ตัว) หรือเลข 2 หลัก'); return;
+      }
       if (!/^\d{1,4}$/.test(newPlate.number)) { toast.error('หมายเลขทะเบียนต้องเป็นตัวเลข 1-4 หลัก'); return; }
       if (!newPlate.province) { toast.error('กรุณาเลือกจังหวัด'); return; }
-      if (newPlate.prefix && !/^\d$/.test(newPlate.prefix)) { toast.error('เลขนำหน้าต้องเป็นตัวเลข 0-9 หนึ่งตัว'); return; }
     }
     if (isOtherSchool && !customSchoolName.trim()) { toast.error('กรุณาระบุชื่อโรงเรียน'); return; }
     setSaving(true);
@@ -258,7 +255,7 @@ export default function InspectionForm() {
                   <select
                     {...ctl}
                     value={form.vehicle_id}
-                    onChange={e => { setForm({ ...form, vehicle_id: e.target.value }); if (e.target.value !== '__other__') setNewPlate({ prefix: '', letters: '', number: '', province: 'ลำปาง' }); }}
+                    onChange={e => { setForm({ ...form, vehicle_id: e.target.value }); if (e.target.value !== '__other__') setNewPlate({ category: '', number: '', province: 'ลำปาง' }); }}
                     className={CONTROL_CLS}
                   >
                     <option value="">— เลือกรถ —</option>
@@ -278,22 +275,14 @@ export default function InspectionForm() {
               {isOtherVehicle && (
                 <div className="mt-3 bg-warn-soft border border-warn/30 rounded-lg p-4 space-y-3">
                   <p className="text-sm font-semibold text-warn-ink">กรอกทะเบียนรถใหม่</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <FormField
-                      label="เลขนำหน้า"
-                      value={newPlate.prefix}
-                      maxLength={1}
-                      inputMode="numeric"
-                      onChange={v => setNewPlate({ ...newPlate, prefix: v.replace(/[^0-9]/g, '') })}
-                      placeholder="1"
-                    />
-                    <FormField
-                      label="หมวดอักษร"
+                      label="หมวดทะเบียน"
                       required
-                      value={newPlate.letters}
-                      maxLength={2}
-                      onChange={v => setNewPlate({ ...newPlate, letters: v.replace(/[^ก-ฮ]/g, '') })}
-                      placeholder="กข"
+                      value={newPlate.category}
+                      maxLength={4}
+                      onChange={v => setNewPlate({ ...newPlate, category: v.replace(/[^0-9\u0E00-\u0E7F]/g, '') })}
+                      placeholder="กข, 1กข หรือ 10"
                     />
                     <FormField
                       label="หมายเลข"

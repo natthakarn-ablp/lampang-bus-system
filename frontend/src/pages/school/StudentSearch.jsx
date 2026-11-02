@@ -51,6 +51,10 @@ export default function StudentSearch() {
 
   const [search, setSearch] = useState('');
   const [grade, setGrade] = useState('');
+  const [classroom, setClassroom] = useState('');
+  const [classrooms, setClassrooms] = useState([]);
+  const [classroomsError, setClassroomsError] = useState(false);
+  const [classroomRefresh, setClassroomRefresh] = useState(0);
   // การ์ด "ความครบถ้วนข้อมูล" บนหน้าภาพรวมลิงก์มาที่นี่พร้อม ?has_vehicle=no
   // เพื่อให้กด "ดูรายชื่อ" แล้วเห็นเฉพาะคนที่ยังไม่ผูกรถทันที
   const [hasVehicle, setHasVehicle] = useState(
@@ -84,6 +88,16 @@ export default function StudentSearch() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    if (!isTeacher) return;
+    let active = true;
+    setClassroomsError(false);
+    api.get('/school/students/classrooms').then(res => {
+      if (active) setClassrooms(Array.isArray(res.data.data) ? res.data.data : []);
+    }).catch(() => { if (active) { setClassrooms([]); setClassroomsError(true); } });
+    return () => { active = false; };
+  }, [isTeacher, classroomRefresh]);
+
   const fetchStudents = useCallback(async (page = 1) => {
     setLoading(true);
     setError('');
@@ -93,6 +107,7 @@ export default function StudentSearch() {
       params.set('per_page', '20');
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (grade) params.set('grade', grade);
+      if (isTeacher && classroom) params.set('classroom', classroom);
       if (hasVehicle) params.set('has_vehicle', hasVehicle);
 
       const res = await api.get(`/school/students?${params}`);
@@ -103,7 +118,7 @@ export default function StudentSearch() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, grade, hasVehicle]);
+  }, [debouncedSearch, grade, classroom, hasVehicle, isTeacher]);
 
   useEffect(() => {
     fetchStudents(1);
@@ -177,6 +192,7 @@ export default function StudentSearch() {
       }
       closeEdit();
       fetchStudents(meta.page);
+      if (isTeacher) setClassroomRefresh(n => n + 1);
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถบันทึกได้');
     } finally { saveLock.current = false; setSaving(false); }
@@ -248,7 +264,7 @@ export default function StudentSearch() {
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
-  const hasFilter = Boolean(debouncedSearch || grade || hasVehicle);
+  const hasFilter = Boolean(debouncedSearch || grade || classroom || hasVehicle);
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
@@ -278,7 +294,9 @@ export default function StudentSearch() {
           <button type="button" onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }} className="focus-ring min-h-[44px] px-3 text-ink-muted">นำเข้าแบบเดิม (สำรอง)</button>
         </div>
       </details>}
-      {showAdd && <AddStudentModal initialVehicleId={params.get('vehicle_id') || ''} onClose={closeAdd} onApplied={() => fetchStudents(1)} />}
+      {showAdd && <AddStudentModal initialVehicleId={params.get('vehicle_id') || ''} onClose={closeAdd} onApplied={() => { fetchStudents(1); if (isTeacher) setClassroomRefresh(n => n + 1); }} />}
+
+      {isTeacher && classroomsError && <ErrorState message="โหลดรายชื่อห้องไม่สำเร็จ" className="mb-4" onRetry={() => setClassroomRefresh(n => n + 1)} />}
 
       <FilterBar
         className="mb-5"
@@ -291,13 +309,16 @@ export default function StudentSearch() {
         filters={[{
           key: 'hasVehicle', label: 'กรองตามการผูกรถ', value: hasVehicle, onChange: setHasVehicle,
           options: [['', 'ทุกสถานะการผูกรถ'], ['no', 'ยังไม่ผูกรถ'], ['yes', 'ผูกรถแล้ว']] },
-        {
+        isTeacher ? {
+          key: 'classroom', label: 'กรองตามเลขห้อง', value: classroom, onChange: setClassroom,
+          options: [['', 'ทุกห้อง'], ...classrooms.map(room => [room, `ห้อง ${room}`])],
+        } : {
           key: 'grade', label: 'กรองตามระดับชั้น', value: grade, onChange: setGrade,
           options: [['', 'ทุกระดับชั้น'], ...['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'].map(g => [g, g])],
         }]}
         count={meta.total}
         countLabel="คน"
-        onClear={() => { setSearch(''); setGrade(''); setHasVehicle(''); }}
+        onClear={() => { setSearch(''); setGrade(''); setClassroom(''); setHasVehicle(''); }}
       />
 
       {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}

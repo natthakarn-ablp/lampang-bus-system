@@ -202,12 +202,30 @@ router.get('/no-show', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get('/students/classrooms', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    const gradeFilter = teacherGradeScope(req);
+    if (!schoolId || !gradeFilter) return sendError(res, 'สำหรับบัญชีครูประจำสายชั้นเท่านั้น', [], 403);
+    const grades = gradeEquivalents(gradeFilter);
+    const [rows] = await pool.query(
+      `SELECT DISTINCT classroom FROM students WHERE school_id = ? AND is_deleted = FALSE
+       AND grade IN (${grades.map(() => '?').join(',')}) AND classroom IS NOT NULL AND classroom <> ''`,
+      [schoolId, ...grades]
+    );
+    return sendSuccess(res, rows.map(row => row.classroom).sort((a, b) => String(a).localeCompare(String(b), 'th', { numeric: true })), 'OK');
+  } catch (err) { next(err); }
+});
+
 router.get('/students', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
 
-    const { search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled, sort, order } = req.query;
+    const { search, grade, classroom, vehicle_id, has_vehicle, morning_enabled, evening_enabled, sort, order } = req.query;
+    if (classroom !== undefined && (typeof classroom !== 'string' || classroom.length > 30)) {
+      return sendError(res, 'เลขห้องไม่ถูกต้อง', [], 400);
+    }
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const per_page = Math.min(100, Math.max(1, parseInt(req.query.per_page, 10) || 20));
     const include_deleted = req.query.include_deleted === '1' || req.query.include_deleted === 'true';
@@ -215,7 +233,7 @@ router.get('/students', async (req, res, next) => {
 
     const gradeFilter = resolveGradeScope(req);
     const result = await schoolSvc.getStudents(schoolId, {
-      search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled,
+      search, grade, classroom: classroom?.trim(), vehicle_id, has_vehicle, morning_enabled, evening_enabled,
       page, per_page, sort, order, gradeFilter, include_deleted, only_deleted,
     });
 

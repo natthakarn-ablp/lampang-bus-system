@@ -198,7 +198,7 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
 /**
  * Search/list students for a school with optional filters.
  */
-async function getStudents(schoolId, { search, grade, vehicle_id, has_vehicle, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
+async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has_vehicle, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
   const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'vehicle_id'];
   const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
   const sortDir = order === 'desc' ? 'DESC' : 'ASC';
@@ -230,6 +230,10 @@ async function getStudents(schoolId, { search, grade, vehicle_id, has_vehicle, m
     const eq = gradeEquivalents(effectiveGrade);
     where += ` AND s.grade IN (${eq.map(() => '?').join(',')})`;
     params.push(...eq);
+  }
+  if (classroom) {
+    where += ' AND s.classroom = ?';
+    params.push(classroom);
   }
   if (vehicle_id) {
     where += ' AND s.vehicle_id = ?';

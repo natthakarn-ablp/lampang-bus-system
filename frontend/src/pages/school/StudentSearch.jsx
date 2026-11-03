@@ -60,6 +60,7 @@ export default function StudentSearch() {
   const [hasVehicle, setHasVehicle] = useState(
     () => new URLSearchParams(window.location.search).get('has_vehicle') || ''
   );
+  const [showDeleted, setShowDeleted] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Edit modal state
@@ -108,7 +109,8 @@ export default function StudentSearch() {
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (grade) params.set('grade', grade);
       if (isTeacher && classroom) params.set('classroom', classroom);
-      if (hasVehicle) params.set('has_vehicle', hasVehicle);
+      if (showDeleted) params.set('only_deleted', '1');
+      else if (hasVehicle) params.set('has_vehicle', hasVehicle);
 
       const res = await api.get(`/school/students?${params}`);
       setStudents(Array.isArray(res.data.data) ? res.data.data : []);
@@ -118,7 +120,15 @@ export default function StudentSearch() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, grade, classroom, hasVehicle, isTeacher]);
+  }, [debouncedSearch, grade, classroom, hasVehicle, isTeacher, showDeleted]);
+
+  function openDeletedSearch(code) {
+    closeAdd();
+    setSearch(String(code));
+    setDebouncedSearch(String(code));
+    setGrade(''); setClassroom(''); setHasVehicle('');
+    setShowDeleted(true);
+  }
 
   useEffect(() => {
     fetchStudents(1);
@@ -219,6 +229,7 @@ export default function StudentSearch() {
   // Replaces window.confirm, which could not show the pupil being withdrawn in
   // any readable form and put the destructive default under Enter.
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(null);
 
   async function handleWithdraw() {
     if (!editStudent) return;
@@ -232,6 +243,20 @@ export default function StudentSearch() {
     } catch (err) {
       toast.error(err.response?.data?.message || 'ไม่สามารถบันทึกได้');
     } finally { setSaving(false); }
+  }
+
+  async function handleRestore() {
+    if (!confirmRestore || saveLock.current) return;
+    saveLock.current = true; setSaving(true);
+    try {
+      await api.post(`/school/students/${confirmRestore.id}/restore`);
+      toast.success('กู้คืนนักเรียนแล้ว กรุณาตรวจสอบข้อมูลเดิมและเลือกรถอีกครั้ง');
+      setConfirmRestore(null);
+      fetchStudents(1);
+      if (isTeacher) setClassroomRefresh(n => n + 1);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'กู้คืนไม่สำเร็จ กรุณาลองอีกครั้ง');
+    } finally { saveLock.current = false; setSaving(false); }
   }
 
   function handleDownloadTemplate() {
@@ -264,7 +289,7 @@ export default function StudentSearch() {
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
-  const hasFilter = Boolean(debouncedSearch || grade || classroom || hasVehicle);
+  const hasFilter = Boolean(debouncedSearch || grade || classroom || hasVehicle || showDeleted);
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
@@ -294,7 +319,7 @@ export default function StudentSearch() {
           <button type="button" onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }} className="focus-ring min-h-[44px] px-3 text-ink-muted">นำเข้าแบบเดิม (สำรอง)</button>
         </div>
       </details>}
-      {showAdd && <AddStudentModal initialVehicleId={params.get('vehicle_id') || ''} onClose={closeAdd} onApplied={() => { fetchStudents(1); if (isTeacher) setClassroomRefresh(n => n + 1); }} />}
+      {showAdd && <AddStudentModal initialVehicleId={params.get('vehicle_id') || ''} onClose={closeAdd} onFindDeleted={openDeletedSearch} onApplied={() => { fetchStudents(1); if (isTeacher) setClassroomRefresh(n => n + 1); }} />}
 
       {isTeacher && classroomsError && <ErrorState message="โหลดรายชื่อห้องไม่สำเร็จ" className="mb-4" onRetry={() => setClassroomRefresh(n => n + 1)} />}
 
@@ -307,8 +332,12 @@ export default function StudentSearch() {
           label: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส',
         }}
         filters={[{
+          key: 'deleted', label: 'สถานะรายชื่อ', value: showDeleted ? 'deleted' : '',
+          onChange: value => { setShowDeleted(value === 'deleted'); setHasVehicle(''); setClassroom(''); },
+          options: [['', 'รายชื่อปัจจุบัน'], ['deleted', 'รายชื่อที่ลบ']],
+        }, ...(!showDeleted ? [{
           key: 'hasVehicle', label: 'กรองตามการผูกรถ', value: hasVehicle, onChange: setHasVehicle,
-          options: [['', 'ทุกสถานะการผูกรถ'], ['no', 'ยังไม่ผูกรถ'], ['yes', 'ผูกรถแล้ว']] },
+          options: [['', 'ทุกสถานะการผูกรถ'], ['no', 'ยังไม่ผูกรถ'], ['yes', 'ผูกรถแล้ว']] }] : []),
         isTeacher ? {
           key: 'classroom', label: 'กรองตามเลขห้อง', value: classroom, onChange: setClassroom,
           options: [['', 'ทุกห้อง'], ...classrooms.map(room => [room, `ห้อง ${room}`])],
@@ -318,13 +347,13 @@ export default function StudentSearch() {
         }]}
         count={meta.total}
         countLabel="คน"
-        onClear={() => { setSearch(''); setGrade(''); setClassroom(''); setHasVehicle(''); }}
+        onClear={() => { setSearch(''); setGrade(''); setClassroom(''); setHasVehicle(''); setShowDeleted(false); }}
       />
 
       {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}
 
       <DataTable
-        caption="รายชื่อนักเรียนของโรงเรียน"
+        caption={showDeleted ? 'รายชื่อนักเรียนที่ลบในขอบเขตที่รับผิดชอบ' : 'รายชื่อนักเรียนของโรงเรียน'}
         loading={loading}
         rows={students}
         rowKey={s2 => s2.id}
@@ -360,16 +389,16 @@ export default function StudentSearch() {
               ? <span>{s2.parent_name}{s2.parent_phone && <span className="text-ink-muted tabular-nums"> {maskPhone(s2.parent_phone)}</span>}</span>
               : <span className="text-ink-muted">-</span>) },
         ]}
-        actions={s2 => (
-          <>
-            <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
-            <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
-          </>
-        )}
+        actions={s2 => showDeleted
+          ? <TableAction tone="brand" onClick={() => setConfirmRestore(s2)}>กู้คืน</TableAction>
+          : <>
+              <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
+              <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
+            </>}
         empty={{
           icon: GraduationCap,
-          title: hasFilter ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้',
-          description: hasFilter ? 'ลองเปลี่ยนคำค้นหรือตัวกรอง' : undefined,
+          title: showDeleted ? 'ไม่พบรายชื่อที่ลบในขอบเขตนี้' : hasFilter ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้',
+          description: showDeleted ? 'ลองเปลี่ยนคำค้นหา หรือกลับไปดูรายชื่อปัจจุบัน' : hasFilter ? 'ลองเปลี่ยนคำค้นหรือตัวกรอง' : undefined,
         }}
       />
 
@@ -598,6 +627,16 @@ export default function StudentSearch() {
         loading={saving}
         onConfirm={handleWithdraw}
         onCancel={() => setConfirmWithdraw(false)}
+      />
+      <ConfirmDialog
+        open={!!confirmRestore}
+        title="กู้คืนนักเรียนเข้ารายชื่อ?"
+        itemName={confirmRestore ? `${confirmRestore.prefix || ''}${confirmRestore.first_name} ${confirmRestore.last_name} · รหัส ${confirmRestore.student_code}` : ''}
+        description="ระบบจะใช้ข้อมูลเดิมและประวัติเดิม นักเรียนจะยังไม่ผูกรถ กรุณาตรวจสอบข้อมูลและเลือกรถหลังจากกู้คืน"
+        confirmLabel="กู้คืนรายชื่อ"
+        loading={saving}
+        onConfirm={handleRestore}
+        onCancel={() => setConfirmRestore(null)}
       />
     </div>
   );

@@ -164,7 +164,35 @@ test('withdraw audit failure rolls back instead of hiding an unaudited deletion'
   expect(conn.commit).not.toHaveBeenCalled();
 });
 
-test('teacher still cannot restore a withdrawn pupil', async () => {
-  expect((await request(app).post('/api/school/students/12/restore')).status).toBe(403);
-  expect(mockPoolQuery).not.toHaveBeenCalled(); expect(mockGetConnection).not.toHaveBeenCalled();
+test('teacher restores a withdrawn pupil in own grade with required audit', async () => {
+  mockCurrentStudent = { ...student, is_deleted: 1 };
+  const res = await request(app).post('/api/school/students/12/restore');
+  expect(res.status).toBe(200);
+  expect(conn.query.mock.calls[0][1]).toEqual([12, 'SCH1']);
+  expect(writes()).toEqual([[expect.stringContaining('is_deleted = FALSE'), [12, 'SCH1', 'ป. 5']]]);
+  expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ conn, required: true, entityId: 12 }));
+  expect(conn.commit).toHaveBeenCalledTimes(1);
+});
+
+test.each([null, { ...student, grade: 'ป.6', is_deleted: 1 }])('teacher cannot restore another school or grade', async current => {
+  mockCurrentStudent = current;
+  expect((await request(app).post('/api/school/students/12/restore')).status).toBe(404);
+  expect(writes()).toHaveLength(0);
+  expect(conn.rollback).toHaveBeenCalled();
+  expect(mockAudit).not.toHaveBeenCalled();
+});
+
+test('full-school account may restore a withdrawn pupil in its school', async () => {
+  mockCurrentStudent = { ...student, grade: 'ป.6', is_deleted: 1 };
+  const res = await request(app).post('/api/school/students/12/restore').set('x-full-school', '1');
+  expect(res.status).toBe(200);
+  expect(writes()).toHaveLength(1);
+});
+
+test('restore audit failure rolls back instead of showing an unaudited pupil', async () => {
+  mockCurrentStudent = { ...student, is_deleted: 1 };
+  mockAudit.mockRejectedValueOnce(new Error('audit unavailable'));
+  expect((await request(app).post('/api/school/students/12/restore')).status).toBe(500);
+  expect(conn.rollback).toHaveBeenCalled();
+  expect(conn.commit).not.toHaveBeenCalled();
 });

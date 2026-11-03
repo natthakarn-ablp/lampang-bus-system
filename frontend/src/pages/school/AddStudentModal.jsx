@@ -15,7 +15,7 @@ const EMPTY = { code: '', prefix: 'เด็กชาย', first: '', last: '', 
 
 // Reuse the existing import validator and idempotent apply. No new create API,
 // automatic guardian replacement, pupil reactivation, or vehicle creation.
-export default function AddStudentModal({ initialVehicleId = '', onClose, onApplied }) {
+export default function AddStudentModal({ initialVehicleId = '', onClose, onFindDeleted, onApplied }) {
   const { user } = useAuth();
   const gradeScope = user?.role === 'school' ? getGradeScope(user) : null;
   const [form, setForm] = useState({ ...EMPTY, grade: gradeScope || '' });
@@ -114,6 +114,11 @@ export default function AddStudentModal({ initialVehicleId = '', onClose, onAppl
           <div><dt className="text-sm text-ink-muted">รอบที่ใช้รถ</dt><dd>เช้าและเย็น · แก้ไขได้ในข้อมูลนักเรียน</dd></div>
         </dl>
         {!row.can_apply && <AlertBanner variant="warn" title="ยังเพิ่มรายการนี้ไม่ได้">{row.message_th || 'กรุณาตรวจสอบรายชื่อนักเรียนเดิมก่อน'} {row.classification === 'SKIP_DUPLICATE_SAME_SCHOOL' && 'ใช้รายชื่อเดิมได้เลย ไม่ต้องเพิ่มอีกครั้ง'}</AlertBanner>}
+        {row.classification === 'SOFT_DELETED_SAME_SCHOOL_REACTIVATE' && (
+          <button type="button" disabled={busy} className={SECONDARY} onClick={() => onFindDeleted?.(row.student_code)}>
+            ดูรายชื่อเดิมและกู้คืน
+          </button>
+        )}
         {error && <AlertBanner variant="danger" title="ตรวจสอบผลบันทึก">{error}</AlertBanner>}
         <div className="flex flex-wrap gap-2">
           {!applyAttempted && <button type="button" disabled={busy} className={SECONDARY} onClick={() => { setPreview(null); setError(''); }}>กลับไปแก้ไข</button>}

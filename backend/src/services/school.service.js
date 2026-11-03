@@ -1,7 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
-const { gradeEquivalents } = require('../utils/gradeScope');
+const { gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
 const { logAudit } = require('../utils/audit');
 const { toBangkokDate } = require('../utils/thaiTime');
 
@@ -470,7 +470,7 @@ async function getEmergencies(schoolId, { page = 1, per_page = 20, gradeFilter =
  * schoolId is part of the WHERE so a school can only restore its own rows.
  * Vehicle is intentionally NOT re-attached — the student returns unassigned.
  */
-async function restoreStudent(db, { schoolId, studentId, actorId, ip = null, userAgent = null }) {
+async function restoreStudent(db, { schoolId, studentId, actorId, gradeScope = null, ip = null, userAgent = null }) {
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -482,13 +482,20 @@ async function restoreStudent(db, { schoolId, studentId, actorId, ip = null, use
        FOR UPDATE`,
       [studentId, schoolId]
     );
-    if (!st) { const e = new Error('ไม่พบนักเรียนในโรงเรียนนี้'); e.statusCode = 404; throw e; }
+    const requestedGrade = gradeScope ? normalizeGrade(gradeScope) : null;
+    if (!st || (gradeScope && (!requestedGrade || normalizeGrade(st.grade) !== requestedGrade))) {
+      const e = new Error('ไม่พบนักเรียนในขอบเขตที่รับผิดชอบ'); e.statusCode = 404; throw e;
+    }
     if (!st.is_deleted) { await conn.commit(); return { status: 'ALREADY_ACTIVE', student_id: st.id }; }
 
-    await conn.query(
-      `UPDATE students SET is_deleted = FALSE, deleted_at = NULL WHERE id = ?`,
-      [studentId]
+    const [updated] = await conn.query(
+      `UPDATE students SET is_deleted = FALSE, deleted_at = NULL
+       WHERE id = ? AND school_id = ? AND grade <=> ? AND is_deleted = TRUE`,
+      [studentId, schoolId, st.grade]
     );
+    if (!updated.affectedRows) {
+      const e = new Error('ข้อมูลนักเรียนเปลี่ยนไป กรุณาโหลดรายชื่อใหม่'); e.statusCode = 409; throw e;
+    }
 
     await logAudit({
       userId: actorId, action: 'UPDATE', entityType: 'student', entityId: studentId, conn,
@@ -498,7 +505,7 @@ async function restoreStudent(db, { schoolId, studentId, actorId, ip = null, use
         student_name: `${st.prefix || ''}${st.first_name} ${st.last_name}`,
         grade: st.grade, classroom: st.classroom,
       },
-      ipAddress: ip, userAgent,
+      ipAddress: ip, userAgent, required: true,
     });
 
     await conn.commit();

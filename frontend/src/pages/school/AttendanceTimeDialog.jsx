@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/axios';
-import { ConfirmDialog } from '../../components/ui';
+import { ConfirmDialog, FormField } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 
 export function bangkokTime(ts) {
@@ -41,9 +41,6 @@ export default function AttendanceTimeDialog({ student, onClose, onSaved }) {
     description="เลือกเวลาที่เกิดเหตุการณ์จริงของวันนี้ ระบบเก็บเวลาเดิม เวลาใหม่ และผู้แก้ไว้ในประวัติอัตโนมัติ"
     confirmLabel="บันทึกเวลา" loading={saving} confirmDisabled={!time || time === originalTime}
     onConfirm={save} onCancel={() => { if (!saving) onClose(); }}>
-    <label htmlFor="attendance-corrected-time" className="block text-sm font-semibold text-ink mb-1.5">เวลาใหม่</label>
-    <input id="attendance-corrected-time" type="time" required value={time}
-      onChange={event => setTime(event.target.value)}
-      className="focus-ring w-full min-h-[48px] rounded-lg border border-surface-border bg-surface-raised px-3 text-base text-ink" />
+    <FormField label="เวลาใหม่" type="time" required value={time} onChange={setTime} />
   </ConfirmDialog>;
 }

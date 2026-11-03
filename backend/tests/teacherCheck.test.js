@@ -27,6 +27,7 @@ const T2 = { username: '__test_teacher_p2', password: 'testpass123' };
 
 let t1 = '';
 let t2 = '';
+let schoolToken = '';
 let t1Id = 0;
 
 const db = () => getTestConnection();
@@ -43,9 +44,9 @@ async function clean(conn) {
   await conn.query('DELETE FROM student_leaves WHERE student_id IN (?) AND leave_date = CURDATE()', [ids]);
   await conn.query('DELETE FROM notifications  WHERE student_id IN (?)', [ids]);
   await conn.query(
-    `DELETE FROM audit_logs WHERE entity_type IN ('checkin_teacher','checkin')
-       AND user_id IN (SELECT id FROM users WHERE username IN (?, ?))`,
-    [T1.username, T2.username]
+    `DELETE FROM audit_logs WHERE entity_type IN ('checkin_teacher','checkin','checkin_time','self_travel','self_travel_time')
+      AND user_id IN (SELECT id FROM users WHERE username IN (?, ?, ?))`,
+    [T1.username, T2.username, '__test_school']
   );
 }
 
@@ -102,6 +103,98 @@ beforeAll(async () => {
   await conn.end();
   t1 = await login(T1);
   t2 = await login(T2);
+  schoolToken = await login({ username: '__test_school', password: 'testpass123' });
+});
+
+describe('teacher check — correction of recorded time', () => {
+  const patchTime = (token, id, time) => request(app)
+    .patch(`/api/school/teacher-check/${id}/time`)
+    .set('Authorization', `Bearer ${token}`).send({ time });
+
+  test('own-grade correction updates the log and latest daily snapshot, with old/new audit', async () => {
+    const created = await post(t1, { session: 'evening', student_ids: [STUDENT_ID] });
+    const id = created.body.data.results[0].log_id;
+    const conn = await db();
+    await conn.query("UPDATE checkin_logs SET checked_at = TIMESTAMP(CURDATE(), '00:05:00') WHERE id = ?", [id]);
+    await conn.query("UPDATE daily_status SET evening_ts = TIMESTAMP(CURDATE(), '00:05:00') WHERE student_id = ? AND check_date = CURDATE()", [STUDENT_ID]);
+    await conn.end();
+
+    const res = await patchTime(t1, id, '00:00');
+    expect(res.status).toBe(200);
+    const verify = await db();
+    const [[log]] = await verify.query("SELECT DATE_FORMAT(checked_at, '%H:%i') AS time FROM checkin_logs WHERE id = ?", [id]);
+    const [[daily]] = await verify.query("SELECT DATE_FORMAT(evening_ts, '%H:%i') AS time FROM daily_status WHERE student_id = ? AND check_date = CURDATE()", [STUDENT_ID]);
+    const [[audit]] = await verify.query("SELECT user_id, old_value, new_value FROM audit_logs WHERE entity_type = 'checkin_time' AND entity_id = ? ORDER BY id DESC LIMIT 1", [String(id)]);
+    await verify.end();
+    expect(log.time).toBe('00:00');
+    expect(daily.time).toBe('00:00');
+    expect(audit.user_id).toBe(t1Id);
+    expect(JSON.parse(typeof audit.old_value === 'string' ? audit.old_value : JSON.stringify(audit.old_value)).checked_at_local).toMatch(/00:05:00$/);
+    expect(JSON.parse(typeof audit.new_value === 'string' ? audit.new_value : JSON.stringify(audit.new_value)).checked_at_local).toMatch(/00:00:00$/);
+
+    const roster = await request(app).get('/api/school/teacher-check?session=evening')
+      .set('Authorization', `Bearer ${t1}`);
+    const pupil = roster.body.data.vehicles.flatMap(v => v.students).find(st => st.id === STUDENT_ID);
+    expect(pupil.time_edited).toBe(true);
+  });
+
+  test('other grade and other school cannot correct a pupil time; full-school can', async () => {
+    const created = await post(t1, { session: 'morning', student_ids: [STUDENT_ID] });
+    const id = created.body.data.results[0].log_id;
+    expect((await patchTime(t2, id, '00:00')).status).toBe(404);
+    expect((await patchTime(schoolToken, id, '00:00')).status).toBe(200);
+
+    const conn = await db();
+    const [result] = await conn.query(
+      `INSERT INTO checkin_logs (term_id, vehicle_id, student_id, session, status, check_date, source)
+       SELECT '2568-2', vehicle_id, id, 'morning', 'CHECKED_IN', CURDATE(), 'web'
+         FROM students WHERE id = ?`, [OTHER_STUDENT]
+    );
+    await conn.end();
+    expect((await patchTime(t1, result.insertId, '00:00')).status).toBe(404);
+    expect((await patchTime(schoolToken, result.insertId, '00:00')).status).toBe(404);
+  });
+
+  test('invalid input and historical records are refused', async () => {
+    const created = await post(t1, { session: 'morning', student_ids: [STUDENT_ID] });
+    const id = created.body.data.results[0].log_id;
+    expect((await patchTime(t1, id, '25:99')).status).toBe(400);
+    expect((await patchTime(t1, id, '00:00:00')).status).toBe(400);
+    const conn = await db();
+    await conn.query('UPDATE checkin_logs SET check_date = CURDATE() - INTERVAL 1 DAY WHERE id = ?', [id]);
+    await conn.end();
+    expect((await patchTime(t1, id, '00:00')).status).toBe(409);
+    const restore = await db();
+    await restore.query('UPDATE checkin_logs SET check_date = CURDATE() WHERE id = ?', [id]);
+    await restore.end();
+  });
+});
+
+describe('independent travel — correction of recorded time', () => {
+  test('own-grade teacher corrects a morning self-travel time; another grade is refused', async () => {
+    const created = await request(app).post('/api/school/self-travel')
+      .set('Authorization', `Bearer ${t1}`).send({ student_id: STUDENT_ID, session: 'morning' });
+    expect(created.status).toBe(201);
+    const id = created.body.data.id;
+    const conn = await db();
+    await conn.query("UPDATE student_leaves SET created_at = TIMESTAMP(CURDATE(), '00:05:00') WHERE id = ?", [id]);
+    await conn.end();
+    const patch = (token) => request(app).patch(`/api/school/self-travel/${id}/time`)
+      .set('Authorization', `Bearer ${token}`).send({ time: '00:00' });
+    expect((await patch(t2)).status).toBe(404);
+    expect((await patch(t1)).status).toBe(200);
+    const verify = await db();
+    const [[record]] = await verify.query("SELECT DATE_FORMAT(created_at, '%H:%i') AS time FROM student_leaves WHERE id = ?", [id]);
+    const [[audit]] = await verify.query("SELECT user_id, old_value, new_value FROM audit_logs WHERE entity_type = 'self_travel_time' AND entity_id = ? ORDER BY id DESC LIMIT 1", [String(id)]);
+    await verify.end();
+    expect(record.time).toBe('00:00');
+    expect(audit.user_id).toBe(t1Id);
+    expect(JSON.parse(typeof audit.old_value === 'string' ? audit.old_value : JSON.stringify(audit.old_value)).recorded_at_local).toMatch(/00:05:00$/);
+    const roster = await request(app).get('/api/school/teacher-check?session=morning')
+      .set('Authorization', `Bearer ${t1}`);
+    const pupil = roster.body.data.vehicles.flatMap(v => v.students).find(st => st.id === STUDENT_ID);
+    expect(pupil.self_time_edited).toBe(true);
+  });
 });
 
 beforeEach(async () => { const c = await db(); await clean(c); await c.end(); });

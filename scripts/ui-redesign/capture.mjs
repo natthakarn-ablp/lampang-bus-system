@@ -1390,12 +1390,18 @@ const SHOTS = [
     act: async page => {
       const writes = [];
       let saved = false;
+      let selfTimeEdited = false;
       await page.route('**/api/school/teacher-check*', async route => {
         if (route.request().method() === 'POST') {
           const body = route.request().postDataJSON(); writes.push({ path: 'bus', body }); saved = true;
           return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ success: true, data: { results: body.student_ids.map(id => ({ student_id: id, result: 'ok' })) } }) });
         }
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { vehicles: [{ vehicle_id: 'V1', plate_no: 'กข-9001', students: [11,12,13].map((id,index) => ({ id, name: ['นักเรียนหนึ่ง','นักเรียนสอง','นักเรียนสาม'][index], grade: 'ป.1', classroom: '1', no_vehicle: false, on_leave: saved && id === 12, self_travel: saved && id === 11, done: saved && id === 13 })) }] } }) });
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { vehicles: [{ vehicle_id: 'V1', plate_no: 'กข-9001', students: [11,12,13].map((id,index) => ({ id, name: ['นักเรียนหนึ่ง','นักเรียนสอง','นักเรียนสาม'][index], grade: 'ป.1', classroom: '1', no_vehicle: false, on_leave: saved && id === 12, self_travel: saved && id === 11, self_id: saved && id === 11 ? 901 : null, self_recorded_at: saved && id === 11 ? (selfTimeEdited ? '2026-11-03T00:30:00.000Z' : '2026-11-03T01:00:00.000Z') : null, self_time_edited: selfTimeEdited && id === 11, done: saved && id === 13 })) }] } }) });
+      });
+      await page.route('**/api/school/self-travel/901/time', async route => {
+        writes.push({ path: 'self_time', body: route.request().postDataJSON() });
+        selfTimeEdited = true;
+        await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { id: 901, time_edited: true } }) });
       });
       for (const [path, label] of [['self-travel','self'],['leave','leave']]) await page.route(`**/api/school/${path}`, async route => {
         writes.push({ path: label, body: route.request().postDataJSON() });
@@ -1420,6 +1426,13 @@ const SHOTS = [
       await selfStudent.locator('span').filter({ hasText: selfLabel }).first().waitFor();
       await page.getByText('ลาแล้ว', { exact: true }).waitFor();
       await page.getByText(/บันทึก ป\.1 ห้อง 1 แล้ว/).waitFor({ state: 'hidden' });
+      await selfStudent.getByRole('button', { name: 'แก้เวลา นักเรียนหนึ่ง' }).click();
+      await page.getByLabel('เวลาใหม่').fill('07:30');
+      await page.getByRole('button', { name: 'บันทึกเวลา' }).click();
+      await selfStudent.getByText('แก้ไขเวลาแล้ว', { exact: false }).waitFor();
+      if (JSON.stringify(writes.at(-1)) !== JSON.stringify({ path: 'self_time', body: { time: '07:30' } })) {
+        throw new Error('self-travel time correction sent an unexpected request');
+      }
       await page.getByRole('heading', { name: 'ป.1 / ห้อง 1', exact: true }).locator('xpath=../..').scrollIntoViewIfNeeded();
     }, expect: ['text=บันทึกครบแล้ว'],
   }))),
@@ -1697,6 +1710,44 @@ const SHOTS = [
       if (await page.getByText('นักเรียน ทดสอบชั้นสอง', { exact: true }).count()) throw new Error('other grade pupil visible');
     },
     expect: ['text=เช็กชื่อรายห้อง', 'text=ป.1 / ห้อง 1', 'text=เด็กชายภูมิ แสงทอง', 'select'] },
+  ...['school', 'teacher'].map(user => ({
+    id: `attendance-one-time-${user}`, url: '/school/teacher-check?session=evening', user, vps: ['mobile', 'desktop'],
+    act: async page => {
+      let recorded = false;
+      let edited = false;
+      const writes = [];
+      await page.route(/\/api\/school\/teacher-check(?:\/.*)?(?:\?.*)?$/, async route => {
+        const req = route.request();
+        if (req.method() === 'POST') {
+          writes.push({ method: 'POST', body: req.postDataJSON() }); recorded = true;
+          return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ success: true, data: { results: [{ student_id: 11, result: 'ok' }] } }) });
+        }
+        if (req.method() === 'PATCH') {
+          writes.push({ method: 'PATCH', body: req.postDataJSON(), path: new URL(req.url()).pathname }); edited = true;
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { log_id: 901, time_edited: true } }) });
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { vehicles: [{ vehicle_id: 'V1', plate_no: 'กข-9001', students: [{ id: 11, name: 'นักเรียนหนึ่ง', grade: 'ป.1', classroom: '1', no_vehicle: false, on_leave: false, self_travel: false, done: recorded, status: recorded ? 'CHECKED_IN' : null, log_id: recorded ? 901 : null, checked_at: recorded ? (edited ? '2026-11-03T09:00:00.000Z' : '2026-11-03T09:30:00.000Z') : null, time_edited: edited }] }] } }) });
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      if (user === 'school') await page.getByLabel('สายชั้นที่ต้องการเช็กชื่อ').selectOption('ป.1');
+      await page.getByRole('button', { name: 'ยืนยันรายคน นักเรียนหนึ่ง' }).click();
+      const edit = page.getByRole('button', { name: 'แก้เวลา นักเรียนหนึ่ง' });
+      await edit.waitFor({ timeout: 5000 }).catch(() => { throw new Error(`edit action missing after one-person save: ${JSON.stringify(writes)}`); });
+      await edit.click();
+      await page.getByLabel('เวลาใหม่').fill('16:00');
+      if (await page.getByRole('button', { name: 'บันทึกเวลา' }).isDisabled()) {
+        throw new Error(`time save disabled: value=${await page.getByLabel('เวลาใหม่').inputValue()}`);
+      }
+      await page.getByRole('button', { name: 'บันทึกเวลา' }).click();
+      await page.getByText('แก้ไขเวลาแล้ว', { exact: false }).first().waitFor({ timeout: 5000 })
+        .catch(() => { throw new Error(`edited-time label missing after patch: ${JSON.stringify(writes)}`); });
+      if (JSON.stringify(writes) !== JSON.stringify([
+        { method: 'POST', body: { session: 'evening', student_ids: [11] } },
+        { method: 'PATCH', body: { time: '16:00' }, path: '/api/school/teacher-check/901/time' },
+      ])) throw new Error('individual time correction sent an unexpected request');
+    },
+    expect: ['text=แก้ไขเวลาแล้ว'],
+  })),
   { id: '96c-school-grade-save', url: '/school/teacher-check?session=morning', user: 'school', vps: ['mobile', 'desktop'],
     act: async page => {
       const writes = [];

@@ -14,6 +14,7 @@ import { getGradeScope } from '../../utils/authScope';
 import { formatGradeClass } from '../../utils/student';
 import { PageTransition } from '../../lib/motion';
 import ClassroomCheck from './ClassroomCheck';
+import AttendanceTimeDialog from './AttendanceTimeDialog';
 
 /**
  * เช็กชื่อขึ้น-ลงรถ — term 2, phase 1: teachers record attendance themselves.
@@ -72,6 +73,7 @@ function VehicleTeacherCheck() {
   const [showPending, setShowPending] = useState(true);
   const [busy, setBusy] = useState({});          // student id → true while saving
   const [confirmBus, setConfirmBus] = useState(null);
+  const [timeStudent, setTimeStudent] = useState(null);
   const [savingBus, setSavingBus] = useState(false);
   const requestSeq = useRef(0);
   const sessionRef = useRef(session);
@@ -112,7 +114,7 @@ function VehicleTeacherCheck() {
   const s = SESSIONS[session];
   const data = loaded?.session === session ? loaded.payload : null;
   const vehicles = data?.vehicles || [];
-  const interactionLocked = savingBus || Object.values(busy).some(Boolean) || Boolean(confirmBus);
+  const interactionLocked = savingBus || Object.values(busy).some(Boolean) || Boolean(confirmBus) || Boolean(timeStudent);
   const totals = useMemo(() => {
     let expected = 0; let done = 0;
     for (const v of vehicles) {
@@ -225,18 +227,20 @@ function VehicleTeacherCheck() {
 
   function stateBadge(st) {
     if (busy[st.id]) return <span className="text-sm text-ink-muted">กำลังบันทึก…</span>;
-    if (st.self_travel) return <StatusBadge variant="neutral">{session === 'morning' ? 'มาเอง' : 'กลับเอง'}</StatusBadge>;
+    if (st.self_travel) return <StatusBadge variant="neutral">
+      {session === 'morning' ? 'มาเอง' : 'กลับเอง'} {timeTH(st.self_recorded_at)}{st.self_time_edited ? ' · แก้ไขเวลาแล้ว' : ''}
+    </StatusBadge>;
     if (st.on_leave) return <StatusBadge variant="neutral">ลา</StatusBadge>;
     if (st.no_vehicle) return <StatusBadge variant="neutral">ไม่มีรถ</StatusBadge>;
     if (st.done) {
       return (
         <StatusBadge variant="success">
-          {session === 'evening' && st.status === 'CHECKED_OUT' ? 'ส่งถึงบ้านแล้ว' : s.done} {timeTH(st.checked_at)} · {whoLabel(st)}
+          {session === 'evening' && st.status === 'CHECKED_OUT' ? 'ส่งถึงบ้านแล้ว' : s.done} {timeTH(st.checked_at)} · {whoLabel(st)}{st.time_edited ? ' · แก้ไขเวลาแล้ว' : ''}
         </StatusBadge>
       );
     }
     if (session === 'morning' && st.status === 'CHECKED_IN') {
-      return <StatusBadge variant="info">คนขับรับขึ้นรถแล้ว</StatusBadge>;
+      return <StatusBadge variant="info">คนขับรับขึ้นรถแล้ว {timeTH(st.checked_at)}{st.time_edited ? ' · แก้ไขเวลาแล้ว' : ''}</StatusBadge>;
     }
     return null;
   }
@@ -258,6 +262,7 @@ function VehicleTeacherCheck() {
           <p className="font-semibold text-ink">เห็นเด็กแล้ว แตะชื่อเพื่อบันทึกทันที</p>
           <p className="text-sm text-ink-muted">เช้า: เด็กถึงโรงเรียน · เย็น: เด็กขึ้นรถกลับบ้าน ไม่ต้องกดบันทึกอีกครั้ง</p>
           <p className="text-sm text-ink-muted">ใช้ข้อมูลร่วมกับคนขับและครูท่านอื่น หากขึ้นว่าบันทึกแล้ว ไม่ต้องเช็กซ้ำ</p>
+          <p className="text-sm text-ink-muted">แตะรายคนเพื่อเก็บเวลาที่กดจริง · บันทึกทั้งคันเป็นเวลาของชุดนั้น ไม่ใช่เวลารับจริงรายคน</p>
         </AppCard>
 
         {/* Session switch */}
@@ -392,6 +397,13 @@ function VehicleTeacherCheck() {
                       </button>
                       <div className="shrink-0 flex items-center gap-2">
                         <span className="hidden sm:inline-flex">{stateBadge(st)}</span>
+                        {!busy[st.id] && ((st.log_id && ['CHECKED_IN', 'CHECKED_OUT'].includes(st.status)) || (st.self_travel && st.self_id)) && (
+                          <button type="button" onClick={() => setTimeStudent(st)} disabled={interactionLocked}
+                            className="focus-ring min-h-[44px] px-3 rounded-lg text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60"
+                            aria-label={`แก้เวลา ${st.name}`}>
+                            แก้เวลา
+                          </button>
+                        )}
                         {!busy[st.id] && st.can_undo && (
                           <button
                             type="button"
@@ -424,6 +436,8 @@ function VehicleTeacherCheck() {
           onConfirm={recordWholeBus}
           onCancel={cancelWholeBus}
         />
+        {timeStudent && <AttendanceTimeDialog key={timeStudent.log_id || `self-${timeStudent.self_id}`} student={timeStudent}
+          onClose={() => setTimeStudent(null)} onSaved={() => load()} />}
       </div>
     </PageTransition>
   );

@@ -817,6 +817,20 @@ router.post('/self-travel/:id/undo', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.patch('/self-travel/:id/time', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const data = await require('../services/selfTravel.service').correctSelfTravelTime(pool, {
+      id, schoolId, gradeFilter: resolveGradeScope(req), userId: req.user.id,
+      time: req.body?.time, ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, data, data.unchanged ? 'เวลาเดิมไม่เปลี่ยน' : 'แก้เวลาแล้ว');
+  } catch (err) { next(err); }
+});
+
 router.get('/teacher-check', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
@@ -847,6 +861,19 @@ router.post('/teacher-check', async (req, res, next) => {
       ...teacherActor(req, schoolId), session, studentIds: student_ids,
     });
     return sendSuccess(res, result, `บันทึกแล้ว ${result.recorded} คน`, null, 201);
+  } catch (err) { next(err); }
+});
+
+router.patch('/teacher-check/:logId/time', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const logId = readIdParam(req, res, 'logId');
+    if (logId === null) return;
+    const result = await checkinSvc.correctTeacherCheckTime(pool, {
+      ...teacherActor(req, schoolId), logId, time: req.body?.time,
+    });
+    return sendSuccess(res, result, result.unchanged ? 'เวลาเดิมไม่เปลี่ยน' : 'แก้เวลาแล้ว');
   } catch (err) { next(err); }
 });
 

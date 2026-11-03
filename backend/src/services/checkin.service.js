@@ -1659,8 +1659,8 @@ async function correctTeacherCheckTime(pool, {
     if (!Number(log.is_today) || !['CHECKED_IN', 'CHECKED_OUT'].includes(log.status)) {
       throw makeError('แก้เวลาได้เฉพาะรายการเช็กชื่อของวันนี้', 409);
     }
-    const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS current_time");
-    if (time > clock.current_time) throw makeError('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
+    const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
+    if (time > clock.now_hm) throw makeError('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
     if (time === log.old_time) {
       await conn.commit();
       return { log_id: id, checked_at: log.checked_at, time_edited: false, unchanged: true };

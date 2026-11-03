@@ -357,7 +357,7 @@ describe('teacher check — roster', () => {
     await post(t1, { session: 'morning', student_ids: [STUDENT_ID] });
     const res = await request(app).get('/api/school/teacher-check?session=morning')
       .set('Authorization', `Bearer ${t1}`);
-    expect(res.status).toBe(200);
+    expectSaved(res);
     const st = res.body.data.vehicles.flatMap(v => v.students).find(s => s.id === STUDENT_ID);
     expect(st).toBeDefined();
     expect(st.done).toBe(true);

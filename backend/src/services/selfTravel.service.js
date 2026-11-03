@@ -105,8 +105,8 @@ async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, 
          FROM student_leaves WHERE id = ? AND student_id = ? AND attendance_kind = 'SELF'
            AND cancelled = FALSE AND leave_date = CURDATE() FOR UPDATE`, [id, student.id]);
     if (!record) fail('แก้เวลาได้เฉพาะรายการมาเองหรือกลับเองของวันนี้', 409);
-    const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS current_time");
-    if (time > clock.current_time) fail('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
+    const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
+    if (time > clock.now_hm) fail('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
     if (time === record.old_time) {
       await conn.commit();
       return { id, recorded_at: record.created_at, unchanged: true };

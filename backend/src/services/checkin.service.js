@@ -1452,13 +1452,13 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
             s.vehicle_id, v.plate_no,
             cl.id AS log_id, cl.status AS log_status, cl.checked_at, cl.checked_by,
             EXISTS(SELECT 1 FROM audit_logs a
-                    WHERE a.entity_type = 'checkin_time' AND a.entity_id = CAST(cl.id AS CHAR)
+                    WHERE a.entity_type = 'checkin_time' AND a.entity_id = CAST(cl.id AS CHAR) COLLATE utf8mb4_unicode_ci
                     LIMIT 1) AS time_edited,
             u.role AS checked_by_role, u.display_name AS checked_by_name,
             (sx.id IS NOT NULL) AS self_travel, sx.id AS self_id, sx.reported_by AS self_reported_by,
             sx.created_at AS self_recorded_at,
             EXISTS(SELECT 1 FROM audit_logs a
-                    WHERE a.entity_type = 'self_travel_time' AND a.entity_id = CAST(sx.id AS CHAR)
+                    WHERE a.entity_type = 'self_travel_time' AND a.entity_id = CAST(sx.id AS CHAR) COLLATE utf8mb4_unicode_ci
                     LIMIT 1) AS self_time_edited,
             (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
                          WHEN MAX(sl.session = 'both') = 1 THEN 'both'

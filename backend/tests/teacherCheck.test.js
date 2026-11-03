@@ -73,6 +73,10 @@ async function post(token, body) {
   return request(app).post('/api/school/teacher-check').set('Authorization', `Bearer ${token}`).send(body);
 }
 
+function expectSaved(res) {
+  expect(res.status === 200 ? 200 : `${res.status}: ${res.body?.message}`).toBe(200);
+}
+
 beforeAll(async () => {
   const conn = await db();
   const hash = await bcrypt.hash('testpass123', 12);
@@ -120,7 +124,7 @@ describe('teacher check — correction of recorded time', () => {
     await conn.end();
 
     const res = await patchTime(t1, id, '00:00');
-    expect(res.status).toBe(200);
+    expectSaved(res);
     const verify = await db();
     const [[log]] = await verify.query("SELECT DATE_FORMAT(checked_at, '%H:%i') AS time FROM checkin_logs WHERE id = ?", [id]);
     const [[daily]] = await verify.query("SELECT DATE_FORMAT(evening_ts, '%H:%i') AS time FROM daily_status WHERE student_id = ? AND check_date = CURDATE()", [STUDENT_ID]);
@@ -134,6 +138,7 @@ describe('teacher check — correction of recorded time', () => {
 
     const roster = await request(app).get('/api/school/teacher-check?session=evening')
       .set('Authorization', `Bearer ${t1}`);
+    expectSaved(roster);
     const pupil = roster.body.data.vehicles.flatMap(v => v.students).find(st => st.id === STUDENT_ID);
     expect(pupil.time_edited).toBe(true);
   });
@@ -142,7 +147,7 @@ describe('teacher check — correction of recorded time', () => {
     const created = await post(t1, { session: 'morning', student_ids: [STUDENT_ID] });
     const id = created.body.data.results[0].log_id;
     expect((await patchTime(t2, id, '00:00')).status).toBe(404);
-    expect((await patchTime(schoolToken, id, '00:00')).status).toBe(200);
+    expectSaved(await patchTime(schoolToken, id, '00:00'));
 
     const conn = await db();
     const [result] = await conn.query(
@@ -182,7 +187,8 @@ describe('independent travel — correction of recorded time', () => {
     const patch = (token) => request(app).patch(`/api/school/self-travel/${id}/time`)
       .set('Authorization', `Bearer ${token}`).send({ time: '00:00' });
     expect((await patch(t2)).status).toBe(404);
-    expect((await patch(t1)).status).toBe(200);
+    const corrected = await patch(t1);
+    expectSaved(corrected);
     const verify = await db();
     const [[record]] = await verify.query("SELECT DATE_FORMAT(created_at, '%H:%i') AS time FROM student_leaves WHERE id = ?", [id]);
     const [[audit]] = await verify.query("SELECT user_id, old_value, new_value FROM audit_logs WHERE entity_type = 'self_travel_time' AND entity_id = ? ORDER BY id DESC LIMIT 1", [String(id)]);
@@ -192,6 +198,7 @@ describe('independent travel — correction of recorded time', () => {
     expect(JSON.parse(typeof audit.old_value === 'string' ? audit.old_value : JSON.stringify(audit.old_value)).recorded_at_local).toMatch(/00:05:00$/);
     const roster = await request(app).get('/api/school/teacher-check?session=morning')
       .set('Authorization', `Bearer ${t1}`);
+    expectSaved(roster);
     const pupil = roster.body.data.vehicles.flatMap(v => v.students).find(st => st.id === STUDENT_ID);
     expect(pupil.self_time_edited).toBe(true);
   });

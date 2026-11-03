@@ -82,4 +82,44 @@ async function undoSelfTravel(pool, { id, schoolId, gradeFilter, userId }) {
   finally { conn.release(); }
 }
 
-module.exports = { recordSelfTravel, undoSelfTravel };
+async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, time, ipAddress = null, userAgent = null }) {
+  if (!Number.isSafeInteger(id) || id < 1 || !schoolId || !userId) fail('รายการไม่ถูกต้อง', 400);
+  if (typeof time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) fail('กรุณาระบุเวลาแบบ HH:mm', 400);
+  const conn = await pool.getConnection();
+  try {
+    await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    await conn.beginTransaction();
+    const [[candidate]] = await conn.query('SELECT student_id FROM student_leaves WHERE id = ?', [id]);
+    if (!candidate) fail('ไม่พบรายการ', 404);
+    const params = [candidate.student_id, schoolId];
+    const gradeAnd = gradeFilter ? ' AND grade IN (?)' : '';
+    if (gradeFilter) params.push(gradeEquivalents(gradeFilter));
+    const [[student]] = await conn.query(
+      `SELECT id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE${gradeAnd} FOR UPDATE`, params);
+    if (!student) fail('ไม่พบรายการในขอบเขตที่รับผิดชอบ', 404);
+    const [[record]] = await conn.query(
+      `SELECT id, student_id, session, created_at,
+              DATE_FORMAT(leave_date, '%Y-%m-%d') AS leave_date,
+              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS old_local,
+              DATE_FORMAT(created_at, '%H:%i') AS old_time
+         FROM student_leaves WHERE id = ? AND student_id = ? AND attendance_kind = 'SELF'
+           AND cancelled = FALSE AND leave_date = CURDATE() FOR UPDATE`, [id, student.id]);
+    if (!record) fail('แก้เวลาได้เฉพาะรายการมาเองหรือกลับเองของวันนี้', 409);
+    const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
+    if (time > clock.now_hm) fail('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
+    if (time === record.old_time) {
+      await conn.commit();
+      return { id, recorded_at: record.created_at, unchanged: true };
+    }
+    const nextLocal = `${record.leave_date} ${time}:00`;
+    await conn.query('UPDATE student_leaves SET created_at = ? WHERE id = ?', [nextLocal, id]);
+    await logAudit({ conn, required: true, userId, action: 'UPDATE', entityType: 'self_travel_time',
+      entityId: String(id), oldValue: { recorded_at_local: record.old_local, session: record.session },
+      newValue: { recorded_at_local: nextLocal, session: record.session }, ipAddress, userAgent });
+    await conn.commit();
+    return { id, recorded_at: new Date(`${record.leave_date}T${time}:00+07:00`).toISOString(), time_edited: true };
+  } catch (error) { await conn.rollback(); throw error; }
+  finally { conn.release(); }
+}
+
+module.exports = { recordSelfTravel, undoSelfTravel, correctSelfTravelTime };

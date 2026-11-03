@@ -1451,8 +1451,15 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
     `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.vehicle_id, v.plate_no,
             cl.id AS log_id, cl.status AS log_status, cl.checked_at, cl.checked_by,
+            EXISTS(SELECT 1 FROM audit_logs a
+                    WHERE a.entity_type = 'checkin_time' AND a.entity_id = CAST(cl.id AS CHAR) COLLATE utf8mb4_unicode_ci
+                    LIMIT 1) AS time_edited,
             u.role AS checked_by_role, u.display_name AS checked_by_name,
             (sx.id IS NOT NULL) AS self_travel, sx.id AS self_id, sx.reported_by AS self_reported_by,
+            sx.created_at AS self_recorded_at,
+            EXISTS(SELECT 1 FROM audit_logs a
+                    WHERE a.entity_type = 'self_travel_time' AND a.entity_id = CAST(sx.id AS CHAR) COLLATE utf8mb4_unicode_ci
+                    LIMIT 1) AS self_time_edited,
             (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
                          WHEN MAX(sl.session = 'both') = 1 THEN 'both'
                          WHEN COUNT(DISTINCT sl.session) > 1 THEN 'both'
@@ -1494,10 +1501,13 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
       on_leave: onLeave,
       self_travel: !!r.self_travel,
       self_id: r.self_id || null,
+      self_recorded_at: r.self_recorded_at || null,
+      self_time_edited: !!r.self_time_edited,
       no_vehicle: !r.vehicle_id,
       status,
       done,
       checked_at: status ? r.checked_at : null,
+      time_edited: status ? !!r.time_edited : false,
       checked_by_role: status ? r.checked_by_role || null : null,
       checked_by_name: status ? r.checked_by_name || null : null,
       // Only the teacher's own, still-current tap can be undone from this page.
@@ -1610,6 +1620,101 @@ async function processTeacherCheck(pool, {
   };
 }
 
+/** Correct today's recorded event time without changing the event or sending another notification. */
+async function correctTeacherCheckTime(pool, {
+  userId, ipAddress = null, userAgent = null,
+  schoolId, gradeFilter = null, logId, time,
+}) {
+  const id = Number(logId);
+  if (!Number.isSafeInteger(id) || id <= 0) throw makeError('logId ไม่ถูกต้อง', 400);
+  if (typeof time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+    throw makeError('กรุณาระบุเวลาแบบ HH:mm', 400);
+  }
+  if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
+
+  const conn = await pool.getConnection();
+  await beginCheckinTransaction(conn);
+  try {
+    // Take the student lock before the log lock, matching the check-in path.
+    const [[candidate]] = await conn.query('SELECT student_id FROM checkin_logs WHERE id = ?', [id]);
+    if (!candidate) throw makeError('ไม่พบรายการเช็กชื่อ', 404);
+    const params = [candidate.student_id, schoolId];
+    const gradeAnd = gradeFilter ? ' AND grade IN (?)' : '';
+    if (gradeFilter) params.push(gradeEquivalents(gradeFilter));
+    const [[student]] = await conn.query(
+      `SELECT id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE${gradeAnd} FOR UPDATE`,
+      params
+    );
+    if (!student) throw makeError('ไม่พบรายการเช็กชื่อในขอบเขตของคุณ', 404);
+
+    const [[log]] = await conn.query(
+      `SELECT id, student_id, session, status, checked_at,
+              DATE_FORMAT(check_date, '%Y-%m-%d') AS check_date,
+              DATE_FORMAT(checked_at, '%Y-%m-%d %H:%i:%s') AS old_local,
+              DATE_FORMAT(checked_at, '%H:%i') AS old_time,
+              check_date = CURDATE() AS is_today
+         FROM checkin_logs WHERE id = ? FOR UPDATE`, [id]
+    );
+    if (!log || Number(log.student_id) !== Number(student.id)) throw makeError('ไม่พบรายการเช็กชื่อ', 404);
+    if (!Number(log.is_today) || !['CHECKED_IN', 'CHECKED_OUT'].includes(log.status)) {
+      throw makeError('แก้เวลาได้เฉพาะรายการเช็กชื่อของวันนี้', 409);
+    }
+    const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
+    if (time > clock.now_hm) throw makeError('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
+    if (time === log.old_time) {
+      await conn.commit();
+      return { log_id: id, checked_at: log.checked_at, time_edited: false, unchanged: true };
+    }
+
+    const [laterVoids] = await conn.query(
+      `SELECT id FROM checkin_logs WHERE student_id = ? AND session = ? AND check_date = CURDATE()
+        AND status = 'CANCELLED' AND id > ? LIMIT 1`, [student.id, log.session, id]
+    );
+    if (laterVoids.length) throw makeError('รายการนี้ถูกยกเลิกแล้ว จึงแก้เวลาไม่ได้', 409);
+    const [otherEvents] = await conn.query(
+      `SELECT id, DATE_FORMAT(checked_at, '%H:%i') AS event_time FROM checkin_logs
+        WHERE student_id = ? AND session = ? AND check_date = CURDATE()
+          AND status IN ('CHECKED_IN', 'CHECKED_OUT') AND id <> ? ORDER BY id`,
+      [student.id, log.session, id]
+    );
+    const previous = otherEvents.filter(event => Number(event.id) < id).at(-1);
+    const next = otherEvents.find(event => Number(event.id) > id);
+    if ((previous && time < previous.event_time) || (next && time > next.event_time)) {
+      throw makeError('เวลาใหม่ต้องเรียงตามลำดับรับและส่งนักเรียน', 409);
+    }
+
+    const nextLocal = `${log.check_date} ${time}:00`;
+    await conn.query('UPDATE checkin_logs SET checked_at = ? WHERE id = ?', [nextLocal, id]);
+    const [[latest]] = await conn.query(
+      `SELECT id FROM checkin_logs WHERE student_id = ? AND session = ? AND check_date = CURDATE()
+        ORDER BY id DESC LIMIT 1`, [student.id, log.session]
+    );
+    // The snapshot follows only the newest event, never an earlier boarding
+    // that was followed by a separate drop-off event.
+    if (Number(latest?.id) === id) {
+      const col = log.session === 'morning' ? 'morning' : 'evening';
+      await conn.query(
+        `UPDATE daily_status SET ${col}_ts = ?
+          WHERE check_date = CURDATE() AND student_id = ? AND ${col}_done = TRUE`,
+        [nextLocal, student.id]
+      );
+    }
+    await logAudit({
+      conn, required: true, userId, action: 'UPDATE', entityType: 'checkin_time', entityId: String(id),
+      oldValue: { checked_at_local: log.old_local, session: log.session, status: log.status },
+      newValue: { checked_at_local: nextLocal, session: log.session, status: log.status },
+      ipAddress, userAgent,
+    });
+    await conn.commit();
+    return { log_id: id, checked_at: new Date(`${log.check_date}T${time}:00+07:00`).toISOString(), time_edited: true };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
 /**
  * A teacher takes back their OWN tap from today (a mis-tap). Only the latest
  * check for that student/session, recorded by this user, with the teacher's
@@ -1670,5 +1775,6 @@ module.exports = {
   TEACHER_STATUS,
   getTeacherRoster,
   processTeacherCheck,
+  correctTeacherCheckTime,
   undoTeacherCheck,
 };

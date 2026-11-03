@@ -13,6 +13,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { getGradeScope } from '../../utils/authScope';
 import { groupTeacherClassrooms, classroomPlan } from '../../utils/classroomAttendance';
 import { PageTransition } from '../../lib/motion';
+import AttendanceTimeDialog, { bangkokTime } from './AttendanceTimeDialog';
 
 const SESSIONS = {
   morning: { label: 'เช้า', action: 'ถึงโรงเรียน', icon: Sunrise },
@@ -40,6 +41,7 @@ export default function ClassroomCheck() {
   const [leaveIds, setLeaveIds] = useState(() => new Set());
   const [selfIds, setSelfIds] = useState(() => new Set());
   const [confirmRoom, setConfirmRoom] = useState(null);
+  const [timeStudent, setTimeStudent] = useState(null);
   const [saving, setSaving] = useState(false);
   const requestSeq = useRef(0);
   const writeInFlight = useRef(false);
@@ -50,7 +52,7 @@ export default function ClassroomCheck() {
     return () => { mounted.current = false; requestSeq.current += 1; };
   }, []);
 
-  const load = useCallback(async (round = sessionRef.current) => {
+  const load = useCallback(async (round = sessionRef.current, resetSelections = true) => {
     const request = ++requestSeq.current;
     setLoading(true); setError(''); setRoster(null);
     try {
@@ -58,7 +60,7 @@ export default function ClassroomCheck() {
       if (!mounted.current || request !== requestSeq.current || round !== sessionRef.current) return;
       if (!Array.isArray(response.data?.data?.vehicles)) throw new Error('invalid roster');
       setRoster({ session: round, vehicles: response.data.data.vehicles });
-      setLeaveIds(new Set()); setSelfIds(new Set());
+      if (resetSelections) { setLeaveIds(new Set()); setSelfIds(new Set()); }
     } catch (err) {
       if (!mounted.current || request !== requestSeq.current || round !== sessionRef.current) return;
       setError(err.response?.data?.message || 'โหลดรายชื่อไม่สำเร็จ กรุณาลองอีกครั้ง');
@@ -74,7 +76,7 @@ export default function ClassroomCheck() {
   const grades = useMemo(() => [...new Set(rooms.map(room => room.grade))], [rooms]);
   const activeGrade = grade || (grades.includes(selectedGrade) ? selectedGrade : '');
   const visibleRooms = rooms.filter(room => room.grade === activeGrade);
-  const locked = saving || !!confirmRoom;
+  const locked = saving || !!confirmRoom || !!timeStudent;
 
   function changeSession(next) {
     if (next === sessionRef.current || locked || writeInFlight.current) return;
@@ -106,6 +108,34 @@ export default function ClassroomCheck() {
     const plan = classroomPlan(room, leaveIds, selfIds);
     if (!plan.presentIds.length && !plan.leaveIds.length && !plan.selfIds.length) return;
     setConfirmRoom({ ...plan, session, grade: room.grade, room: room.classroom || 'ไม่ระบุห้อง' });
+  }
+
+  async function confirmOne(student) {
+    if (locked || loading || !data || writeInFlight.current || student.done || student.on_leave || student.self_travel || student.no_vehicle) return;
+    const round = sessionRef.current;
+    const mode = selfIds.has(student.id) ? 'self' : leaveIds.has(student.id) ? 'leave' : 'bus';
+    if (mode !== 'bus' && student.status) return;
+    writeInFlight.current = true;
+    setSaving(true);
+    try {
+      if (mode === 'self') await api.post('/school/self-travel', { student_id: student.id, session: round });
+      else if (mode === 'leave') await api.post('/school/leave', { student_id: student.id, session: round });
+      else {
+        const response = await api.post('/school/teacher-check', { session: round, student_ids: [student.id] });
+        if (response.data?.data?.results?.[0]?.result !== 'ok') {
+          throw new Error('รายการนี้ยังไม่ถูกบันทึก กรุณาตรวจสอบสถานะใหม่');
+        }
+      }
+      toast.success(`บันทึก ${student.name} แล้ว`);
+      setLeaveIds(previous => { const next = new Set(previous); next.delete(student.id); return next; });
+      setSelfIds(previous => { const next = new Set(previous); next.delete(student.id); return next; });
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'บันทึกไม่สำเร็จ');
+    } finally {
+      await load(round, false);
+      writeInFlight.current = false;
+      if (mounted.current) setSaving(false);
+    }
   }
 
   async function saveRoom() {
@@ -164,6 +194,7 @@ export default function ClassroomCheck() {
           <p className="font-semibold text-ink">เริ่มต้นใช้รถทุกคน เลือก “มาเอง/กลับเอง” หรือ “ลา” ตามจริง</p>
           <p className="text-sm text-ink-muted">ตรวจรายชื่อทีละห้อง แล้วกด “บันทึกทั้งห้อง” · การลาใช้เฉพาะรอบที่เลือก</p>
           <p className="text-sm text-ink-muted">เช้า: ถึงโรงเรียน · เย็น: ขึ้นรถกลับบ้าน · รายการที่คนขับหรือครูบันทึกแล้วจะไม่บันทึกซ้ำ</p>
+          <p className="text-sm text-ink-muted">ยืนยันรายคนเพื่อเก็บเวลาที่กดจริง · บันทึกทั้งห้องเป็นเวลาของชุดนั้น ไม่ใช่เวลารับจริงรายคน</p>
         </AppCard>
 
         <div role="tablist" aria-label="เลือกรอบ" className="grid grid-cols-2 gap-2 p-1 bg-surface border border-surface-border rounded-2xl">
@@ -213,6 +244,17 @@ export default function ClassroomCheck() {
                   <div className="flex-1 min-w-[10rem]">
                     <p className="font-semibold text-ink">{student.name}</p>
                     <p className="text-sm text-ink-muted">{student.plate_no || 'ยังไม่ได้ผูกรถ'}</p>
+                    {student.done && student.checked_at && <p className="text-sm text-ink-muted">
+                      {session === 'evening' && student.status === 'CHECKED_OUT' ? 'ส่งถึงบ้าน' : SESSIONS[session].action} {bangkokTime(student.checked_at)} น.
+                      {student.time_edited ? ' · แก้ไขเวลาแล้ว' : ''}
+                    </p>}
+                    {session === 'morning' && student.status === 'CHECKED_IN' && student.checked_at && <p className="text-sm text-ink-muted">
+                      รับขึ้นรถ {bangkokTime(student.checked_at)} น.{student.time_edited ? ' · แก้ไขเวลาแล้ว' : ''}
+                    </p>}
+                    {student.self_travel && student.self_recorded_at && <p className="text-sm text-ink-muted">
+                      {session === 'morning' ? 'มาเอง' : 'กลับเอง'} {bangkokTime(student.self_recorded_at)} น.
+                      {student.self_time_edited ? ' · แก้ไขเวลาแล้ว' : ''}
+                    </p>}
                   </div>
                   {selectable ? <div className="flex flex-wrap items-center gap-2">
                     <StatusBadge variant={selectedLeave ? 'warn' : 'success'}>{selectedLeave ? 'เลือกลา' : selectedSelf ? (session === 'morning' ? 'มาเอง' : 'กลับเอง') : 'ใช้รถ (ค่าเริ่มต้น)'}</StatusBadge>
@@ -226,10 +268,25 @@ export default function ClassroomCheck() {
                       className={`focus-ring min-h-[44px] px-4 rounded-lg border text-sm font-semibold disabled:opacity-60 ${selectedLeave ? 'border-warn-ink bg-warn-soft text-warn-ink' : 'border-surface-border bg-surface-raised text-ink hover:bg-surface'}`}>
                       {selectedLeave ? 'ยกเลิกลา' : 'ลา'}
                     </button>
+                    <button type="button" onClick={() => confirmOne(student)} disabled={locked || loading || (student.status && (selectedSelf || selectedLeave))}
+                      aria-label={`ยืนยันรายคน ${student.name}`}
+                      className="focus-ring min-h-[44px] px-4 rounded-lg bg-brand-700 text-white text-sm font-semibold disabled:opacity-60">
+                      ยืนยันรายคน
+                    </button>
+                    {student.status === 'CHECKED_IN' && student.log_id && <button type="button" onClick={() => setTimeStudent(student)} disabled={locked}
+                      aria-label={`แก้เวลา ${student.name}`}
+                      className="focus-ring min-h-[44px] px-3 rounded-lg text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60">
+                      แก้เวลา
+                    </button>}
                   </div> : <div className="flex items-center gap-2">
                     <StatusBadge variant={student.on_leave ? 'warn' : student.done ? 'success' : 'neutral'}>
                       {student.self_travel ? (session === 'morning' ? 'มาเอง' : 'กลับเอง') : student.on_leave ? 'ลาแล้ว' : student.done ? 'บันทึกแล้ว' : 'ยังไม่มีรถ'}
                     </StatusBadge>
+                    {((student.done && student.log_id) || (student.self_travel && student.self_id)) && <button type="button" onClick={() => setTimeStudent(student)} disabled={locked}
+                      aria-label={`แก้เวลา ${student.name}`}
+                      className="focus-ring min-h-[44px] px-3 rounded-lg text-sm font-semibold text-brand-700 hover:bg-brand-50 disabled:opacity-60">
+                      แก้เวลา
+                    </button>}
                     {student.can_undo && <button type="button" onClick={() => undo(student)} disabled={locked}
                       aria-label={`ยกเลิกรายการของ ${student.name}`}
                       className="focus-ring min-h-[44px] px-3 rounded-lg text-sm text-ink-muted hover:bg-surface inline-flex items-center gap-1 disabled:opacity-60">
@@ -250,9 +307,11 @@ export default function ClassroomCheck() {
         })}
 
         <ConfirmDialog open={Boolean(confirmRoom)} tone="brand" title="บันทึกทั้งห้อง?"
-          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: ใช้รถ ${confirmRoom.presentIds.length} คน · ${confirmRoom.session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${confirmRoom.selfIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็ก` : ''}
+          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: ใช้รถ ${confirmRoom.presentIds.length} คน · ${confirmRoom.session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${confirmRoom.selfIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็กเป็นชุด ไม่ได้ยืนยันเวลาจริงรายคน` : ''}
           confirmLabel="ยืนยันบันทึกทั้งห้อง" loading={saving} onConfirm={saveRoom}
           onCancel={() => { if (!saving) setConfirmRoom(null); }} />
+        {timeStudent && <AttendanceTimeDialog key={timeStudent.log_id || `self-${timeStudent.self_id}`} student={timeStudent}
+          onClose={() => setTimeStudent(null)} onSaved={() => load(sessionRef.current, false)} />}
       </div>
     </PageTransition>
   );

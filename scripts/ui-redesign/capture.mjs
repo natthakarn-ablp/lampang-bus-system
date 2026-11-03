@@ -1094,6 +1094,11 @@ function mockFor(url, scenario, user) {
   const set = SCENARIOS[scenario] || SCENARIOS.normal;
   try {
     const u = new URL(url);
+    if (['restore-pupil', 'restore-from-add'].includes(scenario) && u.pathname === '/api/school/students' && u.searchParams.get('only_deleted') === '1') {
+      return { data: [{ id: 502, student_code: 'T502', prefix: 'เด็กหญิง', first_name: 'ตัวอย่าง', last_name: 'กู้คืน',
+        grade: 'ป.1', classroom: '1', is_deleted: true, vehicle_id: null,
+        morning_enabled: true, evening_enabled: true }], meta: { page: 1, per_page: 20, total: 1 } };
+    }
     if (u.pathname === '/api/admin/users' && u.searchParams.get('is_active') === 'false') {
       return set['/api/admin/users?is_active=false'] ?? null;
     }
@@ -1614,6 +1619,40 @@ const SHOTS = [
       await page.getByRole('button', { name: 'แก้ข้อมูล', exact: true }).click();
     },
     expect: ['[role=dialog]', 'text=เบอร์เดิมไม่แสดง', 'text=แก้ไขข้อมูลนักเรียน'] },
+  ...['teacher', 'school'].map(user => ({
+    id: `${user}-restore-pupil`, url: '/school/students', user, scenario: 'restore-pupil', vps: ['mobile', 'desktop'],
+    act: async page => {
+      await page.route('**/api/school/students/502/restore', route => route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: { status: 'RESTORED', student_id: 502 } }) }));
+      const listRequest = page.waitForRequest(req => req.method() === 'GET' && req.url().includes('/api/school/students?') && req.url().includes('only_deleted=1'));
+      await page.getByRole('combobox', { name: 'สถานะรายชื่อ' }).selectOption('deleted');
+      await listRequest;
+      await page.getByRole('button', { name: 'กู้คืน', exact: true }).click();
+      const dialog = page.getByRole('alertdialog', { name: 'กู้คืนนักเรียนเข้ารายชื่อ?' });
+      await dialog.getByText('T502').waitFor();
+      const restoreRequest = page.waitForRequest(req => req.method() === 'POST' && req.url().endsWith('/api/school/students/502/restore'));
+      await dialog.getByRole('button', { name: 'กู้คืนรายชื่อ' }).click();
+      await restoreRequest;
+    },
+    expect: ['text=รายชื่อที่ลบ', 'text=กู้คืนนักเรียนแล้ว'],
+  })),
+  { id: 'teacher-restore-from-add', url: '/school/students', user: 'teacher', scenario: 'restore-from-add', vps: ['mobile', 'desktop'],
+    act: async page => {
+      await page.route('**/api/school/students/import/preview', route => route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: { batch_id: 'synthetic-restore', rows: [{
+          student_code: 'T502', student_name: 'เด็กหญิงตัวอย่าง กู้คืน', classification: 'SOFT_DELETED_SAME_SCHOOL_REACTIVATE',
+          can_apply: false, message_th: 'รหัสนี้เคยถูกลบในโรงเรียนนี้',
+        }] } }) }));
+      await page.getByRole('button', { name: 'เพิ่มนักเรียนทีละคน' }).click();
+      await page.getByRole('textbox', { name: /รหัสนักเรียน/ }).fill('T502');
+      await page.getByRole('textbox', { name: /^ชื่อ(?:\s|$)/ }).fill('ตัวอย่าง');
+      await page.getByRole('textbox', { name: /นามสกุล/ }).fill('กู้คืน');
+      await page.getByRole('button', { name: 'ตรวจสอบก่อนบันทึก' }).click();
+      const deletedRequest = page.waitForRequest(req => req.method() === 'GET' && req.url().includes('/api/school/students?') && req.url().includes('only_deleted=1'));
+      await page.getByRole('button', { name: 'ดูรายชื่อเดิมและกู้คืน' }).click();
+      await deletedRequest;
+      if (await page.getByRole('searchbox', { name: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส' }).inputValue() !== 'T502') throw new Error('deleted student code not carried to search');
+    }, expect: ['text=รายชื่อที่ลบ', 'text=T502'] },
   { id: 'teacher-edit-vehicle', url: '/school/vehicles', user: 'teacher', scenario: 'teacher-profile-edit', vps: ['mobile', 'desktop'],
     act: async page => {
       await page.route('**/api/school/vehicles/V1', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { vehicle_id: 'V1' } }) }));

@@ -1181,7 +1181,7 @@ router.delete('/students/:id', async (req, res, next) => {
 // ─── POST /students/:id/restore — กู้คืนนักเรียนที่ถูกลบ (ในขอบเขตโรงเรียน) ─────
 // Reverses DELETE /students/:id (withdraw). Operators previously had to hand-run
 // UPDATE students SET is_deleted=FALSE for a mis-deleted student.
-router.post('/students/:id/restore', requireFullSchoolScope, async (req, res, next) => {
+router.post('/students/:id/restore', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -1190,6 +1190,7 @@ router.post('/students/:id/restore', requireFullSchoolScope, async (req, res, ne
 
     const result = await schoolSvc.restoreStudent(pool, {
       schoolId, studentId, actorId: req.user.id,
+      gradeScope: teacherGradeScope(req),
       ip: req.ip, userAgent: req.headers['user-agent'],
     });
 

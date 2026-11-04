@@ -60,6 +60,7 @@ const SCHOOL_NAV = [
   { to: '/school/vehicle-verification', icon: CheckSquare, label: 'ส่งตรวจและรับรองรถ' },
   { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
   { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
+  { to: '/school/year-promotion', icon: GraduationCap, label: 'เลื่อนชั้นปีการศึกษาใหม่' },
   { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
   { to: '/my-policy',             icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
@@ -164,6 +165,7 @@ const TEACHER_BLOCKED_PATHS = new Set([
   '/school/vehicle-verification',
   '/school/audit-log',
   '/school/teacher-accounts',
+  '/school/year-promotion',
   '/participation',
   '/participation/summary',
   // A registration application is one driver's rider list for a whole bus, with

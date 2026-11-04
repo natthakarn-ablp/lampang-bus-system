@@ -177,6 +177,7 @@ if (env.features.driverRegistration) {
 }
 
 app.use('/api/driver', driverRoutes);
+app.use('/api/school/promotion', require('./routes/schoolPromotion.routes'));
 app.use('/api/school',      schoolRoutes);
 app.use('/api/affiliation', affiliationRoutes);
 app.use('/api/province',    provinceRoutes);

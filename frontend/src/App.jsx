@@ -44,6 +44,7 @@ const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
 const SchoolDashboard      = lazy(() => import('./pages/school/SchoolDashboard'));
 const TeacherCheck         = lazy(() => import('./pages/school/TeacherCheck'));
 const StudentSearch        = lazy(() => import('./pages/school/StudentSearch'));
+const SchoolYearPromotion = lazy(() => import('./pages/school/SchoolYearPromotion'));
 const VehicleList          = lazy(() => import('./pages/school/VehicleList'));
 const EmergencyList        = lazy(() => import('./pages/school/EmergencyList'));
 const SchoolApprovals      = lazy(() => import('./pages/school/SchoolApprovals'));
@@ -278,6 +279,7 @@ export default function App() {
             <Route path="pickup-map"   element={<SchoolPickupMap />} />
             <Route path="live-vehicles" element={<SchoolLiveVehicles />} />
             <Route path="teacher-accounts" element={<SchoolTeacherAccounts />} />
+            <Route path="year-promotion" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><SchoolYearPromotion /></PrivateRoute>} />
             <Route path="registration-review" element={<SchoolRegistrationReview />} />
           </Route>
 

@@ -217,6 +217,20 @@ router.get('/students/classrooms', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Search withdrawn pupils school-wide: a pupil deleted under one grade may come
+// back under another. Needs a 2+ char term, max 20 rows, no PII beyond
+// name/code/former grade/classroom/deleted date.
+router.get('/students/deleted-search', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (q.length > 100) return sendError(res, 'คำค้นยาวเกินไป', [], 400);
+    const rows = await schoolSvc.searchDeletedStudents(pool, { schoolId, q });
+    return sendSuccess(res, rows, 'OK', { min_chars: 2, limit: 20 });
+  } catch (err) { next(err); }
+});
+
 router.get('/students', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
@@ -1218,6 +1232,7 @@ router.post('/students/:id/restore', async (req, res, next) => {
     const result = await schoolSvc.restoreStudent(pool, {
       schoolId, studentId, actorId: req.user.id,
       gradeScope: teacherGradeScope(req),
+      grade: req.body?.grade, classroom: req.body?.classroom,
       ip: req.ip, userAgent: req.headers['user-agent'],
     });
 

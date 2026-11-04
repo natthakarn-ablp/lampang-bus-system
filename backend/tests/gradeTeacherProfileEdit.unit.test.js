@@ -1,7 +1,7 @@
 'use strict';
 require('./loadTestEnv');
 jest.mock('../src/middleware/auth', () => ({ authenticate: (req, _res, next) => {
-  req.user = { id: 7, role: 'school', scopeId: 'SCH1', gradeScope: req.headers['x-full-school'] ? null : 'ป.5' };
+  req.user = { id: 7, role: 'school', scopeId: 'SCH1', gradeScope: req.headers['x-full-school'] ? null : (req.headers['x-grade'] === 'p3' ? 'ป.3' : 'ป.5') };
   next();
 } }));
 const mockPoolQuery = jest.fn();
@@ -164,17 +164,39 @@ test('withdraw audit failure rolls back instead of hiding an unaudited deletion'
   expect(conn.commit).not.toHaveBeenCalled();
 });
 
+const restoreWrite = () => writes().find(([sql]) => sql.includes('is_deleted = FALSE'));
+
 test('teacher restores a withdrawn pupil in own grade with required audit', async () => {
   mockCurrentStudent = { ...student, is_deleted: 1 };
-  const res = await request(app).post('/api/school/students/12/restore');
+  const res = await request(app).post('/api/school/students/12/restore').send({ classroom: ' 2 ' });
   expect(res.status).toBe(200);
   expect(conn.query.mock.calls[0][1]).toEqual([12, 'SCH1']);
-  expect(writes()).toEqual([[expect.stringContaining('is_deleted = FALSE'), [12, 'SCH1', 'ป. 5']]]);
+  expect(restoreWrite()[1]).toEqual(['ป.5', '2', 12, 'SCH1', 'ป. 5']);
   expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ conn, required: true, entityId: 12 }));
   expect(conn.commit).toHaveBeenCalledTimes(1);
 });
 
-test.each([null, { ...student, grade: 'ป.6', is_deleted: 1 }])('teacher cannot restore another school or grade', async current => {
+test('teacher P.3 restores a pupil recorded under P.2: moves into P.3, classroom empty, audit has old and new', async () => {
+  mockCurrentStudent = { ...student, grade: 'ป.2', classroom: '1', is_deleted: 1 };
+  const res = await request(app).post('/api/school/students/12/restore').set('x-grade', 'p3');
+  expect(res.status).toBe(200);
+  expect(restoreWrite()[1]).toEqual(['ป.3', null, 12, 'SCH1', 'ป.2']);
+  const audit = mockAudit.mock.calls[0][0];
+  expect(audit.required).toBe(true);
+  expect(audit.oldValue).toMatchObject({ grade: 'ป.2', classroom: '1' });
+  expect(audit.newValue).toMatchObject({ grade: 'ป.3', classroom: null, previous_grade: 'ป.2', previous_classroom: '1' });
+  expect(conn.commit).toHaveBeenCalledTimes(1);
+});
+
+test('restore returns 409 when an active pupil already has the same student code', async () => {
+  mockCurrentStudent = { ...student, student_code: '9001', grade: 'ป.2', is_deleted: 1 };
+  const res = await request(app).post('/api/school/students/12/restore');
+  expect(res.status).toBe(409);
+  expect(writes()).toHaveLength(0);
+  expect(conn.rollback).toHaveBeenCalled();
+});
+
+test.each([null, { ...student, grade: 'ป.6', is_deleted: 0 }])('teacher cannot restore another school or see an active pupil of another grade', async current => {
   mockCurrentStudent = current;
   expect((await request(app).post('/api/school/students/12/restore')).status).toBe(404);
   expect(writes()).toHaveLength(0);
@@ -182,11 +204,38 @@ test.each([null, { ...student, grade: 'ป.6', is_deleted: 1 }])('teacher cannot
   expect(mockAudit).not.toHaveBeenCalled();
 });
 
-test('full-school account may restore a withdrawn pupil in its school', async () => {
-  mockCurrentStudent = { ...student, grade: 'ป.6', is_deleted: 1 };
-  const res = await request(app).post('/api/school/students/12/restore').set('x-full-school', '1');
-  expect(res.status).toBe(200);
-  expect(writes()).toHaveLength(1);
+test('full-school account may restore a withdrawn pupil and choose a new grade; omitted keeps the old one', async () => {
+  mockCurrentStudent = { ...student, grade: 'ป.6', classroom: '3', is_deleted: 1 };
+  expect((await request(app).post('/api/school/students/12/restore').set('x-full-school', '1').send({ grade: 'ป. 3', classroom: '2' })).status).toBe(200);
+  expect(restoreWrite()[1]).toEqual(['ป.3', '2', 12, 'SCH1', 'ป.6']);
+  conn.query.mockClear();
+  expect((await request(app).post('/api/school/students/12/restore').set('x-full-school', '1')).status).toBe(200);
+  expect(restoreWrite()[1]).toEqual(['ป.6', '3', 12, 'SCH1', 'ป.6']);
+  expect((await request(app).post('/api/school/students/12/restore').set('x-full-school', '1').send({ grade: 'xx' })).status).toBe(400);
+});
+
+describe('deleted-pupil search', () => {
+  test.each(['', ' ', 'ก'])('term %j returns nothing and never queries', async q => {
+    const res = await request(app).get('/api/school/students/deleted-search').query({ q });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+    expect(mockPoolQuery).not.toHaveBeenCalled();
+  });
+  test('missing term returns nothing', async () => {
+    const res = await request(app).get('/api/school/students/deleted-search');
+    expect(res.body.data).toEqual([]);
+    expect(mockPoolQuery).not.toHaveBeenCalled();
+  });
+  test('school-wide, limited to 20, minimal columns, escaped wildcards', async () => {
+    mockPoolQuery.mockResolvedValueOnce([[{ id: 1, first_name: 'ตัวอย่าง' }]]);
+    const res = await request(app).get('/api/school/students/deleted-search').query({ q: '50%_' });
+    expect(res.status).toBe(200);
+    const [sql, params] = mockPoolQuery.mock.calls[0];
+    expect(sql).toContain('s.school_id = ?'); expect(sql).toContain('is_deleted = TRUE'); expect(sql).toContain('LIMIT 20');
+    expect(sql).not.toMatch(/grade IN|parent|phone|vehicle/i);
+    const escaped = '%50' + String.fromCharCode(92) + '%' + String.fromCharCode(92) + '_%';
+    expect(params).toEqual(['SCH1', escaped, escaped]);
+  });
 });
 
 test('restore audit failure rolls back instead of showing an unaudited pupil', async () => {

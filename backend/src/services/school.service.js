@@ -464,13 +464,45 @@ async function getEmergencies(schoolId, { page = 1, per_page = 20, gradeFilter =
   };
 }
 
+const MIN_DELETED_SEARCH_LEN = 2;
+const DELETED_SEARCH_LIMIT = 20;
+
+/**
+ * Search soft-deleted students of ONE school by name or student code.
+ * Needs a term of 2+ characters (never lists the whole deleted roster) and
+ * returns at most 20 rows with only what a restorer needs: name, former
+ * grade/classroom and deletion date. No phone, guardian or vehicle.
+ */
+async function searchDeletedStudents(db, { schoolId, q }) {
+  const term = String(q == null ? '' : q).trim();
+  if (term.length < MIN_DELETED_SEARCH_LEN) return [];
+  const like = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const [rows] = await db.query(
+    `SELECT s.id, s.student_code, s.prefix, s.first_name, s.last_name,
+            s.grade, s.classroom, s.deleted_at
+       FROM students s
+      WHERE s.school_id = ? AND s.is_deleted = TRUE
+        AND (CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, '')) LIKE ?
+             OR s.student_code LIKE ?)
+      ORDER BY s.deleted_at DESC, s.id DESC
+      LIMIT ${DELETED_SEARCH_LIMIT}`,
+    [schoolId, like, like]
+  );
+  return rows;
+}
+
 /**
  * Restore a soft-deleted ("withdrawn") student back into the active roster.
- * Reverses the DELETE /students/:id soft-delete. School-scoped: the caller's
- * schoolId is part of the WHERE so a school can only restore its own rows.
- * Vehicle is intentionally NOT re-attached — the student returns unassigned.
+ * School-scoped: schoolId is part of the WHERE so a school can only restore
+ * its own rows. Vehicle is intentionally NOT re-attached.
+ *
+ * Grade-scoped teacher: the child may have been recorded under another grade
+ * (there is no yearly promotion), so the restore MOVES the child into the
+ * teacher's own grade; classroom = the chosen value or empty.
+ * School admin (no gradeScope): may pick a new grade/classroom; omitted keeps
+ * the previous value.
  */
-async function restoreStudent(db, { schoolId, studentId, actorId, gradeScope = null, ip = null, userAgent = null }) {
+async function restoreStudent(db, { schoolId, studentId, actorId, gradeScope = null, grade, classroom, ip = null, userAgent = null }) {
   const conn = await db.getConnection();
   try {
     await conn.beginTransaction();
@@ -482,16 +514,50 @@ async function restoreStudent(db, { schoolId, studentId, actorId, gradeScope = n
        FOR UPDATE`,
       [studentId, schoolId]
     );
-    const requestedGrade = gradeScope ? normalizeGrade(gradeScope) : null;
-    if (!st || (gradeScope && (!requestedGrade || normalizeGrade(st.grade) !== requestedGrade))) {
+    const teacherGrade = gradeScope ? normalizeGrade(gradeScope) : null;
+    if (!st || (gradeScope && !teacherGrade)) {
       const e = new Error('ไม่พบนักเรียนในขอบเขตที่รับผิดชอบ'); e.statusCode = 404; throw e;
     }
-    if (!st.is_deleted) { await conn.commit(); return { status: 'ALREADY_ACTIVE', student_id: st.id }; }
+    if (!st.is_deleted) {
+      // An ACTIVE child of another grade must stay invisible to a teacher.
+      if (teacherGrade && normalizeGrade(st.grade) !== teacherGrade) {
+        const e = new Error('ไม่พบนักเรียนในขอบเขตที่รับผิดชอบ'); e.statusCode = 404; throw e;
+      }
+      await conn.commit();
+      return { status: 'ALREADY_ACTIVE', student_id: st.id };
+    }
+
+    let newGrade = st.grade;
+    let newClassroom = st.classroom;
+    const cls = classroom == null ? null : String(classroom).trim();
+    if (cls && cls.length > 30) { const e = new Error('เลขห้องไม่ถูกต้อง'); e.statusCode = 400; throw e; }
+    if (teacherGrade) {
+      newGrade = teacherGrade;
+      newClassroom = cls || null;
+    } else {
+      if (grade != null && String(grade).trim() !== '') {
+        const g = normalizeGrade(grade);
+        if (!g) { const e = new Error('ชั้นไม่ถูกต้อง'); e.statusCode = 400; throw e; }
+        newGrade = g;
+      }
+      if (classroom !== undefined) newClassroom = cls || null;
+    }
+
+    if (st.student_code) {
+      const [[dup]] = await conn.query(
+        `SELECT id FROM students
+         WHERE school_id = ? AND student_code = ? AND is_deleted = FALSE AND id <> ? LIMIT 1`,
+        [schoolId, st.student_code, studentId]
+      );
+      if (dup) {
+        const e = new Error('มีนักเรียนที่ใช้งานอยู่ด้วยเลขประจำตัวเดียวกันแล้ว'); e.statusCode = 409; throw e;
+      }
+    }
 
     const [updated] = await conn.query(
-      `UPDATE students SET is_deleted = FALSE, deleted_at = NULL
+      `UPDATE students SET is_deleted = FALSE, deleted_at = NULL, grade = ?, classroom = ?
        WHERE id = ? AND school_id = ? AND grade <=> ? AND is_deleted = TRUE`,
-      [studentId, schoolId, st.grade]
+      [newGrade, newClassroom, studentId, schoolId, st.grade]
     );
     if (!updated.affectedRows) {
       const e = new Error('ข้อมูลนักเรียนเปลี่ยนไป กรุณาโหลดรายชื่อใหม่'); e.statusCode = 409; throw e;
@@ -499,17 +565,18 @@ async function restoreStudent(db, { schoolId, studentId, actorId, gradeScope = n
 
     await logAudit({
       userId: actorId, action: 'UPDATE', entityType: 'student', entityId: studentId, conn,
-      oldValue: { is_deleted: true },
+      oldValue: { is_deleted: true, grade: st.grade, classroom: st.classroom },
       newValue: {
         action: 'restore', is_deleted: false,
         student_name: `${st.prefix || ''}${st.first_name} ${st.last_name}`,
-        grade: st.grade, classroom: st.classroom,
+        grade: newGrade, classroom: newClassroom,
+        previous_grade: st.grade, previous_classroom: st.classroom,
       },
       ipAddress: ip, userAgent, required: true,
     });
 
     await conn.commit();
-    return { status: 'RESTORED', student_id: studentId };
+    return { status: 'RESTORED', student_id: studentId, grade: newGrade, classroom: newClassroom };
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -525,4 +592,5 @@ module.exports = {
   getStatusToday,
   getEmergencies,
   restoreStudent,
+  searchDeletedStudents,
 };

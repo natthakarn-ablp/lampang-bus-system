@@ -1099,6 +1099,11 @@ function mockFor(url, scenario, user) {
         grade: 'ป.1', classroom: '1', is_deleted: true, vehicle_id: null,
         morning_enabled: true, evening_enabled: true }], meta: { page: 1, per_page: 20, total: 1 } };
     }
+    if (['restore-pupil', 'restore-from-add'].includes(scenario) && u.pathname === '/api/school/students/deleted-search') {
+      // Teacher search: a former P.2 pupil, school-wide, minimal fields only.
+      return { data: [{ id: 502, student_code: 'T502', prefix: 'เด็กหญิง', first_name: 'ตัวอย่าง', last_name: 'กู้คืน',
+        grade: 'ป.2', classroom: '1', deleted_at: '2026-03-01T00:00:00.000Z' }], meta: { min_chars: 2, limit: 20 } };
+    }
     if (u.pathname === '/api/admin/users' && u.searchParams.get('is_active') === 'false') {
       return set['/api/admin/users?is_active=false'] ?? null;
     }
@@ -1637,17 +1642,21 @@ const SHOTS = [
     act: async page => {
       await page.route('**/api/school/students/502/restore', route => route.fulfill({ status: 200, contentType: 'application/json',
         body: JSON.stringify({ success: true, data: { status: 'RESTORED', student_id: 502 } }) }));
-      const listRequest = page.waitForRequest(req => req.method() === 'GET' && req.url().includes('/api/school/students?') && req.url().includes('only_deleted=1'));
+      const isTeacher = user === 'teacher';
+      const listRequest = page.waitForRequest(req => req.method() === 'GET' && (isTeacher
+        ? req.url().includes('/api/school/students/deleted-search')
+        : req.url().includes('/api/school/students?') && req.url().includes('only_deleted=1')));
       await page.getByRole('combobox', { name: 'สถานะรายชื่อ' }).selectOption('deleted');
+      if (isTeacher) await page.getByRole('searchbox', { name: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส' }).fill('T502');
       await listRequest;
-      await page.getByRole('button', { name: 'กู้คืน', exact: true }).click();
-      const dialog = page.getByRole('alertdialog', { name: 'กู้คืนนักเรียนเข้ารายชื่อ?' });
+      await page.getByRole('button', { name: isTeacher ? 'กู้คืนเข้าสายชั้นนี้' : 'กู้คืน', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'กู้คืนนักเรียนเข้ารายชื่อ' });
       await dialog.getByText('T502').waitFor();
       const restoreRequest = page.waitForRequest(req => req.method() === 'POST' && req.url().endsWith('/api/school/students/502/restore'));
       await dialog.getByRole('button', { name: 'กู้คืนรายชื่อ' }).click();
       await restoreRequest;
     },
-    expect: ['text=รายชื่อที่ลบ', 'text=กู้คืนนักเรียนแล้ว'],
+    expect: ['text=รายชื่อที่ลบ', user === 'teacher' ? 'text=กู้คืนเข้าสายชั้นของคุณแล้ว' : 'text=กู้คืนนักเรียนแล้ว'],
   })),
   { id: 'teacher-restore-from-add', url: '/school/students', user: 'teacher', scenario: 'restore-from-add', vps: ['mobile', 'desktop'],
     act: async page => {
@@ -1661,7 +1670,8 @@ const SHOTS = [
       await page.getByRole('textbox', { name: /^ชื่อ(?:\s|$)/ }).fill('ตัวอย่าง');
       await page.getByRole('textbox', { name: /นามสกุล/ }).fill('กู้คืน');
       await page.getByRole('button', { name: 'ตรวจสอบก่อนบันทึก' }).click();
-      const deletedRequest = page.waitForRequest(req => req.method() === 'GET' && req.url().includes('/api/school/students?') && req.url().includes('only_deleted=1'));
+      const deletedRequest = page.waitForRequest(req => req.method() === 'GET' && req.url().includes('/api/school/students/deleted-search'));
+      await page.getByRole('button', { name: 'กู้คืนเข้าสายชั้นนี้' }).waitFor();
       await page.getByRole('button', { name: 'ดูรายชื่อเดิมและกู้คืน' }).click();
       await deletedRequest;
       if (await page.getByRole('searchbox', { name: 'ค้นหานักเรียนด้วยชื่อ นามสกุล หรือรหัส' }).inputValue() !== 'T502') throw new Error('deleted student code not carried to search');

@@ -19,6 +19,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { getGradeScope, isGradeTeacher } from '../../utils/authScope';
 import { formatGradeClass } from '../../utils/student';
 
+const RESTORE_GRADES = ['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6'];
+
 // Mask parent phone in list views for PDPA compliance — shows first 3 and
 // last 2 digits only (e.g. 081****67). The edit form shows the full number
 // because the school needs it to make changes.
@@ -103,6 +105,15 @@ export default function StudentSearch() {
     setLoading(true);
     setError('');
     try {
+      if (showDeleted && isTeacher) {
+        // Teachers search withdrawn pupils school-wide, but only with a term.
+        const term = debouncedSearch.trim();
+        if (term.length < 2) { setStudents([]); setMeta({ page: 1, per_page: 20, total: 0 }); return; }
+        const found = await api.get('/school/students/deleted-search', { params: { q: term } });
+        const rows = Array.isArray(found.data.data) ? found.data.data : [];
+        setStudents(rows); setMeta({ page: 1, per_page: 20, total: rows.length });
+        return;
+      }
       const params = new URLSearchParams();
       params.set('page', page);
       params.set('per_page', '20');
@@ -230,6 +241,9 @@ export default function StudentSearch() {
   // any readable form and put the destructive default under Enter.
   const [confirmWithdraw, setConfirmWithdraw] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState(null);
+  const [restoreGrade, setRestoreGrade] = useState('');
+  const [restoreClassroom, setRestoreClassroom] = useState('');
+  function openRestore(row) { setRestoreGrade(''); setRestoreClassroom(isTeacher ? '' : (row.classroom || '')); setConfirmRestore(row); }
 
   async function handleWithdraw() {
     if (!editStudent) return;
@@ -249,8 +263,11 @@ export default function StudentSearch() {
     if (!confirmRestore || saveLock.current) return;
     saveLock.current = true; setSaving(true);
     try {
-      await api.post(`/school/students/${confirmRestore.id}/restore`);
-      toast.success('กู้คืนนักเรียนแล้ว กรุณาตรวจสอบข้อมูลเดิมและเลือกรถอีกครั้ง');
+      const body = isTeacher
+        ? { classroom: restoreClassroom.trim() }
+        : { ...(restoreGrade ? { grade: restoreGrade } : {}), classroom: restoreClassroom.trim() };
+      await api.post(`/school/students/${confirmRestore.id}/restore`, body);
+      toast.success(isTeacher ? 'กู้คืนเข้าสายชั้นของคุณแล้ว กรุณาตรวจสอบข้อมูลและเลือกรถอีกครั้ง' : 'กู้คืนนักเรียนแล้ว กรุณาตรวจสอบข้อมูลเดิมและเลือกรถอีกครั้ง');
       setConfirmRestore(null);
       fetchStudents(1);
       if (isTeacher) setClassroomRefresh(n => n + 1);
@@ -289,6 +306,13 @@ export default function StudentSearch() {
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
+  const deletedColumns = [
+    { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
+      cell: s2 => <span className="font-medium text-ink">{s2.prefix}{s2.first_name} {s2.last_name}</span> },
+    { key: 'grade', header: 'ชั้น/ห้องเดิม', secondary: true, cell: s2 => formatGradeClass(s2.grade, s2.classroom) },
+    { key: 'code', header: 'รหัส', cell: s2 => <span className="tabular-nums">{s2.student_code ?? s2.id}</span> },
+    { key: 'deleted', header: 'วันที่ลบ', cell: s2 => (s2.deleted_at ? new Date(s2.deleted_at).toLocaleDateString('th-TH') : '-') },
+  ];
   const hasFilter = Boolean(debouncedSearch || grade || classroom || hasVehicle || showDeleted);
 
   return (
@@ -357,7 +381,7 @@ export default function StudentSearch() {
         loading={loading}
         rows={students}
         rowKey={s2 => s2.id}
-        columns={[
+        columns={showDeleted && isTeacher ? deletedColumns : [
           { key: 'name', header: 'ชื่อ-นามสกุล', primary: true,
             cell: s2 => <span className="font-medium text-ink">{s2.prefix}{s2.first_name} {s2.last_name}</span> },
           { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
@@ -390,15 +414,15 @@ export default function StudentSearch() {
               : <span className="text-ink-muted">-</span>) },
         ]}
         actions={s2 => showDeleted
-          ? <TableAction tone="brand" onClick={() => setConfirmRestore(s2)}>กู้คืน</TableAction>
+          ? <TableAction tone="brand" onClick={() => openRestore(s2)}>{isTeacher ? 'กู้คืนเข้าสายชั้นนี้' : 'กู้คืน'}</TableAction>
           : <>
               <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
               <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
             </>}
         empty={{
           icon: GraduationCap,
-          title: showDeleted ? 'ไม่พบรายชื่อที่ลบในขอบเขตนี้' : hasFilter ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้',
-          description: showDeleted ? 'ลองเปลี่ยนคำค้นหา หรือกลับไปดูรายชื่อปัจจุบัน' : hasFilter ? 'ลองเปลี่ยนคำค้นหรือตัวกรอง' : undefined,
+          title: showDeleted && isTeacher && debouncedSearch.trim().length < 2 ? 'พิมพ์ชื่อหรือเลขประจำตัวเพื่อค้นหา' : showDeleted ? 'ไม่พบรายชื่อที่ลบในขอบเขตนี้' : hasFilter ? 'ไม่พบข้อมูลตามเงื่อนไขที่เลือก' : 'ยังไม่มีข้อมูลในขอบเขตนี้',
+          description: showDeleted && isTeacher && debouncedSearch.trim().length < 2 ? 'ค้นหาจากชื่อ-นามสกุล หรือเลขประจำตัว (พิมพ์ 2 ตัวขึ้นไป) ระบบจะค้นทั้งโรงเรียน' : showDeleted ? 'ลองเปลี่ยนคำค้นหา หรือกลับไปดูรายชื่อปัจจุบัน' : hasFilter ? 'ลองเปลี่ยนคำค้นหรือตัวกรอง' : undefined,
         }}
       />
 
@@ -628,16 +652,30 @@ export default function StudentSearch() {
         onConfirm={handleWithdraw}
         onCancel={() => setConfirmWithdraw(false)}
       />
-      <ConfirmDialog
-        open={!!confirmRestore}
-        title="กู้คืนนักเรียนเข้ารายชื่อ?"
-        itemName={confirmRestore ? `${confirmRestore.prefix || ''}${confirmRestore.first_name} ${confirmRestore.last_name} · รหัส ${confirmRestore.student_code}` : ''}
-        description="ระบบจะใช้ข้อมูลเดิมและประวัติเดิม นักเรียนจะยังไม่ผูกรถ กรุณาตรวจสอบข้อมูลและเลือกรถหลังจากกู้คืน"
-        confirmLabel="กู้คืนรายชื่อ"
-        loading={saving}
-        onConfirm={handleRestore}
-        onCancel={() => setConfirmRestore(null)}
-      />
+      {confirmRestore && (
+        <Modal title="กู้คืนนักเรียนเข้ารายชื่อ" size="md" dismissible={!saving} onClose={() => setConfirmRestore(null)}>
+          <div className="space-y-4">
+            <p className="font-semibold">{confirmRestore.prefix || ''}{confirmRestore.first_name} {confirmRestore.last_name} · รหัส {confirmRestore.student_code}</p>
+            <p className="text-sm text-ink-muted">ชั้นเดิม {formatGradeClass(confirmRestore.grade, confirmRestore.classroom)}</p>
+            {isTeacher
+              ? <p className="text-sm">นักเรียนจะถูกย้ายเข้าสายชั้น {getGradeScope(user)} ของคุณ ยังไม่ผูกรถ ต้องเลือกรถหลังกู้คืน</p>
+              : <p className="text-sm">ไม่เลือกชั้นใหม่ = คงชั้นเดิม นักเรียนจะยังไม่ผูกรถ กรุณาเลือกรถหลังกู้คืน</p>}
+            {!isTeacher && (
+              <FormField label="ชั้นใหม่ (ไม่บังคับ)">{ctl => (
+                <select {...ctl} className="focus-ring w-full border border-surface-border bg-surface-raised rounded-lg px-3 min-h-[44px] text-base" value={restoreGrade} onChange={e => setRestoreGrade(e.target.value)}>
+                  <option value="">คงชั้นเดิม</option>
+                  {RESTORE_GRADES.map(g => <option key={g}>{g}</option>)}
+                </select>)}
+              </FormField>
+            )}
+            <FormField label="ห้อง (ไม่บังคับ)" value={restoreClassroom} onChange={setRestoreClassroom} placeholder="เช่น 1, 2/1" />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={saving} className="focus-ring min-h-[48px] px-4 rounded-lg bg-brand-600 text-white font-semibold disabled:opacity-50" onClick={handleRestore}>{saving ? 'กำลังกู้คืน…' : 'กู้คืนรายชื่อ'}</button>
+              <button type="button" disabled={saving} className="focus-ring min-h-[44px] px-4 rounded-lg border border-surface-border text-ink hover:bg-surface" onClick={() => setConfirmRestore(null)}>ยกเลิก</button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

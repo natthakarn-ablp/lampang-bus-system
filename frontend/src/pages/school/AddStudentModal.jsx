@@ -28,6 +28,7 @@ export default function AddStudentModal({ initialVehicleId = '', onClose, onFind
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [restored, setRestored] = useState(false);
   const [applyAttempted, setApplyAttempted] = useState(false);
   const lock = useRef(false);
   useEffect(() => {
@@ -88,6 +89,21 @@ export default function AddStudentModal({ initialVehicleId = '', onClose, onFind
     } catch (err) { setError(err.response?.data?.message || 'ยังยืนยันผลบันทึกไม่ได้ กดตรวจสอบผลอีกครั้งได้โดยไม่เพิ่มชื่อซ้ำ'); }
     finally { lock.current = false; setBusy(false); }
   }
+  // Same code as a withdrawn pupil: restore it into THIS grade/classroom in one step.
+  async function restoreHere() {
+    if (lock.current || restored || !row?.student_code) return;
+    lock.current = true; setBusy(true); setError('');
+    try {
+      const found = await api.get('/school/students/deleted-search', { params: { q: String(row.student_code) } });
+      const match = (found.data?.data || []).find(x => String(x.student_code) === String(row.student_code));
+      if (!match) throw new Error('not found');
+      await api.post(`/school/students/${match.id}/restore`, {
+        ...(gradeScope || !form.grade ? {} : { grade: form.grade }), classroom: form.classroom.trim(),
+      });
+      setRestored(true); onApplied?.();
+    } catch (err) { setError(err.response?.data?.message || 'กู้คืนไม่สำเร็จ กรุณาใช้ปุ่มดูรายชื่อเดิมและกู้คืน'); }
+    finally { lock.current = false; setBusy(false); }
+  }
   function nextPupil() {
     setForm(f => ({ ...EMPTY, grade: f.grade, classroom: f.classroom }));
     setPreview(null); setSaved(false); setApplyAttempted(false); setError('');
@@ -96,8 +112,12 @@ export default function AddStudentModal({ initialVehicleId = '', onClose, onFind
   }
   const row = preview?.rows[0];
   return (
-    <Modal title={saved ? 'เพิ่มนักเรียนแล้ว' : 'เพิ่มนักเรียนทีละคน'} size="lg" dismissible={!busy} onClose={onClose}>
-      {saved ? <div className="space-y-4">
+    <Modal title={saved || restored ? (restored ? 'กู้คืนนักเรียนแล้ว' : 'เพิ่มนักเรียนแล้ว') : 'เพิ่มนักเรียนทีละคน'} size="lg" dismissible={!busy} onClose={onClose}>
+      {restored ? <div className="space-y-4">
+        <AlertBanner variant="success" title="กู้คืนเรียบร้อย">{row.student_name} · เข้า{form.grade ? ` ${form.grade}` : 'สายชั้นนี้'}{form.classroom.trim() ? ` ห้อง ${form.classroom.trim()}` : ''}</AlertBanner>
+        <p className="text-sm text-ink-muted">นักเรียนยังไม่ผูกรถ กรุณาเลือกรถในรายชื่อนักเรียนก่อนเช็กชื่อ</p>
+        <button type="button" className={SECONDARY} onClick={onClose}>กลับไปดูรายชื่อ</button>
+      </div> : saved ? <div className="space-y-4">
         <AlertBanner variant="success" title="บันทึกเรียบร้อย">{row.student_name} · {vehicle?.display_plate || vehicle?.plate_no || 'ยังไม่ได้เลือกรถ'}</AlertBanner>
         <p className="text-sm text-ink-muted">{vehicleId ? 'เพิ่มชื่อและเลือกรถแล้ว พร้อมเช็กชื่อรอบเช้าและเย็น ไม่ต้องเลือกรถอีกหน้า' : 'ก่อนเช็กชื่อ ให้เลือกรถรับส่งในรายชื่อนักเรียนก่อน'}</p>
         <div className="flex flex-wrap gap-2">
@@ -114,6 +134,11 @@ export default function AddStudentModal({ initialVehicleId = '', onClose, onFind
           <div><dt className="text-sm text-ink-muted">รอบที่ใช้รถ</dt><dd>เช้าและเย็น · แก้ไขได้ในข้อมูลนักเรียน</dd></div>
         </dl>
         {!row.can_apply && <AlertBanner variant="warn" title="ยังเพิ่มรายการนี้ไม่ได้">{row.message_th || 'กรุณาตรวจสอบรายชื่อนักเรียนเดิมก่อน'} {row.classification === 'SKIP_DUPLICATE_SAME_SCHOOL' && 'ใช้รายชื่อเดิมได้เลย ไม่ต้องเพิ่มอีกครั้ง'}</AlertBanner>}
+        {row.classification === 'SOFT_DELETED_SAME_SCHOOL_REACTIVATE' && (
+          <button type="button" disabled={busy} className={PRIMARY} onClick={restoreHere}>
+            {busy ? 'กำลังกู้คืน…' : 'กู้คืนเข้าสายชั้นนี้'}
+          </button>
+        )}
         {row.classification === 'SOFT_DELETED_SAME_SCHOOL_REACTIVATE' && (
           <button type="button" disabled={busy} className={SECONDARY} onClick={() => onFindDeleted?.(row.student_code)}>
             ดูรายชื่อเดิมและกู้คืน

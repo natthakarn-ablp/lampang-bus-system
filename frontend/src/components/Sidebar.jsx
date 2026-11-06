@@ -4,7 +4,7 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart, ScrollText,
+  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart, ScrollText, History,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
@@ -48,6 +48,7 @@ const MORE = 'เพิ่มเติม';
 const SCHOOL_NAV = [
   { to: '/school',               icon: BarChart3,     label: PAGE_TITLES.SCHOOL_DASHBOARD },
   { to: '/school/teacher-check', icon: CheckSquare,   label: 'เช็กชื่อวันนี้' },
+  { to: '/school/backdated-attendance', icon: History, label: 'เช็กชื่อย้อนหลัง' },
   { to: '/school/students',      icon: GraduationCap, label: 'นักเรียน' },
   { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
   { to: '/school/emergencies',   icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
@@ -162,6 +163,7 @@ const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATI
  * that work for them. Backend still 403s these paths.
  */
 const TEACHER_BLOCKED_PATHS = new Set([
+  '/school/backdated-attendance',
   '/school/vehicle-verification',
   '/school/audit-log',
   '/school/teacher-accounts',

@@ -43,6 +43,7 @@ const DriverVehicleRegistration = lazy(() => import('./pages/driver/DriverVehicl
 const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
 const SchoolDashboard      = lazy(() => import('./pages/school/SchoolDashboard'));
 const TeacherCheck         = lazy(() => import('./pages/school/TeacherCheck'));
+const BackdatedAttendance  = lazy(() => import('./pages/school/BackdatedAttendance'));
 const StudentSearch        = lazy(() => import('./pages/school/StudentSearch'));
 const SchoolYearPromotion = lazy(() => import('./pages/school/SchoolYearPromotion'));
 const VehicleList          = lazy(() => import('./pages/school/VehicleList'));
@@ -267,6 +268,7 @@ export default function App() {
           >
             <Route index               element={<SchoolDashboard />} />
             <Route path="teacher-check" element={<TeacherCheck />} />
+            <Route path="backdated-attendance" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><BackdatedAttendance /></PrivateRoute>} />
             <Route path="students"     element={<StudentSearch />} />
             <Route path="vehicles"     element={<VehicleList />} />
             <Route path="vehicle-verification" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><VehicleVerification /></PrivateRoute>} />

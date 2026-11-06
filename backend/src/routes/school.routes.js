@@ -2478,6 +2478,49 @@ router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, nex
   } catch (err) { next(err); }
 });
 
+// ─── Backdated attendance (เช็คชื่อย้อนหลัง) ──────────────────────────────────
+// A school account records a missed check for one of the last
+// BACKDATE_MAX_DAYS days. school_id comes from the token (resolveSchoolId); a
+// grade teacher is limited to their own grade (gradeScope from the token). The
+// service re-checks school and grade under the student row lock.
+// A wrong backdated row is reversed with POST /checkin/:logId/void above.
+router.get('/backdated-attendance', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const backdated = require('../services/backdatedAttendance.service');
+    const data = await backdated.getBackdatedRoster(pool, {
+      schoolId, gradeFilter: resolveGradeScope(req), checkDate: req.query.date,
+    });
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
+router.post('/backdated-attendance', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const backdated = require('../services/backdatedAttendance.service');
+    const { student_id, check_date, session, status, time, reason } = req.body || {};
+    const result = await backdated.recordBackdatedCheck(pool, {
+      userId:          req.user.id,
+      userRole:        req.user.role,
+      userDisplayName: req.user.displayName || req.user.username || null,
+      ipAddress:       req.ip,
+      userAgent:       req.headers['user-agent'],
+      schoolId,
+      gradeFilter:     teacherGradeScope(req),
+      studentId:       student_id,
+      checkDate:       check_date,
+      session,
+      status,
+      time,
+      reason,
+    });
+    return sendSuccess(res, result, 'บันทึกการเช็คชื่อย้อนหลังแล้ว', null, 201);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
 
 // Exposed for unit testing only. These are PURE request-scope resolvers and the

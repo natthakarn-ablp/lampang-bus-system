@@ -9,6 +9,17 @@ const { gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
  * Create a student leave record.
  */
 async function createLeave({ studentId, vehicleId, leaveDate, session, reason, userId, userRole, schoolId = null, gradeScope = null }) {
+  // A leave is announced ahead of (or on) the day. The UI only ever sends
+  // today, but the API accepted any string, so a past leave_date could be
+  // written straight in and silently rewrite a finished day's attendance.
+  // Past-day corrections go through the audited backdated-attendance path.
+  if (typeof leaveDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(leaveDate)
+      || Number.isNaN(Date.parse(`${leaveDate}T00:00:00Z`))) {
+    const err = new Error('วันที่ลาไม่ถูกต้อง (YYYY-MM-DD)'); err.statusCode = 400; throw err;
+  }
+  if (leaveDate < todayBangkok()) {
+    const err = new Error('บันทึกการลาย้อนหลังไม่ได้'); err.statusCode = 400; err.code = 'LEAVE_DATE_IN_PAST'; throw err;
+  }
   const conn = await pool.getConnection();
   try {
     await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');

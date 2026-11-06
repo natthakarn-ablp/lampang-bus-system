@@ -9,22 +9,38 @@ import { useToast } from '../../components/Toast';
 import { AlertBanner, AppCard, ConfirmDialog, FilterBar, FormField, Modal, StatusBadge } from '../../components/ui';
 import { formatGradeClass } from '../../utils/student';
 import { PageTransition } from '../../lib/motion';
+import { useAuth } from '../../hooks/useAuth';
+import { isGradeTeacher } from '../../utils/authScope';
 
 /**
- * เช็กชื่อย้อนหลัง — a full-scope school account records a missed check for one
- * of the last 7 days (the backend enforces the window, the scope and the
- * reason). Parents are NOT notified for a past day. A wrong row is reversed
- * with the existing void endpoint, which also needs a reason.
+ * เช็กชื่อย้อนหลัง — a school account records a missed check for one of the
+ * last 7 days (the backend enforces the window, the scope and the reason).
+ * Parents are NOT notified for a past day.
+ *
+ * A grade teacher sees only their grade and records only what a teacher
+ * records on the live check page (TEACHER_STATUS): morning = arrived at
+ * school, evening = boarded to go home, pre-filled 07:00 / 16:00. Voiding a
+ * wrong row stays with the full school account.
  */
+
+// Pre-filled times. The two teacher actions come from the server
+// (default_times: มา 07:00 / กลับ 16:00); the other two sit either side.
+const FALLBACK_TIMES = { morning: '07:00', evening: '16:00' };
+function defaultTime(session, status, defaults = FALLBACK_TIMES) {
+  if (session === 'morning') return status === 'CHECKED_OUT' ? defaults.morning : '06:30';
+  return status === 'CHECKED_IN' ? defaults.evening : '16:45';
+}
 
 const SESSION_META = {
   morning: {
     label: 'รอบเช้า', icon: Sunrise,
     in: 'รับขึ้นรถ', out: 'ส่งถึงโรงเรียน', enabledKey: 'morning',
+    teacherStatus: 'CHECKED_OUT', teacherLabel: 'มาถึงโรงเรียน',
   },
   evening: {
     label: 'รอบเย็น', icon: Sunset,
     in: 'รับขึ้นรถ', out: 'ส่งถึงบ้าน', enabledKey: 'evening',
+    teacherStatus: 'CHECKED_IN', teacherLabel: 'ขึ้นรถกลับบ้าน',
   },
 };
 
@@ -44,6 +60,8 @@ function thaiDate(ymd) {
 
 export default function BackdatedAttendance() {
   const toast = useToast();
+  const { user } = useAuth();
+  const teacher = isGradeTeacher(user);
   const [date, setDate] = useState(() => shiftDate(bangkokToday(), -1));
   const [session, setSession] = useState('morning');
   const [filter, setFilter] = useState('');
@@ -95,7 +113,9 @@ export default function BackdatedAttendance() {
 
       <AlertBanner variant="info" title="ข้อควรทราบ">
         รายการย้อนหลังจะไม่ส่งแจ้งเตือน LINE ถึงผู้ปกครอง และถูกเก็บในประวัติการแก้ไขพร้อมชื่อผู้บันทึกและเหตุผล
-        · รายการของวันนี้ให้ใช้ปุ่ม &ldquo;ยืนยันแทนคนขับ&rdquo; ที่หน้าแรก
+        {teacher
+          ? ' · รายการของวันนี้ให้ใช้หน้า “เช็กชื่อวันนี้” · หากบันทึกผิด แจ้งบัญชีโรงเรียนให้ยกเลิกรายการ'
+          : ' · รายการของวันนี้ให้ใช้ปุ่ม “ยืนยันแทนคนขับ” ที่หน้าแรก'}
       </AlertBanner>
 
       <AppCard className="mt-4">
@@ -145,8 +165,9 @@ export default function BackdatedAttendance() {
                     student={s}
                     session={session}
                     meta={meta}
+                    teacher={teacher}
                     onRecord={status => setRecordFor({ student: s, status })}
-                    onVoid={log => setVoidFor({ student: s, log })}
+                    onVoid={teacher ? null : log => setVoidFor({ student: s, log })}
                   />
                 ))}
               </ul>
@@ -159,6 +180,7 @@ export default function BackdatedAttendance() {
           date={date}
           session={session}
           meta={meta}
+          defaults={data?.default_times}
           {...recordFor}
           onClose={() => setRecordFor(null)}
           onSaved={() => { setRecordFor(null); toast?.success?.('บันทึกการเช็กชื่อย้อนหลังแล้ว'); load(); }}
@@ -176,7 +198,7 @@ export default function BackdatedAttendance() {
   );
 }
 
-function StudentRow({ student, session, meta, onRecord, onVoid }) {
+function StudentRow({ student, session, meta, teacher, onRecord, onVoid }) {
   const s = student[session];
   const logs = s.logs || [];
   const hasIn = logs.some(l => l.status === 'CHECKED_IN');
@@ -197,13 +219,15 @@ function StudentRow({ student, session, meta, onRecord, onVoid }) {
                 <StatusBadge variant="success" size="sm">
                   {l.status === 'CHECKED_IN' ? meta.in : meta.out} {l.time} น.
                 </StatusBadge>
-                <button
-                  type="button"
-                  onClick={() => onVoid(l)}
-                  className="text-xs text-danger-ink hover:underline px-1 min-h-[32px]"
-                >
-                  ยกเลิก
-                </button>
+                {onVoid && (
+                  <button
+                    type="button"
+                    onClick={() => onVoid(l)}
+                    className="text-xs text-danger-ink hover:underline px-1 min-h-[32px]"
+                  >
+                    ยกเลิก
+                  </button>
+                )}
               </span>
             ))}
           </div>
@@ -212,6 +236,15 @@ function StudentRow({ student, session, meta, onRecord, onVoid }) {
       <div className="flex flex-wrap gap-2 shrink-0">
         {s.leave ? (
           <StatusBadge variant="neutral" size="sm">{s.leave === 'SELF' ? 'เดินทางเอง' : 'ลา'}</StatusBadge>
+        ) : teacher ? (
+          // Morning arrival is the last step of the morning run; evening
+          // boarding cannot follow a drop-off already recorded.
+          (session === 'morning' ? !hasOut : !hasIn && !hasOut) && (
+            <button type="button" onClick={() => onRecord(meta.teacherStatus)}
+              className="px-3 py-2 text-sm rounded-lg border border-brand-700 text-brand-700 hover:bg-brand-50 min-h-[44px]">
+              บันทึก{meta.teacherLabel}
+            </button>
+          )
         ) : (
           <>
             {!hasIn && !hasOut && (
@@ -233,8 +266,8 @@ function StudentRow({ student, session, meta, onRecord, onVoid }) {
   );
 }
 
-function RecordDialog({ date, session, meta, student, status, onClose, onSaved }) {
-  const [time, setTime] = useState(session === 'morning' ? (status === 'CHECKED_IN' ? '07:00' : '07:45') : (status === 'CHECKED_IN' ? '15:30' : '16:30'));
+function RecordDialog({ date, session, meta, defaults, student, status, onClose, onSaved }) {
+  const [time, setTime] = useState(() => defaultTime(session, status, defaults || FALLBACK_TIMES));
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');

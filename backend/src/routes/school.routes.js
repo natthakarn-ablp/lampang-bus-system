@@ -2479,21 +2479,24 @@ router.post('/checkin/:logId/void', requireFullSchoolScope, async (req, res, nex
 });
 
 // ─── Backdated attendance (เช็คชื่อย้อนหลัง) ──────────────────────────────────
-// A full-scope school account records a missed check for one of the last
-// BACKDATE_MAX_DAYS days. school_id comes from the token (resolveSchoolId);
-// the service re-checks that the pupil belongs to that school under a row lock.
+// A school account records a missed check for one of the last
+// BACKDATE_MAX_DAYS days. school_id comes from the token (resolveSchoolId); a
+// grade teacher is limited to their own grade (gradeScope from the token). The
+// service re-checks school and grade under the student row lock.
 // A wrong backdated row is reversed with POST /checkin/:logId/void above.
-router.get('/backdated-attendance', requireFullSchoolScope, async (req, res, next) => {
+router.get('/backdated-attendance', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendNoSchool(req, res);
     const backdated = require('../services/backdatedAttendance.service');
-    const data = await backdated.getBackdatedRoster(pool, { schoolId, checkDate: req.query.date });
+    const data = await backdated.getBackdatedRoster(pool, {
+      schoolId, gradeFilter: resolveGradeScope(req), checkDate: req.query.date,
+    });
     return sendSuccess(res, data);
   } catch (err) { next(err); }
 });
 
-router.post('/backdated-attendance', requireFullSchoolScope, async (req, res, next) => {
+router.post('/backdated-attendance', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendNoSchool(req, res);
@@ -2506,6 +2509,7 @@ router.post('/backdated-attendance', requireFullSchoolScope, async (req, res, ne
       ipAddress:       req.ip,
       userAgent:       req.headers['user-agent'],
       schoolId,
+      gradeFilter:     teacherGradeScope(req),
       studentId:       student_id,
       checkDate:       check_date,
       session,

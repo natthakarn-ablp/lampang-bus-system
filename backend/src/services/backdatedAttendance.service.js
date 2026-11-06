@@ -27,8 +27,16 @@
 const { getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { todayBangkok, toBangkokDate, daysBetweenBangkok } = require('../utils/thaiTime');
+const { gradeEquivalents } = require('../utils/gradeScope');
 
 const BACKDATE_MAX_DAYS = 7;
+
+/**
+ * What a teacher records, in the teacher-check model (checkin.service
+ * TEACHER_STATUS): morning = arrived at school, evening = boarded to go home.
+ * Default wall-clock times the UI pre-fills for those two actions.
+ */
+const TEACHER_DEFAULT_TIMES = Object.freeze({ morning: '07:00', evening: '16:00' });
 const SESSIONS = ['morning', 'evening'];
 const STATUSES = ['CHECKED_IN', 'CHECKED_OUT'];
 
@@ -49,7 +57,7 @@ function makeError(message, statusCode, code) {
  * Validate a requested past date. Returns the normalised 'YYYY-MM-DD'.
  * `now` is injectable for tests.
  */
-function assertBackdateWindow(checkDate, now = new Date()) {
+function assertBackdateWindow(checkDate, now = new Date(), { allowToday = false } = {}) {
   if (typeof checkDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(checkDate)) {
     throw makeError('กรุณาระบุวันที่แบบ YYYY-MM-DD', 400, 'INVALID_DATE');
   }
@@ -59,7 +67,7 @@ function assertBackdateWindow(checkDate, now = new Date()) {
   }
   const today = todayBangkok(now);
   const ago = daysBetweenBangkok(checkDate, today);
-  if (ago <= 0) {
+  if (ago < 0 || (ago === 0 && !allowToday)) {
     throw makeError('เช็คชื่อย้อนหลังได้เฉพาะวันที่ผ่านมาแล้ว — รายการของวันนี้ให้ใช้เมนูยืนยันแทนคนขับ', 400, 'NOT_PAST_DATE');
   }
   if (ago > BACKDATE_MAX_DAYS) {
@@ -106,7 +114,7 @@ function hhmm(value) {
  * on leave. Each pupil carries the per-session log rows so the UI can offer a
  * void on a wrong one.
  */
-async function getBackdatedRoster(pool, { schoolId, checkDate, now = new Date() }) {
+async function getBackdatedRoster(pool, { schoolId, gradeFilter = null, checkDate, now = new Date() }) {
   if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
   const date = assertBackdateWindow(checkDate, now);
 
@@ -117,12 +125,13 @@ async function getBackdatedRoster(pool, { schoolId, checkDate, now = new Date() 
        FROM students s
        LEFT JOIN vehicles v ON v.id = s.vehicle_id
        LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
-      WHERE s.school_id = ? AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL
+      WHERE s.school_id = ? AND s.is_deleted = FALSE AND s.vehicle_id IS NOT NULL${gradeFilter ? ' AND s.grade IN (?)' : ''}
       ORDER BY v.plate_no, s.grade, s.classroom, s.first_name
       LIMIT 3000`,
-    [date, schoolId]
+    gradeFilter ? [date, schoolId, gradeEquivalents(gradeFilter)] : [date, schoolId]
   );
-  if (!students.length) return { check_date: date, ...backdateWindow(now), students: [] };
+  const windowInfo = { ...backdateWindow(now), default_times: TEACHER_DEFAULT_TIMES, grade_scope: gradeFilter };
+  if (!students.length) return { check_date: date, ...windowInfo, students: [] };
 
   const ids = students.map(s => s.id);
   const [logs] = await pool.query(
@@ -162,7 +171,7 @@ async function getBackdatedRoster(pool, { schoolId, checkDate, now = new Date() 
 
   return {
     check_date: date,
-    ...backdateWindow(now),
+    ...windowInfo,
     students: students.map(s => ({
       id: s.id,
       name: `${s.prefix || ''}${s.first_name} ${s.last_name}`.trim(),
@@ -196,6 +205,7 @@ async function recordBackdatedCheck(pool, {
   ipAddress = null,
   userAgent = null,
   schoolId,
+  gradeFilter = null,
   studentId,
   checkDate,
   session,
@@ -203,12 +213,19 @@ async function recordBackdatedCheck(pool, {
   time,
   reason,
   now = new Date(),
+  // Internal only (ops backfill script). The HTTP route never sets it: today
+  // has its own live paths. Even then the stated time must already be past.
+  allowToday = false,
 }) {
   if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
-  const date = assertBackdateWindow(checkDate, now);
+  const date = assertBackdateWindow(checkDate, now, { allowToday });
   if (!SESSIONS.includes(session)) throw makeError("session ต้องเป็น 'morning' หรือ 'evening'", 400);
   if (!STATUSES.includes(status)) throw makeError("status ต้องเป็น 'CHECKED_IN' หรือ 'CHECKED_OUT'", 400);
   assertTime(time);
+  if (date === todayBangkok(now)) {
+    const nowHm = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false });
+    if (time > nowHm) throw makeError('เวลาที่บันทึกต้องไม่อยู่ในอนาคต', 400, 'TIME_IN_FUTURE');
+  }
   const trimmedReason = assertReason(reason);
   const sid = Number.parseInt(studentId, 10);
   if (!Number.isInteger(sid) || sid <= 0) throw makeError('student_id ไม่ถูกต้อง', 400);
@@ -223,7 +240,7 @@ async function recordBackdatedCheck(pool, {
 
     // Student row lock = the per-student mutex, as in the live check path.
     const [[student]] = await conn.query(
-      `SELECT s.id, s.school_id, s.vehicle_id, s.cid_hash, s.first_name, s.last_name,
+      `SELECT s.id, s.school_id, s.grade, s.vehicle_id, s.cid_hash, s.first_name, s.last_name,
               s.morning_enabled, s.evening_enabled, s.is_deleted, v.plate_no
          FROM students s
          LEFT JOIN vehicles v ON v.id = s.vehicle_id
@@ -234,6 +251,10 @@ async function recordBackdatedCheck(pool, {
     );
     if (!student || student.is_deleted || String(student.school_id) !== String(schoolId)) {
       throw makeError('ไม่พบนักเรียนในโรงเรียนนี้', 404);
+    }
+    // A grade teacher sees only their grade; outside it looks like not found.
+    if (gradeFilter && !gradeEquivalents(gradeFilter).includes(student.grade)) {
+      throw makeError('ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ', 404);
     }
     if (!student.vehicle_id) throw makeError('นักเรียนยังไม่ได้กำหนดรถรับ-ส่ง', 400);
     if (session === 'morning' ? !student.morning_enabled : !student.evening_enabled) {
@@ -339,6 +360,7 @@ async function recordBackdatedCheck(pool, {
         recorded_by_user_id: userId,
         recorded_by_role: userRole,
         recorded_by_display_name: userDisplayName,
+        grade_scope: gradeFilter,
         checkin_log_id: logResult.insertId,
         recorded_at_utc: now.toISOString(),
       },
@@ -368,6 +390,7 @@ async function recordBackdatedCheck(pool, {
 
 module.exports = {
   BACKDATE_MAX_DAYS,
+  TEACHER_DEFAULT_TIMES,
   assertBackdateWindow,
   backdateWindow,
   getBackdatedRoster,

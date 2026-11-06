@@ -163,7 +163,6 @@ const NAV_MAP = { driver: DRIVER_NAV, school: SCHOOL_NAV, affiliation: AFFILIATI
  * that work for them. Backend still 403s these paths.
  */
 const TEACHER_BLOCKED_PATHS = new Set([
-  '/school/backdated-attendance',
   '/school/vehicle-verification',
   '/school/audit-log',
   '/school/teacher-accounts',

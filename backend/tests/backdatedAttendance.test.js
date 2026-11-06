@@ -19,6 +19,7 @@ const SCHOOL = { username: '__test_school', password: 'testpass123' };
 const TEST_STUDENT_ID  = 99999;
 const OTHER_SCHOOL_ID  = '__TSCHB';
 const OTHER_STUDENT_ID = 99997;
+const P2_STUDENT_ID    = 99996;   // same school, grade ป.2 (outside the teacher's ป.1)
 const TEACHER_USERNAME = '__test_school_teacher_bd';
 const TEACHER_PASSWORD = 'testpass123';
 
@@ -44,7 +45,7 @@ async function login(creds) {
 }
 
 async function clean(conn) {
-  const ids = [TEST_STUDENT_ID, OTHER_STUDENT_ID];
+  const ids = [TEST_STUDENT_ID, OTHER_STUDENT_ID, P2_STUDENT_ID];
   const dates = [YESTERDAY, EDGE, TOO_OLD, TODAY];
   await conn.query('DELETE FROM checkin_logs   WHERE student_id IN (?) AND check_date IN (?)', [ids, dates]);
   await conn.query('DELETE FROM daily_status   WHERE student_id IN (?) AND check_date IN (?)', [ids, dates]);
@@ -96,6 +97,15 @@ beforeAll(async () => {
      ON DUPLICATE KEY UPDATE school_id = VALUES(school_id), vehicle_id = VALUES(vehicle_id)`,
     [OTHER_STUDENT_ID, OTHER_SCHOOL_ID]
   );
+  await conn.query(
+    `INSERT INTO students
+       (id, cid_hash, prefix, first_name, last_name, grade, classroom,
+        school_id, vehicle_id, morning_enabled, evening_enabled, term_id)
+     VALUES (?, SHA2('3333333333333', 256), 'เด็กชาย', '__P2BD', 'Student', 'ป.2', '1',
+             '__TSCH', 'V-test000000ab', TRUE, TRUE, '2568-2')
+     ON DUPLICATE KEY UPDATE grade = VALUES(grade), school_id = VALUES(school_id)`,
+    [P2_STUDENT_ID]
+  );
   await clean(conn);
   await conn.end();
   schoolToken = await login(SCHOOL);
@@ -112,7 +122,7 @@ beforeEach(async () => {
 afterAll(async () => {
   const conn = await db();
   await clean(conn);
-  await conn.query('DELETE FROM students WHERE id = ?', [OTHER_STUDENT_ID]);
+  await conn.query('DELETE FROM students WHERE id IN (?, ?)', [OTHER_STUDENT_ID, P2_STUDENT_ID]);
   await conn.query('DELETE FROM schools  WHERE id = ?', [OTHER_SCHOOL_ID]);
   await conn.query('DELETE FROM users    WHERE username = ?', [TEACHER_USERNAME]);
   await conn.end();
@@ -227,12 +237,26 @@ describe('POST /api/school/backdated-attendance — refusals', () => {
     expect(res.status).toBe(409);
   });
 
-  test('grade-scoped teacher → 403 on both GET and POST', async () => {
-    expect((await post({}, teacherToken)).status).toBe(403);
+  test('grade teacher: own grade 201 (teacher model: morning arrival 07:00), other grade 404, void 403', async () => {
+    const ok = await post({ status: 'CHECKED_OUT', time: '07:00' }, teacherToken);
+    expect(ok.status).toBe(201);
+    expect((await post({ student_id: P2_STUDENT_ID }, teacherToken)).status).toBe(404);
+    const v = await request(app)
+      .post(`/api/school/checkin/${ok.body.data.checkin_log_id}/void`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ reason: 'x' });
+    expect(v.status).toBe(403);
+  });
+
+  test('grade teacher GET sees only their grade and the default times', async () => {
     const g = await request(app)
       .get(`/api/school/backdated-attendance?date=${YESTERDAY}`)
       .set('Authorization', `Bearer ${teacherToken}`);
-    expect(g.status).toBe(403);
+    expect(g.status).toBe(200);
+    expect(g.body.data.default_times).toEqual({ morning: '07:00', evening: '16:00' });
+    const ids = g.body.data.students.map(s => s.id);
+    expect(ids).toContain(TEST_STUDENT_ID);
+    expect(ids).not.toContain(P2_STUDENT_ID);
   });
 
   test('affiliation account → 403', async () => {
@@ -262,5 +286,21 @@ describe('POST /api/school/leave — past date guard', () => {
       .set('Authorization', `Bearer ${schoolToken}`)
       .send({ student_id: TEST_STUDENT_ID, session: 'morning', reason: 'x' });
     expect(res.status).toBe(201);
+  });
+});
+
+describe('recordBackdatedCheck allowToday (ops backfill only)', () => {
+  const svc = require('../src/services/backdatedAttendance.service');
+  const { pool } = require('../src/config/database');
+
+  test('today with a past time is accepted only when allowToday is set; a future time never is', async () => {
+    const at = new Date(`${TODAY}T12:00:00+07:00`);
+    const base = { userId: null, schoolId: '__TSCH', studentId: TEST_STUDENT_ID, checkDate: TODAY,
+      session: 'morning', status: 'CHECKED_OUT', reason: 'backfill test', now: at };
+    await expect(svc.recordBackdatedCheck(pool, { ...base, time: '07:00' })).rejects.toMatchObject({ statusCode: 400 });
+    await expect(svc.recordBackdatedCheck(pool, { ...base, time: '16:00', session: 'evening', status: 'CHECKED_IN', allowToday: true }))
+      .rejects.toMatchObject({ code: 'TIME_IN_FUTURE' });
+    const ok = await svc.recordBackdatedCheck(pool, { ...base, time: '07:00', allowToday: true });
+    expect(ok.check_date).toBe(TODAY);
   });
 });

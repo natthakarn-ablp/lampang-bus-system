@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { History, Search, Sunrise, Sunset } from 'lucide-react';
+import { History, Sunrise, Sunset } from 'lucide-react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import EmptyState from '../../components/EmptyState';
 import { useToast } from '../../components/Toast';
-import { AlertBanner, AppCard, ConfirmDialog, Modal, StatusBadge } from '../../components/ui';
+import { AlertBanner, AppCard, ConfirmDialog, FilterBar, FormField, Modal, StatusBadge } from '../../components/ui';
 import { formatGradeClass } from '../../utils/student';
 import { PageTransition } from '../../lib/motion';
 
@@ -99,50 +99,33 @@ export default function BackdatedAttendance() {
       </AlertBanner>
 
       <AppCard className="mt-4">
-        <div className="grid gap-3 sm:grid-cols-[auto_auto_1fr] sm:items-end">
-          <label className="block">
-            <span className="block text-xs font-medium text-ink-muted mb-1">วันที่</span>
-            <input
-              type="date"
-              value={date}
-              min={minDate}
-              max={maxDate}
-              onChange={e => e.target.value && setDate(e.target.value)}
-              className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 min-h-[44px] bg-surface"
-              aria-label="เลือกวันที่ต้องการเช็กชื่อย้อนหลัง"
-            />
-          </label>
-          <div role="radiogroup" aria-label="รอบ" className="flex gap-2">
-            {Object.entries(SESSION_META).map(([key, m]) => {
-              const Icon = m.icon;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  role="radio"
-                  aria-checked={session === key}
-                  onClick={() => setSession(key)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm min-h-[44px] ${
-                    session === key ? 'border-brand-700 bg-brand-50/60 text-ink font-medium' : 'border-surface-border text-ink-muted hover:bg-surface-border/40'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" aria-hidden="true" />{m.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="relative">
-            <Search className="w-4 h-4 text-ink-muted absolute left-2.5 top-3" aria-hidden="true" />
-            <input
-              type="text"
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-              placeholder="ค้นหาจากชื่อ / ชั้น / ทะเบียนรถ"
-              aria-label="ค้นหานักเรียน"
-              className="w-full text-sm border border-surface-border rounded-lg pl-8 pr-3 py-2 min-h-[44px] bg-surface"
-            />
-          </div>
-        </div>
+        <FormField
+          label="วันที่"
+          type="date"
+          value={date}
+          onChange={v => v && setDate(v)}
+          min={minDate}
+          max={maxDate}
+          helper={`เลือกได้ ${thaiDate(minDate)} ถึง ${thaiDate(maxDate)}`}
+          className="max-w-xs mb-3"
+        />
+        <FilterBar
+          chips={{
+            label: 'รอบ',
+            value: session,
+            onChange: setSession,
+            options: Object.entries(SESSION_META).map(([key, m]) => [key, m.label]),
+          }}
+          search={{
+            value: filter,
+            onChange: setFilter,
+            placeholder: 'ค้นหาจากชื่อ / ชั้น / ทะเบียนรถ',
+            label: 'ค้นหานักเรียน',
+          }}
+          count={data ? rows.length : undefined}
+          countLabel="คน"
+          onClear={() => setFilter('')}
+        />
         <p className="text-sm text-ink mt-3">
           {thaiDate(date)} · {meta.label}
           {data && <span className="text-ink-muted"> · บันทึกแล้ว <span className="tabular-nums">{doneCount}/{rows.length}</span> คน</span>}
@@ -298,20 +281,14 @@ function RecordDialog({ date, session, meta, student, status, onClose, onSaved }
           <p className="font-medium text-ink">{student.name}</p>
           <p className="text-xs text-ink-muted">{thaiDate(date)} · {meta.label} · {actionLabel}</p>
         </div>
-        <label className="block">
-          <span className="block text-xs font-medium text-ink-muted mb-1">เวลา <span className="text-danger-ink">*</span></span>
-          <input type="time" value={time} onChange={e => setTime(e.target.value)}
-            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 min-h-[44px] bg-surface" />
-        </label>
-        <label className="block">
-          <span className="block text-xs font-medium text-ink-muted mb-1">
-            เหตุผล <span className="text-danger-ink">*</span>
-            <span className="ml-2 tabular-nums">{reasonTrimmed.length}/500</span>
-          </span>
-          <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={3}
-            placeholder="เช่น คนขับแจ้งว่าโทรศัพท์แบตหมด ไม่ได้กดเช็กชื่อในวันนั้น"
-            className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface resize-none" />
-        </label>
+        <FormField label="เวลา" type="time" required value={time} onChange={setTime} />
+        <FormField label="เหตุผล" required helper={`${reasonTrimmed.length}/500 ตัวอักษร`}>
+          {props => (
+            <textarea {...props} value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={3}
+              placeholder="เช่น คนขับแจ้งว่าโทรศัพท์แบตหมด ไม่ได้กดเช็กชื่อในวันนั้น"
+              className="focus-ring w-full text-base border border-surface-border rounded-lg px-3 py-2 bg-surface-raised resize-none" />
+          )}
+        </FormField>
         {errorMsg && <AlertBanner variant="danger" title="บันทึกไม่สำเร็จ">{errorMsg}</AlertBanner>}
       </div>
     </Modal>
@@ -350,11 +327,12 @@ function VoidDialog({ student, log, meta, onClose, onSaved }) {
       onConfirm={confirm}
       onCancel={onClose}
     >
-      <label className="block mt-3">
-        <span className="block text-xs font-medium text-ink-muted mb-1">เหตุผล <span className="text-danger-ink">*</span></span>
-        <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={2}
-          className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 bg-surface resize-none" />
-      </label>
+      <FormField label="เหตุผล" required className="mt-3">
+        {props => (
+          <textarea {...props} value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={2}
+            className="focus-ring w-full text-base border border-surface-border rounded-lg px-3 py-2 bg-surface-raised resize-none" />
+        )}
+      </FormField>
       {errorMsg && <p className="text-xs text-danger-ink mt-2">{errorMsg}</p>}
     </ConfirmDialog>
   );

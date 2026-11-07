@@ -144,18 +144,18 @@ async function parseSchoolImportFile(filePath) {
 }
 
 const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
+const { auditActionTh, auditEntityTh, roleTh } = require('../utils/auditLabels');
 
 // Shared CSV helper for audit export
 function auditRowsToCsv(rows) {
-  const ACTION_TH = { CREATE: 'สร้าง', UPDATE: 'แก้ไข', DELETE: 'ลบ', EXPORT: 'ส่งออก', LOGIN: 'เข้าสู่ระบบ', IMPORT: 'นำเข้า', APPROVE: 'อนุมัติ' };
-  const ENTITY_TH = { student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้', roster_request: 'คำขอรายชื่อ', leave: 'การลา', checkin: 'เช็กอิน', checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ' };
+  // Thai labels for action, entity and role (QA aff-07).
   // Phase 10.12G — neutralise every cell + redact PII from audit values.
   const esc = csvCell;
   const header = 'วันเวลา,ผู้ดำเนินการ,บทบาท,การกระทำ,ประเภท,รหัส,ค่าเดิม,ค่าใหม่';
   const lines = rows.map(r => [
     esc(new Date(r.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })),
-    esc(r.actor_name || '-'), esc(r.actor_role || '-'),
-    esc(ACTION_TH[r.action] || r.action), esc(ENTITY_TH[r.entity_type] || r.entity_type || '-'),
+    esc(r.actor_name || '-'), esc(roleTh(r.actor_role) || '-'),
+    esc(auditActionTh(r.action)), esc(auditEntityTh(r.entity_type) || '-'),
     esc(r.entity_id || '-'),
     esc(r.old_value ? redactAuditValue(r.old_value) : '-'),
     esc(r.new_value ? redactAuditValue(r.new_value) : '-'),
@@ -327,8 +327,9 @@ router.get('/vehicles-at-risk', async (req, res, next) => {
     const affId = resolveAffiliationId(req);
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
 
-    const data = await affSvc.getVehiclesAtRisk(affId, { limit: req.query.limit });
-    return sendSuccess(res, data);
+    // data stays the capped list; meta.total is the full at-risk count (QA aff-01).
+    const { items, total } = await affSvc.getVehiclesAtRiskWithTotal(affId, { limit: req.query.limit });
+    return sendSuccess(res, items, 'OK', { total });
   } catch (err) { next(err); }
 });
 

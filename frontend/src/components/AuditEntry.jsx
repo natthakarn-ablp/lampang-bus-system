@@ -1,5 +1,6 @@
 import AppCard from './ui/AppCard';
 import StatusBadge from './ui/StatusBadge';
+import { auditActionTh, auditEntityTh } from '../constants/auditLabels';
 
 /**
  * AuditEntry — single audit-log entry as a card with left accent rail.
@@ -15,12 +16,6 @@ import StatusBadge from './ui/StatusBadge';
  *   entityId    — optional row.entity_id (rendered as monospace small text)
  *   summary     — pre-formatted human summary (output of AuditLogTable.summarize)
  */
-
-const ACTION_LABEL = {
-  CREATE: 'สร้าง',  UPDATE: 'แก้ไข',  DELETE: 'ลบ',
-  APPROVE: 'อนุมัติ', IMPORT: 'นำเข้า', LOGIN: 'เข้าสู่ระบบ',
-  EXPORT: 'ส่งออก',
-};
 
 const ACTION_VARIANT = {
   CREATE:  'success',
@@ -41,13 +36,6 @@ const ACTION_RAIL = {
   neutral: 'before:bg-surface-border',
 };
 
-const ENTITY_LABEL = {
-  student: 'นักเรียน', vehicle: 'รถรับส่ง', user: 'บัญชีผู้ใช้',
-  roster_request: 'คำขอรายชื่อ', self_travel: 'เดินทางเอง', leave: 'การลา', checkin: 'เช็กอิน',
-  checkin_override: 'ยืนยันแทนคนขับ', checkin_teacher: 'ครูเช็กชื่อ',
-  driver: 'คนขับ', driver_profile: 'ข้อมูลคนขับ', emergency: 'เหตุฉุกเฉิน',
-};
-
 function formatTime(iso) {
   if (!iso) return '-';
   return new Date(iso).toLocaleString('th-TH', {
@@ -65,8 +53,8 @@ export default function AuditEntry({
 }) {
   const variant   = ACTION_VARIANT[action] || 'neutral';
   const rail      = ACTION_RAIL[variant];
-  const actLabel  = ACTION_LABEL[action] || action;
-  const entLabel  = ENTITY_LABEL[entityType] || entityType || null;
+  const actLabel  = auditActionTh(action);
+  const entLabel  = auditEntityTh(entityType);
 
   return (
     <AppCard

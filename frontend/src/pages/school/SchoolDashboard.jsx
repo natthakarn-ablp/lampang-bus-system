@@ -12,6 +12,7 @@ import StudentStatusTable from '../../components/StudentStatusTable';
 import { useToast } from '../../components/Toast';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import PageHeader from '../../components/PageHeader';
+import { SkeletonKpiGrid } from '../../components/Skeleton';
 import SchoolOverrideModal from '../../components/SchoolOverrideModal';
 import {
   AppCard, StatusBadge, ConfirmDialog, AlertBanner,
@@ -325,7 +326,10 @@ export default function SchoolDashboard() {
       )}
 
       {loading ? (
-        <StatusHero loading rounds={[]} />
+        <div className="space-y-4">
+          <StatusHero loading rounds={[]} />
+          <SkeletonKpiGrid count={4} />
+        </div>
       ) : (
         <>
           <div className="motion-safe:animate-fade-in-up">

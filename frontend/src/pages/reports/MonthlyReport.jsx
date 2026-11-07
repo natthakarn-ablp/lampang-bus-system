@@ -1,20 +1,99 @@
-import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useCallback } from 'react';
-import { FileBarChart } from 'lucide-react';
+import { FileBarChart, Sunrise, Sunset, CalendarCheck, Siren } from 'lucide-react';
 import api from '../../api/axios';
+import { useAuth } from '../../hooks/useAuth';
 import { FormField, DataTable } from '../../components/ui';
-import DashboardCard from '../../components/DashboardCard';
-import KpiCard from '../../components/KpiCard';
+import { StatTile, StatGrid, TravelLeaveSummary } from '../../components/dashboard';
 import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
-import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
+import { ReportHero, ReportSection, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
+
+// A KPI tile is calm unless the number is notably good or below the 85% line.
+const pctTone = v => (v == null || !isFinite(v) ? 'calm' : v >= 95 ? 'success' : v >= 85 ? 'calm' : 'warn');
+const pctText = v => (v == null || !isFinite(v) ? '—' : `${Number(v).toFixed(1)}%`);
+// Days already past are never red: a gap is something to look at, not an alarm.
+// Plain-sentence figures: amber when under the 85% line, never red.
+const sumCls = v => (v == null || !isFinite(v) || v >= 85 ? 'text-ink' : 'text-warn-ink');
+const barCls = v => (v >= 95 ? 'bg-success' : 'bg-warn');
+
+/** One round of one day: label, bar, percentage and count. */
+function DayBar({ label, pct, count }) {
+  const v = pct == null || !isFinite(pct) ? null : Math.max(0, Math.min(100, pct));
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <span className="w-9 shrink-0 text-sm text-ink-muted">{label}</span>
+      <div className="flex-1 h-3 rounded-full bg-surface overflow-hidden" role="img"
+        aria-label={`${label} ${v == null ? 'ไม่มีข้อมูล' : `${Math.round(v)}%`}`}>
+        {v != null && <div className={`h-full rounded-full ${barCls(v)}`} style={{ width: `${v}%` }} />}
+      </div>
+      <span className="w-28 shrink-0 text-right text-sm tabular-nums text-ink">
+        <span className="font-semibold">{v == null ? '—' : `${Math.round(v)}%`}</span>
+        <span className="text-ink-muted"> {count}</span>
+      </span>
+    </div>
+  );
+}
+
+/** Per-day trend as bars: easy to scan down the month, stacks on a phone. */
+function DailyTrendList({ rows }) {
+  const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  return (
+    <ul className="divide-y divide-surface-border rounded-2xl border border-surface-border bg-surface-raised overflow-hidden">
+      {sorted.map(d => (
+        <li key={d.date} className="px-4 py-2.5 grid grid-cols-1 sm:grid-cols-[8rem_1fr_1fr] gap-x-4 gap-y-1 sm:items-center">
+          <span className="font-semibold text-ink">
+            {new Date(d.date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' })}
+          </span>
+          <DayBar label="เช้า" pct={d.morning_pct} count={`${d.morning_done}/${d.morning_expected}`} />
+          <DayBar label="เย็น" pct={d.evening_pct} count={`${d.evening_done}/${d.evening_expected}`} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function WeeklyTrend({ trend }) {
+  const weeks = [];
+  const sorted = [...trend].sort((a, b) => a.date.localeCompare(b.date));
+  for (let i = 0; i < sorted.length; i += 7) {
+    const chunk = sorted.slice(i, i + 7);
+    const avg = k => Math.round(chunk.reduce((s, d) => s + (d[k] || 0), 0) / chunk.length);
+    weeks.push({ label: `สัปดาห์ ${weeks.length + 1}`, days: chunk.length, mAvg: avg('morning_pct'), eAvg: avg('evening_pct') });
+  }
+  if (weeks.length < 2) return null;
+  return (
+    <ReportSection title="แนวโน้มรายสัปดาห์" hint="ค่าเฉลี่ยของแต่ละสัปดาห์ ยิ่งแถบเต็มยิ่งดี">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {weeks.map(w => (
+          <div key={w.label} className="bg-surface-raised rounded-2xl border border-surface-border p-4">
+            <p className="text-sm font-semibold text-ink mb-2">{w.label} <span className="font-normal text-ink-muted">({w.days} วัน)</span></p>
+            <div className="space-y-2">
+              {[['เช้า', w.mAvg], ['เย็น', w.eAvg]].map(([name, v]) => (
+                <div key={name}>
+                  <div className="flex justify-between text-sm mb-0.5">
+                    <span className="text-ink-muted">{name}</span>
+                    <span className={`font-bold tabular-nums ${v >= 95 ? 'text-success-ink' : 'text-warn-ink'}`}>{v}%</span>
+                  </div>
+                  <div className="w-full bg-surface rounded-full h-2.5">
+                    <div className={`h-2.5 rounded-full ${barCls(v)}`} style={{ width: `${v}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </ReportSection>
+  );
+}
 
 export default function MonthlyReport() {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,168 +123,88 @@ export default function MonthlyReport() {
   const bestSchool = data?.schools?.length ? sortByKpi(data.schools)[0] : null;
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      {/* ── HEADER ── */}
-      <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <p className="text-caption text-navy-200 uppercase tracking-wider">รายงานรายเดือน</p>
-            <h1 className="text-lg font-bold">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
-            <p className="text-sm text-navy-200 mt-0.5">
-              {month ? new Date(month + '-01').toLocaleDateString('th-TH', { year: 'numeric', month: 'long' }) : ''}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <FormField label="เดือนของรายงาน" labelClassName="text-navy-200">
-              {ctl => (
-                <input {...ctl} type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-                  className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
-              )}
-            </FormField>
-            <button onClick={resetMonth}
-              className="focus-ring-inverse self-end text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
-              ปัจจุบัน
-            </button>
-          </div>
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
+      <ReportHero eyebrow="รายงานรายเดือน" title={reportScopeName(user, data)}
+        subtitle={month ? new Date(month + '-01').toLocaleDateString('th-TH', { year: 'numeric', month: 'long' }) : ''}>
+        <div className="flex items-end gap-2">
+          <FormField label="เดือนของรายงาน" labelClassName="text-navy-200">
+            {ctl => (
+              <input {...ctl} type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+                className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
+            )}
+          </FormField>
+          <button onClick={resetMonth}
+            className="focus-ring-inverse text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
+            ปัจจุบัน
+          </button>
         </div>
-      </div>
+      </ReportHero>
 
       {error && <ErrorState message={error} className="mb-4" />}
       {loading ? <LoadingState />
       : !data ? <EmptyState icon={FileBarChart} title="ไม่มีข้อมูล" description="ลองเปลี่ยนเดือนอื่น" />
       : (
         <>
-          {/* ── SECTION 2 — KPI Cards ──────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-            <KpiCard label="KPI ส่งเช้า" pct={data.morning_kpi}
-              detail={`${data.total_morning_done}/${data.total_morning_expected} คน`} />
-            <KpiCard label="KPI รับเย็น" pct={data.evening_kpi}
-              detail={`${data.total_evening_done}/${data.total_evening_expected} คน`} />
-            <DashboardCard label="วันครบ 100% ส่งเช้า"
-              value={data.days_with_data > 0 ? `${data.days_morning_100}` : '-'}
-              sub={data.days_with_data > 0 ? `${data.days_morning_100} วัน จาก ${data.days_with_data} วัน` : 'ไม่มีข้อมูล'}
-              color={data.days_morning_100 === data.days_with_data && data.days_with_data > 0 ? 'green' : 'yellow'} />
-            <DashboardCard label="วันครบ 100% รับเย็น"
-              value={data.days_with_data > 0 ? `${data.days_evening_100}` : '-'}
-              sub={data.days_with_data > 0 ? `${data.days_evening_100} วัน จาก ${data.days_with_data} วัน` : 'ไม่มีข้อมูล'}
-              color={data.days_evening_100 === data.days_with_data && data.days_with_data > 0 ? 'green' : 'yellow'} />
-            <DashboardCard label="เหตุฉุกเฉินรวม" value={data.emergency_count}
-              sub={data.emergency_count > 0 ? `${data.emergency_count} ครั้ง ในเดือนนี้` : 'ไม่มีเหตุฉุกเฉิน'}
-              color={data.emergency_count > 0 ? 'red' : 'gray'} />
-          </div>
-
-          {/* Self-travel / leave: in context under the KPI cards, hidden when all 0. */}
-          <AttendanceBreakdown data={data} monthly={true} className="mb-6" />
-
-          {/* ── SECTION 3 — Executive Summary Box ──────────── */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
-            <h2 className="text-sm font-semibold text-blue-800 mb-3">สรุปผู้บริหาร</h2>
-            <ul className="text-sm text-blue-700 space-y-1.5 leading-relaxed">
-              <li>• เดือนนี้ KPI ส่งเช้าเฉลี่ย <strong className={kpiColor(data.morning_kpi)}>{safePct(data.morning_kpi)}</strong> ({data.total_morning_done}/{data.total_morning_expected} คน-วัน)</li>
-              <li>• KPI รับเย็นเฉลี่ย <strong className={kpiColor(data.evening_kpi)}>{safePct(data.evening_kpi)}</strong> ({data.total_evening_done}/{data.total_evening_expected} คน-วัน)</li>
-              <li>• มี {data.days_morning_100} วันที่ส่งเช้าครบ 100% และ {data.days_evening_100} วันที่รับเย็นครบ 100% จากทั้งหมด {data.days_with_data} วัน</li>
-              {data.emergency_count > 0 && <li>• พบเหตุฉุกเฉิน {data.emergency_count} ครั้ง</li>}
-              {bestSchool && <li>• โรงเรียนที่ทำผลงานดีที่สุดคือ <strong>{bestSchool.school_name}</strong> (เช้า {safePct(bestSchool.morning_kpi)} · เย็น {safePct(bestSchool.evening_kpi)})</li>}
-              <li>• นักเรียนทั้งหมด {data.total_students} คน · ข้อมูล {data.days_with_data} วัน</li>
+          {/* 1. The answer in plain sentences */}
+          <section className="rounded-2xl border border-surface-border bg-surface-raised p-4 sm:p-5 mb-5" aria-label="สรุปประจำเดือน">
+            <h2 className="text-lg font-bold text-ink">สรุปประจำเดือน</h2>
+            <ul className="mt-2 text-base text-ink space-y-1.5 leading-relaxed">
+              <li>ส่งเช้าสำเร็จเฉลี่ย <strong className={sumCls(data.morning_kpi)}>{safePct(data.morning_kpi)}</strong> ({data.total_morning_done}/{data.total_morning_expected} คน-วัน)</li>
+              <li>รับเย็นสำเร็จเฉลี่ย <strong className={sumCls(data.evening_kpi)}>{safePct(data.evening_kpi)}</strong> ({data.total_evening_done}/{data.total_evening_expected} คน-วัน)</li>
+              <li>ครบ 100% ส่งเช้า {data.days_morning_100} วัน และรับเย็น {data.days_evening_100} วัน จากทั้งหมด {data.days_with_data} วัน</li>
+              {data.emergency_count > 0 && <li className="text-danger-ink font-semibold">พบเหตุฉุกเฉิน {data.emergency_count} ครั้ง</li>}
+              {bestSchool && data.schools.length > 1 && (
+                <li>โรงเรียนที่ผลดีที่สุด: <strong>{bestSchool.school_name}</strong> (เช้า {safePct(bestSchool.morning_kpi)} · เย็น {safePct(bestSchool.evening_kpi)})</li>
+              )}
+              <li className="text-ink-muted">นักเรียนทั้งหมด {data.total_students} คน · มีข้อมูล {data.days_with_data} วัน</li>
             </ul>
-          </div>
+          </section>
 
-          {/* ── SECTION 4 — Daily Trend Table ──────────────── */}
-          {/* ── Weekly Trend ── */}
-          {data.daily_trend?.length > 0 && (() => {
-            const weeks = [];
-            const sorted = [...data.daily_trend].sort((a, b) => a.date.localeCompare(b.date));
-            for (let i = 0; i < sorted.length; i += 7) {
-              const chunk = sorted.slice(i, i + 7);
-              const mAvg = chunk.length > 0 ? Math.round(chunk.reduce((s, d) => s + (d.morning_pct || 0), 0) / chunk.length) : 0;
-              const eAvg = chunk.length > 0 ? Math.round(chunk.reduce((s, d) => s + (d.evening_pct || 0), 0) / chunk.length) : 0;
-              weeks.push({ label: `สัปดาห์ ${weeks.length + 1}`, days: chunk.length, mAvg, eAvg });
-            }
-            return weeks.length > 1 ? (
-              <section className="mb-6">
-                <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">แนวโน้มรายสัปดาห์</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {weeks.map((w, i) => (
-                    <div key={i} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-                      <p className="text-xs font-semibold text-ink-muted mb-2">{w.label}</p>
-                      <div className="space-y-2">
-                        <div>
-                          <div className="flex justify-between text-xs mb-0.5">
-                            <span className="text-ink-muted">เช้า</span>
-                            <span className={`font-bold ${w.mAvg >= 95 ? 'text-success-ink' : w.mAvg >= 80 ? 'text-warn-ink' : 'text-danger-ink'}`}>{w.mAvg}%</span>
-                          </div>
-                          <div className="w-full bg-gray-100 rounded-full h-2.5">
-                            <div className={`h-2.5 rounded-full ${w.mAvg >= 95 ? 'bg-green-500' : w.mAvg >= 80 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${w.mAvg}%` }} />
-                          </div>
-                        </div>
-                        <div>
-                          <div className="flex justify-between text-xs mb-0.5">
-                            <span className="text-ink-muted">เย็น</span>
-                            <span className={`font-bold ${w.eAvg >= 95 ? 'text-success-ink' : w.eAvg >= 80 ? 'text-warn-ink' : 'text-danger-ink'}`}>{w.eAvg}%</span>
-                          </div>
-                          <div className="w-full bg-gray-100 rounded-full h-2.5">
-                            <div className={`h-2.5 rounded-full ${w.eAvg >= 95 ? 'bg-green-500' : w.eAvg >= 80 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${w.eAvg}%` }} />
-                          </div>
-                        </div>
-                      </div>
-                      <p className="text-xs text-ink-muted mt-1">{w.days} วัน</p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : null;
-          })()}
+          {/* 2. Key numbers */}
+          <StatGrid cols={4} label="ตัวเลขสำคัญของเดือน" className="mb-5">
+            <StatTile icon={Sunrise} label="ส่งเช้าสำเร็จ" value={pctText(data.morning_kpi)} tone={pctTone(data.morning_kpi)}
+              sub={`${data.total_morning_done}/${data.total_morning_expected} คน-วัน`} />
+            <StatTile icon={Sunset} label="รับเย็นสำเร็จ" value={pctText(data.evening_kpi)} tone={pctTone(data.evening_kpi)}
+              sub={`${data.total_evening_done}/${data.total_evening_expected} คน-วัน`} />
+            <StatTile icon={CalendarCheck} label="วันที่ครบ 100%"
+              value={data.days_with_data > 0 ? `${data.days_morning_100} / ${data.days_evening_100}` : '—'}
+              sub={data.days_with_data > 0 ? `เช้า / เย็น จาก ${data.days_with_data} วัน` : 'ไม่มีข้อมูล'} />
+            <StatTile icon={Siren} label="เหตุฉุกเฉิน" value={data.emergency_count} unit="ครั้ง"
+              tone={data.emergency_count > 0 ? 'danger' : 'calm'} sub={data.emergency_count > 0 ? 'ในเดือนนี้' : 'ไม่มีเหตุฉุกเฉิน'} />
+          </StatGrid>
 
+          {/* Self-travel / leave: in context, hidden when all 0. */}
+          <TravelLeaveSummary data={data} monthly className="mb-6" />
+
+          {/* 3. Trend */}
+          {data.daily_trend?.length > 0 && <WeeklyTrend trend={data.daily_trend} />}
           {data.daily_trend?.length > 0 && (
-            <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">แนวโน้มรายวัน</h2>
-              <DataTable
-                caption="แนวโน้มรายวันตลอดเดือน"
-                rows={data.daily_trend}
-                rowKey={d => d.date}
-                rowClassName={d => (d.morning_pct >= 100 && d.evening_pct >= 100 ? 'bg-success-soft/40' : '')}
-                columns={[
-                  { key: 'date', header: 'วันที่', primary: true,
-                    cell: d => new Date(d.date).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' }) },
-                  { key: 'm_pct', header: 'ส่งเช้า %', align: 'center',
-                    cell: d => <span className={`font-medium tabular-nums ${kpiColor(d.morning_pct)}`}>{safePct(d.morning_pct)}</span> },
-                  { key: 'e_pct', header: 'รับเย็น %', align: 'center',
-                    cell: d => <span className={`font-medium tabular-nums ${kpiColor(d.evening_pct)}`}>{safePct(d.evening_pct)}</span> },
-                  { key: 'm_cnt', header: 'ส่งเช้า (คน)', numeric: true, cell: d => `${d.morning_done}/${d.morning_expected}` },
-                  { key: 'e_cnt', header: 'รับเย็น (คน)', numeric: true, cell: d => `${d.evening_done}/${d.evening_expected}` },
-                  { key: 'emergency', header: 'ฉุกเฉิน', align: 'center', cell: () => <span className="text-ink-muted">-</span> },
-                ]}
-                empty={{ title: 'ไม่มีข้อมูลในเดือนที่เลือก' }}
-              />
-            </section>
+            <ReportSection title="แนวโน้มรายวัน" hint="แถบสีเขียว = ครบเกือบทั้งหมด (95% ขึ้นไป) · สีเหลือง = ยังมีนักเรียนที่ไม่ได้ยืนยัน">
+              <DailyTrendList rows={data.daily_trend} />
+            </ReportSection>
           )}
 
-          {/* ── SECTION 5 — School Rankings ─────────────────── */}
+          {/* 4. Rankings */}
           {data.schools?.length > 1 && (
-            <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">จัดอันดับโรงเรียน</h2>
+            <ReportSection title="จัดอันดับโรงเรียน">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RankingTable title="โรงเรียนผลงานดีที่สุด" items={topN(data.schools, 'morning_kpi')} nameKey="school_name" />
                 <RankingTable title="โรงเรียนที่ควรเฝ้าระวัง" items={bottomN(data.schools, 'morning_kpi')} nameKey="school_name" />
               </div>
-            </section>
+            </ReportSection>
           )}
-
-          {/* ── SECTION 6 — Vehicle Rankings ────────────────── */}
           {data.vehicles?.length > 1 && (
-            <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">จัดอันดับรถรับส่ง</h2>
+            <ReportSection title="จัดอันดับรถรับส่ง">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RankingTable title="รถผลงานดีที่สุด" items={topN(data.vehicles, 'morning_kpi')} nameKey="plate_no" showSchool />
                 <RankingTable title="รถที่ควรเฝ้าระวัง" items={bottomN(data.vehicles, 'morning_kpi')} nameKey="plate_no" showSchool />
               </div>
-            </section>
+            </ReportSection>
           )}
 
-          {/* ── SECTION 7 — Full School Summary ────────────── */}
+          {/* 5. Full tables */}
           {data.schools?.length > 0 && (
-            <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามโรงเรียน</h2>
+            <ReportSection title="สรุปตามโรงเรียน">
               <DataTable
                 caption="สรุปผลรายโรงเรียนตลอดเดือน"
                 rows={sortByKpi(data.schools)}
@@ -248,13 +247,11 @@ export default function MonthlyReport() {
                 ]}
                 empty={{ title: 'ไม่มีข้อมูลโรงเรียนในเดือนที่เลือก' }}
               />
-            </section>
+            </ReportSection>
           )}
 
-          {/* ── SECTION 8 — Full Vehicle Summary ───────────── */}
           {data.vehicles?.length > 0 && (
-            <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามรถ</h2>
+            <ReportSection title="สรุปตามรถ">
               <DataTable
                 caption="สรุปผลรายรถตลอดเดือน"
                 rows={sortByKpi(data.vehicles)}
@@ -288,12 +285,12 @@ export default function MonthlyReport() {
                 ]}
                 empty={{ title: 'ไม่มีข้อมูลรถในเดือนที่เลือก' }}
               />
-            </section>
+            </ReportSection>
           )}
 
-          {/* ── SECTION 9 — หมายเหตุ KPI ───────────────────── */}
-          <details className="mt-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-ink-muted">
-            <summary className="px-4 py-3 cursor-pointer font-semibold text-gray-600 hover:text-gray-800 select-none">
+          {/* KPI notes */}
+          <details className="mt-2 bg-surface border border-surface-border rounded-2xl text-sm text-ink-muted">
+            <summary className="px-4 py-3 min-h-[44px] cursor-pointer font-semibold text-ink select-none">
               หมายเหตุ KPI
             </summary>
             <div className="px-4 pb-4 pt-1">
@@ -311,17 +308,13 @@ export default function MonthlyReport() {
             </div>
           </details>
 
-          {/* ── FOOTER ── */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 mt-6">
+          <ExportPanel note="ไฟล์รายงานของเดือนที่เลือก · CSV และ Excel เปิดในตารางคำนวณ, PDF สำหรับพิมพ์">
             <ExportButtons
               basePath="/api/reports/export/monthly"
               queryParams={`month=${month}`}
               filenamePrefix={`monthly-report-${month}`}
             />
-            <p className="text-xs text-ink-muted">
-              สร้างจากระบบรถรับส่งนักเรียนจังหวัดลำปาง · {new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
-            </p>
-          </div>
+          </ExportPanel>
         </>
       )}
     </div>

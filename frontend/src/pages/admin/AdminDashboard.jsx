@@ -5,9 +5,11 @@ import {
 } from 'lucide-react';
 import api from '../../api/axios';
 import {
-  AppCard, AlertBanner, TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars,
-  FoldSection, RoleChip, pctOf, pctTone,
+  AppCard, AlertBanner, DayBars, RankBars, FoldSection, RoleChip,
 } from '../../components/ui';
+import {
+  StatusHero, ActionList, StatTile, StatGrid, TravelLeaveSummary, roundStatus,
+} from '../../components/dashboard';
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import { PageTransition } from '../../lib/motion';
@@ -80,60 +82,52 @@ export default function AdminDashboard() {
     timeZone: 'Asia/Bangkok', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
 
-  // ── Status banner ────────────────────────────────────────────────────────
-  // /health sits outside /api and is not guaranteed to be proxied to the
-  // backend on every host, so the banner is driven by the pending queues only.
+  const dashFailed = failed.includes('dashboard') || !data;
   const pendingFailed = failed.includes('pending');
   const pendingTotal = Number(pending.total) || 0;
-  const requestPage = (Number(pending.vehicle) || 0) > (Number(pending.student_transfer) || 0)
-    ? '/admin/vehicle-requests'
-    : '/admin/transfer-requests';
-  const onlyRoster = pendingTotal > 0 && !pending.student_transfer && !pending.vehicle;
-  const banner = pendingTotal > 0
-    ? {
-        variant: 'warn',
-        title: `มีคำขอรออนุมัติ ${fmt(pendingTotal)} รายการ`,
-        sub: `โอนย้ายนักเรียน ${fmt(pending.student_transfer)} · คำขอเกี่ยวกับรถ ${fmt(pending.vehicle)} · คำขอรายชื่อ ${fmt(pending.roster)}`,
-        // Roster requests have no admin page — no CTA rather than a dead link.
-        cta: onlyRoster ? undefined : { label: 'ตรวจคำขอ', to: requestPage },
-      }
-    : {
-        variant: 'success',
-        title: 'ระบบทำงานปกติ',
-        sub: 'ไม่มีคำขอค้างรออนุมัติ',
-      };
-
-  // ── Todos (never repeat the banner's topic) ─────────────────────────────
-  const todos = [];
-  if (pendingTotal === 0 && !pendingFailed) {
-    todos.push({
-      key: 'pending', variant: 'success', count: 0, keepZero: true,
-      title: 'คำขอรออนุมัติ', sub: 'โอนย้ายนักเรียน · คำขอเกี่ยวกับรถ',
-      cta: { label: 'เปิดดู', to: '/admin/transfer-requests' },
-    });
-  }
-  if (!failed.includes('needs-action')) {
-    todos.push({
-      key: 'users', variant: 'info', count: usersNeedingAction.total,
-      title: 'ผู้ใช้ต้องดูแล', sub: 'ยังไม่เคยเข้าใช้ / ต้องเปลี่ยนรหัสผ่าน',
-      cta: { label: 'ดูรายชื่อ', to: '/admin/users' },
-    });
-  }
-  if (!failed.includes('audit')) {
-    todos.push({
-      key: 'deletes', variant: 'neutral', count: recentDeletes.total,
-      title: 'รายการที่ถูกลบใน 24 ชม.', sub: 'ตรวจย้อนหลังได้ทุกรายการ',
-      cta: { label: 'ดูประวัติ', to: `/admin/audit-logs?action=DELETE&date_from=${yesterday}` },
-    });
-  }
-
-  // ── KPIs ─────────────────────────────────────────────────────────────────
-  const mPct = pctOf(data?.morning_done, data?.morning_total);
-  const ePct = pctOf(data?.evening_done, data?.evening_total);
-  const eveningNotStarted = (Number(data?.evening_done) || 0) === 0;
   const emergencies = Number(data?.recent_emergencies) || 0;
 
-  // ── Right chart: pending requests by queue ──────────────────────────────
+  // ── Compact province round summary (same helper as every dashboard) ──
+  const dateIso = data?.date ? String(data.date).slice(0, 10) : undefined;
+  const isSchoolDay = typeof data?.is_school_day === 'boolean' ? data.is_school_day : undefined;
+  const mStatus = roundStatus({ session: 'morning', done: data?.morning_done, expected: data?.morning_total, date: dateIso, isSchoolDay, unavailable: dashFailed });
+  const eStatus = roundStatus({ session: 'evening', done: data?.evening_done, expected: data?.evening_total, date: dateIso, isSchoolDay, unavailable: dashFailed });
+
+  // ── What the admin has to act on, most urgent first ──
+  const actions = [
+    {
+      key: 'transfer', tone: 'warn', count: pending.student_transfer, unavailable: pendingFailed,
+      title: 'คำขอโอนย้ายนักเรียน', sub: 'ตรวจและอนุมัติคำขอข้ามโรงเรียน',
+      to: '/admin/transfer-requests', actionLabel: 'ตรวจคำขอ',
+    },
+    {
+      key: 'vehicle', tone: 'warn', count: pending.vehicle, unavailable: pendingFailed,
+      title: 'คำขอเกี่ยวกับรถ', sub: 'กู้คืนรถ / ใช้รถร่วมกัน รออนุมัติ',
+      to: '/admin/vehicle-requests', actionLabel: 'ตรวจคำขอ',
+    },
+    {
+      // Roster requests have no admin page — shown as information, not a dead link.
+      key: 'roster', tone: 'info', count: pending.roster, unavailable: pendingFailed,
+      title: 'คำขอรายชื่อจากโรงเรียน', sub: 'รอเขตหรือโรงเรียนดำเนินการ',
+    },
+    {
+      key: 'emergency', tone: 'warn', count: emergencies, unavailable: failed.includes('dashboard'),
+      title: 'เหตุฉุกเฉินใน 7 วัน', sub: 'ตรวจผลการแก้ไข',
+      to: '/province/emergencies', actionLabel: 'ดูเหตุฉุกเฉิน',
+    },
+    {
+      key: 'users', tone: 'info', count: usersNeedingAction.total, unavailable: failed.includes('needs-action'),
+      title: 'ผู้ใช้ที่ต้องดูแล', sub: 'ยังไม่เคยเข้าใช้ หรือต้องเปลี่ยนรหัสผ่าน',
+      to: '/admin/users', actionLabel: 'ดูรายชื่อ',
+    },
+    {
+      key: 'deletes', tone: 'info', count: recentDeletes.total, unavailable: failed.includes('audit'),
+      title: 'รายการที่ถูกลบใน 24 ชั่วโมง', sub: 'ตรวจย้อนหลังได้ทุกรายการ',
+      to: `/admin/audit-logs?action=DELETE&date_from=${yesterday}`, actionLabel: 'ดูประวัติ',
+    },
+  ];
+
+  // ── Pending requests by queue ──
   const queues = [
     { key: 'st', label: 'โอนย้ายนักเรียน', n: Number(pending.student_transfer) || 0 },
     { key: 'vh', label: 'คำขอเกี่ยวกับรถ', n: Number(pending.vehicle) || 0 },
@@ -146,6 +140,7 @@ export default function AdminDashboard() {
         text: `${fmt(q.n)} รายการ`, variant: q.n > 0 ? 'warn' : 'success',
       }))
     : [];
+  const activeAccounts = userCounts.total == null ? null : Math.max(0, userCounts.total - (userCounts.inactive || 0));
 
   return (
     <PageTransition>
@@ -169,75 +164,45 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Scale of the system */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          ['นักเรียน', data?.total_students],
-          ['โรงเรียน', data?.total_schools],
-          ['รถรับส่ง', data?.total_vehicles],
-          ['บัญชีที่เปิดใช้', userCounts.total == null ? null : Math.max(0, userCounts.total - (userCounts.inactive || 0))],
-        ].map(([k, v]) => (
-          <span key={k} className="bg-surface-raised border border-surface-border rounded-full px-4 py-1.5 text-sm text-ink-muted">
-            <span className="font-bold text-ink tabular-nums">{v == null ? '-' : fmt(v)}</span> {k}
-          </span>
-        ))}
-      </div>
-
       {failed.length > 0 && (
         <AlertBanner variant="danger" title="โหลดข้อมูลบางส่วนไม่สำเร็จ">
           ตัวเลขที่แสดงอาจไม่ครบถ้วน กดรีเฟรชเพื่อลองใหม่อีกครั้ง
         </AlertBanner>
       )}
 
-      {!pendingFailed && <TodayBanner {...banner} />}
+      {/* Admin acts on the queues first; the province summary comes second. */}
+      <ActionList
+        items={actions}
+        emptyText="ไม่มีคำขอหรืองานค้าง ระบบทำงานปกติ"
+      />
 
-      <TodoCards items={todos} />
+      <StatusHero
+        eyebrow="ภาพรวมทั้งจังหวัดวันนี้"
+        rounds={[
+          { status: mStatus, to: '/reports/daily', title: 'รอบเช้า (ส่งถึงโรงเรียน)' },
+          { status: eStatus, to: '/reports/daily', title: 'รอบเย็น (ส่งถึงบ้าน)' },
+        ]}
+        action={{ label: 'ดูภาพรวมจังหวัด', to: '/province' }}
+      />
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiRingCard
-          label="ส่งเช้าทั้งจังหวัด"
-          pct={mPct}
-          value={mPct == null ? '-' : undefined}
-          sub={`${fmt(data?.morning_done)} / ${fmt(data?.morning_total)} คน`}
-          variant={pctTone(mPct)}
-        />
-        {eveningNotStarted ? (
-          <KpiRingCard
-            label="รับเย็น"
-            value="-"
-            sub="ยังไม่เริ่มรอบ"
-            variant="neutral"
-            chip="ยังไม่เริ่ม"
-          />
-        ) : (
-          <KpiRingCard
-            label="รับเย็น"
-            pct={ePct}
-            value={ePct == null ? '-' : undefined}
-            sub={`${fmt(data?.evening_done)} / ${fmt(data?.evening_total)} คน`}
-            variant={pctTone(ePct)}
-          />
-        )}
-        <KpiRingCard
-          label="เหตุฉุกเฉิน 7 วัน"
-          value={emergencies}
-          sub={emergencies > 0 ? 'ดูรายละเอียดที่หน้าเหตุฉุกเฉิน' : 'ไม่มีเหตุ'}
-          variant={emergencies > 0 ? 'danger' : 'success'}
-        />
-        <KpiRingCard
-          label="บัญชีที่เปิดใช้"
-          value={userCounts.total == null ? '-' : Math.max(0, userCounts.total - (userCounts.inactive || 0))}
+      <StatGrid label="ขนาดของระบบ">
+        <StatTile label="นักเรียน" value={data?.total_students} unit="คน" unavailable={dashFailed} />
+        <StatTile label="โรงเรียน" value={data?.total_schools} unavailable={dashFailed} />
+        <StatTile label="รถรับส่ง" value={data?.total_vehicles} unit="คัน" unavailable={dashFailed} />
+        <StatTile
+          label="บัญชีที่เปิดใช้" value={activeAccounts} unavailable={activeAccounts == null}
           sub={`ระงับ ${fmt(userCounts.inactive)} บัญชี`}
-          variant="info"
         />
-      </section>
+      </StatGrid>
+
+      <TravelLeaveSummary data={dashFailed ? {} : data} />
 
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <DayBars
           title="การรับส่งทั้งจังหวัด 7 วันล่าสุด (%)"
           days={trendDays || []}
           failed={trendDays === RECENT_DAYS_FAILED}
-          note={trendDays && trendDays.some(d => d.today) && eveningNotStarted ? 'รอบเย็นของวันนี้ยังไม่เริ่ม' : undefined}
+          note={trendDays && trendDays.some(d => d.today) && eStatus.state === 'not_yet' ? 'รอบเย็นของวันนี้ยังไม่ถึงเวลา' : undefined}
         />
         <RankBars
           title="คำขอรออนุมัติแยกประเภท"
@@ -248,13 +213,11 @@ export default function AdminDashboard() {
       </section>
 
       <div className="space-y-3">
-        <FoldSection
-          title="คำขอรายชื่อล่าสุด"
-          subtitle={`รออนุมัติ ${fmt(pendingRosterRequests.total)} รายการ`}
-        >
-          {pendingRosterRequests.rows.length === 0 ? (
-            <p className="text-sm text-ink-muted">ไม่มีคำขอรอดำเนินการ</p>
-          ) : (
+        {pendingRosterRequests.rows.length > 0 && (
+          <FoldSection
+            title="คำขอรายชื่อล่าสุด"
+            subtitle={`รออนุมัติ ${fmt(pendingRosterRequests.total)} รายการ`}
+          >
             <ul className="divide-y divide-surface-border">
               {pendingRosterRequests.rows.map(r => (
                 <li key={r.id} className="py-2 text-sm flex justify-between gap-3">
@@ -263,8 +226,8 @@ export default function AdminDashboard() {
                 </li>
               ))}
             </ul>
-          )}
-        </FoldSection>
+          </FoldSection>
+        )}
 
         <FoldSection title="ทางลัดผู้ดูแลระบบ" subtitle="ผู้ใช้งาน · ประวัติการใช้งาน · โรงเรียน · ตรวจสภาพรถ">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

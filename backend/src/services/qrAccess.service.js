@@ -8,6 +8,7 @@
 const { pool } = require('../config/database');
 const env = require('../config/env');
 const { logAudit } = require('../utils/audit');
+const { daysBetweenBangkok } = require('../utils/thaiTime');
 
 const STAFF_ROLES = new Set(['transport', 'admin', 'province']);
 
@@ -114,9 +115,10 @@ async function getLatestInspectionStatus(vehicleId) {
 
 function documentStatus(expiry, today = new Date()) {
   if (!expiry) return 'MISSING';
-  const end = new Date(expiry);
-  if (end < today) return 'EXPIRED';
-  const days = Math.ceil((end - today) / 86400000);
+  // Compare Bangkok calendar dates: a document is valid through its expiry day.
+  const days = daysBetweenBangkok(today, expiry);
+  if (days === null) return 'MISSING';
+  if (days < 0) return 'EXPIRED';
   return days <= 30 ? 'EXPIRING' : 'VALID';
 }
 

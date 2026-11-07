@@ -46,6 +46,8 @@ function wire() {
       // authenticate middleware: account still forced to change, no reset yet
       return [[{ is_active: 1, must_change_password: 1, driver_id: null, password_changed_at: null, sessions_reset_at: null }]];
     }
+    // change-password lockout counter (AUTH-01): never locked here
+    if (sql.includes('login_lockouts')) return sql.startsWith('SELECT') ? [[]] : [{ affectedRows: 1 }];
     if (sql.includes('SELECT id, username, password_hash')) return [[{ id: 2, username: 'teacher1', password_hash: 'old' }]];
     if (sql.startsWith('UPDATE users SET password_hash')) return [{ affectedRows: 1 }];
     if (sql.includes('INSERT INTO revoked_tokens')) return [{ affectedRows: 1 }];

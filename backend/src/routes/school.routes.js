@@ -485,6 +485,8 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
 
     const vehicleOk = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
     if (!vehicleOk) return sendError(res, 'จุดรับส่งนี้ไม่ใช่ของโรงเรียนคุณ', [], 403);
+    // AUD-SCH-01: a point holding only another school's pupils is not ours.
+    if (!(await ppSvc.isPickupPointVisibleToSchool(pointId, schoolId))) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
 
     const gradeFilter = resolveGradeScope(req);
     const students = await ppSvc.getAssignableStudentsForPickupPoint(point, { schoolId, gradeFilter });
@@ -518,6 +520,8 @@ router.put('/pickup-points/:id/students', requireFullSchoolScope, async (req, re
 
     const vehicleOk = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
     if (!vehicleOk) return sendError(res, 'จุดรับส่งนี้ไม่ใช่ของโรงเรียนคุณ', [], 403);
+    // AUD-SCH-01: a point holding only another school's pupils is not ours.
+    if (!(await ppSvc.isPickupPointVisibleToSchool(pointId, schoolId))) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
 
     if (studentIds.length > 0) {
       const studentsOk = await ppSvc.validateStudentsBelongToSchoolAndVehicle(

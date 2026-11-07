@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
 
 /**
@@ -92,7 +93,9 @@ export default function ConfirmDialog({
     ? 'bg-danger-ink hover:bg-danger-ink/90 active:bg-danger-ink text-white'
     : 'bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white';
 
-  return (
+  // Portal to body for the same reason as Modal (live QA vis-13), and so a
+  // confirmation opened over a Modal is appended after it and paints on top.
+  return createPortal((
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-navy-950/60 motion-safe:animate-fade-in" onClick={() => onCancelRef.current?.()} aria-hidden="true" />
       <div
@@ -141,5 +144,5 @@ export default function ConfirmDialog({
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }

@@ -276,7 +276,7 @@ export default function UserManagement() {
               <FormField
                 label="ระดับชั้น (สำหรับครูประจำสายชั้น)"
                 helper={form.grade_scope
-                  ? `บัญชีครูประจำสายชั้น: ดูข้อมูลเฉพาะระดับชั้น ${form.grade_scope} และเป็นสิทธิ์อ่านอย่างเดียว`
+                  ? `บัญชีครูประจำสายชั้น: ทำงานได้เฉพาะระดับชั้น ${form.grade_scope} (เช็กชื่อและจัดการนักเรียนในชั้นนี้)`
                   : undefined}
               >
                 {ctl => (

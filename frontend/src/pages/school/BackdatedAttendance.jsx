@@ -105,6 +105,7 @@ export default function BackdatedAttendance() {
 
   return (
     <PageTransition>
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
       <PageHeader
         title="เช็กชื่อย้อนหลัง"
         subtitle={`บันทึกการขึ้น-ลงรถที่ตกหล่นย้อนหลังได้ไม่เกิน ${data?.max_days ?? 7} วัน ต้องระบุเวลาและเหตุผลทุกครั้ง`}
@@ -118,7 +119,7 @@ export default function BackdatedAttendance() {
           : ' · รายการของวันนี้ให้ใช้ปุ่ม “ยืนยันแทนคนขับ” ที่หน้าแรก'}
       </AlertBanner>
 
-      <AppCard className="mt-4">
+      <AppCard>
         <FormField
           label="วันที่"
           type="date"
@@ -152,7 +153,7 @@ export default function BackdatedAttendance() {
         </p>
       </AppCard>
 
-      <div className="mt-4">
+      <div>
         {loading ? <LoadingState />
           : error ? <ErrorState message={error} onRetry={load} />
           : rows.length === 0 ? <EmptyState title="ไม่พบนักเรียนที่ใช้บริการรอบนี้" />
@@ -194,6 +195,7 @@ export default function BackdatedAttendance() {
           onSaved={() => { setVoidFor(null); toast?.success?.('ยกเลิกรายการแล้ว'); load(); }}
         />
       )}
+      </div>
     </PageTransition>
   );
 }

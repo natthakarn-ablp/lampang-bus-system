@@ -29,7 +29,7 @@ const STATUS_META = {
   // caller patched the label and the colour back on at each of two call sites.
   ROLLED_BACK: { label: 'ย้อนกลับแล้ว', variant: 'info' },
 };
-const badge = (s) => STATUS_META[s] || { label: s, variant: 'neutral' };
+const badge = (s) => STATUS_META[s] || { label: 'ต้องตรวจสอบ', variant: 'neutral' };
 const fmtDate = (d) => (d ? new Date(d).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 
 const SUMMARY_TONE = {
@@ -142,7 +142,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
   const pendingReady = useMemo(() => (detail?.rows || []).filter((r) => r.can_apply).length, [detail]);
 
   const batchColumns = useMemo(() => [
-    { key: 'created_at', header: 'วันที่นำเข้า', secondary: true, cell: b => fmtDate(b.created_at) },
+    { key: 'created_at', header: 'วันที่นำเข้า', secondary: true, nowrap: true, cell: b => fmtDate(b.created_at) },
     { key: 'filename', header: 'ไฟล์', primary: true, cell: b => b.filename || '—' },
     {
       key: 'status', header: 'สถานะ', badge: true,
@@ -151,16 +151,20 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
         return <StatusBadge variant={m.variant} size="sm">{m.label}</StatusBadge>;
       },
     },
-    { key: 'total_rows', header: 'ทั้งหมด', align: 'right', numeric: true, cell: b => b.total_rows },
+    { key: 'total_rows', header: 'ทั้งหมด', align: 'right', numeric: true, nowrap: true, cell: b => b.total_rows },
     {
-      key: 'insert_count', header: 'สำเร็จ', align: 'right', numeric: true,
-      cell: b => <span className="text-success-ink font-medium">{b.insert_count}</span>,
+      // Live QA sch-07: a preview-only batch has written nothing, yet its
+      // ready-row count was shown here in green as if it had been imported.
+      key: 'insert_count', header: 'สำเร็จ', align: 'right', numeric: true, nowrap: true,
+      cell: b => (b.status === 'PREVIEWED' && !b.rollback_status
+        ? <span className="text-ink-muted" title="ยังไม่ได้กดยืนยันนำเข้า">ยังไม่นำเข้า</span>
+        : <span className="text-success-ink font-medium">{b.insert_count}</span>),
     },
     {
-      key: 'error_count', header: 'ผิดพลาด', align: 'right', numeric: true,
+      key: 'error_count', header: 'ผิดพลาด', align: 'right', numeric: true, nowrap: true,
       cell: b => <span className={b.error_count > 0 ? 'text-danger-ink font-medium' : undefined}>{b.error_count}</span>,
     },
-    { key: 'expires_at', header: 'ไฟล์หมดอายุ', hideOnMobile: true, cell: b => fmtDate(b.expires_at) },
+    { key: 'expires_at', header: 'ไฟล์หมดอายุ', hideOnMobile: true, nowrap: true, cell: b => fmtDate(b.expires_at) },
   ], []);
 
   const rowColumns = useMemo(() => [
@@ -206,10 +210,11 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
       },
     },
     {
-      key: 'message_th', header: 'คำอธิบาย',
+      key: 'message_th', header: 'คำอธิบาย', wrap: true,
       cell: r => (
         <div>
-          <div>{r.message_th}</div>
+          {/* Live QA sch-07: rolled-back rows kept the preview text "พร้อมนำเข้า". */}
+          <div>{r.rollback_status === 'ROLLED_BACK' ? 'ย้อนกลับแล้ว นักเรียนคนนี้ถูกนำออกจากรายชื่อ' : r.message_th}</div>
           {r.error_detail && (
             <div className="text-caption text-danger-ink mt-0.5">สาเหตุจากระบบ: {r.error_detail}</div>
           )}
@@ -242,7 +247,7 @@ export default function ImportHistoryModal({ open, onClose, onChanged }) {
     <>
       <Modal
         title={title}
-        size="lg"
+        size="xl"
         onClose={() => { if (!busy) close(); }}
         footer={view === 'detail' && detail ? (
           <>

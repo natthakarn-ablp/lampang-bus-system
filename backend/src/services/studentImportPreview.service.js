@@ -59,6 +59,9 @@ const canonOf = (plate) => { const p = plateId.parseLegacyPlateText(plate); retu
 // cells; the classifier rejects anything that is still not 10 digits.
 const { normalizePhone } = require('../utils/phone');
 
+// Columns a file must have for any row to be importable: [map key, Thai header].
+const REQUIRED_IMPORT_HEADERS = [['id', 'รหัสนักเรียน'], ['first_name', 'ชื่อ'], ['last_name', 'นามสกุล']];
+
 // ── Parse a CSV/XLS(X) import file into normalized rows. ─────────────────────
 async function parseImportFile(filePath, originalName) {
   const rows = [];
@@ -98,6 +101,21 @@ async function parseImportFile(filePath, originalName) {
     });
     return m;
   };
+  // Live QA sch-04: a file whose headers did not match the template was
+  // accepted and every row came back as "รหัสนักเรียนไม่ถูกต้อง" (the code
+  // column was simply not found), so the teacher fixed the wrong thing. Reject
+  // the whole file once, naming the missing columns, before any row is read.
+  const assertRequiredHeaders = (map) => {
+    const missing = REQUIRED_IMPORT_HEADERS.filter(([key]) => map[key] == null).map(([, label]) => label);
+    if (missing.length) {
+      const e = new Error(
+        `หัวคอลัมน์ในไฟล์ไม่ตรงกับแบบฟอร์ม ไม่พบคอลัมน์: ${missing.join(', ')} ` +
+        '— กรุณาใช้หัวคอลัมน์ตามไฟล์ตัวอย่าง (แถวแรกของไฟล์ต้องเป็นหัวคอลัมน์)');
+      e.statusCode = 400;
+      e.missingHeaders = missing;
+      throw e;
+    }
+  };
   const toRow = (cells, map, rowNum) => ({
     rowNum,
     student_code: pick(cells, map, 'id'),
@@ -117,6 +135,7 @@ async function parseImportFile(filePath, originalName) {
     const ws = wb.worksheets[0];
     const headers = (ws.getRow(1).values || []).slice(1).map((v) => (v == null ? '' : String(v)));
     const map = buildMap(headers);
+    assertRequiredHeaders(map);
     for (let i = 2; i <= ws.rowCount; i++) {
       const cells = (ws.getRow(i).values || []).slice(1).map((v) => (v == null ? '' : String(v)));
       if (cells.every((c) => !String(c).trim())) continue;
@@ -127,6 +146,7 @@ async function parseImportFile(filePath, originalName) {
     const csvRows = parseCsvRecords(raw);
     const headers = (csvRows[0] || []).map((h) => h.trim());
     const map = buildMap(headers);
+    assertRequiredHeaders(map);
     for (let i = 1; i < csvRows.length; i++) {
       const cells = csvRows[i].map((c) => c.trim());
       rows.push(toRow(cells, map, i + 1));

@@ -341,7 +341,7 @@ export default function SchoolTeacherAccounts() {
             <TextField label="ยืนยันรหัสผ่าน *" type="password"
               value={form.confirm} onChange={v => setForm({...form, confirm: v})} />
             <p className="text-[11px] text-ink-muted">
-              บัญชีครูประจำสายชั้นเป็นสิทธิ์อ่านอย่างเดียว เห็นข้อมูลเฉพาะระดับชั้นที่เลือก
+              บัญชีครูประจำสายชั้นทำงานได้เฉพาะระดับชั้นที่เลือก: เช็กชื่อวันนี้และย้อนหลัง และจัดการนักเรียนในชั้นตัวเอง
             </p>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
               <button type="button" onClick={() => { setModal(null); setForm({}); }}

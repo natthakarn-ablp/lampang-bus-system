@@ -363,7 +363,7 @@ async function _buildCheckinTransaction(conn, {
   // three simultaneous taps all read "no log yet" and all insert, producing
   // three checkin_logs rows and three parent notifications for one boarding.
   const [students] = await conn.query(
-    `SELECT id, cid_hash, first_name, last_name
+    `SELECT id, cid_hash, first_name, last_name, morning_enabled, evening_enabled
      FROM   students
      WHERE  id = ? AND vehicle_id = ? AND is_deleted = FALSE
      LIMIT  1
@@ -375,6 +375,14 @@ async function _buildCheckinTransaction(conn, {
   }
   const student = students[0];
   const studentName = `${student.first_name} ${student.last_name}`;
+
+  // DP-03 — a child not enrolled in this session must not be boarded by any
+  // path (driver single/batch/override). Strict 0/false so mocks without the
+  // column are unaffected; the DB always returns it.
+  const enrolled = session === 'morning' ? student.morning_enabled : student.evening_enabled;
+  if (enrolled === 0 || enrolled === false) {
+    throw makeError('นักเรียนไม่ได้ใช้บริการรอบนี้', 409, 'NOT_RIDER');
+  }
 
   // Independent travel and a bus journey are mutually exclusive. This must
   // apply to driver, override and batch paths as well as classroom teachers.
@@ -555,7 +563,7 @@ async function processCheckin(pool, { userId, vehicleId, plateNo, studentId, ses
   return withDeadlockRetry(pool, beginCheckinTransaction, conn =>
     _buildCheckinTransaction(conn, {
       userId, vehicleId, plateNo, studentId, session,
-      status: 'CHECKED_IN', termId, source,
+      status: 'CHECKED_IN', termId, source, refuseLeave: true,
     })
   );
 }

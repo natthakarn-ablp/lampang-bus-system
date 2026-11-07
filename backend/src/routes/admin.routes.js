@@ -1913,7 +1913,7 @@ router.get('/live-vehicles', async (req, res, next) => {
 
 // GPS route history (replay) — every vehicle, same scope as /live-vehicles.
 {
-  const h = makeTrackHandlers(() => ({}));
+  const h = makeTrackHandlers(() => ({ all: true }));
   router.get('/vehicles/:vehicleId/track', h.track);
   router.get('/vehicles/:vehicleId/track-days', h.days);
 }

@@ -278,12 +278,12 @@ function toPublicVehicle(row, nowMs, { includeStudentCountInScope = false } = {}
  *
  *   { schoolId, gradeFilter? }  vehicles carrying a (grade-filtered) pupil of the school
  *   { affiliationId }           vehicles carrying a pupil of any school in the affiliation
- *   {}                          every vehicle (province / admin)
+ *   { all: true }               every vehicle (province / admin)
  *
  * Returns a fragment that starts with " AND " (or is empty) and its params.
  * The caller supplies `v` as the vehicles alias.
  */
-function vehicleScopeSql({ schoolId = null, gradeFilter = null, affiliationId = null } = {}) {
+function vehicleScopeSql({ schoolId = null, gradeFilter = null, affiliationId = null, all = false } = {}) {
   if (schoolId) {
     const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
     const subqueryGrade = eq ? ` AND s.grade IN (${eq.map(() => '?').join(',')})` : '';
@@ -309,7 +309,10 @@ function vehicleScopeSql({ schoolId = null, gradeFilter = null, affiliationId = 
       params: [affiliationId],
     };
   }
-  return { sql: '', params: [] };
+  // Fail CLOSED: an empty/unresolved scope (e.g. a missing school id) must never
+  // widen to "every vehicle". Province/admin opt in explicitly with { all: true }.
+  if (all === true) return { sql: '', params: [] };
+  throw new Error('vehicleScopeSql: no scope given (pass schoolId, affiliationId or all:true)');
 }
 
 /**
@@ -317,7 +320,7 @@ function vehicleScopeSql({ schoolId = null, gradeFilter = null, affiliationId = 
  * Returns { vehicle_id, plate_no, vehicle_type } or null. No driver phone,
  * no student data.
  */
-async function findVehicleInScope(vehicleId, scope = {}) {
+async function findVehicleInScope(vehicleId, scope) {
   if (!vehicleId) return null;
   const s = vehicleScopeSql(scope);
   const [rows] = await pool.query(

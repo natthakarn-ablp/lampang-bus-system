@@ -25,7 +25,7 @@
  * POST /api/school/checkin/:logId/void, which is date-agnostic.
  */
 
-const { getCurrentTerm } = require('./term.service');
+const { deriveTermIdFromDate } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { todayBangkok, toBangkokDate, daysBetweenBangkok } = require('../utils/thaiTime');
 const { gradeEquivalents } = require('../utils/gradeScope');
@@ -245,7 +245,8 @@ async function recordBackdatedCheck(pool, {
   if (!Number.isInteger(sid) || sid <= 0) throw makeError('student_id ไม่ถูกต้อง', 400);
 
   const checkedAt = `${date} ${time}:00`;
-  const termId = await getCurrentTerm(pool);
+  // Term of the day being recorded, not of today: they differ across a term boundary.
+  const termId = await deriveTermIdFromDate(pool, date);
 
   const conn = await pool.getConnection();
   try {

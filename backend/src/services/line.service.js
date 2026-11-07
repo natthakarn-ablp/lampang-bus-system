@@ -76,7 +76,7 @@ if (typeof linkingStateSweeper.unref === 'function') linkingStateSweeper.unref()
 
 async function getBoundPhoneByLineUserId(lineUserId) {
   const [[row]] = await pool.query(
-    `SELECT phone FROM line_bindings WHERE line_user_id = ? LIMIT 1`,
+    `SELECT phone FROM line_bindings WHERE line_user_id = ? AND is_active = TRUE LIMIT 1`,
     [lineUserId]
   );
   return row ? row.phone : null;
@@ -271,7 +271,7 @@ async function getChildrenByBoundPhone(lineUserId) {
      JOIN   students s ON s.id = ps.student_id AND s.is_deleted = FALSE
      LEFT JOIN schools sc ON sc.id = s.school_id
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
-     WHERE  lb.line_user_id = ?`,
+     WHERE  lb.line_user_id = ? AND lb.is_active = TRUE`,
     [lineUserId]
   );
   return rows;

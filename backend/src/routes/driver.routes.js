@@ -1190,8 +1190,18 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
     }
     if (recorded_at && Number.isNaN(Date.parse(recorded_at))) {
       errors.push({ field: 'recorded_at', message: 'recorded_at must be ISO 8601' });
+    } else if (recorded_at) {
+      // Same guard as the batch endpoint: a wrong-clock phone must not write a
+      // future (or ancient) timestamp into the LIVE row.
+      const t = Date.parse(recorded_at);
+      const nowMs = Date.now();
+      if (t > nowMs + BATCH_MAX_FUTURE_MS) {
+        errors.push({ field: 'recorded_at', message: 'RECORDED_AT_IN_FUTURE' });
+      } else if (t < nowMs - env.tracking.locationHistoryRetentionDays * 24 * 60 * 60 * 1000) {
+        errors.push({ field: 'recorded_at', message: 'RECORDED_AT_TOO_OLD' });
+      }
     }
-    if (errors.length) return sendError(res, 'ข้อมูลตำแหน่งไม่ถูกต้อง', errors, 400);
+    if (errors.length) return sendError(res, 'ข้อมูลตำแหน่งไม่ถูกต้อง (เวลาของอุปกรณ์ไม่ตรง กรุณาตรวจสอบวันเวลาของเครื่อง)', errors, 400);
 
     // GPS tracking windows (owner decision 2026-11-07): outside the school-run
     // windows the fix is acknowledged but NOT stored — neither the live row nor

@@ -174,11 +174,13 @@ function VehicleTeacherCheck() {
   }
 
   async function undo(st) {
-    if (!st.can_undo || !(st.self_id || st.log_id) || writeInFlight.current || confirmationRef.current || loading || !data || sessionRef.current !== session) return;
+    if (!st.can_undo || !(st.self_id || st.log_id || st.leave_id) || writeInFlight.current || confirmationRef.current || loading || !data || sessionRef.current !== session) return;
     writeInFlight.current = true;
     setBusy(b => ({ ...b, [st.id]: true }));
     try {
-      await api.post(st.self_travel ? `/school/self-travel/${st.self_id}/undo` : `/school/teacher-check/${st.log_id}/undo`, {});
+      if (st.self_travel) await api.post(`/school/self-travel/${st.self_id}/undo`, {});
+      else if (st.on_leave && st.leave_id) await api.delete(`/school/leaves/${st.leave_id}`);
+      else await api.post(`/school/teacher-check/${st.log_id}/undo`, {});
       toast.success(`ยกเลิกรายการของ ${st.name} แล้ว`);
       await load();
     } catch (err) {

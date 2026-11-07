@@ -581,6 +581,22 @@ async function validateStudentsBelongToSchoolAndVehicle(studentIds, schoolId, ve
   return matched === studentIds.length;
 }
 
+/**
+ * How many live students of OTHER schools are attached to this point.
+ * A school may only delete a point no other school depends on: pickup points
+ * are vehicle-scoped, so on a shared van deleting the whole point would drop
+ * another school's pupils off the driver's map (school-teacher-02).
+ */
+async function countOtherSchoolStudentsOnPoint(pointId, schoolId) {
+  const [[row]] = await pool.query(`
+    SELECT COUNT(*) AS n
+      FROM student_pickup_points spp
+      JOIN students s ON s.id = spp.student_id
+     WHERE spp.pickup_point_id = ? AND s.school_id <> ? AND s.is_deleted = FALSE
+  `, [pointId, schoolId]);
+  return Number(row && row.n) || 0;
+}
+
 async function validateVehicleServesSchool(vehicleId, schoolId) {
   const [[row]] = await pool.query(`
     SELECT 1 FROM students
@@ -874,6 +890,7 @@ module.exports = {
   validateStudentsBelongToVehicle,
   validateStudentsBelongToSchoolAndVehicle,
   validateVehicleServesSchool,
+  countOtherSchoolStudentsOnPoint,
   createPickupPointWithStudents,
   // Phase 6.1 hotfix-4 — duplicate-assignment guard
   validateNoDuplicateAssignmentsForVehicle,

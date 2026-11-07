@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/axios';
+import { driverErrorMessage } from '../../utils/driverErrors';
 import ErrorState from '../../components/ErrorState';
 import { ACTION_LABEL } from '../../utils/session';
 import { useToast } from '../../components/Toast';
@@ -20,7 +21,7 @@ export default function CheckinPanel({ student, session, onDone }) {
       toast.success(`${student.first_name} — ${ACTION_LABEL[session]}`);
       onDone?.();
     } catch (err) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+      setError(driverErrorMessage(err, 'เกิดข้อผิดพลาด'));
     } finally {
       setLoading(false);
     }

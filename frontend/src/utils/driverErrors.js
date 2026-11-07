@@ -44,6 +44,13 @@ const TH_BY_MESSAGE = {
   'latitude must be a number in [-90, 90]': 'ตำแหน่งบนแผนที่ไม่ถูกต้อง กรุณาเลือกจุดใหม่',
   'longitude must be a number in [-180, 180]': 'ตำแหน่งบนแผนที่ไม่ถูกต้อง กรุณาเลือกจุดใหม่',
   'recorded_at must be ISO 8601': 'รูปแบบวันที่ไม่ถูกต้อง',
+  // เช็กชื่อ/จบรอบ/แจ้งเหตุ
+  'Driver profile is not linked to this account': 'บัญชีของคุณยังไม่ได้ผูกกับข้อมูลคนขับ กรุณาแจ้งโรงเรียนหรือผู้ดูแลระบบ',
+  'Multiple open shifts found for this driver': 'พบรอบงานที่เปิดค้างอยู่หลายรอบ กรุณาแจ้งผู้ดูแลระบบ',
+  'Multiple active vehicles assigned to this driver — please contact admin': 'บัญชีของคุณถูกผูกกับรถหลายคัน กรุณาแจ้งผู้ดูแลระบบ',
+  'Student not found in this vehicle': 'ไม่พบนักเรียนคนนี้ในรถของคุณ (อาจถูกย้ายรถแล้ว) กรุณารีเฟรชรายชื่อ',
+  'student_id and session are required': 'ข้อมูลไม่ครบ กรุณารีเฟรชหน้าแล้วลองใหม่',
+  'detail is required': 'กรุณาระบุรายละเอียดเหตุฉุกเฉิน',
 };
 
 /** ข้อความตามรหัสสถานะ เมื่อไม่มีข้อความเฉพาะเจาะจง */

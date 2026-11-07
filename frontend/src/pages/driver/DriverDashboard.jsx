@@ -163,7 +163,9 @@ export default function DriverDashboard() {
       toast.success(ACTION_LABEL[session]);
       await fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+      // 409 = server state differs from screen (already recorded / on leave): resync now
+      if (err.response?.status === 409) await fetchData();
+      toast.error(driverErrorMessage(err, 'เกิดข้อผิดพลาด'));
     } finally {
       setActionLoading((p) => ({ ...p, [studentId]: false }));
     }
@@ -176,7 +178,7 @@ export default function DriverDashboard() {
       toast.success(`บันทึก${LEAVE_LABEL[leaveSession]}สำเร็จ`);
       await fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'ไม่สามารถบันทึกการลาได้');
+      toast.error(driverErrorMessage(err, 'ไม่สามารถบันทึกการลาได้'));
     } finally {
       setLeaveLoading((p) => ({ ...p, [studentId]: false }));
     }
@@ -190,7 +192,7 @@ export default function DriverDashboard() {
       setConfirmCancelLeave(null);
       await fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'ไม่สามารถยกเลิกได้');
+      toast.error(driverErrorMessage(err, 'ไม่สามารถยกเลิกได้'));
     }
   }
 
@@ -207,7 +209,7 @@ export default function DriverDashboard() {
       );
       await fetchData();
     } catch (err) {
-      setBulkMsg(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+      setBulkMsg(driverErrorMessage(err, 'เกิดข้อผิดพลาด'));
     } finally {
       setBulkLoading(false);
     }
@@ -219,10 +221,10 @@ export default function DriverDashboard() {
       const res = await api.post('/driver/checkout-all', { session });
       const { succeeded, failed } = res.data.data;
       toast.success(`บันทึกส่งลงครบ ${succeeded.length} คน` + (failed.length > 0 ? ` · ล้มเหลว ${failed.length} คน` : ''));
-      setCheckedOut(true);
+      if (failed.length === 0) setCheckedOut(true);
       await fetchData();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+      toast.error(driverErrorMessage(err, 'เกิดข้อผิดพลาด'));
     } finally {
       setCheckoutLoading(false);
     }
@@ -753,7 +755,7 @@ function PretripModal({ onComplete }) {
       toast.success('บันทึกผลตรวจรถสำเร็จ');
       onComplete({ all_pass: allPass });
     } catch (err) {
-      toast.error(err.response?.data?.message || 'ไม่สำเร็จ');
+      toast.error(driverErrorMessage(err, 'ไม่สำเร็จ'));
     } finally {
       setSubmitting(false);
     }

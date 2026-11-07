@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { Map as MapIcon, Plus, Pencil, Trash2, Users } from 'lucide-react';
+import { Map as MapIcon, Plus, Pencil, Trash2, Users, MapPin, Table2, Columns2 } from 'lucide-react';
 import api from '../../api/axios';
 import {
   AlertBanner, StatusBadge, DashboardSection,
@@ -13,8 +13,26 @@ import PickupPointFields from '../../components/PickupPointFields';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
 import { useToast } from '../../components/Toast';
 import Pagination from '../../components/Pagination';
+import AdminPickupPointMap from '../../components/AdminPickupPointMap';
+import {
+  runPickupChecks, matchesCheck, coordReasonLabel, isPlottable, CHECK_LABEL, DUP_RADIUS_M,
+} from '../../utils/pickupPointChecks';
 
 const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
+const PER_PAGE = 20;
+
+const VIEW_OPTIONS = [
+  { key: 'split', label: 'แผนที่และตาราง', icon: Columns2 },
+  { key: 'map',   label: 'แผนที่',         icon: MapIcon },
+  { key: 'table', label: 'ตาราง',          icon: Table2 },
+];
+
+const CHECK_CHIPS = [
+  { key: '',       label: 'ทุกจุด' },
+  { key: 'coords', label: CHECK_LABEL.coords, tone: 'danger' },
+  { key: 'empty',  label: CHECK_LABEL.empty,  tone: 'warn' },
+  { key: 'dup',    label: CHECK_LABEL.dup,    tone: 'warn' },
+];
 
 export default function AdminPickupPointManagement() {
   const [rows, setRows] = useState([]);
@@ -25,6 +43,18 @@ export default function AdminPickupPointManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Map + check view: every point for the vehicle filter (compact rows, capped
+  // server-side), so the checks cover the whole set, not one table page.
+  const [mapRows, setMapRows] = useState([]);
+  const [mapMeta, setMapMeta] = useState({ total: 0, truncated: false, cap: 0 });
+  const [mapLoading, setMapLoading] = useState(true);
+  const [mapError, setMapError] = useState(null);
+  const [viewMode, setViewMode] = useState('split');
+  const [checkFilter, setCheckFilter] = useState('');
+  const [checkPage, setCheckPage] = useState(1);
+  const [focusId, setFocusId] = useState(null);
+  const mapBoxRef = useRef(null);
+
   const [editing, setEditing] = useState(null);   // null | 'new' | { ...row }
   const [assigning, setAssigning] = useState(null);  // null | { ...row }
   const [confirmDelete, setConfirmDelete] = useState(null);  // null | { ...row }
@@ -34,7 +64,23 @@ export default function AdminPickupPointManagement() {
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const toast = useToast();
 
-  const visibleIds = useMemo(() => rows.map(r => r.id), [rows]);
+  const { byId: checks, counts: checkCounts } = useMemo(() => runPickupChecks(mapRows), [mapRows]);
+  const checkedRows = useMemo(
+    () => (checkFilter ? mapRows.filter(r => matchesCheck(checks.get(r.id), checkFilter)) : mapRows),
+    [mapRows, checks, checkFilter]
+  );
+  const unplottable = useMemo(() => checkedRows.filter(r => !isPlottable(r)), [checkedRows]);
+
+  // With a check chip on, the table lists the matching points from the full
+  // set (paged here); otherwise it is the server-paged list as before.
+  const checkTotalPages = Math.max(1, Math.ceil(checkedRows.length / PER_PAGE));
+  const tableRows = useMemo(
+    () => (checkFilter ? checkedRows.slice((checkPage - 1) * PER_PAGE, checkPage * PER_PAGE) : rows),
+    [checkFilter, checkedRows, checkPage, rows]
+  );
+  const tableLoading = checkFilter ? mapLoading : loading;
+
+  const visibleIds = useMemo(() => tableRows.map(r => r.id), [tableRows]);
   const isAllVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
   const isAnySelected = selectedIds.size > 0;
   const isIndeterminate = isAnySelected && !isAllVisibleSelected;
@@ -68,8 +114,8 @@ export default function AdminPickupPointManagement() {
   // only the rows currently rendered have full data). For the confirm modal we list
   // labels from the current page; ids not on the current page still get deleted by id.
   const selectedRows = useMemo(
-    () => rows.filter(r => selectedIds.has(r.id)),
-    [rows, selectedIds]
+    () => tableRows.filter(r => selectedIds.has(r.id)),
+    [tableRows, selectedIds]
   );
 
   // Prune stale ids whenever rows change (e.g. after pagination or successful delete).
@@ -80,7 +126,7 @@ export default function AdminPickupPointManagement() {
   // pruning to ids present in the latest rows. Selection survives mount but resets
   // when data refreshes — matches the rubric "Clear selection after successful delete or data reload".
   useEffect(() => {
-    if (loading) return;
+    if (tableLoading) return;
     setSelectedIds(prev => {
       const visible = new Set(visibleIds);
       let changed = false;
@@ -91,7 +137,7 @@ export default function AdminPickupPointManagement() {
       });
       return changed ? next : prev;
     });
-  }, [loading, visibleIds]);
+  }, [tableLoading, visibleIds]);
 
   // Set indeterminate on the header checkbox (HTML attribute — must be set via ref)
   const headerCheckboxRef = useRef(null);
@@ -106,7 +152,7 @@ export default function AdminPickupPointManagement() {
       const params = new URLSearchParams();
       if (vehicleFilter) params.set('vehicle_id', vehicleFilter);
       params.set('page', page);
-      params.set('per_page', 20);
+      params.set('per_page', PER_PAGE);
       const res = await api.get(`/admin/pickup-points?${params}`);
       setRows(Array.isArray(res.data?.data) ? res.data.data : []);
       setMeta(res.data?.meta || { page: 1, per_page: 20, total: 0 });
@@ -119,6 +165,47 @@ export default function AdminPickupPointManagement() {
   }, [vehicleFilter, page]);
 
   useEffect(() => { fetchRows(); }, [fetchRows]);
+
+  const fetchMapRows = useCallback(async () => {
+    setMapLoading(true);
+    setMapError(null);
+    try {
+      const params = new URLSearchParams();
+      if (vehicleFilter) params.set('vehicle_id', vehicleFilter);
+      const res = await api.get(`/admin/pickup-points/map?${params}`);
+      setMapRows(Array.isArray(res.data?.data) ? res.data.data : []);
+      setMapMeta(res.data?.meta || { total: 0, truncated: false, cap: 0 });
+    } catch (err) {
+      setMapError(err?.response?.data?.message || 'โหลดข้อมูลแผนที่ไม่สำเร็จ');
+      setMapRows([]);
+    } finally {
+      setMapLoading(false);
+    }
+  }, [vehicleFilter]);
+
+  useEffect(() => { fetchMapRows(); }, [fetchMapRows]);
+
+  const refreshAll = useCallback(() => { fetchRows(); fetchMapRows(); }, [fetchRows, fetchMapRows]);
+
+  // Table row -> marker. Make sure the map is on screen, then focus.
+  const focusOnMap = useCallback((row) => {
+    setFocusId(row.id);
+    setViewMode(m => (m === 'table' ? 'split' : m));
+    requestAnimationFrame(() => {
+      mapBoxRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    });
+  }, []);
+
+  // Marker -> table row. In check mode jump to the page holding the row.
+  const focusFromMap = useCallback((id) => {
+    setFocusId(id);
+    if (checkFilter) {
+      const idx = checkedRows.findIndex(r => r.id === id);
+      if (idx >= 0) setCheckPage(Math.floor(idx / PER_PAGE) + 1);
+    }
+  }, [checkFilter, checkedRows]);
+
+  const chooseCheck = (key) => { setCheckFilter(key); setCheckPage(1); };
 
   // Vehicle filter dropdown — fetch from /province/vehicles (admin has full read).
   useEffect(() => {
@@ -139,8 +226,9 @@ export default function AdminPickupPointManagement() {
     try {
       await api.delete(`/admin/pickup-points/${confirmDelete.id}`);
       toast.success('ลบจุดรับส่งแล้ว');
+      if (focusId === confirmDelete.id) setFocusId(null);
       setConfirmDelete(null);
-      fetchRows();
+      refreshAll();
     } catch (err) {
       toast.error(err?.response?.data?.message || 'ลบไม่สำเร็จ');
     } finally {
@@ -182,7 +270,7 @@ export default function AdminPickupPointManagement() {
         successIds.forEach(id => next.delete(id));
         return next;
       });
-      fetchRows();
+      refreshAll();
     }
   }
 
@@ -198,7 +286,18 @@ export default function AdminPickupPointManagement() {
   const columns = [
     { key: 'plate_no', header: 'ทะเบียนรถ', primary: true, cell: r => r.plate_no || r.vehicle_id },
     { key: 'label', header: 'ป้ายชื่อ', secondary: true,
-      cell: r => <span className="block truncate max-w-[200px]">{r.label}</span> },
+      cell: r => (
+        <button
+          type="button"
+          onClick={() => focusOnMap(r)}
+          title="ดูจุดนี้บนแผนที่"
+          aria-label={`ดูจุด ${r.label} บนแผนที่`}
+          className="focus-ring inline-flex items-center gap-1 max-w-[220px] min-h-[44px] text-left text-brand-700 hover:underline rounded"
+        >
+          <MapPin className="w-3.5 h-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
+          <span className="truncate">{r.label}</span>
+        </button>
+      ) },
     { key: 'session', header: 'รอบ', badge: true,
       cell: r => <StatusBadge variant="neutral" size="sm">{SESSION_LABEL[r.session] || r.session}</StatusBadge> },
     { key: 'student_count', header: 'นักเรียน', align: 'right', numeric: true, cell: r => r.student_count },
@@ -208,6 +307,8 @@ export default function AdminPickupPointManagement() {
           {r.latitude?.toFixed(5)}, {r.longitude?.toFixed(5)}
         </span>
       ) },
+    { key: 'check', header: 'ตรวจสอบ',
+      cell: r => <CheckBadges check={checks.get(r.id)} loading={mapLoading} /> },
   ];
 
   return (
@@ -243,12 +344,25 @@ export default function AdminPickupPointManagement() {
           key: 'vehicle',
           label: 'รถ',
           value: vehicleFilter,
-          onChange: v => { setVehicleFilter(v); setPage(1); },
+          onChange: v => { setVehicleFilter(v); setPage(1); setCheckPage(1); setFocusId(null); },
           options: [['', 'รถทุกคัน'], ...vehicles.map(v => [v.id, v.plate_no])],
         }]}
         count={meta.total}
         countLabel="จุดรับส่ง"
-        onClear={vehicleFilter ? () => { setVehicleFilter(''); setPage(1); } : undefined}
+        onClear={vehicleFilter ? () => { setVehicleFilter(''); setPage(1); setCheckPage(1); setFocusId(null); } : undefined}
+      />
+
+      <CheckPanel
+        counts={checkCounts}
+        total={mapRows.length}
+        loading={mapLoading}
+        error={mapError}
+        meta={mapMeta}
+        value={checkFilter}
+        onChange={chooseCheck}
+        onRetry={fetchMapRows}
+        viewMode={viewMode}
+        onViewMode={setViewMode}
       />
 
       {/* Phase 10.10G-B — sticky selected-action bar (only visible when ≥1 row selected) */}
@@ -277,11 +391,47 @@ export default function AdminPickupPointManagement() {
         </div>
       )}
 
-      {error ? (
+      {viewMode !== 'table' && !mapError && (mapLoading || mapRows.length > 0) && (
+        <DashboardSection
+          title="แผนที่จุดรับส่ง"
+          description={mapLoading ? 'กำลังโหลด…' : `แสดง ${checkedRows.length - unplottable.length} จุดบนแผนที่`}
+        >
+          <div ref={mapBoxRef} className="h-[60vh] min-h-[320px] max-h-[640px] rounded-xl overflow-hidden border border-surface-border">
+            {mapLoading ? (
+              <LoadingState message="กำลังโหลดแผนที่…" />
+            ) : (
+              <AdminPickupPointMap
+                points={checkedRows}
+                checks={checks}
+                selectedId={focusId}
+                onSelect={focusFromMap}
+                onEdit={r => setEditing(r)}
+                onDelete={r => setConfirmDelete(r)}
+                onStudents={r => setAssigning(r)}
+                sessionLabels={SESSION_LABEL}
+              />
+            )}
+          </div>
+          <MapLegend />
+          {!mapLoading && unplottable.length > 0 && (
+            <p className="mt-2 text-xs text-danger-ink">
+              {unplottable.length} จุดไม่มีพิกัดที่ใช้ได้ จึงไม่แสดงบนแผนที่ — เลือก “{CHECK_LABEL.coords}” เพื่อดูในตาราง
+            </p>
+          )}
+        </DashboardSection>
+      )}
+
+      {viewMode === 'map' ? null : !checkFilter && error ? (
         <ErrorState title="โหลดข้อมูลไม่สำเร็จ" message={error} onRetry={fetchRows} />
-      ) : loading ? (
+      ) : tableLoading ? (
         <LoadingState />
-      ) : rows.length === 0 ? (
+      ) : checkFilter && tableRows.length === 0 ? (
+        <EmptyState
+          icon={MapIcon}
+          title={`ไม่พบจุดที่${CHECK_LABEL[checkFilter]}`}
+          description="ลองเลือกตัวกรองอื่น หรือเลือกรถคันอื่น"
+        />
+      ) : !checkFilter && rows.length === 0 ? (
         <EmptyState
           icon={MapIcon}
           title="ยังไม่มีจุดรับส่งในระบบ"
@@ -289,12 +439,19 @@ export default function AdminPickupPointManagement() {
         />
       ) : (
         <>
-          <DashboardSection title="รายการจุดรับส่ง" description={`หน้า ${meta.page} / ${totalPages}`}>
+          <DashboardSection
+            title={checkFilter ? `รายการจุดรับส่ง: ${CHECK_LABEL[checkFilter]}` : 'รายการจุดรับส่ง'}
+            description={checkFilter
+              ? `${checkedRows.length} จุด · หน้า ${checkPage} / ${checkTotalPages}`
+              : `หน้า ${meta.page} / ${totalPages}`}
+          >
             <DataTable
               caption="จุดรับส่งทั้งหมดในระบบ"
               columns={columns}
-              rows={rows}
-              rowClassName={r => (selectedIds.has(r.id) ? 'bg-brand/5' : undefined)}
+              rows={tableRows}
+              rowClassName={r => (r.id === focusId
+                ? 'bg-brand-50 ring-2 ring-inset ring-brand'
+                : selectedIds.has(r.id) ? 'bg-brand/5' : undefined)}
               selection={{
                 selected: selectedIds,
                 onToggle: r => toggleSelect(r.id),
@@ -322,9 +479,13 @@ export default function AdminPickupPointManagement() {
             />
           </DashboardSection>
 
-          {totalPages > 1 && (
-            <Pagination page={page} totalPages={totalPages} onPage={(p) => setPage(p)} />
-          )}
+          {checkFilter
+            ? checkTotalPages > 1 && (
+              <Pagination page={checkPage} totalPages={checkTotalPages} onPage={(p) => setCheckPage(p)} />
+            )
+            : totalPages > 1 && (
+              <Pagination page={page} totalPages={totalPages} onPage={(p) => setPage(p)} />
+            )}
         </>
       )}
 
@@ -333,7 +494,7 @@ export default function AdminPickupPointManagement() {
           row={editing === 'new' ? null : editing}
           vehicles={vehicles}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); fetchRows(); }}
+          onSaved={() => { setEditing(null); refreshAll(); }}
         />
       )}
       {assigning && (
@@ -341,7 +502,7 @@ export default function AdminPickupPointManagement() {
           apiBase="/admin"
           point={assigning}
           onClose={() => setAssigning(null)}
-          onSaved={() => { setAssigning(null); fetchRows(); }}
+          onSaved={() => { setAssigning(null); refreshAll(); }}
         />
       )}
       <ConfirmDialog
@@ -367,6 +528,108 @@ export default function AdminPickupPointManagement() {
         onCancel={() => { if (!bulkBusy) setBulkConfirmOpen(false); }}
       />
     </div>
+  );
+}
+
+/* ── Check panel: view toggle + check chips ──
+   Counts come from the full point set for the current vehicle filter. A chip
+   filters both the map and the table; "ทุกจุด" returns to the normal list. */
+function CheckPanel({ counts, total, loading, error, meta, value, onChange, onRetry, viewMode, onViewMode }) {
+  return (
+    <section aria-label="ตรวจสอบจุดรับส่ง" className="rounded-xl border border-surface-border bg-surface-raised p-3 sm:p-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-ink">ตรวจสอบจุดรับส่ง</h2>
+        <div role="group" aria-label="รูปแบบการแสดงผล" className="inline-flex rounded-lg border border-surface-border bg-surface p-0.5">
+          {VIEW_OPTIONS.map(opt => {
+            const Icon = opt.icon;
+            const active = viewMode === opt.key;
+            return (
+              <button
+                key={opt.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onViewMode(opt.key)}
+                className={`focus-ring inline-flex items-center gap-1 px-2.5 sm:px-3 min-h-[44px] text-xs sm:text-sm font-medium rounded-md transition ${active ? 'bg-brand-600 text-white shadow-sm' : 'text-ink hover:bg-surface-border'}`}
+              >
+                <Icon className="w-4 h-4 shrink-0" strokeWidth={2} aria-hidden="true" />
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {error ? (
+        <AlertBanner variant="danger" title="โหลดข้อมูลตรวจสอบไม่สำเร็จ">
+          {error}{' '}
+          <button type="button" onClick={onRetry} className="focus-ring inline-flex items-center min-h-[44px] min-w-[44px] underline font-medium rounded">ลองอีกครั้ง</button>
+        </AlertBanner>
+      ) : (
+        <>
+          <div role="group" aria-label="กรองจุดที่ต้องตรวจสอบ" className="flex flex-wrap gap-2">
+            {CHECK_CHIPS.map(chip => {
+              const n = chip.key ? counts[chip.key] : total;
+              const active = value === chip.key;
+              const tone = !chip.key || n === 0 ? 'neutral' : chip.tone;
+              return (
+                <button
+                  key={chip.key || 'all'}
+                  type="button"
+                  aria-pressed={active}
+                  disabled={loading}
+                  onClick={() => onChange(chip.key)}
+                  className={`focus-ring inline-flex items-center gap-1.5 rounded-full border px-3 min-h-[44px] text-sm font-medium transition disabled:opacity-60 ${chipClass(tone, active)}`}
+                >
+                  {chip.label}
+                  <span className="tabular-nums font-semibold">{loading ? '…' : n}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-ink-muted">
+            พิกัดผิด = ไม่มีพิกัด พิกัดเป็นศูนย์ หรืออยู่นอกจังหวัดลำปาง · จุดซ้ำ = รถคันเดียวกันมีจุดห่างกันไม่เกิน {DUP_RADIUS_M} เมตร
+          </p>
+          {meta?.truncated && (
+            <AlertBanner variant="warn" title="แสดงข้อมูลไม่ครบ">
+              มีจุดรับส่ง {meta.total} จุด แผนที่และการตรวจสอบแสดง {meta.cap} จุดแรก — เลือกรถเพื่อดูครบทุกจุดของรถคันนั้น
+            </AlertBanner>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function chipClass(tone, active) {
+  if (active) {
+    if (tone === 'danger') return 'bg-danger-ink border-danger-ink text-white';
+    if (tone === 'warn') return 'bg-warn-ink border-warn-ink text-white';
+    return 'bg-brand-600 border-brand-600 text-white';
+  }
+  if (tone === 'danger') return 'bg-danger-soft border-danger/40 text-danger-ink hover:brightness-95';
+  if (tone === 'warn') return 'bg-warn-soft border-warn/50 text-warn-ink hover:brightness-95';
+  return 'bg-surface border-surface-border text-ink hover:bg-surface-border';
+}
+
+function CheckBadges({ check, loading }) {
+  if (loading && !check) return <span className="text-xs text-ink-muted">…</span>;
+  if (!check) return <span className="text-xs text-ink-muted">-</span>;
+  const items = [];
+  if (check.coords) items.push(<StatusBadge key="c" variant="danger" size="sm">{coordReasonLabel(check.coords)}</StatusBadge>);
+  if (check.empty) items.push(<StatusBadge key="e" variant="warn" size="sm">{CHECK_LABEL.empty}</StatusBadge>);
+  if (check.dup.length) items.push(<StatusBadge key="d" variant="warn" size="sm">{CHECK_LABEL.dup}</StatusBadge>);
+  if (items.length === 0) return <StatusBadge variant="success" size="sm">ปกติ</StatusBadge>;
+  return <span className="inline-flex flex-wrap gap-1">{items}</span>;
+}
+
+function MapLegend() {
+  const dot = c => <span className="inline-block w-3 h-3 rounded-full border-2 border-white shadow" style={{ background: c }} aria-hidden="true" />;
+  return (
+    <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+      <span className="inline-flex items-center gap-1.5">{dot('#1D4ED8')} ปกติ</span>
+      <span className="inline-flex items-center gap-1.5">{dot('#D97706')} ไม่มีนักเรียน หรือจุดซ้ำ</span>
+      <span className="inline-flex items-center gap-1.5">{dot('#DC2626')} อยู่นอกจังหวัดลำปาง</span>
+    </p>
   );
 }
 

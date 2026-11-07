@@ -709,6 +709,19 @@ router.get('/pickup-points', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/admin/pickup-points/map?vehicle_id=
+// Read-only compact rows for the admin map + check view: all points for the
+// filter (capped server-side, meta.truncated says so). No student names,
+// phones or addresses — only counts and school names. Admin-only via the
+// router-level guard; no audit row because nothing personal is returned.
+router.get('/pickup-points/map', async (req, res, next) => {
+  try {
+    const vehicleId = typeof req.query.vehicle_id === 'string' ? req.query.vehicle_id.slice(0, 20) : '';
+    const result = await ppSvc.listPickupPointsForMap({ vehicle_id: vehicleId || undefined });
+    return sendSuccess(res, result.rows, 'OK', result.meta);
+  } catch (err) { next(err); }
+});
+
 // POST /api/admin/pickup-points
 router.post('/pickup-points', async (req, res, next) => {
   try {

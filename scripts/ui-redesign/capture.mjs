@@ -173,6 +173,15 @@ const PICKUP_VEHICLES = [
   { id: 'V-2', plate_no: 'กข-2222 ลำปาง', student_count: 4 },
 ];
 
+// Admin map + check view: the same three points plus one of each problem the
+// check chips count (outside Lampang, zero coords, no students, near-duplicate).
+const ADMIN_PICKUP_MAP_POINTS = [
+  ...PICKUP_POINTS.map(p => ({ ...p, sequence: 0, school_names: ['โรงเรียนบ้านตัวอย่าง'] })),
+  { id: 'PP-4', label: 'หน้าวัดตัวอย่าง (ซ้ำ)', latitude: 18.28890, longitude: 99.49095, session: 'both', notes: '', sequence: 0, vehicle_id: 'V-1', plate_no: 'กข-1111 ลำปาง', student_count: 0, school_names: [] },
+  { id: 'PP-5', label: 'จุดปักพิกัดนอกจังหวัด', latitude: 13.7563, longitude: 100.5018, session: 'morning', notes: '', sequence: 0, vehicle_id: 'V-2', plate_no: 'กข-2222 ลำปาง', student_count: 2, school_names: ['โรงเรียนตัวอย่างสอง'] },
+  { id: 'PP-6', label: 'จุดยังไม่ปักพิกัด', latitude: 0, longitude: 0, session: 'evening', notes: '', sequence: 0, vehicle_id: 'V-2', plate_no: 'กข-2222 ลำปาง', student_count: 1, school_names: ['โรงเรียนตัวอย่างสอง'] },
+];
+
 // Synthetic research fixtures — invented numbers, no production record.
 const SNAP_METRICS = {
   total_students: 1240, students_with_vehicle: 1102, students_with_parent: 998,
@@ -980,6 +989,7 @@ const COMMON = {
     { id: 3, deviation_type: 'STALLED',   vehicle_id: 'V-3', delay_minutes: 9,   occurred_at: '2026-08-25T23:30:00Z', resolved_at: null, severity: 'INFO' },
   ] },
   '/api/admin/pickup-points': { data: PICKUP_POINTS, meta: { total: 3, page: 1, limit: 20 } },
+  '/api/admin/pickup-points/map': { data: ADMIN_PICKUP_MAP_POINTS, meta: { total: 6, returned: 6, cap: 5000, truncated: false } },
   '/api/province/vehicles': { data: PICKUP_VEHICLES },
   '/api/parent/children': { data: [
     { student_id: 'S-1', prefix: 'ด.ช.', first_name: 'นักเรียน', last_name: 'ทดสอบหนึ่ง',
@@ -1904,6 +1914,9 @@ const SHOTS = [
   { id: '77-admin-pickup-mgmt', url: '/admin/pickup-points',  user: 'admin', vps: ['mobile', 'desktop'],
     act: async page => { await page.getByRole('button', { name: /เพิ่มกรณีพิเศษ/ }).first().click(); },
     expect: ['[role=dialog]', 'text=ทะเบียนรถ', 'text=ป้ายชื่อจุด', '[role=radiogroup]'] },
+  { id: '77b-admin-pickup-check', url: '/admin/pickup-points', user: 'admin', vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: /พิกัดผิด/ }).first().click(); await page.waitForTimeout(600); },
+    expect: ['text=ตรวจสอบจุดรับส่ง', 'text=อยู่นอกจังหวัดลำปาง', 'text=พิกัดเป็นศูนย์'] },
   { id: '78-admin-live-veh',   url: '/admin/live-vehicles',   user: 'admin', vps: ['mobile', 'desktop'],
     expect: ['[role=radiogroup]', 'text=ตรวจสอบตำแหน่งรถ'] },
   { id: '64-driver-pickup',     url: '/driver/pickup-map',   user: 'driver',      vps: ['mobile', 'desktop'] },

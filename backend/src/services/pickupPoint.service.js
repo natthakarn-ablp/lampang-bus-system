@@ -203,6 +203,69 @@ async function listPickupPoints({ vehicle_id, page = 1, per_page = 50 } = {}) {
   };
 }
 
+/**
+ * Admin map + check view: every live point for the filter in one compact
+ * response, so the page can plot all of them and run the coordinate / empty /
+ * near-duplicate checks over the full set rather than one table page.
+ *
+ * Bounded by `cap` (+1 probe row to report truncation honestly). student_count
+ * uses the same definition as listPickupPoints so the map and table agree.
+ * school_names comes from the schools of the students assigned to the point —
+ * a point has no school of its own.
+ */
+const MAP_POINT_CAP = 5000;
+
+async function listPickupPointsForMap({ vehicle_id, cap = MAP_POINT_CAP } = {}) {
+  const limit = Math.min(MAP_POINT_CAP, Math.max(1, parseInt(cap, 10) || MAP_POINT_CAP));
+  let where = 'pp.is_deleted = FALSE';
+  const params = [];
+  if (vehicle_id) {
+    where += ' AND pp.vehicle_id = ?';
+    params.push(vehicle_id);
+  }
+
+  const [[{ total }]] = await pool.query(
+    `SELECT COUNT(*) AS total FROM pickup_points pp WHERE ${where}`,
+    params
+  );
+
+  const [rows] = await pool.query(`
+    SELECT
+      pp.id, pp.vehicle_id, pp.sequence, pp.label,
+      pp.latitude, pp.longitude, pp.session, pp.notes,
+      v.plate_no,
+      (SELECT COUNT(*) FROM student_pickup_points spp
+        WHERE spp.pickup_point_id = pp.id) AS student_count,
+      (SELECT GROUP_CONCAT(DISTINCT sch.name ORDER BY sch.name SEPARATOR '\\n')
+         FROM student_pickup_points spp2
+         JOIN students s   ON s.id = spp2.student_id AND s.is_deleted = FALSE
+         JOIN schools sch  ON sch.id = s.school_id   AND sch.is_deleted = FALSE
+        WHERE spp2.pickup_point_id = pp.id) AS school_names_raw
+    FROM pickup_points pp
+    LEFT JOIN vehicles v ON v.id = pp.vehicle_id
+    WHERE ${where}
+    ORDER BY v.plate_no ASC, pp.sequence ASC, pp.id ASC
+    LIMIT ?
+  `, [...params, limit]);
+
+  return {
+    rows: rows.map(r => ({
+      id: r.id,
+      vehicle_id: r.vehicle_id,
+      plate_no: r.plate_no,
+      sequence: r.sequence,
+      label: r.label,
+      latitude: r.latitude == null ? null : parseFloat(r.latitude),
+      longitude: r.longitude == null ? null : parseFloat(r.longitude),
+      session: r.session,
+      notes: r.notes,
+      student_count: Number(r.student_count) || 0,
+      school_names: r.school_names_raw ? String(r.school_names_raw).split('\n') : [],
+    })),
+    meta: { total: Number(total) || 0, returned: rows.length, cap: limit, truncated: Number(total) > rows.length },
+  };
+}
+
 async function getPickupPointById(id) {
   const [[row]] = await pool.query(
     `SELECT id, vehicle_id, sequence, label, latitude, longitude,
@@ -897,6 +960,7 @@ module.exports = {
   getPickupPointsForSchool,
   // Admin CRUD
   listPickupPoints,
+  listPickupPointsForMap,
   getPickupPointById,
   vehicleExists,
   studentExists,

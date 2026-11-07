@@ -140,7 +140,7 @@ async function cancelLeave(leaveId, userId, vehicleId) {
  */
 async function cancelLeaveBySchool(leaveId, userId, schoolId, { gradeScope = null } = {}) {
   const [[row]] = await pool.query(
-    `SELECT sl.id, sl.leave_date, sl.session, s.grade FROM student_leaves sl
+    `SELECT sl.id, sl.leave_date, sl.session, sl.reported_by, s.grade FROM student_leaves sl
        JOIN students s ON s.id = sl.student_id
       WHERE sl.id = ? AND s.school_id = ? AND sl.cancelled = FALSE AND sl.attendance_kind = 'LEAVE'`,
     [leaveId, schoolId]
@@ -161,6 +161,13 @@ async function cancelLeaveBySchool(leaveId, userId, schoolId, { gradeScope = nul
     }
     if (toBangkokDate(row.leave_date) !== todayBangkok() || !['morning', 'evening'].includes(row.session)) {
       const err = new Error('ครูประจำสายชั้นยกเลิกการลาได้เฉพาะรอบวันนี้ — รายการอื่นให้บัญชีโรงเรียนยกเลิก');
+      err.statusCode = 403;
+      throw err;
+    }
+    // Only the teacher's own mistakes: a leave a parent, driver or another
+    // account reported stays with the school account.
+    if (Number(row.reported_by) !== Number(userId)) {
+      const err = new Error('ครูประจำสายชั้นยกเลิกได้เฉพาะการลาที่ตนเองบันทึก — รายการที่ผู้ปกครองหรือคนขับแจ้งให้บัญชีโรงเรียนยกเลิก');
       err.statusCode = 403;
       throw err;
     }

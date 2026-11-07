@@ -54,7 +54,7 @@ function answer(handlers) {
 const updateCalls = () => mockQuery.mock.calls.filter(([sql]) => /UPDATE student_leaves|UPDATE pickup_points/.test(sql));
 
 describe('grade-teacher-03 — DELETE /school/leaves/:id', () => {
-  const leaveRow = (over = {}) => [[{ id: 55, leave_date: todayBangkok(), session: 'morning', grade: 'ประถมศึกษาปีที่ ๔', ...over }]];
+  const leaveRow = (over = {}) => [[{ id: 55, leave_date: todayBangkok(), session: 'morning', grade: 'ประถมศึกษาปีที่ ๔', reported_by: 7, ...over }]];
 
   test('grade teacher cancels today\'s single-round leave in their own grade', async () => {
     answer([['FROM student_leaves sl', leaveRow()], ['UPDATE student_leaves', [{ affectedRows: 1 }]]]);
@@ -79,13 +79,55 @@ describe('grade-teacher-03 — DELETE /school/leaves/:id', () => {
     expect(updateCalls()).toHaveLength(0);
   });
 
+  test('a leave a parent, driver or another account reported is refused (403) and not touched', async () => {
+    answer([['FROM student_leaves sl', leaveRow({ reported_by: 99 })]]);
+    const res = await request(app).delete('/api/school/leaves/55');
+    expect(res.status).toBe(403);
+    expect(updateCalls()).toHaveLength(0);
+  });
+
   test('full-school account keeps its unrestricted cancel', async () => {
     answer([
-      ['FROM student_leaves sl', leaveRow({ grade: 'ม.3', leave_date: '2026-01-05', session: 'both' })],
+      ['FROM student_leaves sl', leaveRow({ grade: 'ม.3', leave_date: '2026-01-05', session: 'both', reported_by: 99 })],
       ['UPDATE student_leaves', [{ affectedRows: 1 }]],
     ]);
     const res = await request(app).delete('/api/school/leaves/55').set('x-full-school', '1');
     expect(res.status).toBe(200);
+  });
+});
+
+describe('grade-teacher-03 — getTeacherRoster leave fields', () => {
+  const { getTeacherRoster } = require('../src/services/checkin.service');
+  const row = (over = {}) => ({
+    id: 12, prefix: 'ด.ช.', first_name: 'ก', last_name: 'ข', grade: 'ป.4', classroom: '1',
+    vehicle_id: 'V-1', plate_no: 'กข 1', log_id: null, log_status: null, checked_by: null,
+    self_travel: 0, self_id: null, self_reported_by: null,
+    leave_session: null, leave_id: null, leave_reported_by: null, ...over,
+  });
+  async function rosterStudent(over, session = 'morning') {
+    const pool = { query: jest.fn().mockResolvedValue([[row(over)]]) };
+    const data = await getTeacherRoster(pool, { schoolId: 'SCH1', gradeFilter: 'ป.4', session, userId: 7 });
+    return data.vehicles[0].students[0];
+  }
+
+  test('a single-round leave this teacher recorded exposes leave_id and can_undo', async () => {
+    const st = await rosterStudent({ leave_session: 'morning', leave_id: 55, leave_reported_by: 7 });
+    expect(st).toMatchObject({ on_leave: true, leave_id: 55, can_undo: true, log_id: null });
+  });
+
+  test('a leave someone else reported is shown but cannot be undone here', async () => {
+    const st = await rosterStudent({ leave_session: 'morning', leave_id: 55, leave_reported_by: 99 });
+    expect(st).toMatchObject({ on_leave: true, leave_id: 55, can_undo: false });
+  });
+
+  test('a whole-day leave gives leave_id null and no undo button', async () => {
+    const st = await rosterStudent({ leave_session: 'both', leave_id: null, leave_reported_by: null });
+    expect(st).toMatchObject({ on_leave: true, leave_id: null, can_undo: false });
+  });
+
+  test('no leave: leave_id null, undo follows the teacher own tap', async () => {
+    const st = await rosterStudent({ log_id: 3, log_status: 'CHECKED_OUT', checked_by: 7 });
+    expect(st).toMatchObject({ on_leave: false, leave_id: null, can_undo: true, log_id: 3 });
   });
 });
 

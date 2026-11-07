@@ -9,9 +9,15 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import PageHeader from '../../components/PageHeader';
 import {
-  StatusBadge, DataTable, TableAction, FilterBar, FormField, Modal,
+  AlertBanner, StatusBadge, DataTable, TableAction, FilterBar, FormField, Modal,
 } from '../../components/ui';
 import { PageTransition } from '../../lib/motion';
+
+// Outcomes that count as success per action; anything else gets an error toast.
+const OK_OUTCOMES = {
+  approve: new Set(['APPLIED', 'ALREADY_APPLIED']),
+  reject: new Set(['REJECTED']),
+};
 
 const FILTERS = [
   { key: 'PENDING', label: 'รออนุมัติ' },
@@ -77,7 +83,11 @@ export default function AffVehicleRequests() {
     setBusy(true);
     try {
       const res = await api.post(`/affiliation/vehicle-requests/${detail.id}/${action}`, { admin_note: note });
-      toast.success(res.data.message || 'สำเร็จ');
+      // The approve route answers 200 for every outcome; FAILED / STALE /
+      // no-longer-pending must not show as a green success (QA affiliation-09).
+      const outStatus = res.data?.data?.status;
+      if (outStatus && OK_OUTCOMES[action] && !OK_OUTCOMES[action].has(outStatus)) toast.error(res.data.message || 'ดำเนินการไม่สำเร็จ');
+      else toast.success(res.data.message || 'สำเร็จ');
       setDetail(null);
       load();
     } catch (err) {
@@ -212,6 +222,12 @@ export default function AffVehicleRequests() {
                 </div>
               )}
             </dl>
+
+            {detail.status === 'PENDING' && detail.request_type === 'RESTORE_SOFT_DELETED_VEHICLE' && detail.active_canonical_conflict && (
+              <AlertBanner variant="danger" className="mt-4">
+                มีรถทะเบียนเดียวกันที่ใช้งานอยู่แล้ว — ไม่สามารถกู้คืนได้ หากอนุมัติ คำขอจะถูกบันทึกว่าดำเนินการไม่สำเร็จ
+              </AlertBanner>
+            )}
 
             {detail.status === 'PENDING' && (
               <FormField

@@ -728,10 +728,14 @@ async function getVehiclesAtRisk({ limit = 10 } = {}) {
     };
   });
 
-  scored.sort((a, b) =>
+  // Only vehicles with at least one risk reason are "at risk". Padding the
+  // list with score-0 vehicles made the dashboard count a clean fleet as
+  // "vehicles needing documents" (QA affiliation-04).
+  const atRisk = scored.filter(v => v.risk_score > 0);
+  atRisk.sort((a, b) =>
     (b.risk_score - a.risk_score) || a.plate_no.localeCompare(b.plate_no, 'th')
   );
-  return scored.slice(0, topN);
+  return atRisk.slice(0, topN);
 }
 
 module.exports = {

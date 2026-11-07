@@ -9,9 +9,15 @@ import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import PageHeader from '../../components/PageHeader';
 import {
-  StatusBadge, DataTable, TableAction, FilterBar, FormField, Modal,
+  AlertBanner, StatusBadge, DataTable, TableAction, FilterBar, FormField, Modal,
 } from '../../components/ui';
 import { PageTransition } from '../../lib/motion';
+
+// Outcomes that count as success per action; anything else gets an error toast.
+const OK_OUTCOMES = {
+  approve: new Set(['APPLIED', 'ALREADY_APPLIED']),
+  reject: new Set(['REJECTED']),
+};
 
 const FILTERS = [
   { key: 'PENDING', label: 'รออนุมัติ' },
@@ -72,7 +78,11 @@ export default function AffTransferRequests() {
     setBusy(true);
     try {
       const res = await api.post(`/affiliation/transfer-requests/${detail.id}/${action}`, { admin_note: note });
-      toast.success(res.data.message || 'สำเร็จ');
+      // The approve route answers 200 for every outcome; FAILED / STALE /
+      // no-longer-pending must not show as a green success (QA affiliation-09).
+      const outStatus = res.data?.data?.status;
+      if (outStatus && OK_OUTCOMES[action] && !OK_OUTCOMES[action].has(outStatus)) toast.error(res.data.message || 'ดำเนินการไม่สำเร็จ');
+      else toast.success(res.data.message || 'สำเร็จ');
       setDetail(null);
       load();
     } catch (err) {
@@ -123,7 +133,7 @@ export default function AffTransferRequests() {
           rowKey={r => r.id}
           columns={[
             { key: 'student', header: 'นักเรียน', primary: true,
-              cell: r => <span className="font-medium text-ink">{r.student_name_snapshot}</span> },
+              cell: r => <span className="font-medium text-ink">{r.student_name || r.student_name_snapshot}</span> },
             { key: 'code', header: 'รหัสนักเรียน', secondary: true,
               cell: r => <span className="tabular-nums">{r.student_code}</span> },
             { key: 'created', header: 'วันที่',
@@ -185,7 +195,7 @@ export default function AffTransferRequests() {
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div>
                 <dt className="text-caption text-ink-muted">นักเรียน</dt>
-                <dd className="font-medium text-ink">{detail.student_name_snapshot}</dd>
+                <dd className="font-medium text-ink">{detail.student_name || detail.student_name_snapshot}</dd>
                 <dd className="text-caption text-ink-muted tabular-nums">{detail.student_code}</dd>
               </div>
               <div>
@@ -223,6 +233,17 @@ export default function AffTransferRequests() {
                 </div>
               )}
             </dl>
+
+            {detail.status === 'PENDING' && detail.destination_code_conflict && (
+              <AlertBanner variant="danger" className="mt-4">
+                พบรหัสนักเรียนซ้ำในโรงเรียนปลายทาง กรุณาตรวจสอบก่อนอนุมัติ
+              </AlertBanner>
+            )}
+            {detail.status === 'PENDING' && detail.current_student?.has_vehicle && (
+              <AlertBanner variant="warn" className="mt-4">
+                นักเรียนมีรถรับส่งอยู่ — ระบบจะยกเลิกการผูกรถเดิมเมื่อโอนย้าย
+              </AlertBanner>
+            )}
 
             {detail.status === 'PENDING' && (
               <FormField

@@ -227,7 +227,16 @@ async function getDetailForAffiliation(pool, { requestId, affiliationId }) {
     [requestId, affiliationId]
   );
   if (!row) throw notFound('ไม่พบคำขอ หรือคำขอนี้ไม่ได้อยู่ในสังกัดของคุณ');
-  return pubRow(row);
+  // Same pre-approval signals as getDetailForAdmin so the affiliation screen
+  // can warn before approving (QA affiliation-09).
+  const [[st]] = await pool.query('SELECT id, school_id, student_code, grade, classroom, vehicle_id, is_deleted FROM students WHERE id = ?', [row.student_id]);
+  const [[destDup]] = await pool.query('SELECT id FROM students WHERE school_id = ? AND student_code = ? AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1', [row.destination_school_id, row.student_code]);
+  return {
+    ...pubRow(row),
+    current_student: st ? { school_id: st.school_id, grade: st.grade, classroom: st.classroom, has_vehicle: !!st.vehicle_id, is_deleted: !!st.is_deleted } : null,
+    destination_code_conflict: !!destDup,
+    can_approve: row.status === 'PENDING',
+  };
 }
 
 

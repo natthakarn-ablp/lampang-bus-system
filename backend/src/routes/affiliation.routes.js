@@ -816,7 +816,7 @@ router.post('/transfer-requests/:id/approve', async (req, res, next) => {
       newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     const msg = out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
       : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
-      : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้'
+      : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้ (พบรหัสนักเรียนซ้ำในโรงเรียนปลายทางหรือข้อมูลไม่ครบ)'
       : out.status === 'STALE_NEEDS_REVIEW' ? 'ข้อมูลนักเรียนเปลี่ยนแปลงตั้งแต่ส่งคำขอ กรุณาตรวจสอบใหม่' : 'ดำเนินการแล้ว';
     return sendSuccess(res, out, msg);
   } catch (err) { next(err); }
@@ -871,7 +871,15 @@ router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
     const out = await vr.approveVehicleRequest(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
     await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'vehicle_request', entityId: String(requestId),
       newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
-    return sendSuccess(res, out, 'อนุมัติคำขอแล้ว');
+    // Same outcome wording as the admin route: a FAILED restore must not be
+    // reported as approved (QA affiliation-09). The client reads out.status
+    // to pick a success or error toast.
+    const msg = out.status === 'APPLIED' ? (out.informational ? 'อนุมัติคำขอแล้ว' : 'อนุมัติและกู้คืนรถสำเร็จ')
+      : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
+      : out.status === 'FAILED' && out.reason === 'ACTIVE_CANONICAL_CONFLICT' ? 'ไม่สามารถกู้คืนรถได้ เนื่องจากมีรถทะเบียนเดียวกันที่ใช้งานอยู่แล้ว'
+      : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้'
+      : 'คำขอนี้ไม่อยู่ในสถานะรออนุมัติแล้ว';
+    return sendSuccess(res, out, msg);
   } catch (err) { next(err); }
 });
 

@@ -64,7 +64,7 @@ describe('resolveVehicleForEmergency — shift-independent (FIX 1)', () => {
     expect(ran(pool, /driver_vehicle_assignments dva/)).toBe(true);
   });
 
-  test('emergency resolver falls back to legacy plate when no relational link (shift ON)', async () => {
+  test('emergency resolver rejects a linked driver with no active assignment (DP-01, shift ON)', async () => {
     ON();
     const pool = makePool({
       activeShift: [],
@@ -72,11 +72,11 @@ describe('resolveVehicleForEmergency — shift-independent (FIX 1)', () => {
       legacyVehicle: [{ vehicle_id: 'V-leg', plate_no: 'นข 4337 ลำปาง' }],
     });
 
-    const res = await resolveVehicleForEmergency(pool, { username: 'นข 4337 ลำปาง', driver_id: 500 });
+    await expect(resolveVehicleForEmergency(pool, { username: 'นข 4337 ลำปาง', driver_id: 500 }))
+      .rejects.toMatchObject({ statusCode: 403, errors: [{ code: 'NO_ACTIVE_ASSIGNMENT' }] });
 
-    expect(res.vehicle_id).toBe('V-leg');
     expect(ran(pool, /driver_vehicle_assignments dva/)).toBe(true);   // tried relational first
-    expect(ran(pool, /FROM\s+vehicles/)).toBe(true);                  // then legacy plate
+    expect(ran(pool, /FROM\s+vehicles/)).toBe(false);                 // no legacy plate fallback
     expect(ran(pool, /vehicle_operating_shifts/)).toBe(false);        // never shift-gated
   });
 

@@ -174,7 +174,7 @@ async function runQuery(rawSql, rawParams) {
 
   // authenticate() re-reads the account on every request.
   if (/^SELECT u\.is_active/.test(sql)) {
-    const user = mockDb.users.find((u) => String(u.id) === String(params[1]));
+    const user = mockDb.users.find((u) => String(u.id) === String(params[params.length - 1]));
     return [user ? [{ ...user, sessions_reset_at: null }] : []];
   }
 

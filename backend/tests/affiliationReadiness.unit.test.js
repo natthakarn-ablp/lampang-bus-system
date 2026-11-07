@@ -22,7 +22,9 @@ jest.mock('../src/services/vehicleRequest.service', () => ({
 }));
 jest.mock('../src/services/studentTransfer.service', () => ({
   getDetailForAffiliation: jest.fn(),
+  assertAffiliationCanDecide: jest.fn(),
   approveAndApply: jest.fn(),
+  approveOutcomeMessage: jest.requireActual('../src/services/studentTransfer.service').approveOutcomeMessage,
 }));
 
 const express = require('express');
@@ -178,6 +180,7 @@ describe('affiliation-09: transfer request approve outcome wording', () => {
 
   beforeEach(() => {
     transfer.getDetailForAffiliation.mockReset().mockResolvedValue({ id: 9 });
+    transfer.assertAffiliationCanDecide.mockReset().mockResolvedValue({ id: 9, direction: 'INTERNAL' });
     transfer.approveAndApply.mockReset();
   });
 
@@ -221,7 +224,8 @@ describe('affiliation-09: transfer request approve outcome wording', () => {
 });
 
 describe('affiliation-09: transfer detail pre-approval fields', () => {
-  const ROW = { id: 9, status: 'PENDING', student_id: 21199, student_code: 'S1', destination_school_id: 'SCH0002' };
+  const ROW = { id: 9, status: 'PENDING', student_id: 21199, student_code: 'S1', destination_school_id: 'SCH0002',
+    source_affiliation_id: 'AFF001', destination_affiliation_id: 'AFF001' };
 
   test('flags a destination code conflict and a current vehicle', async () => {
     pool.query

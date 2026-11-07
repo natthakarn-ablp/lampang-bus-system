@@ -66,10 +66,12 @@ export default function StudentTransferModal({ student, onClose, onChanged }) {
     if (busy) return; // a duplicate request has to be cancelled by hand
     setBusy(true);
     try {
-      await api.post(`/school/students/${student.id}/transfer-request`, {
+      const res = await api.post(`/school/students/${student.id}/transfer-request`, {
         destination_school_id: dest.trim(), reason, evidence_note: evidence,
       });
-      toast.success('ส่งคำขอโอนย้ายแล้ว · รอผู้ดูแลระบบตรวจสอบ');
+      // The server says who decides: the affiliation for a same-affiliation
+      // move, the destination school for a cross-affiliation one.
+      toast.success(res.data?.message || 'ส่งคำขอโอนย้ายแล้ว');
       setDest(''); setReason(''); setEvidence(''); loadRequests(); onChanged?.();
     } catch (err) { setError(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ'); }
     finally { setBusy(false); }
@@ -117,7 +119,8 @@ export default function StudentTransferModal({ student, onClose, onChanged }) {
         </p>
 
         <AlertBanner variant="warn" title="คำขอนี้ยังไม่ย้ายข้อมูล" className="mb-4">
-          ระบบจะไม่ย้ายข้อมูลนักเรียนอัตโนมัติ · คำขอนี้ต้องรอผู้ดูแลระบบตรวจสอบก่อน
+          ระบบจะไม่ย้ายข้อมูลนักเรียนอัตโนมัติ · ถ้าโรงเรียนปลายทางอยู่ในสังกัดเดียวกัน สังกัดเป็นผู้อนุมัติ ·
+          ถ้าอยู่ต่างสังกัด โรงเรียนปลายทางเป็นผู้อนุมัติ
         </AlertBanner>
 
         <form id="student-transfer-form" onSubmit={submit} className="space-y-3">
@@ -170,6 +173,11 @@ export default function StudentTransferModal({ student, onClose, onChanged }) {
                       <span className="text-ink-muted ml-2">
                         <span aria-hidden="true">→</span> {r.destination_school_name || r.destination_school_id}
                       </span>
+                      {r.status === 'PENDING' && (
+                        <div className="text-caption text-ink-muted mt-1">
+                          {r.cross_affiliation ? 'รอโรงเรียนปลายทางพิจารณา (ข้ามสังกัด)' : 'รอสังกัดพิจารณา'}
+                        </div>
+                      )}
                       {r.status === 'REJECTED' && r.admin_note && (
                         <div className="text-caption text-ink-muted mt-1">หมายเหตุ: {r.admin_note}</div>
                       )}

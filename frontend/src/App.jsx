@@ -56,6 +56,7 @@ const SchoolLiveVehicles   = lazy(() => import('./pages/school/SchoolLiveVehicle
 const SchoolTeacherAccounts = lazy(() => import('./pages/school/SchoolTeacherAccounts'));
 const VehicleVerification    = lazy(() => import('./pages/school/VehicleVerification'));
 const SchoolRegistrationReview = lazy(() => import('./pages/school/SchoolRegistrationReview'));
+const SchoolTransferRequests = lazy(() => import('./pages/school/SchoolTransferRequests'));
 
 // Affiliation
 const AffiliationLayout    = lazy(() => import('./pages/affiliation/AffiliationLayout'));
@@ -283,6 +284,7 @@ export default function App() {
             <Route path="teacher-accounts" element={<SchoolTeacherAccounts />} />
             <Route path="year-promotion" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><SchoolYearPromotion /></PrivateRoute>} />
             <Route path="registration-review" element={<SchoolRegistrationReview />} />
+            <Route path="transfer-requests" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><SchoolTransferRequests /></PrivateRoute>} />
           </Route>
 
           {/* Affiliation module */}

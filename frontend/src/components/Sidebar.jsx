@@ -55,6 +55,7 @@ const SCHOOL_NAV = [
   { to: '/reports/daily',        icon: FileText,      label: 'รายงาน' },
   { section: MORE },
   { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },
+  { to: '/school/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },
   { to: '/school/pickup-map',    icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { to: '/school/live-vehicles', icon: Activity,      label: 'ตำแหน่งปัจจุบัน' },
   { to: '/school/registration-review', icon: ClipboardList, label: 'ตรวจลงทะเบียนรถ' },
@@ -168,6 +169,9 @@ const TEACHER_BLOCKED_PATHS = new Set([
   '/school/audit-log',
   '/school/teacher-accounts',
   '/school/year-promotion',
+  // Accepting a pupil transferred in from another affiliation is a school-wide
+  // decision; the backend refuses grade-scoped accounts (requireFullSchoolScope).
+  '/school/transfer-requests',
   '/participation',
   '/participation/summary',
   // A registration application is one driver's rider list for a whole bus, with

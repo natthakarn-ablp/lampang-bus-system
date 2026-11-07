@@ -21,6 +21,12 @@ const FILTERS = [
   { key: 'ALL', label: 'ทั้งหมด' },
 ];
 
+const DIRECTION_LABEL = {
+  INTERNAL: 'ภายในสังกัด',
+  OUTGOING: 'ออกไปต่างสังกัด',
+  INCOMING: 'เข้ามาจากต่างสังกัด',
+};
+
 const STATUS_BADGE = {
   PENDING: ['รออนุมัติ', 'warn'],
   APPLIED: ['โอนย้ายแล้ว', 'success'],
@@ -87,7 +93,9 @@ export default function AffTransferRequests() {
     }
   }
 
-  const pendingCount = rows.filter(r => r.status === 'PENDING').length;
+  // Only requests between two schools of this affiliation are ours to decide;
+  // a cross-affiliation one waits for the destination school (QA affiliation-03).
+  const pendingCount = rows.filter(r => r.can_approve).length;
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
@@ -97,7 +105,7 @@ export default function AffTransferRequests() {
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         <PageHeader
           title="คำขอโอนย้ายนักเรียน"
-          subtitle="อนุมัติคำขอโอนย้ายนักเรียนระหว่างโรงเรียนในสังกัด"
+          subtitle="อนุมัติคำขอโอนย้ายนักเรียนระหว่างโรงเรียนในสังกัด · คำขอข้ามสังกัดให้โรงเรียนปลายทางอนุมัติ"
           actions={
             <div className="flex items-center gap-2">
               {filter === 'PENDING' && pendingCount > 0 && (
@@ -141,8 +149,13 @@ export default function AffTransferRequests() {
                   <span className="text-ink">{r.destination_school_name}</span>
                 </span>
               ) },
+            { key: 'direction', header: 'ทิศทาง',
+              cell: r => DIRECTION_LABEL[r.direction] || '—' },
             { key: 'status', header: 'สถานะ', badge: true,
               cell: r => {
+                if (r.status === 'PENDING' && r.direction !== 'INTERNAL') {
+                  return <StatusBadge variant="neutral">รอโรงเรียนปลายทาง</StatusBadge>;
+                }
                 const [label, variant] = STATUS_BADGE[r.status] || [r.status, 'neutral'];
                 return <StatusBadge variant={variant}>{label}</StatusBadge>;
               } },
@@ -162,7 +175,7 @@ export default function AffTransferRequests() {
             title="รายละเอียดคำขอโอนย้าย"
             onClose={() => setDetail(null)}
             footer={
-              detail.status === 'PENDING' ? (
+              detail.can_approve ? (
                 <>
                   <button onClick={() => setAction('reject')} disabled={busy}
                     className="focus-ring inline-flex items-center justify-center gap-1.5 border border-danger/30 bg-danger-soft hover:bg-danger/10 disabled:opacity-50 text-danger-ink text-sm font-semibold px-4 min-h-[44px] rounded-lg transition">
@@ -229,18 +242,24 @@ export default function AffTransferRequests() {
               )}
             </dl>
 
-            {detail.status === 'PENDING' && detail.destination_code_conflict && (
+            {detail.status === 'PENDING' && detail.direction !== 'INTERNAL' && (
+              <AlertBanner variant="info" className="mt-4">
+                คำขอนี้เป็นการโอนย้ายข้ามสังกัด โรงเรียนปลายทาง ({detail.destination_school_name}) เป็นผู้พิจารณาอนุมัติหรือไม่อนุมัติ
+                สังกัดดูสถานะได้อย่างเดียว
+              </AlertBanner>
+            )}
+            {detail.can_approve && detail.destination_code_conflict && (
               <AlertBanner variant="danger" className="mt-4">
                 พบรหัสนักเรียนซ้ำในโรงเรียนปลายทาง กรุณาตรวจสอบก่อนอนุมัติ
               </AlertBanner>
             )}
-            {detail.status === 'PENDING' && detail.current_student?.has_vehicle && (
+            {detail.can_approve && detail.current_student?.has_vehicle && (
               <AlertBanner variant="warn" className="mt-4">
                 นักเรียนมีรถรับส่งอยู่ — ระบบจะยกเลิกการผูกรถเดิมเมื่อโอนย้าย
               </AlertBanner>
             )}
 
-            {detail.status === 'PENDING' && (
+            {detail.can_approve && (
               <FormField
                 className="mt-4"
                 label="หมายเหตุ"

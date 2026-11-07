@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const { toBangkokDate, todayBangkok } = require('../utils/thaiTime');
 const { logAudit } = require('../utils/audit');
 const { gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
+const { isCalendarDate } = require('../utils/calendarDate');
 
 /**
  * Create a student leave record.
@@ -13,8 +14,7 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
   // today, but the API accepted any string, so a past leave_date could be
   // written straight in and silently rewrite a finished day's attendance.
   // Past-day corrections go through the audited backdated-attendance path.
-  if (typeof leaveDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(leaveDate)
-      || Number.isNaN(Date.parse(`${leaveDate}T00:00:00Z`))) {
+  if (typeof leaveDate !== 'string' || !isCalendarDate(leaveDate)) {
     const err = new Error('วันที่ลาไม่ถูกต้อง (YYYY-MM-DD)'); err.statusCode = 400; throw err;
   }
   if (leaveDate < todayBangkok()) {

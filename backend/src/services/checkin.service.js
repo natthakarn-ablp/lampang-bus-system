@@ -144,7 +144,13 @@ async function resolveVehicleShiftIndependent(pool, { username = '', driverId = 
         400, 'MULTIPLE_ACTIVE_DRIVER_ASSIGNMENTS'
       );
     }
-    // zero active assigned vehicles → fall through to legacy plate resolution
+    // Linked driver with zero active assigned vehicles (assignment ended):
+    // never fall back to plate resolution — that would let a former driver
+    // keep access to a vehicle now served by someone else (DP-01).
+    throw makeError(
+      'บัญชีคนขับนี้ไม่มีรถที่ได้รับมอบหมายในขณะนี้ กรุณาติดต่อผู้ดูแลระบบ',
+      403, 'NO_ACTIVE_ASSIGNMENT'
+    );
   }
 
   // 2) Legacy plate / normalized-plate resolution.
@@ -356,6 +362,7 @@ async function _buildCheckinTransaction(conn, {
   termId,
   source,
   refuseLeave = false,
+  requireBoarded = false,
 }) {
   // 1. Verify student belongs to this vehicle
   // CS5-04 — FOR UPDATE makes this row the per-student mutex for the whole
@@ -430,6 +437,16 @@ async function _buildCheckinTransaction(conn, {
      LIMIT 1`,
     [student.id, session]
   );
+  // DP-02 — the driver's single drop-off must follow a live boarding. Without
+  // this a child who never boarded (or whose boarding was voided, which appends
+  // a non-CHECKED_IN row) got a CHECKED_OUT row and a "dropped off" notification
+  // to the parent, the same fabricated drop-off checkout-all already refuses.
+  // School/teacher paths do not pass requireBoarded: recording arrival without
+  // a board is a legitimate school-side action.
+  if (requireBoarded && status === 'CHECKED_OUT'
+      && !(dupLog.length && dupLog[0].status === 'CHECKED_IN')) {
+    throw makeError('นักเรียนยังไม่ได้ขึ้นรถในรอบนี้ — ไม่สามารถบันทึกการส่งได้', 409, 'NOT_BOARDED');
+  }
   if (dupLog.length) {
     const lastStatus = dupLog[0].status;
     if (lastStatus === status) {
@@ -581,7 +598,7 @@ async function processCheckout(pool, { userId, vehicleId, plateNo, studentId, se
   return withDeadlockRetry(pool, beginCheckinTransaction, conn =>
     _buildCheckinTransaction(conn, {
       userId, vehicleId, plateNo, studentId, session,
-      status: 'CHECKED_OUT', termId, source,
+      status: 'CHECKED_OUT', termId, source, requireBoarded: true,
     })
   );
 }

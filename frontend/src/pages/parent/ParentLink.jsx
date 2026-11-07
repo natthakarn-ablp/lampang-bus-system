@@ -1,7 +1,7 @@
 import { Link2, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
-import { resolveLineUserId, getLiffIdToken, isInLiffClient } from '../../utils/liff';
+import { resolveLineUserId, getLiffIdToken, isInLiffClient, isOutsideLineClient } from '../../utils/liff';
 import PageHeader from '../../components/PageHeader';
 import { AlertBanner, FormField } from '../../components/ui';
 import { formatGradeClass } from '../../utils/student';
@@ -42,6 +42,7 @@ export default function ParentLink() {
   const [idToken, setIdToken] = useState('');
   const [liffReady, setLiffReady] = useState(false);
   const [inLineClient, setInLineClient] = useState(true);
+  const [outsideLine, setOutsideLine] = useState(false);
 
   const [previewStudent, setPreviewStudent] = useState(null);
   const [maskedPhone, setMaskedPhone] = useState('');
@@ -56,11 +57,12 @@ export default function ParentLink() {
         await resolveLineUserId({ loginOutsideLine: false });
         const token = await getLiffIdToken();
         if (cancelled) return;
-        const inClient = isInLiffClient();
+        const outside = isOutsideLineClient();
         setIdToken(token);
-        setInLineClient(inClient);
+        setInLineClient(isInLiffClient());
+        setOutsideLine(outside);
         setLiffReady(true);
-        if (!token && inClient) {
+        if (!token && !outside) {
           setServerErr('ไม่พบ LIFF token — กรุณาเปิดหน้านี้ผ่านลิงก์ใน LINE OA');
         }
       } catch (err) {
@@ -149,7 +151,7 @@ export default function ParentLink() {
   }
 
   // Outside LINE without a LINE login: explain and offer to open in LINE.
-  if (!idToken && !inLineClient) {
+  if (!idToken && outsideLine) {
     return <OpenInLineCard subPath="/link" title="กรุณาเปิดหน้าผูกบัญชีในแอป LINE" />;
   }
 

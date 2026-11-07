@@ -34,7 +34,7 @@ async function getLiffModule() {
  * @param {object} [opts]
  * @param {boolean} [opts.loginOutsideLine=true] When false and the page is
  *   open in an ordinary browser (liff.isInClient() === false), do NOT call
- *   liff.login(). liff.login() outside LINE jumps to LINE's email/password
+ *   the LIFF login call. Logging in outside LINE jumps to LINE's email/password
  *   page with no explanation (live QA parent-01); parent pages pass false and
  *   show their own "open in LINE" screen instead. The admin LINE-verification
  *   flow keeps the default because admins verify from a desktop browser.
@@ -129,6 +129,17 @@ export async function loginWithLineHere() {
   const liff = await getLiffModule();
   if (!liff) return;
   liff.login({ redirectUri: window.location.href });
+}
+
+/**
+ * True only when LIFF is configured and initialised and the page is NOT in the
+ * LINE client — i.e. a real LIFF deployment opened in Chrome/Facebook/desktop.
+ * Without VITE_LIFF_ID (local dev, CI captures) this is false, so those keep
+ * the legacy screens.
+ */
+export function isOutsideLineClient() {
+  if (!LIFF_ID || !_liffReady || !_liffModule) return false;
+  return !safeIsInClient(_liffModule);
 }
 
 export function isInLiffClient() {

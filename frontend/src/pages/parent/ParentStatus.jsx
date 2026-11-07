@@ -1,7 +1,7 @@
 import { Link2, Users, Bus, ClipboardList, MapPin, CalendarDays, Sunrise, Sunset, CheckCircle2, Clock} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
-import { getLiffIdToken, isInLiffClient, LINE_OA_ID, LINE_OA_URL } from '../../utils/liff';
+import { getLiffIdToken, isOutsideLineClient, LINE_OA_ID, LINE_OA_URL } from '../../utils/liff';
 import OpenInLineCard from '../../components/parent/OpenInLineCard';
 import AppCard from '../../components/ui/AppCard';
 import { formatGradeClass } from '../../utils/student';
@@ -37,7 +37,7 @@ function detailErrorMessage(err) {
 
 export default function ParentStatus() {
   const [idToken, setIdToken] = useState('');
-  const [inLineClient, setInLineClient] = useState(true);
+  const [outsideLine, setOutsideLine] = useState(false);
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [status, setStatus] = useState(null);
@@ -62,7 +62,7 @@ export default function ParentStatus() {
       const token = await getLiffIdToken();
       if (cancelled) return;
       setIdToken(token);
-      setInLineClient(isInLiffClient());
+      setOutsideLine(isOutsideLineClient());
       if (!token) {
         // Phase 11A audit fix C5: clear error message when not in LIFF
         if (!cancelled) setError('กรุณาเปิดหน้านี้ผ่านลิงก์ใน LINE OA เท่านั้น — ไม่สามารถเข้าถึงได้โดยตรง');
@@ -156,7 +156,7 @@ export default function ParentStatus() {
 
   // ── Opened outside LINE (parent-02): linked or not, we cannot tell without a
   // LINE identity, so ask to reopen in LINE rather than claim "not linked". ──
-  if (!loading && !idToken && !inLineClient) {
+  if (!loading && !idToken && outsideLine) {
     return <OpenInLineCard subPath="" />;
   }
 

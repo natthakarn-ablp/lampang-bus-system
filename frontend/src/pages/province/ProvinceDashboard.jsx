@@ -98,8 +98,8 @@ export default function ProvinceDashboard() {
 
   // ── Hero: one status per round for the whole province ──
   const isSchoolDay = typeof data.is_school_day === 'boolean' ? data.is_school_day : undefined;
-  const mStatus = roundStatus({ session: 'morning', done: data.morning_done, expected: data.morning_total, date: dateIso, isSchoolDay });
-  const eStatus = roundStatus({ session: 'evening', done: data.evening_done, expected: data.evening_total, date: dateIso, isSchoolDay });
+  const mStatus = roundStatus({ session: 'morning', done: data.morning_done, expected: data.morning_total, date: dateIso, isSchoolDay, conflict: data.morning_conflict });
+  const eStatus = roundStatus({ session: 'evening', done: data.evening_done, expected: data.evening_total, date: dateIso, isSchoolDay, conflict: data.evening_conflict });
 
   // ── Per-affiliation status: who needs follow-up ──
   const TONE_RANK = { danger: 0, warn: 1, info: 2, neutral: 3, success: 4 };
@@ -127,7 +127,7 @@ export default function ProvinceDashboard() {
   const actions = [
     {
       key: 'emergency', tone: emergencyToday ? 'danger' : 'warn', count: emergencies7d,
-      title: emergencyToday ? 'เหตุฉุกเฉินวันนี้ ต้องตรวจสอบ' : 'เหตุฉุกเฉินในรอบ 7 วัน',
+      title: emergencyToday ? 'เหตุฉุกเฉินใน 7 วัน (มีเหตุวันนี้ ต้องตรวจสอบ)' : 'เหตุฉุกเฉินในรอบ 7 วัน',
       sub: incidents[0]?.plate_no ? `ล่าสุดรถ ${incidents[0].plate_no} · ตรวจผลการแก้ไข` : 'ตรวจผลการแก้ไข',
       to: '/province/emergencies', actionLabel: 'ดูเหตุฉุกเฉิน',
     },

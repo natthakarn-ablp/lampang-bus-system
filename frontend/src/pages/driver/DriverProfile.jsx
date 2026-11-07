@@ -86,6 +86,23 @@ export default function DriverProfile() {
       .finally(() => setLoading(false));
   }, []);
 
+  // /uploads ถูกบล็อก จึงโหลดรูปผ่าน API ที่ยืนยันตัวตนแล้วเป็น blob
+  const photoPath = profile?.photo_url || null;
+  const [photoSrc, setPhotoSrc] = useState('');
+  useEffect(() => {
+    if (!photoPath) { setPhotoSrc(''); return undefined; }
+    let url = '';
+    let cancelled = false;
+    api.get('/driver/profile/photo', { responseType: 'blob' })
+      .then((res) => {
+        if (cancelled) return;
+        url = URL.createObjectURL(res.data);
+        setPhotoSrc(url);
+      })
+      .catch(() => { if (!cancelled) setPhotoSrc(''); });
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+  }, [photoPath]);
+
   function validatePhones() {
     for (const field of ['phone', 'attendant_phone', 'owner_phone']) {
       const val = form[field];
@@ -226,7 +243,7 @@ export default function DriverProfile() {
       {/* Photo */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col items-center gap-3">
         {profile.photo_url ? (
-          <img src={profile.photo_url} alt="รูปคนขับ"
+          <img src={photoSrc || undefined} alt="รูปคนขับ"
             className="w-28 h-28 rounded-full object-cover border-2 border-gray-200 shadow-sm"
             onError={(e) => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex'; }}
           />

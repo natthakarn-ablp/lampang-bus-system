@@ -13,7 +13,7 @@ describe('driver permission workflow contract', () => {
     expect(report.driver_route_count).toBeGreaterThan(50);
     expect(report.findings).toEqual([]);
     expect(report.passed).toBe(true);
-    expect(report.counts).toMatchObject({ VIEW: 20, EDIT: 27, EMERGENCY: 1, DENY: 8, CONDITIONAL: 12 });
+    expect(report.counts).toMatchObject({ VIEW: 20, EDIT: 28, EMERGENCY: 1, DENY: 8, CONDITIONAL: 12 });
   });
 
   test('driver has no export, administration or transport-approval route', () => {

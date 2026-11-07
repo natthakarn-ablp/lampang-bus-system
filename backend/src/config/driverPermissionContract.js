@@ -46,6 +46,7 @@ const REQUIRED_ROUTES = [
   { id: 'edit.roster-request', category: 'EDIT', method: 'POST', path: '/api/driver/roster-request', exactRoles: ['driver'], scope: 'request_only_no_approval' },
   { id: 'edit.pretrip', category: 'EDIT', method: 'POST', path: '/api/driver/pretrip', exactRoles: ['driver'], scope: 'active_vehicle' },
   { id: 'edit.location-start', category: 'EDIT', method: 'POST', path: '/api/driver/vehicle-location', exactRoles: ['driver'], scope: 'active_vehicle' },
+  { id: 'edit.location-batch', category: 'EDIT', method: 'POST', path: '/api/driver/vehicle-location/batch', exactRoles: ['driver'], scope: 'active_vehicle' },
   { id: 'edit.location-stop', category: 'EDIT', method: 'DELETE', path: '/api/driver/vehicle-location', exactRoles: ['driver'], scope: 'active_vehicle' },
   { id: 'edit.application-create', category: 'EDIT', method: 'POST', path: '/api/driver/applications', exactRoles: ['driver'], scope: 'own_user', feature: 'FEATURE_DRIVER_REGISTRATION' },
   { id: 'edit.registration-student-add', category: 'EDIT', method: 'POST', path: '/api/driver/registrations/students', exactRoles: ['driver'], scope: 'own_registration', feature: 'FEATURE_DRIVER_REGISTRATION' },

@@ -12,6 +12,8 @@ const { pool } = require('../config/database');
 const provSvc = require('../services/province.service');
 const provAdminSvc = require('../services/provinceAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
+const { makeTrackHandlers } = require('./vehicleTrackHandlers');
+const { trackingInfo } = require('../utils/gpsTrackingWindow');
 const ppSvc = require('../services/pickupPoint.service');
 const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
 const { auditExportBeforeSend } = require('../utils/exportAudit');
@@ -265,9 +267,16 @@ router.get('/live-vehicles', async (req, res, next) => {
       userId: req.user.id, entityId: 'province',
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
-    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
+    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString(), tracking: trackingInfo() });
   } catch (err) { next(err); }
 });
+
+// GPS route history (replay) — every vehicle, same scope as /live-vehicles.
+{
+  const h = makeTrackHandlers(() => ({ all: true }));
+  router.get('/vehicles/:vehicleId/track', h.track);
+  router.get('/vehicles/:vehicleId/track-days', h.days);
+}
 
 // ─── Phase 7.12.2 — GET /api/province/pickup-map ────────────────────────────
 // Read-only multi-role pickup-point map for province oversight. Aggregate-only

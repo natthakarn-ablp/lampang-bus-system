@@ -3,7 +3,7 @@
 # Lampang Bus System — Prune vehicle_location_history (Phase 11A)
 #
 # Purpose:  Delete GPS history rows older than LOCATION_HISTORY_RETENTION_DAYS
-#           (default 30). Keeps the table bounded — at ~5 pings/min per active
+#           (default 7). Keeps the table bounded — at ~5 pings/min per active
 #           vehicle the table grows ~132k rows/day, so pruning is essential.
 #
 #           Also prunes geofence_events older than the same window (they are
@@ -20,7 +20,8 @@
 #           15 3 * * *  bash /home/schoolbus/apps/lampang-bus-system/scripts/prune-location-history.sh >> \
 #                       /home/schoolbus/logs/prune-history.log 2>&1
 #
-# Env:      LOCATION_HISTORY_RETENTION_DAYS (default 30)
+# Env:      LOCATION_HISTORY_RETENTION_DAYS (default 7 — owner decision 2026-11-07;
+#           read from the environment, else from backend/.env, else 7)
 #           DB credentials read from backend/.env via mysql defaults file
 #
 # Exit:     0  OK (or dry-run completed)
@@ -29,7 +30,7 @@
 set -euo pipefail
 
 APP_DIR="/home/schoolbus/apps/lampang-bus-system"
-RETENTION_DAYS="${LOCATION_HISTORY_RETENTION_DAYS:-30}"
+RETENTION_DAYS="${LOCATION_HISTORY_RETENTION_DAYS:-}"
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
 
@@ -43,16 +44,34 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Parse DB credentials from .env (handles KEY=value and quoted values)
-DB_NAME="$(grep -E '^DB_NAME='    "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"'"'"')"
-DB_USER="$(grep -E '^DB_USER='    "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"'"'"')"
-DB_PASS="$(grep -E '^DB_PASSWORD=' "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"'"'"')"
-DB_HOST="$(grep -E '^DB_HOST='    "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"'"'"')"
-DB_PORT="$(grep -E '^DB_PORT='    "$ENV_FILE" | tail -1 | cut -d= -f2- | tr -d '"'"'"')"
+# Parse DB credentials from .env (handles KEY=value and quoted values).
+# (The previous inline form `tr -d '"'"'"'` had an unbalanced quote, so bash
+# refused to parse the whole script — it had never run. A missing key must
+# not trip `set -e -o pipefail`, hence `|| true`.)
+env_val() {
+  { grep -E "^$1=" "$ENV_FILE" || true; } | tail -1 | cut -d= -f2- | tr -d "\"'\r"
+}
+DB_NAME="$(env_val DB_NAME)"
+DB_USER="$(env_val DB_USER)"
+DB_PASS="$(env_val DB_PASSWORD)"
+DB_HOST="$(env_val DB_HOST)"
+DB_PORT="$(env_val DB_PORT)"
 DB_PORT="${DB_PORT:-3306}"
 
 if [[ -z "$DB_NAME" || -z "$DB_USER" ]]; then
   echo "[prune-history] FAIL: DB_NAME / DB_USER missing from .env" >&2
+  exit 1
+fi
+
+# Retention: environment wins, then backend/.env (the same knob the backend
+# reads for the 7-day replay window), then the default of 7 days. It is
+# interpolated into SQL, so it must be a plain positive integer.
+if [[ -z "$RETENTION_DAYS" ]]; then
+  RETENTION_DAYS="$(env_val LOCATION_HISTORY_RETENTION_DAYS | tr -d '[:space:]')"
+fi
+RETENTION_DAYS="${RETENTION_DAYS:-7}"
+if ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]] || [[ "$RETENTION_DAYS" -lt 1 ]]; then
+  echo "[prune-history] FAIL: LOCATION_HISTORY_RETENTION_DAYS must be a positive integer (got '${RETENTION_DAYS}')" >&2
   exit 1
 fi
 

@@ -4,6 +4,7 @@ import api from '../api/axios';
 import { useAuth } from '../hooks/useAuth';
 import { AppCard, AlertBanner, StatusBadge } from './ui';
 import { enqueuePoint, peekPoints, removeSent, countPoints } from '../utils/locationBuffer';
+import { shouldDiscardBatch } from '../utils/locationSendErrors';
 import {
   DEFAULT_TRACKING_WINDOWS,
   isWithinTrackingWindow,
@@ -139,9 +140,9 @@ export default function LiveLocationToggle() {
         if (batch.length < BATCH_SIZE) break;
       }
     } catch (err) {
-      // Network / rate limit: keep the queue, retry later. A 400 for the whole
-      // batch (malformed) would repeat forever — drop that batch instead.
-      if (!isRetryable(err)) {
+      // Keep the queue for network / rate limit AND recoverable 4xx (no vehicle,
+      // no active assignment). Only a malformed batch would repeat forever.
+      if (shouldDiscardBatch(err)) {
         try {
           const batch = await peekPoints(userIdRef.current, BATCH_SIZE);
           await removeSent(userIdRef.current, batch.map((p) => p.recorded_at));
@@ -187,7 +188,8 @@ export default function LiveLocationToggle() {
       setErrorMsg(null);
       flushQueue();
     } catch (err) {
-      if (isRetryable(err)) await queuePoint(body);
+      const st = err?.response?.status;
+      if (isRetryable(err) || st === 403 || st === 404) await queuePoint(body);
       if (isSendingRef.current) {
         setStatus('network_error');
         setErrorMsg(err?.response?.data?.message

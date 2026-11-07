@@ -131,14 +131,6 @@
       "parent": "/school"
     },
     {
-      "path": "/school/backdated-attendance",
-      "roles": [
-        "school",
-        "admin"
-      ],
-      "parent": "/school"
-    },
-    {
       "path": "/school/students",
       "roles": [
         "school",
@@ -228,14 +220,6 @@
     },
     {
       "path": "/school/teacher-accounts",
-      "roles": [
-        "school",
-        "admin"
-      ],
-      "parent": "/school"
-    },
-    {
-      "path": "/school/year-promotion",
       "roles": [
         "school",
         "admin"
@@ -867,12 +851,6 @@
         "icon": "CheckSquare"
       },
       {
-        "to": "/school/backdated-attendance",
-        "label": "เช็กชื่อย้อนหลัง",
-        "group": null,
-        "icon": "History"
-      },
-      {
         "to": "/school/students",
         "label": "นักเรียน",
         "group": null,
@@ -939,12 +917,6 @@
         "icon": "Users"
       },
       {
-        "to": "/school/year-promotion",
-        "label": "เลื่อนชั้นปีการศึกษาใหม่",
-        "group": null,
-        "icon": "GraduationCap"
-      },
-      {
         "to": "/school/audit-log",
         "label": "ประวัติการแก้ไข",
         "group": null,
@@ -993,12 +965,6 @@
         "label": "รถรับส่ง",
         "group": null,
         "icon": "Bus"
-      },
-      {
-        "to": "/affiliation/status",
-        "label": "สถานะวันนี้",
-        "group": null,
-        "icon": "CheckSquare"
       },
       {
         "to": "/affiliation/live-vehicles",

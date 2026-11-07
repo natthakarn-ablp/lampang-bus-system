@@ -37,16 +37,23 @@ const docUpload = multer({
     filename: (req, file, cb) => cb(null, `${req.user.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname).toLowerCase()}`),
   }),
   limits: multipartLimits(5 * 1024 * 1024), // 5MB
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (req, file, cb) => {
     const allowed = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
-    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+    const ok = allowed.includes(path.extname(file.originalname).toLowerCase());
+    if (!ok) req.fileTypeRejected = true;
+    cb(null, ok);
   },
 });
 
 // Validate magic bytes of the just-written file, unlink on reject, else return
 // { sha256, size }. Mirrors the sniff-then-unlink guard in driver.routes.js.
 function validateStoredDocument(req, res) {
-  if (!req.file) { sendError(res, 'กรุณาเลือกไฟล์เอกสาร (PDF, .jpg, .png, .webp ขนาดไม่เกิน 5MB)', [], 400); return null; }
+  if (!req.file) {
+    const msg = req.fileTypeRejected
+      ? 'ชนิดไฟล์ไม่รองรับ (รองรับเฉพาะ PDF, .jpg, .png, .webp ขนาดไม่เกิน 5MB)'
+      : 'กรุณาเลือกไฟล์เอกสาร (PDF, .jpg, .png, .webp ขนาดไม่เกิน 5MB)';
+    sendError(res, msg, [], 400); return null;
+  }
   let buf;
   try { buf = fs.readFileSync(req.file.path); }
   catch { fs.unlink(req.file.path, () => {}); sendError(res, 'ไม่สามารถอ่านไฟล์ที่อัปโหลดได้', [], 400); return null; }

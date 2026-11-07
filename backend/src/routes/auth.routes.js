@@ -88,6 +88,9 @@ function generateAccessToken(user, iat) {
   return jwt.sign(
     {
       sub: user.id,
+      // AUTH-02 — per-token id so logout can revoke just this access token
+      // (revoked_tokens) without ending the user's other sessions.
+      jti: uuidv4(),
       username: user.username,
       role: user.role,
       scopeType: user.scope_type || null,
@@ -505,8 +508,20 @@ router.post('/logout', authenticate, async (req, res, next) => {
   try {
     const { refresh_token } = req.body;
 
+    // AUTH-02 — revoke the presented access token so it stops working at once
+    // instead of living on for its full lifetime. Tokens minted before this
+    // change carry no jti and simply expire as before.
+    if (req.user.jti && req.user.tokenExp) {
+      await pool.query(
+        `INSERT INTO revoked_tokens (jti, user_id, expires_at)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE revoked_at = revoked_at`,
+        [req.user.jti, req.user.id, expToDate(req.user.tokenExp)]
+      );
+    }
+
     if (!refresh_token) {
-      // No refresh token provided — still a valid logout (access token not stored)
+      // No refresh token provided — still a valid logout
       return sendSuccess(res, null, 'ออกจากระบบแล้ว');
     }
 

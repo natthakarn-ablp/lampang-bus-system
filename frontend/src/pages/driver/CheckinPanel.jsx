@@ -71,7 +71,7 @@ export default function CheckinPanel({ student, session, onDone }) {
 
       {error && (
         <div className="px-4 pb-3">
-          <ErrorState message={error} onRetry={load} />
+          <ErrorState message={error} onRetry={handleAction} />
         </div>
       )}
     </div>

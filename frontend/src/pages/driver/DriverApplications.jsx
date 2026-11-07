@@ -12,6 +12,7 @@ import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { StatusStepRail, FormField} from '../../components/ui';
 import { PageTransition } from '../../lib/motion';
+import { auditActionTh } from '../../constants/auditLabels';
 
 const STATUS = {
   PENDING_SCHOOL_REVIEW: ['รอโรงเรียนตรวจสอบ', 'warn'],
@@ -220,6 +221,13 @@ function ApplicationCard({ app, isExpanded, onToggle, timeline, compact }) {
             <StatusStepRail steps={STEP_RAIL} currentIndex={stepIndex} />
           )}
 
+          {app.cancel_reason && (
+            <div className="rounded-lg border border-surface-border bg-surface p-3 text-sm">
+              <p className="text-xs font-semibold text-ink-muted mb-1">เหตุผลที่{app.status === 'REJECTED' ? 'โรงเรียนปฏิเสธ' : 'ยกเลิก'}</p>
+              <p className="text-ink">{app.cancel_reason}</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div>
               <p className="text-xs text-ink-muted">นักเรียนเช้า</p>
@@ -263,9 +271,12 @@ function ApplicationCard({ app, isExpanded, onToggle, timeline, compact }) {
                     </span>
                     <div>
                       <span className="font-medium text-ink">{t.actor_name}</span>
-                      <span className="text-ink-muted"> — {t.action}</span>
+                      <span className="text-ink-muted"> — {auditActionTh(t.action)}</span>
                       {t.new_value?.status && (
                         <span className="ml-1 text-ink">→ {STATUS[t.new_value.status]?.[0] || t.new_value.status}</span>
+                      )}
+                      {t.new_value?.review_notes && (
+                        <p className="text-ink-muted">เหตุผล/หมายเหตุ: {t.new_value.review_notes}</p>
                       )}
                     </div>
                   </div>

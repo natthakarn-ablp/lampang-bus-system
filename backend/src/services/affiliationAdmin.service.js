@@ -6,16 +6,20 @@ const { logAudit } = require('../utils/audit');
 const { validatePassword } = require('../utils/passwordPolicy');
 
 /**
- * Get school user accounts under an affiliation.
+ * Get school user accounts under an affiliation, newest first.
+ * grade_scope marks grade-teacher sub-accounts (role 'school' too) so the page
+ * can label them; must_change_password + last_login let the affiliation see
+ * which new schools have signed in (QA affiliation-08).
  */
 async function getSchoolAccounts(affiliationId) {
   const [rows] = await pool.query(
     `SELECT u.id, u.username, u.display_name, u.is_active, u.last_login, u.created_at,
+            u.grade_scope, u.must_change_password,
             sc.id AS school_id, sc.name AS school_name
      FROM users u
      JOIN schools sc ON sc.id = u.scope_id AND sc.affiliation_id = ?
      WHERE u.role = 'school' AND u.scope_type = 'SCHOOL' AND u.is_deleted = FALSE
-     ORDER BY sc.name`,
+     ORDER BY u.created_at DESC, u.id DESC`,
     [affiliationId]
   );
   return rows;
@@ -48,6 +52,20 @@ async function createSchoolAccount({ affiliationId, schoolId, username, displayN
   if (!/^\d+$/.test(password) || password.length < 4) {
     const err = new Error(`รหัสโรงเรียน "${school.id}" ไม่สามารถใช้เป็นรหัสผ่านเริ่มต้นได้ กรุณาติดต่อผู้ดูแลระบบ`);
     err.statusCode = 400;
+    throw err;
+  }
+
+  // Duplicate-username check, same as createSchoolWithAccount. The unique
+  // index covers soft-deleted rows, so check them too; otherwise the INSERT
+  // fails with an untranslated "Duplicate entry" (QA affiliation-06).
+  const [[existingUser]] = await pool.query(
+    `SELECT id, is_deleted FROM users WHERE username = ?`, [username]
+  );
+  if (existingUser) {
+    const err = new Error(existingUser.is_deleted
+      ? `ชื่อผู้ใช้ ${username} เคยถูกใช้โดยบัญชีที่ถูกลบไปแล้ว กรุณาใช้ชื่ออื่น หรือแจ้งผู้ดูแลระบบให้กู้คืนบัญชีเดิม`
+      : `ชื่อผู้ใช้ ${username} มีอยู่ในระบบแล้ว กรุณาใช้ชื่ออื่น`);
+    err.statusCode = 409;
     throw err;
   }
 
@@ -257,7 +275,7 @@ const ERR_MSG_TH = {
   WEAK_PASSWORD:               'รหัสผ่านเริ่มต้นต้องมีอย่างน้อย 4 ตัวอักษร',
   POLICY_PASSWORD:             'รหัสผ่านที่ระบุไม่ผ่านเกณฑ์ (อย่างน้อย 8 ตัว ไม่อยู่ในรายการคาดเดาง่าย ไม่ซ้ำตัวเดียว)',
   SCHOOL_CODE_EXISTS:          'รหัสโรงเรียนนี้มีอยู่ในระบบแล้ว',
-  USERNAME_EXISTS:             'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว',
+  USERNAME_EXISTS:             'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว (รวมถึงบัญชีที่ถูกลบไปแล้ว) กรุณาใช้ชื่ออื่น',
   DUPLICATE_IN_FILE:           'รหัสโรงเรียนซ้ำกับแถวอื่นในไฟล์เดียวกัน',
   DUPLICATE_USERNAME_IN_FILE:  'ชื่อผู้ใช้ซ้ำกับแถวอื่นในไฟล์เดียวกัน',
 };
@@ -345,7 +363,9 @@ async function previewSchoolImport(rawRows, affiliationId) {
   const [schoolRows] = await pool.query(`SELECT id FROM schools`);
   const existingSchoolCodes = new Set(schoolRows.map(r => String(r.id)));
 
-  const [userRows] = await pool.query(`SELECT username FROM users WHERE is_deleted = FALSE`);
+  // All rows, soft-deleted included: uq_users_username covers deleted users,
+  // so an active-only snapshot let the collision reach the INSERT (QA affiliation-05).
+  const [userRows] = await pool.query(`SELECT username FROM users`);
   const existingUsernames = new Set(userRows.map(r => String(r.username)));
 
   const fileSchoolCodes = new Set();
@@ -408,7 +428,9 @@ async function commitSchoolImport(rawRows, affiliationId, userId) {
     // Snapshot DB state inside the transaction (read consistency).
     const [schoolRows] = await conn.query(`SELECT id FROM schools`);
     const existingSchoolCodes = new Set(schoolRows.map(r => String(r.id)));
-    const [userRows] = await conn.query(`SELECT username FROM users WHERE is_deleted = FALSE`);
+    // All rows, soft-deleted included: uq_users_username covers deleted users,
+    // so an active-only snapshot let the collision reach the INSERT (QA affiliation-05).
+    const [userRows] = await conn.query(`SELECT username FROM users`);
     const existingUsernames = new Set(userRows.map(r => String(r.username)));
 
     const fileSchoolCodes = new Set();

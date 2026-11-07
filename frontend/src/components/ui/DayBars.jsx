@@ -2,11 +2,11 @@
  * DayBars — grouped bars per day (two series), today's column shaded.
  *
  * days = [{ key, label, a, b, today }]   a/b are numbers (or null = no data);
- *        days itself null = still loading
+ *        days itself null = still loading; failed = the load did not succeed
  * With `percent` the scale is fixed at 0–100 and the top label shows "a%".
  */
 export default function DayBars({
-  title, days, aLabel = 'ส่งเช้า', bLabel = 'รับเย็น', percent = true, note, height = 160,
+  title, days, aLabel = 'ส่งเช้า', bLabel = 'รับเย็น', percent = true, note, failed = false, height = 160,
 }) {
   const loading = days == null;
   days = days || [];
@@ -24,6 +24,8 @@ export default function DayBars({
       </div>
       {loading ? (
         <p className="text-sm text-ink-muted py-10 text-center" aria-busy="true">กำลังโหลด…</p>
+      ) : failed ? (
+        <p className="text-sm text-ink-muted py-10 text-center" role="alert">โหลดข้อมูลย้อนหลังไม่สำเร็จ กรุณารีเฟรชหน้าอีกครั้ง</p>
       ) : days.length === 0 ? (
         <p className="text-sm text-ink-muted py-10 text-center">ยังไม่มีข้อมูลย้อนหลัง</p>
       ) : (

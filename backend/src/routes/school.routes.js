@@ -439,6 +439,18 @@ router.delete('/pickup-points/:id', requireFullSchoolScope, async (req, res, nex
     // Scope: the point's vehicle must serve this school
     const serves = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
     if (!serves) return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในขอบเขตโรงเรียนของท่าน', [], 403);
+    // school-teacher-02: a point shared with another school's pupils is not
+    // this school's to delete — it may only take its own pupils off it (PUT
+    // /pickup-points/:id/students already restricts to this school's rows).
+    const others = await ppSvc.countOtherSchoolStudentsOnPoint(id, schoolId);
+    if (others > 0) {
+      return sendError(
+        res,
+        'จุดรับส่งนี้มีนักเรียนของโรงเรียนอื่นใช้อยู่ จึงลบไม่ได้ — ให้แก้ไขรายชื่อเพื่อนำนักเรียนของโรงเรียนท่านออกจากจุดนี้แทน',
+        [{ code: 'POINT_SHARED_WITH_OTHER_SCHOOL' }],
+        409
+      );
+    }
 
     await ppSvc.softDeletePickupPoint(id);
     await logAudit({
@@ -641,13 +653,16 @@ router.post('/leave', async (req, res, next) => {
 });
 
 // ─── DELETE /leaves/:id — ยกเลิกการลาที่บันทึกผิด (ในขอบเขตโรงเรียน) ─────────────
-router.delete('/leaves/:id', requireFullSchoolScope, async (req, res, next) => {
+// grade-teacher-03: a grade teacher may cancel today's leave for a pupil in
+// their own grade (the same scope POST /leave lets them record); the service
+// enforces grade + today + single round.
+router.delete('/leaves/:id', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const id = readIdParam(req, res, 'id');
     if (id === null) return;
-    const result = await leaveSvc.cancelLeaveBySchool(id, req.user.id, schoolId);
+    const result = await leaveSvc.cancelLeaveBySchool(id, req.user.id, schoolId, { gradeScope: teacherGradeScope(req) });
     return sendSuccess(res, result, 'ยกเลิกการลาสำเร็จ');
   } catch (err) { next(err); }
 });

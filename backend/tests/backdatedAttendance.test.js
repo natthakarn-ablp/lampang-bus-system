@@ -237,10 +237,13 @@ describe('POST /api/school/backdated-attendance — refusals', () => {
     expect(res.status).toBe(409);
   });
 
-  test('grade teacher: own grade 201 (teacher model: morning arrival 07:00), other grade 404, void 403', async () => {
+  test('grade teacher: own grade 201 (teacher model: morning arrival 07:00), other grade 404, wrong status 403, void 403', async () => {
     const ok = await post({ status: 'CHECKED_OUT', time: '07:00' }, teacherToken);
     expect(ok.status).toBe(201);
-    expect((await post({ student_id: P2_STUDENT_ID }, teacherToken)).status).toBe(404);
+    expect((await post({ student_id: P2_STUDENT_ID, status: 'CHECKED_OUT', time: '07:00' }, teacherToken)).status).toBe(404);
+    // grade-teacher-04: a teacher may only record the teacher status for the round.
+    const wrong = await post({ status: 'CHECKED_IN', time: '06:50' }, teacherToken);
+    expect(wrong.status).toBe(403);
     const v = await request(app)
       .post(`/api/school/checkin/${ok.body.data.checkin_log_id}/void`)
       .set('Authorization', `Bearer ${teacherToken}`)

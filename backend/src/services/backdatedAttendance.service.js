@@ -9,7 +9,8 @@
  * to put the record right afterwards. This service is that way, and it is
  * deliberately narrower than the same-day paths:
  *
- *   - only a full-scope school account (route guard: requireFullSchoolScope);
+ *   - a school account; a grade teacher only for their own grade and only the
+ *     one teacher status per session (TEACHER_STATUS);
  *   - only the last BACKDATE_MAX_DAYS days, never today (today has its own
  *     paths) and never the future;
  *   - one pupil, one session, one status per request, with a wall-clock time
@@ -38,6 +39,10 @@ const BACKDATE_MAX_DAYS = 7;
  */
 const TEACHER_DEFAULT_TIMES = Object.freeze({ morning: '07:00', evening: '16:00' });
 const SESSIONS = ['morning', 'evening'];
+// The one status a grade teacher may record per session — same model as the
+// live teacher check (checkin.service TEACHER_STATUS). Required here because
+// the UI limit alone is not a server rule (grade-teacher-04).
+const TEACHER_STATUS = Object.freeze({ morning: 'CHECKED_OUT', evening: 'CHECKED_IN' });
 const STATUSES = ['CHECKED_IN', 'CHECKED_OUT'];
 
 /** 'YYYY-MM-DD' of a UTC-midnight instant built from a calendar date. */
@@ -221,6 +226,15 @@ async function recordBackdatedCheck(pool, {
   const date = assertBackdateWindow(checkDate, now, { allowToday });
   if (!SESSIONS.includes(session)) throw makeError("session ต้องเป็น 'morning' หรือ 'evening'", 400);
   if (!STATUSES.includes(status)) throw makeError("status ต้องเป็น 'CHECKED_IN' หรือ 'CHECKED_OUT'", 400);
+  if (gradeFilter && status !== TEACHER_STATUS[session]) {
+    throw makeError(
+      session === 'morning'
+        ? 'ครูประจำชั้นบันทึกรอบเช้าได้เฉพาะ "มาถึงโรงเรียน"'
+        : 'ครูประจำชั้นบันทึกรอบเย็นได้เฉพาะ "ขึ้นรถกลับบ้าน"',
+      403,
+      'TEACHER_STATUS_ONLY'
+    );
+  }
   assertTime(time);
   if (date === todayBangkok(now)) {
     const nowHm = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false });
@@ -391,6 +405,7 @@ async function recordBackdatedCheck(pool, {
 module.exports = {
   BACKDATE_MAX_DAYS,
   TEACHER_DEFAULT_TIMES,
+  TEACHER_STATUS,
   assertBackdateWindow,
   backdateWindow,
   getBackdatedRoster,

@@ -9,6 +9,7 @@ import {
 // Shared by the selects here; FormField supplies the label wiring.
 const CONTROL_CLS = 'focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base sm:text-sm text-ink transition';
 import { useToast } from '../../components/Toast';
+import { relativeTime } from '../../utils/datetime';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../../utils/passwordPolicy';
@@ -477,9 +478,29 @@ export default function AffSchoolAccounts() {
           <DataTable
             caption="บัญชีโรงเรียนที่สร้างล่าสุด"
             columns={[
-              { key: 'school_name', header: 'โรงเรียน', primary: true, cell: a => a.school_name },
+              { key: 'school_name', header: 'โรงเรียน', primary: true,
+                cell: a => (
+                  <span>
+                    {a.school_name}
+                    {a.grade_scope && (
+                      <StatusBadge variant="info" size="sm" className="ml-1.5">
+                        ครูประจำชั้น {a.grade_scope}
+                      </StatusBadge>
+                    )}
+                  </span>
+                ) },
               { key: 'username', header: 'ชื่อผู้ใช้', secondary: true,
                 cell: a => <span className="font-mono text-xs">{a.username}</span> },
+              { key: 'last_login', header: 'การเข้าใช้งาน',
+                cell: a => (
+                  !a.last_login ? (
+                    <StatusBadge variant="warn" size="sm">ยังไม่เคยเข้าระบบ</StatusBadge>
+                  ) : a.must_change_password ? (
+                    <StatusBadge variant="warn" size="sm">ยังไม่เปลี่ยนรหัสผ่าน</StatusBadge>
+                  ) : (
+                    <span className="text-xs text-ink-muted">เข้าล่าสุด {relativeTime(a.last_login)}</span>
+                  )
+                ) },
               { key: 'is_active', header: 'สถานะ', align: 'center', badge: true,
                 cell: a => (
                   <StatusBadge variant={a.is_active ? 'success' : 'neutral'} size="sm">

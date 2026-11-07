@@ -1,6 +1,7 @@
 import { CheckCircle2, XCircle, Info } from 'lucide-react';
-import { useState, useCallback, createContext, useContext } from 'react';
+import { useState, useCallback, useEffect, createContext, useContext } from 'react';
 import { AnimatePresence, ToastSlide } from '../lib/motion';
+import { RATE_LIMIT_EVENT } from '../utils/rateLimitNotice';
 
 const ToastContext = createContext(null);
 
@@ -40,6 +41,14 @@ export function ToastProvider({ children }) {
     get error() { return (msg) => addToast(msg, 'error', 5000); },
     get info() { return (msg) => addToast(msg, 'info'); },
   }));
+
+  // A 429 anywhere in the app (axios interceptor or the export download) shows
+  // the server's Thai message once, instead of each page's generic failure.
+  useEffect(() => {
+    const onRateLimited = (e) => addToast(e.detail?.message, 'error', 6000);
+    window.addEventListener(RATE_LIMIT_EVENT, onRateLimited);
+    return () => window.removeEventListener(RATE_LIMIT_EVENT, onRateLimited);
+  }, [addToast]);
 
   return (
     <ToastContext.Provider value={ctx}>

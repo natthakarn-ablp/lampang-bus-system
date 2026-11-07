@@ -171,10 +171,12 @@ export default function ClassroomCheck() {
   }
 
   async function undo(student) {
-    if (!student.can_undo || !(student.self_id || student.log_id) || locked || writeInFlight.current || !data) return;
+    if (!student.can_undo || !(student.self_id || student.log_id || student.leave_id) || locked || writeInFlight.current || !data) return;
     writeInFlight.current = true; setSaving(true);
     try {
-      await api.post(student.self_travel ? `/school/self-travel/${student.self_id}/undo` : `/school/teacher-check/${student.log_id}/undo`, {});
+      if (student.self_travel) await api.post(`/school/self-travel/${student.self_id}/undo`, {});
+      else if (student.on_leave && student.leave_id) await api.delete(`/school/leaves/${student.leave_id}`);
+      else await api.post(`/school/teacher-check/${student.log_id}/undo`, {});
       toast.success(`ยกเลิกรายการของ ${student.name} แล้ว`);
     } catch (err) {
       toast.error(err.response?.data?.message || 'ยกเลิกไม่สำเร็จ');

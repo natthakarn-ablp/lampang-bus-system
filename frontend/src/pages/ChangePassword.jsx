@@ -36,16 +36,27 @@ export default function ChangePassword() {
 
     setSaving(true);
     try {
-      await api.post('/auth/change-password', {
+      const res = await api.post('/auth/change-password', {
         current_password: form.current_password,
         new_password: form.new_password,
         refresh_token: localStorage.getItem('refresh_token'),
       });
 
-      // Audit 2026-06-18 (frontend-security): the backend now invalidates all
-      // tokens issued before the change (access + refresh), so the current session
-      // is dead. Clear local state and force a fresh login with the new password
-      // instead of navigating on with a stale token (which would 401).
+      // The backend invalidates every token issued before the change, so the
+      // old session is dead. load-03: it now returns a fresh pair signed after
+      // the change — store it and continue to the role home without a second
+      // login. An older backend returns no tokens: fall back to a fresh login.
+      const data = res.data?.data;
+      if (data?.access_token && data?.refresh_token) {
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('refresh_token', data.refresh_token);
+        const nextUser = { ...(user || {}), ...(data.user || {}), must_change_password: false };
+        updateUser(nextUser);
+        toast.success('เปลี่ยนรหัสผ่านสำเร็จ');
+        navigate(ROLE_HOME[nextUser.role] || '/', { replace: true });
+        return;
+      }
+
       localStorage.clear();
       sessionStorage.clear();
       toast.success('เปลี่ยนรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบใหม่');

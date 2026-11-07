@@ -8,6 +8,7 @@ import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import { StatusBadge, DataTable, FormField, AlertBanner} from '../../components/ui';
+import { roundsNotStarted } from '../../utils/reportRounds';
 
 export default function DailyReport() {
   const { user } = useAuth();
@@ -38,6 +39,10 @@ export default function DailyReport() {
   const thaiDate = date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) : '';
   const mPct = data?.morning_conflict ? null : data?.morning_total > 0 ? Math.round((data.morning_done / data.morning_total) * 100) : 0;
   const ePct = data?.evening_conflict ? null : data?.evening_total > 0 ? Math.round((data.evening_done / data.evening_total) * 100) : 0;
+  // A round that has not opened yet (evening before 12:00, any round on a
+  // future date) reads neutral, not as a failure to follow up.
+  const notStarted = roundsNotStarted(date);
+  const roundTone = (pct, pending) => pending ? 'neutral' : pct === 100 ? 'success' : pct >= 80 ? 'warn' : 'danger';
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
@@ -67,7 +72,7 @@ export default function DailyReport() {
 
       {loading ? (
         <LoadingState />
-      ) : !data ? (
+      ) : error ? null : !data ? (
         <EmptyState icon={FileBarChart} title="ไม่มีข้อมูล" description="ลองเปลี่ยนวันที่หรือช่วงเวลาอื่น" />
       ) : (
         <>
@@ -75,19 +80,21 @@ export default function DailyReport() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
             <KpiBox icon={Bus} label="รถรับส่ง" value={data.total_vehicles} sub="คัน" tone="brand" />
             <KpiBox icon={GraduationCap} label="นักเรียน" value={data.total_students} sub="คน" tone="brand" />
-            <KpiBox icon={Sunrise} label="ส่งเช้าสำเร็จ" value={mPct == null || !data.morning_total ? '—' : `${mPct}%`}
-              sub={`${data.morning_done}/${data.morning_total} คน`}
-              tone={mPct === 100 ? 'success' : mPct >= 80 ? 'warn' : 'danger'} />
-            <KpiBox icon={Sunset} label="รับเย็นสำเร็จ" value={ePct == null || !data.evening_total ? '—' : `${ePct}%`}
-              sub={`${data.evening_done}/${data.evening_total} คน`}
-              tone={ePct === 100 ? 'success' : ePct >= 80 ? 'warn' : 'danger'} />
+            <KpiBox icon={Sunrise} label="ส่งเช้าสำเร็จ"
+              value={notStarted.morning ? '—' : mPct == null || !data.morning_total ? '—' : `${mPct}%`}
+              sub={notStarted.morning ? 'ยังไม่ถึงรอบ' : `${data.morning_done}/${data.morning_total} คน`}
+              tone={roundTone(mPct, notStarted.morning)} />
+            <KpiBox icon={Sunset} label="รับเย็นสำเร็จ"
+              value={notStarted.evening ? '—' : ePct == null || !data.evening_total ? '—' : `${ePct}%`}
+              sub={notStarted.evening ? 'ยังไม่ถึงรอบ' : `${data.evening_done}/${data.evening_total} คน`}
+              tone={roundTone(ePct, notStarted.evening)} />
           </div>
 
           {/* ── ALERT: จุดที่ต้องติดตาม ── */}
           {(() => {
             const alerts = [];
-            if (data.morning_pending > 0) alerts.push(`รอส่งเช้า ${data.morning_pending} คน`);
-            if (data.evening_pending > 0) alerts.push(`รอรับเย็น ${data.evening_pending} คน`);
+            if (data.morning_pending > 0 && !notStarted.morning) alerts.push(`รอส่งเช้า ${data.morning_pending} คน`);
+            if (data.evening_pending > 0 && !notStarted.evening) alerts.push(`รอรับเย็น ${data.evening_pending} คน`);
             if (data.emergency_count > 0) alerts.push(`เหตุฉุกเฉิน ${data.emergency_count} รายการ`);
             return alerts.length > 0 ? (
               <AlertBanner variant="warn" title="จุดที่ต้องติดตาม" className="mb-5">
@@ -214,6 +221,7 @@ function DecisionLogModal({ onSubmit, onSkip, onCancel }) {
  */
 function KpiBox({ icon: Icon, label, value, sub, tone = 'brand' }) {
   const TONES = {
+    neutral: 'bg-surface      border-surface-border text-ink-muted',
     brand:   'bg-brand-50     border-brand-200  text-brand-700',
     success: 'bg-success-soft border-success/30 text-success-ink',
     warn:    'bg-warn-soft    border-warn/30    text-warn-ink',

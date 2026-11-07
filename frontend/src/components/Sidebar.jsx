@@ -73,6 +73,7 @@ const AFFILIATION_NAV = [
   { to: '/affiliation/schools',     icon: Building2,     label: 'โรงเรียนในสังกัด' },
   { to: '/affiliation/students',    icon: GraduationCap, label: 'ข้อมูลนักเรียน' },
   { to: '/affiliation/vehicles',    icon: Bus,           label: 'รถรับส่ง' },
+  { to: '/affiliation/status',      icon: CheckSquare,   label: 'สถานะวันนี้' },
   { to: '/affiliation/live-vehicles', icon: Activity,    label: 'ตำแหน่งปัจจุบัน' },
   { to: '/affiliation/pickup-map',  icon: Map,           label: 'แผนที่จุดรับส่ง' },
   { to: '/affiliation/emergencies', icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },

@@ -68,6 +68,24 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
       }
     }
 
+    if (!gradeScope && leaveDate === todayBangkok()) {
+      // Driver path: same checked-in / session-enabled guard as the teacher
+      // path, so a leave cannot contradict today's attendance (DRV-DAILY-OPS-07).
+      const sessions = session === 'both' ? ['morning', 'evening'] : [session];
+      if (session !== 'both' && !(session === 'morning' ? student.morning_enabled : student.evening_enabled)) {
+        const err = new Error('นักเรียนไม่ได้ใช้รถในรอบนี้'); err.statusCode = 409; throw err;
+      }
+      for (const s of sessions) {
+        const [[checked]] = await conn.query(
+          `SELECT status FROM checkin_logs WHERE student_id = ? AND session = ?
+            AND check_date = CURDATE() ORDER BY id DESC LIMIT 1`, [studentId, s]
+        );
+        if (checked && checked.status !== 'CANCELLED') {
+          const err = new Error('มีการเช็กชื่อนักเรียนคนนี้แล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err;
+        }
+      }
+    }
+
     let result;
     try {
       [result] = await conn.query(

@@ -257,11 +257,12 @@ export default function AffiliationDashboard() {
         // ── Schools: complete / in progress / not started (holiday-aware) ──
         const follow = dashOk ? schoolFollowUps(problemSchools, when) : [];
         const activeSession = ['open', 'overdue', 'closed'].includes(eStatus.phase) ? 'evening' : 'morning';
-        const schoolsInPlay = schools.filter(s => Number(s.student_count) > 0).length;
+        const schoolsWithPupils = schools.filter(s => Number(s.student_count) > 0).length;
         const sessionRows = problemSchools.filter(s => (s[`${activeSession}_expected`] || 0) > 0 && (s[`${activeSession}_done`] || 0) < s[`${activeSession}_expected`]);
         const sNotStarted = sessionRows.filter(s => (s[`${activeSession}_done`] || 0) === 0).length;
         const sInProgress = sessionRows.length - sNotStarted;
-        const sComplete = Math.max(0, schoolsInPlay - sessionRows.length);
+        const schoolsInPlay = Math.max(schoolsWithPupils, sessionRows.length);
+        const sComplete = schoolsInPlay - sessionRows.length;
         const showSchoolCounts = dashOk && !failed.schools && !offDay && schoolsInPlay > 0;
 
         const heroAction = follow.length > 0

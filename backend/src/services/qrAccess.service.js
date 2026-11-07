@@ -114,9 +114,12 @@ async function getLatestInspectionStatus(vehicleId) {
 
 function documentStatus(expiry, today = new Date()) {
   if (!expiry) return 'MISSING';
-  const end = new Date(expiry);
-  if (end < today) return 'EXPIRED';
-  const days = Math.ceil((end - today) / 86400000);
+  // Compare Bangkok calendar dates: a document is valid through its expiry day.
+  const fmt = (d) => new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  const endDay = fmt(expiry);
+  const todayDay = fmt(today);
+  if (endDay < todayDay) return 'EXPIRED';
+  const days = Math.round((Date.parse(endDay) - Date.parse(todayDay)) / 86400000);
   return days <= 30 ? 'EXPIRING' : 'VALID';
 }
 

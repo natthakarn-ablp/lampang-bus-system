@@ -201,6 +201,7 @@ async function getDetailForAffiliation(pool, { requestId, affiliationId }) {
     ...pub(q),
     current_vehicle: vehicle ? { plate_no: vehicle.plate_no, vehicle_type: vehicle.vehicle_type, is_deleted: !!vehicle.is_deleted } : null,
     active_canonical_conflict: activeSiblingConflict,
+    can_approve: q.status === 'PENDING',
   };
 }
 

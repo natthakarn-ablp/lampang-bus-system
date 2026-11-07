@@ -777,14 +777,59 @@ router.get('/profile', async (req, res, next) => {
 
 // ─── PUT /profile ────────────────────────────────────────────────────────────
 
+// Mirrors DriverProfile.jsx checks and the column sizes in 001_initial_schema.sql.
+// field -> [label, max length, kind]
+const PROFILE_FIELD_RULES = {
+  name: ['ชื่อคนขับ', 100, 'name'],
+  phone: ['เบอร์โทรคนขับ', 20, 'phone'],
+  vehicle_type: ['ประเภทรถ', 50, 'text'],
+  owner_name: ['ชื่อผู้ครอบครองรถ', 100, 'text'],
+  owner_phone: ['เบอร์โทรผู้ครอบครอง', 20, 'phone'],
+  insurance_type: ['ประเภทประกัน', 50, 'text'],
+  insurance_status: ['สถานะประกัน', 50, 'text'],
+  insurance_expiry: ['วันหมดอายุประกัน', 10, 'date'],
+  attendant_name: ['ชื่อผู้ดูแลรถ', 100, 'text'],
+  attendant_phone: ['เบอร์โทรผู้ดูแลรถ', 20, 'phone'],
+};
+
+function validateDriverProfileBody(body) {
+  const values = {};
+  const errors = [];
+  for (const [field, [label, max, kind]] of Object.entries(PROFILE_FIELD_RULES)) {
+    const raw = body ? body[field] : undefined;
+    if (raw === undefined) continue;
+    if (raw !== null && typeof raw !== 'string') {
+      errors.push({ field, message: `${label}ไม่ถูกต้อง` });
+      continue;
+    }
+    const val = (raw || '').trim();
+    if (kind === 'name' && !val) {
+      errors.push({ field, message: `กรุณากรอก${label}` });
+    } else if (val.length > max) {
+      errors.push({ field, message: `${label}ต้องไม่เกิน ${max} ตัวอักษร` });
+    } else if (kind === 'phone' && val && !/^\d{9,10}$/.test(val)) {
+      errors.push({ field, message: `${label}ต้องเป็นตัวเลข 9-10 หลัก` });
+    } else if (kind === 'date' && val) {
+      const d = new Date(`${val}T00:00:00Z`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(val) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== val) {
+        errors.push({ field, message: `${label}ต้องเป็นวันที่รูปแบบ YYYY-MM-DD` });
+      }
+    }
+    values[field] = val;
+  }
+  return { values, errors };
+}
+
 router.put('/profile', async (req, res, next) => {
   try {
+    const { values, errors: fieldErrors } = validateDriverProfileBody(req.body);
+    if (fieldErrors.length > 0) return sendError(res, fieldErrors[0].message, fieldErrors, 400);
     const {
       name, phone,
       vehicle_type, owner_name, owner_phone,
       insurance_type, insurance_status, insurance_expiry,
       attendant_name, attendant_phone,
-    } = req.body;
+    } = values;
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
 

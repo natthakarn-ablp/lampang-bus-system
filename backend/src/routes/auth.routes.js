@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const rateLimit = require('express-rate-limit');
+const { refreshTokenKey } = require('../middleware/rateLimiters');
 
 const { pool } = require('../config/database');
 const env = require('../config/env');
@@ -46,9 +47,17 @@ const {
 } = require('../utils/sharedSecurityState');
 
 // ─── Rate limiters ──────────────────────────────────────────────────────────
+// Training-room fix (2026-11): a room of ~60 teachers shares one public IP, so
+// the per-IP limiter must not count successful logins (skipSuccessfulRequests)
+// and its ceiling must sit above what honest typos from a whole room reach.
+// It is now only a coarse spray guard; the real brute-force guard is the
+// per-(username+IP) lock above (LOGIN_LOCK: 10 failures / 15 min), which runs
+// on every request this limiter lets through.
+const LOGIN_LIMIT = Object.freeze({ WINDOW_MS: 15 * 60 * 1000, MAX_FAILURES: 60 });
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,                   // 20 attempts per IP per window
+  windowMs: LOGIN_LIMIT.WINDOW_MS,
+  max: LOGIN_LIMIT.MAX_FAILURES,  // failed attempts per IP per window
+  skipSuccessfulRequests: true,   // only 4xx/5xx responses count
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'มีการพยายามเข้าสู่ระบบหลายครั้ง กรุณาลองใหม่ใน 15 นาที', errors: [], data: null },
@@ -60,9 +69,13 @@ const loginLimiter = rateLimit({
 // — the ordinary case — is caught.
 const REPLAY_GRACE_MS = 10 * 1000;
 
+// Keyed by the subject of a VERIFIED refresh token in the body (30 / 5 min per
+// user), so a room of users refreshing behind one IP do not share a bucket.
+// Missing/invalid tokens fall back to a per-IP bucket of the same size.
 const refreshLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 30,
+  keyGenerator: refreshTokenKey,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: 'Too many requests. Try again shortly.', errors: [], data: null },
@@ -459,3 +472,6 @@ router.post('/logout', authenticate, async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports.loginLimiter = loginLimiter;
+module.exports.refreshLimiter = refreshLimiter;
+module.exports.LOGIN_LIMIT = LOGIN_LIMIT;

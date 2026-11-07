@@ -46,7 +46,6 @@ export default function DailyReport() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={false} />
       {/* ── HEADER ── */}
       <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -108,6 +107,9 @@ export default function DailyReport() {
               </div>
             );
           })()}
+
+          {/* Self-travel / leave: in context under the round totals, hidden when all 0. */}
+          <AttendanceBreakdown data={data} className="mb-5" />
 
           {/* ── สรุปรายโรงเรียน ── */}
           {data.schools?.length > 0 && (

@@ -45,8 +45,6 @@ export default function MonthlyReport() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={true} />
-
       {/* ── HEADER ── */}
       <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -95,6 +93,9 @@ export default function MonthlyReport() {
               sub={data.emergency_count > 0 ? `${data.emergency_count} ครั้ง ในเดือนนี้` : 'ไม่มีเหตุฉุกเฉิน'}
               color={data.emergency_count > 0 ? 'red' : 'gray'} />
           </div>
+
+          {/* Self-travel / leave: in context under the KPI cards, hidden when all 0. */}
+          <AttendanceBreakdown data={data} monthly={true} className="mb-6" />
 
           {/* ── SECTION 3 — Executive Summary Box ──────────── */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">

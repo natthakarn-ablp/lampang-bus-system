@@ -180,7 +180,6 @@ export default function ProvinceDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      <AttendanceBreakdown data={error ? {} : data} />
       <div className="flex flex-col gap-2">
         <RoleChip role="province" />
         <PageHeader
@@ -243,6 +242,9 @@ export default function ProvinceDashboard() {
           onClick={emergencies7d > 0 ? () => navigate('/province/emergencies') : undefined}
         />
       </section>
+
+      {/* Self-travel / leave: in context under the round numbers, hidden when all 0. */}
+      <AttendanceBreakdown data={error ? null : data} />
 
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <DayBars

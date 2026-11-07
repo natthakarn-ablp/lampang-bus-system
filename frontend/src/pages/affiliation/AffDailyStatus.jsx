@@ -111,7 +111,7 @@ export default function AffDailyStatus() {
 
       {error && <ErrorState message={error} className="mb-4" />}
 
-      {data && <AttendanceBreakdown data={loading ? null : error ? {} : visibleAttendance(data)} />}
+      {data && !loading && !error && <AttendanceBreakdown data={visibleAttendance(data)} className="mb-4" />}
 
       {loading ? (
         <LoadingState />

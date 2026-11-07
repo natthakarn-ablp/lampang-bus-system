@@ -95,9 +95,11 @@ const upload = multer({
     filename: (req, file, cb) => cb(null, `${req.user.id}-${Date.now()}${path.extname(file.originalname)}`),
   }),
   limits: multipartLimits(2 * 1024 * 1024), // 2MB
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.webp'];
-    cb(null, allowed.includes(path.extname(file.originalname).toLowerCase()));
+    const ok = allowed.includes(path.extname(file.originalname).toLowerCase());
+    if (!ok) req.fileTypeRejected = true;
+    cb(null, ok);
   },
 });
 
@@ -947,7 +949,10 @@ router.get('/profile/photo', async (req, res, next) => {
 
 router.post('/profile/photo', upload.single('photo'), async (req, res, next) => {
   try {
-    if (!req.file) return sendError(res, 'กรุณาเลือกไฟล์รูปภาพ (.jpg, .png, .webp ขนาดไม่เกิน 2MB)', [], 400);
+    if (!req.file) {
+      if (req.fileTypeRejected) return sendError(res, 'ชนิดไฟล์ไม่รองรับ (รองรับเฉพาะ .jpg, .png, .webp ขนาดไม่เกิน 2MB)', [], 400);
+      return sendError(res, 'กรุณาเลือกไฟล์รูปภาพ (.jpg, .png, .webp ขนาดไม่เกิน 2MB)', [], 400);
+    }
 
     // Audit 2026-06-18 (fileupload-import): the extension filter is not enough —
     // sniff the actual bytes and reject anything that isn't a real image, deleting

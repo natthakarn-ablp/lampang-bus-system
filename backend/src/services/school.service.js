@@ -488,6 +488,8 @@ async function searchDeletedStudents(db, { schoolId, q }) {
             s.grade, s.classroom, s.deleted_at
        FROM students s
       WHERE s.school_id = ? AND s.is_deleted = TRUE
+        AND NOT EXISTS (SELECT 1 FROM student_transfer_requests tr
+                         WHERE tr.student_id = s.id AND tr.status = 'APPLIED')
         AND (CONCAT(COALESCE(s.first_name, ''), ' ', COALESCE(s.last_name, '')) LIKE ?
              OR s.student_code LIKE ?)
       ORDER BY s.deleted_at DESC, s.id DESC
@@ -531,6 +533,16 @@ async function restoreStudent(db, { schoolId, studentId, actorId, gradeScope = n
       }
       await conn.commit();
       return { status: 'ALREADY_ACTIVE', student_id: st.id };
+    }
+
+    // A child closed by an APPLIED transfer now lives at the destination school;
+    // restoring here would leave the child active in two schools.
+    const [[moved]] = await conn.query(
+      `SELECT id FROM student_transfer_requests WHERE student_id = ? AND status = 'APPLIED' LIMIT 1`,
+      [studentId]
+    );
+    if (moved) {
+      const e = new Error('นักเรียนคนนี้ย้ายไปโรงเรียนอื่นแล้ว ไม่สามารถกู้คืนได้ หากย้ายผิดพลาดให้แก้ไขผ่านขั้นตอนการโอนย้าย'); e.statusCode = 409; e.code = 'TRANSFERRED_OUT'; throw e;
     }
 
     let newGrade = st.grade;

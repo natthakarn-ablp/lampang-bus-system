@@ -106,8 +106,8 @@ export default function StatusHero({ rounds = [], day, emergencies = 0, action, 
             <Icon className="w-6 h-6" strokeWidth={2.2} aria-hidden="true" />
           </span>
           <div className={`min-w-0 ${t.ink}`}>
-            {eyebrow && <p className="text-sm text-ink-muted">{eyebrow}</p>}
-            <h2 className="text-xl sm:text-2xl font-bold leading-snug text-pretty">{summary.headline}</h2>
+            {eyebrow && <p className="text-sm leading-relaxed text-ink-muted mb-1">{eyebrow}</p>}
+            <h2 className="text-xl sm:text-2xl font-bold leading-normal text-pretty">{summary.headline}</h2>
             {summary.sub && <p className="text-sm sm:text-base mt-0.5 text-pretty">{summary.sub}</p>}
           </div>
         </div>

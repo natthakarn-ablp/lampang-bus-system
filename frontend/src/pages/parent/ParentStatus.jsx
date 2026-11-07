@@ -171,7 +171,7 @@ export default function ParentStatus() {
 
           <div className="text-left space-y-4 mb-6">
             <StepItem number="1" text={<>เพิ่มเพื่อน LINE OA{' '}
-              <a href={LINE_OA_URL} className="text-brand-700 font-semibold underline" target="_blank" rel="noopener noreferrer">{LINE_OA_ID}</a>
+              <a href={LINE_OA_URL} className="focus-ring inline-flex items-center min-h-[44px] px-1 text-brand-700 font-semibold underline" target="_blank" rel="noopener noreferrer">{LINE_OA_ID}</a>
               {' '}(รถรับส่งนักเรียน)</>} />
             <StepItem number="2" text='พิมพ์คำว่า "ผูกบัญชี" ในแชท' />
             <StepItem number="3" text="กรอกเบอร์โทร + รหัสนักเรียนของบุตรหลาน" />

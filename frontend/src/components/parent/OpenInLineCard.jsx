@@ -37,7 +37,7 @@ export default function OpenInLineCard({ subPath = '', title = 'กรุณา�
 
         <p className="text-sm text-ink-muted mb-4">
           หรือเปิดแชต LINE OA{' '}
-          <a href={LINE_OA_URL} className="text-brand-700 font-semibold underline" target="_blank" rel="noopener noreferrer">
+          <a href={LINE_OA_URL} className="focus-ring inline-flex items-center min-h-[44px] px-1 text-brand-700 font-semibold underline" target="_blank" rel="noopener noreferrer">
             {LINE_OA_ID}
           </a>{' '}
           (รถรับส่งนักเรียน) แล้วกดลิงก์จากในแชต
@@ -47,7 +47,7 @@ export default function OpenInLineCard({ subPath = '', title = 'กรุณา�
           type="button"
           onClick={onLoginHere}
           disabled={busy}
-          className="text-caption text-ink-muted underline disabled:opacity-50"
+          className="focus-ring min-h-[44px] px-2 text-caption text-ink-muted underline disabled:opacity-50"
         >
           เข้าสู่ระบบ LINE ด้วยอีเมลในเบราว์เซอร์นี้แทน
         </button>

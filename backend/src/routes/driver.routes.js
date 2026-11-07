@@ -48,6 +48,7 @@ const etaSvc  = env.features.eta           ? require('../services/eta.service') 
 const gfSvc   = env.features.geofence      ? require('../services/geofence.service')      : null;
 const devSvc  = env.features.routeDeviation ? require('../services/routeDeviation.service') : null;
 const { toBangkokDate, todayBangkok, toBangkokSqlDateTime } = require('../utils/thaiTime');
+const { isWithinTrackingWindow, configuredWindows, trackingInfo } = require('../utils/gpsTrackingWindow');
 
 function dateOnly(value) {
   if (!value) return null;
@@ -68,6 +69,21 @@ const driverLocationLimiter = rateLimit({
   keyGenerator: (req) => `drv-loc:${req.user?.id || ipKeyGenerator(req.ip)}`,
   skip: () => process.env.NODE_ENV === 'test',
   message: { success: false, message: 'ส่งตำแหน่งถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
+});
+
+// Offline-buffer flush (POST /vehicle-location/batch). Separate bucket from
+// the live pings above so a flush never starves them. A full day offline is
+// ≤ ~1,000 fixes at the 15 s cadence (8 h of tracking windows) = 5 batches of
+// 200; 10 requests / 5 min per driver drains that in one go with headroom
+// for retries, while capping a misbehaving client at 2,000 points / 5 min.
+const driverLocationBatchLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `drv-loc-batch:${req.user?.id || ipKeyGenerator(req.ip)}`,
+  skip: () => process.env.NODE_ENV === 'test',
+  message: { success: false, message: 'ส่งตำแหน่งย้อนหลังถี่เกินไป ระบบจะลองใหม่ภายหลัง', errors: [], data: null },
 });
 
 // Photo upload config
@@ -1177,6 +1193,23 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
     }
     if (errors.length) return sendError(res, 'ข้อมูลตำแหน่งไม่ถูกต้อง', errors, 400);
 
+    // GPS tracking windows (owner decision 2026-11-07): outside the school-run
+    // windows the fix is acknowledged but NOT stored — neither the live row nor
+    // the history trail — and the tracking hooks do not run. 200, not an
+    // error, so the driver app just shows "นอกช่วงเวลาติดตาม".
+    // Both the fix's own time and the server clock must be inside a window:
+    // this endpoint feeds the LIVE row, so a phone with a wrong clock cannot
+    // move the live marker at night.
+    const fixTime = recorded_at ? new Date(recorded_at) : new Date();
+    if (!isWithinTrackingWindow(fixTime, configuredWindows())
+        || !isWithinTrackingWindow(new Date(), configuredWindows())) {
+      return sendSuccess(res, {
+        stored: false,
+        reason: 'OUTSIDE_TRACKING_WINDOW',
+        tracking: trackingInfo(),
+      }, 'นอกช่วงเวลาติดตาม ระบบไม่บันทึกตำแหน่ง');
+    }
+
     // Resolve vehicle from JWT scope — server-trusted
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
@@ -1252,7 +1285,97 @@ router.post('/vehicle-location', driverLocationLimiter, async (req, res, next) =
       console.error('[tracking] deviation check failed:', { vehicle: vehicle.vehicle_id, err: e.message });
     }
 
-    return sendSuccess(res, { received_at: new Date().toISOString(), safety_policy: policy, tracking_health: trackingHealth }, 'OK');
+    return sendSuccess(res, { stored: true, received_at: new Date().toISOString(), safety_policy: policy, tracking_health: trackingHealth, tracking: trackingInfo() }, 'OK');
+  } catch (err) { return next(err); }
+});
+
+// ─── Offline GPS buffer flush ───────────────────────────────────────────────
+//
+// POST /api/driver/vehicle-location/batch  { points: [{ latitude, longitude,
+//   accuracy_meters?, speed_mps?, heading_deg?, recorded_at }] }
+//
+// The driver app queues fixes it could not send (no signal / send failed) and
+// flushes them here, oldest first, ≤ BATCH_MAX_POINTS per request. Each point
+// is validated like the single endpoint; a bad point is rejected on its own
+// (reason per index) without failing the batch. Accepted points go to the
+// history trail only — the ETA / geofence / deviation hooks do NOT run,
+// because replaying old fixes would fire late "bus arriving" notifications.
+// The live row moves forward only when the newest point is newer than it.
+// Vehicle is resolved from the JWT, never from the body.
+const BATCH_MAX_POINTS = 200;
+const BATCH_MAX_FUTURE_MS = 2 * 60 * 1000;   // tolerate 2 min of phone clock skew
+
+router.post('/vehicle-location/batch', driverLocationBatchLimiter, async (req, res, next) => {
+  try {
+    const points = req.body && req.body.points;
+    if (!Array.isArray(points) || points.length === 0) {
+      return sendError(res, 'ไม่มีข้อมูลตำแหน่งที่จะส่ง', [{ field: 'points', message: 'points must be a non-empty array' }], 400);
+    }
+    if (points.length > BATCH_MAX_POINTS) {
+      return sendError(res, `ส่งได้ครั้งละไม่เกิน ${BATCH_MAX_POINTS} จุด`, [{ field: 'points', message: `max ${BATCH_MAX_POINTS} points per request` }], 400);
+    }
+
+    const nowMs = Date.now();
+    const maxAgeMs = env.tracking.locationHistoryRetentionDays * 24 * 60 * 60 * 1000;
+    const windows = configuredWindows();
+    const results = [];
+    const valid = [];
+    points.forEach((p, index) => {
+      const reject = (reason) => results.push({ index, status: 'rejected', reason });
+      if (!p || typeof p !== 'object') return reject('INVALID_POINT');
+      const lat = Number(p.latitude);
+      const lng = Number(p.longitude);
+      if (p.latitude == null || !Number.isFinite(lat) || lat < -90 || lat > 90) return reject('INVALID_LATITUDE');
+      if (p.longitude == null || !Number.isFinite(lng) || lng < -180 || lng > 180) return reject('INVALID_LONGITUDE');
+      if (lat === 0 && lng === 0) return reject('INVALID_COORDINATES');
+      if (typeof p.recorded_at !== 'string' || Number.isNaN(Date.parse(p.recorded_at))) return reject('INVALID_RECORDED_AT');
+      const t = Date.parse(p.recorded_at);
+      if (t > nowMs + BATCH_MAX_FUTURE_MS) return reject('RECORDED_AT_IN_FUTURE');
+      if (t < nowMs - maxAgeMs) return reject('RECORDED_AT_TOO_OLD');
+      if (!isWithinTrackingWindow(new Date(t), windows)) return reject('OUTSIDE_TRACKING_WINDOW');
+      const num = (x) => (x != null && Number.isFinite(Number(x)) ? Number(x) : null);
+      const acc = num(p.accuracy_meters);
+      valid.push({
+        index,
+        latitude: lat,
+        longitude: lng,
+        accuracyMeters: acc == null ? null : Math.round(acc),
+        speedMps: num(p.speed_mps),
+        headingDeg: num(p.heading_deg),
+        recordedAt: toBangkokSqlDateTime(new Date(t)),
+      });
+      return undefined;
+    });
+
+    let outcome = { inserted: [], duplicates: [], latest_updated: false };
+    if (valid.length) {
+      const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+      if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+      await assessSafety(req, vehicle, 'VEHICLE_LOCATION', { skipAudit: true });
+      const driverId = await vllSvc.getActiveDriverIdForVehicle(vehicle.vehicle_id);
+      if (!driverId) return sendError(res, 'ไม่พบการมอบหมายคนขับสำหรับรถคันนี้', [], 400);
+      outcome = await vllSvc.appendHistoryBatch({ vehicleId: vehicle.vehicle_id, driverId, points: valid });
+      const inserted = new Set(outcome.inserted);
+      const firstOf = new Map();
+      for (const p of valid) {
+        if (inserted.has(p.recordedAt) && !firstOf.has(p.recordedAt)) {
+          firstOf.set(p.recordedAt, p.index);
+          results.push({ index: p.index, status: 'accepted' });
+        } else {
+          results.push({ index: p.index, status: 'duplicate' });
+        }
+      }
+    }
+    results.sort((a, b) => a.index - b.index);
+    const count = (s) => results.filter(r => r.status === s).length;
+    return sendSuccess(res, {
+      accepted: count('accepted'),
+      duplicates: count('duplicate'),
+      rejected: count('rejected'),
+      latest_updated: outcome.latest_updated,
+      results,
+      tracking: trackingInfo(),
+    }, 'OK');
   } catch (err) { return next(err); }
 });
 

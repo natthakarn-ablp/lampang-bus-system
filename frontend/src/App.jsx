@@ -123,6 +123,7 @@ const ExecutivePrint       = lazy(() => import('./pages/admin/ExecutivePrint'));
 const SystemHealth         = lazy(() => import('./pages/admin/SystemHealth'));
 const TermSettings         = lazy(() => import('./pages/admin/TermSettings'));
 const AdminLiveVehicles    = lazy(() => import('./pages/admin/AdminLiveVehicles'));
+const VehicleTrackReplay   = lazy(() => import('./pages/shared/VehicleTrackReplay'));
 const AdminAccountSecurity = lazy(() => import('./pages/admin/AdminAccountSecurity'));
 const ParticipationCases      = lazy(() => import('./pages/participation/ParticipationCases'));
 const ParticipationCaseDetail = lazy(() => import('./pages/participation/ParticipationCaseDetail'));
@@ -281,6 +282,7 @@ export default function App() {
             <Route path="audit-log"    element={<SchoolAuditLog />} />
             <Route path="pickup-map"   element={<SchoolPickupMap />} />
             <Route path="live-vehicles" element={<SchoolLiveVehicles />} />
+            <Route path="vehicle-track" element={<VehicleTrackReplay role="school" />} />
             <Route path="teacher-accounts" element={<SchoolTeacherAccounts />} />
             <Route path="year-promotion" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><SchoolYearPromotion /></PrivateRoute>} />
             <Route path="registration-review" element={<SchoolRegistrationReview />} />
@@ -305,6 +307,7 @@ export default function App() {
             <Route path="accounts"    element={<AffSchoolAccounts />} />
             <Route path="audit-log"   element={<AffAuditLog />} />
             <Route path="live-vehicles" element={<AffiliationLiveVehicles />} />
+            <Route path="vehicle-track" element={<VehicleTrackReplay role="affiliation" />} />
             <Route path="pickup-map"  element={<AffiliationPickupMap />} />
             <Route path="transfer-requests" element={<AffTransferRequests />} />
             <Route path="vehicle-requests"  element={<AffVehicleRequests />} />
@@ -329,6 +332,7 @@ export default function App() {
             <Route path="audit-log"    element={<ProvAuditLog />} />
             <Route path="unit-accounts" element={<ProvUnitAccounts />} />
             <Route path="live-vehicles" element={<ProvinceLiveVehicles />} />
+            <Route path="vehicle-track" element={<VehicleTrackReplay role="province" />} />
             <Route path="pickup-map"   element={<ProvincePickupMap />} />
             <Route path="readiness"    element={<DeploymentReadiness />} />
           </Route>
@@ -436,6 +440,11 @@ export default function App() {
           <Route path="/admin/live-vehicles" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><AdminLiveVehicles /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/vehicle-track" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><VehicleTrackReplay role="admin" /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/measurement" element={

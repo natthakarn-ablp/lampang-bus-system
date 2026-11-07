@@ -1,6 +1,7 @@
 import { Building2 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../api/axios';
+import { driverErrorMessage } from '../../utils/driverErrors';
 import ErrorState from '../../components/ErrorState';
 import { StatusBadge } from '../../components/ui';
 import PageHeader from '../../components/PageHeader';
@@ -58,7 +59,7 @@ export default function StudentList() {
       setData(res.data.data);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
+      setError(driverErrorMessage(err, 'โหลดข้อมูลไม่สำเร็จ'));
     } finally {
       setLoading(false);
     }
@@ -84,7 +85,7 @@ export default function StudentList() {
       );
       await fetchRoster();
     } catch (err) {
-      setBulkMsg(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+      setBulkMsg(driverErrorMessage(err, 'เกิดข้อผิดพลาด'));
     } finally {
       setBulkLoading(false);
     }

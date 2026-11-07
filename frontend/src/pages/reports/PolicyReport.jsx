@@ -32,7 +32,6 @@ export default function PolicyReport() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={false} />
       {/* Header */}
       <div className="flex flex-col gap-3 mb-6">
         <div>
@@ -76,6 +75,9 @@ export default function PolicyReport() {
               sub={data.emergencies_30d > 0 ? `${data.emergencies_30d} ครั้ง` : 'ไม่มี'}
               color={data.emergencies_30d > 0 ? 'red' : 'gray'} />
           </div>
+
+          {/* Self-travel / leave: in context under today's totals, hidden when all 0. */}
+          <AttendanceBreakdown data={data} className="mb-6" />
 
           {/* Executive insight box */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">

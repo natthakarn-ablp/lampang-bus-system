@@ -69,7 +69,6 @@ export default function ProvDailyStatus() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      {data && <AttendanceBreakdown data={loading ? null : error ? {} : visibleAttendance(data)} />}
       <PageHeader
         title="สถานะวันนี้"
         subtitle="ความคืบหน้าการรับ-ส่งนักเรียนรายคันทั้งจังหวัด"
@@ -80,6 +79,9 @@ export default function ProvDailyStatus() {
       />
 
       {error && <ErrorState message={error} className="mb-4" />}
+
+      {/* Self-travel / leave: under the header, hidden when all 0. */}
+      {data && !loading && !error && <AttendanceBreakdown data={visibleAttendance(data)} className="mb-4" />}
 
       {loading ? (
         <LoadingState />

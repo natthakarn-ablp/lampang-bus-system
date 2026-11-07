@@ -76,8 +76,6 @@ export default function SummaryReport() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={false} />
-
       {/* ── SECTION 1 — Header ─────────────────────────────── */}
       <div className="flex flex-col gap-3 mb-6">
         <div>
@@ -135,6 +133,9 @@ export default function SummaryReport() {
               sub={totalSchools > 0 ? `${schools100} แห่ง จาก ${totalSchools} แห่ง` : 'ไม่มีข้อมูล'}
               color={schools100 === totalSchools && totalSchools > 0 ? 'green' : 'yellow'} />
           </div>
+
+          {/* Self-travel / leave: in context under the KPI cards, hidden when all 0. */}
+          <AttendanceBreakdown data={data} className="mb-6" />
 
           {/* ── SECTION 3 — Executive Insight Box ──────────── */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">

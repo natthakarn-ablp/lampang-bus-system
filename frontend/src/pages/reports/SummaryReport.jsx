@@ -1,10 +1,9 @@
-import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useRef } from 'react';
-import { FileBarChart } from 'lucide-react';
+import { FileBarChart, Sunrise, Sunset, GraduationCap, Siren, School } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
-import DashboardCard from '../../components/DashboardCard';
-import KpiCard from '../../components/KpiCard';
+import { StatTile, StatGrid, TravelLeaveSummary } from '../../components/dashboard';
+import { ReportHero, ExportPanel, reportScopeName } from './ReportParts';
 import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
 import SummaryPrintView from '../../components/SummaryPrintView';
@@ -13,6 +12,9 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import { AppCard, StatusBadge, DataTable } from '../../components/ui';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
+
+const pctTone = v => (v == null || !isFinite(v) ? 'calm' : v >= 95 ? 'success' : v >= 85 ? 'calm' : 'warn');
+const pctText = v => (v == null || !isFinite(v) ? '—' : `${Number(v).toFixed(1)}%`);
 
 export default function SummaryReport() {
   const { user } = useAuth();
@@ -76,71 +78,42 @@ export default function SummaryReport() {
 
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
-      {/* ── SECTION 1 — Header ─────────────────────────────── */}
-      <div className="flex flex-col gap-3 mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-800">สรุปภาพรวม</h1>
-          <p className="text-sm text-ink-muted mt-0.5">ภาพรวมผลการดำเนินงานรถรับส่งนักเรียน</p>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          {data?.date && (
-            <span className="text-xs text-ink-muted">
-              ข้อมูล ณ {new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </span>
-          )}
-          <button onClick={() => window.location.reload()}
-            className="focus-ring text-sm text-ink px-3 min-h-[44px] border border-surface-border rounded-lg bg-surface-raised hover:bg-surface active:bg-surface-border transition">
-            รีเฟรชข้อมูล
-          </button>
-          {data && (
-            <div className="sm:ml-auto">
-              {/* CSV and Excel here hit the shared /api/reports/export endpoint,
-                  which returns the per-student daily roster — not this page's
-                  summary. Only PDF renders the summary itself. Naming the file
-                  "summary" made the other two look like something they are not,
-                  so they carry the date and the report they actually contain.
-                  Passing the date explicitly also keeps the file in step with the
-                  day this page is showing rather than the server's today. */}
-              <ExportButtons
-                queryParams={data.date ? `date=${data.date}` : ''}
-                filenamePrefix={`report-${data.date || 'today'}`}
-                onPdf={handlePrintPdf}
-              />
-            </div>
-          )}
-        </div>
-      </div>
+      <ReportHero eyebrow="สรุปภาพรวม" title={reportScopeName(user, data)}
+        subtitle={data?.date ? `ข้อมูล ณ ${new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}` : 'ภาพรวมผลการดำเนินงานรถรับส่งนักเรียน'}>
+        <button onClick={() => window.location.reload()}
+          className="focus-ring-inverse text-sm text-navy-100 hover:text-white px-4 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
+          รีเฟรชข้อมูล
+        </button>
+      </ReportHero>
 
       {error && <ErrorState message={error} className="mb-4" />}
       {loading ? <LoadingState />
       : !data ? <EmptyState icon={FileBarChart} title="ไม่มีข้อมูล" />
       : (
         <>
-          {/* ── SECTION 2 — Executive KPI Cards ────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-            <KpiCard label="KPI ส่งเช้าภาพรวม" pct={data.morning_kpi}
-              detail={`${data.morning_done}/${data.morning_total} คน`} />
-            <KpiCard label="KPI รับเย็นภาพรวม" pct={data.evening_kpi}
-              detail={`${data.evening_done}/${data.evening_total} คน`} />
-            <DashboardCard label="นักเรียนทั้งหมด" value={data.total_students}
-              sub={`เช้า ${data.morning_total} · เย็น ${data.evening_total}`} color="blue" />
-            <DashboardCard label="รถรับส่งทั้งหมด" value={data.total_vehicles} color="blue" />
-            <DashboardCard label="เหตุฉุกเฉิน" value={data.emergency_count}
-              sub={data.emergency_count > 0 ? `${data.emergency_count} ครั้ง` : 'ไม่มี'}
-              color={data.emergency_count > 0 ? 'red' : 'gray'} />
-            <DashboardCard label="โรงเรียนที่ครบ 100%"
-              value={totalSchools > 0 ? `${schools100}` : '-'}
-              sub={totalSchools > 0 ? `${schools100} แห่ง จาก ${totalSchools} แห่ง` : 'ไม่มีข้อมูล'}
-              color={schools100 === totalSchools && totalSchools > 0 ? 'green' : 'yellow'} />
-          </div>
+          {/* ── Key numbers ── */}
+          <StatGrid cols={3} label="ตัวเลขสำคัญ" className="mb-5">
+            <StatTile icon={Sunrise} label="ส่งเช้าสำเร็จ" value={pctText(data.morning_kpi)} tone={pctTone(data.morning_kpi)}
+              sub={`${data.morning_done}/${data.morning_total} คน`} />
+            <StatTile icon={Sunset} label="รับเย็นสำเร็จ" value={pctText(data.evening_kpi)} tone={pctTone(data.evening_kpi)}
+              sub={`${data.evening_done}/${data.evening_total} คน`} />
+            <StatTile icon={GraduationCap} label="นักเรียนที่ใช้รถ" value={data.total_students} unit="คน"
+              sub={`เช้า ${data.morning_total} · เย็น ${data.evening_total} · ${data.total_vehicles} คัน`} />
+            <StatTile icon={Siren} label="เหตุฉุกเฉิน" value={data.emergency_count} unit="ครั้ง"
+              tone={data.emergency_count > 0 ? 'danger' : 'calm'} sub={data.emergency_count > 0 ? 'ควรติดตามผล' : 'ไม่มี'} />
+            {totalSchools > 0 && (
+              <StatTile icon={School} label="โรงเรียนที่ครบ 100%" value={`${schools100} / ${totalSchools}`} unit="แห่ง"
+                tone={schools100 === totalSchools ? 'success' : 'calm'} />
+            )}
+          </StatGrid>
 
-          {/* Self-travel / leave: in context under the KPI cards, hidden when all 0. */}
-          <AttendanceBreakdown data={data} className="mb-6" />
+          {/* Self-travel / leave: in context, hidden when all 0. */}
+          <TravelLeaveSummary data={data} className="mb-6" />
 
           {/* ── SECTION 3 — Executive Insight Box ──────────── */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
-            <h2 className="text-sm font-semibold text-blue-800 mb-3">สรุปผู้บริหาร</h2>
-            <ul className="text-sm text-blue-700 space-y-1.5 leading-relaxed">
+          <div className="rounded-2xl border border-surface-border bg-surface-raised p-4 sm:p-5 mb-6">
+            <h2 className="text-lg font-bold text-ink mb-2">สรุปผู้บริหาร</h2>
+            <ul className="text-base text-ink space-y-1.5 leading-relaxed">
               <li>• วันนี้ KPI ส่งเช้าภาพรวม <strong className={kpiColor(data.morning_kpi)}>{safePct(data.morning_kpi)}</strong> ({data.morning_done}/{data.morning_total} คน)</li>
               <li>• KPI รับเย็นภาพรวม <strong className={kpiColor(data.evening_kpi)}>{safePct(data.evening_kpi)}</strong> ({data.evening_done}/{data.evening_total} คน)</li>
               <li>• มี {schools100} โรงเรียนที่ดำเนินงานครบ 100% จากทั้งหมด {totalSchools} แห่ง</li>
@@ -155,7 +128,7 @@ export default function SummaryReport() {
           {/* ── SECTION 4 — School Rankings ─────────────────── */}
           {data.schools?.length > 1 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">จัดอันดับโรงเรียน</h2>
+              <h2 className="text-lg font-bold text-ink mb-3">จัดอันดับโรงเรียน</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RankingTable title="โรงเรียนผลงานดีที่สุด" items={topN(data.schools, 'morning_kpi')} nameKey="school_name" />
                 <RankingTable title="โรงเรียนที่ควรเฝ้าระวัง" items={bottomN(data.schools, 'morning_kpi')} nameKey="school_name" />
@@ -166,7 +139,7 @@ export default function SummaryReport() {
           {/* ── SECTION 5 — Vehicle Rankings ────────────────── */}
           {data.vehicles?.length > 1 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">จัดอันดับรถรับส่ง</h2>
+              <h2 className="text-lg font-bold text-ink mb-3">จัดอันดับรถรับส่ง</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <RankingTable title="รถผลงานดีที่สุด" items={topN(data.vehicles, 'morning_kpi')} nameKey="plate_no" showSchool />
                 <RankingTable title="รถที่ควรเฝ้าระวัง" items={bottomN(data.vehicles, 'morning_kpi')} nameKey="plate_no" showSchool />
@@ -177,7 +150,7 @@ export default function SummaryReport() {
           {/* ── SECTION 6 — สรุปตามสังกัด (hidden for affiliation — they see only their own) ── */}
           {data.affiliations?.length > 0 && user?.role !== 'affiliation' && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามสังกัด</h2>
+              <h2 className="text-lg font-bold text-ink mb-3">สรุปตามสังกัด</h2>
               <DataTable
                 caption="สรุป KPI รายสังกัด"
                 rows={sortByKpi(data.affiliations)}
@@ -215,7 +188,7 @@ export default function SummaryReport() {
           {/* ── SECTION 7 — สรุปตามโรงเรียน ─────────────────── */}
           {data.schools?.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามโรงเรียน</h2>
+              <h2 className="text-lg font-bold text-ink mb-3">สรุปตามโรงเรียน</h2>
               <DataTable
                 caption="สรุป KPI รายโรงเรียน"
                 rows={sortByKpi(data.schools)}
@@ -253,7 +226,7 @@ export default function SummaryReport() {
           {/* ── SECTION 8 — สรุปตามรถ ───────────────────────── */}
           {data.vehicles?.length > 0 && (
             <section className="mb-6">
-              <h2 className="text-sm font-semibold text-ink-muted uppercase tracking-wide mb-3">สรุปตามรถ</h2>
+              <h2 className="text-lg font-bold text-ink mb-3">สรุปตามรถ</h2>
               <DataTable
                 caption="สรุป KPI รายรถ"
                 rows={sortByKpi(data.vehicles)}
@@ -294,8 +267,8 @@ export default function SummaryReport() {
           )}
 
           {/* ── SECTION 9 — หมายเหตุ KPI ──────────────────── */}
-          <details className="mt-6 bg-gray-50 border border-gray-200 rounded-xl text-xs text-ink-muted">
-            <summary className="px-4 py-3 cursor-pointer font-semibold text-gray-600 hover:text-gray-800 select-none">
+          <details className="mt-6 bg-surface border border-surface-border rounded-2xl text-sm text-ink-muted">
+            <summary className="px-4 py-3 min-h-[44px] cursor-pointer font-semibold text-ink select-none">
               หมายเหตุ KPI
             </summary>
             <div className="px-4 pb-4 pt-1">
@@ -312,6 +285,15 @@ export default function SummaryReport() {
               </ul>
             </div>
           </details>
+
+          {/* PDF is this summary; CSV and Excel are the day's roster (shared export endpoint). */}
+          <ExportPanel note="PDF คือหน้าสรุปนี้สำหรับพิมพ์ · CSV และ Excel เป็นรายชื่อนักเรียนรายวัน">
+            <ExportButtons
+              queryParams={data.date ? `date=${data.date}` : ''}
+              filenamePrefix={`report-${data.date || 'today'}`}
+              onPdf={handlePrintPdf}
+            />
+          </ExportPanel>
         </>
       )}
 

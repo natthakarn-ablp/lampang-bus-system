@@ -115,7 +115,7 @@ export default function AffiliationLiveVehicles() {
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         <LiveKpiCard icon={Bus}            label="รถทั้งหมดในสังกัด"           value={vehicles.length} variant="neutral" />
-        <LiveKpiCard icon={Users}          label="นักเรียนในสังกัด"            value={counts.students} variant="brand"   />
+        <LiveKpiCard icon={Users}          label="นักเรียนที่ใช้รถ"            value={counts.students} variant="brand"   />
         <LiveKpiCard icon={Activity}       label="ออนไลน์"                    value={counts.online}   variant="success" />
         <LiveKpiCard icon={AlertTriangle}  label="สัญญาณเก่า"                 value={counts.stale}    variant="warn"    />
         <LiveKpiCard icon={Pause}          label="หยุดส่ง"                    value={counts.paused}   variant="neutral" />

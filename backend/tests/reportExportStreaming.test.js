@@ -48,7 +48,7 @@ function bufferedCsv(headers, rows) {
   let csv = '﻿' + headers.join(',') + '\n';
   for (const r of rows) {
     csv += [
-      csvCell(r.student_id),
+      csvCell(r.student_code),
       csvCell(r.student_name),
       csvCell(abbreviateGrade(r.grade)),
       csvCell(r.classroom || ''),

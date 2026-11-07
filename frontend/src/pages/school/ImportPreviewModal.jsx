@@ -37,6 +37,11 @@ const CLASS_META = {
   APPLIED: { label: 'นำเข้าสำเร็จ', tone: 'emerald' },
   ALREADY_APPLIED: { label: 'นำเข้าแล้ว', tone: 'blue' },
   APPLY_FAILED: { label: 'นำเข้าไม่สำเร็จ', tone: 'red' },
+  // Emitted by the backend but missing here, so the badge used to show the raw
+  // English code (live QA sch-03).
+  DUPLICATE_ROW_IN_FILE: { label: 'รหัสซ้ำในไฟล์', tone: 'red' },
+  FIELD_TOO_LONG: { label: 'ข้อมูลยาวเกิน', tone: 'red' },
+  VEHICLE_PLATE_INVALID: { label: 'ทะเบียนรถผิดรูปแบบ', tone: 'red' },
 };
 // The classification tones above are the vocabulary this file was written in;
 // they map onto the design system's semantic variants rather than being
@@ -67,7 +72,8 @@ const STATUS_META = {
   VEHICLE_BLOCKED: { label: 'ติดปัญหารถ', tone: 'red' },
   APPLY_FAILED: { label: 'ไม่สำเร็จ', tone: 'red' },
 };
-const metaFor = (c) => CLASS_META[c] || { label: c, tone: 'slate' };
+// Unknown codes fall back to a Thai label — never show a raw English code.
+const metaFor = (c) => CLASS_META[c] || { label: 'ต้องตรวจสอบ', tone: 'slate' };
 const badgeFor = (r) => STATUS_META[r.status] || metaFor(r.classification);
 
 const FILTERS = [
@@ -270,10 +276,10 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
       },
     },
     { key: 'row_number', header: 'แถว', numeric: true, cell: r => r.row_number },
-    { key: 'student_code', header: 'รหัส', secondary: true, cell: r => r.student_code },
+    { key: 'student_code', header: 'รหัส', secondary: true, nowrap: true, cell: r => r.student_code },
     { key: 'student_name', header: 'ชื่อนักเรียน', primary: true, cell: r => r.student_name || '—' },
-    { key: 'input_vehicle_plate', header: 'ทะเบียนในไฟล์', cell: r => r.input_vehicle_plate || '—' },
-    { key: 'matched_display_plate', header: 'รถที่จับคู่ได้', cell: r => r.matched_display_plate || '—' },
+    { key: 'input_vehicle_plate', header: 'ทะเบียนในไฟล์', nowrap: true, cell: r => r.input_vehicle_plate || '—' },
+    { key: 'matched_display_plate', header: 'รถที่จับคู่ได้', nowrap: true, cell: r => r.matched_display_plate || '—' },
     {
       key: 'status', header: 'สถานะ', badge: true,
       cell: r => {
@@ -282,7 +288,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
       },
     },
     {
-      key: 'message_th', header: 'คำอธิบาย / สิ่งที่ต้องทำ',
+      key: 'message_th', header: 'คำอธิบาย / สิ่งที่ต้องทำ', wrap: true,
       cell: r => (
         <div>
           <div>{r.message_th}</div>
@@ -322,7 +328,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
     <>
       <Modal
         title="ตรวจสอบไฟล์ก่อนนำเข้า"
-        size="lg"
+        size={rows ? 'xl' : 'lg'}
         onClose={() => { if (!busy) close(); }}
         footer={rows ? (
           <>
@@ -365,14 +371,17 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
           </>
         ) : undefined}
       >
-        <p className="text-sm text-ink-muted mb-4">
+        <p className={`text-sm text-ink-muted ${rows ? 'mb-3' : 'mb-4'}`}>
           {applied ? 'บันทึกรายการที่สำเร็จแล้ว ตรวจสอบผลด้านล่างได้เลย' : rows
             ? 'ขั้นตอนนี้เป็นการตรวจสอบข้อมูลเท่านั้น ระบบยังไม่บันทึกข้อมูลนักเรียน'
             : 'อัปโหลดไฟล์ CSV หรือ Excel (.xlsx) เพื่อตรวจสอบรายแถวก่อนนำเข้าจริง'}
         </p>
 
         {/* Current academic term (date-derived) — info, not a warning. */}
-        {term && (
+        {/* Shown on the upload step only: on the preview step it pushed the
+            rows below the fold at 1366x768 (live QA vis-04); the term name is
+            repeated in the preview banner instead. */}
+        {term && !rows && (
           <AlertBanner variant="info" icon={CalendarDays} title="ภาคเรียนที่จะบันทึก" className="mb-4">
             <span className="font-semibold">{term.name || `ภาคเรียน ${term.term_id}`}</span>
             {term.start_date && term.end_date && (
@@ -429,12 +438,15 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
             >
               ดาวน์โหลดไฟล์ตัวอย่าง
             </a>
+            <p className="text-caption text-ink-muted text-center -mt-2">
+              ไฟล์ตัวอย่างมีเฉพาะหัวคอลัมน์ กรอกข้อมูลตั้งแต่แถวที่ 2 · คอลัมน์ที่มี * ต้องกรอก · ห้ามแก้ชื่อหัวคอลัมน์
+            </p>
           </div>
         )}
 
         {/* ── Preview step ── */}
         {rows && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <AlertBanner
               variant={applied ? 'success' : 'info'}
               title={applied ? 'นำเข้าเสร็จสิ้น' : 'ยังไม่ได้บันทึกข้อมูล'}
@@ -442,10 +454,13 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
               {applied
                 ? `นำเข้าสำเร็จ ${applyResult.applied} รายการ${applyResult.already_applied ? ` · มีอยู่แล้ว ${applyResult.already_applied}` : ''}${applyResult.failed ? ` · ไม่สำเร็จ ${applyResult.failed}` : ''} — กรุณาตรวจสอบจำนวนในหน้ารายชื่อนักเรียน`
                 : 'ระบบยังไม่ได้บันทึกข้อมูลนักเรียน กรุณาตรวจสอบรายการด้านล่างก่อนกดยืนยันนำเข้า'}
-              <span className="block text-caption mt-0.5">ชุดนำเข้า #{batchId}</span>
+              <span className="block text-caption mt-0.5">
+                ชุดนำเข้า #{batchId}
+                {term && <> · ภาคเรียนที่จะบันทึก {term.name || `ภาคเรียน ${term.term_id}`}</>}
+              </span>
             </AlertBanner>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
               <SummaryCard label="ทั้งหมด" value={summary.total} tone="slate" />
               <SummaryCard label="พร้อมนำเข้า" value={canApplyCount} tone="emerald" />
               <SummaryCard label="ซ้ำในโรงเรียน" value={summary.skip} tone="slate" />
@@ -561,8 +576,8 @@ function ConfirmRow({ label, value, tone = '' }) {
 
 function SummaryCard({ label, value, tone }) {
   return (
-    <div className={`rounded-lg border px-3 py-2.5 ${SUMMARY_TONE[tone] || SUMMARY_TONE.slate}`}>
-      <div className="text-xl font-bold tabular-nums leading-none">{value}</div>
+    <div className={`rounded-lg border px-3 py-2 ${SUMMARY_TONE[tone] || SUMMARY_TONE.slate}`}>
+      <div className="text-lg font-bold tabular-nums leading-none">{value}</div>
       <div className="text-xs font-medium mt-1 opacity-80">{label}</div>
     </div>
   );

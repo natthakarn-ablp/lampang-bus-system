@@ -81,7 +81,6 @@ export default function AffDailyStatus() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      {data && <AttendanceBreakdown data={loading ? null : error ? {} : visibleAttendance(data)} />}
       <PageHeader
         title="สถานะวันนี้"
         subtitle="ความคืบหน้าการรับ-ส่งนักเรียนรายคันในสังกัด"
@@ -111,6 +110,8 @@ export default function AffDailyStatus() {
       />
 
       {error && <ErrorState message={error} className="mb-4" />}
+
+      {data && <AttendanceBreakdown data={loading ? null : error ? {} : visibleAttendance(data)} />}
 
       {loading ? (
         <LoadingState />

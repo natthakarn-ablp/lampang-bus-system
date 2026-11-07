@@ -88,7 +88,7 @@ export default function PickupPointFields({
       />
 
       <div className="grid grid-cols-2 gap-3">
-        <FormField label="Latitude" required helper="-90 ถึง 90">
+        <FormField label="ละติจูด" required helper="-90 ถึง 90 (เช่น 18.29)">
           {ctl => (
             <input
               {...ctl}
@@ -99,7 +99,7 @@ export default function PickupPointFields({
             />
           )}
         </FormField>
-        <FormField label="Longitude" required helper="-180 ถึง 180">
+        <FormField label="ลองจิจูด" required helper="-180 ถึง 180 (เช่น 99.49)">
           {ctl => (
             <input
               {...ctl}

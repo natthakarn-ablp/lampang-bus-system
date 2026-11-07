@@ -1,7 +1,8 @@
 import { Link2, Users, Bus, ClipboardList, MapPin, CalendarDays, Sunrise, Sunset, CheckCircle2, Clock} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT auth
-import { getLiffIdToken } from '../../utils/liff';
+import { getLiffIdToken, isOutsideLineClient, LINE_OA_ID, LINE_OA_URL } from '../../utils/liff';
+import OpenInLineCard from '../../components/parent/OpenInLineCard';
 import AppCard from '../../components/ui/AppCard';
 import { formatGradeClass } from '../../utils/student';
 import ParentConsentModal from '../../components/consent/ParentConsentModal';
@@ -36,6 +37,7 @@ function detailErrorMessage(err) {
 
 export default function ParentStatus() {
   const [idToken, setIdToken] = useState('');
+  const [outsideLine, setOutsideLine] = useState(false);
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [status, setStatus] = useState(null);
@@ -60,6 +62,7 @@ export default function ParentStatus() {
       const token = await getLiffIdToken();
       if (cancelled) return;
       setIdToken(token);
+      setOutsideLine(isOutsideLineClient());
       if (!token) {
         // Phase 11A audit fix C5: clear error message when not in LIFF
         if (!cancelled) setError('กรุณาเปิดหน้านี้ผ่านลิงก์ใน LINE OA เท่านั้น — ไม่สามารถเข้าถึงได้โดยตรง');
@@ -151,7 +154,13 @@ export default function ParentStatus() {
     setDetailLoading(false);
   }
 
-  // ── Unlinked state (no LIFF id_token — opened outside LINE or not linked) ──
+  // ── Opened outside LINE (parent-02): linked or not, we cannot tell without a
+  // LINE identity, so ask to reopen in LINE rather than claim "not linked". ──
+  if (!loading && !idToken && outsideLine) {
+    return <OpenInLineCard subPath="" />;
+  }
+
+  // ── Unlinked state (inside LINE but no LIFF id_token) ──
   if (!loading && !idToken) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-4">
@@ -161,7 +170,9 @@ export default function ParentStatus() {
           <p className="text-base text-ink-muted mb-6">ทำตามขั้นตอนด้านล่าง เพื่อดูสถานะรับ-ส่งบุตรหลาน</p>
 
           <div className="text-left space-y-4 mb-6">
-            <StepItem number="1" text="เพิ่มเพื่อน LINE OA @943glwjf (รถรับส่งนักเรียน)" />
+            <StepItem number="1" text={<>เพิ่มเพื่อน LINE OA{' '}
+              <a href={LINE_OA_URL} className="focus-ring inline-flex items-center min-h-[44px] px-1 text-brand-700 font-semibold underline" target="_blank" rel="noopener noreferrer">{LINE_OA_ID}</a>
+              {' '}(รถรับส่งนักเรียน)</>} />
             <StepItem number="2" text='พิมพ์คำว่า "ผูกบัญชี" ในแชท' />
             <StepItem number="3" text="กรอกเบอร์โทร + รหัสนักเรียนของบุตรหลาน" />
             <StepItem number="4" text="รอโรงเรียนอนุมัติ" />

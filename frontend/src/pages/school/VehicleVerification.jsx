@@ -456,7 +456,7 @@ export default function VehicleVerification() {
     <div className="mx-auto max-w-6xl space-y-5 p-3 sm:p-6">
       <div className="print:hidden">
         <CommandHero
-          eyebrow="School vehicle safety workflow"
+          eyebrow="ขั้นตอนตรวจความปลอดภัยรถโรงเรียน"
           title="ส่งตรวจและรับรองรถ"
           description="คนขับยื่นคำขอขึ้นทะเบียนรถ โรงเรียนตรวจสอบความถูกต้อง และขนส่งตรวจสภาพรถ ติดตามสถานะได้ตลอด"
           icon={ShieldCheck}

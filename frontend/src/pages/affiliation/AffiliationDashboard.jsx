@@ -20,6 +20,7 @@ import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
 import { PageTransition } from '../../lib/motion';
 
 const REFRESH_INTERVAL_MS = 30_000;
+const AT_RISK_LIST_LIMIT = 10;
 
 // What each feed is called in the load-failure banner.
 const SECTION_LABELS = {
@@ -40,6 +41,8 @@ export default function AffiliationDashboard() {
   const [schools, setSchools] = useState([]);
   const [incidents, setIncidents] = useState([]);
   const [atRiskVehicles, setAtRiskVehicles] = useState([]);
+  // Full at-risk count; the list itself is capped at AT_RISK_LIST_LIMIT (QA aff-01).
+  const [atRiskTotal, setAtRiskTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   // section key -> true while its last request failed; those sections show "—"
   const [failed, setFailed] = useState({});
@@ -67,7 +70,7 @@ export default function AffiliationDashboard() {
         settle(api.get('/affiliation/dashboard')),
         settle(api.get('/affiliation/schools')),
         settle(api.get('/affiliation/emergencies?per_page=5&page=1')),
-        settle(api.get('/affiliation/vehicles-at-risk?limit=10')),
+        settle(api.get(`/affiliation/vehicles-at-risk?limit=${AT_RISK_LIST_LIMIT}`)),
       ]);
       if (dash.ok) {
         setData(dash.res.data.data);
@@ -83,7 +86,10 @@ export default function AffiliationDashboard() {
       }
       if (atRiskRes.ok) {
         const atRiskList = atRiskRes.res.data?.data;
-        setAtRiskVehicles(Array.isArray(atRiskList) ? atRiskList : []);
+        const list = Array.isArray(atRiskList) ? atRiskList : [];
+        setAtRiskVehicles(list);
+        const total = Number(atRiskRes.res.data?.meta?.total);
+        setAtRiskTotal(Number.isFinite(total) ? total : list.length);
       }
       setFailed({
         dashboard: !dash.ok, schools: !schoolsRes.ok, incidents: !incRes.ok, atRisk: !atRiskRes.ok,
@@ -134,7 +140,6 @@ export default function AffiliationDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      <AttendanceBreakdown data={failed.dashboard ? {} : data} />
       <div className="flex flex-col gap-2">
         <RoleChip role="affiliation" />
         <PageHeader
@@ -205,11 +210,23 @@ export default function AffiliationDashboard() {
         const schoolTotal = today.school_total ?? today.total_schools ?? schools.length;
         const usedRecently = today.school_used_recently ?? 0;
 
+        // No school-day calendar exists; the backend flags Saturday/Sunday as
+        // not a school day, and then nothing is "late" (QA aff-04).
+        const offDay = dashOk && today.is_school_day === false;
+
         // ── Banner: one sentence, one tone ──
-        const notChecked = problemSchools.filter(s => (s.morning_done || 0) === 0 && (s.morning_expected || 0) > 0);
+        const notChecked = offDay ? [] : problemSchools.filter(s => (s.morning_done || 0) === 0 && (s.morning_expected || 0) > 0);
         let banner;
         if (!dashOk) {
           banner = null;
+        } else if (offDay) {
+          banner = {
+            variant: 'neutral', title: 'วันนี้เป็นวันหยุด (เสาร์–อาทิตย์)',
+            sub: mDone + eDone > 0
+              ? `มีการรับส่ง ส่งเช้า ${mDone.toLocaleString('th-TH')} คน · รับเย็น ${eDone.toLocaleString('th-TH')} คน`
+              : 'ไม่มีการเช็กชื่อตามปกติ ตัวเลขรอส่ง-รับวันนี้จึงไม่ถือว่าค้าง',
+            topic: 'schools',
+          };
         } else if (mTotal + eTotal === 0 || (mDone === 0 && eDone === 0 && notChecked.length === 0)) {
           banner = { variant: 'neutral', title: 'ยังไม่เริ่มรอบวันนี้', sub: 'รอข้อมูลการเช็กชื่อรอบเช้าจากโรงเรียนในสังกัด' };
         } else if (notChecked.length > 0) {
@@ -247,7 +264,7 @@ export default function AffiliationDashboard() {
           },
           {
             key: 'risk-vehicles', variant: atRiskVehicles.some(v => v.risk_score >= 100) ? 'danger' : 'warn',
-            count: atRiskVehicles.length,
+            count: atRiskTotal,
             title: 'รถต้องแก้เอกสาร',
             sub: failed.atRisk ? UNAVAILABLE_SUB : (atRiskVehicles[0]?.risk_reasons?.[0] || 'ประกันหรือเอกสารรถต้องตรวจ'),
             unavailable: !!failed.atRisk,
@@ -268,7 +285,7 @@ export default function AffiliationDashboard() {
         ].filter(Boolean);
 
         // ── Rank: schools to follow, morning done/expected lowest first ──
-        const rankRows = problemSchools
+        const rankRows = (offDay ? [] : problemSchools)
           .filter(s => (s.morning_expected || 0) > 0)
           .map(s => ({ s, pct: pctOf(s.morning_done || 0, s.morning_expected) }))
           .sort((a, b) => a.pct - b.pct)
@@ -287,7 +304,9 @@ export default function AffiliationDashboard() {
         <>
           {banner && <TodayBanner variant={banner.variant} title={banner.title} sub={banner.sub} cta={banner.cta} />}
 
-          <TodoCards items={todos} />
+          <TodoCards items={todos} afterAlert={banner?.variant === 'warn' || banner?.variant === 'danger'} />
+
+          <AttendanceBreakdown data={today} />
 
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="ตัวเลขหลักวันนี้">
             {!dashOk ? (
@@ -298,6 +317,12 @@ export default function AffiliationDashboard() {
                 <KpiRingCard label="เหตุฉุกเฉิน 7 วัน" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
               </>
             ) : (<>
+            {offDay ? (<>
+              <KpiRingCard label="ส่งเช้า" value="–" variant="neutral" chip="วันหยุด"
+                sub={`${mDone.toLocaleString('th-TH')} / ${mTotal.toLocaleString('th-TH')} คน`} />
+              <KpiRingCard label="รับเย็น" value="–" variant="neutral" chip="วันหยุด"
+                sub={`${eDone.toLocaleString('th-TH')} / ${eTotal.toLocaleString('th-TH')} คน`} />
+            </>) : (<>
             <KpiRingCard
               label="ส่งเช้า" pct={mPct} value="–" variant={mPct == null ? 'neutral' : pctTone(mPct)}
               sub={`${mDone.toLocaleString('th-TH')} / ${mTotal.toLocaleString('th-TH')} คน`}
@@ -311,6 +336,7 @@ export default function AffiliationDashboard() {
                 sub={`${eDone.toLocaleString('th-TH')} / ${eTotal.toLocaleString('th-TH')} คน`}
               />
             )}
+            </>)}
             <KpiRingCard
               label="โรงเรียนที่ใช้งาน" pct={pctOf(usedRecently, schoolTotal)} value="–" variant="info"
               sub={`${usedRecently} / ${schoolTotal} โรงเรียน · 14 วัน`}
@@ -336,7 +362,7 @@ export default function AffiliationDashboard() {
               title="โรงเรียนที่ต้องติดตาม"
               sub="ส่งเช้าวันนี้ เรียงจากน้อยไปมาก"
               rows={rankRows}
-              empty={dashOk ? 'ทุกโรงเรียนส่งเช้าครบแล้ว' : UNAVAILABLE_SUB}
+              empty={!dashOk ? UNAVAILABLE_SUB : offDay ? 'วันหยุด ไม่มีโรงเรียนที่ต้องติดตาม' : 'ทุกโรงเรียนส่งเช้าครบแล้ว'}
               link={{ label: 'ดูทุกโรงเรียน', to: '/affiliation/schools' }}
             />
           </section>
@@ -374,8 +400,10 @@ export default function AffiliationDashboard() {
               <FoldSection
                 key={`vehicles-${openFold.vehicles || 0}`}
                 defaultOpen={!!openFold.vehicles}
-                title={`รถที่ต้องติดตาม ${failed.atRisk ? '—' : atRiskVehicles.length} คัน`}
-                subtitle="ประกันหรือเอกสารรถที่ต้องตรวจสอบ"
+                title={`รถที่ต้องติดตาม ${failed.atRisk ? '—' : atRiskTotal.toLocaleString('th-TH')} คัน`}
+                subtitle={atRiskTotal > atRiskVehicles.length
+                  ? `ประกันหรือเอกสารรถที่ต้องตรวจสอบ · แสดง ${atRiskVehicles.length} คันที่เร่งด่วนที่สุด`
+                  : 'ประกันหรือเอกสารรถที่ต้องตรวจสอบ'}
               >
                 {failed.atRisk ? (
                   <p className="py-6 text-center text-sm text-ink-muted">{UNAVAILABLE_SUB}</p>

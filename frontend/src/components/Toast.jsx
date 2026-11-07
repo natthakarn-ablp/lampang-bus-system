@@ -53,18 +53,21 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={ctx}>
       {children}
-      {/* Toast container — fixed bottom-right; lifts above bottom nav when --app-bottom-nav is set */}
+      {/* Toast container — top centre, just under the top bar. It used to sit
+          bottom-right, exactly where row actions (เช็กชื่อ / ยกเลิก / แก้ไข)
+          live, and covered them for 3.5 s after every save (live QA vis-15).
+          Toasts carry no controls, so they never take clicks either. */}
       <div
-        className="fixed right-4 z-toast flex flex-col gap-2 pointer-events-none"
+        className="fixed inset-x-0 z-toast flex flex-col items-center gap-2 px-4 pointer-events-none"
         role="status"
         aria-live="polite"
-        style={{ bottom: 'calc(1rem + var(--app-bottom-nav, 0px))' }}
+        style={{ top: 'calc(env(safe-area-inset-top, 0px) + 4.25rem)' }}
       >
         <AnimatePresence>
           {toasts.map((t) => (
             <ToastSlide
               key={t.id}
-              className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg text-white text-sm shadow-lg ${COLORS[t.type]}`}
+              className={`max-w-md flex items-center gap-2 px-4 py-3 rounded-lg text-white text-sm shadow-lg ${COLORS[t.type]}`}
             >
               {(() => {
                 const { Icon, label } = ICONS[t.type] || ICONS.info;

@@ -267,8 +267,8 @@ const SHOTS = [
   { id: 'school/13-override', url: '/school', user: 'school', ...DESKTOP,
     act: async (p) => {
       // ปุ่มย้ายเข้าไปอยู่ใต้ "งานแก้ไขรายการพิเศษ" (SchoolDashboard.jsx) ต้องกางก่อน
-      await act.click(p, 'summary:has-text("งานแก้ไขรายการพิเศษ")', 400);
-      await act.click(p, 'button:has-text("ยืนยันแทนคนขับ")', 900);
+      await act.click(p, 'button[aria-expanded]:has-text("ยืนยันแทนคนขับ")', 400);
+      await act.click(p, 'button:has-text("ยืนยันแทนคนขับ") >> nth=-1', 900);
     } },
   // ครูกด "บันทึกที่เหลือทั้งคัน (n คน)" แล้วระบบถามยืนยันก่อนบันทึก
   { id: 'school/22c-teacher-check-confirm', url: '/school/teacher-check?session=morning', user: 'teacher', ...MOBILE,

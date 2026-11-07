@@ -18,6 +18,8 @@ const affSvc = require('../services/affiliation.service');
 const { buildAffiliationSchoolsWorkbook } = require('../utils/affiliationSchoolsWorkbook');
 const affAdminSvc = require('../services/affiliationAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
+const { makeTrackHandlers } = require('./vehicleTrackHandlers');
+const { trackingInfo } = require('../utils/gpsTrackingWindow');
 const ppSvc = require('../services/pickupPoint.service');
 const { logAudit } = require('../utils/audit');
 const { auditExportBeforeSend } = require('../utils/exportAudit');
@@ -725,9 +727,26 @@ router.get('/live-vehicles', async (req, res, next) => {
       userId: req.user.id, entityId: affId,
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
-    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
+    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString(), tracking: trackingInfo() });
   } catch (err) { next(err); }
 });
+
+// GPS route history (replay) — vehicles carrying a pupil of a school in this
+// affiliation: the same scope as /live-vehicles (vehicleScopeSql).
+{
+  const h = makeTrackHandlers((req, res) => {
+    const affiliationId = resolveAffiliationId(req);
+    if (!affiliationId) {
+      sendError(res,
+        req.user.role === 'admin' ? 'กรุณาระบุ affiliation_id' : 'ไม่พบข้อมูลสังกัด',
+        [], req.user.role === 'admin' ? 400 : 403);
+      return null;
+    }
+    return { affiliationId };
+  });
+  router.get('/vehicles/:vehicleId/track', h.track);
+  router.get('/vehicles/:vehicleId/track-days', h.days);
+}
 
 // ─── Phase 7.12.2 — GET /api/affiliation/pickup-map ─────────────────────────
 // Read-only multi-role pickup-point map. Returns aggregate-only rows

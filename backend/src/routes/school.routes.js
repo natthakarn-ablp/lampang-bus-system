@@ -28,6 +28,8 @@ const { readWorkbookSafely } = require('../utils/xlsxPreflight');
 const rosterReqSvc = require('../services/rosterRequest.service');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
+const { makeTrackHandlers } = require('./vehicleTrackHandlers');
+const { trackingInfo } = require('../utils/gpsTrackingWindow');
 const checkinSvc = require('../services/checkin.service');
 const { consumePolicyAction } = require('../utils/policyActionEvidence');
 
@@ -2306,9 +2308,27 @@ router.get('/live-vehicles', async (req, res, next) => {
     }
     const gradeFilter = resolveGradeScope(req);
     const vehicles = await vllSvc.listForSchool(schoolId, gradeFilter);
-    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
+    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString(), tracking: trackingInfo() });
   } catch (err) { next(err); }
 });
+
+// GPS route history (replay) — the same scope as /live-vehicles: vehicles
+// carrying an active pupil of this school; a grade teacher (grade_scope)
+// only those carrying a pupil of her own grade (tolerant grade match).
+{
+  const h = makeTrackHandlers((req, res) => {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) {
+      sendError(res,
+        req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน',
+        [], req.user.role === 'admin' ? 400 : 403);
+      return null;
+    }
+    return { schoolId, gradeFilter: resolveGradeScope(req) };
+  });
+  router.get('/vehicles/:vehicleId/track', h.track);
+  router.get('/vehicles/:vehicleId/track-days', h.days);
+}
 
 /* ── Phase 7.11.5 — Grade teacher account management ──────────────────────
  *

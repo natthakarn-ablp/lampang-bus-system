@@ -7,6 +7,7 @@ import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection, LiveKpiCard } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
+import { VehicleTrackLink, TrackingWindowNote } from '../../components/VehicleTrackLinks';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import {
@@ -24,6 +25,7 @@ const STALE_THRESHOLD_MS = 45_000;
 export default function ProvinceLiveVehicles() {
   const [vehicles, setVehicles]       = useState([]);
   const [generatedAt, setGeneratedAt] = useState(null);
+  const [tracking, setTracking] = useState(null);
   const [loading, setLoading]         = useState(true);
   const [firstLoadError, setFirstLoadError] = useState(null);
   const [pollWarn, setPollWarn]       = useState(null);
@@ -40,6 +42,7 @@ export default function ProvinceLiveVehicles() {
       const list = res.data?.data?.vehicles;
       setVehicles(Array.isArray(list) ? list : []);
       setGeneratedAt(res.data?.data?.generated_at || null);
+      setTracking(res.data?.data?.tracking || null);
       setLastFetchAt(Date.now());
       hasDataRef.current = true;
       setPollWarn(null);
@@ -103,6 +106,7 @@ export default function ProvinceLiveVehicles() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
       <PageHeader
+        actions={<VehicleTrackLink role="province" />}
         title="ตำแหน่งปัจจุบัน"
         subtitle="ตำแหน่งล่าสุดของรถรับส่งระดับจังหวัด"
       />
@@ -144,6 +148,8 @@ export default function ProvinceLiveVehicles() {
           <LiveKpiCard icon={WifiOff}    label="ยังไม่เคยส่งตำแหน่ง"  value={counts.neverSent}  variant="neutral" />
         </div>
       )}
+
+      <TrackingWindowNote tracking={tracking} />
 
       {!browserOnline && (
         <AlertBanner variant="warn" title="อุปกรณ์ออฟไลน์">
@@ -258,6 +264,7 @@ function VehicleRow({ vehicle, selected, onClick }) {
         {help && (
           <p className="text-xs text-ink-muted mt-1 italic">{help}</p>
         )}
+        <VehicleTrackLink role="province" vehicleId={vehicle.vehicle_id} compact />
       </AppCard>
     </div>
   );

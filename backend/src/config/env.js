@@ -328,7 +328,13 @@ const env = {
   // Phase 11A — tunable thresholds for the intelligent tracking layer.
   // Exposed via env so operators can adjust without code changes.
   tracking: {
-    locationHistoryRetentionDays: parseInt(process.env.LOCATION_HISTORY_RETENTION_DAYS || '30', 10),
+    // Owner decision 2026-11-07: GPS history is kept 7 days (route replay
+    // offers the last 7 Bangkok days). scripts/prune-location-history.sh and
+    // scripts/cleanup-old-logs.js read the same knob.
+    locationHistoryRetentionDays: Math.max(1, parseInt(process.env.LOCATION_HISTORY_RETENTION_DAYS || '7', 10) || 7),
+    // GPS is recorded only inside these Bangkok wall-clock windows (school
+    // runs). Format HH:MM-HH:MM[,HH:MM-HH:MM…]; see utils/gpsTrackingWindow.js.
+    gpsTrackingWindows: process.env.GPS_TRACKING_WINDOWS || '05:00-09:00,15:00-19:00',
     geofenceDefaultRadiusM: parseInt(process.env.GEOFENCE_DEFAULT_RADIUS_M || '150', 10),
     deviationRadiusM: parseInt(process.env.DEVIATION_RADIUS_M || '500', 10),
     delayThresholdMin: parseInt(process.env.DELAY_THRESHOLD_MIN || '10', 10),

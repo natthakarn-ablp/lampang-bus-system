@@ -6,6 +6,7 @@ import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection, LiveKpiCard } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
+import { VehicleTrackLink, TrackingWindowNote } from '../../components/VehicleTrackLinks';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import {
@@ -23,6 +24,7 @@ const STALE_THRESHOLD_MS = 45_000;
 export default function AffiliationLiveVehicles() {
   const [vehicles, setVehicles]       = useState([]);
   const [generatedAt, setGeneratedAt] = useState(null);
+  const [tracking, setTracking] = useState(null);
   const [loading, setLoading]         = useState(true);
   const [firstLoadError, setFirstLoadError] = useState(null);
   const [pollWarn, setPollWarn]       = useState(null);
@@ -39,6 +41,7 @@ export default function AffiliationLiveVehicles() {
       const list = res.data?.data?.vehicles;
       setVehicles(Array.isArray(list) ? list : []);
       setGeneratedAt(res.data?.data?.generated_at || null);
+      setTracking(res.data?.data?.tracking || null);
       setLastFetchAt(Date.now());
       hasDataRef.current = true;
       setPollWarn(null);
@@ -99,6 +102,7 @@ export default function AffiliationLiveVehicles() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
       <PageHeader
+        actions={<VehicleTrackLink role="affiliation" />}
         title="ตำแหน่งปัจจุบัน"
         subtitle="ตำแหน่งล่าสุดของรถรับส่งในสังกัด"
       />
@@ -121,6 +125,8 @@ export default function AffiliationLiveVehicles() {
         <LiveKpiCard icon={Pause}          label="หยุดส่ง"                    value={counts.paused}   variant="neutral" />
         <LiveKpiCard icon={WifiOff}        label="ออฟไลน์ / ยังไม่มีข้อมูล"     value={counts.offline}  variant="neutral" />
       </div>
+
+      <TrackingWindowNote tracking={tracking} />
 
       {!browserOnline && (
         <AlertBanner variant="warn" title="อุปกรณ์ออฟไลน์">
@@ -235,6 +241,7 @@ function VehicleRow({ vehicle, selected, onClick }) {
         {help && (
           <p className="text-xs text-ink-muted mt-1 italic">{help}</p>
         )}
+        <VehicleTrackLink role="affiliation" vehicleId={vehicle.vehicle_id} compact />
       </AppCard>
     </div>
   );

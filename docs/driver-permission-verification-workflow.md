@@ -43,7 +43,7 @@
 - 60 กรณีผ่านในรอบแรก พบ `/driver/consent` เรียก API 404 ทั้ง 4 ขนาดจอเมื่อ Vehicle QR ปิด
 - แก้ route ให้ตาม feature flag แล้วตรวจซ้ำ 4/4 ผ่าน: ไป `/my-policy`, ไม่เรียก consent API, ไม่มี overflow หรือ loading ค้าง
 - ตรวจ URL ต่างบทบาท 6 เส้นทาง × 2 ขนาดจอ รวม 12 กรณี ถูกปฏิเสธครบ ได้แก่ admin, reports, school, transport, province และ affiliation
-- Route contract ฝั่ง server ตรวจ 58 route: VIEW 20, EDIT 27, EMERGENCY 1, DENY 8 และ CONDITIONAL 12; findings เป็นศูนย์
+- Route contract ฝั่ง server ตรวจ 59 route: VIEW 20, EDIT 28, EMERGENCY 1, DENY 8 และ CONDITIONAL 12; findings เป็นศูนย์
 - หลักฐานการเขียนเดิมใช้ข้อมูลจำลองและไม่ replay: เช็กชื่อขึ้น/ลงรถ, ตรวจรถก่อนออก, เหตุฉุกเฉินหนึ่งเหตุ, shift, override, เอกสารและ lifecycle ตามไฟล์ UAT เดิม
 
 ผลนี้เป็น technical verification บน sandbox ยังต้องให้คนขับจริงตรวจรับถ้อยคำ ลำดับงาน และความเข้าใจบนมือถือของตนเอง

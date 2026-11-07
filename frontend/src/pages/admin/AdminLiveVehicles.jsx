@@ -6,6 +6,7 @@ import {
 import api from '../../api/axios';
 import { AppCard, AlertBanner, StatusBadge, DashboardSection, FilterBar, LiveKpiCard } from '../../components/ui';
 import LiveVehicleMap from '../../components/LiveVehicleMap';
+import { VehicleTrackLink, TrackingWindowNote } from '../../components/VehicleTrackLinks';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import PageHeader from '../../components/PageHeader';
@@ -46,6 +47,7 @@ const FILTERS = [
 export default function AdminLiveVehicles() {
   const [vehicles, setVehicles]       = useState([]);
   const [generatedAt, setGeneratedAt] = useState(null);
+  const [tracking, setTracking] = useState(null);
   const [loading, setLoading]         = useState(true);
   const [firstLoadError, setFirstLoadError] = useState(null);
   const [pollWarn, setPollWarn]       = useState(null);
@@ -64,6 +66,7 @@ export default function AdminLiveVehicles() {
       const list = res.data?.data?.vehicles;
       setVehicles(Array.isArray(list) ? list : []);
       setGeneratedAt(res.data?.data?.generated_at || null);
+      setTracking(res.data?.data?.tracking || null);
       setLastFetchAt(Date.now());
       hasDataRef.current = true;
       setPollWarn(null);
@@ -163,6 +166,7 @@ export default function AdminLiveVehicles() {
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
       <PageHeader
+        actions={<VehicleTrackLink role="admin" />}
         icon={ShieldAlert}
         title="ตรวจสอบตำแหน่งรถ"
         subtitle="หน้าสำหรับผู้ดูแลระบบใช้ตรวจสอบสถานะการส่งตำแหน่งของรถรับส่งทั้งหมด · อัปเดตทุก 15 วินาที"
@@ -189,6 +193,8 @@ export default function AdminLiveVehicles() {
         <LiveKpiCard icon={AlertTriangle} label="ความแม่นยำต่ำ"           value={counts.lowAcc}      variant="warn"    />
         <LiveKpiCard icon={Pause}         label="ไม่อัปเดตเกิน 5 นาที"     value={counts.staleOver5}  variant="warn"    />
       </div>
+
+      <TrackingWindowNote tracking={tracking} />
 
       {!browserOnline && (
         <AlertBanner variant="warn" title="อุปกรณ์ออฟไลน์">
@@ -365,6 +371,7 @@ function VehicleRow({ vehicle, selected, onClick }) {
         {help && (
           <p className="text-xs text-ink-muted mt-1 italic">{help}</p>
         )}
+        <VehicleTrackLink role="admin" vehicleId={vehicle.vehicle_id} compact />
       </AppCard>
     </div>
   );

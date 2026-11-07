@@ -1362,7 +1362,7 @@ const PRINT_MEASURE = `(() => {
 // full 44px target.
 async function assertPartialFailureShown(page) {
   const found = await page.evaluate(() => {
-    const kpi = document.querySelector('section[aria-label="ตัวเลขหลักวันนี้"]');
+    const kpi = document.querySelector('section[aria-label="ตัวเลขหลักวันนี้"], section[aria-label="ตัวเลขประกอบวันนี้"]');
     const todo = [...document.querySelectorAll('section')]
       .find(sec => sec.querySelector(':scope > h2')?.textContent.trim() === 'ต้องทำวันนี้');
     const leaves = el => (el ? [...el.querySelectorAll('*')].filter(n => n.children.length === 0) : []);
@@ -1499,12 +1499,12 @@ const SHOTS = [
   // ยืนยันแทนคนขับแบบยกชุด — การติ๊กกลับด้าน (ติ๊ก = ไม่ได้ขึ้นรถ) ต้องอ่านไม่ผิด
   // จึงยืนยันว่าคำอธิบายและตัวนับทั้งสองฝั่งปรากฏพร้อมกันบนหน้าจอ
   { id: '09b-school-override-bulk', url: '/school', user: 'school', vps: ['desktop'],
-    // The button lives inside the collapsed "งานแก้ไขรายการพิเศษ" disclosure on
+    // The button lives inside the collapsed "ยืนยันแทนคนขับ" section on
     // SchoolDashboard, so it exists in the DOM but is not clickable until the
     // summary is opened.
     act: async (page) => {
-      await page.locator('summary', { hasText: 'งานแก้ไขรายการพิเศษ' }).first().click();
-      const btn = page.locator('button:has-text("ยืนยันแทนคนขับ")').first();
+      await page.locator('button[aria-expanded]', { hasText: 'ยืนยันแทนคนขับ' }).first().click();
+      const btn = page.locator('button:has-text("ยืนยันแทนคนขับ")').last();
       if (await btn.count()) { await btn.click(); await page.waitForTimeout(600); }
     },
     expect: ['[role=dialog], .fixed.inset-0', 'text=ติ๊กเฉพาะคนที่', 'text=ไม่ได้ขึ้นรถ',

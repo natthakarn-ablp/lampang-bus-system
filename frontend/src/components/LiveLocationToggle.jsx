@@ -1,31 +1,49 @@
-import { useEffect, useRef, useState } from 'react';
-import { MapPin, Navigation, OctagonAlert } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { MapPin, Navigation, OctagonAlert, CloudUpload } from 'lucide-react';
 import api from '../api/axios';
+import { useAuth } from '../hooks/useAuth';
 import { AppCard, AlertBanner, StatusBadge } from './ui';
+import { enqueuePoint, peekPoints, removeSent, countPoints } from '../utils/locationBuffer';
+import {
+  DEFAULT_TRACKING_WINDOWS,
+  isWithinTrackingWindow,
+  windowsLabel,
+} from '../utils/gpsTrackingWindow';
 
 /**
  * Phase 7.3 + 7.8 — Driver location sender.
  *
  * Hard guarantees (preserved from 7.3):
- *   • starts OFF on every page load (no localStorage / sessionStorage)
+ *   • the toggle starts OFF on every page load (its on/off state is never stored)
  *   • does NOT call navigator.geolocation before the user taps Start
  *   • single watchPosition; cleared on Stop / unmount / beforeunload
  *   • Stop calls DELETE /driver/vehicle-location to flip backend status=PAUSED
- *   • POST throttle: send when ≥15s have passed OR distance moved >30m
+ *   • capture throttle: a fix is taken when ≥15s have passed OR distance moved >30m
  *   • never includes vehicle_id in the body — backend resolves from JWT
  *   • never logs full lat/lng (privacy)
  *
  * 7.8 polish:
- *   • new browser_offline state + window online/offline listeners
+ *   • browser_offline state + window online/offline listeners
  *   • Permissions API probe on mount surfaces a pre-denied permission
- *     so the driver gets explicit copy without having to tap Start first
  *   • clearer Thai copy per error code (incl. settings hint when denied)
- *   • DELETE-failure message reframed: "หยุดในเครื่องแล้ว แต่แจ้ง
- *     เซิร์ฟเวอร์ไม่สำเร็จ — ข้อมูลจะกลายเป็นออฟไลน์เมื่อเกินเวลา"
+ *
+ * GPS route history (2026-11):
+ *   • offline buffer — a fix that cannot be sent (no signal / send failed) is
+ *     queued on the phone (IndexedDB, localStorage fallback; per user; ≤5,000
+ *     points / 24 h, oldest dropped) and flushed oldest-first to
+ *     POST /driver/vehicle-location/batch (≤200 per request) when the phone is
+ *     back online, after the next successful send, and on page load.
+ *   • tracking windows — fixes outside 05:00–09:00 / 15:00–19:00 (Bangkok;
+ *     server-configurable) are neither sent nor queued.
+ *   • limitation: this is a web page. When the browser is closed, or the
+ *     screen is locked on phones that suspend background pages, no fixes are
+ *     recorded at all — the buffer only covers time the page was open.
  */
 
 const SEND_MIN_INTERVAL_MS = 15_000;
 const SEND_MIN_DISTANCE_M  = 30;
+const BATCH_SIZE           = 200;
+const FLUSH_RETRY_MS       = 60_000;
 
 const STATUS = {
   idle:                  { variant: 'neutral', label: 'ยังไม่ได้ส่งตำแหน่ง' },
@@ -36,6 +54,7 @@ const STATUS = {
   timeout:               { variant: 'warn',    label: 'ค้นหาตำแหน่งนานเกินไป' },
   network_error:         { variant: 'warn',    label: 'ส่งตำแหน่งไม่สำเร็จ' },
   browser_offline:       { variant: 'warn',    label: 'อุปกรณ์ออฟไลน์' },
+  outside_window:        { variant: 'neutral', label: 'นอกช่วงเวลาติดตาม' },
   stopped:               { variant: 'neutral', label: 'หยุดส่งตำแหน่งแล้ว' },
 };
 
@@ -50,61 +69,129 @@ function getDistanceMeters(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+// A send that may succeed later (no network, timeout, 5xx, 429) is worth
+// queueing; a 4xx validation answer would only be rejected again.
+function isRetryable(err) {
+  const s = err?.response?.status;
+  return !s || s >= 500 || s === 429 || s === 408;
+}
+
 export default function LiveLocationToggle() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
   const [status, setStatus]         = useState('idle');
   const [lastSentAt, setLastSentAt] = useState(null);
   const [accuracy, setAccuracy]     = useState(null);
   const [errorMsg, setErrorMsg]     = useState(null);
-  // Whether the OS-level permission was probed and is currently 'denied'.
-  // Drives a pre-flight banner so the driver isn't surprised by a wasted
-  // Start tap on a device that previously refused permission.
   const [permPreDenied, setPermPreDenied] = useState(false);
-  // Soft hint shown briefly after the browser regains online connectivity
-  // — purely informational, not a status-state.
   const [showRecoveryHint, setShowRecoveryHint] = useState(false);
+  const [queued, setQueued]         = useState(0);
+  const [flushing, setFlushing]     = useState(false);
+  const [windows, setWindows]       = useState(DEFAULT_TRACKING_WINDOWS);
 
   const watchIdRef       = useRef(null);
-  const lastSentRef      = useRef({ ts: 0, lat: null, lng: null });
+  const lastCapturedRef  = useRef({ ts: 0, lat: null, lng: null });
   const isSendingRef     = useRef(false);
   const beforeUnloadRef  = useRef(null);
   const onlineHandlerRef = useRef(null);
   const offlineHandlerRef = useRef(null);
+  const flushingRef      = useRef(false);
+  const windowsRef       = useRef(DEFAULT_TRACKING_WINDOWS);
+  const userIdRef        = useRef(userId);
+  userIdRef.current = userId;
 
   const isOn = status === 'sending' || status === 'requesting_permission'
             || status === 'position_unavailable' || status === 'timeout'
-            || status === 'network_error' || status === 'browser_offline';
+            || status === 'network_error' || status === 'browser_offline'
+            || status === 'outside_window';
+
+  const adoptServerWindows = (data) => {
+    const w = data?.tracking?.windows;
+    if (Array.isArray(w) && w.length) {
+      windowsRef.current = w;
+      setWindows(w);
+    }
+  };
+
+  /* ── offline buffer ─────────────────────────────────────────────────────── */
+
+  const refreshQueued = useCallback(async () => {
+    try { setQueued(await countPoints(userIdRef.current)); } catch { /* storage unavailable */ }
+  }, []);
+
+  const flushQueue = useCallback(async () => {
+    if (flushingRef.current) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    if (userIdRef.current == null) return;
+    flushingRef.current = true;
+    setFlushing(true);
+    try {
+      // Bounded loop: at most 5,000 / 200 = 25 batches.
+      for (let i = 0; i < 30; i++) {
+        const batch = await peekPoints(userIdRef.current, BATCH_SIZE);
+        if (!batch.length) break;
+        const res = await api.post('/driver/vehicle-location/batch', { points: batch });
+        adoptServerWindows(res?.data?.data);
+        // accepted, duplicate AND rejected are all final answers — remove them.
+        const left = await removeSent(userIdRef.current, batch.map((p) => p.recorded_at));
+        setQueued(left);
+        if (batch.length < BATCH_SIZE) break;
+      }
+    } catch (err) {
+      // Network / rate limit: keep the queue, retry later. A 400 for the whole
+      // batch (malformed) would repeat forever — drop that batch instead.
+      if (!isRetryable(err)) {
+        try {
+          const batch = await peekPoints(userIdRef.current, BATCH_SIZE);
+          await removeSent(userIdRef.current, batch.map((p) => p.recorded_at));
+        } catch { /* ignore */ }
+      }
+    } finally {
+      flushingRef.current = false;
+      setFlushing(false);
+      refreshQueued();
+    }
+  }, [refreshQueued]);
+
+  const queuePoint = async (point) => {
+    try {
+      const n = await enqueuePoint(userIdRef.current, point);
+      setQueued(n);
+    } catch { /* storage unavailable — point lost */ }
+  };
 
   /* ── send helpers ───────────────────────────────────────────────────────── */
 
-  const postPosition = async (coords, recordedAt) => {
+  const postPosition = async (body) => {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      // Skip the network call when we know we're offline; the next
-      // position callback will retry once we're back online.
+      await queuePoint(body);
       if (isSendingRef.current) {
         setStatus('browser_offline');
-        setErrorMsg('ไม่มีสัญญาณอินเทอร์เน็ตในขณะนี้ ระบบจะลองส่งใหม่เมื่อกลับมาออนไลน์');
+        setErrorMsg('ไม่มีสัญญาณอินเทอร์เน็ต ระบบเก็บตำแหน่งไว้ในเครื่องและจะส่งให้อัตโนมัติเมื่อกลับมาออนไลน์');
       }
       return;
     }
     try {
-      await api.post('/driver/vehicle-location', {
-        latitude:        coords.latitude,
-        longitude:       coords.longitude,
-        accuracy_meters: coords.accuracy != null ? Math.round(coords.accuracy) : null,
-        speed_mps:       Number.isFinite(coords.speed)   ? coords.speed   : null,
-        heading_deg:     Number.isFinite(coords.heading) ? coords.heading : null,
-        recorded_at:     recordedAt,
-      });
-      lastSentRef.current = { ts: Date.now(), lat: coords.latitude, lng: coords.longitude };
+      const res = await api.post('/driver/vehicle-location', body);
+      const data = res?.data?.data;
+      adoptServerWindows(data);
+      if (data?.stored === false && data?.reason === 'OUTSIDE_TRACKING_WINDOW') {
+        if (isSendingRef.current) setStatus('outside_window');
+        setErrorMsg(null);
+        return;
+      }
       setLastSentAt(new Date());
-      setAccuracy(coords.accuracy != null ? Math.round(coords.accuracy) : null);
+      setAccuracy(body.accuracy_meters);
       if (isSendingRef.current) setStatus('sending');
       setErrorMsg(null);
+      flushQueue();
     } catch (err) {
+      if (isRetryable(err)) await queuePoint(body);
       if (isSendingRef.current) {
         setStatus('network_error');
         setErrorMsg(err?.response?.data?.message
-          || 'อินเทอร์เน็ตอาจไม่เสถียร ระบบยังคงรอสัญญาณ GPS และจะลองส่งใหม่เมื่อเชื่อมต่อได้');
+          || 'อินเทอร์เน็ตอาจไม่เสถียร ระบบเก็บตำแหน่งไว้ในเครื่องและจะส่งให้อัตโนมัติเมื่อเชื่อมต่อได้');
       }
     }
   };
@@ -113,7 +200,14 @@ export default function LiveLocationToggle() {
     if (!isSendingRef.current) return;
     const c = pos.coords;
     const now = Date.now();
-    const last = lastSentRef.current;
+    const fixTime = new Date(pos.timestamp || now);
+    if (!isWithinTrackingWindow(fixTime, windowsRef.current)) {
+      // Outside the school-run windows: neither sent nor queued.
+      setStatus('outside_window');
+      setErrorMsg(null);
+      return;
+    }
+    const last = lastCapturedRef.current;
     const moved = (last.lat == null || last.lng == null)
       ? Infinity
       : getDistanceMeters(last.lat, last.lng, c.latitude, c.longitude);
@@ -121,8 +215,17 @@ export default function LiveLocationToggle() {
     if (last.ts !== 0 && aged < SEND_MIN_INTERVAL_MS && moved < SEND_MIN_DISTANCE_M) {
       return;
     }
-    const recordedAt = new Date(pos.timestamp || now).toISOString();
-    postPosition(c, recordedAt);
+    // Gate on the last CAPTURED fix (sent or queued), so an offline phone
+    // still records one point per 15 s / 30 m rather than one per callback.
+    lastCapturedRef.current = { ts: now, lat: c.latitude, lng: c.longitude };
+    postPosition({
+      latitude:        c.latitude,
+      longitude:       c.longitude,
+      accuracy_meters: c.accuracy != null ? Math.round(c.accuracy) : null,
+      speed_mps:       Number.isFinite(c.speed)   ? c.speed   : null,
+      heading_deg:     Number.isFinite(c.heading) ? c.heading : null,
+      recorded_at:     fixTime.toISOString(),
+    });
   };
 
   const onPositionError = (err) => {
@@ -142,7 +245,6 @@ export default function LiveLocationToggle() {
     if (err.code === err.TIMEOUT) {
       setStatus('timeout');
       setErrorMsg('สัญญาณอาจอ่อนหรืออุปกรณ์ประหยัดพลังงานเกินไป ระบบจะลองใหม่ในรอบถัดไป');
-      return;
     }
   };
 
@@ -156,12 +258,14 @@ export default function LiveLocationToggle() {
       return;
     }
     isSendingRef.current = true;
-    setStatus(navigator.onLine === false ? 'browser_offline' : 'requesting_permission');
-    setErrorMsg(navigator.onLine === false
-      ? 'ไม่มีสัญญาณอินเทอร์เน็ตในขณะนี้ ระบบจะลองส่งใหม่เมื่อกลับมาออนไลน์'
+    const offline = navigator.onLine === false;
+    const inWindow = isWithinTrackingWindow(new Date(), windowsRef.current);
+    setStatus(!inWindow ? 'outside_window' : offline ? 'browser_offline' : 'requesting_permission');
+    setErrorMsg(offline && inWindow
+      ? 'ไม่มีสัญญาณอินเทอร์เน็ต ระบบเก็บตำแหน่งไว้ในเครื่องและจะส่งให้อัตโนมัติเมื่อกลับมาออนไลน์'
       : null);
     setShowRecoveryHint(false);
-    lastSentRef.current = { ts: 0, lat: null, lng: null };
+    lastCapturedRef.current = { ts: 0, lat: null, lng: null };
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       onPosition,
@@ -179,20 +283,16 @@ export default function LiveLocationToggle() {
     };
     window.addEventListener('beforeunload', beforeUnloadRef.current);
 
-    // Online/offline listeners — only attached while toggle is ON
     offlineHandlerRef.current = () => {
       if (!isSendingRef.current) return;
       setStatus('browser_offline');
-      setErrorMsg('ไม่มีสัญญาณอินเทอร์เน็ตในขณะนี้ ระบบจะลองส่งใหม่เมื่อกลับมาออนไลน์');
+      setErrorMsg('ไม่มีสัญญาณอินเทอร์เน็ต ระบบเก็บตำแหน่งไว้ในเครื่องและจะส่งให้อัตโนมัติเมื่อกลับมาออนไลน์');
       setShowRecoveryHint(false);
     };
     onlineHandlerRef.current = () => {
       if (!isSendingRef.current) return;
       setShowRecoveryHint(true);
-      // Don't force-set 'sending' — the next watchPosition tick will move
-      // us forward naturally. But clear the offline error so the UI
-      // doesn't keep claiming we're offline.
-      setStatus('sending');
+      setStatus(isWithinTrackingWindow(new Date(), windowsRef.current) ? 'sending' : 'outside_window');
       setErrorMsg(null);
       setTimeout(() => setShowRecoveryHint(false), 4_000);
     };
@@ -224,11 +324,13 @@ export default function LiveLocationToggle() {
     stopInternal();
     setStatus('stopped');
     setShowRecoveryHint(false);
+    // Points already captured were recorded with the driver's consent; still
+    // deliver them, then tell the server the driver stopped.
+    flushQueue();
     try {
       await api.delete('/driver/vehicle-location');
       setErrorMsg(null);
     } catch (err) {
-      // Local watch is already cleared above (privacy first).
       setErrorMsg(err?.response?.data?.message
         || 'หยุดการส่งจากอุปกรณ์แล้ว แต่แจ้งเซิร์ฟเวอร์ไม่สำเร็จ ข้อมูลจะเปลี่ยนเป็นออฟไลน์เมื่อเกินเวลาที่กำหนด');
     }
@@ -242,8 +344,6 @@ export default function LiveLocationToggle() {
         .then(result => {
           if (cancelled) return;
           if (result.state === 'denied') setPermPreDenied(true);
-          // Listen for runtime changes (driver toggles permission in
-          // browser settings while the page is open).
           result.onchange = () => {
             if (cancelled) return;
             setPermPreDenied(result.state === 'denied');
@@ -253,6 +353,19 @@ export default function LiveLocationToggle() {
     }
     return () => { cancelled = true; };
   }, []);
+
+  /* ── buffer: count + flush on load, on reconnect, and periodically ──────── */
+  useEffect(() => {
+    if (userId == null) return undefined;
+    refreshQueued().then(() => flushQueue());
+    const onOnline = () => flushQueue();
+    window.addEventListener('online', onOnline);
+    const id = setInterval(() => { flushQueue(); }, FLUSH_RETRY_MS);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      clearInterval(id);
+    };
+  }, [userId, refreshQueued, flushQueue]);
 
   /* ── unmount: hard cleanup ──────────────────────────────────────────────── */
   useEffect(() => {
@@ -271,6 +384,7 @@ export default function LiveLocationToggle() {
     || status === 'timeout'
     || status === 'network_error'
     || status === 'browser_offline';
+  const label = windowsLabel(windows);
 
   return (
     <AppCard padding="md" className="mb-4">
@@ -304,7 +418,25 @@ export default function LiveLocationToggle() {
         </div>
       )}
 
-      {/* Pre-flight banner: permission was previously denied at the OS / browser level */}
+      {queued > 0 && (
+        <p
+          className="flex items-center gap-1.5 text-xs font-medium text-warn-ink mb-3 tabular-nums"
+          role="status"
+          data-testid="gps-queue-status"
+        >
+          <CloudUpload className="w-4 h-4 shrink-0" strokeWidth={2} />
+          {flushing
+            ? `กำลังส่งตำแหน่งย้อนหลัง ${queued.toLocaleString('th-TH')} จุด`
+            : `รอส่งตำแหน่ง ${queued.toLocaleString('th-TH')} จุด (ไม่มีสัญญาณ)`}
+        </p>
+      )}
+
+      {status === 'outside_window' && (
+        <AlertBanner variant="info" title={`นอกช่วงเวลาติดตาม (${label})`} className="mb-3">
+          ระบบบันทึกตำแหน่งรถเฉพาะช่วงรับส่งนักเรียน เปิดค้างไว้ได้ ระบบจะเริ่มส่งเองเมื่อถึงช่วงเวลา
+        </AlertBanner>
+      )}
+
       {!isOn && permPreDenied && status !== 'permission_denied' && (
         <AlertBanner variant="danger" title="ไม่ได้รับอนุญาตตำแหน่ง" className="mb-3">
           <p>กรุณาอนุญาตการเข้าถึงตำแหน่งในเบราว์เซอร์ แล้วกดเริ่มส่งตำแหน่งอีกครั้ง</p>
@@ -331,7 +463,7 @@ export default function LiveLocationToggle() {
 
       {showRecoveryHint && (
         <AlertBanner variant="info" title="กลับมาออนไลน์แล้ว" className="mb-3">
-          ระบบจะลองส่งตำแหน่งในรอบถัดไป
+          ระบบจะส่งตำแหน่งที่เก็บไว้ในเครื่องให้อัตโนมัติ
         </AlertBanner>
       )}
 
@@ -362,8 +494,9 @@ export default function LiveLocationToggle() {
       )}
 
       <p className="text-[11px] text-ink-muted mt-2 leading-snug">
-        ระบบจะส่งตำแหน่งรถขณะที่คนขับเปิดใช้งานเท่านั้น และจะหยุดทันทีเมื่อกด "หยุดส่งตำแหน่ง"
-        ปิดเบราว์เซอร์ หรือออกจากระบบ
+        ระบบบันทึกตำแหน่งรถเฉพาะช่วง {label} น. ขณะที่คนขับเปิดใช้งาน และหยุดทันทีเมื่อกด "หยุดส่งตำแหน่ง"
+        ปิดเบราว์เซอร์ หรือออกจากระบบ หากไม่มีสัญญาณ ระบบจะเก็บตำแหน่งไว้ในเครื่องแล้วส่งให้เมื่อกลับมาออนไลน์
+        (ต้องเปิดหน้านี้ค้างไว้ โทรศัพท์บางรุ่นหยุดบันทึกเมื่อล็อกหน้าจอ)
       </p>
     </AppCard>
   );

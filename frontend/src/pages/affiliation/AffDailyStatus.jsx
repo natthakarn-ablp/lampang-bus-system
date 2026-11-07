@@ -1,7 +1,8 @@
-import AttendanceBreakdown from '../../components/AttendanceBreakdown';
+import { StatusHero, TravelLeaveSummary, roundStatus } from '../../components/dashboard';
 import { isBusRider, visibleAttendance } from '../../utils/attendance';
 import { Building2, Bus, ChevronDown, RefreshCw } from 'lucide-react';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { tone } from '../../components/ui/tone';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import StudentStatusTable from '../../components/StudentStatusTable';
@@ -79,6 +80,31 @@ export default function AffDailyStatus() {
     );
   }, [data]);
 
+  // Per-school numbers once, so the hero, the ordering and the rows agree.
+  const schoolRows = useMemo(() => (data?.schools || []).map((school) => {
+    const students = school.vehicles.flatMap((v) => v.students);
+    const count = (session) => {
+      const riders = students.filter((s) => isBusRider(s, session));
+      return { done: riders.filter((s) => s[`${session}_done`]).length, expected: riders.length };
+    };
+    return { school, students, morning: count('morning'), evening: count('evening') };
+  }), [data]);
+
+  const when = { date: data?.date, isSchoolDay: data?.is_school_day };
+  const sumRound = (session) => schoolRows.reduce(
+    (acc, r) => ({ done: acc.done + r[session].done, expected: acc.expected + r[session].expected }),
+    { done: 0, expected: 0 },
+  );
+  const morningStatus = roundStatus({ session: 'morning', ...sumRound('morning'), ...when });
+  const eveningStatus = roundStatus({ session: 'evening', ...sumRound('evening'), ...when });
+  // Schools that still need a call come first; the rest keep the API order.
+  const needsFollowUp = (r) => ['morning', 'evening'].some((session) => {
+    const st = roundStatus({ session, ...r[session], ...when });
+    return st.tone === 'warn' || st.tone === 'danger';
+  });
+  const orderedRows = [...schoolRows].sort((a, b) => Number(needsFollowUp(b)) - Number(needsFollowUp(a)));
+  const followCount = schoolRows.filter(needsFollowUp).length;
+
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
       <PageHeader
@@ -111,7 +137,24 @@ export default function AffDailyStatus() {
 
       {error && <ErrorState message={error} className="mb-4" />}
 
-      {data && <AttendanceBreakdown data={loading ? null : error ? {} : visibleAttendance(data)} />}
+      {data && !loading && !error && data.schools?.length > 0 && (
+        <StatusHero
+          className="mb-4"
+          eyebrow={`ทุกโรงเรียนในสังกัด · ${data.schools.length} โรงเรียน`}
+          rounds={[
+            { status: morningStatus, title: 'รอบเช้า · ส่งถึงโรงเรียน' },
+            { status: eveningStatus, title: 'รอบเย็น · ส่งถึงบ้าน' },
+          ]}
+        >
+          {followCount > 0 && (
+            <p className="mt-4 text-sm text-ink">
+              <b className="tabular-nums">{followCount.toLocaleString('th-TH')}</b> โรงเรียนต้องติดตาม — แสดงไว้บนสุดของรายการด้านล่าง
+            </p>
+          )}
+        </StatusHero>
+      )}
+
+      {data && !loading && !error && <TravelLeaveSummary data={visibleAttendance(data)} className="mb-4" />}
 
       {loading ? (
         <LoadingState />
@@ -119,12 +162,9 @@ export default function AffDailyStatus() {
         <EmptyState title="ยังไม่มีข้อมูล" description="ยังไม่มีโรงเรียนที่ส่งข้อมูลสถานะวันนี้" />
       ) : (
         <div className="space-y-3">
-          {data.schools.map((school) => {
-            const allStudents = school.vehicles.flatMap((v) => v.students);
-            const morningDone = allStudents.filter((s) => isBusRider(s, 'morning') && s.morning_done).length;
-            const morningTotal = allStudents.filter((s) => isBusRider(s, 'morning')).length;
-            const eveningDone = allStudents.filter((s) => isBusRider(s, 'evening') && s.evening_done).length;
-            const eveningTotal = allStudents.filter((s) => isBusRider(s, 'evening')).length;
+          {orderedRows.map(({ school, students: allStudents, morning, evening }) => {
+            const mSt = roundStatus({ session: 'morning', ...morning, ...when });
+            const eSt = roundStatus({ session: 'evening', ...evening, ...when });
             const isSchoolExpanded = expandedSchool === school.school_id;
 
             return (
@@ -140,13 +180,9 @@ export default function AffDailyStatus() {
                       {allStudents.length} คน · {school.vehicles.length} คัน
                     </p>
                   </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className={morningDone === morningTotal && morningTotal > 0 ? 'text-success-ink' : 'text-orange-600'}>
-                      เช้า {morningDone}/{morningTotal}
-                    </span>
-                    <span className={eveningDone === eveningTotal && eveningTotal > 0 ? 'text-success-ink' : 'text-indigo-600'}>
-                      เย็น {eveningDone}/{eveningTotal}
-                    </span>
+                  <div className="flex items-center gap-2 sm:gap-3 text-sm shrink-0">
+                    <RoundPill label="เช้า" st={mSt} />
+                    <RoundPill label="เย็น" st={eSt} />
                     <ChevronDown
                       className={`w-4 h-4 text-ink-muted shrink-0 transition-transform ${isSchoolExpanded ? 'rotate-180' : ''}`}
                       strokeWidth={2}
@@ -211,5 +247,16 @@ export default function AffDailyStatus() {
         </div>
       )}
     </div>
+  );
+}
+
+
+// done/expected plus the time-aware word, so a pill is never red before the round.
+function RoundPill({ label, st }) {
+  return (
+    <span className={`inline-flex flex-col items-center rounded-lg px-2 py-1 leading-tight ${tone(st.tone).soft} ${tone(st.tone).ink}`}>
+      <span className="text-xs">{label}</span>
+      <span className="font-semibold tabular-nums">{st.done}/{st.expected}</span>
+    </span>
   );
 }

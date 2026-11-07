@@ -1,8 +1,7 @@
-import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Building2, Bus, AlertTriangle, ChevronDown,
+  Building2, Bus, AlertTriangle, ChevronDown, Users,
   // Phase 10.7E-1 — icons for the action row
   Search, FileText,
   // Phase 10.8C — override button icon
@@ -17,7 +16,7 @@ import { SkeletonKpiGrid } from '../../components/Skeleton';
 import SchoolOverrideModal from '../../components/SchoolOverrideModal';
 import {
   AppCard, StatusBadge, ConfirmDialog, AlertBanner,
-  TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars, FoldSection, RoleChip,
+  DayBars, RankBars, FoldSection, RoleChip,
   pctOf, pctTone,
 } from '../../components/ui';
 import {
@@ -28,7 +27,11 @@ import {
 // use isGradeTeacher() to hide write-only actions from teacher accounts.
 import { useAuth } from '../../hooks/useAuth';
 import useRecentDays, { RECENT_DAYS_FAILED } from '../../hooks/useRecentDays';
-import { isGradeTeacher } from '../../utils/authScope';
+import { isGradeTeacher, getGradeScope } from '../../utils/authScope';
+import {
+  StatusHero, ActionList, StatTile, StatGrid, SectionCard, TravelLeaveSummary,
+  roundStatus, dayStatus,
+} from '../../components/dashboard';
 import { PageTransition } from '../../lib/motion';
 import { formatGradeClass } from '../../utils/student';
 
@@ -160,65 +163,60 @@ export default function SchoolDashboard() {
   const filtered = vehicles.filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase()));
 
   // ── Today's numbers ───────────────────────────────────────────────────────
-  const mTotal = dash?.morning_total ?? 0;
-  const eTotal = dash?.evening_total ?? 0;
+  // After the API's decorateDaily, *_total already excludes leave and
+  // self-travel, so it IS the expected count (do not subtract leave again).
   const mLeave = dash?.morning_leave ?? 0;
   const eLeave = dash?.evening_leave ?? 0;
-  const mDone = dash?.morning_done ?? 0;
-  const eDone = dash?.evening_done ?? 0;
-  const mPending = dash?.morning_pending ?? 0;
-  const ePending = dash?.evening_pending ?? 0;
-  // Pending already excludes pupils on leave, so the percentages do too.
-  const mExpected = Math.max(0, mTotal - mLeave);
-  const eExpected = Math.max(0, eTotal - eLeave);
-  const mPct = pctOf(mDone, mExpected);
-  const ePct = pctOf(eDone, eExpected);
   const emerg7d = dash?.recent_emergencies ?? 0;
-  const nothingToday = mTotal + eTotal === 0;
-  const eveningStarted = eDone > 0;
+  const gradeScope = getGradeScope(user);
 
-  // ── Banner: one sentence, one tone ───────────────────────────────────────
-  const showVehicles = { label: 'ดูรถที่ยังค้าง', onClick: () => openFold('vehicles', vehiclesRef) };
-  let banner;
-  if (nothingToday) {
-    banner = { variant: 'neutral', title: 'ยังไม่มีข้อมูลการรับส่งวันนี้', sub: 'รอข้อมูลรอบเช้าจากคนขับ', topic: 'none' };
-  } else if (mPending > 0) {
-    banner = {
-      variant: 'warn', title: `รอบเช้ายังค้าง ${mPending.toLocaleString('th-TH')} คน`,
-      sub: `ส่งแล้ว ${mDone.toLocaleString('th-TH')} จาก ${mExpected.toLocaleString('th-TH')} คน`,
-      cta: showVehicles, topic: 'morning',
-    };
-  } else if (!eveningStarted) {
-    banner = {
-      variant: 'success', title: 'รอบเช้าครบแล้ว',
-      sub: `ส่งครบ ${mDone.toLocaleString('th-TH')} คน · รอบเย็นยังไม่เริ่ม`, topic: 'none',
-    };
-  } else if (ePending > 0) {
-    banner = {
-      variant: 'warn', title: `รอบเย็นยังค้าง ${ePending.toLocaleString('th-TH')} คน`,
-      sub: `รอบเช้าครบ ${mDone.toLocaleString('th-TH')} คน · รับเย็นแล้ว ${eDone.toLocaleString('th-TH')} จาก ${eExpected.toLocaleString('th-TH')} คน`,
-      cta: showVehicles, topic: 'evening',
-    };
-  } else {
-    banner = { variant: 'success', title: 'วันนี้รับส่งครบแล้ว', sub: `ส่งเช้า ${mDone.toLocaleString('th-TH')} คน · รับเย็น ${eDone.toLocaleString('th-TH')} คน`, topic: 'none' };
+  const roundOpts = { date: dash?.date, isSchoolDay: dash?.is_school_day, unavailable: !dashOk };
+  const morning = roundStatus({ session: 'morning', done: dash?.morning_done, expected: dash?.morning_total, conflict: dash?.morning_conflict, ...roundOpts });
+  const evening = roundStatus({ session: 'evening', done: dash?.evening_done, expected: dash?.evening_total, conflict: dash?.evening_conflict, ...roundOpts });
+  const day = dashOk ? dayStatus([morning, evening]) : null;
+
+  // The round that needs attention now (hero focus), else the one in progress.
+  const rankSession = day?.focus
+    || ([morning, evening].find(r => r.pending > 0 && ['in_progress', 'waiting', 'overdue', 'not_delivered'].includes(r.state))?.session)
+    || (['open', 'overdue', 'closed'].includes(evening.phase) ? 'evening' : 'morning');
+  const focusRound = rankSession === 'evening' ? evening : morning;
+  const focusName = rankSession === 'evening' ? 'รอบเย็น' : 'รอบเช้า';
+
+  // Hero action: grade teachers go and check names; the school opens the buses still waiting.
+  const hasPending = dashOk && focusRound.pending > 0 && ['in_progress', 'overdue', 'not_delivered', 'incomplete_record'].includes(focusRound.state);
+  let heroAction;
+  if (hasPending) {
+    heroAction = isTeacher
+      ? { label: 'เช็กชื่อวันนี้', to: '/school/teacher-check' }
+      : { label: 'ดูรถที่ยังค้าง', onClick: () => openFold('vehicles', vehiclesRef) };
   }
 
-  // ── Todos: things to act on that the banner does not already say ─────────
+  // ── ต้องทำวันนี้ ───────────────────────────────────────────────────────────
   const c = dash?.completeness;
   const noVehicle = c && Number.isFinite(c.students_total) && Number.isFinite(c.students_with_vehicle)
     ? Math.max(0, c.students_total - c.students_with_vehicle) : 0;
   const noParent = c && Number.isFinite(c.students_total) && Number.isFinite(c.students_with_parent)
     ? Math.max(0, c.students_total - c.students_with_parent) : 0;
-  const todos = [
-    { key: 'emergency', variant: 'danger', count: emerg7d, title: 'เหตุฉุกเฉินใน 7 วัน', sub: dashOk ? 'ตรวจสอบรายละเอียดและผลการแก้ไข' : UNAVAILABLE_SUB, unavailable: !dashOk, cta: { label: 'ดูเหตุฉุกเฉิน', to: '/school/emergencies' } },
-    !isTeacher && (failed.roster || rosterPending != null) && { key: 'roster', variant: 'warn', count: rosterPending ?? 0, title: 'คำขอรายชื่อจากคนขับ', sub: failed.roster ? UNAVAILABLE_SUB : 'รอโรงเรียนอนุมัติ', unavailable: !!failed.roster, cta: { label: 'ตรวจคำขอ', to: '/school/approvals' } },
-    { key: 'no-vehicle', variant: 'warn', count: noVehicle, title: 'นักเรียนยังไม่ผูกรถ', sub: dashOk ? 'ยังไม่มีรถรับส่งในระบบ' : UNAVAILABLE_SUB, unavailable: !dashOk, cta: { label: 'ดูรายชื่อ', to: '/school/students?has_vehicle=no' } },
-    { key: 'no-parent', variant: 'info', count: noParent, title: 'ข้อมูลผู้ปกครองไม่ครบ', sub: dashOk ? 'เติมเบอร์ผู้ปกครองเพื่อให้แจ้งเตือนได้' : UNAVAILABLE_SUB, unavailable: !dashOk, cta: { label: 'ดูรายชื่อ', to: '/school/students' } },
-    !isTeacher && { key: 'leaves', variant: 'info', count: leaves.length, title: 'รายการลาของวันนี้', sub: failed.leaves ? UNAVAILABLE_SUB : 'ยกเลิกได้หากบันทึกผิด', unavailable: !!failed.leaves, cta: failed.leaves ? undefined : { label: 'ดูรายการลา', onClick: () => openFold('leaves', leavesRef) } },
+  const actions = [
+    { key: 'emergency', tone: 'danger', count: emerg7d, title: 'เหตุฉุกเฉินใน 7 วัน', sub: dashOk ? 'ตรวจรายละเอียดและผลการแก้ไข' : UNAVAILABLE_SUB, unavailable: !dashOk, to: '/school/emergencies', actionLabel: 'ดูเหตุฉุกเฉิน' },
+    !isTeacher && (failed.roster || rosterPending != null) && { key: 'roster', tone: 'warn', count: rosterPending ?? 0, title: 'คำขอรายชื่อจากคนขับ รอโรงเรียนอนุมัติ', sub: failed.roster ? UNAVAILABLE_SUB : 'คนขับขอเพิ่มหรือลบนักเรียนในรถ', unavailable: !!failed.roster, to: '/school/approvals', actionLabel: 'ตรวจคำขอ' },
+    { key: 'no-vehicle', tone: 'warn', count: noVehicle, title: 'นักเรียนที่ยังไม่ผูกกับรถ', sub: dashOk ? 'เลือกรถให้นักเรียน เพื่อให้นับในการรับส่ง' : UNAVAILABLE_SUB, unavailable: !dashOk, to: '/school/students?has_vehicle=no', actionLabel: 'ดูรายชื่อ' },
+    { key: 'no-parent', tone: 'info', count: noParent, title: 'นักเรียนที่ข้อมูลผู้ปกครองไม่ครบ', sub: dashOk ? 'เติมเบอร์ผู้ปกครองเพื่อให้แจ้งเตือนได้' : UNAVAILABLE_SUB, unavailable: !dashOk, to: '/school/students', actionLabel: 'ดูรายชื่อ' },
+    !isTeacher && { key: 'leaves', tone: 'info', count: leaves.length, title: 'รายการลาของวันนี้', sub: failed.leaves ? UNAVAILABLE_SUB : 'ยกเลิกได้หากบันทึกผิด', unavailable: !!failed.leaves, onClick: failed.leaves ? undefined : () => openFold('leaves', leavesRef), actionLabel: 'ดูรายการลา' },
   ].filter(Boolean);
 
-  // ── Per-bus ranking for the round in progress ────────────────────────────
-  const rankSession = eveningStarted ? 'evening' : 'morning';
+  // ── Buses / pupils still waiting in the round in focus ────────────────────
+  const waitingBuses = vehicles
+    .map(v => ({ v, r: vehicleRound(v, rankSession) }))
+    .filter(x => x.r.pending > 0)
+    .sort((a, b) => b.r.pending - a.r.pending);
+  const waitingPupils = vehicles.flatMap(v => (v.students || []).filter(s => (
+    rankSession === 'evening'
+      ? s.evening_enabled && !isEveningLeave(s) && !s.evening_self && !s.evening_done
+      : s.morning_enabled && !isMorningLeave(s) && !s.morning_self && !s.morning_done
+  )));
+  const roundNotRunning = ['not_yet', 'off_day', 'no_riders', 'unavailable'].includes(focusRound.state);
+
   const rankRows = vehicles
     .map(v => ({ v, r: vehicleRound(v, rankSession) }))
     .filter(x => x.r.expected > 0)
@@ -252,6 +250,12 @@ export default function SchoolDashboard() {
   })();
 
   const btnSecondary = 'flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 whitespace-nowrap bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]';
+  const dateText = data?.date
+    ? new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })
+    : null;
+  const heroEyebrow = [
+    gradeScope ? `ชั้น ${gradeScope}` : null,
+  ].filter(Boolean).join(' · ');
 
   return (
     <PageTransition>
@@ -261,20 +265,16 @@ export default function SchoolDashboard() {
         <PageHeader
           title={PAGE_TITLES.SCHOOL_DASHBOARD}
           subtitle={data?.school
-            ? `${data.school.name}${data.school.affiliation_name ? ' · ' + data.school.affiliation_name : ''}`
+            ? `${data.school.name}${data.school.affiliation_name ? ' · ' + data.school.affiliation_name : ''}${gradeScope ? ` · ชั้น ${gradeScope}` : ''}`
             : null}
-          meta={data?.date
-            ? `วันที่ ${new Date(data.date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}`
-            : null}
+          meta={dateText ? `วันที่ ${dateText}` : null}
           icon={Building2}
           iconColor="green"
         />
 
-        {/* Quick actions. "จัดการรถ" and "ยืนยันแทนคนขับ" are hidden for
-            grade-teacher accounts, which are read-only (the backend 403s). */}
+        {/* Quick actions. "รถรับส่ง" is hidden for grade-teacher accounts,
+            which are read-only (the backend 403s). */}
         <div className="flex flex-wrap items-stretch gap-2">
-          {/* Term 2: teachers record arrivals/boardings themselves — the
-              day's main task, so it is the first and strongest button. */}
           <Link
             to="/school/teacher-check"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-success-ink hover:opacity-90 text-white text-sm font-semibold px-4 py-2 rounded-lg transition min-h-[44px]"
@@ -298,16 +298,6 @@ export default function SchoolDashboard() {
             <span className="sm:hidden">รายงาน</span><span className="hidden sm:inline">รายงานวันนี้</span>
           </Link>
         </div>
-        {!isTeacher && (
-          <details className="rounded-xl border border-surface-border p-3">
-            <summary className="focus-ring min-h-[44px] flex items-center text-sm font-medium cursor-pointer">งานแก้ไขรายการพิเศษ</summary>
-            <p className="text-sm text-ink-muted mb-3">เช็กชื่อประจำวันใช้ปุ่ม “เช็กชื่อวันนี้” ด้านบน ส่วนนี้สำหรับยืนยันแทนคนขับเมื่อมีเหตุจำเป็นและต้องระบุเหตุผล</p>
-            <button type="button" onClick={() => setOverrideOpen(true)} className={btnSecondary}>
-              <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
-              ยืนยันแทนคนขับ
-            </button>
-          </details>
-          )}
       </div>
 
       {overrideOpen && (
@@ -337,57 +327,71 @@ export default function SchoolDashboard() {
 
       {loading ? (
         <div className="space-y-4">
+          <StatusHero loading rounds={[]} />
           <SkeletonKpiGrid count={4} />
-          <SkeletonKpiGrid count={2} />
         </div>
       ) : (
         <>
-          {dashOk && (
-            <div className="motion-safe:animate-fade-in-up">
-              <TodayBanner variant={banner.variant} title={banner.title} sub={banner.sub} cta={banner.cta} />
-            </div>
+          <div className="motion-safe:animate-fade-in-up">
+            <StatusHero
+              eyebrow={heroEyebrow}
+              rounds={[{ status: morning }, { status: evening }]}
+              day={day || { tone: 'neutral', headline: 'ยังไม่มีข้อมูลวันนี้', sub: UNAVAILABLE_SUB }}
+              action={heroAction}
+            />
+          </div>
+
+          <ActionList title="ต้องทำวันนี้" items={actions} afterAlert={dashOk && !!day && (day.tone === 'warn' || day.tone === 'danger')} emptyText="วันนี้ไม่มีงานค้าง" />
+
+          {/* Grade teacher: their own pupils still waiting, and a way to act. */}
+          {isTeacher && !roundNotRunning && waitingPupils.length > 0 && (
+            <SectionCard
+              title={`นักเรียน${gradeScope ? ` ชั้น ${gradeScope}` : ''} ที่ยังรอ${focusName}`}
+              sub={`${waitingPupils.length.toLocaleString('th-TH')} คน ยังไม่ยืนยัน`}
+              action={<Link to="/school/teacher-check" className="focus-ring inline-flex min-h-[44px] items-center rounded-lg bg-success-ink px-3 text-sm font-semibold text-white">เช็กชื่อวันนี้</Link>}
+            >
+              <ul className="flex flex-col divide-y divide-surface-border">
+                {waitingPupils.slice(0, 8).map(s => (
+                  <li key={s.id} className="py-2 text-sm text-ink">
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-ink-muted"> · {formatGradeClass(s.grade, s.classroom, '')}</span>
+                  </li>
+                ))}
+              </ul>
+              {waitingPupils.length > 8 && <p className="pt-2 text-sm text-ink-muted">และอีก {(waitingPupils.length - 8).toLocaleString('th-TH')} คน ดูทั้งหมดในหน้าเช็กชื่อ</p>}
+            </SectionCard>
           )}
 
-          <TodoCards items={todos} afterAlert={dashOk && (banner.variant === 'warn' || banner.variant === 'danger')} />
+          {/* School: buses that still have pupils waiting in the round in focus. */}
+          {!isTeacher && !roundNotRunning && waitingBuses.length > 0 && (
+            <SectionCard
+              title={`รถที่ยังค้าง (${focusName})`}
+              sub={`${waitingBuses.length.toLocaleString('th-TH')} คัน · เรียงจากค้างมากไปน้อย`}
+              action={<button type="button" onClick={() => openFold('vehicles', vehiclesRef)} className="focus-ring inline-flex min-h-[44px] items-center rounded-lg px-3 text-sm font-semibold text-brand-700 hover:underline">ดูรายชื่อในรถ</button>}
+            >
+              <ul className="flex flex-col divide-y divide-surface-border">
+                {waitingBuses.slice(0, 5).map(({ v, r }) => (
+                  <li key={v.vehicle_id || v.plate_no} className="flex items-center justify-between gap-3 py-2.5">
+                    <span className="min-w-0 truncate font-semibold text-ink">{v.plate_no || 'ยังไม่ระบุรถ'}</span>
+                    <span className="shrink-0 text-sm tabular-nums text-ink-muted">
+                      ส่งแล้ว {r.done}/{r.expected} คน · <span className="font-semibold text-warn-ink">ค้าง {r.pending}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
 
-          <AttendanceBreakdown data={failed.dashboard ? {} : data} />
+          {/* Self-travel / leave, in context under the round numbers. */}
+          <TravelLeaveSummary data={failed.dashboard ? {} : data} />
 
-          {/* Headline numbers */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="ตัวเลขหลักวันนี้">
-            {!dashOk ? (
-              <>
-                <KpiRingCard label="ส่งเช้า" value="—" sub={UNAVAILABLE_SUB} variant="neutral" chip="ไม่มีข้อมูล" />
-                <KpiRingCard label="รับเย็น" value="—" sub={UNAVAILABLE_SUB} variant="neutral" chip="ไม่มีข้อมูล" />
-                <KpiRingCard label="นักเรียนที่ลา" value="—" sub={UNAVAILABLE_SUB} variant="neutral" chip="ไม่มีข้อมูล" />
-                <KpiRingCard label="เหตุฉุกเฉิน 7 วัน" value="—" sub={UNAVAILABLE_SUB} variant="neutral" chip="ไม่มีข้อมูล" />
-              </>
-            ) : (<>
-            {/* Before a round has any check-in, show "not started" instead of an empty ring. */}
-            {mExpected === 0 || mDone === 0 ? (
-              <KpiRingCard label="ส่งเช้า" value="ยังไม่เริ่ม" sub="ยังไม่เริ่มรอบ" variant="neutral" />
-            ) : (
-              <KpiRingCard label="ส่งเช้า" pct={mPct} sub={`${mDone.toLocaleString('th-TH')} / ${mExpected.toLocaleString('th-TH')} คน`} variant={pctTone(mPct)} />
-            )}
-            {eExpected === 0 || !eveningStarted ? (
-              <KpiRingCard label="รับเย็น" value="ยังไม่เริ่ม" sub="ยังไม่เริ่มรอบ" variant="neutral" />
-            ) : (
-              <KpiRingCard label="รับเย็น" pct={ePct} sub={`${eDone.toLocaleString('th-TH')} / ${eExpected.toLocaleString('th-TH')} คน`} variant={pctTone(ePct)} />
-            )}
-            <KpiRingCard
-              label="นักเรียนที่ลา"
-              value={mLeave + eLeave}
-              sub={`วันนี้ · เช้า ${mLeave} · เย็น ${eLeave}`}
-              variant="info"
-            />
-            <KpiRingCard
-              label="เหตุฉุกเฉิน 7 วัน"
-              value={emerg7d}
-              sub="7 วันล่าสุด"
-              variant={emerg7d > 0 ? 'danger' : 'success'}
-              chip={emerg7d > 0 ? undefined : 'ไม่มีเหตุ'}
-            />
-            </>)}
-          </section>
+          {/* Secondary facts, calm */}
+          <StatGrid cols={4} label="ตัวเลขประกอบวันนี้">
+            <StatTile label="นักเรียนทั้งหมด" value={dash?.total_students} unit="คน" unavailable={!dashOk} icon={Users} />
+            <StatTile label="รถรับส่ง" value={dash?.total_vehicles} unit="คัน" unavailable={!dashOk} icon={Bus} to={isTeacher ? undefined : '/school/vehicles'} />
+            <StatTile label="นักเรียนลา" value={mLeave + eLeave} unit="ครั้ง" sub={`เช้า ${mLeave} · เย็น ${eLeave}`} unavailable={!dashOk} />
+            <StatTile label="เหตุฉุกเฉิน 7 วัน" value={emerg7d} unit="รายการ" tone={emerg7d > 0 ? 'danger' : 'calm'} unavailable={!dashOk} to="/school/emergencies" />
+          </StatGrid>
 
           {/* Two charts: the last school days, and the buses to chase now */}
           <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -483,6 +487,21 @@ export default function SchoolDashboard() {
               </FoldSection>
             )}
           </section>
+
+          {/* Rare action, kept out of the way but never an empty box: it says what it is for. */}
+          {!isTeacher && (
+            <SectionCard
+              collapsible
+              title="ยืนยันแทนคนขับ"
+              sub="ใช้เมื่อคนขับเช็กชื่อไม่ได้และมีเหตุจำเป็น ต้องระบุเหตุผล"
+            >
+              <p className="text-sm text-ink-muted mb-3">เช็กชื่อประจำวันใช้ปุ่ม “เช็กชื่อวันนี้” ด้านบน ส่วนนี้สำหรับยืนยันแทนคนขับเท่านั้น และบันทึกไว้ในประวัติการแก้ไข</p>
+              <button type="button" onClick={() => setOverrideOpen(true)} className={btnSecondary}>
+                <CheckCircle2 className="w-4 h-4" strokeWidth={2} />
+                ยืนยันแทนคนขับ
+              </button>
+            </SectionCard>
+          )}
         </>
       )}
     </div>

@@ -1,14 +1,21 @@
-import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { FileBarChart, Bus, GraduationCap, Sunrise, Sunset} from 'lucide-react';
+import { FileBarChart, Bus, GraduationCap } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
 import ExportButtons from '../../components/ExportButtons';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
-import { StatusBadge, DataTable, FormField, AlertBanner} from '../../components/ui';
-import { roundsNotStarted } from '../../utils/reportRounds';
+import { StatusBadge, DataTable, FormField } from '../../components/ui';
+import { StatusHero, ActionList, StatTile, StatGrid, TravelLeaveSummary, roundStatus } from '../../components/dashboard';
+import { ReportHero, ReportSection, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
+
+// Where each role acts on a follow-up item (admin has no such page).
+const ROLE_LINKS = {
+  school: { round: '/school/teacher-check', emergency: '/school/emergencies' },
+  affiliation: { round: '/affiliation/status', emergency: '/affiliation/emergencies' },
+  province: { round: '/province/status', emergency: '/province/emergencies' },
+};
 
 export default function DailyReport() {
   const { user } = useAuth();
@@ -37,36 +44,24 @@ export default function DailyReport() {
   useEffect(() => { fetchReport(); }, [fetchReport]);
 
   const thaiDate = date ? new Date(date).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }) : '';
-  const mPct = data?.morning_conflict ? null : data?.morning_total > 0 ? Math.round((data.morning_done / data.morning_total) * 100) : 0;
-  const ePct = data?.evening_conflict ? null : data?.evening_total > 0 ? Math.round((data.evening_done / data.evening_total) * 100) : 0;
-  // A round that has not opened yet (evening before 12:00, any round on a
-  // future date) reads neutral, not as a failure to follow up.
-  const notStarted = roundsNotStarted(date);
-  const roundTone = (pct, pending) => pending ? 'neutral' : pct === 100 ? 'success' : pct >= 80 ? 'warn' : 'danger';
+  // One calm, time-aware status per round. `date` is the report date, so an
+  // earlier day with gaps reads amber and a round that has not opened is grey.
+  const morning = data ? roundStatus({ session: 'morning', done: data.morning_done, expected: data.morning_total, date, conflict: data.morning_conflict }) : null;
+  const evening = data ? roundStatus({ session: 'evening', done: data.evening_done, expected: data.evening_total, date, conflict: data.evening_conflict }) : null;
+  const emergencies = Number(data?.emergency_count) || 0;
+  const links = ROLE_LINKS[user?.role] || {};
+  const isToday = date === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      <AttendanceBreakdown data={loading ? null : error ? {} : data} monthly={false} />
-      {/* ── HEADER ── */}
-      <div className="bg-navy-700 text-white rounded-xl px-5 py-4 mb-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <p className="text-caption text-navy-200 uppercase tracking-wider">รายงานรายวัน</p>
-            <h1 className="text-lg font-semibold">ระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
-            <p className="text-sm text-navy-200 mt-0.5">{thaiDate}</p>
-          </div>
-          <FormField
-            label="วันที่ของรายงาน"
-            labelClassName="text-navy-200"
-            className="sm:w-44"
-          >
-            {ctl => (
-              <input {...ctl} type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
-            )}
-          </FormField>
-        </div>
-      </div>
+      <ReportHero eyebrow="รายงานรายวัน" title={reportScopeName(user, data)} subtitle={thaiDate}>
+        <FormField label="วันที่ของรายงาน" labelClassName="text-navy-200" className="sm:w-48">
+          {ctl => (
+            <input {...ctl} type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
+          )}
+        </FormField>
+      </ReportHero>
 
       {error && <ErrorState message={error} className="mb-4" />}
 
@@ -76,43 +71,37 @@ export default function DailyReport() {
         <EmptyState icon={FileBarChart} title="ไม่มีข้อมูล" description="ลองเปลี่ยนวันที่หรือช่วงเวลาอื่น" />
       ) : (
         <>
-          {/* ── KPI 4 CARDS ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            <KpiBox icon={Bus} label="รถรับส่ง" value={data.total_vehicles} sub="คัน" tone="brand" />
-            <KpiBox icon={GraduationCap} label="นักเรียน" value={data.total_students} sub="คน" tone="brand" />
-            <KpiBox icon={Sunrise} label="ส่งเช้าสำเร็จ"
-              value={notStarted.morning ? '—' : mPct == null || !data.morning_total ? '—' : `${mPct}%`}
-              sub={notStarted.morning ? 'ยังไม่ถึงรอบ' : `${data.morning_done}/${data.morning_total} คน`}
-              tone={roundTone(mPct, notStarted.morning)} />
-            <KpiBox icon={Sunset} label="รับเย็นสำเร็จ"
-              value={notStarted.evening ? '—' : ePct == null || !data.evening_total ? '—' : `${ePct}%`}
-              sub={notStarted.evening ? 'ยังไม่ถึงรอบ' : `${data.evening_done}/${data.evening_total} คน`}
-              tone={roundTone(ePct, notStarted.evening)} />
-          </div>
+          {/* ── 1. Answer first: status per round ── */}
+          <StatusHero
+            className="mb-5"
+            emergencies={emergencies}
+            rounds={[{ status: morning }, { status: evening }]}
+          />
 
-          {/* ── ALERT: จุดที่ต้องติดตาม ── */}
-          {(() => {
-            const alerts = [];
-            if (data.morning_pending > 0 && !notStarted.morning) alerts.push(`รอส่งเช้า ${data.morning_pending} คน`);
-            if (data.evening_pending > 0 && !notStarted.evening) alerts.push(`รอรับเย็น ${data.evening_pending} คน`);
-            if (data.emergency_count > 0) alerts.push(`เหตุฉุกเฉิน ${data.emergency_count} รายการ`);
-            return alerts.length > 0 ? (
-              <AlertBanner variant="warn" title="จุดที่ต้องติดตาม" className="mb-5">
-                <ul className="space-y-0.5 mt-1">
-                  {alerts.map((a, i) => <li key={i}>{a}</li>)}
-                </ul>
-              </AlertBanner>
-            ) : (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-5 text-center">
-                <p className="text-sm font-semibold text-green-700">ดำเนินการครบทุกรายการ</p>
-              </div>
-            );
-          })()}
+          {/* ── 2. What to follow up ── */}
+          <ActionList
+            className="mb-5"
+            title="จุดที่ต้องติดตาม"
+            hideWhenEmpty
+            items={[
+              { key: 'em', tone: 'danger', count: emergencies, title: `เหตุฉุกเฉิน ${emergencies} รายการ`, sub: 'ดูรายละเอียดและติดตามผล', to: links.emergency, actionLabel: 'ดูเหตุฉุกเฉิน' },
+              { key: 'm', tone: morning.tone, count: ['not_delivered', 'overdue', 'incomplete_record'].includes(morning.state) ? morning.pending : 0, title: `รอบเช้ายังไม่ยืนยัน ${morning.pending} คน`, sub: morning.detail },
+              { key: 'e', tone: evening.tone, count: ['not_delivered', 'overdue', 'incomplete_record'].includes(evening.state) ? evening.pending : 0, title: `รอบเย็นยังไม่ยืนยัน ${evening.pending} คน`, sub: evening.detail },
+            ].map(i => (i.key === 'em' || !isToday ? i : { ...i, to: links.round, actionLabel: 'ดูรายชื่อ' }))}
+          />
+
+          {/* ── 3. Totals ── */}
+          <StatGrid cols={2} label="จำนวนรถและนักเรียน" className="mb-5">
+            <StatTile icon={Bus} label="รถรับส่ง" value={data.total_vehicles} unit="คัน" />
+            <StatTile icon={GraduationCap} label="นักเรียนทั้งหมด" value={data.total_students} unit="คน" />
+          </StatGrid>
+
+          {/* Self-travel / leave: in context under the round totals, hidden when all 0. */}
+          <TravelLeaveSummary data={data} className="mb-5" />
 
           {/* ── สรุปรายโรงเรียน ── */}
           {data.schools?.length > 0 && (
-            <section className="mb-5">
-              <h2 className="text-sm font-semibold text-ink mb-2">สรุปรายโรงเรียน</h2>
+            <ReportSection title="สรุปรายโรงเรียน" hint="ส่งเช้า / รับเย็น แสดงเป็น จำนวนที่ยืนยันแล้ว / จำนวนที่ใช้รถ">
               <CompletionTable
                 caption="สรุปการรับ-ส่งรายโรงเรียน"
                 rows={data.schools}
@@ -120,13 +109,12 @@ export default function DailyReport() {
                 labelHeader="โรงเรียน"
                 label={s => s.school_name}
               />
-            </section>
+            </ReportSection>
           )}
 
           {/* ── สรุปรายรถ ── */}
           {data.vehicles?.length > 0 && (
-            <section className="mb-5">
-              <h2 className="text-sm font-semibold text-ink mb-2">สรุปรายรถ</h2>
+            <ReportSection title="สรุปรายรถ">
               <CompletionTable
                 caption="สรุปการรับ-ส่งรายรถ"
                 rows={data.vehicles}
@@ -134,11 +122,11 @@ export default function DailyReport() {
                 labelHeader="ทะเบียนรถ"
                 label={v => v.plate_no}
               />
-            </section>
+            </ReportSection>
           )}
 
-          {/* ── FOOTER: Export + timestamp ── */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200">
+          {/* ── Export ── */}
+          <ExportPanel note={`ข้อมูลของ${thaiDate} · CSV และ Excel เปิดในตารางคำนวณ, PDF สำหรับพิมพ์`}>
             <ExportButtons queryParams={`date=${date}`} filenamePrefix={`report-${date}`}
               onBeforeExport={user?.role === 'province' ? (fmt) => new Promise((resolve, reject) => {
                 if (fmt !== 'pdf') { resolve(); return; }
@@ -146,10 +134,7 @@ export default function DailyReport() {
                 setShowDecision(true);
               }) : undefined}
             />
-            <p className="text-xs text-ink-muted">
-              สร้างจากระบบรถรับส่งนักเรียนจังหวัดลำปาง · {new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
-            </p>
-          </div>
+          </ExportPanel>
         </>
       )}
 
@@ -208,34 +193,6 @@ function DecisionLogModal({ onSubmit, onSkip, onCancel }) {
           <button onClick={() => onSubmit(type, note)} className="flex-1 text-sm bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-medium">บันทึก + ดาวน์โหลด</button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/**
- * The four report KPI tiles used an emoji as the icon (🚌 👨‍🎓 🌅 🌆) and a
- * hardcoded blue/green/red/amber palette. The emoji announced nothing useful
- * and did not print reliably; the tones now come from the semantic tokens and
- * the icons from Lucide, marked aria-hidden since the label says what the tile
- * is.
- */
-function KpiBox({ icon: Icon, label, value, sub, tone = 'brand' }) {
-  const TONES = {
-    neutral: 'bg-surface      border-surface-border text-ink-muted',
-    brand:   'bg-brand-50     border-brand-200  text-brand-700',
-    success: 'bg-success-soft border-success/30 text-success-ink',
-    warn:    'bg-warn-soft    border-warn/30    text-warn-ink',
-    danger:  'bg-danger-soft  border-danger/30  text-danger-ink',
-  };
-  const cls = TONES[tone] || TONES.brand;
-  return (
-    <div className={`rounded-xl border p-3 text-center ${cls.replace(/text-[\w-]+$/, '')}`}>
-      {Icon && (
-        <Icon className={`w-5 h-5 mx-auto mb-1 ${cls.split(' ').pop()}`} strokeWidth={2} aria-hidden="true" />
-      )}
-      <p className={`text-2xl font-bold tabular-nums ${cls.split(' ').pop()}`}>{value}</p>
-      <p className="text-caption text-ink-muted">{label}</p>
-      {sub && <p className="text-caption text-ink-muted tabular-nums">{sub}</p>}
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import AttendanceBreakdown from '../../components/AttendanceBreakdown';
+import { StatusHero, TravelLeaveSummary, roundStatus } from '../../components/dashboard';
+import { tone } from '../../components/ui';
 import { isBusRider, visibleAttendance } from '../../utils/attendance';
 import { Building2, Bus } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
@@ -67,9 +68,18 @@ export default function ProvDailyStatus() {
     );
   }, [data]);
 
+  const dateIso = data?.date ? String(data.date).slice(0, 10) : undefined;
+  const isSchoolDay = typeof data?.is_school_day === 'boolean' ? data.is_school_day : undefined;
+  const pill = (session, done, total) => {
+    const st = roundStatus({ session, done, expected: total, date: dateIso, isSchoolDay });
+    const t = tone(st.tone);
+    return { st, cls: `inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${t.soft} ${t.ink} ${t.border}` };
+  };
+  const all = (data?.affiliations || []).flatMap((aff) => aff.schools.flatMap((s) => flatStudents(s.vehicles)));
+  const totals = countStatus(all);
+
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
-      {data && <AttendanceBreakdown data={loading ? null : error ? {} : visibleAttendance(data)} />}
       <PageHeader
         title="สถานะวันนี้"
         subtitle="ความคืบหน้าการรับ-ส่งนักเรียนรายคันทั้งจังหวัด"
@@ -80,6 +90,24 @@ export default function ProvDailyStatus() {
       />
 
       {error && <ErrorState message={error} className="mb-4" />}
+
+      {data && !loading && !error && data.affiliations?.length > 0 && (
+        <StatusHero
+          className="mb-4"
+          eyebrow="ทั้งจังหวัดวันนี้"
+          rounds={[
+            { status: roundStatus({ session: 'morning', done: totals.mDone, expected: totals.mTotal, date: dateIso, isSchoolDay }), title: 'รอบเช้า (ส่งถึงโรงเรียน)' },
+            { status: roundStatus({ session: 'evening', done: totals.eDone, expected: totals.eTotal, date: dateIso, isSchoolDay }), title: 'รอบเย็น (ส่งถึงบ้าน)' },
+          ]}
+        />
+      )}
+
+      {/* Self-travel / leave: under the round numbers, hidden when all 0. */}
+      {data && !loading && !error && <TravelLeaveSummary data={visibleAttendance(data)} className="mb-4" />}
+
+      {data && !loading && !error && data.affiliations?.length > 0 && (
+        <h2 className="text-lg font-bold text-ink mb-2">แยกตามสังกัด <span className="text-sm font-normal text-ink-muted">แตะเพื่อดูโรงเรียนและรถ</span></h2>
+      )}
 
       {loading ? (
         <LoadingState />
@@ -103,13 +131,16 @@ export default function ProvDailyStatus() {
                       {aff.schools.length} โรงเรียน · {allStudents.length} คน
                     </p>
                   </div>
-                  <div className="flex items-center gap-4 text-sm">
-                    <span className={mDone === mTotal && mTotal > 0 ? 'text-success-ink' : 'text-orange-600'}>
-                      เช้า {mDone}/{mTotal}
-                    </span>
-                    <span className={eDone === eTotal && eTotal > 0 ? 'text-success-ink' : 'text-indigo-600'}>
-                      เย็น {eDone}/{eTotal}
-                    </span>
+                  <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
+                    {[['เช้า', 'morning', mDone, mTotal], ['เย็น', 'evening', eDone, eTotal]].map(([n, ses, d, t]) => {
+                      const p = pill(ses, d, t);
+                      return (
+                        <span key={ses} className="inline-flex items-center gap-1.5 tabular-nums">
+                          <strong className="text-ink">{n} {d}/{t}</strong>
+                          <span className={p.cls}>{p.st.label}</span>
+                        </span>
+                      );
+                    })}
                     <span className="text-ink-muted text-xs">{isAffExpanded ? '▲' : '▼'}</span>
                   </div>
                 </button>
@@ -132,10 +163,10 @@ export default function ProvDailyStatus() {
                               <span className="text-xs text-ink-muted">({sStudents.length} คน)</span>
                             </div>
                             <div className="flex items-center gap-3 text-xs">
-                              <span className={ss.mDone === ss.mTotal && ss.mTotal > 0 ? 'text-success-ink' : 'text-orange-500'}>
+                              <span className={`font-medium ${tone(pill('morning', ss.mDone, ss.mTotal).st.tone).ink}`}>
                                 เช้า {ss.mDone}/{ss.mTotal}
                               </span>
-                              <span className={ss.eDone === ss.eTotal && ss.eTotal > 0 ? 'text-success-ink' : 'text-indigo-500'}>
+                              <span className={`font-medium ${tone(pill('evening', ss.eDone, ss.eTotal).st.tone).ink}`}>
                                 เย็น {ss.eDone}/{ss.eTotal}
                               </span>
                               <span className="text-ink-muted">{isSchoolExpanded ? '▲' : '▼'}</span>
@@ -159,11 +190,11 @@ export default function ProvDailyStatus() {
                                         <span className="text-xs text-ink-muted">({vehicle.students.length})</span>
                                       </div>
                                       <div className="flex items-center gap-3 text-xs">
-                                        <span className={vs.mDone === vs.mTotal && vs.mTotal > 0 ? 'text-success-ink' : 'text-orange-500'}>
-                                          {vs.mDone}/{vs.mTotal}
+                                        <span className={`font-medium ${tone(pill('morning', vs.mDone, vs.mTotal).st.tone).ink}`}>
+                                          เช้า {vs.mDone}/{vs.mTotal}
                                         </span>
-                                        <span className={vs.eDone === vs.eTotal && vs.eTotal > 0 ? 'text-success-ink' : 'text-indigo-500'}>
-                                          {vs.eDone}/{vs.eTotal}
+                                        <span className={`font-medium ${tone(pill('evening', vs.eDone, vs.eTotal).st.tone).ink}`}>
+                                          เย็น {vs.eDone}/{vs.eTotal}
                                         </span>
                                         <span className="text-ink-muted">{isVehicleExpanded ? '▲' : '▼'}</span>
                                       </div>

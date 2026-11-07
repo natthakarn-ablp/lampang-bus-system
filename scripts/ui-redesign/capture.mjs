@@ -1372,7 +1372,7 @@ const PRINT_MEASURE = `(() => {
 // full 44px target.
 async function assertPartialFailureShown(page) {
   const found = await page.evaluate(() => {
-    const kpi = document.querySelector('section[aria-label="ตัวเลขหลักวันนี้"]');
+    const kpi = document.querySelector('section[aria-label="ตัวเลขหลักวันนี้"], section[aria-label="ตัวเลขประกอบวันนี้"]');
     const todo = [...document.querySelectorAll('section')]
       .find(sec => sec.querySelector(':scope > h2')?.textContent.trim() === 'ต้องทำวันนี้');
     const leaves = el => (el ? [...el.querySelectorAll('*')].filter(n => n.children.length === 0) : []);
@@ -1455,10 +1455,12 @@ const SHOTS = [
     id: `attendance-monthly-${user}`, url: '/reports/monthly', user, scenario: 'attendance-monthly', vps: ['mobile','desktop'],
     act: async page => {
       const summary = page.getByRole('region', { name: 'แยกการเดินทางและการลา', exact: true });
+      // The per-round detail sits behind a disclosure (closed by default).
+      await summary.getByRole('button', { name: /ดูรายละเอียด/ }).click();
       await summary.getByText('5 ครั้ง / 1 คนไม่ซ้ำ', { exact: true }).waitFor();
       if (await summary.getByText('3 ครั้ง / 2 คนไม่ซ้ำ', { exact: true }).count() !== 1) throw new Error('leave frequency/distinct pupils missing');
       if (await summary.getByText('มาเอง', { exact: true }).count() !== 1 || await summary.getByText('กลับเอง', { exact: true }).count() !== 1) throw new Error('round headings merged');
-    }, expect: ['text=แยกการเดินทางและการลารายเดือน'],
+    }, expect: ['text=ไม่ใช้รถในเดือนนี้ (เดินทางเอง/ลา)'],
   })),
   { id: '01-login',        url: '/login',       user: null,          vps: ['mobile', 'desktop'] },
   { id: '02-admin-dash',   url: '/admin',       user: 'admin',       vps: ['mobile', 'tablet', 'desktop', 'wide'] },
@@ -1507,12 +1509,12 @@ const SHOTS = [
   // ยืนยันแทนคนขับแบบยกชุด — การติ๊กกลับด้าน (ติ๊ก = ไม่ได้ขึ้นรถ) ต้องอ่านไม่ผิด
   // จึงยืนยันว่าคำอธิบายและตัวนับทั้งสองฝั่งปรากฏพร้อมกันบนหน้าจอ
   { id: '09b-school-override-bulk', url: '/school', user: 'school', vps: ['desktop'],
-    // The button lives inside the collapsed "งานแก้ไขรายการพิเศษ" disclosure on
+    // The button lives inside the collapsed "ยืนยันแทนคนขับ" section on
     // SchoolDashboard, so it exists in the DOM but is not clickable until the
     // summary is opened.
     act: async (page) => {
-      await page.locator('summary', { hasText: 'งานแก้ไขรายการพิเศษ' }).first().click();
-      const btn = page.locator('button:has-text("ยืนยันแทนคนขับ")').first();
+      await page.locator('button[aria-expanded]', { hasText: 'ยืนยันแทนคนขับ' }).first().click();
+      const btn = page.locator('button:has-text("ยืนยันแทนคนขับ")').last();
       if (await btn.count()) { await btn.click(); await page.waitForTimeout(600); }
     },
     expect: ['[role=dialog], .fixed.inset-0', 'text=ติ๊กเฉพาะคนที่', 'text=ไม่ได้ขึ้นรถ',

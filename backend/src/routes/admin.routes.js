@@ -16,6 +16,8 @@ const termSvc = require('../services/term.service');
 const { importExportLimiter, exportFormatLimiter } = require('../middleware/rateLimiters');
 const ppSvc = require('../services/pickupPoint.service');
 const vllSvc = require('../services/vehicleLocation.service');
+const { makeTrackHandlers } = require('./vehicleTrackHandlers');
+const { trackingInfo } = require('../utils/gpsTrackingWindow');
 const ExcelJS = require('exceljs');
 const { csvCell, neutralizeSpreadsheetCell, redactAuditValue } = require('../utils/exportSecurity');
 const { rejectOverLongFields } = require('../utils/fieldLength');
@@ -1918,9 +1920,16 @@ router.get('/live-vehicles', async (req, res, next) => {
       userId: req.user.id, entityId: 'admin-all',
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
-    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString() });
+    return sendSuccess(res, { vehicles, generated_at: new Date().toISOString(), tracking: trackingInfo() });
   } catch (err) { next(err); }
 });
+
+// GPS route history (replay) — every vehicle, same scope as /live-vehicles.
+{
+  const h = makeTrackHandlers(() => ({ all: true }));
+  router.get('/vehicles/:vehicleId/track', h.track);
+  router.get('/vehicles/:vehicleId/track-days', h.days);
+}
 
 // ─── Pending-requests count (bell badge) — aggregates the 3 admin queues ─────
 router.get('/pending-requests-count', async (req, res, next) => {

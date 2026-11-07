@@ -135,7 +135,7 @@ export default function StudentList() {
         {bulkMsg && <p className="text-center text-sm text-gray-600 mt-2">{bulkMsg}</p>}
       </div>
 
-      {error && <ErrorState message={error} className="mb-4" onRetry={load} />}
+      {error && <ErrorState message={error} className="mb-4" onRetry={fetchRoster} />}
 
       {loading && <LoadingState />}
 

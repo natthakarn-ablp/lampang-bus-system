@@ -207,7 +207,19 @@ import { StatusHero, RoundProgress, ActionList, StatTile, StatGrid, SectionCard,
 - `<ActionList title? items={[{ key, tone, count, title, sub, to|onClick, actionLabel?, keepZero?, unavailable? }]} max? hideWhenEmpty? afterAlert? emptyText? />`
 - `<StatTile label value unit? sub? tone?='calm'|'success'|'warn'|'danger'|'info' icon? to? unavailable? />`, `<StatGrid cols? label?>`
 - `<SectionCard title sub? action? empty? hideWhenEmpty?=true emptyText? collapsible? defaultOpen?>`
-- `<TravelLeaveSummary data monthly? defaultOpen? className? />`, `isTravelLeaveEmpty(data)`
+- `<TravelLeaveSummary data monthly? defaultOpen? className? />`, `isTravelLeaveEmpty(data)`,
+  `isTravelLeaveUnavailable(data)`. `null` → hidden; all zeros → hidden;
+  `{}` (failed feed, no counts) → shown open with "—" (the CI capture
+  `assertPartialFailureShown` requires ≥ 4 "—" in the region
+  `aria-label="แยกการเดินทางและการลา"` on partial-500 dashboards — keep passing
+  `failed ? {} : data` on dashboards).
+
+CI runtime capture (`scripts/ui-redesign/capture.mjs`) asserts on several
+dashboard texts (e.g. a `section` whose direct `h2` is "ต้องทำวันนี้", the
+region `aria-label="ตัวเลขหลักวันนี้"` on partial-failure scenarios, no "0"
+in failed numbers). If you restructure a page, keep those hooks or update the
+matching assertion in the same PR (capture.mjs edits: only the assertions for
+your own pages).
 
 Tests: `frontend/tests/dashboardRoundStatus.test.mjs` (in `npm run test:readiness`).
 

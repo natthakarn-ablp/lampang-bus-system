@@ -4,7 +4,7 @@ export { default as StatusHero, RoundProgress } from './StatusHero';
 export { default as ActionList } from './ActionList';
 export { default as StatTile, StatGrid } from './StatTile';
 export { default as SectionCard } from './SectionCard';
-export { default as TravelLeaveSummary, isTravelLeaveEmpty } from './TravelLeaveSummary';
+export { default as TravelLeaveSummary, isTravelLeaveEmpty, isTravelLeaveUnavailable } from './TravelLeaveSummary';
 export {
   ROUND_TIMES, SESSION_LABEL, SESSION_DONE_VERB,
   bangkokClock, isWeekend, roundPhase, roundStatus, dayStatus,

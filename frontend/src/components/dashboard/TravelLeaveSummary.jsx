@@ -7,11 +7,22 @@ const SESSIONS = [
 ];
 const KINDS = ['self', 'leave'];
 const fmt = n => Number(n || 0).toLocaleString('th-TH');
+const shown = v => (typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString('th-TH') : '—');
 const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/**
+ * True when the feed failed: an object without any of the counts (pages pass
+ * `{}` for a failed feed). Shown as "—", never hidden as if it were 0.
+ */
+export function isTravelLeaveUnavailable(data) {
+  if (!data || typeof data !== 'object') return false;
+  return SESSIONS.every(({ key }) => KINDS.every(kind => typeof data[`${key}_${kind}`] !== 'number'));
+}
 
 /** True when there is nothing worth showing: no data, or every count is 0 and no conflict. */
 export function isTravelLeaveEmpty(data) {
   if (!data || typeof data !== 'object') return true;
+  if (isTravelLeaveUnavailable(data)) return false;
   return SESSIONS.every(({ key }) => !num(data[`${key}_conflict`]) && KINDS.every(kind => !num(data[`${key}_${kind}`])));
 }
 
@@ -38,8 +49,11 @@ export function isTravelLeaveEmpty(data) {
  *   defaultOpen
  */
 export default function TravelLeaveSummary({ data, monthly = false, defaultOpen = false, className = '' }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [toggled, setOpen] = useState(defaultOpen);
   if (isTravelLeaveEmpty(data)) return null;
+  // A failed feed keeps the detail open so every count reads "—", not 0.
+  const unavailable = isTravelLeaveUnavailable(data);
+  const open = toggled || unavailable;
 
   const unit = monthly ? 'ครั้ง' : 'คน';
   const conflicts = SESSIONS.filter(({ key }) => num(data[`${key}_conflict`]) > 0);
@@ -62,7 +76,9 @@ export default function TravelLeaveSummary({ data, monthly = false, defaultOpen 
       >
         <span className="min-w-0">
           <span className="block font-semibold text-ink">{title}</span>
-          {parts.length > 0 && <span className="block text-sm text-ink-muted tabular-nums">{parts.join(' · ')} {unit}</span>}
+          {unavailable
+            ? <span className="block text-sm text-ink-muted">โหลดข้อมูลไม่สำเร็จ</span>
+            : parts.length > 0 && <span className="block text-sm text-ink-muted tabular-nums">{parts.join(' · ')} {unit}</span>}
         </span>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 shrink-0">
           {open ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียด'}
@@ -90,8 +106,8 @@ export default function TravelLeaveSummary({ data, monthly = false, defaultOpen 
                     <div key={kind} className="flex justify-between gap-3">
                       <dt>{label}</dt>
                       <dd className="tabular-nums">
-                        {fmt(data[`${s.key}_${kind}`])} {unit}
-                        {monthly && typeof data[`${s.key}_${kind}_people`] === 'number' ? ` / ${fmt(data[`${s.key}_${kind}_people`])} คนไม่ซ้ำ` : ''}
+                        {shown(data[`${s.key}_${kind}`])}{unavailable ? '' : ` ${unit}`}
+                        {monthly && typeof data[`${s.key}_${kind}_people`] === 'number' ? ` / ${shown(data[`${s.key}_${kind}_people`])} คนไม่ซ้ำ` : ''}
                       </dd>
                     </div>
                   ))}

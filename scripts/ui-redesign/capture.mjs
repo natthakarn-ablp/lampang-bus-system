@@ -1445,10 +1445,12 @@ const SHOTS = [
     id: `attendance-monthly-${user}`, url: '/reports/monthly', user, scenario: 'attendance-monthly', vps: ['mobile','desktop'],
     act: async page => {
       const summary = page.getByRole('region', { name: 'แยกการเดินทางและการลา', exact: true });
+      // The per-round detail sits behind a disclosure (closed by default).
+      await summary.getByRole('button', { name: /ดูรายละเอียด/ }).click();
       await summary.getByText('5 ครั้ง / 1 คนไม่ซ้ำ', { exact: true }).waitFor();
       if (await summary.getByText('3 ครั้ง / 2 คนไม่ซ้ำ', { exact: true }).count() !== 1) throw new Error('leave frequency/distinct pupils missing');
       if (await summary.getByText('มาเอง', { exact: true }).count() !== 1 || await summary.getByText('กลับเอง', { exact: true }).count() !== 1) throw new Error('round headings merged');
-    }, expect: ['text=แยกการเดินทางและการลารายเดือน'],
+    }, expect: ['text=ไม่ใช้รถในเดือนนี้ (เดินทางเอง/ลา)'],
   })),
   { id: '01-login',        url: '/login',       user: null,          vps: ['mobile', 'desktop'] },
   { id: '02-admin-dash',   url: '/admin',       user: 'admin',       vps: ['mobile', 'tablet', 'desktop', 'wide'] },

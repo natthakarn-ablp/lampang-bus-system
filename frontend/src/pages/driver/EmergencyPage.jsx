@@ -2,6 +2,7 @@ import { AlertTriangle, Satellite, MapPin, MapPinOff, CheckCircle2 } from 'lucid
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { driverErrorMessage } from '../../utils/driverErrors';
 import ErrorState from '../../components/ErrorState';
 import { FormField } from '../../components/ui';
 import PageHeader from '../../components/PageHeader';
@@ -106,7 +107,7 @@ export default function EmergencyPage() {
       toast.success('แจ้งเหตุฉุกเฉินสำเร็จ');
       setSuccess(true);
     } catch (err) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+      setError(driverErrorMessage(err, 'เกิดข้อผิดพลาด'));
     } finally {
       setLoading(false);
     }

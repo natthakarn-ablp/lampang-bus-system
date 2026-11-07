@@ -865,6 +865,38 @@ router.put('/profile', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+// ─── GET /profile/photo ──────────────────────────────────────────────────────
+// /uploads is never served publicly (app.js), so the driver's OWN photo is
+// streamed here behind authentication. Only a plain basename inside the
+// drivers upload dir is ever resolved.
+
+const PHOTO_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+
+router.get('/profile/photo', async (req, res, next) => {
+  try {
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    const [[row]] = await pool.query(
+      `SELECT d.photo_url
+       FROM drivers d
+       JOIN driver_vehicle_assignments dva ON dva.driver_id = d.id AND dva.is_active = TRUE
+       WHERE dva.vehicle_id = ?
+       LIMIT 1`,
+      [vehicle.vehicle_id]
+    );
+    const stored = row && row.photo_url ? String(row.photo_url) : '';
+    const prefix = '/uploads/drivers/';
+    const name = stored.startsWith(prefix) ? stored.slice(prefix.length) : '';
+    const mime = PHOTO_MIME[path.extname(name).toLowerCase()];
+    if (!name || name !== path.basename(name) || !mime) return sendError(res, 'ไม่พบรูปคนขับ', [], 404);
+    const abs = path.join(uploadDir, name);
+    if (!fs.existsSync(abs)) return sendError(res, 'ไม่พบรูปคนขับ', [], 404);
+    res.setHeader('Content-Type', mime);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.sendFile(abs);
+  } catch (err) { return next(err); }
+});
+
 // ─── POST /profile/photo ─────────────────────────────────────────────────────
 
 router.post('/profile/photo', upload.single('photo'), async (req, res, next) => {

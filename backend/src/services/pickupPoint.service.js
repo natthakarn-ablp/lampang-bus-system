@@ -76,6 +76,25 @@ async function getPickupPointsForSchool(schoolId, { session = null, gradeFilter 
   }
   params.push(schoolId);
   if (gradeFilter) params.push(eq);
+  // A point left with no pupils at all stays listed for the full-school view
+  // while its bus still serves this school, so it can be refilled or deleted
+  // from the page (live QA swt-03). Before, it vanished from the list and the
+  // map but still existed on the vehicle, reachable only through the API. The
+  // condition is the same one DELETE / PUT /pickup-points/:id authorise with
+  // (validateVehicleServesSchool). A point holding only another school's
+  // pupils stays hidden, and a grade teacher still sees only points with
+  // pupils of their own grade.
+  let emptyPoint = '';
+  if (!gradeFilter) {
+    emptyPoint = `
+      OR (NOT EXISTS (SELECT 1 FROM student_pickup_points spp3
+                        JOIN students s3 ON s3.id = spp3.student_id AND s3.is_deleted = FALSE
+                       WHERE spp3.pickup_point_id = pp.id)
+          AND EXISTS (SELECT 1 FROM students s4
+                       WHERE s4.vehicle_id = pp.vehicle_id AND s4.school_id = ?
+                         AND s4.is_deleted = FALSE))`;
+    params.push(schoolId);
+  }
 
   const [rows] = await pool.query(`
     SELECT
@@ -102,12 +121,12 @@ async function getPickupPointsForSchool(schoolId, { session = null, gradeFilter 
     FROM pickup_points pp
     LEFT JOIN vehicles v ON v.id = pp.vehicle_id
     WHERE pp.is_deleted = FALSE${sessionFilter}
-      AND EXISTS (
+      AND (EXISTS (
         SELECT 1 FROM student_pickup_points spp2
         JOIN students s2 ON s2.id = spp2.student_id AND s2.is_deleted = FALSE
                        AND s2.school_id = ?${existsGrade}
         WHERE spp2.pickup_point_id = pp.id
-      )
+      )${emptyPoint})
     ORDER BY v.plate_no ASC, pp.sequence ASC, pp.id ASC
   `, params);
 
@@ -351,10 +370,13 @@ async function getVehiclesForSchool(schoolId, { gradeFilter = null } = {}) {
   const eq = gradeFilter ? gradeEquivalents(gradeFilter) : null;
   const countGrade = gradeFilter ? ' AND s2.grade IN (?)'  : '';
   const joinGrade  = gradeFilter ? ' AND s.grade IN (?)'   : '';
+  // Placeholders in SQL order: subquery school, subquery grade, JOIN grade,
+  // WHERE school. The JOIN's grade comes BEFORE the WHERE's school; pushing
+  // them the other way round bound the grade list to `s.school_id = ?` and
+  // every grade teacher got a 500 (live QA gt2-04).
   const params = [schoolId];
-  if (gradeFilter) params.push(eq);
+  if (gradeFilter) params.push(eq, eq);
   params.push(schoolId);
-  if (gradeFilter) params.push(eq);
   const [rows] = await pool.query(`
     SELECT DISTINCT v.id, v.plate_no,
            (SELECT COUNT(*) FROM students s2

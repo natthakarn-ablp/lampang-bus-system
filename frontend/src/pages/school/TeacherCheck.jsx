@@ -45,7 +45,9 @@ function timeTH(ts) {
 
 function whoLabel(st) {
   if (st.checked_by_role === 'driver' || !st.checked_by_role) return 'คนขับ';
-  if (st.can_undo) return 'คุณ';
+  // can_undo is also true for a full-school account on another account's
+  // override, so it no longer means "you recorded this".
+  if (st.own_check ?? st.can_undo) return 'คุณ';
   return st.checked_by_name || 'ครู';
 }
 

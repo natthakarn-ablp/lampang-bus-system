@@ -64,4 +64,14 @@ function gradeEquivalents(canonical) {
   return [...forms];
 }
 
-module.exports = { VALID_GRADE_SCOPES, isValidGradeScope, normalizeGradeScope, normalizeGrade, gradeEquivalents };
+// What a student edit stores in students.grade: the canonical form when the
+// input is a recognisable grade ('ป1' -> 'ป.1'), otherwise the trimmed text as
+// typed, and null for an empty value. Used by PUT /school/students/:id.
+function storedGrade(raw) {
+  if (raw == null) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  return normalizeGrade(trimmed) || trimmed;
+}
+
+module.exports = { VALID_GRADE_SCOPES, isValidGradeScope, normalizeGradeScope, normalizeGrade, gradeEquivalents, storedGrade };

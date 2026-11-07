@@ -24,7 +24,7 @@ export function VehicleTrackLink({ role, vehicleId = null, compact = false }) {
         to={to}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
-        className="focus-ring mt-2 inline-flex items-center gap-1 min-h-[36px] px-2.5 rounded-lg border border-surface-border text-xs font-medium text-brand hover:bg-surface"
+        className="focus-ring mt-2 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] px-3 rounded-lg border border-surface-border text-xs font-medium text-brand hover:bg-surface"
       >
         <RouteIcon className="w-3.5 h-3.5" strokeWidth={2.2} />
         ประวัติเส้นทาง

@@ -810,8 +810,9 @@ function validateDriverProfileBody(body) {
     } else if (kind === 'phone' && val && !/^\d{9,10}$/.test(val)) {
       errors.push({ field, message: `${label}ต้องเป็นตัวเลข 9-10 หลัก` });
     } else if (kind === 'date' && val) {
-      const d = new Date(`${val}T00:00:00Z`);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(val) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== val) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(val);
+      const d = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+      if (!d || d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) {
         errors.push({ field, message: `${label}ต้องเป็นวันที่รูปแบบ YYYY-MM-DD` });
       }
     }

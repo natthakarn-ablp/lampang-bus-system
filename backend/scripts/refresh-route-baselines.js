@@ -23,7 +23,12 @@
 //
 // Exit codes: 0=OK, 1=error.
 
+// Wall-clock maths below (getHours/getMinutes) must be Bangkok time regardless
+// of the cron host's TZ. Must be set before anything is required.
+process.env.TZ = 'Asia/Bangkok';
+
 const { pool } = require('../src/config/database');
+const { toBangkokSqlDateTime } = require('../src/utils/thaiTime');
 const env = require('../src/config/env');
 
 const WINDOW_DAYS = env.tracking.baselineWindowDays;
@@ -199,8 +204,8 @@ async function typicalPath(vehicleId, session, dayOfWeek, dateFrom, dateTo) {
 async function refreshAll() {
   const dateTo = new Date();
   const dateFrom = new Date(dateTo.getTime() - WINDOW_DAYS * 86400 * 1000);
-  const dateFromStr = dateFrom.toISOString().slice(0, 19).replace('T', ' ');
-  const dateToStr = dateTo.toISOString().slice(0, 19).replace('T', ' ');
+  const dateFromStr = toBangkokSqlDateTime(dateFrom, { milliseconds: false });
+  const dateToStr = toBangkokSqlDateTime(dateTo, { milliseconds: false });
 
   console.log(`[refresh-baselines] window=${WINDOW_DAYS}d from=${dateFromStr} to=${dateToStr}`);
 

@@ -78,7 +78,9 @@ export default function ParentLink() {
   function validateStudent(sid) {
     const t = (sid || '').trim();
     if (!t) return 'กรุณากรอกรหัสนักเรียน';
-    if (!/^\d+$/.test(t)) return 'รหัสนักเรียนต้องเป็นตัวเลข';
+    // parent-06: codes may contain letters or "/" (e.g. A1234, ป1/015) — the
+    // backend accepts any 1-50 character code, so only the length is checked.
+    if (t.length > 50) return 'รหัสนักเรียนยาวเกิน 50 ตัวอักษร';
     return '';
   }
 
@@ -243,12 +245,13 @@ export default function ParentLink() {
           <FormField
             label="รหัสนักเรียน"
             required
-            inputMode="numeric"
+            inputMode="text"
             autoComplete="off"
+            maxLength={50}
             value={studentId}
             onChange={(v) => { setStudentId(v); setStudentErr(''); }}
             placeholder="18985"
-            helper="รหัสนักเรียนของบุตรหลาน (ตัวเลข)"
+            helper="รหัสนักเรียนของบุตรหลาน ตามที่โรงเรียนแจ้ง"
             error={studentErr || undefined}
           />
 

@@ -3,6 +3,7 @@
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const { gradeEquivalents } = require('../utils/gradeScope');
+const { normalizePhone, isValidPhone, PHONE_ERROR_TH } = require('../utils/phone');
 
 /**
  * Create a roster change request (driver → pending → school approval).
@@ -15,6 +16,11 @@ async function createRequest({ vehicleId, studentId, schoolId, requestType, reas
   // ── "add new student" mode ──
   if (requestType === 'add' && newStudentData && !studentId) {
     // Validate required fields
+    // parent-02: store the canonical phone form (shared helper) so the parent
+    // row created at approval matches what the parent types when linking LINE.
+    if (newStudentData.parent_phone != null && newStudentData.parent_phone !== '') {
+      newStudentData = { ...newStudentData, parent_phone: normalizePhone(newStudentData.parent_phone) };
+    }
     const { first_name, last_name, school_id, parent_phone } = newStudentData;
     if (!first_name || !last_name) {
       const err = new Error('กรุณากรอกชื่อและนามสกุลนักเรียน');
@@ -26,8 +32,8 @@ async function createRequest({ vehicleId, studentId, schoolId, requestType, reas
       err.statusCode = 400;
       throw err;
     }
-    if (parent_phone && !/^\d{10}$/.test(parent_phone)) {
-      const err = new Error('เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 10 หลัก');
+    if (newStudentData.parent_phone != null && newStudentData.parent_phone !== '' && !isValidPhone(parent_phone)) {
+      const err = new Error(PHONE_ERROR_TH);
       err.statusCode = 400;
       throw err;
     }

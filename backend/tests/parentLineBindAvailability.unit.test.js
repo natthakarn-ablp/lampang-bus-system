@@ -3,6 +3,7 @@
 jest.mock('../src/services/lineIdToken.service');
 jest.mock('../src/services/lineBindGuard', () => ({
   keysFor: jest.fn(() => ({ pair: 'synthetic-pair', sub: 'synthetic-sub' })),
+  resolveStudentLockKey: jest.fn().mockResolvedValue(null),
   checkLock: jest.fn().mockResolvedValue({ locked: false }),
   noteFailure: jest.fn(),
   noteSuccess: jest.fn(),

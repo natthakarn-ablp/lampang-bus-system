@@ -8,6 +8,8 @@
 // vehicle classification. Returns ONE primary classification (the action or the
 // blocking reason) plus the vehicle/guardian detail in fields.
 
+const { normalizePhone, isValidPhone, PHONE_ERROR_TH } = require('./phone');
+
 function maskPhone(p) {
   const d = String(p == null ? '' : p).replace(/\D/g, '');
   return d.length >= 6 ? d.slice(0, 3) + '****' + d.slice(-2) : (d ? '****' : '');
@@ -42,11 +44,10 @@ function classifyImportRow({ row, schoolId, existing = null, crossSchool = false
   const firstName = String(row.first_name || '').trim();
   const lastName = String(row.last_name || '').trim();
   const guardianInput = String(row.parent_name || '').trim();
-  let phoneDigits = String(row.parent_phone || '').replace(/\D/g, '');
   // Thai mobile numbers exported from Excel often lose the leading zero and
-  // become 9 digits (e.g. 909755785). Prepend 0 when exactly 9 digits so the
-  // import can proceed without forcing every school to re-format the file.
-  if (phoneDigits.length === 9 && !phoneDigits.startsWith('0')) phoneDigits = '0' + phoneDigits;
+  // become 9 digits (e.g. 909755785). The shared helper restores it (parent-02),
+  // the same value the service stores, so what is validated is what is saved.
+  const phoneDigits = normalizePhone(row.parent_phone);
 
   const base = {
     row_number: row.rowNum,
@@ -74,7 +75,7 @@ function classifyImportRow({ row, schoolId, existing = null, crossSchool = false
   // 1. Required-field validation.
   if (!code) return out('INVALID_STUDENT_CODE', 'ERROR', 'รหัสนักเรียนไม่ถูกต้อง', false, 'แก้ไขรหัสนักเรียนในไฟล์');
   if (!firstName || !lastName) return out('INVALID_REQUIRED_FIELD', 'ERROR', 'ไม่มีชื่อหรือนามสกุลนักเรียน', false, 'กรอกชื่อ-นามสกุลให้ครบ');
-  if (phoneDigits && phoneDigits.length !== 10) return out('INVALID_GUARDIAN_PHONE', 'ERROR', 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 10 หลัก', false, 'แก้ไขเบอร์โทรในไฟล์');
+  if (phoneDigits && !isValidPhone(phoneDigits)) return out('INVALID_GUARDIAN_PHONE', 'ERROR', PHONE_ERROR_TH, false, 'แก้ไขเบอร์โทรในไฟล์');
 
   // 1b. Destination column width. Without this a 150-character name previewed as
   //     READY and then died at apply with ER_DATA_TOO_LONG (MySQL runs in

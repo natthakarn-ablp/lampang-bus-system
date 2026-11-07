@@ -14,6 +14,8 @@ const { isVerificationUnavailable } = require('../utils/lineVerificationError');
 const tpl = require('../services/lineFlexTemplates.service');
 const bindGuard = require('../services/lineBindGuard');
 const parentConsent = require('../services/parentConsentGate');
+const { createUserKeyedLimiter, lineUserOrIpKey, ipKey } = require('../middleware/rateLimiters');
+const { normalizePhone, isValidPhone } = require('../utils/phone');
 
 // Consent gate for a child-detail endpoint. Dark by default (guardParentView
 // short-circuits with no DB hit), so live behaviour is unchanged until
@@ -28,30 +30,80 @@ async function ensureParentConsent(req, res) {
   return true;
 }
 
-// Rate limit: 60 requests per minute per IP (parents querying status)
-const parentLimiter = rateLimit({
+// KEYING (readiness parent-03 / load-06, 2026-11): these limits used to be per
+// IP only. A training room or a school office (dozens of phones behind one NAT
+// address) then shared ONE budget, so only ~6 parents could link per 10 minutes
+// and 15-20 phones opening the status page went over 60/min. Each limit is now
+// two layers:
+//   1. a per-IP FLOOR, sized for a full room, that runs before any LINE verify
+//      call so a flood of junk tokens still cannot reach LINE unbounded;
+//   2. the original per-person budget, keyed by the SERVER-VERIFIED LINE sub
+//      (req.lineUserId), falling back to the IP when there is no verified sub.
+// Brute force on the bind credential is still bounded per credential and per
+// sub by lineBindGuard (DB-backed lockout).
+const PARENT_LIMIT_MSG = { success: false, message: 'มีการใช้งานถี่เกินไป กรุณารอสักครู่แล้วลองใหม่', errors: [], data: null };
+const BIND_LIMIT_MSG = { success: false, message: 'มีการพยายามผูกบัญชีหลายครั้งเกินไป กรุณาลองใหม่ภายหลัง', errors: [], data: null };
+
+const parentIpFloorLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 60,
+  max: 600, // ~60 phones x 10 requests/min from one address
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many requests. Try again shortly.', errors: [], data: null },
+  keyGenerator: ipKey,
+  message: PARENT_LIMIT_MSG,
 });
-router.use(parentLimiter);
+router.use(parentIpFloorLimiter);
+
+// Per verified LINE user: 60 requests per minute (parents querying status).
+const parentLimiter = createUserKeyedLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: PARENT_LIMIT_MSG,
+  keyGenerator: lineUserOrIpKey,
+  skipInTest: false,
+});
 
 // Audit 2026-06-18 (line-integration / auth-crypto): account BINDING is far more
 // sensitive than read traffic — a (phone, studentId) pair authorizes linking to a
 // child. The generous 60/min limiter made guessing cheap, so bind endpoints get a
-// much tighter per-IP budget. NOTE (residual): the strongest fix is proof of phone
-// ownership (SMS OTP) or a school-issued one-time claim code; that needs an SMS
-// provider decision and is tracked separately.
-const bindLimiter = rateLimit({
+// much tighter budget (now per verified LINE user, see KEYING above). NOTE
+// (residual): the strongest fix is proof of phone ownership (SMS OTP) or a
+// school-issued one-time claim code; that needs an SMS provider decision and is
+// tracked separately.
+const bindIpFloorLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 12,
+  max: 150, // ~60 parents x preview+confirm, plus retries, from one address
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: ipKey,
   skip: () => process.env.NODE_ENV === 'test',
-  message: { success: false, message: 'มีการพยายามผูกบัญชีหลายครั้งเกินไป กรุณาลองใหม่ภายหลัง', errors: [], data: null },
+  message: BIND_LIMIT_MSG,
 });
+const bindLimiter = createUserKeyedLimiter({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 12,
+  message: BIND_LIMIT_MSG,
+  keyGenerator: lineUserOrIpKey,
+});
+
+/**
+ * Verify the bind request's LIFF id_token BEFORE the per-user bind limiter so
+ * the limiter can key on the verified sub. Never rejects: the handler still
+ * owns the 400/401/503 responses and reuses this result (req.lineVerify)
+ * instead of verifying a second time.
+ */
+async function attachBindLineIdentity(req, _res, next) {
+  try {
+    const idToken = req.body && req.body.idToken;
+    const verify = await idTokenSvc.verifyIdToken(idToken);
+    req.lineVerify = verify;
+    if (verify && verify.valid && verify.userId) req.lineUserId = verify.userId;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+const bindGuards = [bindIpFloorLimiter, attachBindLineIdentity, bindLimiter];
 
 /**
  * Parent REST API — for LIFF parent access (status / history view).
@@ -103,7 +155,7 @@ async function requireParentLineAuth(req, res, next) {
 
 // ─── GET /api/parent/children ───────────────────────────────────────────────
 // Returns linked children for the verified LINE parent user.
-router.get('/children', requireParentLineAuth, async (req, res, next) => {
+router.get('/children', requireParentLineAuth, parentLimiter, async (req, res, next) => {
   try {
     const children = await lineSvc.getLinkedChildren(req.lineUserId);
 
@@ -124,7 +176,7 @@ router.get('/children', requireParentLineAuth, async (req, res, next) => {
 
 // ─── GET /api/parent/children/:id/status ────────────────────────────────────
 // Returns today's checkin/checkout status for a specific child.
-router.get('/children/:id/status', requireParentLineAuth, async (req, res, next) => {
+router.get('/children/:id/status', requireParentLineAuth, parentLimiter, async (req, res, next) => {
   try {
     const studentId = readIdParam(req, res);
     if (studentId === null) return;
@@ -142,7 +194,7 @@ router.get('/children/:id/status', requireParentLineAuth, async (req, res, next)
 
 // ─── GET /api/parent/children/:id/history ───────────────────────────────────
 // Returns recent checkin/checkout history for a child (last 7 days).
-router.get('/children/:id/history', requireParentLineAuth, async (req, res, next) => {
+router.get('/children/:id/history', requireParentLineAuth, parentLimiter, async (req, res, next) => {
   try {
     const studentId = readIdParam(req, res);
     if (studentId === null) return;
@@ -175,7 +227,7 @@ router.get('/children/:id/history', requireParentLineAuth, async (req, res, next
 // ('feature_disabled', 'no_vehicle', 'no_pickup_point', 'vehicle_offline').
 // The response contains NO PII — only the pickup point label, ETA seconds,
 // distance, and confidence.
-router.get('/children/:id/eta', requireParentLineAuth, async (req, res, next) => {
+router.get('/children/:id/eta', requireParentLineAuth, parentLimiter, async (req, res, next) => {
   try {
     const studentId = readIdParam(req, res);
     if (studentId === null) return;
@@ -197,11 +249,11 @@ router.get('/children/:id/eta', requireParentLineAuth, async (req, res, next) =>
 // from the request body. The canonical lineUserId is the `sub` field of the
 // LINE-verified token, full stop.
 
+// Shared normalization (parent-02): the same canonical form the importers store.
 function validatePhone(raw) {
   if (typeof raw !== 'string') return null;
-  const s = raw.replace(/\D/g, '');
-  if (!/^\d{10}$/.test(s)) return null;
-  return s;
+  const s = normalizePhone(raw);
+  return isValidPhone(s) ? s : null;
 }
 
 function validateStudentId(raw) {
@@ -227,7 +279,7 @@ function validateStudentCredential(raw) {
 // → 401 idToken invalid
 // → 404 phone+studentId combo not found
 // → 409 already linked (different parent)
-router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
+router.post('/line/bind-preview', bindGuards, async (req, res, next) => {
   const meta = { ip: req.ip, ua: req.headers['user-agent'] };
   try {
     const { idToken, phone, studentId, student_code } = req.body || {};
@@ -240,14 +292,17 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
 
     // Phase 10.13C-4A — credential lockout (before the credential lookup), so a
     // brute-force can't be bypassed by rotating IPs.
-    const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential });
+    // parent-07: the per-student lock is scoped to the school the code resolves to.
+    const studentLockKey = await bindGuard.resolveStudentLockKey(credential);
+    const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, studentLockKey });
     const lock = await bindGuard.checkLock(keys);
     if (lock.locked) {
       await lineSvc.auditBind({ phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
     }
 
-    const verify = await idTokenSvc.verifyIdToken(idToken);
+    // Verified once by attachBindLineIdentity (for the per-user limiter).
+    const verify = req.lineVerify || await idTokenSvc.verifyIdToken(idToken);
     if (!verify.valid) {
       if (isVerificationUnavailable(verify)) {
         return sendError(res, 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่', [
@@ -258,7 +313,7 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
       return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ของคุณได้ กรุณาเปิดผ่านลิงก์ใน LINE OA อีกครั้ง', [], 401);
     }
     const lineUserId = verify.userId;
-    const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, sub: lineUserId });
+    const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, studentLockKey, sub: lineUserId });
     const subLock = await bindGuard.checkLock({ sub: subKeys.sub });
     if (subLock.locked) {
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: subLock.reason, ...meta });
@@ -281,6 +336,15 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
     }
 
     await bindGuard.noteSuccess(subKeys); // valid credential — clear the pair counter
+
+    // parent-08: one phone binds to one LINE account. Say so here, before the
+    // preview card, instead of letting the second guardian hit it at confirm.
+    const phoneOwner = await lineSvc.getLineUserIdByPhone(cleanPhone);
+    if (phoneOwner && phoneOwner !== lineUserId) {
+      await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: match.studentCode || credential, action: 'LINE_BIND_DUPLICATE_OR_ALREADY_BOUND', reason: 'PHONE_BOUND_TO_OTHER', ...meta });
+      return sendError(res, lineSvc.PHONE_BOUND_TO_OTHER_MSG, [{ field: 'phone', code: 'PHONE_BOUND_TO_OTHER' }], 409);
+    }
+
     console.log('[LINE_BIND_PREVIEW] ok', { hasStudent: true });
     return sendSuccess(res, {
       student: match.student,
@@ -293,7 +357,7 @@ router.post('/line/bind-preview', bindLimiter, async (req, res, next) => {
 // body: { idToken, phone, studentId }
 // → 201 success
 // → same error codes as preview
-router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
+router.post('/line/bind-confirm', bindGuards, async (req, res, next) => {
   const meta = { ip: req.ip, ua: req.headers['user-agent'] };
   try {
     const { idToken, phone, studentId, student_code } = req.body || {};
@@ -304,14 +368,17 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
     }
 
     // Credential lockout before lookup (see bind-preview).
-    const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential });
+    // parent-07: the per-student lock is scoped to the school the code resolves to.
+    const studentLockKey = await bindGuard.resolveStudentLockKey(credential);
+    const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, studentLockKey });
     const lock = await bindGuard.checkLock(keys);
     if (lock.locked) {
       await lineSvc.auditBind({ phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason, ...meta });
       return sendError(res, 'พยายามหลายครั้งเกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง', [], 429);
     }
 
-    const verify = await idTokenSvc.verifyIdToken(idToken);
+    // Verified once by attachBindLineIdentity (for the per-user limiter).
+    const verify = req.lineVerify || await idTokenSvc.verifyIdToken(idToken);
     if (!verify.valid) {
       if (isVerificationUnavailable(verify)) {
         return sendError(res, 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่', [
@@ -322,7 +389,7 @@ router.post('/line/bind-confirm', bindLimiter, async (req, res, next) => {
       return sendError(res, 'ไม่สามารถยืนยันบัญชี LINE ของคุณได้ กรุณาเปิดผ่านลิงก์ใน LINE OA อีกครั้ง', [], 401);
     }
     const lineUserId = verify.userId;
-    const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, sub: lineUserId });
+    const subKeys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, studentLockKey, sub: lineUserId });
     const subLock = await bindGuard.checkLock({ sub: subKeys.sub });
     if (subLock.locked) {
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: subLock.reason, ...meta });

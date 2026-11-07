@@ -70,16 +70,28 @@ function refreshTokenKey(req) {
 }
 
 /**
- * A limiter keyed per user (falling back to IP). `skipInTest: false` is for
- * unit tests that exercise the real limiter behaviour.
+ * Rate-limit key for the parent (LINE LIFF) API: `line:<sub>` when an earlier
+ * middleware has set req.lineUserId from a SERVER-VERIFIED LINE id_token
+ * (readiness parent-03 / load-06: a training room of phones shares one NAT
+ * address), otherwise `ip:<ip>`. Never reads an unverified claim.
  */
-function createUserKeyedLimiter({ windowMs, max, message, extraSkip, skipInTest = true }) {
+function lineUserOrIpKey(req) {
+  const sub = req.lineUserId;
+  return typeof sub === 'string' && sub ? `line:${sub}` : ipKey(req);
+}
+
+/**
+ * A limiter keyed per user (falling back to IP). `skipInTest: false` is for
+ * unit tests that exercise the real limiter behaviour. `keyGenerator` defaults
+ * to the access-token user (userOrIpKey).
+ */
+function createUserKeyedLimiter({ windowMs, max, message, extraSkip, skipInTest = true, keyGenerator = userOrIpKey }) {
   return rateLimit({
     windowMs,
     max,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: userOrIpKey,
+    keyGenerator,
     skip: (req) => (skipInTest && process.env.NODE_ENV === 'test') || (extraSkip ? extraSkip(req) : false),
     message,
   });
@@ -120,6 +132,8 @@ module.exports = {
   exportFormatOnly,
   createUserKeyedLimiter,
   userOrIpKey,
+  lineUserOrIpKey,
+  ipKey,
   refreshTokenKey,
   accessTokenUserId,
   GLOBAL_API_BUDGET,

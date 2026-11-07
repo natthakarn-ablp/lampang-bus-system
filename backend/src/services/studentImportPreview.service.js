@@ -55,7 +55,9 @@ function parseCsvRow(text) {
 // work so a (possibly decompression-bombed) file can't amplify into the DB.
 const MAX_IMPORT_ROWS = 5000;
 const canonOf = (plate) => { const p = plateId.parseLegacyPlateText(plate); return p ? plateId.buildCanonicalPlate(p) : ''; };
-const normalizePhone = (p) => String(p == null ? '' : p).replace(/\D/g, '');
+// parent-02: shared helper restores the leading 0 Excel drops from numeric
+// cells; the classifier rejects anything that is still not 10 digits.
+const { normalizePhone } = require('../utils/phone');
 
 // ── Parse a CSV/XLS(X) import file into normalized rows. ─────────────────────
 async function parseImportFile(filePath, originalName) {

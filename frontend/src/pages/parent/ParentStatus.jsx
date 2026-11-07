@@ -13,6 +13,27 @@ const STATUS_MAP = {
   CANCELLED:   { label: 'ยกเลิก',  cls: 'bg-surface text-ink-muted border-surface-border',  icon: '↩️' },
 };
 
+// parent-05: the ETA endpoint answers 200 with { error } when there is nothing
+// to show. Each code gets a Thai reason instead of a card of blank fields.
+const ETA_ERROR_TH = {
+  feature_disabled: 'ยังไม่เปิดใช้งานการคำนวณเวลาถึงโดยประมาณ (ETA)',
+  no_vehicle: 'บุตรหลานยังไม่มีรถรับส่งประจำในระบบ',
+  no_pickup_point: 'ยังไม่ได้กำหนดจุดรับ-ส่งของบุตรหลาน กรุณาติดต่อโรงเรียน',
+  vehicle_offline: 'รถยังไม่ได้ส่งตำแหน่ง (อาจยังไม่เริ่มรอบ หรือออฟไลน์อยู่)',
+};
+
+// parent-04: a failed detail fetch used to look like "ยังไม่ส่ง" / "ไม่มีประวัติ".
+// Turn the error into a Thai message the parent can act on.
+function detailErrorMessage(err) {
+  const code = err?.response?.status;
+  if (!err?.response) return 'เชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่';
+  if (code === 401) return 'การยืนยันบัญชี LINE หมดอายุ กรุณาปิดแล้วเปิดหน้านี้ใหม่จาก LINE OA';
+  if (code === 403) return 'ไม่มีสิทธิ์ดูข้อมูลของนักเรียนคนนี้';
+  if (code === 429) return 'มีการใช้งานถี่เกินไป กรุณารอสักครู่แล้วลองใหม่';
+  if (code === 503) return 'LINE ยังไม่พร้อมยืนยันบัญชี กรุณาลองใหม่';
+  return 'โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
+}
+
 export default function ParentStatus() {
   const [idToken, setIdToken] = useState('');
   const [children, setChildren] = useState([]);
@@ -28,6 +49,9 @@ export default function ParentStatus() {
   // nothing is prompted and behaviour is unchanged.
   const [consentRequired, setConsentRequired] = useState(false);
   const [showConsent, setShowConsent] = useState(false);
+  // Per-view fetch state for status / history / ETA (parent-04).
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -68,44 +92,53 @@ export default function ParentStatus() {
     return () => { cancelled = true; };
   }, []);
 
-  async function viewStatus(child) {
+  // Shared fetch for the three detail views: shows a spinner while loading and
+  // an error card (not the empty state) when the request fails.
+  async function loadDetail(child, nextView, path, onData) {
     setSelectedChild(child);
-    setView('status');
+    setView(nextView);
+    setDetailLoading(true);
+    setDetailError('');
     try {
-      const res = await axios.get(`/api/parent/children/${child.id}/status`, {
+      const res = await axios.get(`/api/parent/children/${child.id}/${path}`, {
         headers: { Authorization: `Bearer ${idToken}` },
       });
-      setStatus(res.data.data);
-    } catch {
-      setStatus(null);
+      onData(res.data?.data);
+    } catch (err) {
+      onData(undefined);
+      const consentNeeded = err?.response?.status === 403
+        && (err.response.data?.errors || []).some((e) => e?.code === 'PARENT_CONSENT_REQUIRED');
+      if (consentNeeded) {
+        setDetailError('ต้องให้ความยินยอมก่อนดูข้อมูลการเดินทางของบุตรหลาน');
+        setShowConsent(true);
+      } else {
+        setDetailError(detailErrorMessage(err));
+      }
+    } finally {
+      setDetailLoading(false);
     }
   }
 
-  async function viewHistory(child) {
-    setSelectedChild(child);
-    setView('history');
-    try {
-      const res = await axios.get(`/api/parent/children/${child.id}/history?days=7`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      setHistory(res.data.data?.history || []);
-    } catch {
-      setHistory([]);
-    }
+  function viewStatus(child) {
+    setStatus(null);
+    return loadDetail(child, 'status', 'status', (d) => setStatus(d || null));
   }
 
-  async function viewEta(child) {
-    setSelectedChild(child);
-    setView('eta');
+  function viewHistory(child) {
+    setHistory([]);
+    return loadDetail(child, 'history', 'history?days=7', (d) => setHistory(d?.history || []));
+  }
+
+  function viewEta(child) {
     setEta(null);
-    try {
-      const res = await axios.get(`/api/parent/children/${child.id}/eta`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      setEta(res.data.data);
-    } catch {
-      setEta(null);
-    }
+    return loadDetail(child, 'eta', 'eta', (d) => setEta(d || null));
+  }
+
+  function retryDetail() {
+    if (!selectedChild) return;
+    if (view === 'status') viewStatus(selectedChild);
+    else if (view === 'history') viewHistory(selectedChild);
+    else if (view === 'eta') viewEta(selectedChild);
   }
 
   function goBack() {
@@ -114,6 +147,8 @@ export default function ParentStatus() {
     setStatus(null);
     setHistory([]);
     setEta(null);
+    setDetailError('');
+    setDetailLoading(false);
   }
 
   // ── Unlinked state (no LIFF id_token — opened outside LINE or not linked) ──
@@ -314,6 +349,9 @@ export default function ParentStatus() {
 
             <p className="text-base font-semibold text-ink-muted">สถานะวันนี้</p>
 
+            {detailLoading || detailError ? (
+              <DetailState loading={detailLoading} error={detailError} onRetry={retryDetail} />
+            ) : (<>
             {/* Morning / Evening cards */}
             <div className="grid grid-cols-2 gap-3">
               <StatusCard
@@ -339,6 +377,7 @@ export default function ParentStatus() {
                 ยังไม่มีข้อมูลเช็คอินวันนี้
               </p>
             )}
+            </>)}
 
             {/* Quick action */}
             <button onClick={() => viewStatus(selectedChild)}
@@ -363,7 +402,9 @@ export default function ParentStatus() {
 
             <p className="text-base font-semibold text-ink-muted">ประวัติ 7 วันล่าสุด</p>
 
-            {history.length === 0 ? (
+            {detailLoading || detailError ? (
+              <DetailState loading={detailLoading} error={detailError} onRetry={retryDetail} />
+            ) : history.length === 0 ? (
               <AppCard padding="lg" className="text-center">
                 <p className="text-ink-muted text-lg">ไม่มีประวัติในช่วงนี้</p>
               </AppCard>
@@ -412,7 +453,25 @@ export default function ParentStatus() {
 
             <p className="text-base font-semibold text-ink-muted">เวลาถึงโดยประมาณ (ETA)</p>
 
-            {eta == null ? (
+            {detailLoading || detailError ? (
+              <DetailState loading={detailLoading} error={detailError} onRetry={retryDetail} />
+            ) : eta?.error ? (
+              <AppCard padding="lg" className="text-center">
+                <MapPin className="w-10 h-10 mx-auto mb-2 text-ink-muted" strokeWidth={1.8} aria-hidden="true" />
+                <p className="text-ink-muted text-base">
+                  {ETA_ERROR_TH[eta.error] || 'ยังไม่มีข้อมูล ETA'}
+                </p>
+                {eta.error === 'vehicle_offline' && (
+                  <button
+                    type="button"
+                    onClick={() => viewEta(selectedChild)}
+                    className="focus-ring mt-4 inline-flex items-center justify-center bg-amber-50 hover:bg-amber-100 text-amber-700 font-semibold px-6 min-h-[44px] rounded-xl border-2 border-amber-200 transition"
+                  >
+                    รีเฟรช ETA
+                  </button>
+                )}
+              </AppCard>
+            ) : eta == null ? (
               <AppCard padding="lg" className="text-center">
                 <MapPin className="w-10 h-10 mx-auto mb-2 text-ink-muted" strokeWidth={1.8} aria-hidden="true" />
                 <p className="text-ink-muted text-base">
@@ -468,6 +527,27 @@ export default function ParentStatus() {
         />
       )}
     </div>
+  );
+}
+
+/* ── Loading / error state for a detail view (parent-04) ── */
+function DetailState({ loading, error, onRetry }) {
+  if (loading) {
+    return (
+      <AppCard padding="lg" className="text-center" role="status">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600 mx-auto mb-3" aria-hidden="true" />
+        <p className="text-ink-muted text-base">กำลังโหลดข้อมูล…</p>
+      </AppCard>
+    );
+  }
+  return (
+    <AppCard padding="lg" className="text-center border-danger/30" role="alert">
+      <p className="text-base text-danger-ink font-medium mb-4">{error}</p>
+      <button type="button" onClick={onRetry}
+        className="focus-ring bg-red-50 hover:bg-red-100 text-red-700 font-medium px-6 min-h-[44px] rounded-xl transition border border-red-200">
+        ลองใหม่อีกครั้ง
+      </button>
+    </AppCard>
   );
 }
 

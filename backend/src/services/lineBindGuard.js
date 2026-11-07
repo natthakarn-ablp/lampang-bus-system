@@ -76,13 +76,50 @@ function sha(value) {
  * @param {string} parts.studentKey   student_code (optionally prefixed with school_id)
  * @param {string} [parts.sub]        verified LINE sub
  */
-function keysFor({ phone, studentKey, sub }) {
+function keysFor({ phone, studentKey, sub, studentLockKey }) {
+  // `studentLockKey` (from resolveStudentLockKey) overrides the key used for the
+  // per-student lock only; the pair key stays phone + typed code. Passing it
+  // explicitly as null drops the student lock for this attempt.
+  const studentScope = studentLockKey === undefined ? studentKey : studentLockKey;
   return {
     phone:   phone      ? `phone:${sha(phone)}`        : null,
-    student: studentKey ? `student:${sha(studentKey)}` : null,
+    student: studentScope ? `student:${sha(studentScope)}` : null,
     pair:    (phone && studentKey) ? `pair:${sha(`${phone}:${studentKey}`)}` : null,
     sub:     sub        ? `sub:${sha(sub)}`            : null,
   };
+}
+
+/**
+ * The scope for the per-student lock (readiness parent-07).
+ *
+ * student_code is unique only per school, so a lock on the bare code meant ten
+ * typos against a short code like "101" locked binding for every child coded
+ * "101" in the province. The lock is now scoped to the school the code
+ * resolves to:
+ *   - exactly one school has it  → `<school_id>:<code>` (same protection, one child's school)
+ *   - none, or several schools   → null: no student lock. A code that matches
+ *     no child protects nobody, and for a code shared by several schools one
+ *     school's typos must not lock the others. Those attempts are still capped
+ *     by the pair, phone and LINE-sub locks and the route rate limits.
+ *
+ * Matches the same way findLinkablePhoneByStudentAndPhone does (student_code,
+ * or the numeric id for migrated rows).
+ *
+ * @param {string} code trimmed student credential
+ * @returns {Promise<string|null>}
+ */
+async function resolveStudentLockKey(code) {
+  const cred = String(code == null ? '' : code).trim();
+  if (!cred) return null;
+  const asId = /^\d{1,10}$/.test(cred) ? Number(cred) : null;
+  const [rows] = await pool.query(
+    `SELECT DISTINCT school_id FROM students
+      WHERE (student_code = ? OR id = ?) AND COALESCE(is_deleted, FALSE) = FALSE
+      LIMIT 2`,
+    [cred, asId]
+  );
+  if (rows.length !== 1 || rows[0].school_id == null) return null;
+  return `${rows[0].school_id}:${cred}`;
 }
 
 /** Strip the `<type>:` prefix — the table holds the type in its own column. */
@@ -191,6 +228,6 @@ async function __reset() {
 }
 
 module.exports = {
-  keysFor, checkLock, noteFailure, noteSuccess,
+  keysFor, resolveStudentLockKey, checkLock, noteFailure, noteSuccess,
   POLICY, __advance, __reset,
 };

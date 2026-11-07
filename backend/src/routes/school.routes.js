@@ -127,16 +127,13 @@ function decodeUploadFilename(name) {
   catch { return String(name || ''); }
 }
 
-// Normalize phone: strip dashes, pad leading zero if Excel stripped it
-function normalizePhone(raw) {
-  if (!raw) return raw;
-  let stripped = String(raw).replace(/-/g, '').trim();
-  // Thai mobile numbers: if 9 digits starting with 8 or 9, Excel likely stripped leading 0
-  if (/^\d{9}$/.test(stripped) && (stripped[0] === '8' || stripped[0] === '9')) {
-    stripped = '0' + stripped;
-  }
-  return stripped;
-}
+// Phone normalization is shared with the preview importer and the LINE bind
+// lookup (parent-02) so a stored phone always matches what the parent types.
+const { normalizePhone, isValidPhone, PHONE_ERROR_TH } = require('../utils/phone');
+// A non-empty input that is not a valid phone once normalized ('abc' would
+// normalize to '' and silently clear the phone otherwise).
+const phoneInputInvalid = (raw, normalized) =>
+  String(raw == null ? '' : raw).trim() !== '' && !isValidPhone(normalized);
 
 const { csvCell, redactAuditValue } = require('../utils/exportSecurity');
 const { rejectOverLongFields } = require('../utils/fieldLength');
@@ -974,8 +971,12 @@ router.put('/students/:id', async (req, res, next) => {
     if (last_name !== undefined && (typeof last_name !== 'string' || !last_name.trim())) return sendError(res, 'กรุณากรอกนามสกุลนักเรียน', [], 400);
     // Normalize phone (strip dashes) before validation
     const normalizedParentPhone = parent_phone !== undefined ? normalizePhone(parent_phone) : undefined;
-    if (normalizedParentPhone && !/^\d{9,10}$/.test(normalizedParentPhone)) {
-      return sendError(res, 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก (รองรับรูปแบบ 0XX-XXXXXXX)', [], 400);
+    // parent-02: only a 10-digit mobile can be linked to LINE. A value that is
+    // unchanged from what is already stored (e.g. an old 9-digit landline sent
+    // back by the edit form) is still accepted so other fields can be saved.
+    if (parent_phone !== undefined && phoneInputInvalid(parent_phone, normalizedParentPhone)
+        && normalizedParentPhone !== String(st.parent_phone || '')) {
+      return sendError(res, PHONE_ERROR_TH, [{ field: 'parent_phone', message: PHONE_ERROR_TH }], 400);
     }
     // Audit 2026-06-18 (limitations): reject over-length values with a clean 400
     // instead of letting MySQL raise a 500 on column overflow. parent_name is in
@@ -1888,11 +1889,13 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
           continue;
         }
 
-        // Normalize + validate parent phone (Phase 11A audit fix M8: accept
-        // 9-10 digits after normalization, matching the student edit endpoint)
-        r.parent_phone = normalizePhone(r.parent_phone);
-        if (r.parent_phone && !/^\d{9,10}$/.test(r.parent_phone)) {
-          results.errors.push({ row: r.rowNum, message: 'เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก' });
+        // Normalize + validate parent phone with the shared helper (parent-02):
+        // the leading 0 Excel drops is restored, anything else that is not a
+        // 10-digit phone is a row error (same rule as the preview importer).
+        const rawParentPhone = r.parent_phone;
+        r.parent_phone = normalizePhone(rawParentPhone);
+        if (phoneInputInvalid(rawParentPhone, r.parent_phone)) {
+          results.errors.push({ row: r.rowNum, message: PHONE_ERROR_TH });
           continue;
         }
 

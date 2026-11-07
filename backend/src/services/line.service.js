@@ -137,6 +137,13 @@ async function findLinkablePhoneByStudentAndPhone(phone, studentCredential) {
   };
 }
 
+// One phone can be bound to one LINE account. The second guardian used to get
+// a bare "already bound" with no next step (readiness parent-08); the message
+// now says what to do. Shared with the LIFF preview, which checks this early.
+const PHONE_BOUND_TO_OTHER_MSG =
+  'เบอร์นี้ผูกกับบัญชี LINE อื่นไว้แล้ว (1 เบอร์ผูกได้ 1 บัญชี LINE) '
+  + 'กรุณาให้ผู้ที่ผูกไว้เดิมพิมพ์ "ยกเลิกผูกบัญชี" ใน LINE OA ก่อน หรือติดต่อโรงเรียนเพื่อแก้ไขเบอร์ผู้ปกครอง';
+
 // Bind a LINE user to a phone atomically. Caller MUST have already verified
 // (phone, studentId) via findLinkablePhoneByStudentAndPhone.
 // `parentId` is the verified parent row, used for the legacy line_users
@@ -157,7 +164,7 @@ async function bindLineUserToPhone(lineUserId, phone, parentId) {
       return {
         success: false,
         code: 'PHONE_BOUND_TO_OTHER',
-        message: 'เบอร์นี้ผูก LINE อื่นไว้แล้ว',
+        message: PHONE_BOUND_TO_OTHER_MSG,
       };
     }
 
@@ -440,6 +447,33 @@ async function getLinkedChildren(lineUserId) {
 function sessionDoneLabel(session, lastStatus) {
   if (session === 'morning') return lastStatus === 'CHECKED_OUT' ? 'ถึงโรงเรียนแล้ว' : 'ขึ้นรถแล้ว';
   return lastStatus === 'CHECKED_IN' ? 'ขึ้นรถกลับบ้านแล้ว' : 'ส่งถึงจุดรับแล้ว';
+}
+
+// Thai labels for checkin_logs.status codes (CLAUDE.md §3.1).
+const CHECKIN_STATUS_TH = { CHECKED_IN: 'รับแล้ว', CHECKED_OUT: 'ส่งแล้ว', ABSENT: 'ไม่มา', CANCELLED: 'ยกเลิก' };
+
+/**
+ * Text of a LINE push for one notifications row (readiness parent-01).
+ *
+ * The header used to come from notification_type alone ('checkin' → 'ส่งเช้า',
+ * 'checkout' → 'รับเย็น'), but the type only reflects the status, not the
+ * round: a teacher's morning tap (CHECKED_OUT) read "รับเย็น ... รอบ: เช้า",
+ * and the status line printed the raw English code. The header is now built
+ * from session + status with the same sessionDoneLabel the LIFF view uses.
+ */
+function buildNotificationText(type, data = {}) {
+  const d = data || {};
+  const otherLabel = { emergency: 'เหตุฉุกเฉิน', system: 'แจ้งเตือน' };
+  const isTrip = type === 'checkin' || type === 'checkout';
+  const session = d.session === 'morning' ? 'morning' : 'evening';
+  const header = isTrip && d.status
+    ? sessionDoneLabel(session, d.status)
+    : (otherLabel[type] || 'แจ้งเตือน');
+  return `📢 แจ้งเตือน: ${header}\n` +
+    `นักเรียน: ${d.studentName || '-'}\n` +
+    `สถานะ: ${CHECKIN_STATUS_TH[d.status] || '-'}\n` +
+    `รอบ: ${session === 'morning' ? 'เช้า' : 'เย็น'}\n` +
+    `เวลา: ${d.checkedAt ? new Date(d.checkedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-'}`;
 }
 
 async function getChildStatusToday(studentId) {
@@ -1343,12 +1377,7 @@ async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180, types
 
     for (const n of rows) {
       const data = typeof n.message_json === 'string' ? JSON.parse(n.message_json) : n.message_json;
-      const typeLabel = { checkin: 'ส่งเช้า', checkout: 'รับเย็น', emergency: 'เหตุฉุกเฉิน', system: 'แจ้งเตือน' };
-      const text = `📢 แจ้งเตือน: ${typeLabel[n.notification_type] || n.notification_type}\n` +
-        `นักเรียน: ${data.studentName || '-'}\n` +
-        `สถานะ: ${data.status || '-'}\n` +
-        `รอบ: ${data.session === 'morning' ? 'เช้า' : 'เย็น'}\n` +
-        `เวลา: ${data.checkedAt ? new Date(data.checkedAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-'}`;
+      const text = buildNotificationText(n.notification_type, data);
 
       const result = await sendTextMessage(n.target_line_user_id, text);
       if (result.sent || result.dryRun) {
@@ -1381,11 +1410,12 @@ module.exports = {
   unbindLineUser,
   getChildrenByBoundPhone,
   LineBindConflictError,
+  PHONE_BOUND_TO_OTHER_MSG,
   // Public surface (signatures unchanged — internals refactored to phone-based)
   tryLinkByPhoneAndStudentId,
   findLinkableParent, commitLineLink,
   getLinkedParentId, getLinkedParentSummary, unlinkAccount,
-  getLinkedChildren, getChildStatusToday, sessionDoneLabel,
+  getLinkedChildren, getChildStatusToday, sessionDoneLabel, buildNotificationText,
   sendTextMessage, pushToEmergencyGroup, pushEmergencyFlexMessage,
   pushParentStatusFlex, pushParentFlex, logMessage, auditBind,
   processUnsentNotifications,

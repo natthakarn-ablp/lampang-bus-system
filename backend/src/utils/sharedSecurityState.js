@@ -75,6 +75,20 @@ function loginLockKey(username, ip) {
 }
 
 /**
+ * The lookup key for wrong-current-password attempts on change-password
+ * (AUTH-01). Keyed by user id alone, not IP: the caller already holds a valid
+ * access token, and a stolen token must not get a fresh budget per source IP.
+ * Shares the login_lockouts table and LOGIN_LOCK threshold; the 'change-password'
+ * prefix keeps it from colliding with a login key.
+ *
+ * @param {number|string} userId
+ * @returns {string} 64 hex characters
+ */
+function changePasswordLockKey(userId) {
+  return crypto.createHash('sha256').update(JSON.stringify(['change-password', String(userId)])).digest('hex');
+}
+
+/**
  * Is this (username + IP) currently locked out?
  *
  * The window is applied in the WHERE clause rather than by reading the row and
@@ -156,6 +170,7 @@ async function alreadyProcessed(eventId) {
 module.exports = {
   LOGIN_LOCK,
   loginLockKey,
+  changePasswordLockKey,
   isLoginLocked,
   noteLoginFail,
   clearLoginFails,

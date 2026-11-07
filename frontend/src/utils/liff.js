@@ -30,7 +30,16 @@ async function getLiffModule() {
   return _liffModule;
 }
 
-export async function resolveLineUserId() {
+/**
+ * @param {object} [opts]
+ * @param {boolean} [opts.loginOutsideLine=true] When false and the page is
+ *   open in an ordinary browser (liff.isInClient() === false), do NOT call
+ *   liff.login(). liff.login() outside LINE jumps to LINE's email/password
+ *   page with no explanation (live QA parent-01); parent pages pass false and
+ *   show their own "open in LINE" screen instead. The admin LINE-verification
+ *   flow keeps the default because admins verify from a desktop browser.
+ */
+export async function resolveLineUserId({ loginOutsideLine = true } = {}) {
   // Return cached result if already resolved
   if (_cachedUserId) return _cachedUserId;
 
@@ -43,6 +52,9 @@ export async function resolveLineUserId() {
         const profile = await liff.getProfile();
         _cachedUserId = profile.userId;
         return _cachedUserId;
+      } else if (!loginOutsideLine && !safeIsInClient(liff)) {
+        // Ordinary browser and the caller asked not to bounce to LINE login.
+        return '';
       } else {
         // Not logged in — trigger login and come BACK to this page.
         //
@@ -92,6 +104,31 @@ export async function getLiffIdToken() {
 
 export function isLiffReady() {
   return _liffReady;
+}
+
+function safeIsInClient(liff) {
+  try { return !!liff?.isInClient(); } catch { return false; }
+}
+
+// Public add-friend link of the system's LINE OA.
+export const LINE_OA_ID = '@943glwjf';
+export const LINE_OA_URL = 'https://line.me/R/ti/p/@943glwjf';
+
+/**
+ * URL that opens a LIFF page inside the LINE app. `subPath` is relative to the
+ * LIFF Endpoint URL (/parent), e.g. '/link' for /parent/link. Without a
+ * configured LIFF ID the LINE OA add-friend link is returned instead.
+ */
+export function getLiffLaunchUrl(subPath = '') {
+  if (!LIFF_ID) return LINE_OA_URL;
+  return `https://liff.line.me/${LIFF_ID}${subPath}`;
+}
+
+/** Start LINE login in this (external) browser — explicit user choice only. */
+export async function loginWithLineHere() {
+  const liff = await getLiffModule();
+  if (!liff) return;
+  liff.login({ redirectUri: window.location.href });
 }
 
 export function isInLiffClient() {

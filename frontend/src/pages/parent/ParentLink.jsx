@@ -5,6 +5,7 @@ import { resolveLineUserId, getLiffIdToken, isInLiffClient } from '../../utils/l
 import PageHeader from '../../components/PageHeader';
 import { AlertBanner, FormField } from '../../components/ui';
 import { formatGradeClass } from '../../utils/student';
+import OpenInLineCard from '../../components/parent/OpenInLineCard';
 
 // Phase 10.3E-UX1 — parent account linking via LIFF form.
 //
@@ -50,13 +51,16 @@ export default function ParentLink() {
     let cancelled = false;
     (async () => {
       try {
-        await resolveLineUserId();
+        // parent-01: in an ordinary browser do not bounce to LINE's
+        // email/password login — show our own "open in LINE" screen instead.
+        await resolveLineUserId({ loginOutsideLine: false });
         const token = await getLiffIdToken();
         if (cancelled) return;
+        const inClient = isInLiffClient();
         setIdToken(token);
-        setInLineClient(isInLiffClient());
+        setInLineClient(inClient);
         setLiffReady(true);
-        if (!token) {
+        if (!token && inClient) {
           setServerErr('ไม่พบ LIFF token — กรุณาเปิดหน้านี้ผ่านลิงก์ใน LINE OA');
         }
       } catch (err) {
@@ -142,6 +146,11 @@ export default function ParentLink() {
         <div className="text-ink-muted text-sm">กำลังเริ่มต้น LIFF…</div>
       </div>
     );
+  }
+
+  // Outside LINE without a LINE login: explain and offer to open in LINE.
+  if (!idToken && !inLineClient) {
+    return <OpenInLineCard subPath="/link" title="กรุณาเปิดหน้าผูกบัญชีในแอป LINE" />;
   }
 
   if (step === STEP.SUCCESS) {

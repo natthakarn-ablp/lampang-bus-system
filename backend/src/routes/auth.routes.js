@@ -41,6 +41,7 @@ const DUMMY_BCRYPT_HASH = bcrypt.hashSync('lampang-login-timing-equaliser', BCRY
 // releases every account an attacker was working on.
 const {
   loginLockKey: loginKey,
+  changePasswordLockKey,
   isLoginLocked,
   noteLoginFail,
   clearLoginFails,
@@ -279,6 +280,13 @@ router.post('/change-password', authenticate, async (req, res, next) => {
       return sendError(res, 'กรุณากรอกรหัสผ่านปัจจุบันและรหัสผ่านใหม่', [], 400);
     }
 
+    // AUTH-01: wrong current_password attempts share the login lockout budget
+    // (10 / 15 min per user), so a stolen access token cannot brute-force it.
+    const cpLockKey = changePasswordLockKey(req.user.id);
+    if (await isLoginLocked(cpLockKey)) {
+      return sendError(res, 'มีการพยายามเปลี่ยนรหัสผ่านหลายครั้ง กรุณาลองใหม่ใน 15 นาที', [], 429);
+    }
+
     const [rows] = await pool.query(
       'SELECT id, username, password_hash FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1',
       [req.user.id]
@@ -290,8 +298,13 @@ router.post('/change-password', authenticate, async (req, res, next) => {
 
     const match = await bcrypt.compare(String(current_password), rows[0].password_hash);
     if (!match) {
+      await noteLoginFail(cpLockKey);
+      await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: req.user.id,
+        newValue: { action: 'password_change_failed', reason: 'wrong_current_password' },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'] });
       return sendError(res, 'รหัสผ่านปัจจุบันไม่ถูกต้อง', [], 400);
     }
+    await clearLoginFails(cpLockKey);
 
     const pwCheck = validatePassword(new_password, { username: rows[0].username });
     if (!pwCheck.ok) {

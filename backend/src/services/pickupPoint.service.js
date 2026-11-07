@@ -682,6 +682,24 @@ async function countOtherSchoolStudentsOnPoint(pointId, schoolId) {
   return Number(row && row.n) || 0;
 }
 
+/**
+ * Whether a point is this school's to see or edit by id: it holds at least one
+ * live pupil of the school, or no live pupil at all (an emptied point, listed
+ * for the school while its bus serves it). A point holding only other schools'
+ * pupils is not visible — same rule as getPickupPointsForSchool (AUD-SCH-01).
+ */
+async function isPickupPointVisibleToSchool(pointId, schoolId) {
+  const others = await countOtherSchoolStudentsOnPoint(pointId, schoolId);
+  if (others === 0) return true;
+  const [[row]] = await pool.query(`
+    SELECT COUNT(*) AS n
+      FROM student_pickup_points spp
+      JOIN students s ON s.id = spp.student_id
+     WHERE spp.pickup_point_id = ? AND s.school_id = ? AND s.is_deleted = FALSE
+  `, [pointId, schoolId]);
+  return (Number(row && row.n) || 0) > 0;
+}
+
 async function validateVehicleServesSchool(vehicleId, schoolId) {
   const [[row]] = await pool.query(`
     SELECT 1 FROM students
@@ -977,6 +995,7 @@ module.exports = {
   validateStudentsBelongToSchoolAndVehicle,
   validateVehicleServesSchool,
   countOtherSchoolStudentsOnPoint,
+  isPickupPointVisibleToSchool,
   createPickupPointWithStudents,
   // Phase 6.1 hotfix-4 — duplicate-assignment guard
   validateNoDuplicateAssignmentsForVehicle,

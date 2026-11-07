@@ -115,19 +115,21 @@ describe('teacher check — correction of recorded time', () => {
     .patch(`/api/school/teacher-check/${id}/time`)
     .set('Authorization', `Bearer ${token}`).send({ time });
 
+  // Morning, so 00:00 is both in the past and inside the round whatever the
+  // CI clock says (an evening time must be 11:00 or later — live QA gt1-04).
   test('own-grade correction updates the log and latest daily snapshot, with old/new audit', async () => {
-    const created = await post(t1, { session: 'evening', student_ids: [STUDENT_ID] });
+    const created = await post(t1, { session: 'morning', student_ids: [STUDENT_ID] });
     const id = created.body.data.results[0].log_id;
     const conn = await db();
     await conn.query("UPDATE checkin_logs SET checked_at = TIMESTAMP(CURDATE(), '00:05:00') WHERE id = ?", [id]);
-    await conn.query("UPDATE daily_status SET evening_ts = TIMESTAMP(CURDATE(), '00:05:00') WHERE student_id = ? AND check_date = CURDATE()", [STUDENT_ID]);
+    await conn.query("UPDATE daily_status SET morning_ts = TIMESTAMP(CURDATE(), '00:05:00') WHERE student_id = ? AND check_date = CURDATE()", [STUDENT_ID]);
     await conn.end();
 
     const res = await patchTime(t1, id, '00:00');
     expectSaved(res);
     const verify = await db();
     const [[log]] = await verify.query("SELECT DATE_FORMAT(checked_at, '%H:%i') AS time FROM checkin_logs WHERE id = ?", [id]);
-    const [[daily]] = await verify.query("SELECT DATE_FORMAT(evening_ts, '%H:%i') AS time FROM daily_status WHERE student_id = ? AND check_date = CURDATE()", [STUDENT_ID]);
+    const [[daily]] = await verify.query("SELECT DATE_FORMAT(morning_ts, '%H:%i') AS time FROM daily_status WHERE student_id = ? AND check_date = CURDATE()", [STUDENT_ID]);
     const [[audit]] = await verify.query("SELECT user_id, old_value, new_value FROM audit_logs WHERE entity_type = 'checkin_time' AND entity_id = ? ORDER BY id DESC LIMIT 1", [String(id)]);
     await verify.end();
     expect(log.time).toBe('00:00');
@@ -136,11 +138,19 @@ describe('teacher check — correction of recorded time', () => {
     expect(JSON.parse(typeof audit.old_value === 'string' ? audit.old_value : JSON.stringify(audit.old_value)).checked_at_local).toMatch(/00:05:00$/);
     expect(JSON.parse(typeof audit.new_value === 'string' ? audit.new_value : JSON.stringify(audit.new_value)).checked_at_local).toMatch(/00:00:00$/);
 
-    const roster = await request(app).get('/api/school/teacher-check?session=evening')
+    const roster = await request(app).get('/api/school/teacher-check?session=morning')
       .set('Authorization', `Bearer ${t1}`);
     expectSaved(roster);
     const pupil = roster.body.data.vehicles.flatMap(v => v.students).find(st => st.id === STUDENT_ID);
     expect(pupil.time_edited).toBe(true);
+  });
+
+  test('a time on the wrong side of the day for the round is refused (gt1-04)', async () => {
+    const created = await post(t1, { session: 'evening', student_ids: [STUDENT_ID] });
+    const id = created.body.data.results[0].log_id;
+    const res = await patchTime(t1, id, '07:45');
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('เวลารอบเย็นต้องตั้งแต่ 11:00 น. เป็นต้นไป');
   });
 
   test('other grade and other school cannot correct a pupil time; full-school can', async () => {

@@ -12,14 +12,22 @@ import { tone } from './tone';
  * shows "—", because dropping it (or showing 0) would claim there is nothing
  * to do when the truth is unknown.
  *
+ * `afterAlert` — the page banner above already reports pending work. An empty
+ * list then reads "nothing else" in a neutral tone, so a warning and a green
+ * "ไม่มีงานค้าง" are never shown one under the other (QA vis-06).
+ *
  * item = { key, variant, count, title, sub, cta: { label, to } | { label, onClick }, keepZero, unavailable }
  */
-export default function TodoCards({ title = 'ต้องทำวันนี้', items = [], max = 3 }) {
+export default function TodoCards({ title = 'ต้องทำวันนี้', items = [], max = 3, afterAlert = false }) {
   const shown = items.filter(i => i && (i.unavailable || i.keepZero || Number(i.count) > 0)).slice(0, max);
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-lg font-bold text-ink">{title}</h2>
-      {shown.length === 0 ? (
+      {shown.length === 0 && afterAlert ? (
+        <p className="rounded-2xl border border-surface-border bg-surface-raised px-4 py-3 text-sm text-ink-muted">
+          ไม่มีงานอื่นค้าง นอกจากที่แจ้งด้านบน
+        </p>
+      ) : shown.length === 0 ? (
         <p className="flex items-center gap-2 rounded-2xl border border-success/30 bg-success-soft px-4 py-3 text-sm font-semibold text-success-ink">
           <CheckCircle2 className="w-5 h-5" aria-hidden="true" /> ไม่มีงานค้าง
         </p>

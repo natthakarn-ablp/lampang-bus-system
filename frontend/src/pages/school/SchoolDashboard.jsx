@@ -256,7 +256,6 @@ export default function SchoolDashboard() {
   return (
     <PageTransition>
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
-      <AttendanceBreakdown data={failed.dashboard ? {} : data} />
       <div className="space-y-2">
         <RoleChip role="school" />
         <PageHeader
@@ -349,7 +348,9 @@ export default function SchoolDashboard() {
             </div>
           )}
 
-          <TodoCards items={todos} />
+          <TodoCards items={todos} afterAlert={dashOk && (banner.variant === 'warn' || banner.variant === 'danger')} />
+
+          <AttendanceBreakdown data={failed.dashboard ? {} : data} />
 
           {/* Headline numbers */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="ตัวเลขหลักวันนี้">

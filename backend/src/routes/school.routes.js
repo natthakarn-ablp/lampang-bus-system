@@ -2199,6 +2199,48 @@ router.post('/students/transfer-requests/:id/cancel', requireFullSchoolScope, as
   } catch (err) { next(err); }
 });
 
+// Incoming cross-affiliation transfers (QA affiliation-03). When the pupil comes
+// from a school in a DIFFERENT affiliation, the receiving school decides, not
+// the source affiliation. The service only finds rows whose
+// destination_school_id is the caller's school; requireFullSchoolScope keeps
+// grade-scoped teacher accounts out.
+router.get('/students/transfer-requests/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    const transfer = require('../services/studentTransfer.service');
+    return sendSuccess(res, await transfer.getIncomingDetailForSchool(pool, { requestId, schoolId: resolveSchoolId(req) }));
+  } catch (err) { next(err); }
+});
+
+router.post('/students/transfer-requests/:id/approve', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    const transfer = require('../services/studentTransfer.service');
+    const out = await transfer.approveAsDestinationSchool(pool, {
+      requestId, schoolId: resolveSchoolId(req), userId: req.user.id, note: (req.body || {}).note,
+    });
+    await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(requestId),
+      newValue: { result: out.status, approved_by_destination_school: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return sendSuccess(res, out, transfer.approveOutcomeMessage(out));
+  } catch (err) { next(err); }
+});
+
+router.post('/students/transfer-requests/:id/reject', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const requestId = readIdParam(req, res, 'id');
+    if (requestId === null) return;
+    const transfer = require('../services/studentTransfer.service');
+    const out = await transfer.rejectAsDestinationSchool(pool, {
+      requestId, schoolId: resolveSchoolId(req), userId: req.user.id, note: (req.body || {}).note,
+    });
+    await logAudit({ userId: req.user.id, action: 'UPDATE', entityType: 'student_transfer_request', entityId: String(requestId),
+      newValue: { result: 'REJECTED', rejected_by_destination_school: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return sendSuccess(res, out, 'ไม่อนุมัติคำขอแล้ว');
+  } catch (err) { next(err); }
+});
+
 router.post('/students/:studentId/transfer-request', requireFullSchoolScope, async (req, res, next) => {
   try {
     const studentId = readIdParam(req, res, 'studentId');
@@ -2209,7 +2251,9 @@ router.post('/students/:studentId/transfer-request', requireFullSchoolScope, asy
       studentId, schoolId: resolveSchoolId(req), userId: req.user.id,
       destinationSchoolId: destination_school_id, reason, evidenceNote: evidence_note, requestType: request_type || 'TRANSFER_TO_SCHOOL',
     });
-    return sendSuccess(res, out, 'ส่งคำขอโอนย้ายแล้ว · รอผู้ดูแลระบบตรวจสอบ', null, 201);
+    return sendSuccess(res, out, out.cross_affiliation
+      ? 'ส่งคำขอโอนย้ายแล้ว · รอโรงเรียนปลายทางพิจารณา (โอนย้ายข้ามสังกัด)'
+      : 'ส่งคำขอโอนย้ายแล้ว · รอสังกัดหรือผู้ดูแลระบบตรวจสอบ', null, 201);
   } catch (err) { next(err); }
 });
 

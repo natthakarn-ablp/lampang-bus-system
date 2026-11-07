@@ -28,8 +28,16 @@ async function createRequest(pool, { studentId, schoolId, userId, destinationSch
   if (String(st.school_id) !== String(schoolId)) throw forbidden('ไม่มีสิทธิ์ส่งคำขอสำหรับนักเรียนของโรงเรียนอื่น');
   if (st.is_deleted) throw badReq('นักเรียนนี้ถูกลบแล้ว ไม่สามารถส่งคำขอโอนย้ายได้');
 
-  const [[dest]] = await pool.query('SELECT id, name FROM schools WHERE id = ? AND COALESCE(is_deleted, FALSE) = FALSE', [destinationSchoolId]);
+  // The source school's affiliation rides along so the caller can tell the
+  // requester who decides: same affiliation → the affiliation (or admin);
+  // different affiliation → the destination school (QA affiliation-03).
+  const [[dest]] = await pool.query(
+    `SELECT id, name, affiliation_id,
+            (SELECT src.affiliation_id FROM schools src WHERE src.id = ?) AS source_affiliation_id
+       FROM schools WHERE id = ? AND COALESCE(is_deleted, FALSE) = FALSE`,
+    [schoolId, destinationSchoolId]);
   if (!dest) throw badReq('ไม่พบโรงเรียนปลายทาง');
+  const crossAffiliation = isCrossAffiliation({ source_affiliation_id: dest.source_affiliation_id, destination_affiliation_id: dest.affiliation_id });
 
   const [[existing]] = await pool.query("SELECT id FROM student_transfer_requests WHERE student_id = ? AND status = 'PENDING' LIMIT 1", [studentId]);
   if (existing) { const e = conflict('มีคำขอโอนย้ายที่รออนุมัติสำหรับนักเรียนคนนี้อยู่แล้ว'); e.errors = [{ code: 'PENDING_REQUEST_EXISTS', request_id: existing.id }]; throw e; }
@@ -42,8 +50,24 @@ async function createRequest(pool, { studentId, schoolId, userId, destinationSch
     [requestType, studentId, st.student_code, name, schoolId, destinationSchoolId, userId, String(reason || '').slice(0, 500), String(evidenceNote || '').slice(0, 500)]
   );
   await logAudit({ userId, action: 'CREATE', entityType: 'student_transfer_request', entityId: String(r.insertId),
-    newValue: { student_id: studentId, source: schoolId, destination: destinationSchoolId, type: requestType } });
-  return { id: r.insertId, status: 'PENDING' };
+    newValue: { student_id: studentId, source: schoolId, destination: destinationSchoolId, type: requestType, cross_affiliation: crossAffiliation } });
+  return { id: r.insertId, status: 'PENDING', cross_affiliation: crossAffiliation, approver: crossAffiliation ? APPROVER.DESTINATION_SCHOOL : APPROVER.AFFILIATION };
+}
+
+// ── Who decides a request (QA affiliation-03) ────────────────────────────────
+// A transfer between two schools of the SAME affiliation is decided by that
+// affiliation (or a system admin), as before. A transfer into a school of a
+// DIFFERENT affiliation is decided by the destination school itself: it is the
+// school that receives the pupil and whose staff the guardians' LINE access
+// will point at, so the source affiliation must not be able to push a child in
+// unseen. Decided from the schools' CURRENT affiliation at read time; a school
+// with no affiliation counts as different from one that has one. No schema
+// change: the request row already carries both school ids.
+const APPROVER = { AFFILIATION: 'AFFILIATION', DESTINATION_SCHOOL: 'DESTINATION_SCHOOL' };
+function isCrossAffiliation(row) {
+  const a = row.source_affiliation_id == null ? null : String(row.source_affiliation_id);
+  const b = row.destination_affiliation_id == null ? null : String(row.destination_affiliation_id);
+  return a !== b;
 }
 
 const pubRow = (q) => ({
@@ -52,16 +76,81 @@ const pubRow = (q) => ({
   destination_school_id: q.destination_school_id, destination_school_name: q.destination_school_name,
   reason: q.reason, admin_note: q.admin_note, evidence_note: q.evidence_note, applied_student_id: q.applied_student_id,
   created_at: q.created_at, approved_at: q.approved_at, rejected_at: q.rejected_at, applied_at: q.applied_at,
+  cross_affiliation: isCrossAffiliation(q),
+  approver: isCrossAffiliation(q) ? APPROVER.DESTINATION_SCHOOL : APPROVER.AFFILIATION,
 });
 const JOIN_SCHOOLS = `LEFT JOIN schools ss ON ss.id = q.source_school_id LEFT JOIN schools ds ON ds.id = q.destination_school_id`;
-const SELECT_COLS = `q.*, ss.name AS source_school_name, ds.name AS destination_school_name`;
+const SELECT_COLS = `q.*, ss.name AS source_school_name, ds.name AS destination_school_name,
+  ss.affiliation_id AS source_affiliation_id, ds.affiliation_id AS destination_affiliation_id`;
 
 // ── School: list requests involving this school. ─────────────────────────────
 async function listForSchool(pool, { schoolId }) {
   const [rows] = await pool.query(
     `SELECT ${SELECT_COLS} FROM student_transfer_requests q ${JOIN_SCHOOLS}
      WHERE q.source_school_id = ? OR q.destination_school_id = ? ORDER BY q.id DESC LIMIT 200`, [schoolId, schoolId]);
-  return rows.map(pubRow);
+  return rows.map((q) => {
+    const out = pubRow(q);
+    const incoming = String(q.destination_school_id) === String(schoolId);
+    out.direction = incoming ? 'INCOMING' : 'OUTGOING';
+    // Only an incoming cross-affiliation request is this school's to decide.
+    out.can_decide = incoming && out.cross_affiliation && q.status === 'PENDING';
+    return out;
+  });
+}
+
+// ── Destination school: decide an incoming cross-affiliation request ────────
+// Scope is enforced here, not in the client: the row must name the caller's
+// school as destination_school_id. The route additionally refuses grade-scoped
+// teacher accounts (requireFullSchoolScope).
+async function loadForDestinationSchool(pool, { requestId, schoolId }) {
+  if (!schoolId) throw badReq('กรุณาระบุโรงเรียน');
+  const [[row]] = await pool.query(
+    `SELECT ${SELECT_COLS} FROM student_transfer_requests q ${JOIN_SCHOOLS}
+     WHERE q.id = ? AND q.destination_school_id = ?`, [requestId, schoolId]);
+  if (!row) throw notFound('ไม่พบคำขอ หรือคำขอนี้ไม่ได้โอนเข้าโรงเรียนของคุณ');
+  return row;
+}
+
+// Only what the receiving school needs to decide: who, from where, why, which
+// grade, and the pre-approval warnings. No source-school internal ids.
+async function getIncomingDetailForSchool(pool, { requestId, schoolId }) {
+  const row = await loadForDestinationSchool(pool, { requestId, schoolId });
+  const [[st]] = await pool.query('SELECT grade, classroom, is_deleted FROM students WHERE id = ?', [row.student_id]);
+  const [[destDup]] = await pool.query('SELECT id FROM students WHERE school_id = ? AND student_code = ? AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1', [row.destination_school_id, row.student_code]);
+  const [[links]] = await pool.query('SELECT SUM(approved = TRUE) AS approved_total FROM parent_student WHERE student_id = ?', [row.student_id]);
+  const cross = isCrossAffiliation(row);
+  return {
+    id: row.id, request_type: row.request_type, status: row.status,
+    student_code: row.student_code, student_name: row.student_name_snapshot,
+    grade: st ? st.grade : null, classroom: st ? st.classroom : null,
+    source_school_name: row.source_school_name, destination_school_name: row.destination_school_name,
+    reason: row.reason, evidence_note: row.evidence_note, admin_note: row.admin_note,
+    created_at: row.created_at, approved_at: row.approved_at, rejected_at: row.rejected_at, applied_at: row.applied_at,
+    cross_affiliation: cross,
+    approver: cross ? APPROVER.DESTINATION_SCHOOL : APPROVER.AFFILIATION,
+    guardian_links: Number(links?.approved_total || 0),
+    destination_code_conflict: !!destDup,
+    source_student_missing: !st || !!st.is_deleted,
+    can_decide: cross && row.status === 'PENDING',
+  };
+}
+
+function sameAffiliationForbidden() {
+  const e = forbidden('คำขอนี้เป็นการโอนย้ายภายในสังกัดเดียวกัน สังกัดเป็นผู้พิจารณาอนุมัติ โรงเรียนปลายทางดำเนินการไม่ได้');
+  e.errors = [{ code: 'SAME_AFFILIATION_AFFILIATION_DECIDES' }];
+  return e;
+}
+
+async function approveAsDestinationSchool(pool, { requestId, schoolId, userId, note }) {
+  const row = await loadForDestinationSchool(pool, { requestId, schoolId });
+  if (!isCrossAffiliation(row)) throw sameAffiliationForbidden();
+  return approveAndApply(pool, { requestId, adminUserId: userId, adminNote: note });
+}
+
+async function rejectAsDestinationSchool(pool, { requestId, schoolId, userId, note }) {
+  const row = await loadForDestinationSchool(pool, { requestId, schoolId });
+  if (!isCrossAffiliation(row)) throw sameAffiliationForbidden();
+  return reject(pool, { requestId, adminUserId: userId, adminNote: note });
 }
 
 async function cancelRequest(pool, { requestId, schoolId, userId }) {
@@ -205,26 +294,39 @@ async function reject(pool, { requestId, adminUserId, adminNote }) {
 }
 
 
-// ── Affiliation: list transfer requests for schools in this affiliation ──────
+// ── Affiliation: list transfer requests touching this affiliation ──────────
+// A request shows up when either end is one of this affiliation's schools, with
+// a direction relative to the affiliation. Only INTERNAL requests (both schools
+// in this affiliation) are the affiliation's to decide; a cross-affiliation one
+// waits for the destination school (QA affiliation-03).
+function affiliationDirection(row, affiliationId) {
+  const fromHere = row.source_affiliation_id != null && String(row.source_affiliation_id) === String(affiliationId);
+  const toHere = row.destination_affiliation_id != null && String(row.destination_affiliation_id) === String(affiliationId);
+  if (fromHere && toHere) return 'INTERNAL';
+  return fromHere ? 'OUTGOING' : 'INCOMING';
+}
+function affRow(row, affiliationId) {
+  const direction = affiliationDirection(row, affiliationId);
+  return { ...pubRow(row), direction, can_approve: direction === 'INTERNAL' && row.status === 'PENDING' };
+}
+
 async function listForAffiliation(pool, { affiliationId, status = null }) {
   const statusSql = status ? ' AND q.status = ?' : '';
-  const params = [affiliationId, ...(status ? [status] : [])];
+  const params = [affiliationId, affiliationId, ...(status ? [status] : [])];
   const [rows] = await pool.query(
     `SELECT ${SELECT_COLS} FROM student_transfer_requests q ${JOIN_SCHOOLS}
-     LEFT JOIN schools sa ON sa.id = q.source_school_id
-     WHERE sa.affiliation_id = ?${statusSql}
+     WHERE (ss.affiliation_id = ? OR ds.affiliation_id = ?)${statusSql}
      ORDER BY q.status='PENDING' DESC, q.id DESC LIMIT 200`,
     params
   );
-  return rows.map(pubRow);
+  return rows.map((r) => affRow(r, affiliationId));
 }
 
 async function getDetailForAffiliation(pool, { requestId, affiliationId }) {
   const [[row]] = await pool.query(
     `SELECT ${SELECT_COLS} FROM student_transfer_requests q ${JOIN_SCHOOLS}
-     LEFT JOIN schools sa ON sa.id = q.source_school_id
-     WHERE q.id = ? AND sa.affiliation_id = ?`,
-    [requestId, affiliationId]
+     WHERE q.id = ? AND (ss.affiliation_id = ? OR ds.affiliation_id = ?)`,
+    [requestId, affiliationId, affiliationId]
   );
   if (!row) throw notFound('ไม่พบคำขอ หรือคำขอนี้ไม่ได้อยู่ในสังกัดของคุณ');
   // Same pre-approval signals as getDetailForAdmin so the affiliation screen
@@ -232,12 +334,42 @@ async function getDetailForAffiliation(pool, { requestId, affiliationId }) {
   const [[st]] = await pool.query('SELECT id, school_id, student_code, grade, classroom, vehicle_id, is_deleted FROM students WHERE id = ?', [row.student_id]);
   const [[destDup]] = await pool.query('SELECT id FROM students WHERE school_id = ? AND student_code = ? AND COALESCE(is_deleted, FALSE) = FALSE LIMIT 1', [row.destination_school_id, row.student_code]);
   return {
-    ...pubRow(row),
+    ...affRow(row, affiliationId),
     current_student: st ? { school_id: st.school_id, grade: st.grade, classroom: st.classroom, has_vehicle: !!st.vehicle_id, is_deleted: !!st.is_deleted } : null,
     destination_code_conflict: !!destDup,
-    can_approve: row.status === 'PENDING',
   };
 }
 
+// Guard for the affiliation approve/reject routes: the request must be in this
+// affiliation AND internal to it. A cross-affiliation request is refused with a
+// Thai message naming who decides instead.
+async function assertAffiliationCanDecide(pool, { requestId, affiliationId }) {
+  const detail = await getDetailForAffiliation(pool, { requestId, affiliationId });
+  if (detail.direction !== 'INTERNAL') {
+    const e = forbidden('คำขอนี้เป็นการโอนย้ายข้ามสังกัด โรงเรียนปลายทางเป็นผู้พิจารณาอนุมัติหรือไม่อนุมัติ สังกัดดูสถานะได้อย่างเดียว');
+    e.errors = [{ code: 'CROSS_AFFILIATION_DESTINATION_SCHOOL_DECIDES' }];
+    throw e;
+  }
+  return detail;
+}
 
-module.exports = { createRequest, listForSchool, cancelRequest, listForAdmin, countPendingForAdmin, getDetailForAdmin, listForAffiliation, getDetailForAffiliation, approveAndApply, reject };
+// Toast wording for an approve outcome; the approve routes answer 200 for
+// every outcome and the client shows non-applied ones as errors (QA affiliation-09).
+function approveOutcomeMessage(out) {
+  return out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
+    : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
+    : out.status === 'FAILED' && out.reason === 'DESTINATION_CODE_EXISTS' ? 'ไม่สามารถโอนย้ายได้ เนื่องจากพบรหัสนักเรียนซ้ำในโรงเรียนปลายทาง'
+    : out.status === 'FAILED' && out.reason === 'DESTINATION_MISSING' ? 'ไม่สามารถโอนย้ายได้ เนื่องจากไม่พบโรงเรียนปลายทาง (อาจถูกลบไปแล้ว)'
+    : out.status === 'FAILED' && out.reason ? 'ไม่สามารถดำเนินการได้'
+    : out.status === 'STALE_NEEDS_REVIEW' ? 'ข้อมูลนักเรียนเปลี่ยนแปลงตั้งแต่ส่งคำขอ กรุณาตรวจสอบใหม่'
+    : 'คำขอนี้ไม่อยู่ในสถานะรออนุมัติแล้ว';
+}
+
+
+module.exports = {
+  APPROVER, isCrossAffiliation,
+  createRequest, listForSchool, cancelRequest, listForAdmin, countPendingForAdmin, getDetailForAdmin,
+  listForAffiliation, getDetailForAffiliation, assertAffiliationCanDecide, approveOutcomeMessage,
+  getIncomingDetailForSchool, approveAsDestinationSchool, rejectAsDestinationSchool,
+  approveAndApply, reject,
+};

@@ -7,6 +7,7 @@ const env = require('../config/env');
 const lineSvc = require('../services/line.service');
 const tpl = require('../services/lineFlexTemplates.service');
 const bindGuard = require('../services/lineBindGuard');
+const { normalizePhone, isValidPhone } = require('../utils/phone');
 
 /**
  * Verify LINE webhook signature (HMAC-SHA256, base64).
@@ -264,8 +265,10 @@ async function handleTextMessage(lineUserId, text) {
   const state = lineSvc.getLinkState(lineUserId);
 
   if (state?.step === 'await_phone') {
-    const phone = cmd.replace(/-/g, '').trim();
-    if (!/^\d{9,10}$/.test(phone)) {
+    // Shared normalization (parent-02): same canonical form the importers store.
+    const typed = String(cmd || '').trim();
+    const normalized = /^[\d\s\-+]+$/.test(typed) ? normalizePhone(typed) : '';
+    if (!isValidPhone(normalized)) {
       await lineSvc.pushParentFlex(lineUserId, {
         flex:         tpl.buildParentInvalidPhoneCard(),
         fallbackText: tpl.fallbackInvalidPhone(),
@@ -273,7 +276,6 @@ async function handleTextMessage(lineUserId, text) {
       });
       return;
     }
-    const normalized = phone.length === 9 && (phone[0] === '8' || phone[0] === '9') ? '0' + phone : phone;
     lineSvc.setLinkState(lineUserId, { step: 'await_student_id', phone: normalized });
     await lineSvc.pushParentFlex(lineUserId, {
       flex:         tpl.buildParentRequestStudentCard(),
@@ -298,7 +300,9 @@ async function handleTextMessage(lineUserId, text) {
 
     // Same credential lockout as the LIFF bind endpoints (per phone / student /
     // pair / sub). The chat path is another guessing surface for the same pair.
-    const guardKeys = bindGuard.keysFor({ phone: state.phone, studentKey: credential, sub: lineUserId });
+    // parent-07: per-student lock scoped to the school the code resolves to.
+    const studentLockKey = await bindGuard.resolveStudentLockKey(credential);
+    const guardKeys = bindGuard.keysFor({ phone: state.phone, studentKey: credential, studentLockKey, sub: lineUserId });
     const lock = await bindGuard.checkLock(guardKeys);
     if (lock.locked) {
       await lineSvc.auditBind({ sub: lineUserId, phone: state.phone, studentCode: credential, action: 'LINE_BIND_LOCKED', reason: lock.reason });

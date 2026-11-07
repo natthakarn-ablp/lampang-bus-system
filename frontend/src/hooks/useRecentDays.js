@@ -45,6 +45,13 @@ function toDays(rows, n) {
 }
 
 /**
+ * Returned instead of a day list when the load failed (timeout, 5xx, 429), so
+ * a dashboard can say "โหลดไม่สำเร็จ" rather than look like there is no data.
+ * It is still an empty array, so callers that only read `days` keep working.
+ */
+export const RECENT_DAYS_FAILED = Object.freeze([]);
+
+/**
  * The last `n` days that have check-in data, as DayBars rows.
  *
  *  source 'reports'  → /reports/monthly (scoped to the caller: school, grade
@@ -54,7 +61,7 @@ function toDays(rows, n) {
  *                      denominators are TODAY's rider totals).
  *
  * Days without any data are absent from both endpoints, so holidays and
- * weekends simply do not appear.
+ * weekends simply do not appear. A failed load yields RECENT_DAYS_FAILED.
  */
 export default function useRecentDays(source = 'reports', n = 7) {
   const [days, setDays] = useState(null);
@@ -77,7 +84,7 @@ export default function useRecentDays(source = 'reports', n = 7) {
         }
         if (alive) setDays(toDays(rows, n));
       } catch {
-        if (alive) setDays([]);
+        if (alive) setDays(RECENT_DAYS_FAILED);
       }
     }
     load();

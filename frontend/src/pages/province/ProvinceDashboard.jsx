@@ -12,7 +12,7 @@ import EmptyState from '../../components/EmptyState';
 import { safePct, kpiColor } from '../../utils/kpi';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
 import { useAuth } from '../../hooks/useAuth';
-import useRecentDays from '../../hooks/useRecentDays';
+import useRecentDays, { RECENT_DAYS_FAILED } from '../../hooks/useRecentDays';
 import {
   AppCard, RiskCard, StatusBadge,
   TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars, FoldSection, RoleChip,
@@ -248,6 +248,7 @@ export default function ProvinceDashboard() {
         <DayBars
           title="การรับส่งทั้งจังหวัด 7 วันล่าสุด (%)"
           days={recentDays || []}
+          failed={recentDays === RECENT_DAYS_FAILED}
           note="คิดจากจำนวนผู้ใช้บริการปัจจุบัน"
         />
         <RankBars

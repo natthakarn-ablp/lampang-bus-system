@@ -15,7 +15,7 @@ import {
   TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars, FoldSection, RoleChip,
   pctOf, pctTone,
 } from '../../components/ui';
-import useRecentDays from '../../hooks/useRecentDays';
+import useRecentDays, { RECENT_DAYS_FAILED } from '../../hooks/useRecentDays';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
 import { PageTransition } from '../../lib/motion';
 
@@ -329,6 +329,7 @@ export default function AffiliationDashboard() {
             <DayBars
               title="การรับส่งทั้งสังกัด 7 วันล่าสุด (%)"
               days={recentDays || []}
+              failed={recentDays === RECENT_DAYS_FAILED}
               note={recentDays == null ? 'กำลังโหลด…' : undefined}
             />
             <RankBars

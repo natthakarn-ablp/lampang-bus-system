@@ -27,7 +27,7 @@ import {
 // SchoolLayout already renders a scope chip above every school page. We only
 // use isGradeTeacher() to hide write-only actions from teacher accounts.
 import { useAuth } from '../../hooks/useAuth';
-import useRecentDays from '../../hooks/useRecentDays';
+import useRecentDays, { RECENT_DAYS_FAILED } from '../../hooks/useRecentDays';
 import { isGradeTeacher } from '../../utils/authScope';
 import { PageTransition } from '../../lib/motion';
 import { formatGradeClass } from '../../utils/student';
@@ -392,6 +392,7 @@ export default function SchoolDashboard() {
             <DayBars
               title="การรับส่ง 7 วันล่าสุด (%)"
               days={recentDays || []}
+              failed={recentDays === RECENT_DAYS_FAILED}
               note="แสดงเฉพาะวันที่มีการเช็กชื่อ"
             />
             <RankBars

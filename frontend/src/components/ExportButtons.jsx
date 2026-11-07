@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getGradeScope } from '../utils/authScope';
 import usePolicyAction from '../hooks/usePolicyAction';
 import api from '../api/axios';
+import { rateLimitMessage } from '../utils/rateLimitNotice';
 
 const FORMATS = [
   { key: 'csv',   label: 'CSV',   ext: 'csv',  style: 'bg-success-soft hover:bg-success-soft/80 text-success-ink border-success/20' },
@@ -70,6 +71,12 @@ export default function ExportButtons({
         const headers = { Authorization: `Bearer ${accessToken}` };
         if (policyToken) headers['X-Policy-Action-Token'] = policyToken;
         const res = await fetch(url, { headers });
+        if (res.status === 429) {
+          const body = await res.json().catch(() => null);
+          const err = new Error('Export rate limited');
+          err.userMessage = rateLimitMessage(body, res.headers);
+          throw err;
+        }
         if (!res.ok) throw new Error('Export failed');
         const blob = await res.blob();
         const a = document.createElement('a');
@@ -80,8 +87,8 @@ export default function ExportButtons({
         return { downloaded: true };
       });
       if (!result?.cancelled) toast.success(`ดาวน์โหลด ${fmt.label} สำเร็จ`);
-    } catch {
-      toast.error(`ดาวน์โหลด ${fmt.label} ล้มเหลว`);
+    } catch (err) {
+      toast.error(err?.userMessage || `ดาวน์โหลด ${fmt.label} ล้มเหลว`);
     } finally {
       setDownloading(null);
     }

@@ -90,6 +90,7 @@ jobs:
         run: node ../scripts/ui-redesign/nav-snapshot.mjs --compare ../scripts/ui-redesign/baselines/nav-baseline.json
       - run: npm run check:labels:strict
       - run: npm run check:hybrid-ui
+      - run: npm run test:readiness
       - run: npm run build
 
   ui-runtime:

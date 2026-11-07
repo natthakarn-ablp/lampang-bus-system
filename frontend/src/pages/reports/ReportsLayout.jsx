@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import Layout from '../../components/Layout';
+import MobileBottomNav from '../../components/MobileBottomNav';
+import { ROLE_TABS } from '../../components/mobileTabs';
 import TeacherScopeChip from '../../components/TeacherScopeChip';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -14,8 +16,11 @@ const TABS = [
 export default function ReportsLayout() {
   const { user } = useAuth();
   const tabs = TABS.filter((t) => !t.roles || t.roles.includes(user?.role));
+  // School and affiliation reach รายงาน from their bottom bar; keep it here so
+  // they can tap back to เช็กชื่อ / หน้าแรก. Province/admin have no bar.
+  const bottomTabs = ROLE_TABS[user?.role];
   return (
-    <Layout>
+    <Layout bottomNav={bottomTabs ? <MobileBottomNav tabs={bottomTabs} /> : null}>
       {/* Report sub-navigation tabs */}
       <div className="border-b border-surface-border bg-surface-raised px-4 sm:px-6 pt-3">
         <nav className="flex gap-1 overflow-x-auto" aria-label="หมวดรายงาน">

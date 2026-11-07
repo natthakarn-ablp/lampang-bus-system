@@ -83,7 +83,7 @@ const refreshLimiter = rateLimit({
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function generateAccessToken(user) {
+function generateAccessToken(user, iat) {
   return jwt.sign(
     {
       sub: user.id,
@@ -98,16 +98,19 @@ function generateAccessToken(user) {
       // Phase 10.12D — carried so the auth middleware can enforce the forced
       // password change at the backend (H2).
       mustChangePassword: !!user.must_change_password,
+      // An explicit iat is only passed by /change-password, so the new pair is
+      // never older than the password_changed_at it was minted against.
+      ...(iat ? { iat } : {}),
     },
     env.jwt.secret,
     { expiresIn: env.jwt.expiresIn, algorithm: JWT_ALG }
   );
 }
 
-function generateRefreshToken(userId) {
+function generateRefreshToken(userId, iat) {
   const jti = uuidv4();
   const token = jwt.sign(
-    { sub: userId, jti, type: 'refresh' },
+    { sub: userId, jti, type: 'refresh', ...(iat ? { iat } : {}) },
     env.jwt.secret,
     { expiresIn: env.jwt.refreshExpiresIn, algorithm: JWT_ALG }
   );
@@ -321,7 +324,50 @@ router.post('/change-password', authenticate, async (req, res, next) => {
       userAgent: req.headers['user-agent'],
     });
 
-    return sendSuccess(res, null, 'Password changed successfully');
+    // load-03 (training 2026-11): the update above invalidates every token
+    // minted before password_changed_at, including this session's. Hand back a
+    // fresh pair so the user continues straight to their home page instead of
+    // spending a second /auth/login. iat is pinned to the stored cutoff (read
+    // back from the DB, so DB/app clock skew and TIMESTAMP rounding cannot make
+    // the new tokens look older than it), and never earlier than now.
+    const [fresh] = await pool.query(
+      `SELECT id, username, role, scope_type, scope_id, grade_scope, display_name,
+              must_change_password, driver_id, password_changed_at
+         FROM users WHERE id = ? AND is_deleted = FALSE LIMIT 1`,
+      [req.user.id]
+    );
+    const u = fresh[0];
+    if (!u) {
+      return sendSuccess(res, null, 'Password changed successfully');
+    }
+    const changedAtUnix = u.password_changed_at
+      ? Math.floor(new Date(u.password_changed_at).getTime() / 1000)
+      : 0;
+    const iat = Math.max(Math.floor(Date.now() / 1000), changedAtUnix);
+    const accessToken = generateAccessToken(u, iat);
+    const { token: refreshToken } = generateRefreshToken(u.id, iat);
+
+    return sendSuccess(
+      res,
+      {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        token_type: 'Bearer',
+        expires_in: env.jwt.expiresIn,
+        user: {
+          id: u.id,
+          username: u.username,
+          role: u.role,
+          scope_type: u.scope_type,
+          scope_id: u.scope_id,
+          grade_scope: u.grade_scope || null,
+          display_name: u.display_name,
+          must_change_password: !!u.must_change_password,
+          driver_id: u.driver_id || null,
+        },
+      },
+      'Password changed successfully'
+    );
   } catch (err) {
     return next(err);
   }

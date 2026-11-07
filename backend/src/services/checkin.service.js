@@ -1466,7 +1466,11 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
                          ELSE MAX(sl.session) END
                FROM student_leaves sl
               WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE AND sl.attendance_kind = 'LEAVE'
-            ) AS leave_session
+            ) AS leave_session,
+            (SELECT MAX(sl.id) FROM student_leaves sl
+              WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE
+                AND sl.attendance_kind = 'LEAVE' AND sl.session = '${session}'
+            ) AS leave_id
        FROM students s
        LEFT JOIN vehicles v ON v.id = s.vehicle_id
        LEFT JOIN checkin_logs cl
@@ -1511,8 +1515,15 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
       checked_by_role: status ? r.checked_by_role || null : null,
       checked_by_name: status ? r.checked_by_name || null : null,
       // Only the teacher's own, still-current tap can be undone from this page.
-      can_undo: r.self_travel ? r.self_reported_by === userId : !!status && status === target && r.checked_by === userId,
+      // A leave for this round only (not a whole-day one) can also be cancelled
+      // here — grade-teacher-03; DELETE /school/leaves/:id enforces the scope.
+      can_undo: r.self_travel
+        ? r.self_reported_by === userId
+        : onLeave
+          ? !!r.leave_id
+          : !!status && status === target && r.checked_by === userId,
       log_id: status ? r.log_id : null,
+      leave_id: onLeave && r.leave_id ? r.leave_id : null,
     });
   }
   return { session, target_status: target, vehicles: [...byVehicle.values()] };

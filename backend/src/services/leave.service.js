@@ -138,9 +138,9 @@ async function cancelLeave(leaveId, userId, vehicleId) {
  * @param {number} userId    - users.id of the canceller
  * @param {string} schoolId  - the canceller's school scope
  */
-async function cancelLeaveBySchool(leaveId, userId, schoolId) {
+async function cancelLeaveBySchool(leaveId, userId, schoolId, { gradeScope = null } = {}) {
   const [[row]] = await pool.query(
-    `SELECT sl.id FROM student_leaves sl
+    `SELECT sl.id, sl.leave_date, sl.session, s.grade FROM student_leaves sl
        JOIN students s ON s.id = sl.student_id
       WHERE sl.id = ? AND s.school_id = ? AND sl.cancelled = FALSE AND sl.attendance_kind = 'LEAVE'`,
     [leaveId, schoolId]
@@ -150,11 +150,26 @@ async function cancelLeaveBySchool(leaveId, userId, schoolId) {
     err.statusCode = 404;
     throw err;
   }
+  // grade-teacher-03: a grade teacher may undo a leave recorded by mistake, but
+  // only within what they can record — their own grade, today, one round.
+  // Outside the grade reads as not found (no existence leak).
+  if (gradeScope) {
+    if (normalizeGrade(row.grade) !== gradeScope && !gradeEquivalents(gradeScope).includes(row.grade)) {
+      const err = new Error('ไม่พบรายการลาหรือยกเลิกไปแล้ว');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (toBangkokDate(row.leave_date) !== todayBangkok() || !['morning', 'evening'].includes(row.session)) {
+      const err = new Error('ครูประจำสายชั้นยกเลิกการลาได้เฉพาะรอบวันนี้ — รายการอื่นให้บัญชีโรงเรียนยกเลิก');
+      err.statusCode = 403;
+      throw err;
+    }
+  }
   await pool.query(
-    `UPDATE student_leaves SET cancelled = TRUE, cancelled_by = ?, cancelled_at = NOW() WHERE id = ?`,
+    `UPDATE student_leaves SET cancelled = TRUE, cancelled_by = ?, cancelled_at = NOW() WHERE id = ? AND cancelled = FALSE`,
     [userId, leaveId]
   );
-  await logAudit({ userId, action: 'UPDATE', entityType: 'leave', entityId: leaveId, newValue: { cancelled: true, by: 'school' } });
+  await logAudit({ userId, action: 'UPDATE', entityType: 'leave', entityId: leaveId, newValue: { cancelled: true, by: gradeScope ? 'grade_teacher' : 'school' } });
   return { id: leaveId, cancelled: true };
 }
 

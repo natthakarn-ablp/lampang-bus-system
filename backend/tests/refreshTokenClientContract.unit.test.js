@@ -84,6 +84,8 @@ describe('frontend refresh interceptor', () => {
       }
     };
     walk(frontendSrc);
-    expect(`writers: ${writers.sort().join(', ')}`).toBe('writers: api/axios.js, hooks/useAuth.jsx');
+    // ChangePassword.jsx stores the fresh pair /auth/change-password returns
+    // (load-03), so a forced first-login change needs no second login.
+    expect(`writers: ${writers.sort().join(', ')}`).toBe('writers: api/axios.js, hooks/useAuth.jsx, pages/ChangePassword.jsx');
   });
 });

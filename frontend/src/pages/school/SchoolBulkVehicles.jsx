@@ -5,6 +5,7 @@ import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import LoadingState from '../../components/LoadingState';
+import DriverCredentialsNotice from '../../components/DriverCredentialsNotice';
 import { AlertBanner, FormField } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { AppCard } from '../../components/ui';
@@ -192,7 +193,16 @@ export default function SchoolBulkVehicles() {
           driver_phone: isTeacher ? '' : row.driver_phone.trim(),
           owner_name: isTeacher ? '' : (row.owner_name || '').trim(),
         });
-        const saved = { vehicle_id: res.data?.data?.vehicle_id || null, plate_no: res.data?.data?.plate_no || plate };
+        // SEED-F1: a new driver login comes back with a one-time random
+        // password; keep it on the saved row so the school can hand it over.
+        const creds = res.data?.data?.driver_credentials;
+        const saved = {
+          vehicle_id: res.data?.data?.vehicle_id || null,
+          plate_no: res.data?.data?.plate_no || plate,
+          driver_credentials: creds?.username && creds?.temporary_password
+            ? { username: creds.username, temporary_password: creds.temporary_password }
+            : null,
+        };
         setRows(prev => prev.map(r => r.key === idx ? { ...r, saved } : r));
         setRowErrors(p => { const next = { ...p }; delete next[idx]; return next; });
         ok++;
@@ -325,6 +335,12 @@ export default function SchoolBulkVehicles() {
                   <h3 className="font-semibold text-success-ink">บันทึกรถ {r.saved.plate_no} แล้ว</h3>
                   <p className="text-sm text-ink-muted mt-1">รถจะปรากฏในรายชื่อรถของโรงเรียน เมื่อมีนักเรียนของโรงเรียนเลือกใช้รถคันนี้</p>
                 </div>
+                {r.saved.driver_credentials && (
+                  <DriverCredentialsNotice
+                    username={r.saved.driver_credentials.username}
+                    temporaryPassword={r.saved.driver_credentials.temporary_password}
+                  />
+                )}
                 {r.saved.vehicle_id ? (
                   <Link to={`/school/students?add=one&vehicle_id=${encodeURIComponent(r.saved.vehicle_id)}`} aria-disabled={saving || undefined}
                     onClick={e => { if (savingRef.current) e.preventDefault(); }}

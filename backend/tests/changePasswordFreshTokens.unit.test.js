@@ -69,7 +69,7 @@ test('returns a fresh access + refresh pair that survives the password_changed_a
     .set('Authorization', `Bearer ${sign({ sub: 2, role: 'school', mustChangePassword: true })}`)
     .send({ current_password: 'Initial#2569', new_password: 'Lampang#Teacher2569', refresh_token: oldRefresh });
 
-  expect(res.body.message).toBe('Password changed successfully');
+  expect(res.body.message).toBe('เปลี่ยนรหัสผ่านสำเร็จ');
   expect(res.status).toBe(200);
   const { access_token, refresh_token, user } = res.body.data;
   expect(user).toMatchObject({ id: 2, role: 'school', grade_scope: 'ป.1', must_change_password: false });

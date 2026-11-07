@@ -182,7 +182,7 @@ describe('POST /api/auth/logout', () => {
       .post('/api/auth/refresh-token')
       .send({ refresh_token: rToken });
     expect(refreshRes.status).toBe(401);
-    expect(refreshRes.body.message).toMatch(/revoked/i);
+    expect(refreshRes.body.message).toMatch(/ถูกยกเลิก/);
   });
 });
 

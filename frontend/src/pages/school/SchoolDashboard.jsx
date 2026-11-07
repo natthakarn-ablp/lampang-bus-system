@@ -251,7 +251,7 @@ export default function SchoolDashboard() {
       : null;
   })();
 
-  const btnSecondary = 'flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]';
+  const btnSecondary = 'flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 whitespace-nowrap bg-surface-raised hover:bg-surface active:bg-surface-border text-ink text-sm font-medium px-3.5 py-2 rounded-lg transition border border-surface-border min-h-[44px]';
 
   return (
     <PageTransition>
@@ -295,7 +295,8 @@ export default function SchoolDashboard() {
           )}
           <Link to="/reports/daily" className={btnSecondary}>
             <FileText className="w-4 h-4" strokeWidth={2} />
-            รายงานวันนี้
+            {/* "รายงานวันนี้" broke mid-word at 390px (live QA vis-14). */}
+            <span className="sm:hidden">รายงาน</span><span className="hidden sm:inline">รายงานวันนี้</span>
           </Link>
         </div>
         {!isTeacher && (

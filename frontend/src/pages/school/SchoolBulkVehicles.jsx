@@ -372,7 +372,7 @@ export default function SchoolBulkVehicles() {
                     value={r.plate_prefix}
                     maxLength={4}
                     onChange={(v) => updateRow(i, 'plate_prefix', v)}
-                    placeholder="เช่น นข หรือ 36"
+                    placeholder="เช่น นข"
                   />
                   <FormField
                     label="เลขทะเบียน"

@@ -24,6 +24,9 @@ import EmptyState from '../EmptyState';
  *   badge,                mobile: pinned top-right of the card
  *   hideOnMobile,         omit from the card entirely (keeps cards readable)
  *   numeric,              right-align + tabular-nums
+ *   nowrap,               desktop: keep the cell on one line (codes, plates)
+ *   wrap,                 mobile: full-width, wrapped instead of truncated
+ *                         (long explanations that must be readable)
  * }]
  *
  * `actions(row)` renders in the last table column and along the card footer.
@@ -170,7 +173,7 @@ export default function DataTable({
                   </th>
                 )}
                 {columns.map(c => (
-                  <th key={c.key} scope="col" className={`px-4 py-3 ${cellAlign(c)}`}>{c.header}</th>
+                  <th key={c.key} scope="col" className={`px-4 py-3 ${cellAlign(c)} ${c.nowrap ? 'whitespace-nowrap' : ''}`}>{c.header}</th>
                 ))}
                 {actions && <th scope="col" className="px-4 py-3 text-center">{actionsHeader}</th>}
               </tr>
@@ -190,7 +193,7 @@ export default function DataTable({
                     </td>
                   )}
                   {columns.map(c => (
-                    <td key={c.key} className={`px-4 py-3 text-ink ${cellAlign(c)}`}>{c.cell(row)}</td>
+                    <td key={c.key} className={`px-4 py-3 text-ink ${cellAlign(c)} ${c.nowrap ? 'whitespace-nowrap' : ''}`}>{c.cell(row)}</td>
                   ))}
                   {actions && (
                     <td className="px-4 py-3">
@@ -232,9 +235,9 @@ export default function DataTable({
               {detail.length > 0 && (
                 <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5">
                   {detail.map(c => (
-                    <div key={c.key} className="min-w-0">
+                    <div key={c.key} className={`min-w-0 ${c.wrap ? 'col-span-2' : ''}`}>
                       <dt className="text-caption text-ink-muted">{c.header}</dt>
-                      <dd className={`text-sm text-ink truncate ${c.numeric ? 'tabular-nums' : ''}`}>{c.cell(row)}</dd>
+                      <dd className={`text-sm text-ink ${c.wrap ? 'break-words' : 'truncate'} ${c.numeric ? 'tabular-nums' : ''}`}>{c.cell(row)}</dd>
                     </div>
                   ))}
                 </dl>

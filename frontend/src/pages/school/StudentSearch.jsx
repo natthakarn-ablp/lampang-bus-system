@@ -445,7 +445,10 @@ export default function StudentSearch() {
       {/* ── Transfer request (Phase 10.13B-6) ──
           The import existed and the "ขอโอนย้ายนักเรียน" button set
           transferStudent, but nothing ever rendered the modal — the button
-          was inert. Caught by the runtime smoke on this page. */}
+          was inert. Caught by the runtime smoke on this page.
+          The button lives inside the edit modal, which is closed first so the
+          transfer form is the only dialog on screen (it used to open behind
+          the edit modal and the click looked dead). */}
       {transferStudent && (
         <StudentTransferModal
           student={transferStudent}
@@ -624,7 +627,7 @@ export default function StudentSearch() {
               )}
               {editMode === 'profile' && <details className="border border-surface-border rounded-lg p-3">
               <summary className="focus-ring min-h-[44px] flex items-center cursor-pointer text-sm">{isTeacher ? 'นำรายชื่อออก' : 'ย้ายโรงเรียน / นำรายชื่อออก'}</summary>
-              {!isTeacher && <button onClick={() => setTransferStudent(editStudent)} disabled={saving}
+              {!isTeacher && <button onClick={() => { const s = editStudent; closeEdit(); setTransferStudent(s); }} disabled={saving}
                 className="focus-ring w-full bg-warn-soft hover:bg-warn-soft/70 text-warn-ink border border-warn/30 min-h-[44px] rounded-lg transition disabled:opacity-40 disabled:pointer-events-none">
                 ขอโอนย้ายนักเรียน
               </button>}

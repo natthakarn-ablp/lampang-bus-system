@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 /**
@@ -12,14 +13,19 @@ import { X } from 'lucide-react';
  * For destructive confirmations use ConfirmDialog instead — it additionally
  * puts initial focus on Cancel so a stray Enter cannot confirm.
  *
- * `size`: 'sm' | 'md' | 'lg'
+ * `size`: 'sm' | 'md' | 'lg' | 'xl' (wide tables, e.g. the import preview)
  *
  * `dismissible={false}` removes every exit that is not an explicit choice in
  * the body: no close button, no Escape, no backdrop click. For a gate the user
  * must answer — the driver's pre-trip safety check — the dialog semantics,
  * focus trap and scroll lock are wanted, and a way to skip it is not.
  */
-const SIZES = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl' };
+// Rendered into document.body through a portal. Inside the page the overlay
+// sat under <main> (a scroll container) and page wrappers that animate a
+// transform; live QA (vis-13) saw the backdrop start ~20px down with a white
+// strip above it and the dialog header clipped. At body level `fixed inset-0`
+// is always the viewport, and later dialogs (opened on top) are appended last.
+const SIZES = { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-2xl', xl: 'max-w-5xl' };
 
 export default function Modal({
   open = true,
@@ -53,7 +59,7 @@ export default function Modal({
         'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       ) ?? []
     );
-    (focusables()[0] || panelRef.current)?.focus?.();
+    (focusables()[0] || panelRef.current)?.focus?.({ preventScroll: true });
 
     function onKeyDown(e) {
       if (e.key === 'Escape') {
@@ -81,7 +87,7 @@ export default function Modal({
 
   if (!open) return null;
 
-  return (
+  return createPortal((
     <div className="fixed inset-0 z-modal flex items-start justify-center overflow-y-auto p-4 sm:items-center">
       <div
         className="absolute inset-0 bg-navy-950/60 motion-safe:animate-fade-in"
@@ -119,5 +125,5 @@ export default function Modal({
         )}
       </div>
     </div>
-  );
+  ), document.body);
 }

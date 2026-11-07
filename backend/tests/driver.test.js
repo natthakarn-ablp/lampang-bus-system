@@ -214,6 +214,12 @@ describe('POST /api/driver/checkin', () => {
 
 describe('POST /api/driver/checkout', () => {
   it('checks out a student successfully', async () => {
+    // DP-02 — a drop-off needs a prior board in the same session.
+    await request(app)
+      .post('/api/driver/checkin')
+      .set('Authorization', `Bearer ${driverToken}`)
+      .send({ student_id: TEST_STUDENT_ID, session: 'morning' });
+
     const res = await request(app)
       .post('/api/driver/checkout')
       .set('Authorization', `Bearer ${driverToken}`)

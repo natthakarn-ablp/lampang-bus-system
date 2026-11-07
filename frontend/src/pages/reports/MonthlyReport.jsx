@@ -17,6 +17,8 @@ import { ReportHero, ReportSection, ExportPanel, reportScopeName } from '../../c
 const pctTone = v => (v == null || !isFinite(v) ? 'calm' : v >= 95 ? 'success' : v >= 85 ? 'calm' : 'warn');
 const pctText = v => (v == null || !isFinite(v) ? '—' : `${Number(v).toFixed(1)}%`);
 // Days already past are never red: a gap is something to look at, not an alarm.
+// Plain-sentence figures: amber when under the 85% line, never red.
+const sumCls = v => (v == null || !isFinite(v) || v >= 85 ? 'text-ink' : 'text-warn-ink');
 const barCls = v => (v >= 95 ? 'bg-success' : 'bg-warn');
 
 /** One round of one day: label, bar, percentage and count. */
@@ -147,8 +149,8 @@ export default function MonthlyReport() {
           <section className="rounded-2xl border border-surface-border bg-surface-raised p-4 sm:p-5 mb-5" aria-label="สรุปประจำเดือน">
             <h2 className="text-lg font-bold text-ink">สรุปประจำเดือน</h2>
             <ul className="mt-2 text-base text-ink space-y-1.5 leading-relaxed">
-              <li>ส่งเช้าสำเร็จเฉลี่ย <strong className={kpiColor(data.morning_kpi)}>{safePct(data.morning_kpi)}</strong> ({data.total_morning_done}/{data.total_morning_expected} คน-วัน)</li>
-              <li>รับเย็นสำเร็จเฉลี่ย <strong className={kpiColor(data.evening_kpi)}>{safePct(data.evening_kpi)}</strong> ({data.total_evening_done}/{data.total_evening_expected} คน-วัน)</li>
+              <li>ส่งเช้าสำเร็จเฉลี่ย <strong className={sumCls(data.morning_kpi)}>{safePct(data.morning_kpi)}</strong> ({data.total_morning_done}/{data.total_morning_expected} คน-วัน)</li>
+              <li>รับเย็นสำเร็จเฉลี่ย <strong className={sumCls(data.evening_kpi)}>{safePct(data.evening_kpi)}</strong> ({data.total_evening_done}/{data.total_evening_expected} คน-วัน)</li>
               <li>ครบ 100% ส่งเช้า {data.days_morning_100} วัน และรับเย็น {data.days_evening_100} วัน จากทั้งหมด {data.days_with_data} วัน</li>
               {data.emergency_count > 0 && <li className="text-danger-ink font-semibold">พบเหตุฉุกเฉิน {data.emergency_count} ครั้ง</li>}
               {bestSchool && data.schools.length > 1 && (

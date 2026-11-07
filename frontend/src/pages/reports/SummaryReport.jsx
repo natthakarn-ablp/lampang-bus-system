@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { FileBarChart, Sunrise, Sunset, GraduationCap, Siren, School } from 'lucide-react';
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
-import { StatTile, StatGrid, TravelLeaveSummary } from '../../components/dashboard';
+import { StatTile, StatGrid, TravelLeaveSummary, roundStatus } from '../../components/dashboard';
 import { ReportHero, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
 import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
@@ -69,6 +69,12 @@ export default function SummaryReport() {
     setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   }
 
+  // The summary is "today": a round that has not opened (or a day off) is a 0%
+  // that means nothing yet, so it stays calm instead of amber/red.
+  const phaseOf = session => roundStatus({ session, done: data?.[`${session}_done`], expected: data?.[`${session}_total`], date: data?.date }).phase;
+  const early = session => ['before', 'open', 'future', 'off_day'].includes(phaseOf(session));
+  const kpiTone = session => (early(session) ? 'calm' : pctTone(data?.[`${session}_kpi`]));
+  const kpiCls = session => (early(session) ? 'text-ink' : kpiColor(data?.[`${session}_kpi`]));
   const schools100 = data?.schools?.filter(s => (s.morning_kpi ?? 0) >= 100 && (s.evening_kpi ?? 0) >= 100).length ?? 0;
   const totalSchools = data?.schools?.length ?? 0;
   const bestSchool = data?.schools?.length ? sortByKpi(data.schools)[0] : null;
@@ -93,16 +99,16 @@ export default function SummaryReport() {
         <>
           {/* ── Key numbers ── */}
           <StatGrid cols={3} label="ตัวเลขสำคัญ" className="mb-5">
-            <StatTile icon={Sunrise} label="ส่งเช้าสำเร็จ" value={pctText(data.morning_kpi)} tone={pctTone(data.morning_kpi)}
-              sub={`${data.morning_done}/${data.morning_total} คน`} />
-            <StatTile icon={Sunset} label="รับเย็นสำเร็จ" value={pctText(data.evening_kpi)} tone={pctTone(data.evening_kpi)}
-              sub={`${data.evening_done}/${data.evening_total} คน`} />
-            <StatTile icon={GraduationCap} label="นักเรียนที่ใช้รถ" value={data.total_students} unit="คน"
+            <StatTile icon={Sunrise} label="ส่งเช้าสำเร็จ" value={pctText(data.morning_kpi)} tone={kpiTone('morning')}
+              sub={`${data.morning_done}/${data.morning_total} คน${early('morning') ? ' · ยังไม่ถึงเวลา' : ''}`} />
+            <StatTile icon={Sunset} label="รับเย็นสำเร็จ" value={pctText(data.evening_kpi)} tone={kpiTone('evening')}
+              sub={`${data.evening_done}/${data.evening_total} คน${early('evening') ? ' · ยังไม่ถึงเวลา' : ''}`} />
+            <StatTile icon={GraduationCap} label="นักเรียนทั้งหมด" value={data.total_students} unit="คน"
               sub={`เช้า ${data.morning_total} · เย็น ${data.evening_total} · ${data.total_vehicles} คัน`} />
             <StatTile icon={Siren} label="เหตุฉุกเฉิน" value={data.emergency_count} unit="ครั้ง"
               tone={data.emergency_count > 0 ? 'danger' : 'calm'} sub={data.emergency_count > 0 ? 'ควรติดตามผล' : 'ไม่มี'} />
             {totalSchools > 0 && (
-              <StatTile icon={School} label="โรงเรียนที่ครบ 100%" value={`${schools100} / ${totalSchools}`} unit="แห่ง"
+              <StatTile icon={School} label="โรงเรียนครบ 100%" value={`${schools100} / ${totalSchools}`} unit="แห่ง"
                 tone={schools100 === totalSchools ? 'success' : 'calm'} />
             )}
           </StatGrid>
@@ -114,8 +120,8 @@ export default function SummaryReport() {
           <div className="rounded-2xl border border-surface-border bg-surface-raised p-4 sm:p-5 mb-6">
             <h2 className="text-lg font-bold text-ink mb-2">สรุปผู้บริหาร</h2>
             <ul className="text-base text-ink space-y-1.5 leading-relaxed">
-              <li>• วันนี้ KPI ส่งเช้าภาพรวม <strong className={kpiColor(data.morning_kpi)}>{safePct(data.morning_kpi)}</strong> ({data.morning_done}/{data.morning_total} คน)</li>
-              <li>• KPI รับเย็นภาพรวม <strong className={kpiColor(data.evening_kpi)}>{safePct(data.evening_kpi)}</strong> ({data.evening_done}/{data.evening_total} คน)</li>
+              <li>• วันนี้ KPI ส่งเช้าภาพรวม <strong className={kpiCls('morning')}>{safePct(data.morning_kpi)}</strong> ({data.morning_done}/{data.morning_total} คน)</li>
+              <li>• KPI รับเย็นภาพรวม <strong className={kpiCls('evening')}>{safePct(data.evening_kpi)}</strong> ({data.evening_done}/{data.evening_total} คน)</li>
               <li>• มี {schools100} โรงเรียนที่ดำเนินงานครบ 100% จากทั้งหมด {totalSchools} แห่ง</li>
               {data.emergency_count > 0 && <li>• พบเหตุฉุกเฉิน {data.emergency_count} ครั้ง</li>}
               {bestSchool && <li>• โรงเรียนที่มีผลการดำเนินงานดีที่สุดคือ <strong>{bestSchool.school_name}</strong> (เช้า {safePct(bestSchool.morning_kpi)} · เย็น {safePct(bestSchool.evening_kpi)})</li>}

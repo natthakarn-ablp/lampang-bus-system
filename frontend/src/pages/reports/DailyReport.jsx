@@ -93,7 +93,7 @@ export default function DailyReport() {
           {/* ── 3. Totals ── */}
           <StatGrid cols={2} label="จำนวนรถและนักเรียน" className="mb-5">
             <StatTile icon={Bus} label="รถรับส่ง" value={data.total_vehicles} unit="คัน" />
-            <StatTile icon={GraduationCap} label="นักเรียนที่ใช้รถ" value={data.total_students} unit="คน" />
+            <StatTile icon={GraduationCap} label="นักเรียนทั้งหมด" value={data.total_students} unit="คน" />
           </StatGrid>
 
           {/* Self-travel / leave: in context under the round totals, hidden when all 0. */}

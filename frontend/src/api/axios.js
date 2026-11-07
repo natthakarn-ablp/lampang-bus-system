@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { notifyRateLimited } from '../utils/rateLimitNotice';
 
 const api = axios.create({
   baseURL: '/api',
@@ -52,6 +53,11 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
+
+    // Login renders its own lockout message, so it is left out here.
+    if (error.response?.status === 429 && !String(original?.url || '').startsWith('/auth/login')) {
+      notifyRateLimited(error.response.data, error.response.headers);
+    }
 
     const mustChangePassword = error.response?.status === 403
       && error.response?.data?.errors?.some((entry) => entry?.code === 'MUST_CHANGE_PASSWORD');

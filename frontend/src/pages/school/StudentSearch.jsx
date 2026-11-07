@@ -374,11 +374,11 @@ export default function StudentSearch() {
         onClear={() => { setSearch(''); setGrade(''); setClassroom(''); setHasVehicle(''); setShowDeleted(false); }}
       />
 
-      {error && <ErrorState message={error} className="mb-4" onRetry={() => fetchStudents(meta.page)} />}
-
       <DataTable
         caption={showDeleted ? 'รายชื่อนักเรียนที่ลบในขอบเขตที่รับผิดชอบ' : 'รายชื่อนักเรียนของโรงเรียน'}
         loading={loading}
+        error={error || null}
+        onRetry={() => fetchStudents(meta.page)}
         rows={students}
         rowKey={s2 => s2.id}
         columns={showDeleted && isTeacher ? deletedColumns : [

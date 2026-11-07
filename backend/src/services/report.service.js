@@ -77,8 +77,21 @@ function buildScopeFilter(user, { date, month, school_id, affiliation_id, vehicl
  * Daily report for a specific date.
  */
 
+/**
+ * A school's own daily figures count only pupils who are on a bus (live QA
+ * gt1-02). เช็กชื่อวันนี้ lists a pupil with no vehicle as "ไม่มีรถ" and leaves
+ * them out of its own expected count, and the per-vehicle rows can only count
+ * pupils on a vehicle; a headline that still counted them showed "ค้าง" that
+ * no teacher could ever clear. Affiliation and province views are unchanged:
+ * their dashboards have their own headline queries that this would not reach.
+ */
+function ridersOnly(user, monthly) {
+  return !monthly && user && user.role === 'school' ? ' AND s.vehicle_id IS NOT NULL' : '';
+}
+
 async function reportLedger(user, filters, monthly = false) {
-  const scope = buildScopeFilter(user, filters);
+  const base = buildScopeFilter(user, filters);
+  const scope = { ...base, where: base.where + ridersOnly(user, monthly) };
   const start = monthly ? `${filters.month || todayBangkok().slice(0, 7)}-01` : filters.date || todayBangkok();
   const endDate = new Date(`${start}T00:00:00Z`);
   if (monthly) endDate.setUTCMonth(endDate.getUTCMonth() + 1);
@@ -89,6 +102,7 @@ async function reportLedger(user, filters, monthly = false) {
 async function getDailyReport(user, filters) {
   const date = filters.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
   const { where, params } = buildScopeFilter(user, filters);
+  const riders = ridersOnly(user, false);
 
   // Total students
   const [[{ total_students }]] = await pool.query(
@@ -99,11 +113,11 @@ async function getDailyReport(user, filters) {
   // Morning/evening totals
   const [[{ morning_total }]] = await pool.query(
     `SELECT COUNT(*) AS morning_total FROM students s
-     JOIN schools sc ON sc.id = s.school_id WHERE ${where} AND s.morning_enabled = TRUE`, params
+     JOIN schools sc ON sc.id = s.school_id WHERE ${where} AND s.morning_enabled = TRUE${riders}`, params
   );
   const [[{ evening_total }]] = await pool.query(
     `SELECT COUNT(*) AS evening_total FROM students s
-     JOIN schools sc ON sc.id = s.school_id WHERE ${where} AND s.evening_enabled = TRUE`, params
+     JOIN schools sc ON sc.id = s.school_id WHERE ${where} AND s.evening_enabled = TRUE${riders}`, params
   );
 
   // Checkin stats for the date
@@ -114,7 +128,7 @@ async function getDailyReport(user, filters) {
      FROM daily_status ds
      JOIN students s ON s.id = ds.student_id
      JOIN schools sc ON sc.id = s.school_id
-     WHERE ds.check_date = ? AND ${where}`,
+     WHERE ds.check_date = ? AND ${where}${riders}`,
     [date, ...params]
   );
 
@@ -163,10 +177,10 @@ async function getDailyReport(user, filters) {
   const [schoolBreakdown] = await pool.query(
     `SELECT sc.id AS school_id, sc.name AS school_name,
             COUNT(DISTINCT s.id) AS student_count,
-            COUNT(DISTINCT CASE WHEN s.morning_enabled = TRUE THEN s.id END) AS morning_expected,
-            COUNT(DISTINCT CASE WHEN s.evening_enabled = TRUE THEN s.id END) AS evening_expected,
-            COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE THEN ds.student_id END) AS morning_done,
-            COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
+            COUNT(DISTINCT CASE WHEN s.morning_enabled = TRUE${riders} THEN s.id END) AS morning_expected,
+            COUNT(DISTINCT CASE WHEN s.evening_enabled = TRUE${riders} THEN s.id END) AS evening_expected,
+            COUNT(DISTINCT CASE WHEN ds.morning_done = TRUE${riders} THEN ds.student_id END) AS morning_done,
+            COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE${riders} THEN ds.student_id END) AS evening_done
      FROM schools sc
      JOIN students s ON s.school_id = sc.id AND s.is_deleted = FALSE
      LEFT JOIN daily_status ds ON ds.student_id = s.id AND ds.check_date = ?
@@ -487,7 +501,13 @@ function exportRowsQuery(user, filters) {
   const date = filters.date || todayBangkok();
   const { where, params } = buildScopeFilter(user, filters);
 
+  // รหัสนักเรียน is the school's own visible code (students.student_code), not
+  // the internal surrogate id — a teacher matches the export against school
+  // records (live QA gt1-01 / swt-02 / sch-01). Rows from before migration 026
+  // carry no code; that migration set code = id for them, so the id is the same
+  // fallback the LINE binding uses (line.service.js).
   const sql = `SELECT s.id AS student_id,
+            COALESCE(NULLIF(s.student_code, ''), CAST(s.id AS CHAR)) AS student_code,
             CONCAT(IFNULL(s.prefix,''), s.first_name, ' ', s.last_name) AS student_name,
             s.grade, s.classroom,
             sc.name AS school_name,

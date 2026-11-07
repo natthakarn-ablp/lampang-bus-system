@@ -16,6 +16,7 @@ const { abbreviateGrade } = require('../utils/gradeDisplay');
 const { DECISION_LOG_ROLES, validateDecisionLog } = require('../utils/decisionLog');
 const { consumePolicyAction } = require('../utils/policyActionEvidence');
 const { todayBangkok } = require('../utils/thaiTime');
+const { normalizeGradeScope } = require('../utils/gradeScope');
 
 // Reports accessible to school, affiliation, province, admin
 router.use(authenticate, requireRole('school', 'affiliation', 'province', 'admin'));
@@ -116,6 +117,34 @@ router.get('/policy', async (req, res, next) => {
 // from the outside by tests/exportRateLimitCoverage.unit.test.js, which scans
 // every route file and every mount in app.js and fails if a route that builds an
 // export ends up with neither kind of cap.
+
+/**
+ * A grade-scoped teacher's export covers only their own grade. Both the file
+ * name and the PDF heading must say so; a file called report-2026-11-07.csv
+ * that holds only ป.1 reads as the whole school once it is forwarded (live QA
+ * gt1-06 / gt2-05). Only a canonical grade (utils/gradeScope.js) is used, so
+ * nothing from the token reaches a response header unvetted.
+ */
+function exportGrade(user) {
+  return (user && user.role === 'school' && normalizeGradeScope(user.gradeScope)) || null;
+}
+
+/**
+ * Content-Disposition for an export. The plain filename stays ASCII for old
+ * clients; filename* (RFC 6266 / 5987) carries the grade suffix, which is Thai.
+ */
+function exportDisposition(base, ext, user) {
+  const grade = exportGrade(user);
+  const ascii = `${base}.${ext}`;
+  if (!grade) return `attachment; filename="${ascii}"`;
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(`${base}-${grade}.${ext}`)}`;
+}
+
+/** The PDF sub-heading naming the grade, or null for a whole-scope report. */
+function gradeHeading(user) {
+  const grade = exportGrade(user);
+  return grade ? `เฉพาะนักเรียนชั้น ${grade}` : null;
+}
 
 const CSV_HEADERS = [
   'รหัสนักเรียน', 'ชื่อ-นามสกุล', 'ระดับชั้น', 'ห้อง',
@@ -248,7 +277,7 @@ function monthlyRowValues(row) {
 function csvLine(r) {
   // Phase 10.12G — every cell neutralised against CSV formula injection.
   return [
-    csvCell(r.student_id),
+    csvCell(r.student_code),
     csvCell(r.student_name),
     csvCell(abbreviateGrade(r.grade)),
     csvCell(r.classroom || ''),
@@ -285,14 +314,14 @@ router.get('/export/csv', async (req, res, next) => {
     if (!await consumeReportExportPolicy(req, res, 'daily', 'csv')) return;
     // Resolved before any header goes out, so a bad filter still answers JSON.
     const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
-    const filename = `report-${date}.csv`;
+    const disposition = exportDisposition(`report-${date}`, 'csv', req.user);
 
     if (!await auditExportBeforeSend(req, res, {
       entityType: 'report_csv', entityId: date,
       metadata: { format: 'csv', role: req.user.role, scope: req.user.scopeId },
     })) return;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', disposition);
 
     async function* body() {
       yield '\uFEFF' + CSV_HEADERS.join(',') + '\n';
@@ -314,14 +343,14 @@ router.get('/export/excel', async (req, res, next) => {
   try {
     if (!await consumeReportExportPolicy(req, res, 'daily', 'excel')) return;
     const { date } = reportSvc.exportRowsQuery(req.user, req.filters);
-    const filename = `report-${date}.xlsx`;
+    const disposition = exportDisposition(`report-${date}`, 'xlsx', req.user);
 
     if (!await auditExportBeforeSend(req, res, {
       entityType: 'report_excel', entityId: date,
       metadata: { format: 'excel', role: req.user.role, scope: req.user.scopeId },
     })) return;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', disposition);
 
     // WorkbookWriter writes each row to the response as it is committed, so the
     // whole workbook is never held in memory. useStyles keeps the header format
@@ -353,7 +382,7 @@ router.get('/export/excel', async (req, res, next) => {
     for await (const r of reportSvc.streamExportRows(req.user, req.filters)) {
       // Phase 10.12G — neutralise user-sourced text cells (defense-in-depth).
       sheet.addRow({
-        col0: r.student_id,
+        col0: neutralizeSpreadsheetCell(r.student_code),
         col1: neutralizeSpreadsheetCell(r.student_name),
         col2: neutralizeSpreadsheetCell(abbreviateGrade(r.grade)),
         col3: neutralizeSpreadsheetCell(r.classroom || ''),
@@ -385,7 +414,7 @@ router.get('/export/pdf', async (req, res, next) => {
     const thaiDate = new Date(report.date).toLocaleDateString('th-TH', {
       year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Bangkok',
     });
-    const filename = `report-${report.date}.pdf`;
+    const disposition = exportDisposition(`report-${report.date}`, 'pdf', req.user);
 
     const PDFDocument = require('pdfkit');
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -395,7 +424,7 @@ router.get('/export/pdf', async (req, res, next) => {
       metadata: { format: 'pdf', role: req.user.role, scope: req.user.scopeId },
     })) return;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', disposition);
     doc.pipe(res);
 
     // Load Thai font
@@ -422,6 +451,7 @@ router.get('/export/pdf', async (req, res, next) => {
     doc.font(fontBold).fontSize(16).text('รายงานสถานะรับ-ส่งนักเรียน', { align: 'center' });
     doc.font(fontName).fontSize(11).text(`ระบบรถรับส่งนักเรียนจังหวัดลำปาง`, { align: 'center' });
     doc.fontSize(11).text(`วันที่ ${thaiDate}`, { align: 'center' });
+    if (gradeHeading(req.user)) doc.font(fontBold).fontSize(12).text(gradeHeading(req.user), { align: 'center' });
     doc.moveDown(1.2);
 
     // ── Summary box ──
@@ -549,7 +579,7 @@ router.get('/export/monthly/csv', async (req, res, next) => {
     if (!await consumeReportExportPolicy(req, res, 'monthly', 'csv')) return;
     const report = await reportSvc.getMonthlyReport(req.user, req.filters);
     const rows = buildMonthlyExportRows(report);
-    const filename = `monthly-report-${report.month}.csv`;
+    const disposition = exportDisposition(`monthly-report-${report.month}`, 'csv', req.user);
 
     const BOM = '\uFEFF';
     let csv = BOM + MONTHLY_HEADERS.map(csvCell).join(',') + '\n';
@@ -562,7 +592,7 @@ router.get('/export/monthly/csv', async (req, res, next) => {
       metadata: { format: 'csv', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
     })) return;
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', disposition);
     return res.send(csv);
   } catch (err) { next(err); }
 });
@@ -576,7 +606,7 @@ router.get('/export/monthly/excel', async (req, res, next) => {
     if (!await consumeReportExportPolicy(req, res, 'monthly', 'excel')) return;
     const report = await reportSvc.getMonthlyReport(req.user, req.filters);
     const rows = buildMonthlyExportRows(report);
-    const filename = `monthly-report-${report.month}.xlsx`;
+    const disposition = exportDisposition(`monthly-report-${report.month}`, 'xlsx', req.user);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'ระบบรถรับส่งนักเรียนจังหวัดลำปาง';
@@ -601,7 +631,7 @@ router.get('/export/monthly/excel', async (req, res, next) => {
       metadata: { format: 'excel', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
     })) return;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', disposition);
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) { next(err); }
@@ -619,7 +649,7 @@ router.get('/export/monthly/pdf', async (req, res, next) => {
     const monthLabel = new Date(`${report.month}-01`).toLocaleDateString('th-TH', {
       year: 'numeric', month: 'long', timeZone: 'Asia/Bangkok',
     });
-    const filename = `monthly-report-${report.month}.pdf`;
+    const disposition = exportDisposition(`monthly-report-${report.month}`, 'pdf', req.user);
 
     const PDFDocument = require('pdfkit');
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -629,7 +659,7 @@ router.get('/export/monthly/pdf', async (req, res, next) => {
       metadata: { format: 'pdf', report_type: 'monthly', role: req.user.role, scope: req.user.scopeId },
     })) return;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', disposition);
     doc.pipe(res);
 
     const env = require('../config/env');
@@ -651,6 +681,7 @@ router.get('/export/monthly/pdf', async (req, res, next) => {
     doc.font(fontBold).fontSize(16).text('รายงานรายเดือนรถรับส่งนักเรียน', { align: 'center' });
     doc.font(fontName).fontSize(11).text('ระบบรถรับส่งนักเรียนจังหวัดลำปาง', { align: 'center' });
     doc.fontSize(11).text(`เดือน ${monthLabel}`, { align: 'center' });
+    if (gradeHeading(req.user)) doc.font(fontBold).fontSize(12).text(gradeHeading(req.user), { align: 'center' });
     doc.moveDown(1.2);
 
     doc.font(fontBold).fontSize(13).text('สรุปภาพรวม');
@@ -769,3 +800,4 @@ router.post('/decision-log', async (req, res, next) => {
 
 
 module.exports = router;
+module.exports._test = { exportDisposition, gradeHeading, csvLine };

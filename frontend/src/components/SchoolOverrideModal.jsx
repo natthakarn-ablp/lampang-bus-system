@@ -252,8 +252,10 @@ export default function SchoolOverrideModal({ vehicles = [], onClose, onSaved })
                 className="w-full text-sm border border-surface-border rounded-lg px-3 py-2 min-h-[44px] bg-surface"
                 disabled={busy}
               >
-                <option value="CHECKED_IN">ยืนยันรับ/มาถึง</option>
-                <option value="CHECKED_OUT">ยืนยันส่ง/ออก</option>
+                {/* Labels name the event for the chosen round (live QA swt-05);
+                    one "รับ/มาถึง" label for both rounds read as arrival either way. */}
+                <option value="CHECKED_IN">{session === 'morning' ? 'รับขึ้นรถแล้ว (นับว่ามาแล้ว)' : 'ขึ้นรถกลับบ้านแล้ว'}</option>
+                <option value="CHECKED_OUT">{session === 'morning' ? 'ส่งถึงโรงเรียนแล้ว' : 'ส่งถึงบ้านแล้ว'}</option>
               </select>
             </label>
           </div>

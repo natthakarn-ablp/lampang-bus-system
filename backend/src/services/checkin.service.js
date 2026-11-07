@@ -17,6 +17,7 @@
  *  getStatusToday(pool, vehicleId)
  */
 
+const { sessionTimeError } = require('../utils/sessionTimeWindow');
 const env = require('../config/env');
 const { getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
@@ -1434,6 +1435,24 @@ function teacherStatusFor(session) {
 }
 
 /**
+ * Who may take back today's latest check from the teacher page.
+ *  - the teacher's own tap (the teacher's status for that round), as before;
+ *  - the user's own "ยืนยันแทนคนขับ" override, whichever status it recorded;
+ *  - for a full-school account (no grade scope), any check a school account
+ *    recorded today, so a wrong same-day override can be reversed from the UI
+ *    (live QA swt-04). The void endpoint already allows exactly this for
+ *    full-school accounts; only the page had no way to reach it.
+ * A driver's check is never offered here.
+ */
+function canUndoSchoolCheck({ status, target, checkedBy, checkedByRole, userId, gradeFilter }) {
+  if (!status || !['CHECKED_IN', 'CHECKED_OUT'].includes(status)) return false;
+  const own = checkedBy != null && Number(checkedBy) === Number(userId);
+  if (own && status === target) return true;
+  if (checkedByRole !== 'school') return false;
+  return own || !gradeFilter;
+}
+
+/**
  * Today's roster for the teacher check page: the school's riders (only the
  * teacher's own grade when gradeFilter is set), grouped by vehicle, each with
  * the latest check for `session` today and who recorded it.
@@ -1501,7 +1520,14 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
     const status = r.log_status && r.log_status !== 'CANCELLED' ? r.log_status : null;
     // "done" for the teacher = the thing the teacher attests to has been
     // recorded, or the session is already finished (evening drop-off at home).
-    const done = !!status && (status === target || (session === 'evening' && status === 'CHECKED_OUT'));
+    // A school account's morning CHECKED_IN is the "ยืนยันแทนคนขับ" override:
+    // the school has confirmed the pupil came, and the dashboard already counts
+    // it as done (daily_status.morning_done). A teacher tap in the morning is
+    // CHECKED_OUT, so this only ever matches an override (live QA swt-05). A
+    // driver's own morning boarding still waits for the teacher.
+    const schoolWrite = !!status && r.checked_by_role === 'school';
+    const done = !!status && (status === target || (session === 'evening' && status === 'CHECKED_OUT')
+      || (session === 'morning' && status === 'CHECKED_IN' && schoolWrite));
     byVehicle.get(key).students.push({
       id: r.id,
       name: `${r.prefix || ''}${r.first_name} ${r.last_name}`.trim(),
@@ -1513,6 +1539,7 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
       self_recorded_at: r.self_recorded_at || null,
       self_time_edited: !!r.self_time_edited,
       no_vehicle: !r.vehicle_id,
+      own_check: !!status && r.checked_by != null && Number(r.checked_by) === Number(userId),
       status,
       done,
       checked_at: status ? r.checked_at : null,
@@ -1528,7 +1555,7 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
         ? r.self_reported_by === userId
         : onLeave
           ? !!r.leave_id && r.leave_reported_by != null && Number(r.leave_reported_by) === Number(userId)
-          : !!status && status === target && r.checked_by === userId,
+          : canUndoSchoolCheck({ status, target, checkedBy: r.checked_by, checkedByRole: r.checked_by_role, userId, gradeFilter }),
       log_id: status ? r.log_id : null,
       leave_id: onLeave && r.leave_id ? r.leave_id : null,
     });
@@ -1677,6 +1704,8 @@ async function correctTeacherCheckTime(pool, {
     if (!Number(log.is_today) || !['CHECKED_IN', 'CHECKED_OUT'].includes(log.status)) {
       throw makeError('แก้เวลาได้เฉพาะรายการเช็กชื่อของวันนี้', 409);
     }
+    const windowError = sessionTimeError(log.session, time);
+    if (windowError) throw makeError(windowError, 400);
     const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
     if (time > clock.now_hm) throw makeError('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
     if (time === log.old_time) {
@@ -1753,6 +1782,7 @@ async function undoTeacherCheck(pool, {
   }
   const [[log]] = await pool.query(
     `SELECT cl.id, cl.student_id, cl.session, cl.status, cl.checked_by,
+            (SELECT u.role FROM users u WHERE u.id = cl.checked_by) AS checked_by_role,
             cl.check_date = CURDATE() AS is_today,
             (SELECT MAX(c2.id) FROM checkin_logs c2
               WHERE c2.student_id = cl.student_id AND c2.session = cl.session
@@ -1763,16 +1793,22 @@ async function undoTeacherCheck(pool, {
     params
   );
   if (!log) throw makeError('ไม่พบรายการที่ต้องการยกเลิก', 404);
-  if (log.checked_by !== userId || log.status !== teacherStatusFor(log.session)) {
-    throw makeError('ยกเลิกได้เฉพาะรายการที่คุณบันทึกเอง', 403);
+  if (!canUndoSchoolCheck({
+    status: log.status, target: teacherStatusFor(log.session), checkedBy: log.checked_by,
+    checkedByRole: log.checked_by_role, userId, gradeFilter,
+  })) {
+    throw makeError(gradeFilter
+      ? 'ยกเลิกได้เฉพาะรายการที่คุณบันทึกเอง'
+      : 'ยกเลิกได้เฉพาะรายการที่บัญชีโรงเรียนบันทึก รายการของคนขับให้ติดต่อผู้ดูแลระบบ', 403);
   }
+  const ownTap = Number(log.checked_by) === Number(userId) && log.status === teacherStatusFor(log.session);
   if (!Number(log.is_today)) throw makeError('ยกเลิกได้เฉพาะรายการของวันนี้', 409);
   if (Number(log.latest_id) !== Number(log.id)) {
     throw makeError('มีการบันทึกรายการใหม่ต่อจากนี้แล้ว จึงยกเลิกไม่ได้', 409);
   }
   return voidCheckin(pool, {
     userId, userRole, userDisplayName, ipAddress, userAgent,
-    logId: id, reason: 'ครูยกเลิกรายการที่บันทึกผิด',
+    logId: id, reason: ownTap ? 'ครูยกเลิกรายการที่บันทึกผิด' : 'โรงเรียนยกเลิกรายการยืนยันแทนที่บันทึกผิด',
     scope: { kind: 'school', schoolId }, restorePriorDone: true,
   });
 }
@@ -1795,4 +1831,5 @@ module.exports = {
   processTeacherCheck,
   correctTeacherCheckTime,
   undoTeacherCheck,
+  canUndoSchoolCheck,
 };

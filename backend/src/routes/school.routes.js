@@ -53,7 +53,7 @@ function resolveSchoolId(req) {
 
 // Phase 7.11.5 — extracted into shared util so admin.routes.js can
 // use the same whitelist.
-const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
+const { VALID_GRADE_SCOPES, isValidGradeScope, gradeEquivalents, normalizeGrade, storedGrade } = require('../utils/gradeScope');
 const { todayBangkok, toBangkokDate } = require('../utils/thaiTime');
 
 /**
@@ -1022,7 +1022,9 @@ router.put('/students/:id', async (req, res, next) => {
       if (prefix !== undefined) { updates.push('prefix = ?'); params.push(prefix || null); }
       if (first_name !== undefined) { updates.push('first_name = ?'); params.push(first_name); }
       if (last_name !== undefined) { updates.push('last_name = ?'); params.push(last_name); }
-      if (grade !== undefined) { updates.push('grade = ?'); params.push(grade || null); }
+      // A typed 'ป1' / 'ป. 1' / 'ประถมศึกษาปีที่ 1' is stored as 'ป.1' (live QA
+      // gt1-05). A value normalizeGrade does not recognise is kept as typed.
+      if (grade !== undefined) { updates.push('grade = ?'); params.push(storedGrade(grade)); }
       if (classroom !== undefined) { updates.push('classroom = ?'); params.push(classroom || null); }
       if (morning_enabled !== undefined) { updates.push('morning_enabled = ?'); params.push(morning_enabled ? 1 : 0); }
       if (evening_enabled !== undefined) { updates.push('evening_enabled = ?'); params.push(evening_enabled ? 1 : 0); }

@@ -60,10 +60,16 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
        COUNT(DISTINCT CASE WHEN ds.evening_done = TRUE THEN ds.student_id END) AS evening_done
      FROM daily_status ds
      JOIN students s ON s.id = ds.student_id
-     WHERE ds.check_date = ? AND s.school_id = ? AND s.is_deleted = FALSE${gradeAnd}`,
+     WHERE ds.check_date = ? AND s.school_id = ? AND s.is_deleted = FALSE
+       AND s.vehicle_id IS NOT NULL${gradeAnd}`,
     ga(today, schoolId)
   );
 
+  // Expected riders are pupils on a vehicle, as on เช็กชื่อวันนี้ and in the
+  // per-vehicle rows: a pupil with no vehicle is listed there as "ไม่มีรถ" and
+  // shown under completeness.students_no_vehicle here, never as "ค้าง" that no
+  // teacher can clear (live QA gt1-02). The ledger below is filtered the same
+  // way by report.service.reportLedger.
   // Students with morning service (excluding leave)
   const [[{ morning_total, morning_leave }]] = await pool.query(
     `SELECT
@@ -71,13 +77,13 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
        (SELECT COUNT(*) FROM student_leaves sl
         WHERE sl.student_id IN (
           SELECT id FROM students
-          WHERE school_id = ? AND is_deleted = FALSE AND morning_enabled = TRUE${gradeAndNoAlias}
+          WHERE school_id = ? AND is_deleted = FALSE AND morning_enabled = TRUE AND vehicle_id IS NOT NULL${gradeAndNoAlias}
         )
           AND sl.leave_date = ? AND sl.cancelled = FALSE
           AND (sl.session = 'morning' OR sl.session = 'both')
        ) AS morning_leave
      FROM students
-     WHERE school_id = ? AND is_deleted = FALSE AND morning_enabled = TRUE${gradeAndNoAlias}`,
+     WHERE school_id = ? AND is_deleted = FALSE AND morning_enabled = TRUE AND vehicle_id IS NOT NULL${gradeAndNoAlias}`,
     gradeFilter
       ? [schoolId, eq, today, schoolId, eq]
       : [schoolId, today, schoolId]
@@ -90,13 +96,13 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
        (SELECT COUNT(*) FROM student_leaves sl
         WHERE sl.student_id IN (
           SELECT id FROM students
-          WHERE school_id = ? AND is_deleted = FALSE AND evening_enabled = TRUE${gradeAndNoAlias}
+          WHERE school_id = ? AND is_deleted = FALSE AND evening_enabled = TRUE AND vehicle_id IS NOT NULL${gradeAndNoAlias}
         )
           AND sl.leave_date = ? AND sl.cancelled = FALSE
           AND (sl.session = 'evening' OR sl.session = 'both')
        ) AS evening_leave
      FROM students
-     WHERE school_id = ? AND is_deleted = FALSE AND evening_enabled = TRUE${gradeAndNoAlias}`,
+     WHERE school_id = ? AND is_deleted = FALSE AND evening_enabled = TRUE AND vehicle_id IS NOT NULL${gradeAndNoAlias}`,
     gradeFilter
       ? [schoolId, eq, today, schoolId, eq]
       : [schoolId, today, schoolId]

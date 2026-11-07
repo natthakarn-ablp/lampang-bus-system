@@ -31,12 +31,14 @@ async function optionalAuth(req, res, next) {
       if (payload && payload.type !== 'refresh' && payload.sub) {
         const [rows] = await pool.query(
           `SELECT u.is_active, u.must_change_password, u.password_changed_at,
-                  rt.revoked_at AS sessions_reset_at
+                  rt.revoked_at AS sessions_reset_at,
+                  art.revoked_at AS access_revoked_at
              FROM users u
              LEFT JOIN revoked_tokens rt ON rt.jti = ?
+             LEFT JOIN revoked_tokens art ON art.jti = ?
             WHERE u.id = ? AND u.is_deleted = FALSE
             LIMIT 1`,
-          [sessionResetJti(payload.sub), payload.sub]
+          [sessionResetJti(payload.sub), payload.jti || null, payload.sub]
         );
         const dbUser = rows[0];
         const tokenPredatesPwChange = dbUser && dbUser.password_changed_at && payload.iat &&
@@ -44,7 +46,7 @@ async function optionalAuth(req, res, next) {
         // Mirror authenticate()'s quarantine: a must_change_password (freshly
         // provisioned / admin-reset) account is not allowed to operate yet, so it
         // must NOT gain a QR access level — stay anonymous (L1) until onboarded.
-        if (dbUser && dbUser.is_active && !dbUser.must_change_password && !tokenPredatesPwChange
+        if (dbUser && dbUser.is_active && !dbUser.must_change_password && !tokenPredatesPwChange && !dbUser.access_revoked_at
             && !issuedBeforeReset(payload.iat, dbUser.sessions_reset_at)) {
           req.user = {
             id: payload.sub,

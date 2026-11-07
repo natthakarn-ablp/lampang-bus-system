@@ -437,7 +437,10 @@ router.put('/school-accounts/:id', async (req, res, next) => {
     if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
     const accountId = readIdParam(req, res, 'id');
     if (accountId === null) return;
-    const { is_active } = req.body;
+    const { is_active } = req.body || {};
+    if (typeof is_active !== 'boolean') {
+      return sendError(res, 'is_active ต้องเป็น true หรือ false', [], 400);
+    }
 
     const result = await affAdminSvc.toggleSchoolAccount({
       affiliationId: affId, accountId,

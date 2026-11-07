@@ -30,6 +30,7 @@ beforeEach(() => {
     beginTransaction: jest.fn().mockResolvedValue(), commit: jest.fn().mockResolvedValue(), rollback: jest.fn().mockResolvedValue(), release: jest.fn(),
     query: jest.fn(async sql => {
       if (sql.includes('FROM students s')) return [mockCurrentStudent ? [mockCurrentStudent] : []];
+      if (sql.includes('student_transfer_requests')) return [[]];
       if (sql.includes('SELECT id FROM students')) return [mockHasRider ? [{ id: 12 }] : []];
       if (sql.includes('FROM vehicles')) return [mockCurrentVehicle ? [mockCurrentVehicle] : []];
       if (sql.includes('SELECT ps.parent_id')) return [[{ parent_id: 50, current_name: student.parent_name, current_phone: student.parent_phone }]];

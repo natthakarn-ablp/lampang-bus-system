@@ -5,8 +5,8 @@
  *
  * ISOLATED — mock pool, no DB/globalSetup. Verifies getDriverVehicle prefers the
  * relational link (users.driver_id → assignment → vehicle) for LINKED users and
- * falls back to legacy plate resolution for unlinked (YELLOW) users and when a
- * linked user has no active assignment.
+ * falls back to legacy plate resolution for unlinked (YELLOW) users only; a
+ * linked user with no active assignment is rejected (DP-01).
  */
 
 const { getDriverVehicle } = require('../src/services/checkin.service');
@@ -61,12 +61,12 @@ describe('getDriverVehicle — prefer users.driver_id (10.13A-20)', () => {
     expect(res.vehicle_id).toBe('V-x');
   });
 
-  test('4. linked user with NO active assignment falls back to legacy plate resolution', async () => {
+  test('4. linked user with NO active assignment is rejected (DP-01: no legacy plate fallback)', async () => {
     const pool = makePool({ relational: [], legacyVehicle: [{ vehicle_id: 'V-leg', plate_no: 'นข 4337 ลำปาง' }] });
-    const res = await getDriverVehicle(pool, { username: 'นข 4337 ลำปาง', driver_id: 500 });
-    expect(res.vehicle_id).toBe('V-leg');
+    await expect(getDriverVehicle(pool, { username: 'นข 4337 ลำปาง', driver_id: 500 }))
+      .rejects.toMatchObject({ statusCode: 403, errors: [{ code: 'NO_ACTIVE_ASSIGNMENT' }] });
     expect(ran(pool, /driver_vehicle_assignments dva/)).toBe(true);  // tried relational first
-    expect(ran(pool, /FROM\s+vehicles/)).toBe(true);                 // then fell back
+    expect(ran(pool, /FROM\s+vehicles/)).toBe(false);                // never fell back
   });
 
   test('5. linked user with MULTIPLE active assigned vehicles fails closed', async () => {
@@ -92,10 +92,10 @@ describe('getDriverVehicle — prefer users.driver_id (10.13A-20)', () => {
     expect(res.vehicle_id).toBe('V-z');
   });
 
-  test('8. deleted vehicle never returned (relational empty → legacy empty → not found)', async () => {
+  test('8. linked user whose vehicle is deleted (no active relational row) is rejected', async () => {
     const pool = makePool({ relational: [], legacyVehicle: [] });
     await expect(getDriverVehicle(pool, { username: 'นข 4337 ลำปาง', driver_id: 500 }))
-      .rejects.toThrow(/Vehicle not found/);
+      .rejects.toMatchObject({ statusCode: 403 });
   });
 
   test('9. legacy multiple plate match still fails safely', async () => {

@@ -144,7 +144,13 @@ async function resolveVehicleShiftIndependent(pool, { username = '', driverId = 
         400, 'MULTIPLE_ACTIVE_DRIVER_ASSIGNMENTS'
       );
     }
-    // zero active assigned vehicles → fall through to legacy plate resolution
+    // Linked driver with zero active assigned vehicles (assignment ended):
+    // never fall back to plate resolution — that would let a former driver
+    // keep access to a vehicle now served by someone else (DP-01).
+    throw makeError(
+      'บัญชีคนขับนี้ไม่มีรถที่ได้รับมอบหมายในขณะนี้ กรุณาติดต่อผู้ดูแลระบบ',
+      403, 'NO_ACTIVE_ASSIGNMENT'
+    );
   }
 
   // 2) Legacy plate / normalized-plate resolution.

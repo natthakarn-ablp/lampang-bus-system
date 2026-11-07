@@ -1012,6 +1012,7 @@ async function abortInspectionAttempt(pool, {
 async function createDriverApplication(pool, {
   vehicleId,
   driverUserId,
+  issuingSchoolId: requestedIssuingSchoolId,
 }) {
   if (!vehicleId || !driverUserId) {
     throw appError('vehicleId และ driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
@@ -1070,8 +1071,20 @@ async function createDriverApplication(pool, {
     );
     if (!schools.length) throw appError('รถคันนี้ยังไม่มีนักเรียนผูกอยู่', 400, 'NO_CURRENT_RIDERS');
 
-    // Use the first school as issuing school (primary school)
-    const issuingSchoolId = schools[0].school_id;
+    // Issuing school = the one the driver names (must have riders on this vehicle),
+    // otherwise the school with the most riders (primary school) — not the
+    // alphabetically first, which may not be the school managing the vehicle.
+    let issuingSchoolId;
+    if (requestedIssuingSchoolId) {
+      const chosen = schools.find((row) => String(row.school_id) === String(requestedIssuingSchoolId));
+      if (!chosen) {
+        throw appError('โรงเรียนที่เลือกไม่มีนักเรียนใช้รถคันนี้', 400, 'INVALID_ISSUING_SCHOOL');
+      }
+      issuingSchoolId = chosen.school_id;
+    } else {
+      const riders = (row) => Math.max(Number(row.morning_rider_count) || 0, Number(row.evening_rider_count) || 0);
+      issuingSchoolId = schools.reduce((best, row) => (riders(row) > riders(best) ? row : best), schools[0]).school_id;
+    }
 
     // Check for active application
     const activeKey = `${vehicleId}|${currentTerm}`;

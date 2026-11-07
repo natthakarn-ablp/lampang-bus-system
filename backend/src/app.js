@@ -9,6 +9,7 @@ const { routeLatencyMiddleware } = require('./services/routeLatency.service');
 
 const env = require('./config/env');
 const errorHandler = require('./middleware/errorHandler');
+const { createUserKeyedLimiter, GLOBAL_API_BUDGET, REPORT_EXPORT_BUDGET } = require('./middleware/rateLimiters');
 const { getBuildInfo, pingDatabaseWithTimeout, getEnvironment } = require('./utils/health');
 const authRoutes   = require('./routes/auth.routes');
 const driverRoutes = require('./routes/driver.routes');
@@ -142,14 +143,10 @@ app.use(routeLatencyMiddleware);
 // place; this is a catch-all floor for /api/{school,affiliation,province,
 // transport,admin}/* and related authenticated operator routes. Generous enough
 // for normal UI usage, tight enough to prevent pool exhaustion (pool=10).
-const globalApiLimiter = rateLimit({
-  windowMs: 60 * 1000,       // 1 minute
-  max: 120,                  // 120 requests/min per IP — ~2/sec, plenty for UI
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
-  message: { success: false, message: 'คำขอถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
-});
+// Training-room fix (2026-11): keyed per USER (verified access-token sub), not
+// per IP, so a school office / training room behind one NAT address doesn't
+// share a single 120/min budget. Unauthenticated requests still key by IP.
+const globalApiLimiter = createUserKeyedLimiter(GLOBAL_API_BUDGET); // 120/min per user
 
 // Mount BEFORE the protected routers below. Keep it scoped so login, LINE
 // webhook/LIFF parent endpoints, and report exports continue to use their own
@@ -184,14 +181,7 @@ app.use('/api/province',    provinceRoutes);
 // Audit 2026-06-18 (config-infra-dos): the report/export endpoints build full
 // datasets in memory and were unthrottled. Cap them so a single authenticated
 // user can't hammer expensive exports. Skipped under test.
-const exportLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
-  max: 40,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: () => process.env.NODE_ENV === 'test',
-  message: { success: false, message: 'ขอรายงานถี่เกินไป กรุณารอสักครู่', errors: [], data: null },
-});
+const exportLimiter = createUserKeyedLimiter(REPORT_EXPORT_BUDGET); // 40 / 5 min per user
 app.use('/api/reports',     exportLimiter, reportRoutes);
 
 // ─── Phase 7+ routes ────────────────────────────────────────────────────────
@@ -303,4 +293,6 @@ module.exports.isOriginAllowed = isOriginAllowed;
 module.exports.GLOBAL_API_LIMITED_PREFIXES = GLOBAL_API_LIMITED_PREFIXES;
 module.exports.apiNotFound = apiNotFound;
 module.exports.publicHealthLimiter = publicHealthLimiter;
+module.exports.globalApiLimiter = globalApiLimiter;
+module.exports.exportLimiter = exportLimiter;
 module.exports.publicHealthNoStore = publicHealthNoStore;

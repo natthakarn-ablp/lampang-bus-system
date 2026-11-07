@@ -288,11 +288,17 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
         // soft-deleted, and still belongs to this school before mutating it (the
         // request may pre-date a delete/transfer).
         const [[stu]] = await conn.query(
-          `SELECT id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE FOR UPDATE`,
+          `SELECT id, vehicle_id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE FOR UPDATE`,
           [req.student_id, req.school_id]
         );
         if (!stu) {
           const err = new Error('นักเรียนถูกลบหรือย้ายโรงเรียนแล้ว ไม่สามารถอนุมัติคำขอนี้ได้');
+          err.statusCode = 409;
+          throw err;
+        }
+        // DRV-ROSTER-05: student may have been moved to another vehicle while pending.
+        if (stu.vehicle_id && stu.vehicle_id !== req.vehicle_id) {
+          const err = new Error('นักเรียนถูกย้ายไปรถคันอื่นแล้ว ไม่สามารถอนุมัติคำขอนี้ได้');
           err.statusCode = 409;
           throw err;
         }
@@ -389,11 +395,17 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
       } else if (req.request_type === 'remove') {
         // Re-verify ownership before clearing the assignment (see add path above).
         const [[stu]] = await conn.query(
-          `SELECT id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE FOR UPDATE`,
+          `SELECT id, vehicle_id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE FOR UPDATE`,
           [req.student_id, req.school_id]
         );
         if (!stu) {
           const err = new Error('นักเรียนถูกลบหรือย้ายโรงเรียนแล้ว ไม่สามารถอนุมัติคำขอนี้ได้');
+          err.statusCode = 409;
+          throw err;
+        }
+        // DRV-ROSTER-05: do not unassign a student now on a different vehicle.
+        if (stu.vehicle_id !== req.vehicle_id) {
+          const err = new Error('นักเรียนไม่ได้อยู่ในรถคันนี้แล้ว ไม่สามารถอนุมัติคำขอนี้ได้');
           err.statusCode = 409;
           throw err;
         }

@@ -142,7 +142,7 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return sendError(res, 'username and password are required', [], 400);
+      return sendError(res, 'กรุณากรอกชื่อผู้ใช้และรหัสผ่าน', [], 400);
     }
 
     const lockKey = loginKey(username, req.ip);
@@ -257,7 +257,7 @@ router.get('/me', authenticate, async (req, res, next) => {
     );
 
     if (rows.length === 0) {
-      return sendError(res, 'User not found or account disabled', [], 401);
+      return sendError(res, 'ไม่พบบัญชีผู้ใช้ หรือบัญชีถูกระงับการใช้งาน', [], 401);
     }
 
     return sendSuccess(res, rows[0]);
@@ -273,7 +273,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
     const { current_password, new_password } = req.body;
 
     if (!current_password || !new_password) {
-      return sendError(res, 'current_password and new_password are required', [], 400);
+      return sendError(res, 'กรุณากรอกรหัสผ่านปัจจุบันและรหัสผ่านใหม่', [], 400);
     }
 
     const [rows] = await pool.query(
@@ -282,12 +282,12 @@ router.post('/change-password', authenticate, async (req, res, next) => {
     );
 
     if (rows.length === 0) {
-      return sendError(res, 'User not found', [], 404);
+      return sendError(res, 'ไม่พบบัญชีผู้ใช้', [], 404);
     }
 
     const match = await bcrypt.compare(String(current_password), rows[0].password_hash);
     if (!match) {
-      return sendError(res, 'Current password is incorrect', [], 400);
+      return sendError(res, 'รหัสผ่านปัจจุบันไม่ถูกต้อง', [], 400);
     }
 
     const pwCheck = validatePassword(new_password, { username: rows[0].username });
@@ -338,7 +338,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
     );
     const u = fresh[0];
     if (!u) {
-      return sendSuccess(res, null, 'Password changed successfully');
+      return sendSuccess(res, null, 'เปลี่ยนรหัสผ่านสำเร็จ');
     }
     const changedAtUnix = u.password_changed_at
       ? Math.floor(new Date(u.password_changed_at).getTime() / 1000)
@@ -366,7 +366,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
           driver_id: u.driver_id || null,
         },
       },
-      'Password changed successfully'
+      'เปลี่ยนรหัสผ่านสำเร็จ'
     );
   } catch (err) {
     return next(err);
@@ -380,13 +380,13 @@ router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
     const { refresh_token } = req.body;
 
     if (!refresh_token) {
-      return sendError(res, 'refresh_token is required', [], 400);
+      return sendError(res, 'ไม่พบข้อมูลเซสชัน กรุณาเข้าสู่ระบบใหม่', [], 400);
     }
 
     const payload = decodeRefreshToken(refresh_token);
 
     if (!payload || payload.type !== 'refresh') {
-      return sendError(res, 'Invalid or expired refresh token', [], 401);
+      return sendError(res, 'เซสชันหมดอายุหรือไม่ถูกต้อง กรุณาเข้าสู่ระบบใหม่', [], 401);
     }
 
     // Check the revocation list, and read this user's session-reset cutoff in
@@ -434,7 +434,7 @@ router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
           401
         );
       }
-      return sendError(res, 'Refresh token has been revoked', [{ code: 'REFRESH_TOKEN_REVOKED' }], 401);
+      return sendError(res, 'เซสชันนี้ถูกยกเลิกแล้ว กรุณาเข้าสู่ระบบใหม่', [{ code: 'REFRESH_TOKEN_REVOKED' }], 401);
     }
 
     // Check user still active
@@ -447,7 +447,7 @@ router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
       [payload.sub]
     );
     if (rows.length === 0) {
-      return sendError(res, 'User not found or account disabled', [], 401);
+      return sendError(res, 'ไม่พบบัญชีผู้ใช้ หรือบัญชีถูกระงับการใช้งาน', [], 401);
     }
 
     // Reject tokens issued before the last password change
@@ -455,7 +455,7 @@ router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
     if (user.password_changed_at && payload.iat) {
       const changedAtUnix = Math.floor(new Date(user.password_changed_at).getTime() / 1000);
       if (payload.iat < changedAtUnix) {
-        return sendError(res, 'Token invalidated by password change. Please login again.', [], 401);
+        return sendError(res, 'มีการเปลี่ยนรหัสผ่านแล้ว กรุณาเข้าสู่ระบบใหม่', [], 401);
       }
     }
 
@@ -479,7 +479,7 @@ router.post('/refresh-token', refreshLimiter, async (req, res, next) => {
         token_type: 'Bearer',
         expires_in: env.jwt.expiresIn,
       },
-      'Token refreshed'
+      'ต่ออายุเซสชันสำเร็จ'
     );
   } catch (err) {
     return next(err);
@@ -494,7 +494,7 @@ router.post('/logout', authenticate, async (req, res, next) => {
 
     if (!refresh_token) {
       // No refresh token provided — still a valid logout (access token not stored)
-      return sendSuccess(res, null, 'Logged out');
+      return sendSuccess(res, null, 'ออกจากระบบแล้ว');
     }
 
     const payload = decodeRefreshToken(refresh_token);
@@ -511,7 +511,7 @@ router.post('/logout', authenticate, async (req, res, next) => {
       );
     }
 
-    return sendSuccess(res, null, 'Logged out successfully');
+    return sendSuccess(res, null, 'ออกจากระบบสำเร็จ');
   } catch (err) {
     return next(err);
   }

@@ -1352,6 +1352,7 @@ router.post('/vehicles', async (req, res, next) => {
 
     const conn = await pool.getConnection();
     let driverAccountCreated = false;
+    let driverTemporaryPassword = null;
 
     try {
       await conn.beginTransaction();
@@ -1406,7 +1407,7 @@ router.post('/vehicles', async (req, res, next) => {
       //    already linked to a different driver profile.
       if (driver_name) {
         const { linkOrCreateDriverForVehicle } = require('../services/driverProfile.service');
-        const { userCreated } = await linkOrCreateDriverForVehicle(conn, {
+        const { userCreated, temporaryPassword } = await linkOrCreateDriverForVehicle(conn, {
           driverName: driver_name,
           driverPhone: driver_phone,
           normalizedPlate,
@@ -1414,6 +1415,7 @@ router.post('/vehicles', async (req, res, next) => {
           vehicleId: vId,
         });
         driverAccountCreated = userCreated;
+        driverTemporaryPassword = temporaryPassword || null;
       }
 
       await logAudit({
@@ -1428,8 +1430,8 @@ router.post('/vehicles', async (req, res, next) => {
       if (driverAccountCreated) {
         responseData.driver_credentials = {
           username: trimmedPlate,
-          temporary_password: trimmedPlate,
-          message: 'คนขับใช้ทะเบียนรถเป็นชื่อผู้ใช้และรหัสผ่านเริ่มต้น ต้องเปลี่ยนรหัสผ่านหลัง login ครั้งแรก',
+          temporary_password: driverTemporaryPassword,
+          message: 'ชื่อผู้ใช้คือทะเบียนรถ รหัสผ่านชั่วคราวแสดงเพียงครั้งเดียว กรุณาส่งให้คนขับ คนขับต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก',
         };
       }
 

@@ -36,7 +36,8 @@ describe('linkOrCreateDriverForVehicle — driver onboarding link (10.13A-18)', 
   test('1. new driver + new user: creates profile, user WITH driver_id, assignment', async () => {
     const conn = makeConn({ profileByPhone: [], profileByName: [], user: [], newDriverId: 900 });
     const res = await linkOrCreateDriverForVehicle(conn, BASE);
-    expect(res).toEqual({ driverId: 900, userCreated: true });
+    expect(res).toMatchObject({ driverId: 900, userCreated: true });
+    expect(typeof res.temporaryPassword).toBe('string');
     expect(ran(conn, /INSERT INTO drivers/)).toBe(true);
     const up = paramsOf(conn, /INSERT INTO users/);
     expect(up).toContain(900);              // users.driver_id set to the new profile id

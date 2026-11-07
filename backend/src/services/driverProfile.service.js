@@ -15,9 +15,44 @@
  * DIFFERENT profile, fails closed with 409 DRIVER_USER_PROFILE_CONFLICT.
  */
 
+const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 
 const BCRYPT_COST = 12;
+
+// swt-07 (live QA 2026-11): the initial password used to be the licence plate,
+// which is painted on the bus. Anyone who saw it could log in first and take
+// the account (and its roster) before the real driver did. The initial
+// password is now random, shown once to the school, and must be changed at
+// first login. Look-alike characters (0/o, 1/l/i) are left out because the
+// school reads it out or writes it down for the driver.
+const TEMP_PASSWORD_LETTERS = 'abcdefghjkmnpqrstuvwxyz';
+const TEMP_PASSWORD_DIGITS = '23456789';
+const TEMP_PASSWORD_LENGTH = 8;
+
+function pick(alphabet) {
+  return alphabet[crypto.randomInt(alphabet.length)];
+}
+
+/**
+ * Random initial password: 8 characters, at least two letters and two digits,
+ * built with a CSPRNG. Always satisfies utils/passwordPolicy (length 8, not a
+ * single repeated character, not on the blocklist, never equal to a plate).
+ */
+function generateTemporaryPassword() {
+  const all = TEMP_PASSWORD_LETTERS + TEMP_PASSWORD_DIGITS;
+  const chars = [
+    pick(TEMP_PASSWORD_LETTERS), pick(TEMP_PASSWORD_LETTERS),
+    pick(TEMP_PASSWORD_DIGITS), pick(TEMP_PASSWORD_DIGITS),
+  ];
+  while (chars.length < TEMP_PASSWORD_LENGTH) chars.push(pick(all));
+  // Fisher-Yates so the letters/digits are not always in the same places.
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join('');
+}
 
 async function linkOrCreateDriverForVehicle(conn, { driverName, driverPhone, normalizedPlate, plateNo, vehicleId }) {
   const name = String(driverName || '').trim();
@@ -59,6 +94,7 @@ async function linkOrCreateDriverForVehicle(conn, { driverName, driverPhone, nor
   );
 
   let userCreated = false;
+  let temporaryPassword = null;
   if (user) {
     if (user.driver_id != null && Number(user.driver_id) !== Number(driverId)) {
       const e = new Error('บัญชีคนขับนี้เชื่อมกับข้อมูลคนขับอื่นแล้ว กรุณาตรวจสอบ');
@@ -70,7 +106,8 @@ async function linkOrCreateDriverForVehicle(conn, { driverName, driverPhone, nor
       await conn.query(`UPDATE users SET driver_id = ? WHERE id = ?`, [driverId, user.id]);
     }
   } else {
-    const hash = await bcrypt.hash(plateNo, BCRYPT_COST);
+    temporaryPassword = generateTemporaryPassword();
+    const hash = await bcrypt.hash(temporaryPassword, BCRYPT_COST);
     await conn.query(
       `INSERT INTO users (username, password_hash, role, display_name, driver_id, must_change_password)
        VALUES (?, ?, 'driver', ?, ?, TRUE)`,
@@ -106,7 +143,10 @@ async function linkOrCreateDriverForVehicle(conn, { driverName, driverPhone, nor
     }
   }
 
-  return { driverId, userCreated };
+  // The plaintext temporary password is returned only for an account created
+  // in this call, so the route can show it to the school exactly once. It is
+  // never stored in plaintext or written to the audit log.
+  return userCreated ? { driverId, userCreated, temporaryPassword } : { driverId, userCreated };
 }
 
-module.exports = { linkOrCreateDriverForVehicle };
+module.exports = { linkOrCreateDriverForVehicle, generateTemporaryPassword };

@@ -14,10 +14,10 @@ const { sendError } = require('../utils/response');
 function requireRole(...roles) {
   const guard = (req, res, next) => {
     if (!req.user) {
-      return sendError(res, 'Unauthenticated', [], 401);
+      return sendError(res, 'กรุณาเข้าสู่ระบบก่อนใช้งาน', [], 401);
     }
     if (!roles.includes(req.user.role)) {
-      return sendError(res, 'You do not have permission to access this resource', [], 403);
+      return sendError(res, 'คุณไม่มีสิทธิ์เข้าถึงข้อมูลส่วนนี้', [], 403);
     }
     return next();
   };

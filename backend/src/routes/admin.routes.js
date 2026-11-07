@@ -309,6 +309,24 @@ function buildResearchProvenance(payload, { from, to, include }) {
 const BCRYPT_COST = 12;
 const VALID_ROLES = ['driver', 'school', 'affiliation', 'province', 'transport', 'admin'];
 const SCOPED_ROLES = { school: 'SCHOOL', affiliation: 'AFFILIATION', province: 'PROVINCE' };
+
+// Scoped roles (school / affiliation / province) need a scope_id, and school /
+// affiliation scopes must point at a live row. Shared by POST and PUT so a role
+// change cannot leave a NULL or dangling scope. Returns a Thai error or null.
+async function validateRoleScope(role, scopeId) {
+  const scopeType = SCOPED_ROLES[role] || null;
+  if (!scopeType) return null;
+  if (!scopeId) return `role "${role}" ต้องระบุ scope_id`;
+  if (scopeType === 'SCHOOL') {
+    const [[school]] = await pool.query('SELECT id FROM schools WHERE id = ? AND is_deleted = FALSE', [scopeId]);
+    if (!school) return 'ไม่พบโรงเรียนที่ระบุ';
+  }
+  if (scopeType === 'AFFILIATION') {
+    const [[aff]] = await pool.query('SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE', [scopeId]);
+    if (!aff) return 'ไม่พบสังกัดที่ระบุ';
+  }
+  return null;
+}
 const { VALID_GRADE_SCOPES, isValidGradeScope } = require('../utils/gradeScope');
 const { validatePassword } = require('../utils/passwordPolicy');
 
@@ -376,17 +394,8 @@ router.post('/users', async (req, res, next) => {
 
     // Validate scope
     const scopeType = SCOPED_ROLES[role] || null;
-    if (scopeType && !scope_id) {
-      return sendError(res, `role "${role}" ต้องระบุ scope_id`, [], 400);
-    }
-    if (scopeType === 'SCHOOL') {
-      const [[school]] = await pool.query('SELECT id FROM schools WHERE id = ? AND is_deleted = FALSE', [scope_id]);
-      if (!school) return sendError(res, 'ไม่พบโรงเรียนที่ระบุ', [], 400);
-    }
-    if (scopeType === 'AFFILIATION') {
-      const [[aff]] = await pool.query('SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE', [scope_id]);
-      if (!aff) return sendError(res, 'ไม่พบสังกัดที่ระบุ', [], 400);
-    }
+    const scopeError = await validateRoleScope(role, scope_id);
+    if (scopeError) return sendError(res, scopeError, [], 400);
 
     // Phase 7.11.5 — optional grade_scope. Only valid on school role;
     // value must be one of the 15 canonical Thai grades (mirrors the
@@ -491,6 +500,8 @@ router.put('/users/:id', async (req, res, next) => {
     if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
     if (role && VALID_ROLES.includes(role)) {
       const scopeType = SCOPED_ROLES[role] || null;
+      const scopeError = await validateRoleScope(role, scope_id);
+      if (scopeError) return sendError(res, scopeError, [], 400);
       updates.push('role = ?', 'scope_type = ?', 'scope_id = ?');
       params.push(role, scopeType, scope_id || null);
       // L6 — a role change away from 'school' must drop any stale grade_scope

@@ -814,10 +814,16 @@ router.post('/transfer-requests/:id/approve', async (req, res, next) => {
     const out = await transfer.approveAndApply(pool, { requestId, adminUserId: req.user.id, adminNote: (req.body || {}).admin_note });
     await logAudit({ userId: req.user.id, action: 'APPROVE', entityType: 'student_transfer_request', entityId: String(requestId),
       newValue: { result: out.status, approved_by_affiliation: true }, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    // Wording follows out.reason, and anything that is not an outcome of this
+    // approval (REJECTED / CANCELLED / FAILED earlier) says the request is no
+    // longer pending; the client shows it as an error toast (QA affiliation-09).
     const msg = out.status === 'APPLIED' ? 'อนุมัติและดำเนินการโอนย้ายสำเร็จ'
       : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
-      : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้ (พบรหัสนักเรียนซ้ำในโรงเรียนปลายทางหรือข้อมูลไม่ครบ)'
-      : out.status === 'STALE_NEEDS_REVIEW' ? 'ข้อมูลนักเรียนเปลี่ยนแปลงตั้งแต่ส่งคำขอ กรุณาตรวจสอบใหม่' : 'ดำเนินการแล้ว';
+      : out.status === 'FAILED' && out.reason === 'DESTINATION_CODE_EXISTS' ? 'ไม่สามารถโอนย้ายได้ เนื่องจากพบรหัสนักเรียนซ้ำในโรงเรียนปลายทาง'
+      : out.status === 'FAILED' && out.reason === 'DESTINATION_MISSING' ? 'ไม่สามารถโอนย้ายได้ เนื่องจากไม่พบโรงเรียนปลายทาง (อาจถูกลบไปแล้ว)'
+      : out.status === 'FAILED' && out.reason ? 'ไม่สามารถดำเนินการได้'
+      : out.status === 'STALE_NEEDS_REVIEW' ? 'ข้อมูลนักเรียนเปลี่ยนแปลงตั้งแต่ส่งคำขอ กรุณาตรวจสอบใหม่'
+      : 'คำขอนี้ไม่อยู่ในสถานะรออนุมัติแล้ว';
     return sendSuccess(res, out, msg);
   } catch (err) { next(err); }
 });

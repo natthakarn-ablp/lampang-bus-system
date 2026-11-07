@@ -6,7 +6,8 @@
  *   affiliation-05  bulk school import treats soft-deleted usernames as taken
  *   affiliation-06  add-account-to-existing-school checks the username first
  *   affiliation-08  school-accounts list returns grade_scope / must_change_password, newest first
- *   affiliation-09  vehicle-request approve does not call a FAILED outcome "approved"
+ *   affiliation-09  vehicle/transfer approve does not call a FAILED outcome "approved";
+ *                   transfer detail carries the pre-approval warning fields
  */
 
 let mockUser;
@@ -19,6 +20,10 @@ jest.mock('../src/services/vehicleRequest.service', () => ({
   getDetailForAffiliation: jest.fn(),
   approveVehicleRequest: jest.fn(),
 }));
+jest.mock('../src/services/studentTransfer.service', () => ({
+  getDetailForAffiliation: jest.fn(),
+  approveAndApply: jest.fn(),
+}));
 
 const express = require('express');
 const request = require('supertest');
@@ -27,6 +32,8 @@ const affSvc = require('../src/services/affiliation.service');
 const provSvc = require('../src/services/province.service');
 const affAdmin = require('../src/services/affiliationAdmin.service');
 const vr = require('../src/services/vehicleRequest.service');
+const transfer = require('../src/services/studentTransfer.service');
+const realTransfer = jest.requireActual('../src/services/studentTransfer.service');
 
 beforeEach(() => {
   pool.query.mockReset();
@@ -159,5 +166,98 @@ describe('affiliation-09: vehicle request approve outcome wording', () => {
     vr.approveVehicleRequest.mockResolvedValue({ status: 'REJECTED' });
     const res = await request(app).post('/api/affiliation/vehicle-requests/5/approve').send({});
     expect(res.body.message).not.toBe('อนุมัติคำขอแล้ว');
+  });
+});
+
+describe('affiliation-09: transfer request approve outcome wording', () => {
+  const routes = require('../src/routes/affiliation.routes');
+  const app = express();
+  app.use(express.json());
+  app.use('/api/affiliation', routes);
+  app.use((err, _req, res, _next) => res.status(err.statusCode || 500).json({ success: false, message: err.message }));
+
+  beforeEach(() => {
+    transfer.getDetailForAffiliation.mockReset().mockResolvedValue({ id: 9 });
+    transfer.approveAndApply.mockReset();
+  });
+
+  async function approve() {
+    return request(app).post('/api/affiliation/transfer-requests/9/approve').send({});
+  }
+
+  test('APPLIED reports success', async () => {
+    transfer.approveAndApply.mockResolvedValue({ status: 'APPLIED', applied_student_id: 77 });
+    const res = await approve();
+    expect(res.status).toBe(200);
+    expect(res.body.message).toBe('อนุมัติและดำเนินการโอนย้ายสำเร็จ');
+  });
+
+  test('FAILED DESTINATION_CODE_EXISTS names the duplicate student code', async () => {
+    transfer.approveAndApply.mockResolvedValue({ status: 'FAILED', reason: 'DESTINATION_CODE_EXISTS' });
+    const res = await approve();
+    expect(res.body.data.status).toBe('FAILED');
+    expect(res.body.message).toBe('ไม่สามารถโอนย้ายได้ เนื่องจากพบรหัสนักเรียนซ้ำในโรงเรียนปลายทาง');
+  });
+
+  test('FAILED DESTINATION_MISSING names the missing destination school, not a duplicate code', async () => {
+    transfer.approveAndApply.mockResolvedValue({ status: 'FAILED', reason: 'DESTINATION_MISSING' });
+    const res = await approve();
+    expect(res.body.message).toBe('ไม่สามารถโอนย้ายได้ เนื่องจากไม่พบโรงเรียนปลายทาง (อาจถูกลบไปแล้ว)');
+    expect(res.body.message).not.toMatch(/รหัสนักเรียนซ้ำ/);
+  });
+
+  test('STALE_NEEDS_REVIEW asks for a re-check', async () => {
+    transfer.approveAndApply.mockResolvedValue({ status: 'STALE_NEEDS_REVIEW' });
+    const res = await approve();
+    expect(res.body.message).toBe('ข้อมูลนักเรียนเปลี่ยนแปลงตั้งแต่ส่งคำขอ กรุณาตรวจสอบใหม่');
+  });
+
+  test.each(['REJECTED', 'CANCELLED', 'FAILED'])('a request already %s says it is no longer pending', async (status) => {
+    // approveAndApply passes a non-PENDING status through without a reason
+    transfer.approveAndApply.mockResolvedValue({ status });
+    const res = await approve();
+    expect(res.body.message).toBe('คำขอนี้ไม่อยู่ในสถานะรออนุมัติแล้ว');
+  });
+});
+
+describe('affiliation-09: transfer detail pre-approval fields', () => {
+  const ROW = { id: 9, status: 'PENDING', student_id: 21199, student_code: 'S1', destination_school_id: 'SCH0002' };
+
+  test('flags a destination code conflict and a current vehicle', async () => {
+    pool.query
+      .mockResolvedValueOnce([[ROW]])
+      .mockResolvedValueOnce([[{ id: 21199, school_id: 'SCH0001', student_code: 'S1', grade: 'ป.1', classroom: '1', vehicle_id: 'V-1', is_deleted: 0 }]])
+      .mockResolvedValueOnce([[{ id: 30001 }]]);
+    const out = await realTransfer.getDetailForAffiliation(pool, { requestId: 9, affiliationId: 'AFF001' });
+    expect(out.destination_code_conflict).toBe(true);
+    expect(out.current_student).toMatchObject({ school_id: 'SCH0001', has_vehicle: true, is_deleted: false });
+    expect(out.can_approve).toBe(true);
+    expect(pool.query.mock.calls[2][1]).toEqual(['SCH0002', 'S1']);
+  });
+
+  test('no conflict, no vehicle, not pending', async () => {
+    pool.query
+      .mockResolvedValueOnce([[{ ...ROW, status: 'APPLIED' }]])
+      .mockResolvedValueOnce([[{ id: 21199, school_id: 'SCH0001', student_code: 'S1', vehicle_id: null, is_deleted: 1 }]])
+      .mockResolvedValueOnce([[]]);
+    const out = await realTransfer.getDetailForAffiliation(pool, { requestId: 9, affiliationId: 'AFF001' });
+    expect(out.destination_code_conflict).toBe(false);
+    expect(out.current_student).toMatchObject({ has_vehicle: false, is_deleted: true });
+    expect(out.can_approve).toBe(false);
+  });
+
+  test('missing student row yields current_student null', async () => {
+    pool.query
+      .mockResolvedValueOnce([[ROW]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]]);
+    const out = await realTransfer.getDetailForAffiliation(pool, { requestId: 9, affiliationId: 'AFF001' });
+    expect(out.current_student).toBeNull();
+  });
+
+  test('a request outside the affiliation is 404', async () => {
+    pool.query.mockResolvedValueOnce([[]]);
+    await expect(realTransfer.getDetailForAffiliation(pool, { requestId: 9, affiliationId: 'AFF002' }))
+      .rejects.toMatchObject({ statusCode: 404 });
   });
 });

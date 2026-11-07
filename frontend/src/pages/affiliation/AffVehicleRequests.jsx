@@ -12,12 +12,7 @@ import {
   AlertBanner, StatusBadge, DataTable, TableAction, FilterBar, FormField, Modal,
 } from '../../components/ui';
 import { PageTransition } from '../../lib/motion';
-
-// Outcomes that count as success per action; anything else gets an error toast.
-const OK_OUTCOMES = {
-  approve: new Set(['APPLIED', 'ALREADY_APPLIED']),
-  reject: new Set(['REJECTED']),
-};
+import { isFailedOutcome } from '../../utils/requestOutcome';
 
 const FILTERS = [
   { key: 'PENDING', label: 'รออนุมัติ' },
@@ -86,7 +81,7 @@ export default function AffVehicleRequests() {
       // The approve route answers 200 for every outcome; FAILED / STALE /
       // no-longer-pending must not show as a green success (QA affiliation-09).
       const outStatus = res.data?.data?.status;
-      if (outStatus && OK_OUTCOMES[action] && !OK_OUTCOMES[action].has(outStatus)) toast.error(res.data.message || 'ดำเนินการไม่สำเร็จ');
+      if (isFailedOutcome(action, outStatus)) toast.error(res.data.message || 'ดำเนินการไม่สำเร็จ');
       else toast.success(res.data.message || 'สำเร็จ');
       setDetail(null);
       load();

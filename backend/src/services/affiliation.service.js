@@ -10,6 +10,12 @@ const { toBangkokDate } = require('../utils/thaiTime');
 // any daily_status row in the last N days.
 const SCHOOL_USAGE_WINDOW_DAYS = 14;
 
+/** True when a YYYY-MM-DD calendar date falls on Saturday or Sunday. */
+function isWeekendDate(dateStr) {
+  const day = new Date(`${String(dateStr).slice(0, 10)}T00:00:00Z`).getUTCDay();
+  return day === 0 || day === 6;
+}
+
 /**
  * Get dashboard summary for a specific affiliation (เขตพื้นที่).
  */
@@ -127,8 +133,9 @@ async function getDashboard(affiliationId) {
   // filter by sc.affiliation_id so the affiliation account never sees
   // counts that include other affiliations. Two invariants must hold:
   //   school_total === school_used_recently + school_not_using_recently
-  //   school_total === schools_with_vehicle_data + schools_missing_vehicle_data
-  // The bottom of getDashboard() asserts both via non-fatal console.warn.
+  // The bottom of getDashboard() asserts it via non-fatal console.warn.
+  // schools_missing_vehicle_data is NOT school_total - schools_with_vehicle_data:
+  // a school with no pupils has nothing to link, so it is not "missing" (QA aff-03).
 
   // 1. Schools with any daily_status in the last N days. daily_status has
   //    no school_id column, so join through students -> schools.
@@ -152,10 +159,22 @@ async function getDashboard(affiliationId) {
     [affiliationId]
   );
 
+  // 3. Schools with at least one live pupil who has no (live) vehicle — what
+  //    the card "นักเรียนบางคนยังไม่ผูกกับรถ" says. Schools with no pupils at
+  //    all are not counted here (QA aff-03).
+  const [[{ schools_missing_vehicle_data }]] = await pool.query(
+    `SELECT COUNT(DISTINCT sc.id) AS schools_missing_vehicle_data
+     FROM   schools sc
+     JOIN   students s ON s.school_id = sc.id AND s.is_deleted = FALSE
+     LEFT JOIN vehicles v ON v.id = s.vehicle_id AND v.is_deleted = FALSE
+     WHERE  sc.affiliation_id = ? AND sc.is_deleted = FALSE
+       AND  v.id IS NULL`,
+    [affiliationId]
+  );
+
   // Derived (JS) — non-negative by SQL filter design.
   const school_total                 = total_schools;
   const school_not_using_recently    = school_total - school_used_recently;
-  const schools_missing_vehicle_data = school_total - schools_with_vehicle_data;
 
   // Aliases for clearer downstream naming. Old names ALSO returned below
   // so 10.7C-2 frontend cutover doesn't have to happen in the same phase.
@@ -170,16 +189,14 @@ async function getDashboard(affiliationId) {
       affiliationId, school_total, school_used_recently, school_not_using_recently,
     });
   }
-  if (schools_with_vehicle_data + schools_missing_vehicle_data !== school_total) {
-    // eslint-disable-next-line no-console
-    console.warn('[affiliation.getDashboard] school vehicle-data invariant drift', {
-      affiliationId, school_total, schools_with_vehicle_data, schools_missing_vehicle_data,
-    });
-  }
 
   const dashboard = {
     affiliation: affiliation || null,
     date: today,
+    // No school-day calendar exists, so Saturday and Sunday are the only days
+    // known not to be school days. The page uses this to keep weekend
+    // dashboards free of "not checked yet" alarms (QA aff-04).
+    is_school_day: !isWeekendDate(today),
     total_schools,
     total_students,
     total_vehicles,
@@ -320,9 +337,15 @@ async function getStudents(affiliationId, { search, grade, school_id, vehicle_id
   const params = [affiliationId];
 
   if (search) {
-    where += ' AND (s.first_name LIKE ? OR s.last_name LIKE ? OR CAST(s.id AS CHAR) LIKE ?)';
-    const like = `%${search}%`;
-    params.push(like, like, like);
+    // Code and full name too, as the search box promises (QA aff-02). The
+    // internal id is matched exactly only, so '9999' no longer finds any
+    // pupil whose database id merely contains those digits.
+    const term = String(search).trim();
+    const like = `%${term}%`;
+    const fullLike = `%${term.replace(/\s+/g, ' ')}%`;
+    where += " AND (s.first_name LIKE ? OR s.last_name LIKE ? OR s.student_code LIKE ?"
+      + " OR CONCAT(s.first_name, ' ', s.last_name) LIKE ? OR CAST(s.id AS CHAR) = ?)";
+    params.push(like, like, like, fullLike, term);
   }
   if (grade) {
     // Tolerant grade match, same as the school student search. students.grade is
@@ -543,6 +566,15 @@ async function getEmergencies(affiliationId, { page = 1, per_page = 20 }) {
  * affiliations; this affiliation's view shows only its own students).
  */
 async function getVehiclesAtRisk(affiliationId, { limit = 10 } = {}) {
+  return (await getVehiclesAtRiskWithTotal(affiliationId, { limit })).items;
+}
+
+/**
+ * Same list as getVehiclesAtRisk plus `total`, the number of at-risk vehicles
+ * before the top-N cut. The dashboard showed the length of the capped list as
+ * the count, so it never read more than 10 (QA aff-01).
+ */
+async function getVehiclesAtRiskWithTotal(affiliationId, { limit = 10 } = {}) {
   const topN = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 100);
 
   const [rows] = await pool.query(`
@@ -622,7 +654,7 @@ async function getVehiclesAtRisk(affiliationId, { limit = 10 } = {}) {
   atRisk.sort((a, b) =>
     (b.risk_score - a.risk_score) || a.plate_no.localeCompare(b.plate_no, 'th')
   );
-  return atRisk.slice(0, topN);
+  return { items: atRisk.slice(0, topN), total: atRisk.length };
 }
 
 module.exports = {
@@ -634,4 +666,6 @@ module.exports = {
   getStatusToday,
   getEmergencies,
   getVehiclesAtRisk,
+  getVehiclesAtRiskWithTotal,
+  isWeekendDate,
 };

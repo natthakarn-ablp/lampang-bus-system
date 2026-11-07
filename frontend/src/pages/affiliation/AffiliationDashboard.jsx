@@ -1,26 +1,25 @@
-import AttendanceBreakdown from '../../components/AttendanceBreakdown';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Map, Building2, GraduationCap, Bus, AlertTriangle,
-  Sunrise, Sunset, BellRing, Activity, FileText, RefreshCw,
+  Map, Building2, GraduationCap, Bus, AlertTriangle, BellRing, Activity, FileText, RefreshCw, ChevronRight,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import PageHeader from '../../components/PageHeader';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
 import { relativeTime } from '../../utils/datetime';
+import { StatusBadge, AlertBanner, DayBars, FoldSection, RoleChip } from '../../components/ui';
 import {
-  AppCard, StatusBadge, AlertBanner,
-  TodayBanner, TodoCards, KpiRingCard, DayBars, RankBars, FoldSection, RoleChip,
-  pctOf, pctTone,
-} from '../../components/ui';
+  StatusHero, ActionList, StatTile, StatGrid, SectionCard, TravelLeaveSummary,
+  roundStatus, dayStatus, SESSION_LABEL,
+} from '../../components/dashboard';
 import useRecentDays, { RECENT_DAYS_FAILED } from '../../hooks/useRecentDays';
 import { PAGE_TITLES, UI_MESSAGES } from '../../constants/uiLabels';
 import { PageTransition } from '../../lib/motion';
 
 const REFRESH_INTERVAL_MS = 30_000;
 const AT_RISK_LIST_LIMIT = 10;
+const SCHOOL_LIST_VISIBLE = 5;
 
 // What each feed is called in the load-failure banner.
 const SECTION_LABELS = {
@@ -30,10 +29,45 @@ const SECTION_LABELS = {
   atRisk: 'รถที่ต้องติดตาม',
 };
 const UNAVAILABLE_SUB = 'โหลดข้อมูลไม่สำเร็จ';
+const num = n => Number(n || 0).toLocaleString('th-TH');
 
 // Resolve to { ok, res } instead of throwing, so one failed feed does not hide
 // the others and is never mistaken for an empty one.
 const settle = promise => promise.then(res => ({ ok: true, res }), () => ({ ok: false }));
+
+/**
+ * Which schools need a phone call, and why. Uses the same time-aware rule as
+ * the hero (roundStatus): a school is only listed for a round that is past its
+ * due time (amber) or closed today / an earlier day (red / amber). Before or
+ * during a round nobody is "late", so the list stays empty and calm.
+ */
+function schoolFollowUps(problemSchools, { date, isSchoolDay }) {
+  const rows = [];
+  for (const s of problemSchools) {
+    const reasons = [];
+    let worst = 'warn';
+    let notStarted = false;
+    let pending = 0;
+    for (const session of ['morning', 'evening']) {
+      const done = s[`${session}_done`] || 0;
+      const expected = s[`${session}_expected`] || 0;
+      const st = roundStatus({ session, done, expected, date, isSchoolDay });
+      if (st.tone !== 'warn' && st.tone !== 'danger') continue;
+      pending += st.pending;
+      if (st.tone === 'danger') worst = 'danger';
+      if (done === 0) {
+        notStarted = true;
+        reasons.push(`ยังไม่เช็กชื่อ${SESSION_LABEL[session]} (${num(expected)} คน)`);
+      } else {
+        reasons.push(`${SESSION_LABEL[session]}ค้าง ${num(st.pending)} คน (${num(done)}/${num(expected)})`);
+      }
+    }
+    if (reasons.length === 0) continue;
+    rows.push({ school: s, reasons, tone: worst, notStarted, pending });
+  }
+  return rows.sort((a, b) =>
+    (Number(b.notStarted) - Number(a.notStarted)) || (b.pending - a.pending));
+}
 
 export default function AffiliationDashboard() {
   const toast = useToast();
@@ -49,15 +83,17 @@ export default function AffiliationDashboard() {
   const [notified, setNotified] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [showAllSchools, setShowAllSchools] = useState(false);
   const requestInFlight = useRef(false);
   const recentDays = useRecentDays('reports');
 
-  // Folds the banner/todo buttons can open. FoldSection owns its own open
+  // Folds the hero / action buttons can open. FoldSection owns its own open
   // state, so a fold is re-mounted (key) with defaultOpen when asked to open.
   const [openFold, setOpenFold] = useState({});
   const foldRefs = { schools: useRef(null), vehicles: useRef(null), emergencies: useRef(null) };
   function openAndScroll(name) {
-    setOpenFold(prev => ({ ...prev, [name]: (prev[name] || 0) + 1 }));
+    if (name === 'schools') setShowAllSchools(true);
+    else setOpenFold(prev => ({ ...prev, [name]: (prev[name] || 0) + 1 }));
     setTimeout(() => foldRefs[name].current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
 
@@ -198,201 +234,176 @@ export default function AffiliationDashboard() {
         const dashOk = !failed.dashboard;
         const today = dashOk ? data : {};
         const problemSchools = today.schools_not_complete ?? [];
-        const mTotal = today.morning_total ?? 0;
-        const eTotal = today.evening_total ?? 0;
-        const mDone = today.morning_done ?? 0;
-        const eDone = today.evening_done ?? 0;
-        const mPending = today.morning_pending ?? Math.max(0, mTotal - mDone);
-        const ePending = today.evening_pending ?? Math.max(0, eTotal - eDone);
-        const mPct = pctOf(mDone, mTotal);
-        const ePct = pctOf(eDone, eTotal);
         const emerg7 = today.emergency_7d ?? today.recent_emergencies ?? 0;
         const schoolTotal = today.school_total ?? today.total_schools ?? schools.length;
         const usedRecently = today.school_used_recently ?? 0;
-
         // No school-day calendar exists; the backend flags Saturday/Sunday as
         // not a school day, and then nothing is "late" (QA aff-04).
-        const offDay = dashOk && today.is_school_day === false;
+        const isSchoolDay = dashOk ? today.is_school_day : undefined;
+        const offDay = dashOk && isSchoolDay === false;
+        const when = { date: today.date, isSchoolDay };
 
-        // ── Banner: one sentence, one tone ──
-        const notChecked = offDay ? [] : problemSchools.filter(s => (s.morning_done || 0) === 0 && (s.morning_expected || 0) > 0);
-        let banner;
-        if (!dashOk) {
-          banner = null;
-        } else if (offDay) {
-          banner = {
-            variant: 'neutral', title: 'วันนี้เป็นวันหยุด (เสาร์–อาทิตย์)',
-            sub: mDone + eDone > 0
-              ? `มีการรับส่ง ส่งเช้า ${mDone.toLocaleString('th-TH')} คน · รับเย็น ${eDone.toLocaleString('th-TH')} คน`
-              : 'ไม่มีการเช็กชื่อตามปกติ ตัวเลขรอส่ง-รับวันนี้จึงไม่ถือว่าค้าง',
-            topic: 'schools',
-          };
-        } else if (mTotal + eTotal === 0 || (mDone === 0 && eDone === 0 && notChecked.length === 0)) {
-          banner = { variant: 'neutral', title: 'ยังไม่เริ่มรอบวันนี้', sub: 'รอข้อมูลการเช็กชื่อรอบเช้าจากโรงเรียนในสังกัด' };
-        } else if (notChecked.length > 0) {
-          const names = notChecked.slice(0, 2).map(s => s.school_name).join(' · ');
-          const more = notChecked.length > 2 ? ` และอีก ${notChecked.length - 2} โรงเรียน` : '';
-          banner = {
-            variant: 'danger',
-            title: `${notChecked.length} โรงเรียนยังไม่เช็กชื่อรอบเช้า`,
-            sub: `${names}${more}`,
-            cta: { label: 'ดูโรงเรียนที่ต้องติดตาม', onClick: () => openAndScroll('schools') },
-            topic: 'schools',
-          };
-        } else if (mPending + ePending > 0) {
-          banner = {
-            variant: 'warn',
-            title: ePending > 0 && mPending === 0
-              ? `รอบเย็นยังรอรับ ${ePending.toLocaleString('th-TH')} คน`
-              : `ยังรอส่ง-รับอีก ${(mPending + ePending).toLocaleString('th-TH')} คน`,
-            sub: `ส่งเช้าแล้ว ${mDone.toLocaleString('th-TH')} จาก ${mTotal.toLocaleString('th-TH')} คน`
-              + (problemSchools.length > 0 ? ` · ${problemSchools.length} โรงเรียนยังมีรายการค้าง` : ''),
-            cta: problemSchools.length > 0 ? { label: 'ดูโรงเรียนที่ต้องติดตาม', onClick: () => openAndScroll('schools') } : undefined,
-            topic: 'schools',
-          };
-        } else {
-          banner = { variant: 'success', title: 'ทุกโรงเรียนในสังกัดรับส่งครบแล้ว', sub: `ส่งเช้า ${mDone.toLocaleString('th-TH')} คน · รับเย็น ${eDone.toLocaleString('th-TH')} คน` };
-        }
+        // ── Hero: one status per round, time-aware ──
+        const mStatus = roundStatus({
+          session: 'morning', done: today.morning_done, expected: today.morning_total,
+          ...when, unavailable: !dashOk,
+        });
+        const eStatus = roundStatus({
+          session: 'evening', done: today.evening_done, expected: today.evening_total,
+          ...when, unavailable: !dashOk,
+        });
+        const day = dayStatus([mStatus, eStatus], { emergencies: 0 });
 
-        // ── Todos: never repeat the banner's topic ──
+        // ── Schools: complete / in progress / not started (holiday-aware) ──
+        const follow = dashOk ? schoolFollowUps(problemSchools, when) : [];
+        const activeSession = ['open', 'overdue', 'closed'].includes(eStatus.phase) ? 'evening' : 'morning';
+        const schoolsWithPupils = schools.filter(s => Number(s.student_count) > 0).length;
+        const sessionRows = problemSchools.filter(s => (s[`${activeSession}_expected`] || 0) > 0 && (s[`${activeSession}_done`] || 0) < s[`${activeSession}_expected`]);
+        const sNotStarted = sessionRows.filter(s => (s[`${activeSession}_done`] || 0) === 0).length;
+        const sInProgress = sessionRows.length - sNotStarted;
+        const schoolsInPlay = Math.max(schoolsWithPupils, sessionRows.length);
+        const sComplete = schoolsInPlay - sessionRows.length;
+        const showSchoolCounts = dashOk && !failed.schools && !offDay && schoolsInPlay > 0;
+
+        const heroAction = follow.length > 0
+          ? { label: 'ดูโรงเรียนที่ต้องติดตาม', onClick: () => openAndScroll('schools') }
+          : undefined;
+
+        // ── ActionList: each row says what to do ──
+        const notStartedRows = follow.filter(f => f.notStarted);
+        const followOthers = follow.filter(f => !f.notStarted);
+        const notStartedTone = notStartedRows.some(f => f.tone === 'danger') ? 'danger' : 'warn';
+        const names = list => list.slice(0, 2).map(f => f.school.school_name).join(' · ')
+          + (list.length > 2 ? ` และอีก ${list.length - 2} โรงเรียน` : '');
+        const riskDanger = atRiskVehicles.some(v => v.risk_score >= 100);
         const todos = [
-          banner?.topic !== 'schools' && {
-            key: 'risk-schools', variant: 'warn', count: today.at_risk_schools ?? 0,
-            title: 'โรงเรียนที่ต้องติดตาม', sub: dashOk ? 'ยังมีนักเรียนรอส่งหรือรอรับ' : UNAVAILABLE_SUB,
+          {
+            key: 'emergencies', tone: 'danger', count: emerg7,
+            title: 'เหตุฉุกเฉินใน 7 วันที่ผ่านมา',
+            sub: failed.incidents && !dashOk ? UNAVAILABLE_SUB : 'ตรวจสอบเหตุและผลการแก้ไขกับโรงเรียน/คนขับ',
             unavailable: !dashOk,
-            cta: { label: 'ดูรายชื่อ', onClick: () => openAndScroll('schools') },
+            to: '/affiliation/emergencies', actionLabel: 'ดูเหตุฉุกเฉิน',
           },
           {
-            key: 'risk-vehicles', variant: atRiskVehicles.some(v => v.risk_score >= 100) ? 'danger' : 'warn',
-            count: atRiskTotal,
+            key: 'not-started', tone: notStartedTone, count: notStartedRows.length,
+            title: 'โรงเรียนยังไม่เช็กชื่อ',
+            sub: dashOk ? `โทรหรือแจ้งโรงเรียนให้เช็กชื่อ · ${names(notStartedRows)}` : UNAVAILABLE_SUB,
+            unavailable: !dashOk,
+            onClick: () => openAndScroll('schools'), actionLabel: 'ดูรายชื่อ',
+          },
+          {
+            key: 'follow', tone: 'warn', count: followOthers.length,
+            title: 'โรงเรียนที่ยังมีนักเรียนค้าง',
+            sub: dashOk ? `ติดตามให้โรงเรียนยืนยันที่เหลือ · ${names(followOthers)}` : UNAVAILABLE_SUB,
+            unavailable: !dashOk,
+            onClick: () => openAndScroll('schools'), actionLabel: 'ดูรายชื่อ',
+          },
+          {
+            key: 'risk-vehicles', tone: riskDanger ? 'danger' : 'warn', count: atRiskTotal,
             title: 'รถต้องแก้เอกสาร',
-            sub: failed.atRisk ? UNAVAILABLE_SUB : (atRiskVehicles[0]?.risk_reasons?.[0] || 'ประกันหรือเอกสารรถต้องตรวจ'),
+            sub: failed.atRisk
+              ? UNAVAILABLE_SUB
+              : `ประกันหรือผลตรวจสภาพหมดอายุ — แจ้งเจ้าของรถให้ต่ออายุ${atRiskVehicles[0]?.risk_reasons?.[0] ? ` · เช่น ${atRiskVehicles[0].risk_reasons[0]}` : ''}`,
             unavailable: !!failed.atRisk,
-            cta: { label: 'ดูรายการรถ', onClick: () => openAndScroll('vehicles') },
+            onClick: () => openAndScroll('vehicles'), actionLabel: 'ดูรายการรถ',
           },
           {
-            key: 'missing-vehicle-data', variant: 'info', count: today.schools_missing_vehicle_data ?? 0,
-            title: 'โรงเรียนข้อมูลรถไม่ครบถ้วน', sub: dashOk ? 'นักเรียนบางคนยังไม่ผูกกับรถ' : UNAVAILABLE_SUB,
+            key: 'missing-vehicle-data', tone: 'info', count: today.schools_missing_vehicle_data ?? 0,
+            title: 'โรงเรียนที่ผูกนักเรียนกับรถไม่ครบ',
+            sub: dashOk ? `จาก ${num(schoolTotal)} โรงเรียน · แจ้งโรงเรียนให้ผูกรถให้นักเรียนที่ใช้รถ` : UNAVAILABLE_SUB,
             unavailable: !dashOk,
-            cta: { label: 'ดูโรงเรียน', to: '/affiliation/schools' },
+            to: '/affiliation/schools', actionLabel: 'ดูโรงเรียน',
           },
           {
-            key: 'not-using', variant: 'info', count: today.school_not_using_recently ?? 0,
-            title: 'โรงเรียนยังไม่ใช้ระบบ', sub: dashOk ? 'ไม่มีข้อมูลเช็กชื่อใน 14 วัน' : UNAVAILABLE_SUB,
+            key: 'not-using', tone: 'info', count: today.school_not_using_recently ?? 0,
+            title: 'โรงเรียนที่ยังไม่เริ่มใช้ระบบ',
+            sub: dashOk ? `จาก ${num(schoolTotal)} โรงเรียน · ไม่มีการเช็กชื่อใน 14 วัน ติดต่อให้เริ่มเช็กชื่อ` : UNAVAILABLE_SUB,
             unavailable: !dashOk,
-            cta: { label: 'ดูโรงเรียน', to: '/affiliation/schools' },
+            to: '/affiliation/schools', actionLabel: 'ดูโรงเรียน',
           },
-        ].filter(Boolean);
+        ];
 
-        // ── Rank: schools to follow, morning done/expected lowest first ──
-        const rankRows = (offDay ? [] : problemSchools)
-          .filter(s => (s.morning_expected || 0) > 0)
-          .map(s => ({ s, pct: pctOf(s.morning_done || 0, s.morning_expected) }))
-          .sort((a, b) => a.pct - b.pct)
-          .slice(0, 6)
-          .map(({ s, pct }) => ({
-            key: s.school_id,
-            label: s.school_name,
-            width: pct,
-            text: (s.morning_done || 0) === 0 ? 'ยังไม่เช็กชื่อ' : `${pct}% (${s.morning_done}/${s.morning_expected})`,
-            variant: (s.morning_done || 0) === 0 ? 'danger' : pctTone(pct),
-          }));
-
-        const eveningNotStarted = eDone === 0 && mDone > 0;
+        const visibleFollow = showAllSchools ? follow : follow.slice(0, SCHOOL_LIST_VISIBLE);
 
         return (
         <>
-          {banner && <TodayBanner variant={banner.variant} title={banner.title} sub={banner.sub} cta={banner.cta} />}
-
-          <TodoCards items={todos} afterAlert={banner?.variant === 'warn' || banner?.variant === 'danger'} />
-
-          <AttendanceBreakdown data={today} />
-
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" aria-label="ตัวเลขหลักวันนี้">
-            {!dashOk ? (
-              <>
-                <KpiRingCard label="ส่งเช้า" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
-                <KpiRingCard label="รับเย็น" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
-                <KpiRingCard label="โรงเรียนที่ใช้งาน" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
-                <KpiRingCard label="เหตุฉุกเฉิน 7 วัน" value="—" variant="neutral" chip="ไม่มีข้อมูล" sub={UNAVAILABLE_SUB} />
-              </>
-            ) : (<>
-            {offDay ? (<>
-              <KpiRingCard label="ส่งเช้า" value="–" variant="neutral" chip="วันหยุด"
-                sub={`${mDone.toLocaleString('th-TH')} / ${mTotal.toLocaleString('th-TH')} คน`} />
-              <KpiRingCard label="รับเย็น" value="–" variant="neutral" chip="วันหยุด"
-                sub={`${eDone.toLocaleString('th-TH')} / ${eTotal.toLocaleString('th-TH')} คน`} />
-            </>) : (<>
-            <KpiRingCard
-              label="ส่งเช้า" pct={mPct} value="–" variant={mPct == null ? 'neutral' : pctTone(mPct)}
-              sub={`${mDone.toLocaleString('th-TH')} / ${mTotal.toLocaleString('th-TH')} คน`}
-            />
-            {eveningNotStarted ? (
-              <KpiRingCard label="รับเย็น" value="–" variant="neutral" chip="ยังไม่เริ่ม"
-                sub={`ยังไม่เริ่มรอบ · ${eTotal.toLocaleString('th-TH')} คน`} />
-            ) : (
-              <KpiRingCard
-                label="รับเย็น" pct={ePct} value="–" variant={ePct == null ? 'neutral' : pctTone(ePct)}
-                sub={`${eDone.toLocaleString('th-TH')} / ${eTotal.toLocaleString('th-TH')} คน`}
-              />
+          <StatusHero
+            eyebrow={[today.affiliation?.name, dateLabel].filter(Boolean).join(' · ') || undefined}
+            rounds={[
+              { status: mStatus, title: 'รอบเช้า · ส่งถึงโรงเรียน' },
+              { status: eStatus, title: 'รอบเย็น · ส่งถึงบ้าน' },
+            ]}
+            day={day}
+            action={heroAction}
+          >
+            {showSchoolCounts && (
+              <p className="mt-4 text-sm text-ink" aria-label={`สถานะโรงเรียน ${SESSION_LABEL[activeSession]}`}>
+                <span className="font-semibold">{SESSION_LABEL[activeSession]} · {num(schoolsInPlay)} โรงเรียน:</span>{' '}
+                เช็กชื่อครบ <b className="tabular-nums">{num(sComplete)}</b>
+                {' · '}ยังค้าง <b className="tabular-nums">{num(sInProgress)}</b>
+                {' · '}ยังไม่เริ่ม <b className="tabular-nums">{num(sNotStarted)}</b>
+              </p>
             )}
-            </>)}
-            <KpiRingCard
-              label="โรงเรียนที่ใช้งาน" pct={pctOf(usedRecently, schoolTotal)} value="–" variant="info"
-              sub={`${usedRecently} / ${schoolTotal} โรงเรียน · 14 วัน`}
-            />
-            <KpiRingCard
-              label="เหตุฉุกเฉิน 7 วัน" value={emerg7}
-              variant={emerg7 > 0 ? 'danger' : 'success'}
-              chip={emerg7 > 0 ? 'ต้องรีบ' : 'ไม่มีเหตุ'}
-              sub={emerg7 > 0 ? (!failed.incidents && incidents[0] ? `${incidents[0].plate_no || '-'} · ${relativeTime(incidents[0].reported_at)}` : 'ดูรายละเอียดด้านล่าง') : 'ไม่มีเหตุในสังกัด'}
-              onClick={emerg7 > 0 ? () => openAndScroll('emergencies') : undefined}
-            />
-            </>)}
-          </section>
+            {offDay && <p className="mt-4 text-sm text-ink-muted">วันนี้เป็นวันหยุด ไม่ต้องติดตามโรงเรียน</p>}
+          </StatusHero>
 
-          <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <ActionList items={todos} afterAlert={day.tone === 'warn' || day.tone === 'danger'} />
+
+          <div ref={foldRefs.schools}>
+            <SectionCard
+              title="โรงเรียนที่ต้องติดตาม"
+              sub="เรียงจากโรงเรียนที่ยังไม่เช็กชื่อและมีนักเรียนค้างมากที่สุด"
+              empty={follow.length === 0}
+            >
+              <ul className="flex flex-col gap-2">
+                {visibleFollow.map(f => (
+                  <FollowRow
+                    key={f.school.school_id}
+                    row={f}
+                    notifiedAt={notified[f.school.school_id]}
+                    onNotify={() => notifySchool(f.school)}
+                  />
+                ))}
+              </ul>
+              {follow.length > SCHOOL_LIST_VISIBLE && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllSchools(v => !v)}
+                  className="focus-ring mt-3 inline-flex min-h-[44px] items-center text-sm font-semibold text-brand-700 hover:underline"
+                >
+                  {showAllSchools ? 'แสดงเฉพาะ 5 โรงเรียนแรก' : `แสดงทั้งหมด ${num(follow.length)} โรงเรียน`}
+                </button>
+              )}
+            </SectionCard>
+          </div>
+
+          <StatGrid label="ตัวเลขหลักวันนี้">
+            <StatTile
+              label="โรงเรียนที่ใช้ระบบ" icon={Building2}
+              value={usedRecently} unit={`/ ${num(schoolTotal)}`}
+              sub="เช็กชื่อภายใน 14 วัน" unavailable={!dashOk}
+              to="/affiliation/schools"
+            />
+            <StatTile label="นักเรียนที่ใช้รถ" icon={GraduationCap} value={today.total_students} unit="คน" unavailable={!dashOk} />
+            <StatTile label="รถ" icon={Bus} value={today.total_vehicles} unit="คัน" sub="นับไม่ซ้ำคัน" unavailable={!dashOk} to="/affiliation/vehicles" />
+            <StatTile
+              label="เหตุฉุกเฉิน 7 วัน" icon={AlertTriangle}
+              value={emerg7} unit="ครั้ง" unavailable={!dashOk}
+              tone={emerg7 > 0 ? 'danger' : 'calm'}
+              sub={emerg7 > 0 ? 'ดูรายละเอียดเพื่อติดตามผล' : 'ไม่มีเหตุในสังกัด'}
+              to={emerg7 > 0 ? '/affiliation/emergencies' : undefined}
+            />
+          </StatGrid>
+
+          <TravelLeaveSummary data={dashOk ? today : {}} />
+
+          <section className="flex flex-col gap-3">
             <DayBars
               title="การรับส่งทั้งสังกัด 7 วันล่าสุด (%)"
               days={recentDays || []}
               failed={recentDays === RECENT_DAYS_FAILED}
               note={recentDays == null ? 'กำลังโหลด…' : undefined}
             />
-            <RankBars
-              title="โรงเรียนที่ต้องติดตาม"
-              sub="ส่งเช้าวันนี้ เรียงจากน้อยไปมาก"
-              rows={rankRows}
-              empty={!dashOk ? UNAVAILABLE_SUB : offDay ? 'วันหยุด ไม่มีโรงเรียนที่ต้องติดตาม' : 'ทุกโรงเรียนส่งเช้าครบแล้ว'}
-              link={{ label: 'ดูทุกโรงเรียน', to: '/affiliation/schools' }}
-            />
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <div ref={foldRefs.schools}>
-              <FoldSection
-                key={`schools-${openFold.schools || 0}`}
-                defaultOpen={!!openFold.schools}
-                title={`โรงเรียนที่ยังมีรายการค้าง ${dashOk ? problemSchools.length : '—'} โรงเรียน`}
-                subtitle="ความคืบหน้ารายโรงเรียน พร้อมปุ่มแจ้งเตือนโรงเรียน"
-              >
-                {!dashOk ? (
-                  <p className="py-6 text-center text-sm text-ink-muted">{UNAVAILABLE_SUB}</p>
-                ) : problemSchools.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-ink-muted">ไม่มีโรงเรียนค้าง</p>
-                ) : (
-                  <div className="space-y-3">
-                    {problemSchools.map(s => (
-                      <SchoolRiskRow
-                        key={s.school_id}
-                        school={s}
-                        notifiedAt={notified[s.school_id]}
-                        onNotify={() => notifySchool(s)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </FoldSection>
-            </div>
 
             <SchoolReadinessFold schools={schools} totals={today} schoolsFailed={!!failed.schools} totalsFailed={!dashOk} />
 
@@ -423,6 +434,9 @@ export default function AffiliationDashboard() {
                     ))}
                   </ul>
                 )}
+                <Link to="/affiliation/vehicles" className="focus-ring mt-3 inline-flex min-h-[44px] items-center text-sm font-semibold text-brand-700 hover:underline">
+                  ไปหน้ารถในสังกัด →
+                </Link>
               </FoldSection>
             </div>
 
@@ -460,6 +474,47 @@ export default function AffiliationDashboard() {
       })()}
     </div>
     </PageTransition>
+  );
+}
+
+/* ── One school to follow up: why, and what to do ── */
+function FollowRow({ row, notifiedAt, onNotify }) {
+  const { school: s, reasons, tone } = row;
+  const border = tone === 'danger' ? 'border-danger/30' : 'border-warn/30';
+  return (
+    <li className={`rounded-2xl border bg-surface-raised p-3 sm:p-4 ${border}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="font-semibold text-ink text-pretty">{s.school_name}</p>
+          {reasons.map(r => (
+            <p key={r} className={`text-sm text-pretty ${tone === 'danger' ? 'text-danger-ink' : 'text-warn-ink'}`}>{r}</p>
+          ))}
+          <p className="mt-0.5 text-xs text-ink-muted">
+            นักเรียน {s.student_count ?? '-'} คน · รถ {s.vehicle_count ?? '-'} คัน
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onNotify}
+            className={`focus-ring inline-flex items-center gap-1.5 min-h-[44px] text-sm font-medium px-3 rounded-xl transition border ${
+              notifiedAt
+                ? 'bg-success-soft text-success-ink border-success/30'
+                : 'bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100'
+            }`}
+          >
+            <BellRing className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+            {notifiedAt ? `แจ้งแล้ว ${notifiedAt}` : 'คัดลอกข้อความแจ้งโรงเรียน'}
+          </button>
+          <Link
+            to="/affiliation/status"
+            className="focus-ring inline-flex items-center gap-1 min-h-[44px] text-sm font-medium px-3 rounded-xl border border-surface-border bg-surface-raised text-ink hover:bg-surface transition"
+          >
+            ดูสถานะรายคัน <ChevronRight className="w-4 h-4" aria-hidden="true" />
+          </Link>
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -512,80 +567,5 @@ function SchoolReadinessFold({ schools, totals, schoolsFailed, totalsFailed }) {
         <Building2 className="w-4 h-4 mr-1.5" strokeWidth={2} aria-hidden="true" /> ไปหน้าโรงเรียนในสังกัด →
       </Link>
     </FoldSection>
-  );
-}
-
-/* ── School risk row with notify CTA ── */
-function SchoolRiskRow({ school: s, notifiedAt, onNotify }) {
-  const mTotal = s.morning_expected || 0;
-  const mDone = s.morning_done || 0;
-  const mPend = s.morning_pending || 0;
-  const mPct = mTotal > 0 ? Math.round((mDone / mTotal) * 100) : 0;
-  const eTotal = s.evening_expected || 0;
-  const eDone = s.evening_done || 0;
-  const ePend = s.evening_pending || 0;
-  const ePct = eTotal > 0 ? Math.round((eDone / eTotal) * 100) : 0;
-  const totalPending = mPend + ePend;
-  const level = totalPending > 50 ? 'high' : totalPending > 20 ? 'medium' : 'low';
-  const RISK = {
-    high:   { variant: 'danger', label: 'เสี่ยงสูง',     border: 'border-danger/30' },
-    medium: { variant: 'warn',   label: 'เสี่ยงปานกลาง', border: 'border-warn/30'   },
-    low:    { variant: 'success', label: 'เสี่ยงน้อย',    border: 'border-success/30' },
-  }[level];
-
-  return (
-    <AppCard padding="md" className={RISK.border}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <p className="text-base font-semibold text-ink truncate">{s.school_name}</p>
-            <StatusBadge variant={RISK.variant} size="sm" icon={AlertTriangle} className="shrink-0">
-              {RISK.label}
-            </StatusBadge>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-ink-muted mt-1">
-            <span className="inline-flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5" strokeWidth={2} /> {s.student_count ?? '-'} คน</span>
-            <span className="inline-flex items-center gap-1"><Bus className="w-3.5 h-3.5" strokeWidth={2} /> {s.vehicle_count ?? '-'} คัน</span>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onNotify}
-          className={`focus-ring shrink-0 inline-flex items-center gap-1.5 min-h-[44px] text-sm font-medium px-3 rounded-xl transition border ${
-            notifiedAt
-              ? 'bg-success-soft text-success-ink border-success/30'
-              : 'bg-brand-50 text-brand-700 border-brand-200 hover:bg-brand-100'
-          }`}
-        >
-          <BellRing className="w-4 h-4" strokeWidth={2} />
-          {notifiedAt ? `แจ้งแล้ว ${notifiedAt}` : 'แจ้งเตือน'}
-        </button>
-      </div>
-
-      <SessionBar icon={Sunrise} label="ส่งเช้า" done={mDone} total={mTotal} pending={mPend} pct={mPct} doneLabel="ส่งแล้ว" />
-      <div className="h-2" />
-      <SessionBar icon={Sunset}  label="รับเย็น" done={eDone} total={eTotal} pending={ePend} pct={ePct} doneLabel="รับแล้ว" />
-    </AppCard>
-  );
-}
-
-function SessionBar({ icon: Icon, label, done, total, pending, pct, doneLabel }) {
-  return (
-    <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="inline-flex items-center gap-1.5 font-medium text-ink">
-          <Icon className="w-4 h-4 text-ink-muted" strokeWidth={2} />{label}
-        </span>
-        <span className="text-ink-muted tabular-nums">{done}/{total} ({pct}%)</span>
-      </div>
-      <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-surface">
-        {done > 0 && <div className="bg-success h-full" style={{ width: `${pct}%` }} />}
-        {pending > 0 && <div className="bg-danger/80 h-full" style={{ width: `${100 - pct}%` }} />}
-      </div>
-      <div className="flex justify-between text-xs mt-0.5">
-        <span className="text-success-ink font-medium">{doneLabel} {done}</span>
-        <span className="text-danger-ink font-medium">รอ {pending}</span>
-      </div>
-    </div>
   );
 }

@@ -189,8 +189,8 @@ export default function StudentSearch() {
     if (!editStudent || saveLock.current) return;
     if (!form.first_name.trim()) { toast.error('กรุณากรอกชื่อนักเรียน'); return; }
     if (!form.last_name.trim()) { toast.error('กรุณากรอกนามสกุลนักเรียน'); return; }
-    if (form.parent_phone && !/^\d{9,10}$/.test(form.parent_phone)) {
-      toast.error('เบอร์โทรผู้ปกครองต้องเป็นตัวเลข 9-10 หลัก');
+    if (form.parent_phone && !/^0\d{9}$/.test(form.parent_phone.replace(/\D/g, ''))) {
+      toast.error('เบอร์โทรผู้ปกครองต้องเป็นเบอร์มือถือ 10 หลัก ขึ้นต้นด้วย 0 (เช่น 0812345678)');
       return;
     }
     // Grade-teacher responses intentionally omit private phone fields. Send

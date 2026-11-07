@@ -18,7 +18,10 @@ async function createRequest({ vehicleId, studentId, schoolId, requestType, reas
     // Validate required fields
     // parent-02: store the canonical phone form (shared helper) so the parent
     // row created at approval matches what the parent types when linking LINE.
-    if (newStudentData.parent_phone != null && newStudentData.parent_phone !== '') {
+    // Keep the raw value: 'abc' or '-' normalizes to '' and must still be a 400,
+    // not a request silently stored without a parent phone.
+    const rawParentPhone = String(newStudentData.parent_phone == null ? '' : newStudentData.parent_phone).trim();
+    if (newStudentData.parent_phone != null) {
       newStudentData = { ...newStudentData, parent_phone: normalizePhone(newStudentData.parent_phone) };
     }
     const { first_name, last_name, school_id, parent_phone } = newStudentData;
@@ -32,7 +35,7 @@ async function createRequest({ vehicleId, studentId, schoolId, requestType, reas
       err.statusCode = 400;
       throw err;
     }
-    if (newStudentData.parent_phone != null && newStudentData.parent_phone !== '' && !isValidPhone(parent_phone)) {
+    if (rawParentPhone !== '' && !isValidPhone(parent_phone)) {
       const err = new Error(PHONE_ERROR_TH);
       err.statusCode = 400;
       throw err;

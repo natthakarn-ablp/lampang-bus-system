@@ -113,12 +113,19 @@ describe('parent-07 student lock scoped per school', () => {
     expect(params).toEqual(['101', 101]);
   });
 
-  test('a code shared by several schools, or by none, gets no student lock', async () => {
-    pool.query.mockResolvedValueOnce([[{ school_id: 'SCH0001' }, { school_id: 'SCH0002' }]]);
-    await expect(bindGuard.resolveStudentLockKey('101')).resolves.toBeNull();
+  test('a code shared by several schools keeps a lock scoped to that set of schools', async () => {
+    pool.query.mockResolvedValueOnce([[{ school_id: 'SCH0002' }, { school_id: 'SCH0001' }]]);
+    await expect(bindGuard.resolveStudentLockKey('101')).resolves.toBe('multi:SCH0001,SCH0002:101');
+    pool.query.mockResolvedValueOnce([[{ school_id: 'SCH0001' }, { school_id: 'SCH0003' }]]);
+    await expect(bindGuard.resolveStudentLockKey('101')).resolves.toBe('multi:SCH0001,SCH0003:101');
+    const k = bindGuard.keysFor({ phone: '0812345678', studentKey: '101', studentLockKey: 'multi:SCH0001,SCH0002:101' });
+    expect(k.student).toMatch(/^student:[0-9a-f]{64}$/);
+  });
+
+  test('a code in no school gets no student lock', async () => {
     pool.query.mockResolvedValueOnce([[]]);
     await expect(bindGuard.resolveStudentLockKey('A-1')).resolves.toBeNull();
-    expect(pool.query.mock.calls[1][1]).toEqual(['A-1', null]);
+    expect(pool.query.mock.calls[0][1]).toEqual(['A-1', null]);
   });
 
   test('keysFor keeps the pair on the typed code and scopes only the student key', () => {
@@ -210,5 +217,25 @@ describe('parent routes (rate-limit keying, parent-08 preview conflict)', () => 
     const r = await request(app).post('/api/parent/line/bind-preview')
       .send({ idToken: 'a', phone: '0812345678', student_code: '101' });
     expect(r.status).toBe(200);
+  });
+});
+
+describe('parent-02 roster request rejects a phone with no digits', () => {
+  let svc;
+  let pool;
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('../src/config/database', () => ({ pool: { query: jest.fn() } }));
+    pool = require('../src/config/database').pool;
+    svc = require('../src/services/rosterRequest.service');
+  });
+
+  const base = { vehicleId: 1, schoolId: 'SCH0001', requestType: 'add', userId: 9 };
+  const student = (parent_phone) => ({ first_name: 'ก', last_name: 'ข', school_id: 'SCH0001', parent_phone });
+
+  test.each(['abc', '-', 'ไม่มี', '054123456'])('%p -> 400 before any DB call', async (phone) => {
+    await expect(svc.createRequest({ ...base, newStudentData: student(phone) }))
+      .rejects.toMatchObject({ statusCode: 400 });
+    expect(pool.query).not.toHaveBeenCalled();
   });
 });

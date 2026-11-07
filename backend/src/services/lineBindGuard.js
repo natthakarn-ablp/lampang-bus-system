@@ -97,10 +97,14 @@ function keysFor({ phone, studentKey, sub, studentLockKey }) {
  * "101" in the province. The lock is now scoped to the school the code
  * resolves to:
  *   - exactly one school has it  → `<school_id>:<code>` (same protection, one child's school)
- *   - none, or several schools   → null: no student lock. A code that matches
- *     no child protects nobody, and for a code shared by several schools one
- *     school's typos must not lock the others. Those attempts are still capped
- *     by the pair, phone and LINE-sub locks and the route rate limits.
+ *   - several schools            → `multi:<sorted school_ids>:<code>`. Short
+ *     codes like "1" or "101" are the ones shared across schools and also the
+ *     most guessable, so they keep a per-credential lock. It is scoped to the
+ *     exact set of schools that share the code, so typos on "101" lock only
+ *     those schools' "101", never an unrelated code or school.
+ *   - none                       → null: a code that matches no child protects
+ *     nobody. Those attempts are still capped by the pair, phone and LINE-sub
+ *     locks and the route rate limits.
  *
  * Matches the same way findLinkablePhoneByStudentAndPhone does (student_code,
  * or the numeric id for migrated rows).
@@ -115,11 +119,13 @@ async function resolveStudentLockKey(code) {
   const [rows] = await pool.query(
     `SELECT DISTINCT school_id FROM students
       WHERE (student_code = ? OR id = ?) AND COALESCE(is_deleted, FALSE) = FALSE
-      LIMIT 2`,
+        AND school_id IS NOT NULL`,
     [cred, asId]
   );
-  if (rows.length !== 1 || rows[0].school_id == null) return null;
-  return `${rows[0].school_id}:${cred}`;
+  const schoolIds = [...new Set(rows.map((r) => String(r.school_id)))].sort();
+  if (schoolIds.length === 0) return null;
+  if (schoolIds.length === 1) return `${schoolIds[0]}:${cred}`;
+  return `multi:${schoolIds.join(',')}:${cred}`;
 }
 
 /** Strip the `<type>:` prefix — the table holds the type in its own column. */

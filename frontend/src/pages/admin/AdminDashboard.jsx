@@ -12,7 +12,7 @@ import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import { PageTransition } from '../../lib/motion';
 import { todayBangkok, bangkokDateDaysAgo } from '../../utils/thaiTime';
-import useRecentDays from '../../hooks/useRecentDays';
+import useRecentDays, { RECENT_DAYS_FAILED } from '../../hooks/useRecentDays';
 
 const EMPTY_SIGNAL = { total: 0, rows: [] };
 const EMPTY_PENDING = { total: 0, student_transfer: 0, vehicle: 0, roster: 0 };
@@ -236,6 +236,7 @@ export default function AdminDashboard() {
         <DayBars
           title="การรับส่งทั้งจังหวัด 7 วันล่าสุด (%)"
           days={trendDays || []}
+          failed={trendDays === RECENT_DAYS_FAILED}
           note={trendDays && trendDays.some(d => d.today) && eveningNotStarted ? 'รอบเย็นของวันนี้ยังไม่เริ่ม' : undefined}
         />
         <RankBars

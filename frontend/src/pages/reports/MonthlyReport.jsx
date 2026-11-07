@@ -11,7 +11,7 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
-import { ReportHero, ReportSection, ExportPanel, reportScopeName } from './ReportParts';
+import { ReportHero, ReportSection, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
 
 // A KPI tile is calm unless the number is notably good or below the 85% line.
 const pctTone = v => (v == null || !isFinite(v) ? 'calm' : v >= 95 ? 'success' : v >= 85 ? 'calm' : 'warn');

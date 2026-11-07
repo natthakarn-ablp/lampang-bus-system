@@ -3,7 +3,7 @@ import { FileBarChart, Sunrise, Sunset, GraduationCap, Siren, School } from 'luc
 import api from '../../api/axios';
 import { useAuth } from '../../hooks/useAuth';
 import { StatTile, StatGrid, TravelLeaveSummary } from '../../components/dashboard';
-import { ReportHero, ExportPanel, reportScopeName } from './ReportParts';
+import { ReportHero, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
 import ExportButtons from '../../components/ExportButtons';
 import RankingTable from '../../components/RankingTable';
 import SummaryPrintView from '../../components/SummaryPrintView';

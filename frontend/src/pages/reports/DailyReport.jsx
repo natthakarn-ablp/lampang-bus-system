@@ -8,7 +8,7 @@ import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import { StatusBadge, DataTable, FormField } from '../../components/ui';
 import { StatusHero, ActionList, StatTile, StatGrid, TravelLeaveSummary, roundStatus } from '../../components/dashboard';
-import { ReportHero, ReportSection, ExportPanel, reportScopeName } from './ReportParts';
+import { ReportHero, ReportSection, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
 
 // Where each role acts on a follow-up item (admin has no such page).
 const ROLE_LINKS = {

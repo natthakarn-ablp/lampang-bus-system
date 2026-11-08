@@ -6,6 +6,8 @@ jest.mock('../src/config/database', () => ({ pool: { query: jest.fn(), getConnec
 jest.mock('../src/config/env', () => ({ line: { channelAccessToken: '' }, features: {} }));
 
 const http = require('http');
+const crypto = require('crypto');
+const KEY = crypto.randomUUID();
 const { pool } = require('../src/config/database');
 const d = require('../src/services/lineDispatch.service');
 
@@ -27,14 +29,14 @@ afterAll(() => new Promise(r => { server.closeAllConnections(); server.close(r);
 beforeEach(() => { seen.length = 0; d.resetSchemaCache(); });
 
 const push = (extra = {}) => d.pushWithRetryKey({
-  to: 'U1', messages: [{ type: 'text', text: 'x' }], retryKey: '123e4567-e89b-12d3-a456-426614174000',
+  to: 'U1', messages: [{ type: 'text', text: 'x' }], retryKey: KEY,
   token: 'tkn', timeoutMs: 300, baseUrl, ...extra,
 });
 
 test('sends the retry key, bearer token, recipient and body unchanged', async () => {
   const r = await push();
   expect(r).toMatchObject({ status: 200, requestId: 'r1' });
-  expect(seen[0].headers['x-line-retry-key']).toBe('123e4567-e89b-12d3-a456-426614174000');
+  expect(seen[0].headers['x-line-retry-key']).toBe(KEY);
   expect(seen[0].headers.authorization).toBe('Bearer tkn');
   expect(seen[0].body).toEqual({ to: 'U1', messages: [{ type: 'text', text: 'x' }] });
 });

@@ -191,7 +191,16 @@ router.get('/no-show', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const session = req.query.session === 'evening' ? 'evening' : 'morning';
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
+    // SCH-ATT-8 (school audit 2026-11-08): a real calendar date, not after
+    // today (2026-13-45 reached MySQL; a future date listed every rider).
+    let date = null;
+    if (req.query.date !== undefined && req.query.date !== '') {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+      if (typeof req.query.date !== 'string' || !isCalendarDate(req.query.date) || req.query.date > today) {
+        return sendError(res, 'วันที่ไม่ถูกต้อง', [{ field: 'date', message: 'วันที่ไม่ถูกต้อง' }], 400);
+      }
+      date = req.query.date;
+    }
     // AUD-004 — this was the one read on the router that consulted neither
     // resolveGradeScope nor requireFullSchoolScope, so a teacher pinned to one
     // grade could name every child school-wide who missed the bus, on any date.
@@ -619,6 +628,10 @@ router.get('/leaves', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const date = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    // SCH-ATT-8: the date went straight into SQL unchecked.
+    if (typeof date !== 'string' || !isCalendarDate(date)) {
+      return sendError(res, 'วันที่ไม่ถูกต้อง', [{ field: 'date', message: 'วันที่ไม่ถูกต้อง' }], 400);
+    }
     const gradeFilter = resolveGradeScope(req);
     const leaves = await leaveSvc.getLeavesForSchool(schoolId, date, { gradeFilter });
     return sendSuccess(res, leaves);
@@ -633,6 +646,14 @@ router.post('/leave', async (req, res, next) => {
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const { student_id, vehicle_id, leave_date, session, reason } = req.body;
     if (!student_id || !session) return sendError(res, 'student_id and session are required', [], 400);
+    // SCH-ATT-3 (school audit 2026-11-08): an unknown session or an over-long
+    // reason reached the ENUM / VARCHAR(255) columns and came back as a 500.
+    if (!['morning', 'evening', 'both'].includes(session)) {
+      return sendError(res, 'รอบไม่ถูกต้อง (morning / evening / both)', [{ field: 'session', message: 'รอบไม่ถูกต้อง' }], 400);
+    }
+    if (reason != null && (typeof reason !== 'string' || reason.length > 255)) {
+      return sendError(res, 'เหตุผลต้องไม่เกิน 255 ตัวอักษร', [{ field: 'reason', message: 'เหตุผลยาวเกินไป' }], 400);
+    }
     const gradeScope = req.user.role === 'school' ? req.user.gradeScope || null : null;
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     if (gradeScope && (leave_date && leave_date !== today || !['morning', 'evening'].includes(session))) {

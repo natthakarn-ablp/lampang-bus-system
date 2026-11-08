@@ -30,10 +30,10 @@ function fail(statusCode, message, code) {
   return err;
 }
 
+// Bangkok calendar day + n days (noon anchor: no DST in Asia/Bangkok, and
+// noon keeps the result on the same calendar day whatever the host TZ).
 function addDays(dateStr, days) {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  return toBangkokDate(new Date(Date.parse(`${dateStr}T12:00:00+07:00`) + days * 86400000));
 }
 
 function hhmm(now) {

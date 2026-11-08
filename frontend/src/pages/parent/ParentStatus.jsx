@@ -4,6 +4,7 @@ import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT
 import { getLiffIdToken, isOutsideLineClient, LINE_OA_ID, LINE_OA_URL } from '../../utils/liff';
 import OpenInLineCard from '../../components/parent/OpenInLineCard';
 import AppCard from '../../components/ui/AppCard';
+import FormField from '../../components/ui/FormField';
 import { formatGradeClass } from '../../utils/student';
 import ParentConsentModal from '../../components/consent/ParentConsentModal';
 
@@ -42,9 +43,8 @@ function todayBangkokStr() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 }
 function addDaysStr(dateStr, days) {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + Number(days || 0));
-  return d.toISOString().slice(0, 10);
+  const t = Date.parse(`${dateStr}T12:00:00+07:00`) + Number(days || 0) * 86400000;
+  return new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 }
 
 export default function ParentStatus() {
@@ -547,27 +547,21 @@ export default function ParentStatus() {
               <>
                 <AppCard padding="md" className="space-y-3">
                   <p className="text-base font-semibold text-ink">แจ้งว่าบุตรหลานจะไม่ขึ้นรถ</p>
-                  <label className="block text-sm text-ink-muted">วันที่
-                    <input type="date" value={leaveForm.leave_date}
-                      min={todayBangkokStr()} max={addDaysStr(todayBangkokStr(), leaveRules?.max_days_ahead ?? 14)}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, leave_date: e.target.value })}
-                      className="focus-ring mt-1 w-full border border-surface-border bg-surface-raised rounded-lg px-3 min-h-[48px] text-base text-ink" />
-                  </label>
-                  <label className="block text-sm text-ink-muted">รอบ
-                    <select value={leaveForm.session}
+                  <FormField label="วันที่" type="date" required value={leaveForm.leave_date}
+                    min={todayBangkokStr()} max={addDaysStr(todayBangkokStr(), leaveRules?.max_days_ahead ?? 14)}
+                    onChange={(v) => setLeaveForm({ ...leaveForm, leave_date: v })} />
+                  <FormField label="รอบ" required>{(ctl) => (
+                    <select {...ctl} value={leaveForm.session}
                       onChange={(e) => setLeaveForm({ ...leaveForm, session: e.target.value })}
-                      className="focus-ring mt-1 w-full border border-surface-border bg-surface-raised rounded-lg px-3 min-h-[48px] text-base text-ink">
+                      className="focus-ring w-full border border-surface-border bg-surface-raised rounded-lg px-3 min-h-[48px] text-base text-ink">
                       <option value="both">ทั้งวัน (เช้าและเย็น)</option>
                       <option value="morning">รอบเช้า</option>
                       <option value="evening">รอบเย็น</option>
                     </select>
-                  </label>
-                  <label className="block text-sm text-ink-muted">เหตุผล (ไม่บังคับ)
-                    <input type="text" maxLength={255} value={leaveForm.reason}
-                      onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })}
-                      placeholder="เช่น ไม่สบาย, ผู้ปกครองรับเอง"
-                      className="focus-ring mt-1 w-full border border-surface-border bg-surface-raised rounded-lg px-3 min-h-[48px] text-base text-ink" />
-                  </label>
+                  )}</FormField>
+                  <FormField label="เหตุผล (ไม่บังคับ)" value={leaveForm.reason} maxLength={255}
+                    onChange={(v) => setLeaveForm({ ...leaveForm, reason: v })}
+                    placeholder="เช่น ไม่สบาย, ผู้ปกครองรับเอง" />
                   {leaveRules && (
                     <p className="text-sm text-ink-muted">
                       แจ้งของวันนี้ได้ก่อน {leaveRules.morning_cutoff} น. (รอบเช้า/ทั้งวัน) และก่อน {leaveRules.evening_cutoff} น. (รอบเย็น) ล่วงหน้าได้ไม่เกิน {leaveRules.max_days_ahead} วัน

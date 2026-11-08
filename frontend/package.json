@@ -13,7 +13,7 @@
     "check:labels:strict": "node ../scripts/check-ui-labels.js --strict",
     "check:labels:verbose": "node ../scripts/check-ui-labels.js --verbose",
     "check:hybrid-ui": "node ./scripts/check-hybrid-motion-ui.mjs && node --test ./tests/transportIncidentView.test.mjs && node ./tests/check-incident-render.mjs",
-    "test:readiness": "node --test tests/readinessUi.test.mjs tests/dashboardRoundStatus.test.mjs tests/driverRosterRetry.test.mjs tests/driverNotLinked.test.mjs tests/driverProfilePhoto.test.mjs tests/driverApplicationReason.test.mjs tests/driverErrorMessages.test.mjs tests/locationSendErrors.test.mjs tests/parentBindPreviewChildren.test.mjs tests/schoolParentLineStatus.test.mjs tests/schoolParentLineUnlink.test.mjs tests/parentLeaveUi.test.mjs",
+    "test:readiness": "node --test tests/readinessUi.test.mjs tests/dashboardRoundStatus.test.mjs tests/driverRosterRetry.test.mjs tests/driverNotLinked.test.mjs tests/driverProfilePhoto.test.mjs tests/driverApplicationReason.test.mjs tests/driverErrorMessages.test.mjs tests/locationSendErrors.test.mjs tests/parentBindPreviewChildren.test.mjs tests/schoolParentLineStatus.test.mjs tests/schoolParentLineUnlink.test.mjs tests/parentLeaveUi.test.mjs tests/parentClaimCodeUi.test.mjs",
     "hooks:install": "node ../scripts/install-hooks.js",
     "hooks:install:strict": "node ../scripts/install-hooks.js --strict",
     "hooks:remove": "node ../scripts/install-hooks.js --remove"

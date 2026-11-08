@@ -309,6 +309,10 @@ async function assertParentFeatureMigrationsPresent() {
     enabled: env.features.parentLeave, envName: 'FEATURE_PARENT_LEAVE',
     migration: '056_parent_leave.sql', required: [['student_leaves', 'reported_line_user_id']],
   });
+  await assertFeatureSchema({
+    enabled: env.features.parentClaimCode, envName: 'FEATURE_PARENT_CLAIM_CODE',
+    migration: '057_parent_claim_codes.sql', required: [['parent_claim_codes']],
+  });
 }
 
 async function start() {

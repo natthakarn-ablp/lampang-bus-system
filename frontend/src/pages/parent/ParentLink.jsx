@@ -34,6 +34,9 @@ export default function ParentLink() {
   const [step, setStep] = useState(STEP.FORM);
   const [phone, setPhone] = useState('');
   const [studentId, setStudentId] = useState('');
+  // M3: one-time code from the school. Shown only when the backend enables it.
+  const [claimCode, setClaimCode] = useState('');
+  const [bindConfig, setBindConfig] = useState({ claim_code_enabled: false, claim_code_required: false });
   const [phoneErr, setPhoneErr] = useState('');
   const [studentErr, setStudentErr] = useState('');
   const [serverErr, setServerErr] = useState('');
@@ -76,6 +79,15 @@ export default function ParentLink() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    axios.get('/api/parent/line/bind-config')
+      .then((res) => { if (!cancelled && res.data?.data) setBindConfig(res.data.data); })
+      .catch(() => { /* older backend or offline: keep the classic form */ });
+    return () => { cancelled = true; };
+  }, []);
+  const usingClaim = bindConfig.claim_code_enabled && claimCode.trim() !== '';
+
   // ─── Inline validation ────────────────────────────────────────────────────
   function validatePhone(p) {
     const s = (p || '').replace(/\D/g, '');
@@ -99,7 +111,9 @@ export default function ParentLink() {
     e?.preventDefault();
     setServerErr('');
     const pErr = validatePhone(cleanedPhone);
-    const sErr = validateStudent(studentId);
+    const sErr = bindConfig.claim_code_required && !claimCode.trim()
+      ? 'กรุณากรอกรหัสผูกบัญชีที่ได้รับจากโรงเรียน'
+      : (usingClaim ? '' : validateStudent(studentId));
     setPhoneErr(pErr);
     setStudentErr(sErr);
     if (pErr || sErr) return;
@@ -110,7 +124,7 @@ export default function ParentLink() {
     setBusy(true);
     try {
       const res = await axios.post('/api/parent/line/bind-preview', {
-        idToken, phone: cleanedPhone, studentId,
+        idToken, phone: cleanedPhone, studentId, ...(usingClaim ? { claim_code: claimCode.trim() } : {}),
       });
       setPreviewStudent(res.data?.data?.student || null);
       setPreviewChildren(Array.isArray(res.data?.data?.children) ? res.data.data.children : []);
@@ -122,7 +136,7 @@ export default function ParentLink() {
     } finally {
       setBusy(false);
     }
-  }, [cleanedPhone, studentId, idToken]);
+  }, [cleanedPhone, studentId, idToken, usingClaim, claimCode, bindConfig]);
 
   const onConfirm = useCallback(async () => {
     setServerErr('');
@@ -133,7 +147,7 @@ export default function ParentLink() {
     setBusy(true);
     try {
       await axios.post('/api/parent/line/bind-confirm', {
-        idToken, phone: cleanedPhone, studentId,
+        idToken, phone: cleanedPhone, studentId, ...(usingClaim ? { claim_code: claimCode.trim() } : {}),
       });
       setStep(STEP.SUCCESS);
     } catch (err) {
@@ -142,7 +156,7 @@ export default function ParentLink() {
     } finally {
       setBusy(false);
     }
-  }, [cleanedPhone, studentId, idToken]);
+  }, [cleanedPhone, studentId, idToken, usingClaim, claimCode]);
 
   // ─── UI ───────────────────────────────────────────────────────────────────
   if (!liffReady) {
@@ -277,7 +291,23 @@ export default function ParentLink() {
             error={phoneErr || undefined}
           />
 
-          <FormField
+          {bindConfig.claim_code_enabled && (
+            <FormField
+              label="รหัสผูกบัญชีจากโรงเรียน"
+              required={bindConfig.claim_code_required}
+              inputMode="text"
+              autoComplete="off"
+              maxLength={9}
+              value={claimCode}
+              onChange={(v) => { setClaimCode(v.toUpperCase()); setStudentErr(''); }}
+              placeholder="ABCD-2345"
+              helper={bindConfig.claim_code_required
+                ? 'รหัส 8 ตัวในใบแจ้งจากโรงเรียน'
+                : 'ถ้ามีใบแจ้งรหัสจากโรงเรียน กรอกรหัสนี้แทนรหัสนักเรียนได้'}
+            />
+          )}
+
+          {!usingClaim && !bindConfig.claim_code_required && <FormField
             label="รหัสนักเรียน"
             required
             inputMode="text"
@@ -288,7 +318,10 @@ export default function ParentLink() {
             placeholder="18985"
             helper="รหัสนักเรียนของบุตรหลาน ตามที่โรงเรียนแจ้ง"
             error={studentErr || undefined}
-          />
+          />}
+          {(usingClaim || bindConfig.claim_code_required) && studentErr && (
+            <p className="text-danger-ink text-sm">{studentErr}</p>
+          )}
 
           {serverErr && <AlertBanner variant="danger" title="ค้นหาไม่สำเร็จ">{serverErr}</AlertBanner>}
 

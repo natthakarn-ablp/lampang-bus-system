@@ -1247,6 +1247,62 @@ router.delete('/students/:id', async (req, res, next) => {
 // Reverses DELETE /students/:id (withdraw). Operators previously had to hand-run
 // UPDATE students SET is_deleted=FALSE for a mis-deleted student.
 /**
+ * M3 one-time LINE bind codes (parent audit 2026-11-08). Full school account
+ * only; dark until FEATURE_PARENT_CLAIM_CODE=true (migration 057).
+ *   POST /api/school/students/:id/claim-code          → one pupil
+ *   POST /api/school/claim-codes  { grade, classroom? } → a whole class/grade
+ * The plain code is returned once (for printing); only its hash is stored.
+ */
+function claimCodesEnabled(res) {
+  if (env.features.parentClaimCode === true) return true;
+  sendError(res, 'ยังไม่เปิดใช้งานรหัสผูกบัญชี LINE', [{ code: 'FEATURE_DISABLED' }], 404);
+  return false;
+}
+
+router.post('/students/:id/claim-code', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    if (!claimCodesEnabled(res)) return;
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const claimSvc = require('../services/parentClaimCode.service');
+    const rows = await claimSvc.issueForStudents({
+      schoolId, studentIds: [id], userId: req.user.id, ip: req.ip, ua: req.headers['user-agent'],
+    });
+    if (!rows.length) return sendError(res, 'ไม่พบนักเรียน', [], 404);
+    return sendSuccess(res, { codes: rows, valid_days: claimSvc.VALID_DAYS }, 'ออกรหัสผูกบัญชีแล้ว', null, 201);
+  } catch (err) { next(err); }
+});
+
+router.post('/claim-codes', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    if (!claimCodesEnabled(res)) return;
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const grade = typeof req.body?.grade === 'string' ? req.body.grade.trim() : '';
+    const classroom = typeof req.body?.classroom === 'string' ? req.body.classroom.trim() : '';
+    if (!grade || grade.length > 20 || classroom.length > 30) {
+      return sendError(res, 'กรุณาเลือกระดับชั้น', [{ field: 'grade', message: 'กรุณาเลือกระดับชั้น' }], 400);
+    }
+    const claimSvc = require('../services/parentClaimCode.service');
+    // Tolerant grade match: students.grade is stored in several spellings.
+    const grades = gradeEquivalents(grade);
+    const [students] = await pool.query(
+      `SELECT id FROM students WHERE school_id = ? AND is_deleted = FALSE
+          AND grade IN (${grades.map(() => '?').join(',')})${classroom ? ' AND classroom = ?' : ''}
+        ORDER BY id LIMIT ?`,
+      [schoolId, ...grades, ...(classroom ? [classroom] : []), claimSvc.BULK_MAX]
+    );
+    if (!students.length) return sendError(res, 'ไม่พบนักเรียนในชั้นที่เลือก', [], 404);
+    const rows = await claimSvc.issueForStudents({
+      schoolId, studentIds: students.map(s => s.id), userId: req.user.id, ip: req.ip, ua: req.headers['user-agent'],
+    });
+    return sendSuccess(res, { codes: rows, valid_days: claimSvc.VALID_DAYS }, `ออกรหัสผูกบัญชีแล้ว ${rows.length} คน`, null, 201);
+  } catch (err) { next(err); }
+});
+
+/**
  * POST /api/school/students/:id/parent-line/unlink   body: { reason }
  * P-04 (parent audit 2026-11-08, owner-approved): a full school account can
  * cut the LINE binding(s) of this pupil's parent(s) — wrong person bound,

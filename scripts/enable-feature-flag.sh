@@ -55,7 +55,8 @@ KNOWN_FLAGS="FEATURE_DRIVER_REGISTRATION FEATURE_PARTICIPATION_CASES \
 FEATURE_PARENT_CONSENT_REQUIRED FEATURE_VEHICLE_QR FEATURE_QR_LEVEL3 \
 FEATURE_ETA FEATURE_GEOFENCE FEATURE_ROUTE_DEVIATION \
 FEATURE_DRIVER_SHIFT_SELECTION FEATURE_ADMIN_PASSWORD_RECOVERY \
-FEATURE_PARENT_LEAVE"
+FEATURE_PARENT_LEAVE FEATURE_PARENT_CLAIM_CODE \
+FEATURE_PARENT_CLAIM_CODE_REQUIRED"
 
 say()  { echo "[flag] $*"; }
 fail() { echo "[flag] ERROR: $*" >&2; exit 1; }
@@ -89,6 +90,10 @@ fi
 if [ "$FLAG" = "FEATURE_PARENT_CONSENT_REQUIRED" ] && [ "$VALUE" = "true" ]; then
   QR="$(read_flag FEATURE_VEHICLE_QR)"
   [ "$QR" = "true" ] || fail "FEATURE_PARENT_CONSENT_REQUIRED requires FEATURE_VEHICLE_QR=true (the consent router is the only way a parent can grant consent)"
+fi
+if [ "$FLAG" = "FEATURE_PARENT_CLAIM_CODE_REQUIRED" ] && [ "$VALUE" = "true" ]; then
+  CC="$(read_flag FEATURE_PARENT_CLAIM_CODE)"
+  [ "$CC" = "true" ] || fail "FEATURE_PARENT_CLAIM_CODE_REQUIRED requires FEATURE_PARENT_CLAIM_CODE=true (schools must be able to issue codes first)"
 fi
 if [ "$FLAG" = "FEATURE_QR_LEVEL3" ] && [ "$VALUE" = "true" ]; then
   QR="$(read_flag FEATURE_VEHICLE_QR)"

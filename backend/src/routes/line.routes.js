@@ -286,6 +286,14 @@ async function handleTextMessage(lineUserId, text) {
   }
 
   if (state?.step === 'await_student_id') {
+    // M3: when a school code is mandatory, the chat flow (phone + student
+    // code) must not bypass it — send the parent to the LIFF form instead.
+    if (env.features.parentClaimCodeRequired === true) {
+      lineSvc.clearLinkState(lineUserId);
+      await lineSvc.sendTextMessage(lineUserId,
+        'การผูกบัญชีต้องใช้รหัสผูกบัญชีที่ได้รับจากโรงเรียน กรุณากดเมนู "ผูกบัญชี" แล้วกรอกเบอร์โทรและรหัสจากโรงเรียน');
+      return;
+    }
     // Phase 10.13C-4A — accept the VISIBLE รหัสนักเรียน (student_code), which may be
     // non-numeric, as the credential (was parseInt-only).
     const credential = String(cmd || '').trim();

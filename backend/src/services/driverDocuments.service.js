@@ -240,7 +240,7 @@ async function notifyUploaderRejected(pool, { uploadedBy, docType, note }) {
   } catch { /* best-effort — never affects the review */ }
 }
 
-async function reviewDocument(pool, { kind, id, decision, note, reviewerUserId }) {
+async function reviewDocument(pool, { kind, id, decision, note, reviewerUserId, reviewerRole = null }) {
   if (!REVIEW_DECISIONS.includes(decision)) throw appError('ผลการตรวจไม่ถูกต้อง', 400, 'BAD_DECISION');
   const trimmedNote = note != null ? String(note).trim().slice(0, 500) : null;
   if (decision === 'REJECTED' && !trimmedNote) throw appError('กรุณาระบุเหตุผลที่ไม่อนุมัติ', 400, 'NOTE_REQUIRED');
@@ -251,8 +251,17 @@ async function reviewDocument(pool, { kind, id, decision, note, reviewerUserId }
   try {
     await conn.beginTransaction();
     const [[doc]] = await conn.query(
-      `SELECT id, review_status, doc_type, uploaded_by FROM ${table} WHERE id = ? AND is_deleted = FALSE FOR UPDATE`, [id]);
+      `SELECT id, review_status, doc_type, uploaded_by, reviewed_by FROM ${table} WHERE id = ? AND is_deleted = FALSE FOR UPDATE`, [id]);
     if (!doc) throw appError('ไม่พบเอกสาร', 404, 'DOC_NOT_FOUND');
+    // SCH-VEH-5 (school audit 2026-11-08): a school may review a pending
+    // document or revise its own school's decision, but must not overturn a
+    // decision transport or admin already made.
+    if (reviewerRole === 'school' && doc.review_status !== 'PENDING' && doc.reviewed_by) {
+      const [[prior]] = await conn.query('SELECT role FROM users WHERE id = ? LIMIT 1', [doc.reviewed_by]);
+      if (prior && ['transport', 'admin'].includes(prior.role)) {
+        throw appError('เอกสารนี้ขนส่งหรือผู้ดูแลระบบตรวจแล้ว โรงเรียนเปลี่ยนผลไม่ได้', 409, 'REVIEWED_BY_TRANSPORT');
+      }
+    }
 
     await conn.query(
       `UPDATE ${table}

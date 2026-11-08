@@ -191,7 +191,16 @@ router.get('/no-show', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const session = req.query.session === 'evening' ? 'evening' : 'morning';
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
+    // SCH-ATT-8 (school audit 2026-11-08): a real calendar date, not after
+    // today (2026-13-45 reached MySQL; a future date listed every rider).
+    let date = null;
+    if (req.query.date !== undefined && req.query.date !== '') {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+      if (typeof req.query.date !== 'string' || !isCalendarDate(req.query.date) || req.query.date > today) {
+        return sendError(res, 'วันที่ไม่ถูกต้อง', [{ field: 'date', message: 'วันที่ไม่ถูกต้อง' }], 400);
+      }
+      date = req.query.date;
+    }
     // AUD-004 — this was the one read on the router that consulted neither
     // resolveGradeScope nor requireFullSchoolScope, so a teacher pinned to one
     // grade could name every child school-wide who missed the bus, on any date.
@@ -619,6 +628,10 @@ router.get('/leaves', async (req, res, next) => {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const date = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+    // SCH-ATT-8: the date went straight into SQL unchecked.
+    if (typeof date !== 'string' || !isCalendarDate(date)) {
+      return sendError(res, 'วันที่ไม่ถูกต้อง', [{ field: 'date', message: 'วันที่ไม่ถูกต้อง' }], 400);
+    }
     const gradeFilter = resolveGradeScope(req);
     const leaves = await leaveSvc.getLeavesForSchool(schoolId, date, { gradeFilter });
     return sendSuccess(res, leaves);
@@ -633,6 +646,14 @@ router.post('/leave', async (req, res, next) => {
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
     const { student_id, vehicle_id, leave_date, session, reason } = req.body;
     if (!student_id || !session) return sendError(res, 'student_id and session are required', [], 400);
+    // SCH-ATT-3 (school audit 2026-11-08): an unknown session or an over-long
+    // reason reached the ENUM / VARCHAR(255) columns and came back as a 500.
+    if (!['morning', 'evening', 'both'].includes(session)) {
+      return sendError(res, 'รอบไม่ถูกต้อง (morning / evening / both)', [{ field: 'session', message: 'รอบไม่ถูกต้อง' }], 400);
+    }
+    if (reason != null && (typeof reason !== 'string' || reason.length > 255)) {
+      return sendError(res, 'เหตุผลต้องไม่เกิน 255 ตัวอักษร', [{ field: 'reason', message: 'เหตุผลยาวเกินไป' }], 400);
+    }
     const gradeScope = req.user.role === 'school' ? req.user.gradeScope || null : null;
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     if (gradeScope && (leave_date && leave_date !== today || !['morning', 'evening'].includes(session))) {
@@ -976,10 +997,10 @@ router.put('/students/:id', async (req, res, next) => {
               s.morning_enabled, s.evening_enabled, s.dropoff_address,
               p.name AS parent_name, p.phone AS parent_phone
        FROM students s
-       LEFT JOIN parent_student ps ON ps.student_id = s.id
+       LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.approved = TRUE
        LEFT JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
        WHERE s.id = ? AND s.school_id = ? AND s.is_deleted = FALSE
-       ${gradeScope ? 'AND s.grade IN (?)' : ''} LIMIT 1`;
+       ${gradeScope ? 'AND s.grade IN (?)' : ''} ORDER BY ps.parent_id LIMIT 1`;
     const profileParams = [studentId, schoolId, ...(gradeScope ? [gradeEquivalents(gradeScope)] : [])];
     let [[st]] = await pool.query(profileSql, profileParams);
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
@@ -1064,7 +1085,8 @@ router.put('/students/:id', async (req, res, next) => {
           `SELECT ps.parent_id, p.name AS current_name, p.phone AS current_phone
            FROM   parent_student ps
            JOIN   parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
-           WHERE  ps.student_id = ?
+           WHERE  ps.student_id = ? AND ps.approved = TRUE
+           ORDER BY ps.parent_id
            LIMIT  1`,
           [studentId]
         );
@@ -1085,10 +1107,13 @@ router.put('/students/:id', async (req, res, next) => {
         if (!noChange && (newName || newPhone)) {
           // Detach this student from current parent (preserve old parent row
           // and any sibling links that point to it).
+          // SCH-STU-4 (school audit 2026-11-08): replace only the guardian
+          // being edited. Deleting every link of the child dropped a second
+          // approved guardian (and their LINE access) silently.
           if (currentLink) {
             await conn.query(
-              `DELETE FROM parent_student WHERE student_id = ?`,
-              [studentId]
+              `DELETE FROM parent_student WHERE student_id = ? AND parent_id = ?`,
+              [studentId, currentLink.parent_id]
             );
           }
           // ALWAYS INSERT a fresh parent row — never look up by phone.
@@ -2054,9 +2079,17 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
         // different school is allowed; only a duplicate within the same school is
         // blocked. Soft-deleted matches in this school are reactivated below.
         const [[existing]] = await conn.query(
-          `SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1`,
+          `SELECT id, is_deleted,
+                  EXISTS(SELECT 1 FROM student_transfer_requests tr
+                          WHERE tr.student_id = students.id AND tr.status = 'APPLIED') AS transferred_out
+             FROM students WHERE school_id = ? AND student_code = ? LIMIT 1`,
           [schoolId, studentCode]
         );
+        // SCH-STU-2: never silently revive a pupil who was transferred out.
+        if (existing && existing.is_deleted && Number(existing.transferred_out)) {
+          results.errors.push({ row: r.rowNum, message: `รหัสนักเรียน ${studentCode}: นักเรียนคนนี้โอนย้ายไปโรงเรียนอื่นแล้ว นำเข้าเพื่อกู้คืนไม่ได้ หากต้องการรับกลับให้ใช้คำขอโอนย้าย` });
+          continue;
+        }
         if (classifyStudentImport(existing) === 'SKIP') {
           results.errors.push({ row: r.rowNum, message: `รหัสนักเรียน ${studentCode} มีอยู่แล้วในโรงเรียนนี้` });
           continue;

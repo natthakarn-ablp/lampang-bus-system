@@ -270,7 +270,9 @@ async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has
     `SELECT s.id, s.student_code, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled,
             s.dropoff_address, s.is_deleted, s.deleted_at,
-            p.name AS parent_name, p.phone AS parent_phone
+            p.name AS parent_name, p.phone AS parent_phone,
+            EXISTS(SELECT 1 FROM line_bindings lb
+                    WHERE lb.phone = p.phone AND lb.is_active = TRUE) AS parent_line_linked
      FROM students s
      LEFT JOIN vehicles v ON v.id = s.vehicle_id
      LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.approved = TRUE
@@ -285,9 +287,12 @@ async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has
   // response. Parent contact + dropoff address remain available to the
   // full school account (responsible for parent comms) but are stripped
   // for homeroom teachers, who don't need them to verify roster.
+  // P-04 (parent audit 2026-11-08): the school can see whether the parent has
+  // linked LINE (a yes/no only — never the LINE id). Read-only for teachers too.
+  const withLine = students.map(s => ({ ...s, parent_line_linked: !!Number(s.parent_line_linked) }));
   const sanitized = gradeFilter
-    ? students.map(({ parent_phone, dropoff_address, ...rest }) => rest)
-    : students;
+    ? withLine.map(({ parent_phone, dropoff_address, ...rest }) => rest)
+    : withLine;
 
   return {
     students: sanitized,

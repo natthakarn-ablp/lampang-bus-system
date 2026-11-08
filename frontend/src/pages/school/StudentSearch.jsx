@@ -410,7 +410,10 @@ export default function StudentSearch() {
             /* Phone stays masked in list view (PDPA); the edit form shows it in
                full because the school needs it to make changes. */
             cell: s2 => (s2.parent_name
-              ? <span>{s2.parent_name}{s2.parent_phone && <span className="text-ink-muted tabular-nums"> {maskPhone(s2.parent_phone)}</span>}</span>
+              ? <span>{s2.parent_name}{s2.parent_phone && <span className="text-ink-muted tabular-nums"> {maskPhone(s2.parent_phone)}</span>}
+                  {' '}{s2.parent_line_linked
+                    ? <StatusBadge variant="success">ผูก LINE แล้ว</StatusBadge>
+                    : <StatusBadge variant="neutral">ยังไม่ผูก LINE</StatusBadge>}</span>
               : <span className="text-ink-muted">-</span>) },
         ]}
         actions={s2 => showDeleted

@@ -16,6 +16,8 @@ const bindGuard = require('../services/lineBindGuard');
 const parentConsent = require('../services/parentConsentGate');
 const { createUserKeyedLimiter, lineUserOrIpKey, ipKey } = require('../middleware/rateLimiters');
 const { normalizePhone, isValidPhone } = require('../utils/phone');
+const env = require('../config/env');
+const parentLeaveSvc = require('../services/parentLeave.service');
 
 // Consent gate for a child-detail endpoint. Dark by default (guardParentView
 // short-circuits with no DB hit), so live behaviour is unchanged until
@@ -169,6 +171,7 @@ router.get('/children', requireParentLineAuth, parentLimiter, async (req, res, n
     sendSuccess(res, result.children, 'OK', {
       consent_required: result.consent_required,
       consent_granted: result.consent_granted,
+      parent_leave_enabled: env.features.parentLeave === true,
     });
   } catch (err) { next(err); }
 });
@@ -247,6 +250,79 @@ router.get('/children/:id/eta', requireParentLineAuth, parentLimiter, async (req
     const eta = await etaSvc.getForStudent(studentId);
     return sendSuccess(res, eta);
   } catch (err) { next(err); }
+});
+
+// ─── Parent leave via LINE (M1, parent audit 2026-11-08) ────────────────────
+// Dark until FEATURE_PARENT_LEAVE=true (needs migration 056). Same identity
+// and link checks as the read endpoints; the service enforces dates/cut-offs.
+function parentLeaveEnabled(res) {
+  if (env.features.parentLeave === true) return true;
+  sendError(res, 'ยังไม่เปิดใช้งานการแจ้งลาผ่าน LINE', [{ code: 'FEATURE_DISABLED' }], 404);
+  return false;
+}
+
+async function linkedChildOr403(req, res, studentId) {
+  const children = await lineSvc.getLinkedChildren(req.lineUserId);
+  const child = children.find(c => c.id === studentId);
+  if (!child) { sendError(res, 'Student not linked to this account', [], 403); return null; }
+  if (!(await ensureParentConsent(req, res))) return null;
+  return child;
+}
+
+function sendServiceError(res, next, err) {
+  if (err && err.statusCode) {
+    return sendError(res, err.message, err.code ? [{ code: err.code }] : [], err.statusCode);
+  }
+  return next(err);
+}
+
+router.get('/children/:id/leaves', requireParentLineAuth, parentLimiter, async (req, res, next) => {
+  try {
+    if (!parentLeaveEnabled(res)) return;
+    const studentId = readIdParam(req, res);
+    if (studentId === null) return;
+    if (!(await linkedChildOr403(req, res, studentId))) return;
+    const leaves = await parentLeaveSvc.listParentLeaves({ lineUserId: req.lineUserId, studentId });
+    return sendSuccess(res, {
+      leaves,
+      rules: {
+        morning_cutoff: env.features.parentLeaveMorningCutoff,
+        evening_cutoff: env.features.parentLeaveEveningCutoff,
+        max_days_ahead: env.features.parentLeaveMaxDaysAhead,
+      },
+    });
+  } catch (err) { return sendServiceError(res, next, err); }
+});
+
+router.post('/children/:id/leaves', requireParentLineAuth, parentLimiter, async (req, res, next) => {
+  try {
+    if (!parentLeaveEnabled(res)) return;
+    const studentId = readIdParam(req, res);
+    if (studentId === null) return;
+    const child = await linkedChildOr403(req, res, studentId);
+    if (!child) return;
+    const { leave_date, session, reason } = req.body || {};
+    const leave = await parentLeaveSvc.createParentLeave({
+      lineUserId: req.lineUserId, studentId, leaveDate: leave_date, session, reason,
+    });
+    try {
+      const sessionTh = parentLeaveSvc.SESSION_TH[leave.session] || leave.session;
+      await lineSvc.sendTextMessage(req.lineUserId,
+        `รับแจ้งลาแล้ว: ${child.first_name || ''} ${child.last_name || ''} วันที่ ${leave.leave_date} ${sessionTh}
+คนขับและครูจะเห็นรายการนี้`);
+    } catch { /* best effort */ }
+    return sendSuccess(res, leave, 'แจ้งลาเรียบร้อยแล้ว', null, 201);
+  } catch (err) { return sendServiceError(res, next, err); }
+});
+
+router.post('/leaves/:id/cancel', requireParentLineAuth, parentLimiter, async (req, res, next) => {
+  try {
+    if (!parentLeaveEnabled(res)) return;
+    const leaveId = readIdParam(req, res);
+    if (leaveId === null) return;
+    const out = await parentLeaveSvc.cancelParentLeave({ lineUserId: req.lineUserId, leaveId });
+    return sendSuccess(res, out, 'ยกเลิกการแจ้งลาแล้ว');
+  } catch (err) { return sendServiceError(res, next, err); }
 });
 
 // ─── LIFF bind flow (Phase 10.3E-UX1) ───────────────────────────────────────

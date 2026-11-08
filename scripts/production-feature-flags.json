@@ -13,7 +13,8 @@
     "eta":                   { "env": "FEATURE_ETA",                     "enabled": false, "since": null },
     "geofence":              { "env": "FEATURE_GEOFENCE",                "enabled": false, "since": null },
     "routeDeviation":        { "env": "FEATURE_ROUTE_DEVIATION",         "enabled": false, "since": null },
-    "parentConsentRequired": { "env": "FEATURE_PARENT_CONSENT_REQUIRED", "enabled": false, "since": null }
+    "parentConsentRequired": { "env": "FEATURE_PARENT_CONSENT_REQUIRED", "enabled": false, "since": null },
+    "parentLeave":           { "env": "FEATURE_PARENT_LEAVE",            "enabled": false, "since": null }
   },
   "settings": {
     "adminRecoveryRequireCode": {

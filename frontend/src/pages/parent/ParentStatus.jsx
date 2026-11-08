@@ -4,6 +4,7 @@ import axios from 'axios'; // Raw axios intentional — public LIFF page, no JWT
 import { getLiffIdToken, isOutsideLineClient, LINE_OA_ID, LINE_OA_URL } from '../../utils/liff';
 import OpenInLineCard from '../../components/parent/OpenInLineCard';
 import AppCard from '../../components/ui/AppCard';
+import FormField from '../../components/ui/FormField';
 import { formatGradeClass } from '../../utils/student';
 import ParentConsentModal from '../../components/consent/ParentConsentModal';
 
@@ -35,6 +36,17 @@ function detailErrorMessage(err) {
   return 'โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง';
 }
 
+// M1 parent leave helpers (Bangkok calendar day; the server re-checks).
+const LEAVE_SESSION_TH = { morning: 'รอบเช้า', evening: 'รอบเย็น', both: 'ทั้งวัน' };
+const LEAVE_BY_TH = { me: 'ท่าน', parent: 'ผู้ปกครองอีกท่าน', driver: 'คนขับ', school: 'โรงเรียน' };
+function todayBangkokStr() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+}
+function addDaysStr(dateStr, days) {
+  const t = Date.parse(`${dateStr}T12:00:00+07:00`) + Number(days || 0) * 86400000;
+  return new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+}
+
 export default function ParentStatus() {
   const [idToken, setIdToken] = useState('');
   const [outsideLine, setOutsideLine] = useState(false);
@@ -54,6 +66,13 @@ export default function ParentStatus() {
   // Per-view fetch state for status / history / ETA (parent-04).
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  // M1 parent leave via LINE — shown only when the backend reports it is on.
+  const [leaveEnabled, setLeaveEnabled] = useState(false);
+  const [leaves, setLeaves] = useState([]);
+  const [leaveRules, setLeaveRules] = useState(null);
+  const [leaveForm, setLeaveForm] = useState({ leave_date: '', session: 'both', reason: '' });
+  const [leaveBusy, setLeaveBusy] = useState(false);
+  const [leaveMsg, setLeaveMsg] = useState({ ok: '', err: '' });
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +97,7 @@ export default function ParentStatus() {
         if (!cancelled) {
           setChildren(Array.isArray(res.data?.data) ? res.data.data : []);
           setConsentRequired(res.data?.meta?.consent_required === true);
+          setLeaveEnabled(res.data?.meta?.parent_leave_enabled === true);
         }
       } catch (err) {
         if (!cancelled) {
@@ -137,8 +157,60 @@ export default function ParentStatus() {
     return loadDetail(child, 'eta', 'eta', (d) => setEta(d || null));
   }
 
+  function viewLeave(child) {
+    setLeaves([]);
+    setLeaveMsg({ ok: '', err: '' });
+    setLeaveForm({ leave_date: todayBangkokStr(), session: 'both', reason: '' });
+    return loadDetail(child, 'leave', 'leaves', (d) => {
+      setLeaves(d?.leaves || []);
+      setLeaveRules(d?.rules || null);
+    });
+  }
+
+  async function reloadLeaves(child) {
+    const res = await axios.get(`/api/parent/children/${child.id}/leaves`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    setLeaves(res.data?.data?.leaves || []);
+  }
+
+  async function submitLeave() {
+    if (!selectedChild || leaveBusy) return;
+    setLeaveBusy(true);
+    setLeaveMsg({ ok: '', err: '' });
+    try {
+      await axios.post(`/api/parent/children/${selectedChild.id}/leaves`, leaveForm, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      setLeaveMsg({ ok: 'แจ้งลาเรียบร้อยแล้ว คนขับและครูจะเห็นรายการนี้', err: '' });
+      await reloadLeaves(selectedChild).catch(() => {});
+    } catch (err) {
+      setLeaveMsg({ ok: '', err: err.response?.data?.message || detailErrorMessage(err) });
+    } finally {
+      setLeaveBusy(false);
+    }
+  }
+
+  async function cancelLeave(leaveId) {
+    if (!selectedChild || leaveBusy) return;
+    setLeaveBusy(true);
+    setLeaveMsg({ ok: '', err: '' });
+    try {
+      await axios.post(`/api/parent/leaves/${leaveId}/cancel`, {}, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      setLeaveMsg({ ok: 'ยกเลิกการแจ้งลาแล้ว', err: '' });
+      await reloadLeaves(selectedChild).catch(() => {});
+    } catch (err) {
+      setLeaveMsg({ ok: '', err: err.response?.data?.message || detailErrorMessage(err) });
+    } finally {
+      setLeaveBusy(false);
+    }
+  }
+
   function retryDetail() {
     if (!selectedChild) return;
+    if (view === 'leave') { viewLeave(selectedChild); return; }
     if (view === 'status') viewStatus(selectedChild);
     else if (view === 'history') viewHistory(selectedChild);
     else if (view === 'eta') viewEta(selectedChild);
@@ -339,6 +411,15 @@ export default function ParentStatus() {
                     ย้อนหลัง
                   </button>
                 </div>
+                {leaveEnabled && (
+                  <div className="px-4 pb-4 -mt-2">
+                    <button onClick={() => viewLeave(child)}
+                      className="focus-ring w-full inline-flex items-center justify-center gap-1.5 bg-surface hover:bg-surface-raised text-ink font-semibold min-h-[48px] rounded-xl transition border border-surface-border text-base">
+                      <CalendarDays className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                      แจ้งลา / ไม่ขึ้นรถ
+                    </button>
+                  </div>
+                )}
               </AppCard>
             ))}
           </div>
@@ -446,6 +527,84 @@ export default function ParentStatus() {
                   );
                 })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Parent leave (M1) ── */}
+        {view === 'leave' && selectedChild && (
+          <div className="space-y-4">
+            <AppCard padding="md">
+              <p className="text-lg font-semibold text-ink">
+                {selectedChild.first_name} {selectedChild.last_name}
+              </p>
+              <p className="text-base text-ink-muted">{selectedChild.school_name || '-'}</p>
+            </AppCard>
+
+            {detailLoading || detailError ? (
+              <DetailState loading={detailLoading} error={detailError} onRetry={retryDetail} />
+            ) : (
+              <>
+                <AppCard padding="md" className="space-y-3">
+                  <p className="text-base font-semibold text-ink">แจ้งว่าบุตรหลานจะไม่ขึ้นรถ</p>
+                  <FormField label="วันที่" type="date" required value={leaveForm.leave_date}
+                    min={todayBangkokStr()} max={addDaysStr(todayBangkokStr(), leaveRules?.max_days_ahead ?? 14)}
+                    onChange={(v) => setLeaveForm({ ...leaveForm, leave_date: v })} />
+                  <FormField label="รอบ" required>{(ctl) => (
+                    <select {...ctl} value={leaveForm.session}
+                      onChange={(e) => setLeaveForm({ ...leaveForm, session: e.target.value })}
+                      className="focus-ring w-full border border-surface-border bg-surface-raised rounded-lg px-3 min-h-[48px] text-base text-ink">
+                      <option value="both">ทั้งวัน (เช้าและเย็น)</option>
+                      <option value="morning">รอบเช้า</option>
+                      <option value="evening">รอบเย็น</option>
+                    </select>
+                  )}</FormField>
+                  <FormField label="เหตุผล (ไม่บังคับ)" value={leaveForm.reason} maxLength={255}
+                    onChange={(v) => setLeaveForm({ ...leaveForm, reason: v })}
+                    placeholder="เช่น ไม่สบาย, ผู้ปกครองรับเอง" />
+                  {leaveRules && (
+                    <p className="text-sm text-ink-muted">
+                      แจ้งของวันนี้ได้ก่อน {leaveRules.morning_cutoff} น. (รอบเช้า/ทั้งวัน) และก่อน {leaveRules.evening_cutoff} น. (รอบเย็น) ล่วงหน้าได้ไม่เกิน {leaveRules.max_days_ahead} วัน
+                    </p>
+                  )}
+                  {leaveMsg.err && <p className="text-danger-ink text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{leaveMsg.err}</p>}
+                  {leaveMsg.ok && <p className="text-success-ink text-sm bg-success-soft border border-success/30 rounded-lg px-3 py-2">{leaveMsg.ok}</p>}
+                  <button type="button" onClick={submitLeave} disabled={leaveBusy || !leaveForm.leave_date}
+                    className="focus-ring w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold min-h-[48px] rounded-xl transition text-base">
+                    {leaveBusy ? 'กำลังส่ง…' : 'ส่งแจ้งลา'}
+                  </button>
+                </AppCard>
+
+                <p className="text-base font-semibold text-ink-muted">รายการลาที่จะถึง</p>
+                {leaves.length === 0 ? (
+                  <AppCard padding="lg" className="text-center">
+                    <p className="text-ink-muted text-lg">ยังไม่มีรายการลา</p>
+                  </AppCard>
+                ) : (
+                  <div className="space-y-2">
+                    {leaves.map((l) => (
+                      <AppCard key={l.id} padding="sm" className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-base font-medium text-ink">
+                            {new Date(`${l.leave_date}T00:00:00+07:00`).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' })}
+                            {' · '}{LEAVE_SESSION_TH[l.session] || l.session}
+                          </p>
+                          <p className="text-sm text-ink-muted">
+                            {l.kind === 'SELF' ? 'เดินทางเอง' : 'ลา'} · แจ้งโดย{LEAVE_BY_TH[l.reported_by] || l.reported_by}
+                            {l.reason ? ` · ${l.reason}` : ''}
+                          </p>
+                        </div>
+                        {l.can_cancel && (
+                          <button type="button" onClick={() => cancelLeave(l.id)} disabled={leaveBusy}
+                            className="focus-ring shrink-0 min-h-[44px] px-3 rounded-lg border border-surface-border text-ink hover:bg-surface text-sm font-semibold disabled:opacity-50">
+                            ยกเลิก
+                          </button>
+                        )}
+                      </AppCard>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

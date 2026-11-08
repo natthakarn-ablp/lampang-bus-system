@@ -274,6 +274,43 @@ async function assertParticipationCasesMigrationPresent() {
 }
 
 // ─── Start ───────────────────────────────────────────────────────────────────
+// ─── Parent-feature migration guards (2026-11-08) ────────────────────────────
+// Each parent feature flag needs its migration first. A flag flipped on before
+// the migration would 500 on every use, so refuse to boot instead —
+// scripts/enable-feature-flag.sh then rolls the flag back automatically.
+// `required` lists [table] or [table, column] pairs that must exist.
+async function assertFeatureSchema({ enabled, envName, migration, required }) {
+  if (!enabled) return;
+  const missing = [];
+  for (const [table, column] of required) {
+    const [rows] = column
+      ? await pool.query(
+        `SELECT 1 FROM information_schema.columns
+          WHERE table_schema = ? AND table_name = ? AND column_name = ? LIMIT 1`,
+        [env.db.name, table, column])
+      : await pool.query(
+        `SELECT 1 FROM information_schema.tables
+          WHERE table_schema = ? AND table_name = ? LIMIT 1`,
+        [env.db.name, table]);
+    if (!rows.length) missing.push(column ? `${table}.${column}` : table);
+  }
+  if (missing.length) {
+    console.error(
+      `[app] FATAL: ${envName}=true requires migration ${migration} — missing: ${missing.join(', ')}. ` +
+      `Apply backend/migrations/${migration} or set ${envName}=false before starting.`
+    );
+    process.exit(1);
+  }
+  console.log(`[app] ${envName} migration check passed (${migration})`);
+}
+
+async function assertParentFeatureMigrationsPresent() {
+  await assertFeatureSchema({
+    enabled: env.features.parentLeave, envName: 'FEATURE_PARENT_LEAVE',
+    migration: '056_parent_leave.sql', required: [['student_leaves', 'reported_line_user_id']],
+  });
+}
+
 async function start() {
   await testConnection();
   await assertSharedSecurityStateMigrationPresent();
@@ -283,6 +320,7 @@ async function start() {
   await assertTrackingMigrationPresent();
   await assertAdminRecoveryMigrationPresent();
   await assertParticipationCasesMigrationPresent();
+  await assertParentFeatureMigrationsPresent();
   // Warm the current-term cache so getCurrentTermCachedSync() returns the live
   // DB value (terms.is_current) from the first request. Best-effort — falls back
   // to env.app.currentTerm if the table/row isn't present yet (pre-migration-046).

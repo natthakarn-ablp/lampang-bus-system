@@ -1510,8 +1510,12 @@ router.post('/vehicles', async (req, res, next) => {
       await conn.beginTransaction();
 
       // 1. Create or reuse vehicle (dedup by normalized_plate, not raw plate)
+      // SCH-VEH-2b (school audit 2026-11-08): only an ACTIVE row is reused. A
+      // soft-deleted plate falls through to classifyPlateAgainstDb, which
+      // answers 409 so the school goes through the restore request instead of
+      // silently reviving the deleted vehicle (and attaching a driver to it).
       const [[existingVehicle]] = await conn.query(
-        `SELECT id FROM vehicles WHERE normalized_plate = ?`,
+        `SELECT id FROM vehicles WHERE normalized_plate = ? AND is_deleted = FALSE`,
         [normalizedPlate]
       );
       const vId = existingVehicle ? existingVehicle.id : vehicleId;

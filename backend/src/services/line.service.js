@@ -1410,7 +1410,20 @@ async function isStillLinkedRecipient(conn, lineUserId, studentId) {
   return !!row;
 }
 
+// PERF-001: with migration 059 applied, dispatch claims rows with a lease and
+// sends OUTSIDE any transaction (services/lineDispatch.service.js). Without the
+// columns the legacy path below runs unchanged, so code may ship before 059.
 async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180, types = null) {
+  const dispatch = require('./lineDispatch.service');
+  if (await dispatch.hasLeaseSchema()) {
+    return dispatch.dispatchBatch({ limit, maxAgeMinutes, types });
+  }
+  return legacyProcessUnsentNotifications(limit, maxAgeMinutes, types);
+}
+
+// Pre-059 dispatcher: holds one transaction (and the row locks) across the
+// LINE calls. Kept only as the fallback until 059 is applied everywhere.
+async function legacyProcessUnsentNotifications(limit = 50, maxAgeMinutes = 180, types = null) {
   const conn = await pool.getConnection();
   let sent = 0, failed = 0, processed = 0, skipped = 0;
   try {
@@ -1490,5 +1503,7 @@ module.exports = {
   sendTextMessage, pushToEmergencyGroup, pushEmergencyFlexMessage,
   pushParentStatusFlex, pushParentFlex, logMessage, auditBind,
   processUnsentNotifications,
+  legacyProcessUnsentNotifications,
+  isStillLinkedRecipient,
   getChildrenByPhone,
 };

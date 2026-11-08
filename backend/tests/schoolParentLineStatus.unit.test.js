@@ -8,7 +8,12 @@ jest.mock('../src/config/database', () => ({ pool: { query: jest.fn() } }));
 const { pool } = require('../src/config/database');
 const schoolSvc = require('../src/services/school.service');
 
+// These assert the plain line_bindings SQL, i.e. FEATURE_CO_GUARDIAN off. Pin
+// it: the production server's .env turns it on and the deploy runs the unit
+// suite there (the co-guardian path has its own tests).
+const pinnedEnv = require('../src/config/env');
 beforeEach(() => {
+  pinnedEnv.features.coGuardian = false;
   pool.query.mockReset();
   pool.query.mockImplementation(async (sql) => {
     if (/COUNT\(\*\)/i.test(sql)) return [[{ total: 2 }]];

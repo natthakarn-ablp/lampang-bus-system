@@ -9,6 +9,10 @@ jest.mock('../src/services/line.service', () => ({
   unbindLineUser: jest.fn().mockResolvedValue({ success: true }),
   sendTextMessage: jest.fn().mockResolvedValue({ dryRun: true }),
 }));
+// Only reached with FEATURE_CO_GUARDIAN on (the "flag on" block below).
+jest.mock('../src/services/coGuardian.service', () => ({
+  removeAllForPhone: jest.fn().mockResolvedValue(['U_co']),
+}));
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req, _res, next) => { req.user = JSON.parse(decodeURIComponent(req.headers['x-test-user'])); next(); },
 }));
@@ -73,4 +77,39 @@ test('reason is required', async () => {
 test('a pupil of another school is 404', async () => {
   expect((await post({ ...SCHOOL, scopeId: 'SCH0002' })).status).toBe(404);
   expect(lineSvc.unbindLineUser).not.toHaveBeenCalled();
+});
+
+// OPS-001 review: with FEATURE_CO_GUARDIAN on, cutting the binding also removes
+// the co-guardians on the parent phone(s), audited, and tells them. Off (above):
+// the co-guardian table is never touched.
+describe('with FEATURE_CO_GUARDIAN on', () => {
+  const coSvc = require('../src/services/coGuardian.service');
+  beforeEach(() => {
+    pinnedEnv.features.coGuardian = true;
+    pool.query.mockImplementation(async (sql, params) => {
+      if (/FROM students WHERE id = \? AND school_id = \?/.test(sql)) return [[{ id: 101 }]];
+      if (/JOIN line_co_guardians cg/.test(sql)) return [[{ phone: '0811112222' }]];
+      if (/FROM parent_student/.test(sql)) return [[{ line_user_id: 'U_bound', phone: '0811112222' }]];
+      return [[]];
+    });
+  });
+  afterAll(() => { pinnedEnv.features.coGuardian = false; });
+
+  test('primary and co-guardians are cut; both audited; both told', async () => {
+    const res = await post(SCHOOL);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ unlinked: 2 });
+    expect(lineSvc.unbindLineUser).toHaveBeenCalledWith('U_bound');
+    expect(coSvc.removeAllForPhone).toHaveBeenCalledWith('0811112222');
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ entityType: 'line_co_guardian', required: true }));
+    expect(lineSvc.sendTextMessage).toHaveBeenCalledWith('U_co', expect.any(String));
+  });
+});
+
+test('flag off: the co-guardian table is never queried and the service never called', async () => {
+  const coSvc = require('../src/services/coGuardian.service');
+  coSvc.removeAllForPhone.mockClear();
+  await post(SCHOOL);
+  expect(pool.query.mock.calls.some(([sql]) => /line_co_guardians/.test(sql))).toBe(false);
+  expect(coSvc.removeAllForPhone).not.toHaveBeenCalled();
 });

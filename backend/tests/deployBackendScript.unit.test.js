@@ -159,6 +159,17 @@ exec "${realMv}" "$@"
 echo "publisher $*" >> "$STUB_LOG"; echo "publisher $0" >> "$STUB_LOG.paths"
 exit "\${STUB_PUBLISH_EXIT:-0}"
 `,
+    // OPS-001: the CI gate, run by the script as "$NODE_BIN" "$CI_GATE" …; it
+    // records its arguments and answers STUB_CI_EXIT (0 allow, 2 refuse,
+    // 3 cannot check). Never touches the network.
+    'ci-gate.js': `'use strict';
+const fs = require('fs');
+fs.appendFileSync(process.env.STUB_LOG, 'ci-gate ' + process.argv.slice(2).join(' ') + String.fromCharCode(10));
+const code = Number(process.env.STUB_CI_EXIT || 0);
+if (code === 0) console.log('[ci-gate] ALLOW: stub');
+else console.error('[ci-gate] ' + (code === 2 ? 'REFUSE' : 'CANNOT CHECK') + ': stub');
+process.exit(code);
+`,
   };
   for (const [name, body] of Object.entries(stubs)) {
     const file = path.join(dir, name);
@@ -232,6 +243,10 @@ const INHERITED_DEPLOY_VARS = [
   'HEALTH_SLEEP_SEC', 'LOCK_WAIT_ATTEMPTS', 'LOCK_ORPHAN_SEC',
   'DEPLOY_CURL', 'DEPLOY_PM2', 'DEPLOY_NPM', 'DEPLOY_NPX', 'DEPLOY_NODE', 'DEPLOY_MV',
   'DEPLOY_FRONTEND', 'DEPLOY_PYTHON',
+  // OPS-001 CI gate — the production run exports none of these, but a caller
+  // must never be able to point the fixture at the real GitHub API.
+  'DEPLOY_TARGET_SHA', 'DEPLOY_CI_GATE', 'DEPLOY_CI_REPO', 'DEPLOY_CI_WORKFLOW_FILE',
+  'DEPLOY_CI_TOKEN_FILE', 'DEPLOY_CI_API', 'DEPLOY_CI_TIMEOUT_MS',
 ];
 function baseEnv() {
   const out = {};
@@ -260,6 +275,10 @@ function envFor(fx, env = {}) {
     DEPLOY_MV: `${fx.stubs}/mv`,
     DEPLOY_NODE: toPosix(process.execPath),
     DEPLOY_PYTHON: `${fx.stubs}/publisher`,
+    DEPLOY_CI_GATE: `${fx.stubs}/ci-gate.js`,
+    // The release to deploy defaults to the branch head as published, so the
+    // pre-OPS-001 cases keep their meaning; gate cases override it.
+    DEPLOY_TARGET_SHA: git(fx.origin, 'rev-parse', 'main'),
     STUB_LOG: fx.stubLog,
     STUB_REPO: fx.server,
     STUB_RUNTIME: fx.runtime,
@@ -955,10 +974,24 @@ describe('deploy-backend.sh source', () => {
   it('pins the fetched commit by full SHA and checks HEAD equals it after the merge', () => {
     expect(code).toMatch(/git merge --ff-only "\$TARGET_FULL"/);
     expect(code).toMatch(/\[ "\$AFTER_FULL" = "\$TARGET_FULL" \] \|\| fail/);
-    // FETCH_HEAD is read exactly once, to pin it.
+    // FETCH_HEAD is read exactly once, to pin the fetched branch head.
     const uses = code.match(/FETCH_HEAD/g) || [];
     expect(uses).toHaveLength(1);
-    expect(code).toMatch(/TARGET_FULL="\$\(git rev-parse FETCH_HEAD\)"/);
+    expect(code).toMatch(/FETCHED_FULL="\$\(git rev-parse FETCH_HEAD\)"/);
+    // OPS-001: the deployed commit is the operator's DEPLOY_TARGET_SHA, never
+    // the moving branch head, and it must be on the fetched branch.
+    expect(code).toMatch(/TARGET_FULL="\$DEPLOY_TARGET_SHA"/);
+    expect(code).toMatch(/git merge-base --is-ancestor "\$TARGET_FULL" "\$FETCHED_FULL"/);
+  });
+
+  it('OPS-001: the CI gate runs before the start record and before the checkout moves, with the pinned SHA', () => {
+    const gateAt = code.indexOf('"$NODE_BIN" "$CI_GATE" --sha "$TARGET_FULL" --branch "$BRANCH"');
+    const startAt = code.indexOf('record "start ');
+    const mergeAt = code.indexOf('git merge --ff-only "$TARGET_FULL"');
+    expect(`gate ${gateAt > -1} before start ${gateAt < startAt} before merge ${gateAt < mergeAt}`)
+      .toBe('gate true before start true before merge true');
+    expect(code).toMatch(/\[\[ "\$DEPLOY_TARGET_SHA" =~ \^\[0-9a-f\]\{40\}\$ \]\] \|\| fail/);
+    expect(code).not.toMatch(/DEPLOY_SKIP_CI|SKIP_CI_GATE|CI_GATE_SKIP/);
   });
 
   it('quotes the paths it uses', () => {
@@ -1016,5 +1049,100 @@ describe('deploy-backend.sh source', () => {
 
   it('uses LF line endings so the server\'s bash can run it', () => {
     expect(`has CR: ${src.includes('\r')}`).toBe('has CR: false');
+  });
+});
+
+// ── OPS-001 (2026-11-08): CI gate and pinned target ────────────────────────
+// The gate itself is a stub here (STUB_CI_EXIT); its GitHub logic is covered by
+// deployCiGate.unit.test.js. These cases pin what the deploy script does with
+// the gate's answer and with DEPLOY_TARGET_SHA — nothing touches the network.
+describeWithBash('deploy-backend.sh CI gate (OPS-001)', () => {
+  jest.setTimeout(60000);
+  let fx;
+  beforeEach(() => { fx = makeFixture(); });
+  afterEach(() => { try { fs.rmSync(fx.base, { recursive: true, force: true }); } catch { /* temp dir */ } });
+
+  const gateCalls = (r) => r.stubCalls.filter((l) => l.startsWith('ci-gate '));
+  const unitRuns = (r) => r.stubCalls.filter((l) => l.startsWith('npx jest'));
+
+  it('gate allows: asks about exactly the target SHA on the deploy branch, then deploys it', () => {
+    const after = publish(fx, { 'backend/src/new.js': "'use strict';\nmodule.exports = 2;\n" }, 'feature');
+    const full = git(fx.seed, 'rev-parse', 'HEAD');
+    const r = run(fx, { DEPLOY_TARGET_SHA: full });
+    expect(`exit ${r.status}: ${r.out}`).toMatch(/^exit 0:/);
+    expect(gateCalls(r)).toEqual([`ci-gate --sha ${full} --branch main --repo natthakarn-ablp/lampang-bus-system --workflow-file full-quality.yml`]);
+    expect(r.head).toBe(after);
+    expect(pm2Reloads(r)).toHaveLength(1);
+  });
+
+  it.each([
+    ['refuses (pending / failed / cancelled / not found)', '2', /CI gate refused/],
+    ['cannot check (API down, rate-limited, no permission)', '3', /CI could not be verified/],
+  ])('gate %s: nothing moves — no merge, no tests, no reload, no start record', (_label, code, msg) => {
+    const before = git(fx.server, 'rev-parse', '--short', 'HEAD');
+    publish(fx, { 'backend/src/new.js': "'use strict';\nmodule.exports = 2;\n" }, 'feature');
+    const r = run(fx, { STUB_CI_EXIT: code });
+    expect(r.status).not.toBe(0);
+    expect(r.out).toMatch(msg);
+    expect(r.out).toContain('nothing was changed');
+    expect(r.head).toBe(before);
+    expect(r.running).toBe(before);
+    expect(unitRuns(r)).toEqual([]);
+    expect(pm2Reloads(r)).toEqual([]);
+    expect(r.log).toContain('refused ci-gate');
+    expect(r.log).not.toMatch(/ start /);
+  });
+
+  it('branch moved after the target was checked: deploys the target only, never the newer head', () => {
+    const first = publish(fx, { 'backend/src/a.js': "'use strict';\nmodule.exports = 'a';\n" }, 'checked in CI');
+    const firstFull = git(fx.seed, 'rev-parse', 'HEAD');
+    publish(fx, { 'backend/src/b.js': "'use strict';\nmodule.exports = 'b';\n" }, 'pushed later, not checked');
+    const r = run(fx, { DEPLOY_TARGET_SHA: firstFull });
+    expect(`exit ${r.status}: ${r.out}`).toMatch(/^exit 0:/);
+    expect(r.head).toBe(first);
+    expect(r.running).toBe(first);
+    expect(r.out).toContain('the newer commits are NOT deployed');
+    expect(gateCalls(r)[0]).toContain(`--sha ${firstFull} `);
+  });
+
+  it('a target that is not on the branch is refused before the gate and before anything moves', () => {
+    const before = git(fx.server, 'rev-parse', '--short', 'HEAD');
+    git(fx.seed, 'checkout', '-q', '-b', 'side');
+    write(`${fx.seed}/backend/src/side.js`, "'use strict';\nmodule.exports = 's';\n");
+    git(fx.seed, 'add', '-A'); git(fx.seed, 'commit', '-q', '-m', 'side');
+    git(fx.seed, 'push', '-q', 'origin', 'side');
+    const sideFull = git(fx.seed, 'rev-parse', 'HEAD');
+    const r = run(fx, { DEPLOY_TARGET_SHA: sideFull });
+    expect(r.status).not.toBe(0);
+    expect(r.out).toMatch(/not on origin\/main|is not in this repository/);
+    expect(gateCalls(r)).toEqual([]);
+    expect(r.head).toBe(before);
+    expect(pm2Reloads(r)).toEqual([]);
+  });
+
+  it('rollback after a failed health check does NOT re-run the gate: it returns to the commit /health reported before the deploy (recorded in the start line)', () => {
+    const before = git(fx.server, 'rev-parse', '--short', 'HEAD');
+    const after = publish(fx, { 'backend/src/new.js': "'use strict';\n" }, 'feature');
+    const afterFull = git(fx.seed, 'rev-parse', 'HEAD');
+    const r = run(fx, { DEPLOY_TARGET_SHA: afterFull, STUB_HEALTH_FAIL_AT: after });
+    expect(r.status).not.toBe(0);
+    // One gate call, for the target only — the rollback reference is not CI-gated.
+    expect(gateCalls(r)).toEqual([`ci-gate --sha ${afterFull} --branch main --repo natthakarn-ablp/lampang-bus-system --workflow-file full-quality.yml`]);
+    // Evidence for the rollback target: what /health reported before anything moved.
+    expect(r.log).toMatch(new RegExp(`start branch=main before=${before} target=${after} running_before=${before} rollback_ref=${before}\\(running\\)`));
+    expect(r.head).toBe(before);
+    expect(r.running).toBe(before);
+    expect(pm2Reloads(r)).toHaveLength(2);
+    expect(r.out).toMatch(new RegExp(`Rolled back: running ${before}`));
+    expect(r.log).toMatch(new RegExp(`end result=rolled-back head=${before}`));
+  });
+
+  it.each([[''], ['abc1234'], ['ZZZZ'.repeat(10)]])('DEPLOY_TARGET_SHA %j is refused before the lock, the fetch or the gate', (sha) => {
+    const before = git(fx.server, 'rev-parse', '--short', 'HEAD');
+    const r = run(fx, { DEPLOY_TARGET_SHA: sha });
+    expect(r.status).not.toBe(0);
+    expect(r.out).toContain('DEPLOY_TARGET_SHA must be the full 40-character commit SHA');
+    expect(r.stubCalls).toEqual([]);
+    expect(r.head).toBe(before);
   });
 });

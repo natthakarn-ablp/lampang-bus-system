@@ -116,6 +116,7 @@ async function applyPromotion(db, { schoolId, academicYear, excludedIds = [], ac
         'UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL WHERE school_id = ? AND is_deleted = FALSE AND id IN (?)',
         [schoolId, graduates.map((m) => m.pupil.id)]
       );
+      await require('./pickupCleanup.service').clearStalePickupAssignments(conn, graduates.map((m) => m.pupil.id));  // SCH-STU-7
     }
 
     const promoted = plan.moves.length - graduates.length;

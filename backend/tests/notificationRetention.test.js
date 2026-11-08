@@ -15,9 +15,7 @@ const M = (f) => fs.readFileSync(path.join(__dirname, '../migrations', f), 'utf8
 // The test connection has multipleStatements off; the owner's mysql CLI apply
 // runs the file as is. Strip comment lines and run each statement.
 async function runSqlFile(c, f) {
-  const body = M(f).split('
-').filter(l => !/^\s*--/.test(l)).join('
-');
+  const body = M(f).split(/\r?\n/).filter(l => !/^\s*--/.test(l)).join(' ');
   for (const stmt of body.split(';').map(x => x.trim()).filter(Boolean)) await c.query(stmt);
 }
 const LID = 'U__ret_a';

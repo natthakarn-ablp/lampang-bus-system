@@ -38,8 +38,13 @@ export default function SchoolApprovals() {
     if (processingId === id) return;
     setProcessingId(id);
     try {
-      await api.put(`/school/roster-requests/${id}`, { status, review_note: note.trim() });
+      const res = await api.put(`/school/roster-requests/${id}`, { status, review_note: note.trim() });
       toast.success(status === 'approved' ? 'อนุมัติสำเร็จ' : 'ปฏิเสธสำเร็จ');
+      // SCH-STU-8: the driver's guardian phone already has a LINE account, so
+      // it was not linked automatically.
+      if (res.data?.data?.parent_link_skipped === 'PHONE_ALREADY_BOUND') {
+        toast.error('เบอร์ผู้ปกครองที่คนขับกรอกผูก LINE กับบัญชีอื่นอยู่แล้ว ระบบจึงยังไม่ผูกผู้ปกครองให้ กรุณาตรวจสอบและเพิ่มผู้ปกครองในหน้าแก้ไขนักเรียน');
+      }
       setRejectTarget(null);
       setReviewNote('');
       fetchRequests();

@@ -46,10 +46,12 @@ test('teacher cannot move a student in another grade; no vehicle lookup or updat
 test('teacher can assign an own-grade student to an existing vehicle', async () => {
   mockQuery.mockResolvedValueOnce([[{ id: 12, grade: 'ประถมศึกษาปีที่ ๔', vehicle_id: null }]])
     .mockResolvedValueOnce([[{ id: 'V-1' }]])
-    .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    .mockResolvedValueOnce([{ affectedRows: 1 }])
+    .mockResolvedValueOnce([{ affectedRows: 0 }]); // SCH-STU-7 pickup cleanup
   const res = await request(app).post('/api/school/students/move').send({ student_id: 12, vehicle_id: 'V-1' });
   expect(res.status).toBe(200);
   expect(mockQuery.mock.calls[2]).toEqual([expect.stringContaining('UPDATE students SET vehicle_id'), ['V-1', 12, 'SCH1', 'ประถมศึกษาปีที่ ๔']]);
+  expect(mockQuery.mock.calls[3]).toEqual([expect.stringContaining('DELETE spp FROM student_pickup_points'), [[12]]]);
 });
 
 test('teacher cannot set driver or owner data while registering a vehicle', async () => {

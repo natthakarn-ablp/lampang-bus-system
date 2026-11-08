@@ -17,8 +17,10 @@ Work clone: `D:\Projects\SchoolBus-Lampang\worktrees\night-1108` (LF, `core.auto
 | ID | Status | Branch / PR | Evidence | Remaining |
 |---|---|---|---|---|
 | DATA-001 | merged; deploy pending CI of merge SHA | PR #147 → merge `07a7e4f507d67b01e73a7a2c103702199a6f16c5` | PR CI runs 42484151024/42484169643 green; synthetic round trip 62 tables 0 mismatch (backup 0.5 s, restore 2.1 s); `test-backup-status.py` 21/21; prod read-only run: local/offhost/readback OK, restore UNPROVEN | cron+alert install (owner), rclone own client_id (owner Google login), real-backup restore in isolated env, CRON_TZ finding |
-| DOC-001 | in progress (module drafts by one Sonnet agent) | branch `docs/doc-001-system-index` | | |
-| PERF-001 | PR open, label needs-owner, NOT merged | PR #148 (`6861b79`) | local unit 8/8 + related 78/78; CI pending | owner: merge, apply 059, enable dispatch |
+| DOC-001 | PR open, CI pending | PR #151 (`docs/doc-001-system-index`) | module drafts by 1 Sonnet agent, spot-checked; PII/secret grep clean | merge after CI (docs only) |
+| PERF-001 | PR open, label needs-owner, NOT merged | PR #148 (`6861b79` + `f71213c`) | local unit 8/8 + related 78/78; CI pending | owner: merge, apply 059, enable dispatch |
+| PERF-002 | PR open (stacked on #148), needs-owner, NOT merged | PR #149 (`3613365`, merge `7adb65f`) | local unit 17/17; CI pending | owner: retention days, 059/060 |
+| CI-fix | PR open | PR #150 `.gitleaksignore` fingerprint | secret scan pass on #150 | merge, then deploy that merge SHA (carries DATA-001) |
 | PERF-002 | todo (PR only, no merge) | | | |
 
 ## Log
@@ -29,3 +31,6 @@ Work clone: `D:\Projects\SchoolBus-Lampang\worktrees\night-1108` (LF, `core.auto
 - Finding: no LINE dispatcher scheduled on prod (no cron/timer/dispatch.log).
 - Prod DB aggregate query (notification counts) was DENIED by the session's safety classifier → table sizes unmeasured.
 - 21:0x PR #147 merged → 07a7e4f. PR #148 opened (needs-owner).
+- Secret scan scans ALL refs: #148's example UUID (`retryKey:` literal in a unit test) failed the scan on every branch incl. merge 07a7e4f push run 42485046745. Force-push to rewrite was DENIED by safety classifier (not retried). Fix: literal removed (f71213c) + fingerprint in .gitleaksignore on feat via PR #150.
+- PERF-002 PR #149 opened; DOC-001 PR #151 opened.
+- Next: #150 green → merge → wait push CI of merge SHA → backup → deploy that SHA (DATA-001 + #150 [+ #151 if merged first]).

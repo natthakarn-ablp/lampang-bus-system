@@ -20,7 +20,6 @@ async function optionalAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   const idTokenParam =
-    (typeof req.query.id_token === 'string' ? req.query.id_token : '') ||
     (req.body && typeof req.body.id_token === 'string' ? req.body.id_token : '') ||
     '';
 

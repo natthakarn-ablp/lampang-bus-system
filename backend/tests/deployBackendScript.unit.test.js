@@ -974,10 +974,24 @@ describe('deploy-backend.sh source', () => {
   it('pins the fetched commit by full SHA and checks HEAD equals it after the merge', () => {
     expect(code).toMatch(/git merge --ff-only "\$TARGET_FULL"/);
     expect(code).toMatch(/\[ "\$AFTER_FULL" = "\$TARGET_FULL" \] \|\| fail/);
-    // FETCH_HEAD is read exactly once, to pin it.
+    // FETCH_HEAD is read exactly once, to pin the fetched branch head.
     const uses = code.match(/FETCH_HEAD/g) || [];
     expect(uses).toHaveLength(1);
-    expect(code).toMatch(/TARGET_FULL="\$\(git rev-parse FETCH_HEAD\)"/);
+    expect(code).toMatch(/FETCHED_FULL="\$\(git rev-parse FETCH_HEAD\)"/);
+    // OPS-001: the deployed commit is the operator's DEPLOY_TARGET_SHA, never
+    // the moving branch head, and it must be on the fetched branch.
+    expect(code).toMatch(/TARGET_FULL="\$DEPLOY_TARGET_SHA"/);
+    expect(code).toMatch(/git merge-base --is-ancestor "\$TARGET_FULL" "\$FETCHED_FULL"/);
+  });
+
+  it('OPS-001: the CI gate runs before the start record and before the checkout moves, with the pinned SHA', () => {
+    const gateAt = code.indexOf('"$NODE_BIN" "$CI_GATE" --sha "$TARGET_FULL" --branch "$BRANCH"');
+    const startAt = code.indexOf('record "start ');
+    const mergeAt = code.indexOf('git merge --ff-only "$TARGET_FULL"');
+    expect(`gate ${gateAt > -1} before start ${gateAt < startAt} before merge ${gateAt < mergeAt}`)
+      .toBe('gate true before start true before merge true');
+    expect(code).toMatch(/\[\[ "\$DEPLOY_TARGET_SHA" =~ \^\[0-9a-f\]\{40\}\$ \]\] \|\| fail/);
+    expect(code).not.toMatch(/DEPLOY_SKIP_CI|SKIP_CI_GATE|CI_GATE_SKIP/);
   });
 
   it('quotes the paths it uses', () => {

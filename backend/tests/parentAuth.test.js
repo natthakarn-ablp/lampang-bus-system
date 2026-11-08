@@ -123,9 +123,9 @@ describe('Parent API requires a verified LIFF id_token', () => {
     expect(body).not.toContain(USER_B);
   });
 
-  test('9. id_token may also be supplied via query (no Authorization header)', async () => {
+  test('9. id_token in the query string is refused (P-10: URLs land in access logs)', async () => {
     const res = await request(app).get(`/api/parent/children?id_token=${VALID_TOKEN}`);
-    expect(res.status).toBe(200);
-    expect(lineSvc.getLinkedChildren).toHaveBeenCalledWith(USER_A);
+    expect(res.status).toBe(401);
+    expect(lineSvc.getLinkedChildren).not.toHaveBeenCalled();
   });
 });

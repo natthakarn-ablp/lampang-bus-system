@@ -19,7 +19,6 @@ async function requireParentLineAuth(req, res, next) {
     const header = req.headers.authorization || '';
     const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
     const token = bearer ||
-      (typeof req.query.id_token === 'string' ? req.query.id_token : '') ||
       (req.body && typeof req.body.id_token === 'string' ? req.body.id_token : '') || '';
     if (!token) return sendError(res, 'กรุณาเปิดผ่าน LINE ก่อนใช้งาน', [], 401);
     const verify = await idTokenSvc.verifyIdToken(token);

@@ -127,7 +127,6 @@ async function requireParentLineAuth(req, res, next) {
     const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
     const token =
       bearer ||
-      (typeof req.query.id_token === 'string' ? req.query.id_token : '') ||
       (req.body && typeof req.body.id_token === 'string' ? req.body.id_token : '') ||
       '';
 

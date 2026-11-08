@@ -19,7 +19,7 @@
 | CI fix: `.gitleaksignore` fingerprint | ✅ | ✅ | ✅ #150 | อยู่ใน 549cce9 |
 | DOC-001 README / INDEX / ARCHITECTURE / modules / CLAUDE.md ใหม่ | ✅ | ✅ | ✅ #151 (`be87fb4`) | เอกสารเท่านั้น |
 | PERF-001 ส่ง LINE นอก transaction + lease + retry key (migration 059) | ✅ | ✅ (head 85581ac) | ❌ ตั้งใจไม่ merge (needs-owner) | ❌ |
-| PERF-002 index 060 + สคริปต์ลบแบบ opt-in | ✅ | PR run ผ่าน; push run ล้มจาก test เวลาคร่อมขอบ → แก้แล้ว (9dc103c) รอ CI รอบใหม่ | ❌ ตั้งใจไม่ merge (needs-owner, ซ้อนบน #148) | ❌ |
+| PERF-002 index 060 + สคริปต์ลบแบบ opt-in | ✅ | ✅ (head 9dc103c ทั้ง PR และ push run; ก่อนหน้ามี test เวลาคร่อมขอบล้ม 1 ครั้ง แก้แล้ว) | ❌ ตั้งใจไม่ merge (needs-owner, ซ้อนบน #148) | ❌ |
 
 ## 3. PR / commit / run และผลทดสอบสำคัญ
 - **#147** (`1f9334a` → merge `07a7e4f`): CI 42484151024 (push) / 42484169643 (PR) ผ่าน; `test-backup-status.py` 21/21 (rclone 1.75.0 จริง + LINE จำลอง); **restore round trip สังเคราะห์: 62 ตาราง, mismatch 0, 20,000 แถว, dump 312 KB, backup 0.5 วินาที, restore 2.1 วินาที**

@@ -238,7 +238,8 @@ async function analyzeRows(db, schoolId, rows, autoCreateVehicle = false) {
     let crossSchool = false;
     if (code) {
       const [[ex]] = await db.query(
-        `SELECT st.id, st.is_deleted, (SELECT p.name FROM parent_student ps JOIN parents p ON p.id = ps.parent_id WHERE ps.student_id = st.id AND ps.approved = TRUE LIMIT 1) AS parent_name
+        `SELECT st.id, st.is_deleted, (SELECT p.name FROM parent_student ps JOIN parents p ON p.id = ps.parent_id WHERE ps.student_id = st.id AND ps.approved = TRUE LIMIT 1) AS parent_name,
+                EXISTS(SELECT 1 FROM student_transfer_requests tr WHERE tr.student_id = st.id AND tr.status = 'APPLIED') AS transferred_out
          FROM students st WHERE st.school_id = ? AND st.student_code = ? LIMIT 1`, [schoolId, code]);
       existing = ex || null;
       if (!existing) {
@@ -680,6 +681,14 @@ async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
     if (!row) { await conn.commit(); return; }
     const [[st]] = await conn.query('SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1 FOR UPDATE', [schoolId, row.student_code]);
     if (!st) {
+      await markStale(conn, row, r);
+      await conn.commit(); return;
+    }
+    // SCH-STU-2: re-check under the lock — a transfer may have been applied
+    // after the preview was taken.
+    const [[moved]] = await conn.query(
+      "SELECT id FROM student_transfer_requests WHERE student_id = ? AND status = 'APPLIED' LIMIT 1", [st.id]);
+    if (moved) {
       await markStale(conn, row, r);
       await conn.commit(); return;
     }

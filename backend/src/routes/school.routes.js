@@ -1643,9 +1643,17 @@ router.put('/vehicles/:id', async (req, res, next) => {
     const vehicleId = req.params.id;
     const gradeScope = teacherGradeScope(req);
     const b = req.body || {};
-    const editable = new Set(['vehicle_type', 'owner_name', 'owner_phone', 'insurance_status', 'insurance_type', 'insurance_expiry']);
+    // SCH-VEH-3 (owner decision 2026-11-08): insurance of a shared vehicle is
+    // maintained by the vehicle owner/driver (driver profile), not by any one
+    // of the schools that ride it — a school's value fed vehicle eligibility
+    // for every school. Schools still see it (GET /vehicles).
+    const INSURANCE_FIELDS = ['insurance_status', 'insurance_type', 'insurance_expiry'];
+    if (INSURANCE_FIELDS.some((k) => Object.prototype.hasOwnProperty.call(req.body || {}, k))) {
+      return sendError(res, 'ข้อมูลประกันรถให้เจ้าของรถหรือคนขับแก้ไขในระบบคนขับ', [{ code: 'INSURANCE_OWNER_ONLY' }], 403);
+    }
+    const editable = new Set(['vehicle_type', 'owner_name', 'owner_phone']);
     if (gradeScope && Object.keys(b).some(key => !editable.has(key))) {
-      return sendError(res, 'แก้ไขได้เฉพาะประเภท เจ้าของ และข้อมูลประกันรถ', [], 403);
+      return sendError(res, 'แก้ไขได้เฉพาะประเภทและเจ้าของรถ', [], 403);
     }
     const sets = [], params = [], newVal = {};
     // whitelist of editable columns (column names are hardcoded → safe to interpolate)
@@ -1657,15 +1665,6 @@ router.put('/vehicles/:id', async (req, res, next) => {
     strField('vehicle_type', 50);
     strField('owner_name', 100);
     strField('owner_phone', 20);
-    strField('insurance_status', 50);
-    strField('insurance_type', 50);
-    if (b.insurance_expiry !== undefined) {
-      // CS5-02 — pin the write boundary to a Bangkok calendar date so the
-      // round trip through the edit form cannot walk the date backwards.
-      const v = b.insurance_expiry ? toCalendarDate(b.insurance_expiry) : null;
-      if (v === undefined) return sendError(res, 'รูปแบบวันหมดอายุประกันไม่ถูกต้อง', [{ field: 'insurance_expiry', message: 'ต้องเป็นวันที่ในรูปแบบ YYYY-MM-DD' }], 400);
-      sets.push('insurance_expiry = ?'); params.push(v); newVal.insurance_expiry = v;
-    }
     if (!sets.length) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
 
     const conn = gradeScope ? await pool.getConnection() : null;

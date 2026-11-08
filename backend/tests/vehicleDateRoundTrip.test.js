@@ -132,10 +132,11 @@ describe('CS5-02 — insurance_expiry survives an edit that leaves the date alon
           vehicle_type:     v.vehicle_type || '',
           owner_name:       v.owner_name || '',
           owner_phone:      v.owner_phone || '',
-          insurance_status: v.insurance_status || '',
-          insurance_type:   v.insurance_type || '',
-          insurance_expiry: uiEditFormValue(v.insurance_expiry),
         };
+        // SCH-VEH-3: the school form no longer carries insurance; it is shown
+        // read-only and saved by the vehicle owner/driver. Saving the form must
+        // still leave the stored date untouched.
+        void uiEditFormValue;
 
         // 3. Save the whole form back, exactly as handleSaveEdit() does —
         //    the user changed nothing.
@@ -173,7 +174,8 @@ describe('CS5-02 — insurance_expiry survives an edit that leaves the date alon
         .put(`/api/school/vehicles/${VEHICLE_ID}`)
         .set('Authorization', `Bearer ${schoolToken}`)
         .send({ insurance_expiry: '2026-08-04T17:00:00.000Z' });
-      expect(putRes.status).toBe(200);
+      // SCH-VEH-3: schools may not write insurance at all (owner/driver only).
+      expect(putRes.status).toBe(403);
 
       expect(await readStoredExpiry(conn)).toBe(STORED_DATE);
     } finally {
@@ -190,7 +192,9 @@ describe('CS5-02 — insurance_expiry survives an edit that leaves the date alon
         .put(`/api/school/vehicles/${VEHICLE_ID}`)
         .set('Authorization', `Bearer ${schoolToken}`)
         .send({ insurance_expiry: '2026-12-31' });
-      expect(putRes.status).toBe(200);
+      // SCH-VEH-3: refused, so nothing to audit and the date stays put.
+      expect(putRes.status).toBe(403);
+      return;
 
       const [[row]] = await conn.query(
         `SELECT old_value, new_value FROM audit_logs

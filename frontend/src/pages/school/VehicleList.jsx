@@ -50,9 +50,6 @@ export default function VehicleList() {
       vehicle_type: v.vehicle_type || '',
       owner_name: v.owner_name || '',
       owner_phone: v.owner_phone || '',
-      insurance_status: v.insurance_status || '',
-      insurance_type: v.insurance_type || '',
-      insurance_expiry: v.insurance_expiry ? String(v.insurance_expiry).slice(0, 10) : '',
     };
     editInitial.current = values;
     setEditForm(values);
@@ -193,27 +190,10 @@ export default function VehicleList() {
                 onChange={v => setEditForm(f => ({ ...f, owner_phone: v }))}
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <FormField
-                label="สถานะประกัน"
-                value={editForm.insurance_status}
-                onChange={v => setEditForm(f => ({ ...f, insurance_status: v }))}
-                placeholder="เช่น มีประกัน / หมดอายุ"
-              />
-              <FormField
-                label="ประเภทประกัน"
-                value={editForm.insurance_type}
-                onChange={v => setEditForm(f => ({ ...f, insurance_type: v }))}
-                placeholder="เช่น ชั้น 1 / พ.ร.บ."
-              />
+            <div className="rounded-lg border border-surface-border bg-surface px-3 py-2 text-sm text-ink">
+              <p>ประกันภัย: {editVehicle.insurance_type || '-'} · {editVehicle.insurance_status || '-'} · หมดอายุ {editVehicle.insurance_expiry ? String(editVehicle.insurance_expiry).slice(0, 10) : '-'}</p>
+              <p className="text-caption text-ink-muted mt-1">ข้อมูลประกันให้เจ้าของรถหรือคนขับแก้ไขในระบบคนขับ</p>
             </div>
-            <FormField label="วันหมดอายุประกัน">
-              {ctl => (
-                <input {...ctl} type="date" value={editForm.insurance_expiry}
-                  onChange={e => setEditForm(f => ({ ...f, insurance_expiry: e.target.value }))}
-                  className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition" />
-              )}
-            </FormField>
             <p className="text-caption text-ink-muted">
               ข้อมูลคนขับ ให้คนขับแก้ไขเองในหน้าโปรไฟล์คนขับ
             </p>

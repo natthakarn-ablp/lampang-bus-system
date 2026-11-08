@@ -132,7 +132,7 @@ test('deleted vehicle rejects and rolls back', async () => {
 
 test('vehicle audit failure rolls back the edit', async () => {
   mockAudit.mockRejectedValueOnce(new Error('audit unavailable'));
-  expect((await putVehicle({ owner_name: 'ใหม่', insurance_expiry: '2027-01-31' })).status).toBe(500);
+  expect((await putVehicle({ owner_name: 'ใหม่', owner_phone: '0811111111' })).status).toBe(500);
   expect(conn.rollback).toHaveBeenCalled(); expect(conn.commit).not.toHaveBeenCalled(); expect(conn.release).toHaveBeenCalled();
 });
 

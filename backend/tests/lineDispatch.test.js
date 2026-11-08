@@ -185,8 +185,13 @@ test('overlapping workers: every row delivered exactly once', async () => {
   await queue(12);
   fake.mode = 'slow'; fake.delayMs = 50;
   const results = await Promise.all([run({ limit: 8 }), run({ limit: 8 }), run({ limit: 8 })]);
-  const total = results.reduce((s, r) => s + r.sent, 0);
+  // FOR UPDATE ... ORDER BY ... LIMIT may lock more rows than it returns, so a
+  // concurrent run can skip rows it could have taken; they stay queued (never
+  // lost, never doubled) and the next run drains them.
+  const drain = await run({ limit: 50 });
+  const total = results.reduce((s, r) => s + r.sent, 0) + drain.sent;
   expect(total).toBe(12);
+  expect(results.reduce((s, r) => s + r.lost, 0) + drain.lost).toBe(0);
   expect(fake.deliveries).toHaveLength(12);
   expect(new Set(fake.deliveries.map(d => d.key)).size).toBe(12);
   expect((await rows()).every(x => x.sent === 1)).toBe(true);

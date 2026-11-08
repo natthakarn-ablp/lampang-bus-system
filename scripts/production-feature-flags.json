@@ -1,7 +1,7 @@
 {
   "_comment": "สถานะ feature flag บน production ตามความจริง ใช้เป็นแหล่งเดียวสำหรับเครื่องมือที่ต้องจำลอง production เช่นฮาร์เนสถ่ายภาพคู่มือ แก้ไฟล์นี้ทุกครั้งที่เปิดหรือปิดสวิตช์จริง มิฉะนั้นภาพในคู่มือจะเป็นหน้าจอที่ผู้ใช้ไม่มีวันเห็น",
   "_how_to_verify": "อ่านจากเซิร์ฟเวอร์ด้วย grep '^FEATURE_' /home/schoolbus/apps/lampang-bus-system/backend/.env หรือดูเท่าที่เปิดสาธารณะที่ GET /api/auth/recovery/config",
-  "verified_at": "2026-09-08",
+  "verified_at": "2026-11-08",
   "verified_by": "GET https://schoolbuslampang.com/api/auth/recovery/config (admin_password_recovery, requires_recovery_code) และ docs/project-closure/owner-answers-2026-09-07.md สำหรับอีกสองรายการ",
   "flags": {
     "driverRegistration":    { "env": "FEATURE_DRIVER_REGISTRATION",     "enabled": true,  "since": "ก่อน 2026-09-04" },
@@ -14,10 +14,10 @@
     "geofence":              { "env": "FEATURE_GEOFENCE",                "enabled": false, "since": null },
     "routeDeviation":        { "env": "FEATURE_ROUTE_DEVIATION",         "enabled": false, "since": null },
     "parentConsentRequired": { "env": "FEATURE_PARENT_CONSENT_REQUIRED", "enabled": false, "since": null },
-    "parentLeave":           { "env": "FEATURE_PARENT_LEAVE",            "enabled": false, "since": null },
-    "parentClaimCode":       { "env": "FEATURE_PARENT_CLAIM_CODE",       "enabled": false, "since": null },
+    "parentLeave":           { "env": "FEATURE_PARENT_LEAVE",            "enabled": true,  "since": "2026-11-08 11:56 น." },
+    "parentClaimCode":       { "env": "FEATURE_PARENT_CLAIM_CODE",       "enabled": true,  "since": "2026-11-08 11:56 น." },
     "parentClaimCodeRequired": { "env": "FEATURE_PARENT_CLAIM_CODE_REQUIRED", "enabled": false, "since": null },
-    "coGuardian":            { "env": "FEATURE_CO_GUARDIAN",             "enabled": false, "since": null }
+    "coGuardian":            { "env": "FEATURE_CO_GUARDIAN",             "enabled": true,  "since": "2026-11-08 11:56 น." }
   },
   "settings": {
     "adminRecoveryRequireCode": {

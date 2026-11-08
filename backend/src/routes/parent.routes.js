@@ -18,6 +18,7 @@ const { createUserKeyedLimiter, lineUserOrIpKey, ipKey } = require('../middlewar
 const { normalizePhone, isValidPhone } = require('../utils/phone');
 const env = require('../config/env');
 const parentLeaveSvc = require('../services/parentLeave.service');
+const claimSvc = require('../services/parentClaimCode.service');
 
 // Consent gate for a child-detail endpoint. Dark by default (guardParentView
 // short-circuits with no DB hit), so live behaviour is unchanged until
@@ -354,6 +355,42 @@ function validateStudentCredential(raw) {
   return s;
 }
 
+// M3 (parent audit 2026-11-08): a parent may bind with phone + a one-time
+// code the school issued (claim_code) instead of the student code. When
+// FEATURE_PARENT_CLAIM_CODE_REQUIRED is on, new binds must use a code.
+function readBindInput(body) {
+  const { phone, studentId, student_code, claim_code } = body || {};
+  const cleanPhone = validatePhone(phone);
+  const claimGiven = typeof claim_code === 'string' && claim_code.trim() !== '';
+  const useClaim = env.features.parentClaimCode === true && claimGiven;
+  const claimCode = useClaim ? claimSvc.normalizeCode(claim_code) : null;
+  const credential = useClaim ? null : validateStudentCredential(student_code != null ? student_code : studentId);
+  const errors = [];
+  if (!cleanPhone) errors.push({ field: 'phone', message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก' });
+  if (env.features.parentClaimCodeRequired === true && !useClaim) {
+    errors.push({ field: 'claim_code', message: 'กรุณากรอกรหัสผูกบัญชีที่ได้รับจากโรงเรียน' });
+  } else if (useClaim && !claimCode) {
+    errors.push({ field: 'claim_code', message: 'รหัสผูกบัญชีไม่ถูกต้อง (8 ตัวอักษร)' });
+  } else if (!useClaim && !credential) {
+    errors.push({ field: 'studentId', message: 'กรุณากรอกรหัสนักเรียน' });
+  }
+  // Lock key for the "student" half: the claim code itself, or the student code.
+  const lockCredential = useClaim ? `claim:${claimCode}` : credential;
+  return { cleanPhone, credential, claimCode, useClaim, lockCredential, errors };
+}
+
+async function findBindMatch(input) {
+  return input.useClaim
+    ? claimSvc.findLinkableParentByClaim(input.cleanPhone, input.claimCode)
+    : lineSvc.findLinkableParent(input.cleanPhone, input.credential);
+}
+
+// GET /api/parent/line/bind-config — public: which bind fields the LIFF form shows.
+router.get('/line/bind-config', (req, res) => sendSuccess(res, {
+  claim_code_enabled: env.features.parentClaimCode === true,
+  claim_code_required: env.features.parentClaimCodeRequired === true,
+}));
+
 // POST /api/parent/line/bind-preview
 // body: { idToken, phone, studentId }
 // → 200 { student: { ... }, masked_phone: "090****567" }   parent may proceed
@@ -364,18 +401,15 @@ function validateStudentCredential(raw) {
 router.post('/line/bind-preview', bindGuards, async (req, res, next) => {
   const meta = { ip: req.ip, ua: req.headers['user-agent'] };
   try {
-    const { idToken, phone, studentId, student_code } = req.body || {};
-    const errors = [];
-    const cleanPhone = validatePhone(phone);
-    const credential = validateStudentCredential(student_code != null ? student_code : studentId);
-    if (!cleanPhone)  errors.push({ field: 'phone',     message: 'กรุณากรอกเบอร์โทรศัพท์ 10 หลัก' });
-    if (!credential)  errors.push({ field: 'studentId', message: 'กรุณากรอกรหัสนักเรียน' });
-    if (errors.length) return sendError(res, 'ข้อมูลไม่ถูกต้อง', errors, 400);
+    const { idToken } = req.body || {};
+    const input = readBindInput(req.body);
+    const { cleanPhone, lockCredential: credential } = input;
+    if (input.errors.length) return sendError(res, 'ข้อมูลไม่ถูกต้อง', input.errors, 400);
 
     // Phase 10.13C-4A — credential lockout (before the credential lookup), so a
     // brute-force can't be bypassed by rotating IPs.
     // parent-07: the per-student lock is scoped to the school the code resolves to.
-    const studentLockKey = await bindGuard.resolveStudentLockKey(credential);
+    const studentLockKey = input.useClaim ? null : await bindGuard.resolveStudentLockKey(credential);
     const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, studentLockKey });
     const lock = await bindGuard.checkLock(keys);
     if (lock.locked) {
@@ -410,7 +444,7 @@ router.post('/line/bind-preview', bindGuards, async (req, res, next) => {
       return sendError(res, 'บัญชี LINE นี้ผูกอยู่กับผู้ปกครองท่านอื่นแล้ว กรุณาพิมพ์ "ยกเลิกผูกบัญชี" ก่อน', [], 409);
     }
 
-    const match = await lineSvc.findLinkableParent(cleanPhone, credential);
+    const match = await findBindMatch(input);
     if (!match.found) {
       await bindGuard.noteFailure(subKeys);
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_PREVIEW_FAILED', reason: 'CREDENTIAL_MISMATCH', ...meta });
@@ -445,16 +479,14 @@ router.post('/line/bind-preview', bindGuards, async (req, res, next) => {
 router.post('/line/bind-confirm', bindGuards, async (req, res, next) => {
   const meta = { ip: req.ip, ua: req.headers['user-agent'] };
   try {
-    const { idToken, phone, studentId, student_code } = req.body || {};
-    const cleanPhone = validatePhone(phone);
-    const credential = validateStudentCredential(student_code != null ? student_code : studentId);
-    if (!cleanPhone || !credential) {
-      return sendError(res, 'ข้อมูลไม่ถูกต้อง', [], 400);
-    }
+    const { idToken } = req.body || {};
+    const input = readBindInput(req.body);
+    const { cleanPhone, lockCredential: credential } = input;
+    if (input.errors.length) return sendError(res, 'ข้อมูลไม่ถูกต้อง', input.errors, 400);
 
     // Credential lockout before lookup (see bind-preview).
     // parent-07: the per-student lock is scoped to the school the code resolves to.
-    const studentLockKey = await bindGuard.resolveStudentLockKey(credential);
+    const studentLockKey = input.useClaim ? null : await bindGuard.resolveStudentLockKey(credential);
     const keys = bindGuard.keysFor({ phone: cleanPhone, studentKey: credential, studentLockKey });
     const lock = await bindGuard.checkLock(keys);
     if (lock.locked) {
@@ -486,7 +518,7 @@ router.post('/line/bind-confirm', bindGuards, async (req, res, next) => {
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_DUPLICATE_OR_ALREADY_BOUND', reason: 'ALREADY_BOUND', ...meta });
       return sendError(res, 'บัญชี LINE นี้ผูกอยู่แล้ว', [], 409);
     }
-    const match = await lineSvc.findLinkableParent(cleanPhone, credential);
+    const match = await findBindMatch(input);
     if (!match.found) {
       await bindGuard.noteFailure(subKeys);
       await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: credential, action: 'LINE_BIND_CONFIRM_FAILED', reason: 'CREDENTIAL_MISMATCH', ...meta });
@@ -505,6 +537,7 @@ router.post('/line/bind-confirm', bindGuards, async (req, res, next) => {
       throw bindErr;
     }
     await bindGuard.noteSuccess(subKeys);
+    if (input.useClaim && match.claimId) await claimSvc.markUsed(match.claimId, lineUserId);
     await lineSvc.auditBind({ sub: lineUserId, phone: cleanPhone, studentCode: match.studentCode || credential, action: 'LINE_BIND_SUCCESS', reason: 'SUCCESS', ...meta });
     await lineSvc.logMessage(lineUserId, 'system', 'bind_success_liff', 'ok', `parent_id=${match.parentId}`);
     console.log('[LINE_BIND_CONFIRM] linked', { parentId: match.parentId });

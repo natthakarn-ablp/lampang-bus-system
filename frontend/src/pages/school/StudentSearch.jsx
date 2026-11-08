@@ -36,7 +36,8 @@ const PREFIX_OPTIONS = ['เด็กชาย', 'เด็กหญิง', '�
 export default function StudentSearch() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { user } = useAuth();
+  const { user, features } = useAuth();
+  const claimEnabled = !!(features && features.parentClaimCode);
   const isTeacher = isGradeTeacher(user);
   const [params, setParams] = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
@@ -243,6 +244,42 @@ export default function StudentSearch() {
   const [confirmRestore, setConfirmRestore] = useState(null);
   const [restoreGrade, setRestoreGrade] = useState('');
   const [restoreClassroom, setRestoreClassroom] = useState('');
+  // M3: one-time LINE bind codes for parents, printed as slips.
+  const [claimCodes, setClaimCodes] = useState(null);
+  async function issueClaimCodes(body, studentId) {
+    if (saveLock.current) return;
+    saveLock.current = true; setSaving(true);
+    try {
+      const res = studentId
+        ? await api.post(`/school/students/${studentId}/claim-code`)
+        : await api.post('/school/claim-codes', body);
+      setClaimCodes(res.data?.data || null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ออกรหัสไม่สำเร็จ');
+    } finally { saveLock.current = false; setSaving(false); }
+  }
+  function printClaimSlips() {
+    if (!claimCodes) return;
+    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const slips = claimCodes.codes.map((c) => `
+      <div class="slip">
+        <div class="t">ใบแจ้งรหัสผูกบัญชี LINE สำหรับผู้ปกครอง</div>
+        <div>นักเรียน: <b>${esc(c.prefix)}${esc(c.first_name)} ${esc(c.last_name)}</b> · ${esc(formatGradeClass(c.grade, c.classroom))}</div>
+        <div class="code">${esc(c.code)}</div>
+        <div>เปิด LINE OA ของระบบ กด "ผูกบัญชี" กรอกเบอร์โทรที่ให้ไว้กับโรงเรียน และรหัสนี้ · ใช้ได้ครั้งเดียว ภายใน ${esc(claimCodes.valid_days)} วัน</div>
+        <div class="s">โปรดเก็บรหัสนี้เป็นความลับ อย่าส่งต่อให้ผู้อื่น</div>
+      </div>`).join('');
+    const w = window.open('', '_blank');
+    if (!w) { toast.error('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป'); return; }
+    w.document.write(`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>รหัสผูกบัญชี LINE</title>
+      <style>body{font-family:sans-serif;margin:16px}.slip{border:1px dashed #555;padding:12px;margin:0 0 12px;page-break-inside:avoid;font-size:14px;line-height:1.5}
+      .t{font-weight:bold;font-size:16px}.code{font-family:monospace;font-size:28px;letter-spacing:4px;margin:8px 0}.s{color:#555;font-size:12px}</style>
+      </head><body>${slips}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
   // P-04: full school account cuts the parent's LINE binding (with a reason).
   const [unlinkTarget, setUnlinkTarget] = useState(null);
   const [unlinkReason, setUnlinkReason] = useState('');
@@ -391,6 +428,15 @@ export default function StudentSearch() {
         onClear={() => { setSearch(''); setGrade(''); setClassroom(''); setHasVehicle(''); setShowDeleted(false); }}
       />
 
+      {!isTeacher && claimEnabled && !showDeleted && grade && (
+        <div className="mb-4">
+          <button type="button" disabled={saving} onClick={() => issueClaimCodes({ grade })}
+            className="focus-ring min-h-[44px] px-4 rounded-lg border border-surface-border text-ink hover:bg-surface font-semibold disabled:opacity-50">
+            ออกรหัสผูก LINE ทั้งชั้น {grade}
+          </button>
+        </div>
+      )}
+
       <DataTable
         caption={showDeleted ? 'รายชื่อนักเรียนที่ลบในขอบเขตที่รับผิดชอบ' : 'รายชื่อนักเรียนของโรงเรียน'}
         loading={loading}
@@ -438,6 +484,9 @@ export default function StudentSearch() {
           : <>
               <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
               <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
+              {!isTeacher && claimEnabled && (
+                <TableAction tone="neutral" onClick={() => issueClaimCodes(null, s2.id)}>ออกรหัสผูก LINE</TableAction>
+              )}
               {!isTeacher && s2.parent_line_linked && (
                 <TableAction tone="neutral" onClick={() => { setUnlinkReason(''); setUnlinkTarget(s2); }}>ตัดการผูก LINE</TableAction>
               )}
@@ -678,6 +727,25 @@ export default function StudentSearch() {
         onConfirm={handleWithdraw}
         onCancel={() => setConfirmWithdraw(false)}
       />
+      {claimCodes && (
+        <Modal title="รหัสผูกบัญชี LINE สำหรับผู้ปกครอง" size="md" dismissible={!saving} onClose={() => setClaimCodes(null)}>
+          <div className="space-y-4">
+            <p className="text-sm">ออกรหัสแล้ว {claimCodes.codes.length} คน รหัสแสดงครั้งนี้ครั้งเดียว กรุณาพิมพ์แจกผู้ปกครอง ใช้ได้ครั้งเดียว ภายใน {claimCodes.valid_days} วัน (ออกใหม่แล้วรหัสเดิมใช้ไม่ได้)</p>
+            <ul className="max-h-72 overflow-auto divide-y divide-surface-border border border-surface-border rounded-lg">
+              {claimCodes.codes.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <span>{c.prefix || ''}{c.first_name} {c.last_name} <span className="text-ink-muted">· {formatGradeClass(c.grade, c.classroom)}</span></span>
+                  <span className="font-mono font-semibold tracking-wider">{c.code}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="focus-ring min-h-[48px] px-4 rounded-lg bg-brand-600 text-white font-semibold" onClick={printClaimSlips}>พิมพ์ใบแจ้งผู้ปกครอง</button>
+              <button type="button" className="focus-ring min-h-[44px] px-4 rounded-lg border border-surface-border text-ink hover:bg-surface" onClick={() => setClaimCodes(null)}>ปิด</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {unlinkTarget && (
         <Modal title="ตัดการผูก LINE ของผู้ปกครอง" size="md" dismissible={!saving} onClose={() => setUnlinkTarget(null)}>
           <div className="space-y-4">

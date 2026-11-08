@@ -16,7 +16,8 @@
     "parentConsentRequired": { "env": "FEATURE_PARENT_CONSENT_REQUIRED", "enabled": false, "since": null },
     "parentLeave":           { "env": "FEATURE_PARENT_LEAVE",            "enabled": false, "since": null },
     "parentClaimCode":       { "env": "FEATURE_PARENT_CLAIM_CODE",       "enabled": false, "since": null },
-    "parentClaimCodeRequired": { "env": "FEATURE_PARENT_CLAIM_CODE_REQUIRED", "enabled": false, "since": null }
+    "parentClaimCodeRequired": { "env": "FEATURE_PARENT_CLAIM_CODE_REQUIRED", "enabled": false, "since": null },
+    "coGuardian":            { "env": "FEATURE_CO_GUARDIAN",             "enabled": false, "since": null }
   },
   "settings": {
     "adminRecoveryRequireCode": {

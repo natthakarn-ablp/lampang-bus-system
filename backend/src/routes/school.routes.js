@@ -1336,7 +1336,20 @@ router.post('/students/:id/parent-line/unlink', requireFullSchoolScope, async (r
         WHERE ps.student_id = ? AND ps.approved = TRUE`,
       [id]
     );
-    if (!bindings.length) return sendError(res, 'ผู้ปกครองของนักเรียนคนนี้ยังไม่ได้ผูก LINE', [], 404);
+    // M2: co-guardians on the same parent phone(s) are cut too.
+    let coPhones = [];
+    if (env.features.coGuardian === true) {
+      const [rows] = await pool.query(
+        `SELECT DISTINCT cg.phone
+           FROM parent_student ps
+           JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
+           JOIN line_co_guardians cg ON cg.phone = p.phone AND cg.is_active = TRUE
+          WHERE ps.student_id = ? AND ps.approved = TRUE`,
+        [id]
+      );
+      coPhones = rows.map(r => r.phone);
+    }
+    if (!bindings.length && !coPhones.length) return sendError(res, 'ผู้ปกครองของนักเรียนคนนี้ยังไม่ได้ผูก LINE', [], 404);
 
     const lineSvc = require('../services/line.service');
     for (const b of bindings) {
@@ -1353,7 +1366,27 @@ router.post('/students/:id/parent-line/unlink', requireFullSchoolScope, async (r
           'โรงเรียนได้ยกเลิกการผูกบัญชี LINE ของท่านกับข้อมูลนักเรียนแล้ว หากไม่ถูกต้อง กรุณาติดต่อโรงเรียน');
       } catch { /* best effort: the unbind already happened */ }
     }
-    return sendSuccess(res, { unlinked: bindings.length }, 'ยกเลิกการผูก LINE ของผู้ปกครองแล้ว');
+    let coRemoved = 0;
+    if (coPhones.length) {
+      const coSvc = require('../services/coGuardian.service');
+      await logAudit({
+        userId: req.user.id, action: 'DELETE', entityType: 'line_co_guardian', entityId: id,
+        oldValue: { student_id: id, phones_last4: coPhones.map(p => String(p || '').slice(-4)) },
+        newValue: { reason },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], required: true,
+      });
+      for (const phone of coPhones) {
+        const removed = await coSvc.removeAllForPhone(phone);
+        coRemoved += removed.length;
+        for (const lu of removed) {
+          try {
+            await lineSvc.sendTextMessage(lu,
+              'โรงเรียนได้ยกเลิกการผูกบัญชี LINE ของท่านกับข้อมูลนักเรียนแล้ว หากไม่ถูกต้อง กรุณาติดต่อโรงเรียน');
+          } catch { /* best effort */ }
+        }
+      }
+    }
+    return sendSuccess(res, { unlinked: bindings.length + coRemoved }, 'ยกเลิกการผูก LINE ของผู้ปกครองแล้ว');
   } catch (err) { next(err); }
 });
 

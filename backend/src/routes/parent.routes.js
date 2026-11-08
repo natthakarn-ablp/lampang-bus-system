@@ -19,6 +19,8 @@ const { normalizePhone, isValidPhone } = require('../utils/phone');
 const env = require('../config/env');
 const parentLeaveSvc = require('../services/parentLeave.service');
 const claimSvc = require('../services/parentClaimCode.service');
+const coGuardianSvc = require('../services/coGuardian.service');
+const { activeBindingsSql } = require('../services/lineBindingSource');
 
 // Consent gate for a child-detail endpoint. Dark by default (guardParentView
 // short-circuits with no DB hit), so live behaviour is unchanged until
@@ -173,6 +175,7 @@ router.get('/children', requireParentLineAuth, parentLimiter, async (req, res, n
       consent_required: result.consent_required,
       consent_granted: result.consent_granted,
       parent_leave_enabled: env.features.parentLeave === true,
+      co_guardian_enabled: env.features.coGuardian === true,
     });
   } catch (err) { next(err); }
 });
@@ -219,7 +222,7 @@ router.get('/children/:id/history', requireParentLineAuth, parentLimiter, async 
        FROM checkin_logs
        WHERE student_id = ? AND check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
          AND check_date >= COALESCE(
-               (SELECT DATE(lb.bound_at) FROM line_bindings lb
+               (SELECT DATE(lb.bound_at) FROM ${activeBindingsSql()} lb
                  WHERE lb.line_user_id = ? AND lb.is_active = TRUE LIMIT 1),
                '1000-01-01')
        ORDER BY check_date DESC, checked_at DESC
@@ -326,6 +329,63 @@ router.post('/leaves/:id/cancel', requireParentLineAuth, parentLimiter, async (r
   } catch (err) { return sendServiceError(res, next, err); }
 });
 
+// ─── Co-guardians (M2, parent audit 2026-11-08) ─────────────────────────────
+// Dark until FEATURE_CO_GUARDIAN=true (needs migration 058).
+function coGuardianEnabled(res) {
+  if (env.features.coGuardian === true) return true;
+  sendError(res, 'ยังไม่เปิดใช้งานผู้ปกครองร่วม', [{ code: 'FEATURE_DISABLED' }], 404);
+  return false;
+}
+
+router.get('/guardians', requireParentLineAuth, parentLimiter, async (req, res, next) => {
+  try {
+    if (!coGuardianEnabled(res)) return;
+    return sendSuccess(res, await coGuardianSvc.getGuardianInfo(req.lineUserId));
+  } catch (err) { return sendServiceError(res, next, err); }
+});
+
+router.post('/guardians/invite', requireParentLineAuth, parentLimiter, async (req, res, next) => {
+  try {
+    if (!coGuardianEnabled(res)) return;
+    const out = await coGuardianSvc.createInvite(req.lineUserId);
+    return sendSuccess(res, out, 'สร้างรหัสเชิญแล้ว', null, 201);
+  } catch (err) { return sendServiceError(res, next, err); }
+});
+
+// Redeeming a code is a bind: same tight per-account budget as bind-preview.
+router.post('/guardians/accept', requireParentLineAuth, bindLimiter, async (req, res, next) => {
+  try {
+    if (!coGuardianEnabled(res)) return;
+    const out = await coGuardianSvc.acceptInvite(req.lineUserId, req.body && req.body.code);
+    try {
+      await lineSvc.sendTextMessage(out.invited_by, 'มีผู้ปกครองร่วมเข้าร่วมดูข้อมูลบุตรหลานของท่านแล้ว หากไม่ใช่ผู้ที่ท่านเชิญ กรุณานำออกที่หน้าสถานะบุตรหลาน');
+    } catch { /* best effort */ }
+    return sendSuccess(res, { ok: true }, 'เข้าร่วมเป็นผู้ปกครองร่วมแล้ว', null, 201);
+  } catch (err) { return sendServiceError(res, next, err); }
+});
+
+router.post('/guardians/:id/remove', requireParentLineAuth, parentLimiter, async (req, res, next) => {
+  try {
+    if (!coGuardianEnabled(res)) return;
+    const coId = readIdParam(req, res);
+    if (coId === null) return;
+    const removed = await coGuardianSvc.removeByPrimary(req.lineUserId, coId);
+    for (const lu of removed) {
+      try { await lineSvc.sendTextMessage(lu, 'ผู้ปกครองหลักได้นำบัญชีของท่านออกจากผู้ปกครองร่วมแล้ว'); } catch { /* best effort */ }
+    }
+    return sendSuccess(res, { removed: removed.length }, 'นำผู้ปกครองร่วมออกแล้ว');
+  } catch (err) { return sendServiceError(res, next, err); }
+});
+
+router.post('/guardians/leave', requireParentLineAuth, parentLimiter, async (req, res, next) => {
+  try {
+    if (!coGuardianEnabled(res)) return;
+    const removed = await coGuardianSvc.leave(req.lineUserId);
+    if (!removed.length) return sendError(res, 'บัญชีนี้ไม่ได้เป็นผู้ปกครองร่วม', [], 404);
+    return sendSuccess(res, { ok: true }, 'ออกจากผู้ปกครองร่วมแล้ว');
+  } catch (err) { return sendServiceError(res, next, err); }
+});
+
 // ─── LIFF bind flow (Phase 10.3E-UX1) ───────────────────────────────────────
 // Two-step server-trusted bind: preview (read-only) then confirm (writes).
 // Both endpoints require a valid LIFF ID token — line_user_id is NEVER taken
@@ -389,6 +449,7 @@ async function findBindMatch(input) {
 router.get('/line/bind-config', (req, res) => sendSuccess(res, {
   claim_code_enabled: env.features.parentClaimCode === true,
   claim_code_required: env.features.parentClaimCodeRequired === true,
+  co_guardian_enabled: env.features.coGuardian === true,
 }));
 
 // POST /api/parent/line/bind-preview

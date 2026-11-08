@@ -19,6 +19,7 @@
 
 const { sessionTimeError } = require('../utils/sessionTimeWindow');
 const env = require('../config/env');
+const { activeBindingsSql } = require('./lineBindingSource');
 const { getCurrentTerm } = require('./term.service');
 const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
@@ -513,7 +514,7 @@ async function _buildCheckinTransaction(conn, {
             AND p.is_deleted = FALSE
             AND p.phone IS NOT NULL
             AND TRIM(p.phone) <> ''
-     JOIN   line_bindings lb
+     JOIN   ${activeBindingsSql()} lb
             ON lb.phone = p.phone
             AND lb.is_active = TRUE
      JOIN   line_users lu

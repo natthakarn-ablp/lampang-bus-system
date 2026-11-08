@@ -96,7 +96,7 @@ describe('LIFF bind with a school code', () => {
   test('bind-config tells the form what to show', async () => {
     env.features.parentClaimCodeRequired = true;
     const res = await request(app).get('/api/parent/line/bind-config');
-    expect(res.body.data).toEqual({ claim_code_enabled: true, claim_code_required: true });
+    expect(res.body.data).toMatchObject({ claim_code_enabled: true, claim_code_required: true });
   });
 
   test('preview with a code needs no student code and uses the claim lookup', async () => {

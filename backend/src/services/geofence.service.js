@@ -20,6 +20,7 @@
 
 const { pool } = require('../config/database');
 const env = require('../config/env');
+const { activeBindingsSql } = require('./lineBindingSource');
 const etaSvc = require('./eta.service');
 const { logAudit } = require('../utils/audit');
 
@@ -306,7 +307,7 @@ async function notifyParentsForPickupPoint({ pickupPointId, vehicleId, eventType
              AND p.is_deleted = FALSE
              AND p.phone IS NOT NULL
              AND TRIM(p.phone) <> ''
-       JOIN line_bindings lb
+       JOIN ${activeBindingsSql()} lb
               ON lb.phone = p.phone
              AND lb.is_active = TRUE
        JOIN line_users lu

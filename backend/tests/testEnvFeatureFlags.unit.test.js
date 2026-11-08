@@ -53,3 +53,18 @@ test('every FEATURE_* name config/env.js reads is covered', () => {
   expect(names).toEqual(expect.arrayContaining(['FEATURE_CO_GUARDIAN', 'FEATURE_PARENT_LEAVE', 'FEATURE_PARENT_CLAIM_CODE', 'FEATURE_VEHICLE_QR']));
   for (const n of names) expect(process.env[n]).toBeDefined();
 });
+
+test('a feature test can still switch a flag ON for itself before requiring the module, and restore it', () => {
+  const saved = process.env.FEATURE_CO_GUARDIAN;
+  try {
+    process.env.FEATURE_CO_GUARDIAN = 'true';
+    let fresh;
+    jest.isolateModules(() => { fresh = require('../src/config/env'); });
+    expect(fresh.features.coGuardian).toBe(true);
+  } finally {
+    process.env.FEATURE_CO_GUARDIAN = saved;
+  }
+  let again;
+  jest.isolateModules(() => { again = require('../src/config/env'); });
+  expect(again.features.coGuardian).toBe(false);
+});

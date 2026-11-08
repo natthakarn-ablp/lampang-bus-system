@@ -245,7 +245,7 @@ const INHERITED_DEPLOY_VARS = [
   'DEPLOY_FRONTEND', 'DEPLOY_PYTHON',
   // OPS-001 CI gate — the production run exports none of these, but a caller
   // must never be able to point the fixture at the real GitHub API.
-  'DEPLOY_TARGET_SHA', 'DEPLOY_CI_GATE', 'DEPLOY_CI_REPO', 'DEPLOY_CI_WORKFLOW',
+  'DEPLOY_TARGET_SHA', 'DEPLOY_CI_GATE', 'DEPLOY_CI_REPO', 'DEPLOY_CI_WORKFLOW_FILE',
   'DEPLOY_CI_TOKEN_FILE', 'DEPLOY_CI_API', 'DEPLOY_CI_TIMEOUT_MS',
 ];
 function baseEnv() {
@@ -1070,7 +1070,7 @@ describeWithBash('deploy-backend.sh CI gate (OPS-001)', () => {
     const full = git(fx.seed, 'rev-parse', 'HEAD');
     const r = run(fx, { DEPLOY_TARGET_SHA: full });
     expect(`exit ${r.status}: ${r.out}`).toMatch(/^exit 0:/);
-    expect(gateCalls(r)).toEqual([`ci-gate --sha ${full} --branch main --repo natthakarn-ablp/lampang-bus-system --workflow Full Quality`]);
+    expect(gateCalls(r)).toEqual([`ci-gate --sha ${full} --branch main --repo natthakarn-ablp/lampang-bus-system --workflow-file full-quality.yml`]);
     expect(r.head).toBe(after);
     expect(pm2Reloads(r)).toHaveLength(1);
   });
@@ -1118,6 +1118,23 @@ describeWithBash('deploy-backend.sh CI gate (OPS-001)', () => {
     expect(gateCalls(r)).toEqual([]);
     expect(r.head).toBe(before);
     expect(pm2Reloads(r)).toEqual([]);
+  });
+
+  it('rollback after a failed health check does NOT re-run the gate: it returns to the commit /health reported before the deploy (recorded in the start line)', () => {
+    const before = git(fx.server, 'rev-parse', '--short', 'HEAD');
+    const after = publish(fx, { 'backend/src/new.js': "'use strict';\n" }, 'feature');
+    const afterFull = git(fx.seed, 'rev-parse', 'HEAD');
+    const r = run(fx, { DEPLOY_TARGET_SHA: afterFull, STUB_HEALTH_FAIL_AT: after });
+    expect(r.status).not.toBe(0);
+    // One gate call, for the target only — the rollback reference is not CI-gated.
+    expect(gateCalls(r)).toEqual([`ci-gate --sha ${afterFull} --branch main --repo natthakarn-ablp/lampang-bus-system --workflow-file full-quality.yml`]);
+    // Evidence for the rollback target: what /health reported before anything moved.
+    expect(r.log).toMatch(new RegExp(`start branch=main before=${before} target=${after} running_before=${before} rollback_ref=${before}\\(running\\)`));
+    expect(r.head).toBe(before);
+    expect(r.running).toBe(before);
+    expect(pm2Reloads(r)).toHaveLength(2);
+    expect(r.out).toMatch(new RegExp(`Rolled back: running ${before}`));
+    expect(r.log).toMatch(new RegExp(`end result=rolled-back head=${before}`));
   });
 
   it.each([[''], ['abc1234'], ['ZZZZ'.repeat(10)]])('DEPLOY_TARGET_SHA %j is refused before the lock, the fetch or the gate', (sha) => {

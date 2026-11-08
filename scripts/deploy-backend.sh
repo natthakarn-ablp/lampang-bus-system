@@ -87,7 +87,7 @@
 #         DEPLOY_CURL, DEPLOY_PM2, DEPLOY_NPM, DEPLOY_NPX, DEPLOY_NODE, DEPLOY_MV,
 #         DEPLOY_PYTHON,
 #         DEPLOY_TARGET_SHA (required), DEPLOY_CI_GATE, DEPLOY_CI_REPO,
-#         DEPLOY_CI_WORKFLOW, DEPLOY_CI_TOKEN_FILE (read by the gate)
+#         DEPLOY_CI_WORKFLOW_FILE, DEPLOY_CI_TOKEN_FILE (read by the gate)
 set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/home/schoolbus/apps/lampang-bus-system}"
@@ -130,7 +130,7 @@ PYTHON_BIN="${DEPLOY_PYTHON:-python3}"
 DEPLOY_TARGET_SHA="${DEPLOY_TARGET_SHA:-}"
 CI_GATE="${DEPLOY_CI_GATE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy-ci-gate.js}"
 CI_REPO="${DEPLOY_CI_REPO:-natthakarn-ablp/lampang-bus-system}"
-CI_WORKFLOW="${DEPLOY_CI_WORKFLOW:-Full Quality}"
+CI_WORKFLOW_FILE="${DEPLOY_CI_WORKFLOW_FILE:-full-quality.yml}"
 # Written into node_modules by a completed install: the sha256 of
 # package.json + package-lock.json that install satisfied.
 DEPS_MARKER=".deploy-lockfile.sha256"
@@ -447,9 +447,9 @@ ROLLBACK="$(git rev-parse --short "$ROLLBACK_FULL")"
 # ── 2b. CI gate (OPS-001): Full Quality must have passed for TARGET_FULL ─────
 # Before the start line and before the checkout moves: a refusal leaves the
 # tree, dependencies and the running process exactly as they were.
-echo "[deploy] Checking CI: \"$CI_WORKFLOW\" for $TARGET_FULL on $BRANCH ($CI_REPO)..."
+echo "[deploy] Checking CI: .github/workflows/$CI_WORKFLOW_FILE for $TARGET_FULL on $BRANCH ($CI_REPO)..."
 set +e
-"$NODE_BIN" "$CI_GATE" --sha "$TARGET_FULL" --branch "$BRANCH" --repo "$CI_REPO" --workflow "$CI_WORKFLOW"
+"$NODE_BIN" "$CI_GATE" --sha "$TARGET_FULL" --branch "$BRANCH" --repo "$CI_REPO" --workflow-file "$CI_WORKFLOW_FILE"
 CI_CODE=$?
 set -e
 if [ "$CI_CODE" -ne 0 ]; then

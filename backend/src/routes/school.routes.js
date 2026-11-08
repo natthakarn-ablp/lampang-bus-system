@@ -1569,6 +1569,7 @@ router.post('/vehicles', async (req, res, next) => {
           normalizedPlate,
           plateNo: trimmedPlate,
           vehicleId: vId,
+          schoolId,
         });
         driverAccountCreated = userCreated;
         driverTemporaryPassword = temporaryPassword || null;

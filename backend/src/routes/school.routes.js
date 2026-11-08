@@ -1246,6 +1246,61 @@ router.delete('/students/:id', async (req, res, next) => {
 // ─── POST /students/:id/restore — กู้คืนนักเรียนที่ถูกลบ (ในขอบเขตโรงเรียน) ─────
 // Reverses DELETE /students/:id (withdraw). Operators previously had to hand-run
 // UPDATE students SET is_deleted=FALSE for a mis-deleted student.
+/**
+ * POST /api/school/students/:id/parent-line/unlink   body: { reason }
+ * P-04 (parent audit 2026-11-08, owner-approved): a full school account can
+ * cut the LINE binding(s) of this pupil's parent(s) — wrong person bound,
+ * custody dispute, lost phone. The binding is keyed on the parent PHONE, so
+ * it ends that LINE account's access to every child filed under the phone;
+ * a legitimate parent can bind again. Audited; the unbound LINE account is
+ * told (best effort). Grade teachers cannot do this.
+ */
+router.post('/students/:id/parent-line/unlink', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (reason.length < 3 || reason.length > 200) {
+      return sendError(res, 'กรุณาระบุเหตุผล (3–200 ตัวอักษร)', [{ field: 'reason', message: 'กรุณาระบุเหตุผล' }], 400);
+    }
+
+    const [[student]] = await pool.query(
+      'SELECT id FROM students WHERE id = ? AND school_id = ? AND is_deleted = FALSE LIMIT 1',
+      [id, schoolId]
+    );
+    if (!student) return sendError(res, 'ไม่พบนักเรียน', [], 404);
+
+    const [bindings] = await pool.query(
+      `SELECT DISTINCT lb.line_user_id, lb.phone
+         FROM parent_student ps
+         JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
+         JOIN line_bindings lb ON lb.phone = p.phone AND lb.is_active = TRUE
+        WHERE ps.student_id = ? AND ps.approved = TRUE`,
+      [id]
+    );
+    if (!bindings.length) return sendError(res, 'ผู้ปกครองของนักเรียนคนนี้ยังไม่ได้ผูก LINE', [], 404);
+
+    const lineSvc = require('../services/line.service');
+    for (const b of bindings) {
+      // Audit first (required): no unbind may happen without its record.
+      await logAudit({
+        userId: req.user.id, action: 'DELETE', entityType: 'line_binding', entityId: id,
+        oldValue: { student_id: id, phone_last4: String(b.phone || '').slice(-4) },
+        newValue: { reason },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], required: true,
+      });
+      await lineSvc.unbindLineUser(b.line_user_id);
+      try {
+        await lineSvc.sendTextMessage(b.line_user_id,
+          'โรงเรียนได้ยกเลิกการผูกบัญชี LINE ของท่านกับข้อมูลนักเรียนแล้ว หากไม่ถูกต้อง กรุณาติดต่อโรงเรียน');
+      } catch { /* best effort: the unbind already happened */ }
+    }
+    return sendSuccess(res, { unlinked: bindings.length }, 'ยกเลิกการผูก LINE ของผู้ปกครองแล้ว');
+  } catch (err) { next(err); }
+});
+
 router.post('/students/:id/restore', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);

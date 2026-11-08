@@ -37,7 +37,7 @@ async function isParentLinkedToVehicle(lineUserId, vehicleId) {
        JOIN parents p ON p.phone = lb.phone AND p.is_deleted = FALSE
        JOIN parent_student ps ON ps.parent_id = p.id AND ps.approved = TRUE
        JOIN students s ON s.id = ps.student_id AND s.is_deleted = FALSE
-      WHERE lb.line_user_id = ? AND s.vehicle_id = ?
+      WHERE lb.line_user_id = ? AND lb.is_active = TRUE AND s.vehicle_id = ?
       LIMIT 1`,
     [lineUserId, vehicleId]
   );

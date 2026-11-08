@@ -2050,9 +2050,17 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
         // different school is allowed; only a duplicate within the same school is
         // blocked. Soft-deleted matches in this school are reactivated below.
         const [[existing]] = await conn.query(
-          `SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1`,
+          `SELECT id, is_deleted,
+                  EXISTS(SELECT 1 FROM student_transfer_requests tr
+                          WHERE tr.student_id = students.id AND tr.status = 'APPLIED') AS transferred_out
+             FROM students WHERE school_id = ? AND student_code = ? LIMIT 1`,
           [schoolId, studentCode]
         );
+        // SCH-STU-2: never silently revive a pupil who was transferred out.
+        if (existing && existing.is_deleted && Number(existing.transferred_out)) {
+          results.errors.push({ row: r.rowNum, message: `รหัสนักเรียน ${studentCode}: นักเรียนคนนี้โอนย้ายไปโรงเรียนอื่นแล้ว นำเข้าเพื่อกู้คืนไม่ได้ หากต้องการรับกลับให้ใช้คำขอโอนย้าย` });
+          continue;
+        }
         if (classifyStudentImport(existing) === 'SKIP') {
           results.errors.push({ row: r.rowNum, message: `รหัสนักเรียน ${studentCode} มีอยู่แล้วในโรงเรียนนี้` });
           continue;

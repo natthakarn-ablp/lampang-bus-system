@@ -45,6 +45,8 @@ export default function ParentLink() {
   const [outsideLine, setOutsideLine] = useState(false);
 
   const [previewStudent, setPreviewStudent] = useState(null);
+  // P-02: every child the phone binding will expose, from bind-preview.
+  const [previewChildren, setPreviewChildren] = useState([]);
   const [maskedPhone, setMaskedPhone] = useState('');
 
   // Bootstrap LIFF (resolveLineUserId triggers the login redirect if needed).
@@ -111,6 +113,7 @@ export default function ParentLink() {
         idToken, phone: cleanedPhone, studentId,
       });
       setPreviewStudent(res.data?.data?.student || null);
+      setPreviewChildren(Array.isArray(res.data?.data?.children) ? res.data.data.children : []);
       setMaskedPhone(res.data?.data?.masked_phone || maskPhoneClient(cleanedPhone));
       setStep(STEP.PREVIEW);
     } catch (err) {
@@ -186,6 +189,27 @@ export default function ParentLink() {
               {gradeRoom && <div className="text-sm text-ink-muted mt-1">ระดับชั้น: {gradeRoom}</div>}
               {s.school_name && <div className="text-sm text-ink-muted">โรงเรียน: {s.school_name}</div>}
             </div>
+            {previewChildren.length > 0 && (
+              <div className="border border-surface-border rounded-xl p-4">
+                <div className="text-sm font-semibold text-ink mb-2">
+                  เมื่อผูกบัญชีแล้ว คุณจะเห็นข้อมูลนักเรียนที่ใช้เบอร์นี้ทั้งหมด {previewChildren.length} คน
+                </div>
+                <ul className="space-y-1">
+                  {previewChildren.map((c, i) => (
+                    <li key={i} className="text-sm text-ink">
+                      {[c.prefix, c.first_name, c.last_name].filter(Boolean).join('') || '-'}
+                      <span className="text-ink-muted">
+                        {formatGradeClass(c.grade, c.classroom, '') ? ` · ${formatGradeClass(c.grade, c.classroom, '')}` : ''}
+                        {c.school_name ? ` · ${c.school_name}` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-caption text-ink-muted mt-2">
+                  หากมีชื่อที่ไม่ใช่บุตรหลานของท่าน กรุณาอย่ากดยืนยัน และติดต่อโรงเรียนเพื่อแก้ไขเบอร์โทรศัพท์
+                </p>
+              </div>
+            )}
             <div className="flex items-center justify-between text-sm">
               <span className="text-ink-muted">เบอร์โทรศัพท์ที่ใช้ค้นหา</span>
               <span className="font-bold text-ink">{maskedPhone}</span>

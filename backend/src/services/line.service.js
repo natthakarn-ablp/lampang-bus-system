@@ -277,6 +277,31 @@ async function getChildrenByBoundPhone(lineUserId) {
   return rows;
 }
 
+// P-02 (parent audit 2026-11-08): a binding is keyed on the PHONE, so it
+// grants every approved child whose parent row carries that phone — not only
+// the child whose code was typed. The bind preview lists all of them so the
+// parent sees exactly what they are about to get (and can stop if the school
+// filed someone else's child under their number). Same rows/filters as
+// getChildrenByBoundPhone, keyed by phone instead of an existing binding.
+async function getChildrenByPhone(phone) {
+  const [rows] = await pool.query(
+    `SELECT DISTINCT
+            s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+            sc.name AS school_name
+     FROM   parents p
+     JOIN   parent_student ps ON ps.parent_id = p.id AND ps.approved = TRUE
+     JOIN   students s ON s.id = ps.student_id AND s.is_deleted = FALSE
+     LEFT JOIN schools sc ON sc.id = s.school_id
+     WHERE  p.phone = ? AND p.is_deleted = FALSE
+     ORDER BY s.id`,
+    [phone]
+  );
+  return rows.map(r => ({
+    prefix: r.prefix, first_name: r.first_name, last_name: r.last_name,
+    grade: r.grade, classroom: r.classroom, school_name: r.school_name,
+  }));
+}
+
 // Phase 10.3E-UX1 — preview-then-commit linking, used by the LIFF bind page.
 // `findLinkableParent` is read-only: no DB mutation. The browser shows the
 // student summary to the user, and only after the user taps Confirm does
@@ -1419,4 +1444,5 @@ module.exports = {
   sendTextMessage, pushToEmergencyGroup, pushEmergencyFlexMessage,
   pushParentStatusFlex, pushParentFlex, logMessage, auditBind,
   processUnsentNotifications,
+  getChildrenByPhone,
 };

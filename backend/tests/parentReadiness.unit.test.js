@@ -163,6 +163,10 @@ describe('parent routes (rate-limit keying, parent-08 preview conflict)', () => 
       findLinkableParent: jest.fn().mockResolvedValue({ found: true, parentId: 7, studentCode: '101', student: { first_name: 'ก' } }),
       getLineUserIdByPhone: jest.fn().mockResolvedValue(null),
       getLinkedChildren: jest.fn().mockResolvedValue([]),
+      getChildrenByPhone: jest.fn().mockResolvedValue([
+        { first_name: 'ก', school_name: 'โรงเรียน A' },
+        { first_name: 'ข', school_name: 'โรงเรียน B' },
+      ]),
       commitLineLink: jest.fn(),
       PHONE_BOUND_TO_OTHER_MSG: 'เบอร์นี้ผูกกับบัญชี LINE อื่นไว้แล้ว',
       LineBindConflictError: class LineBindConflictError extends Error {},
@@ -202,6 +206,14 @@ describe('parent routes (rate-limit keying, parent-08 preview conflict)', () => 
     expect(idTokenSvc.verifyIdToken).toHaveBeenCalledTimes(1);
     expect(lineSvc.findLinkableParent).toHaveBeenCalledWith('0812345678', '101');
     expect(bindGuard.keysFor).toHaveBeenCalledWith(expect.objectContaining({ studentLockKey: 'SCH0001:101' }));
+  });
+
+  test('bind-preview lists every child the phone binding will expose (P-02)', async () => {
+    const r = await request(app).post('/api/parent/line/bind-preview')
+      .send({ idToken: 'tok', phone: '0812345678', student_code: '101' });
+    expect(r.status).toBe(200);
+    expect(lineSvc.getChildrenByPhone).toHaveBeenCalledWith('0812345678');
+    expect(r.body.data.children.map(c => c.first_name)).toEqual(['ก', 'ข']);
   });
 
   test('bind-preview returns the phone-already-bound 409 before the confirm step', async () => {

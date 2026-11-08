@@ -73,6 +73,12 @@ export default function ParentStatus() {
   const [leaveForm, setLeaveForm] = useState({ leave_date: '', session: 'both', reason: '' });
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveMsg, setLeaveMsg] = useState({ ok: '', err: '' });
+  // M2 co-guardians.
+  const [coEnabled, setCoEnabled] = useState(false);
+  const [guardians, setGuardians] = useState(null);
+  const [invite, setInvite] = useState(null);
+  const [guardianMsg, setGuardianMsg] = useState({ ok: '', err: '' });
+  const [guardianBusy, setGuardianBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +104,7 @@ export default function ParentStatus() {
           setChildren(Array.isArray(res.data?.data) ? res.data.data : []);
           setConsentRequired(res.data?.meta?.consent_required === true);
           setLeaveEnabled(res.data?.meta?.parent_leave_enabled === true);
+          setCoEnabled(res.data?.meta?.co_guardian_enabled === true);
         }
       } catch (err) {
         if (!cancelled) {
@@ -207,6 +214,43 @@ export default function ParentStatus() {
       setLeaveBusy(false);
     }
   }
+
+  async function loadGuardians(token = idToken) {
+    try {
+      const res = await axios.get('/api/parent/guardians', { headers: { Authorization: `Bearer ${token}` } });
+      setGuardians(res.data?.data || null);
+    } catch {
+      setGuardians(null);
+    }
+  }
+  useEffect(() => {
+    if (coEnabled && idToken) loadGuardians(idToken);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coEnabled, idToken]);
+
+  async function guardianAction(fn, okMsg) {
+    if (guardianBusy) return;
+    setGuardianBusy(true);
+    setGuardianMsg({ ok: '', err: '' });
+    try {
+      await fn();
+      if (okMsg) setGuardianMsg({ ok: okMsg, err: '' });
+      await loadGuardians();
+    } catch (err) {
+      setGuardianMsg({ ok: '', err: err.response?.data?.message || detailErrorMessage(err) });
+    } finally {
+      setGuardianBusy(false);
+    }
+  }
+  const authHeaders = () => ({ headers: { Authorization: `Bearer ${idToken}` } });
+  const createInvite = () => guardianAction(async () => {
+    const res = await axios.post('/api/parent/guardians/invite', {}, authHeaders());
+    setInvite(res.data?.data || null);
+  });
+  const removeGuardian = (id) => guardianAction(
+    () => axios.post(`/api/parent/guardians/${id}/remove`, {}, authHeaders()), 'นำผู้ปกครองร่วมออกแล้ว');
+  const leaveGuardian = () => guardianAction(
+    () => axios.post('/api/parent/guardians/leave', {}, authHeaders()), 'ออกจากผู้ปกครองร่วมแล้ว ปิดแล้วเปิดหน้านี้ใหม่');
 
   function retryDetail() {
     if (!selectedChild) return;
@@ -423,6 +467,53 @@ export default function ParentStatus() {
               </AppCard>
             ))}
           </div>
+        )}
+
+        {view === 'list' && coEnabled && guardians && guardians.role !== 'none' && (
+          <AppCard padding="md" className="mt-4 space-y-3">
+            <p className="text-base font-semibold text-ink">ผู้ปกครองร่วม</p>
+            {guardians.role === 'primary' ? (
+              <>
+                <p className="text-sm text-ink-muted">เชิญผู้ปกครองอีกท่าน (เช่น พ่อหรือแม่) ให้เห็นข้อมูลและได้รับแจ้งเตือนเหมือนท่าน ได้สูงสุด {guardians.max} ท่าน</p>
+                {guardians.co_guardians.length > 0 && (
+                  <ul className="divide-y divide-surface-border border border-surface-border rounded-lg">
+                    {guardians.co_guardians.map((g) => (
+                      <li key={g.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                        <span>{g.display_name || 'ผู้ปกครองร่วม'}</span>
+                        <button type="button" disabled={guardianBusy} onClick={() => removeGuardian(g.id)}
+                          className="focus-ring min-h-[44px] px-3 rounded-lg border border-surface-border text-ink hover:bg-surface font-semibold disabled:opacity-50">
+                          นำออก
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {invite && (
+                  <div className="rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm">
+                    <p>ส่งรหัสนี้ให้ผู้ปกครองอีกท่าน ใช้ได้ครั้งเดียว ภายใน {invite.valid_hours} ชั่วโมง</p>
+                    <p className="font-mono text-2xl font-bold tracking-widest text-ink my-1">{invite.code}</p>
+                    <p className="text-ink-muted">ผู้รับเปิด LINE OA นี้ กดเมนู "ผูกบัญชี" แล้วเลือก "มีรหัสเชิญจากผู้ปกครองหลัก"</p>
+                  </div>
+                )}
+                {guardians.co_guardians.length < guardians.max && (
+                  <button type="button" disabled={guardianBusy} onClick={createInvite}
+                    className="focus-ring w-full min-h-[48px] rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold disabled:opacity-50">
+                    {invite || guardians.pending_invite ? 'สร้างรหัสเชิญใหม่ (รหัสเดิมจะใช้ไม่ได้)' : 'เชิญผู้ปกครองร่วม'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-ink-muted">ท่านเป็นผู้ปกครองร่วม ผู้ปกครองหลักเป็นผู้เชิญและนำออกได้</p>
+                <button type="button" disabled={guardianBusy} onClick={leaveGuardian}
+                  className="focus-ring w-full min-h-[44px] rounded-lg border border-surface-border text-ink hover:bg-surface font-semibold disabled:opacity-50">
+                  ออกจากผู้ปกครองร่วม
+                </button>
+              </>
+            )}
+            {guardianMsg.err && <p className="text-danger-ink text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{guardianMsg.err}</p>}
+            {guardianMsg.ok && <p className="text-success-ink text-sm bg-success-soft border border-success/30 rounded-lg px-3 py-2">{guardianMsg.ok}</p>}
+          </AppCard>
         )}
 
         {/* ── Today's status ── */}

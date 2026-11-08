@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 const env = require('../config/env');
+const { activeBindingsSql } = require('./lineBindingSource');
 const { formatGradeClass } = require('../utils/gradeDisplay');
 
 // Lazy-init LINE client (only when credentials are configured)
@@ -76,7 +77,7 @@ if (typeof linkingStateSweeper.unref === 'function') linkingStateSweeper.unref()
 
 async function getBoundPhoneByLineUserId(lineUserId) {
   const [[row]] = await pool.query(
-    `SELECT phone FROM line_bindings WHERE line_user_id = ? AND is_active = TRUE LIMIT 1`,
+    `SELECT lb.phone FROM ${activeBindingsSql()} lb WHERE lb.line_user_id = ? AND lb.is_active = TRUE LIMIT 1`,
     [lineUserId]
   );
   return row ? row.phone : null;
@@ -265,7 +266,7 @@ async function getChildrenByBoundPhone(lineUserId) {
                 AND dva.is_active = TRUE
                 AND d.is_deleted = FALSE
               LIMIT 1) AS driver_name
-     FROM   line_bindings lb
+     FROM   ${activeBindingsSql()} lb
      JOIN   parents p ON p.phone = lb.phone AND p.is_deleted = FALSE
      JOIN   parent_student ps ON ps.parent_id = p.id AND ps.approved = TRUE
      JOIN   students s ON s.id = ps.student_id AND s.is_deleted = FALSE
@@ -441,12 +442,21 @@ async function getLinkedParentSummary(lineUserId) {
 // Round 1 unlink — hard delete the line_bindings row, clear legacy mirrors.
 // Public name kept stable so webhook handlers (line.routes.js) don't break.
 async function unlinkAccount(lineUserId) {
+  // M2: a co-guardian "unbinding" only leaves; it never touches the primary.
+  if (env.features.coGuardian === true) {
+    const left = await require('./coGuardian.service').leave(lineUserId);
+    if (left.length) return { success: true, unlinkedPhone: null, unlinkedParentId: null, coGuardian: true };
+  }
   const phone = await getBoundPhoneByLineUserId(lineUserId);
   const legacyParentId = phone ? null : await getLinkedParentId(lineUserId);
   if (!phone && !legacyParentId) {
     return { success: false, message: 'ไม่พบการผูกบัญชี' };
   }
   await unbindLineUser(lineUserId);
+  // M2: co-guardians joined through this primary; they go with it.
+  if (env.features.coGuardian === true && phone) {
+    await require('./coGuardian.service').removeAllForPhone(phone);
+  }
   return { success: true, unlinkedPhone: phone, unlinkedParentId: legacyParentId };
 }
 
@@ -1386,7 +1396,7 @@ async function isStillLinkedRecipient(conn, lineUserId, studentId) {
        JOIN parents p
               ON p.id = ps.parent_id
              AND p.is_deleted = FALSE
-       JOIN line_bindings lb
+       JOIN ${activeBindingsSql()} lb
               ON lb.phone = p.phone
              AND lb.is_active = TRUE
        JOIN line_users lu

@@ -37,6 +37,27 @@ export default function ParentLink() {
   // M3: one-time code from the school. Shown only when the backend enables it.
   const [claimCode, setClaimCode] = useState('');
   const [bindConfig, setBindConfig] = useState({ claim_code_enabled: false, claim_code_required: false });
+  // M2: an invited co-guardian redeems the primary parent's code instead.
+  const [inviteMode, setInviteMode] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteDone, setInviteDone] = useState(false);
+  async function onAcceptInvite(e) {
+    e?.preventDefault();
+    setServerErr('');
+    if (!idToken) { setServerErr('ไม่พบ LIFF token — กรุณาเปิดหน้านี้ผ่านลิงก์ใน LINE OA'); return; }
+    if (!inviteCode.trim()) { setServerErr('กรุณากรอกรหัสเชิญ'); return; }
+    setBusy(true);
+    try {
+      await axios.post('/api/parent/guardians/accept', { code: inviteCode.trim() }, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      setInviteDone(true);
+    } catch (err) {
+      setServerErr(err.response?.data?.message || 'เข้าร่วมไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setBusy(false);
+    }
+  }
   const [phoneErr, setPhoneErr] = useState('');
   const [studentErr, setStudentErr] = useState('');
   const [serverErr, setServerErr] = useState('');
@@ -257,6 +278,47 @@ export default function ParentLink() {
     );
   }
 
+  if (inviteDone) {
+    return (
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6">
+        <CheckCircle2 className="w-16 h-16 mb-5 text-success-ink" strokeWidth={2} aria-hidden="true" />
+        <h2 className="text-xl font-bold text-ink mb-2">เข้าร่วมเป็นผู้ปกครองร่วมแล้ว</h2>
+        <p className="text-ink-muted text-center">ท่านจะเห็นข้อมูลและได้รับแจ้งเตือนเหมือนผู้ปกครองหลัก กดเมนู "สถานะบุตรหลาน" ใน LINE OA เพื่อดูข้อมูล</p>
+      </div>
+    );
+  }
+
+  if (inviteMode) {
+    return (
+      <div className="min-h-screen bg-surface p-4 sm:p-6">
+        <div className="max-w-lg mx-auto">
+          <PageHeader icon={Link2} title="เข้าร่วมเป็นผู้ปกครองร่วม" subtitle="ใช้รหัสเชิญจากผู้ปกครองหลัก" />
+          <form onSubmit={onAcceptInvite} className="bg-surface-raised rounded-2xl border border-surface-border shadow-sm p-5 space-y-4">
+            <FormField
+              label="รหัสเชิญ"
+              required
+              autoComplete="off"
+              maxLength={9}
+              value={inviteCode}
+              onChange={(v) => { setInviteCode(v.toUpperCase()); setServerErr(''); }}
+              placeholder="ABCD-2345"
+              helper="รหัส 8 ตัวที่ผู้ปกครองหลักส่งให้ ใช้ได้ภายใน 24 ชั่วโมง"
+            />
+            {serverErr && <AlertBanner variant="danger" title="เข้าร่วมไม่สำเร็จ">{serverErr}</AlertBanner>}
+            <button type="submit" disabled={busy}
+              className="focus-ring w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold min-h-[48px] rounded-lg transition">
+              {busy ? 'กำลังตรวจสอบ…' : 'เข้าร่วม'}
+            </button>
+            <button type="button" onClick={() => { setInviteMode(false); setServerErr(''); }}
+              className="focus-ring w-full min-h-[44px] rounded-lg border border-surface-border text-ink hover:bg-surface">
+              กลับไปผูกบัญชีด้วยเบอร์โทร
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   // STEP.FORM
   return (
     <div className="min-h-screen bg-surface p-4 sm:p-6">
@@ -333,6 +395,13 @@ export default function ParentLink() {
             {busy ? 'กำลังค้นหา…' : 'ค้นหาข้อมูลบุตรหลาน'}
           </button>
         </form>
+
+        {bindConfig.co_guardian_enabled && (
+          <button type="button" onClick={() => { setInviteMode(true); setServerErr(''); }}
+            className="focus-ring mt-4 w-full min-h-[44px] rounded-lg border border-surface-border text-ink hover:bg-surface-raised font-semibold">
+            มีรหัสเชิญจากผู้ปกครองหลัก? เข้าร่วมเป็นผู้ปกครองร่วม
+          </button>
+        )}
 
         <div className="mt-4 text-center text-caption text-ink-muted">
           ระบบรถรับส่งนักเรียนจังหวัดลำปาง

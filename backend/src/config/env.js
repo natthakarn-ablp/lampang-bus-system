@@ -333,6 +333,9 @@ const env = {
     parentClaimCode: process.env.FEATURE_PARENT_CLAIM_CODE === 'true',
     parentClaimCodeRequired: process.env.FEATURE_PARENT_CLAIM_CODE_REQUIRED === 'true'
       && process.env.FEATURE_PARENT_CLAIM_CODE === 'true',
+    // Co-guardians (migration 058): the primary parent invites up to two more
+    // LINE accounts. Off = every binding read is plain line_bindings again.
+    coGuardian: process.env.FEATURE_CO_GUARDIAN === 'true',
     // Phase 4 — participatory-administration cases + append-only event log.
     // Dark by default: when false the /api/participation router is not
     // mounted, so the existing system is byte-for-byte unchanged. Migration

@@ -313,6 +313,10 @@ async function assertParentFeatureMigrationsPresent() {
     enabled: env.features.parentClaimCode, envName: 'FEATURE_PARENT_CLAIM_CODE',
     migration: '057_parent_claim_codes.sql', required: [['parent_claim_codes']],
   });
+  await assertFeatureSchema({
+    enabled: env.features.coGuardian, envName: 'FEATURE_CO_GUARDIAN',
+    migration: '058_co_guardians.sql', required: [['line_co_guardians'], ['line_guardian_invites']],
+  });
 }
 
 async function start() {

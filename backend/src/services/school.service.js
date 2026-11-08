@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const { activeBindingsSql } = require('./lineBindingSource');
 const { gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
 const { logAudit } = require('../utils/audit');
 const { toBangkokDate } = require('../utils/thaiTime');
@@ -271,7 +272,7 @@ async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has
             s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled,
             s.dropoff_address, s.is_deleted, s.deleted_at,
             p.name AS parent_name, p.phone AS parent_phone,
-            EXISTS(SELECT 1 FROM line_bindings lb
+            EXISTS(SELECT 1 FROM ${activeBindingsSql()} lb
                     WHERE lb.phone = p.phone AND lb.is_active = TRUE) AS parent_line_linked
      FROM students s
      LEFT JOIN vehicles v ON v.id = s.vehicle_id

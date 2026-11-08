@@ -7,6 +7,7 @@
 
 const { pool } = require('../config/database');
 const env = require('../config/env');
+const { activeBindingsSql } = require('./lineBindingSource');
 const { logAudit } = require('../utils/audit');
 const { daysBetweenBangkok } = require('../utils/thaiTime');
 
@@ -33,7 +34,7 @@ async function isParentLinkedToVehicle(lineUserId, vehicleId) {
   if (!lineUserId || !vehicleId) return false;
   const [[row]] = await pool.query(
     `SELECT 1 AS ok
-       FROM line_bindings lb
+       FROM ${activeBindingsSql()} lb
        JOIN parents p ON p.phone = lb.phone AND p.is_deleted = FALSE
        JOIN parent_student ps ON ps.parent_id = p.id AND ps.approved = TRUE
        JOIN students s ON s.id = ps.student_id AND s.is_deleted = FALSE

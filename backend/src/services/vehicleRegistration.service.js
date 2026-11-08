@@ -370,8 +370,14 @@ async function patchRosterStudent(pool, { applicationId, schoolId, rosterId, fie
     if (!['UNMATCHED', 'MATCHED', 'NOT_FOUND'].includes(fields.match_status)) {
       throw appError('สถานะการจับคู่ไม่ถูกต้อง', 400, 'INVALID_MATCH_STATUS');
     }
+    // SCH-VEH-6: MATCHED means "linked to a pupil" — set it through the match
+    // endpoint, never bare (that cleared UNMATCHED without a pupil and let
+    // approve pass).
+    if (fields.match_status === 'MATCHED') {
+      throw appError('กรุณาเลือกนักเรียนที่ตรงกันผ่านปุ่มจับคู่', 400, 'MATCH_NEEDS_STUDENT');
+    }
     allowed.match_status = fields.match_status;
-    if (fields.match_status !== 'MATCHED') allowed.matched_student_id = null;
+    allowed.matched_student_id = null;
   }
   if (!Object.keys(allowed).length) throw appError('ไม่มีข้อมูลที่จะแก้ไข', 400, 'NOTHING_TO_UPDATE');
 
@@ -393,15 +399,33 @@ async function patchRosterStudent(pool, { applicationId, schoolId, rosterId, fie
   return { id: Number(rosterId), ...allowed };
 }
 
+// SCH-VEH-6 (school audit 2026-11-08): a school decision needs a live
+// application and a current state it can move from. Approving a cancelled or
+// superseded application, or approving twice from a stale screen, recorded a
+// decision nobody could act on.
+const INACTIVE_APPLICATION = ['CANCELLED', 'SUPERSEDED', 'EXPIRED'];
+function assertDecidable(aps, allowedFrom) {
+  if (INACTIVE_APPLICATION.includes(aps.application_status)) {
+    throw appError('คำขอนี้ถูกยกเลิกหรือหมดอายุแล้ว', 409, 'APPLICATION_INACTIVE');
+  }
+  if (!allowedFrom.includes(aps.approval_status)) {
+    throw appError('สถานะคำขอเปลี่ยนไปแล้ว กรุณาโหลดหน้าใหม่', 409, 'STALE_APPROVAL_STATUS');
+  }
+}
+
 async function approveRegistration(pool, { applicationId, schoolId, userId }) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [[aps]] = await conn.query(
-      'SELECT approval_status FROM inspection_application_schools WHERE application_id = ? AND school_id = ? FOR UPDATE',
+      `SELECT aps.approval_status, a.status AS application_status
+         FROM inspection_application_schools aps
+         JOIN vehicle_inspection_applications a ON a.id = aps.application_id
+        WHERE aps.application_id = ? AND aps.school_id = ? FOR UPDATE`,
       [applicationId, schoolId]
     );
     if (!aps) throw appError('ไม่ใช่คำขอของโรงเรียนนี้', 403, 'NOT_THIS_SCHOOL');
+    assertDecidable(aps, ['PENDING_SCHOOL_REVIEW']);
 
     const [[u]] = await conn.query(
       `SELECT COUNT(*) AS unresolved FROM registration_roster_students
@@ -441,10 +465,14 @@ async function rejectRegistration(pool, { applicationId, schoolId, userId, reaso
   try {
     await conn.beginTransaction();
     const [[aps]] = await conn.query(
-      'SELECT approval_status FROM inspection_application_schools WHERE application_id = ? AND school_id = ? FOR UPDATE',
+      `SELECT aps.approval_status, a.status AS application_status
+         FROM inspection_application_schools aps
+         JOIN vehicle_inspection_applications a ON a.id = aps.application_id
+        WHERE aps.application_id = ? AND aps.school_id = ? FOR UPDATE`,
       [applicationId, schoolId]
     );
     if (!aps) throw appError('ไม่ใช่คำขอของโรงเรียนนี้', 403, 'NOT_THIS_SCHOOL');
+    assertDecidable(aps, ['PENDING_SCHOOL_REVIEW', 'APPROVED']);
     await conn.query(
       `UPDATE inspection_application_schools
           SET approval_status = 'NEEDS_REVISION', reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP, school_note = ?

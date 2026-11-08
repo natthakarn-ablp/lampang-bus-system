@@ -976,10 +976,10 @@ router.put('/students/:id', async (req, res, next) => {
               s.morning_enabled, s.evening_enabled, s.dropoff_address,
               p.name AS parent_name, p.phone AS parent_phone
        FROM students s
-       LEFT JOIN parent_student ps ON ps.student_id = s.id
+       LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.approved = TRUE
        LEFT JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
        WHERE s.id = ? AND s.school_id = ? AND s.is_deleted = FALSE
-       ${gradeScope ? 'AND s.grade IN (?)' : ''} LIMIT 1`;
+       ${gradeScope ? 'AND s.grade IN (?)' : ''} ORDER BY ps.parent_id LIMIT 1`;
     const profileParams = [studentId, schoolId, ...(gradeScope ? [gradeEquivalents(gradeScope)] : [])];
     let [[st]] = await pool.query(profileSql, profileParams);
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
@@ -1064,7 +1064,8 @@ router.put('/students/:id', async (req, res, next) => {
           `SELECT ps.parent_id, p.name AS current_name, p.phone AS current_phone
            FROM   parent_student ps
            JOIN   parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
-           WHERE  ps.student_id = ?
+           WHERE  ps.student_id = ? AND ps.approved = TRUE
+           ORDER BY ps.parent_id
            LIMIT  1`,
           [studentId]
         );
@@ -1085,10 +1086,13 @@ router.put('/students/:id', async (req, res, next) => {
         if (!noChange && (newName || newPhone)) {
           // Detach this student from current parent (preserve old parent row
           // and any sibling links that point to it).
+          // SCH-STU-4 (school audit 2026-11-08): replace only the guardian
+          // being edited. Deleting every link of the child dropped a second
+          // approved guardian (and their LINE access) silently.
           if (currentLink) {
             await conn.query(
-              `DELETE FROM parent_student WHERE student_id = ?`,
-              [studentId]
+              `DELETE FROM parent_student WHERE student_id = ? AND parent_id = ?`,
+              [studentId, currentLink.parent_id]
             );
           }
           // ALWAYS INSERT a fresh parent row — never look up by phone.

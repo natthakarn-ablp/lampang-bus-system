@@ -83,7 +83,7 @@ test('guardian change creates a fresh per-pupil link without changing siblings o
   const res = await putStudent({ parent_name: 'ผู้ปกครองใหม่' });
   expect(res.status).toBe(200); expect(res.body.data.parent_reassigned).toBe(true);
   const calls = writes();
-  expect(calls.find(([sql]) => sql.includes('DELETE FROM parent_student'))[1]).toEqual([12]);
+  expect(calls.find(([sql]) => sql.includes('DELETE FROM parent_student'))[1]).toEqual([12, 50]); // SCH-STU-4: only the edited guardian's link
   expect(calls.find(([sql]) => sql.includes('INSERT INTO parents'))[1]).toEqual(['ผู้ปกครองใหม่', '0800000000']);
   expect(calls.find(([sql]) => sql.includes('INSERT INTO parent_student'))[1]).toEqual([51, 12, 7]);
   expect(calls.some(([sql]) => /UPDATE parents|DELETE FROM parents|line_user_id/.test(sql))).toBe(false);

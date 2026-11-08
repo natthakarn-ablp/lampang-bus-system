@@ -30,14 +30,41 @@
  * Idempotent: requiring this module more than once only loads the file once.
  */
 
+const fs = require('fs');
 const path = require('path');
 
+/**
+ * Feature flags are pinned OFF for the test run (OPS-001, 2026-11-08).
+ *
+ * config/env.js calls `require('dotenv').config()`, which reads `.env` from the
+ * working directory. On the production server deploy-backend.sh runs the unit
+ * suite from backend/, where the real `.env` turns production flags on — and a
+ * test that asserted flag-off SQL failed there while passing in CI (deploy of
+ * 4a7b1ca aborted). dotenv never overrides a key that is already set, so every
+ * FEATURE_* name config/env.js reads is set here first: to the value from
+ * `.env.test` when that file names it, otherwise to 'false'. Neither the real
+ * `.env` nor a value exported by the surrounding shell can switch a flag on
+ * for the suite. A test that needs a flag on sets it itself (env.features.x or
+ * process.env before a fresh require) and covers the on/off cases explicitly.
+ */
+const ENV_JS = path.resolve(__dirname, '../src/config/env.js');
+function featureFlagNames() {
+  const src = fs.readFileSync(ENV_JS, 'utf8');
+  return [...new Set(src.match(/\bFEATURE_[A-Z0-9_]+/g) || [])];
+}
+
 if (!global.__LAMPANG_TEST_ENV_LOADED__) {
-  require('dotenv').config({
+  const loaded = require('dotenv').config({
     path: path.resolve(__dirname, '../.env.test'),
     override: true,
   });
+  const fromTestFile = (loaded && loaded.parsed) || {};
+  for (const name of featureFlagNames()) {
+    process.env[name] = Object.prototype.hasOwnProperty.call(fromTestFile, name)
+      ? fromTestFile[name]
+      : 'false';
+  }
   global.__LAMPANG_TEST_ENV_LOADED__ = true;
 }
 
-module.exports = {};
+module.exports = { featureFlagNames };

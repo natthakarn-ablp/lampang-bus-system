@@ -53,6 +53,21 @@
 #        reset; if it is dirty the rollback is refused and the manual steps
 #        are printed instead.
 #
+#   2026-11-08 (OPS-001, system audit): CI was not required. The server ran
+#   only the DB-free unit suite, so a commit whose integration tests, migration
+#   check or frontend build failed in CI could still be deployed.
+#     9. The operator names the release: DEPLOY_TARGET_SHA (full 40-hex) is
+#        required. It must be on $REMOTE/$EXPECTED_BRANCH after the fetch; if
+#        the branch has moved past it, the newer commits are NOT deployed — the
+#        target stays the SHA that was checked.
+#    10. Before anything in the checkout moves, scripts/deploy-ci-gate.js
+#        (beside this script) asks GitHub whether the "Full Quality" workflow
+#        ran on `push` for exactly that SHA on that branch and succeeded.
+#        Pending, failed, cancelled, missing, or an API that cannot be reached
+#        or refuses access all stop the deploy with nothing changed. There is
+#        no skip switch; DEPLOY_CI_GATE exists so the test suite can point at a
+#        stub, the same way DEPLOY_NPX lets it stub the unit run.
+#
 # What this script guarantees, stated exactly: every failure up to and
 # including the unit tests stops BEFORE `pm2 reload`, and if dependencies were
 # already swapped in they are put back. A health-check failure happens after
@@ -70,7 +85,9 @@
 #         HEALTH_ATTEMPTS, HEALTH_TIMEOUT_SEC, HEALTH_SLEEP_SEC,
 #         LOCK_WAIT_ATTEMPTS, LOCK_ORPHAN_SEC, DEPLOY_FRONTEND=0|1,
 #         DEPLOY_CURL, DEPLOY_PM2, DEPLOY_NPM, DEPLOY_NPX, DEPLOY_NODE, DEPLOY_MV,
-#         DEPLOY_PYTHON
+#         DEPLOY_PYTHON,
+#         DEPLOY_TARGET_SHA (required), DEPLOY_CI_GATE, DEPLOY_CI_REPO,
+#         DEPLOY_CI_WORKFLOW, DEPLOY_CI_TOKEN_FILE (read by the gate)
 set -euo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/home/schoolbus/apps/lampang-bus-system}"
@@ -107,6 +124,13 @@ NPX_BIN="${DEPLOY_NPX:-npx}"
 NODE_BIN="${DEPLOY_NODE:-node}"
 MV_BIN="${DEPLOY_MV:-mv}"
 PYTHON_BIN="${DEPLOY_PYTHON:-python3}"
+# OPS-001: the release to deploy, by full SHA, and the CI gate that must pass
+# for it. The gate lives beside this script (both are installed together into
+# deploy-state), so it is the reviewed copy, not whatever the checkout holds.
+DEPLOY_TARGET_SHA="${DEPLOY_TARGET_SHA:-}"
+CI_GATE="${DEPLOY_CI_GATE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy-ci-gate.js}"
+CI_REPO="${DEPLOY_CI_REPO:-natthakarn-ablp/lampang-bus-system}"
+CI_WORKFLOW="${DEPLOY_CI_WORKFLOW:-Full Quality}"
 # Written into node_modules by a completed install: the sha256 of
 # package.json + package-lock.json that install satisfied.
 DEPS_MARKER=".deploy-lockfile.sha256"
@@ -347,6 +371,8 @@ case "$DEPLOY_ROLLBACK" in auto|never) ;; *) fail "DEPLOY_ROLLBACK must be auto 
 case "$DEPLOY_UNKNOWN_RUNNING" in abort|use-checkout) ;; *) fail "DEPLOY_UNKNOWN_RUNNING must be abort or use-checkout (got '$DEPLOY_UNKNOWN_RUNNING')" ;; esac
 case "$DEPLOY_FRONTEND" in 0|1) ;; *) fail "DEPLOY_FRONTEND must be 0 or 1 (got '$DEPLOY_FRONTEND')" ;; esac
 [ -n "$HEALTH_SERVICE" ] || fail "HEALTH_SERVICE must not be empty"
+[[ "$DEPLOY_TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "DEPLOY_TARGET_SHA must be the full 40-character commit SHA to deploy (got '${DEPLOY_TARGET_SHA:-none}') — take it from the green Full Quality run; nothing was changed"
+[ -f "$CI_GATE" ] || fail "CI gate not found at $CI_GATE — install scripts/deploy-ci-gate.js beside this script; nothing was changed"
 [ -d "$PROJECT_DIR" ] || fail "project dir not found: $PROJECT_DIR"
 [ -d "$BACKEND_DIR" ] || fail "backend dir not found: $BACKEND_DIR"
 mkdir -p "$DEPLOY_STATE_DIR" || fail "cannot create $DEPLOY_STATE_DIR"
@@ -392,10 +418,20 @@ fi
 # ── 2. Fetch, pin the target, establish the rollback reference, fast-forward ─
 echo "[deploy] Fetching $REMOTE/$BRANCH..."
 git fetch "$REMOTE" "$BRANCH" || fail "git fetch failed — nothing was deployed (still at $BEFORE)"
-# Pinned by full SHA the moment it is fetched. Everything after this refers to
-# TARGET_FULL, never to FETCH_HEAD, which another process could move.
-TARGET_FULL="$(git rev-parse FETCH_HEAD)"
+# The branch head as fetched, pinned by full SHA (FETCH_HEAD can be moved by
+# another process). The TARGET, however, is the SHA the operator named and CI
+# is checked for: it must be on the branch, and when the branch has moved past
+# it the newer commits are not deployed (OPS-001).
+FETCHED_FULL="$(git rev-parse FETCH_HEAD)"
+TARGET_FULL="$DEPLOY_TARGET_SHA"
+git cat-file -e "${TARGET_FULL}^{commit}" 2>/dev/null \
+  || fail "DEPLOY_TARGET_SHA $TARGET_FULL is not in this repository after fetching $REMOTE/$BRANCH — check the SHA; nothing was changed (still at $BEFORE)"
+git merge-base --is-ancestor "$TARGET_FULL" "$FETCHED_FULL" \
+  || fail "DEPLOY_TARGET_SHA $TARGET_FULL is not on $REMOTE/$BRANCH (head $(git rev-parse --short "$FETCHED_FULL")) — refusing to deploy a commit outside the branch; nothing was changed (still at $BEFORE)"
 TARGET="$(git rev-parse --short "$TARGET_FULL")"
+if [ "$TARGET_FULL" != "$FETCHED_FULL" ]; then
+  echo "[deploy] note: $REMOTE/$BRANCH is now at $(git rev-parse --short "$FETCHED_FULL"), ahead of the target $TARGET — deploying $TARGET only; the newer commits are NOT deployed"
+fi
 if [ "$TARGET_FULL" != "$BEFORE_FULL" ] && ! git merge-base --is-ancestor "$BEFORE_FULL" "$TARGET_FULL"; then
   fail "cannot fast-forward $BEFORE -> $TARGET: HEAD is not an ancestor of $REMOTE/$BRANCH (local commits on the server, or a diverged branch) — resolve by hand; still at $BEFORE"
 fi
@@ -407,6 +443,23 @@ if [ "$RUNNING_BEFORE" != unknown ]; then
   [ -n "$ROLLBACK_FULL" ] || fail "/health reports commit $RUNNING_BEFORE, which this repository does not contain (or it is ambiguous) — cannot establish a rollback reference; nothing was changed (still at $BEFORE)"
 fi
 ROLLBACK="$(git rev-parse --short "$ROLLBACK_FULL")"
+
+# ── 2b. CI gate (OPS-001): Full Quality must have passed for TARGET_FULL ─────
+# Before the start line and before the checkout moves: a refusal leaves the
+# tree, dependencies and the running process exactly as they were.
+echo "[deploy] Checking CI: \"$CI_WORKFLOW\" for $TARGET_FULL on $BRANCH ($CI_REPO)..."
+set +e
+"$NODE_BIN" "$CI_GATE" --sha "$TARGET_FULL" --branch "$BRANCH" --repo "$CI_REPO" --workflow "$CI_WORKFLOW"
+CI_CODE=$?
+set -e
+if [ "$CI_CODE" -ne 0 ]; then
+  record "refused ci-gate branch=$BRANCH target=$TARGET exit=$CI_CODE by=$(who)" || true
+  case "$CI_CODE" in
+    2) fail "CI gate refused $TARGET (see [ci-gate] above) — nothing was changed (still at $BEFORE, running $RUNNING_BEFORE)" ;;
+    *) fail "CI could not be verified for $TARGET (gate exit $CI_CODE, see [ci-gate] above) — a deploy without CI evidence is refused; nothing was changed (still at $BEFORE, running $RUNNING_BEFORE)" ;;
+  esac
+fi
+
 # The start line is written BEFORE anything moves. If it cannot be written
 # there is no deploy: the log is the rollback record.
 record "start branch=$BRANCH before=$BEFORE target=$TARGET running_before=$RUNNING_BEFORE rollback_ref=$ROLLBACK($ROLLBACK_SOURCE) by=$(who)" \

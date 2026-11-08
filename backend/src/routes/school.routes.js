@@ -976,10 +976,10 @@ router.put('/students/:id', async (req, res, next) => {
               s.morning_enabled, s.evening_enabled, s.dropoff_address,
               p.name AS parent_name, p.phone AS parent_phone
        FROM students s
-       LEFT JOIN parent_student ps ON ps.student_id = s.id
+       LEFT JOIN parent_student ps ON ps.student_id = s.id AND ps.approved = TRUE
        LEFT JOIN parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
        WHERE s.id = ? AND s.school_id = ? AND s.is_deleted = FALSE
-       ${gradeScope ? 'AND s.grade IN (?)' : ''} LIMIT 1`;
+       ${gradeScope ? 'AND s.grade IN (?)' : ''} ORDER BY ps.parent_id LIMIT 1`;
     const profileParams = [studentId, schoolId, ...(gradeScope ? [gradeEquivalents(gradeScope)] : [])];
     let [[st]] = await pool.query(profileSql, profileParams);
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
@@ -1064,7 +1064,8 @@ router.put('/students/:id', async (req, res, next) => {
           `SELECT ps.parent_id, p.name AS current_name, p.phone AS current_phone
            FROM   parent_student ps
            JOIN   parents p ON p.id = ps.parent_id AND p.is_deleted = FALSE
-           WHERE  ps.student_id = ?
+           WHERE  ps.student_id = ? AND ps.approved = TRUE
+           ORDER BY ps.parent_id
            LIMIT  1`,
           [studentId]
         );
@@ -1085,10 +1086,13 @@ router.put('/students/:id', async (req, res, next) => {
         if (!noChange && (newName || newPhone)) {
           // Detach this student from current parent (preserve old parent row
           // and any sibling links that point to it).
+          // SCH-STU-4 (school audit 2026-11-08): replace only the guardian
+          // being edited. Deleting every link of the child dropped a second
+          // approved guardian (and their LINE access) silently.
           if (currentLink) {
             await conn.query(
-              `DELETE FROM parent_student WHERE student_id = ?`,
-              [studentId]
+              `DELETE FROM parent_student WHERE student_id = ? AND parent_id = ?`,
+              [studentId, currentLink.parent_id]
             );
           }
           // ALWAYS INSERT a fresh parent row — never look up by phone.
@@ -1510,8 +1514,12 @@ router.post('/vehicles', async (req, res, next) => {
       await conn.beginTransaction();
 
       // 1. Create or reuse vehicle (dedup by normalized_plate, not raw plate)
+      // SCH-VEH-2b (school audit 2026-11-08): only an ACTIVE row is reused. A
+      // soft-deleted plate falls through to classifyPlateAgainstDb, which
+      // answers 409 so the school goes through the restore request instead of
+      // silently reviving the deleted vehicle (and attaching a driver to it).
       const [[existingVehicle]] = await conn.query(
-        `SELECT id FROM vehicles WHERE normalized_plate = ?`,
+        `SELECT id FROM vehicles WHERE normalized_plate = ? AND is_deleted = FALSE`,
         [normalizedPlate]
       );
       const vId = existingVehicle ? existingVehicle.id : vehicleId;
@@ -1565,6 +1573,7 @@ router.post('/vehicles', async (req, res, next) => {
           normalizedPlate,
           plateNo: trimmedPlate,
           vehicleId: vId,
+          schoolId,
         });
         driverAccountCreated = userCreated;
         driverTemporaryPassword = temporaryPassword || null;
@@ -2050,9 +2059,17 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
         // different school is allowed; only a duplicate within the same school is
         // blocked. Soft-deleted matches in this school are reactivated below.
         const [[existing]] = await conn.query(
-          `SELECT id, is_deleted FROM students WHERE school_id = ? AND student_code = ? LIMIT 1`,
+          `SELECT id, is_deleted,
+                  EXISTS(SELECT 1 FROM student_transfer_requests tr
+                          WHERE tr.student_id = students.id AND tr.status = 'APPLIED') AS transferred_out
+             FROM students WHERE school_id = ? AND student_code = ? LIMIT 1`,
           [schoolId, studentCode]
         );
+        // SCH-STU-2: never silently revive a pupil who was transferred out.
+        if (existing && existing.is_deleted && Number(existing.transferred_out)) {
+          results.errors.push({ row: r.rowNum, message: `รหัสนักเรียน ${studentCode}: นักเรียนคนนี้โอนย้ายไปโรงเรียนอื่นแล้ว นำเข้าเพื่อกู้คืนไม่ได้ หากต้องการรับกลับให้ใช้คำขอโอนย้าย` });
+          continue;
+        }
         if (classifyStudentImport(existing) === 'SKIP') {
           results.errors.push({ row: r.rowNum, message: `รหัสนักเรียน ${studentCode} มีอยู่แล้วในโรงเรียนนี้` });
           continue;

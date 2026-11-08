@@ -33,7 +33,12 @@ const post = (user, body = { reason: 'ผูกผิดคน' }) => request(ap
   .post('/api/school/students/101/parent-line/unlink')
   .set('x-test-user', encodeURIComponent(JSON.stringify(user))).send(body);
 
+// These assert the plain line_bindings SQL, i.e. FEATURE_CO_GUARDIAN off. Pin
+// it: the production server's .env turns it on and the deploy runs the unit
+// suite there (the co-guardian path has its own tests).
+const pinnedEnv = require('../src/config/env');
 beforeEach(() => {
+  pinnedEnv.features.coGuardian = false;
   jest.clearAllMocks();
   pool.query.mockImplementation(async (sql, params) => {
     if (/FROM students WHERE id = \? AND school_id = \?/.test(sql)) return [params[1] === 'SCH0001' ? [{ id: 101 }] : []];

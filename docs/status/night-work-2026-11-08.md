@@ -16,11 +16,11 @@ Work clone: `D:\Projects\SchoolBus-Lampang\worktrees\night-1108` (LF, `core.auto
 ## Tasks
 | ID | Status | Branch / PR | Evidence | Remaining |
 |---|---|---|---|---|
-| DATA-001 | merged; deploy pending CI of merge SHA | PR #147 → merge `07a7e4f507d67b01e73a7a2c103702199a6f16c5` | PR CI runs 42484151024/42484169643 green; synthetic round trip 62 tables 0 mismatch (backup 0.5 s, restore 2.1 s); `test-backup-status.py` 21/21; prod read-only run: local/offhost/readback OK, restore UNPROVEN | cron+alert install (owner), rclone own client_id (owner Google login), real-backup restore in isolated env, CRON_TZ finding |
-| DOC-001 | PR open, CI pending | PR #151 (`docs/doc-001-system-index`) | module drafts by 1 Sonnet agent, spot-checked; PII/secret grep clean | merge after CI (docs only) |
+| DATA-001 | merged + deployed (549cce9) — cron/alert NOT installed | PR #147 → merge `07a7e4f507d67b01e73a7a2c103702199a6f16c5` | PR CI runs 42484151024/42484169643 green; synthetic round trip 62 tables 0 mismatch (backup 0.5 s, restore 2.1 s); `test-backup-status.py` 21/21; prod read-only run: local/offhost/readback OK, restore UNPROVEN | cron+alert install (owner), rclone own client_id (owner Google login), real-backup restore in isolated env, CRON_TZ finding |
+| DOC-001 | merged (be87fb4), docs only, not deployed | PR #151 | CI green on head 48336a7 | — |
 | PERF-001 | PR open, label needs-owner, NOT merged | PR #148 (`6861b79` + `f71213c`) | local unit 8/8 + related 78/78; CI pending | owner: merge, apply 059, enable dispatch |
 | PERF-002 | PR open (stacked on #148), needs-owner, NOT merged | PR #149 (`3613365`, merge `7adb65f`) | local unit 17/17; CI pending | owner: retention days, 059/060 |
-| CI-fix | PR open | PR #150 `.gitleaksignore` fingerprint | secret scan pass on #150 | merge, then deploy that merge SHA (carries DATA-001) |
+| CI-fix | merged + deployed | PR #150 → `549cce9694cfbbd85721a10360e45be8782e9f2d` | push CI 42486132747 green; deploy 13:51 UTC ok, 2786 unit tests on server, backup lampang_bus_20261108_135049, rollback ebea699 | — |
 | PERF-002 | todo (PR only, no merge) | | | |
 
 ## Log
@@ -34,3 +34,6 @@ Work clone: `D:\Projects\SchoolBus-Lampang\worktrees\night-1108` (LF, `core.auto
 - Secret scan scans ALL refs: #148's example UUID (`retryKey:` literal in a unit test) failed the scan on every branch incl. merge 07a7e4f push run 42485046745. Force-push to rewrite was DENIED by safety classifier (not retried). Fix: literal removed (f71213c) + fingerprint in .gitleaksignore on feat via PR #150.
 - PERF-002 PR #149 opened; DOC-001 PR #151 opened.
 - Next: #150 green → merge → wait push CI of merge SHA → backup → deploy that SHA (DATA-001 + #150 [+ #151 if merged first]).
+- 13:50 UTC backup lampang_bus_20261108_135049; 13:51–13:52 deploy 549cce9 ok; post checks ok (health, /, /manual/, 401, logs).
+- #151 merged be87fb4 (docs, not deployed). #149 retention test boundary flake fixed (9dc103c).
+- Final report: docs/status/NIGHT_WORK_REPORT_2026-11-08_2100.md

@@ -319,6 +319,13 @@ const env = {
     // without breaking the live parent experience until consent text + DPO are
     // signed off. Turn on only together with FEATURE_VEHICLE_QR's consent flow.
     parentConsentRequired: process.env.FEATURE_PARENT_CONSENT_REQUIRED === 'true',
+    // Parent leave via LINE (migration 056 must be applied first). Dark by
+    // default: when false the parent leave endpoints answer 404 and the LIFF
+    // page hides the button.
+    parentLeave: process.env.FEATURE_PARENT_LEAVE === 'true',
+    parentLeaveMorningCutoff: process.env.PARENT_LEAVE_MORNING_CUTOFF || '06:00',
+    parentLeaveEveningCutoff: process.env.PARENT_LEAVE_EVENING_CUTOFF || '14:00',
+    parentLeaveMaxDaysAhead: Number(process.env.PARENT_LEAVE_MAX_DAYS_AHEAD || 14),
     // Phase 4 — participatory-administration cases + append-only event log.
     // Dark by default: when false the /api/participation router is not
     // mounted, so the existing system is byte-for-byte unchanged. Migration

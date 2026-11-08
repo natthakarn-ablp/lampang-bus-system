@@ -331,8 +331,8 @@ const env = {
     // makes a code mandatory for NEW binds (owner decision: keep off until
     // schools have handed codes out). The second needs the first.
     parentClaimCode: process.env.FEATURE_PARENT_CLAIM_CODE === 'true',
-    parentClaimCodeRequired: process.env.FEATURE_PARENT_CLAIM_CODE === 'true'
-      && process.env.FEATURE_PARENT_CLAIM_CODE_REQUIRED === 'true',
+    parentClaimCodeRequired: process.env.FEATURE_PARENT_CLAIM_CODE_REQUIRED === 'true'
+      && process.env.FEATURE_PARENT_CLAIM_CODE === 'true',
     // Phase 4 — participatory-administration cases + append-only event log.
     // Dark by default: when false the /api/participation router is not
     // mounted, so the existing system is byte-for-byte unchanged. Migration

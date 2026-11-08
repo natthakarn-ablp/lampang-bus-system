@@ -127,7 +127,6 @@ async function requireParentLineAuth(req, res, next) {
     const bearer = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
     const token =
       bearer ||
-      (typeof req.query.id_token === 'string' ? req.query.id_token : '') ||
       (req.body && typeof req.body.id_token === 'string' ? req.body.id_token : '') ||
       '';
 
@@ -345,10 +344,13 @@ router.post('/line/bind-preview', bindGuards, async (req, res, next) => {
       return sendError(res, lineSvc.PHONE_BOUND_TO_OTHER_MSG, [{ field: 'phone', code: 'PHONE_BOUND_TO_OTHER' }], 409);
     }
 
+    // P-02: every child this binding will expose (keyed on the phone).
+    const visible = await lineSvc.getChildrenByPhone(cleanPhone);
     console.log('[LINE_BIND_PREVIEW] ok', { hasStudent: true });
     return sendSuccess(res, {
       student: match.student,
       masked_phone: tpl.maskPhone(cleanPhone),
+      children: Array.isArray(visible) ? visible : [],
     });
   } catch (err) { return next(err); }
 });

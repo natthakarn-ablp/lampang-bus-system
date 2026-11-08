@@ -1348,9 +1348,36 @@ async function auditBind({ sub, phone, studentCode, action, reason, ip, ua }) {
 //
 // Medium fix (code review): uses FOR UPDATE SKIP LOCKED inside a transaction so
 // that overlapping cron runs (or manual + cron) cannot pick up the same rows.
+// P-07 (parent audit 2026-11-08): a notification row is queued at check-in
+// time and may be sent up to maxAgeMinutes later (or retried). By then the
+// parent may have unbound LINE, the school may have changed the parent's phone
+// or un-approved the link, or the student may have been removed. Re-check the
+// same chain the resolver in checkin.service.js used, at send time.
+async function isStillLinkedRecipient(conn, lineUserId, studentId) {
+  const [[row]] = await conn.query(
+    `SELECT 1 AS ok
+       FROM parent_student ps
+       JOIN students s ON s.id = ps.student_id AND s.is_deleted = FALSE
+       JOIN parents p
+              ON p.id = ps.parent_id
+             AND p.is_deleted = FALSE
+       JOIN line_bindings lb
+              ON lb.phone = p.phone
+             AND lb.is_active = TRUE
+       JOIN line_users lu
+              ON lu.line_user_id = lb.line_user_id
+             AND lu.user_type = 'parent'
+             AND lu.verified = TRUE
+      WHERE ps.student_id = ? AND ps.approved = TRUE AND lb.line_user_id = ?
+      LIMIT 1`,
+    [studentId, lineUserId]
+  );
+  return !!row;
+}
+
 async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180, types = null) {
   const conn = await pool.getConnection();
-  let sent = 0, failed = 0, processed = 0;
+  let sent = 0, failed = 0, processed = 0, skipped = 0;
   try {
     await conn.beginTransaction();
     const where = ['sent = FALSE', 'retry_count < 3'];
@@ -1379,6 +1406,15 @@ async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180, types
       const data = typeof n.message_json === 'string' ? JSON.parse(n.message_json) : n.message_json;
       const text = buildNotificationText(n.notification_type, data);
 
+      if (n.student_id != null && !(await isStillLinkedRecipient(conn, n.target_line_user_id, n.student_id))) {
+        // Never send, never retry: retry_count = 3 takes it out of the queue.
+        await conn.query(
+          "UPDATE notifications SET retry_count = 3, error_message = 'RECIPIENT_NO_LONGER_LINKED' WHERE id = ?",
+          [n.id]);
+        skipped++;
+        continue;
+      }
+
       const result = await sendTextMessage(n.target_line_user_id, text);
       if (result.sent || result.dryRun) {
         await conn.query('UPDATE notifications SET sent = TRUE, sent_at = NOW() WHERE id = ?', [n.id]);
@@ -1396,7 +1432,7 @@ async function processUnsentNotifications(limit = 50, maxAgeMinutes = 180, types
   } finally {
     conn.release();
   }
-  return { processed, sent, failed };
+  return { processed, sent, failed, skipped };
 }
 
 module.exports = {

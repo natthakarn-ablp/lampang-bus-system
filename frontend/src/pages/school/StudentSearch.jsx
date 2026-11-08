@@ -243,6 +243,23 @@ export default function StudentSearch() {
   const [confirmRestore, setConfirmRestore] = useState(null);
   const [restoreGrade, setRestoreGrade] = useState('');
   const [restoreClassroom, setRestoreClassroom] = useState('');
+  // P-04: full school account cuts the parent's LINE binding (with a reason).
+  const [unlinkTarget, setUnlinkTarget] = useState(null);
+  const [unlinkReason, setUnlinkReason] = useState('');
+  async function handleUnlinkLine() {
+    if (!unlinkTarget || saveLock.current) return;
+    if (unlinkReason.trim().length < 3) { toast.error('กรุณาระบุเหตุผล'); return; }
+    saveLock.current = true; setSaving(true);
+    try {
+      await api.post(`/school/students/${unlinkTarget.id}/parent-line/unlink`, { reason: unlinkReason.trim() });
+      toast.success('ยกเลิกการผูก LINE ของผู้ปกครองแล้ว');
+      setUnlinkTarget(null); setUnlinkReason('');
+      fetchStudents(meta.page);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ยกเลิกการผูกไม่สำเร็จ');
+    } finally { saveLock.current = false; setSaving(false); }
+  }
+
   function openRestore(row) { setRestoreGrade(''); setRestoreClassroom(isTeacher ? '' : (row.classroom || '')); setConfirmRestore(row); }
 
   async function handleWithdraw() {
@@ -421,6 +438,9 @@ export default function StudentSearch() {
           : <>
               <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
               <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
+              {!isTeacher && s2.parent_line_linked && (
+                <TableAction tone="neutral" onClick={() => { setUnlinkReason(''); setUnlinkTarget(s2); }}>ตัดการผูก LINE</TableAction>
+              )}
             </>}
         empty={{
           icon: GraduationCap,
@@ -658,6 +678,19 @@ export default function StudentSearch() {
         onConfirm={handleWithdraw}
         onCancel={() => setConfirmWithdraw(false)}
       />
+      {unlinkTarget && (
+        <Modal title="ตัดการผูก LINE ของผู้ปกครอง" size="md" dismissible={!saving} onClose={() => setUnlinkTarget(null)}>
+          <div className="space-y-4">
+            <p className="font-semibold">{unlinkTarget.prefix || ''}{unlinkTarget.first_name} {unlinkTarget.last_name} · รหัส {unlinkTarget.student_code}</p>
+            <p className="text-sm">บัญชี LINE ที่ผูกกับเบอร์ผู้ปกครองนี้จะดูข้อมูลและรับแจ้งเตือนไม่ได้ทันที รวมถึงพี่น้องที่ใช้เบอร์เดียวกัน ผู้ปกครองตัวจริงผูกใหม่ได้ด้วยเบอร์และรหัสนักเรียน</p>
+            <FormField label="เหตุผล (บังคับ)" value={unlinkReason} onChange={setUnlinkReason} placeholder="เช่น ผูกผิดคน, ผู้ปกครองแจ้งทำโทรศัพท์หาย" />
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={saving} className="focus-ring min-h-[48px] px-4 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-50" onClick={handleUnlinkLine}>{saving ? 'กำลังดำเนินการ…' : 'ตัดการผูก LINE'}</button>
+              <button type="button" disabled={saving} className="focus-ring min-h-[44px] px-4 rounded-lg border border-surface-border text-ink hover:bg-surface" onClick={() => setUnlinkTarget(null)}>ยกเลิก</button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {confirmRestore && (
         <Modal title="กู้คืนนักเรียนเข้ารายชื่อ" size="md" dismissible={!saving} onClose={() => setConfirmRestore(null)}>
           <div className="space-y-4">

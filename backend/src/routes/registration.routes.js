@@ -258,6 +258,7 @@ schoolRouter.post('/documents/:kind/:id/review', requireFullSchoolScope, async (
     return sendSuccess(res, await docSvc.reviewDocument(pool, {
       kind, id: docId,
       decision: req.body.decision, note: req.body.note, reviewerUserId: req.user.id,
+      reviewerRole: req.user.role,
     }), 'บันทึกผลการตรวจเอกสารแล้ว');
   } catch (error) { return next(error); }
 });

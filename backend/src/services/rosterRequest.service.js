@@ -24,6 +24,12 @@ async function createRequest({ vehicleId, studentId, schoolId, requestType, reas
     if (newStudentData.parent_phone != null) {
       newStudentData = { ...newStudentData, parent_phone: normalizePhone(newStudentData.parent_phone) };
     }
+    // SCH-STU-8 (school audit 2026-11-08): store only the fields the form has,
+    // clipped to their column sizes (the blob was stored as sent).
+    const NEW_STUDENT_FIELDS = { student_id: 20, prefix: 20, first_name: 100, last_name: 100, school_id: 10, grade: 20, classroom: 20, parent_name: 100, parent_phone: 20 };
+    newStudentData = Object.fromEntries(Object.entries(NEW_STUDENT_FIELDS)
+      .filter(([k]) => newStudentData[k] != null && String(newStudentData[k]).trim() !== '')
+      .map(([k, max]) => [k, String(newStudentData[k]).trim().slice(0, max)]));
     const { first_name, last_name, school_id, parent_phone } = newStudentData;
     if (!first_name || !last_name) {
       const err = new Error('กรุณากรอกชื่อและนามสกุลนักเรียน');
@@ -48,6 +54,19 @@ async function createRequest({ vehicleId, studentId, schoolId, requestType, reas
     if (!school) {
       const err = new Error('ไม่พบโรงเรียนที่เลือก');
       err.statusCode = 404;
+      throw err;
+    }
+    // SCH-STU-8: a driver may ask to add a pupil only for a school this bus
+    // already serves (or while the bus carries nobody yet) — not for any school.
+    const [[served]] = await pool.query(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(school_id = ?), 0) AS mine
+         FROM students WHERE vehicle_id = ? AND is_deleted = FALSE`,
+      [school_id, vehicleId]
+    );
+    if (Number(served.total) > 0 && Number(served.mine) === 0) {
+      const err = new Error('รถคันนี้ยังไม่ได้รับส่งนักเรียนของโรงเรียนที่เลือก กรุณาติดต่อโรงเรียนให้เพิ่มนักเรียนเอง');
+      err.statusCode = 403;
+      err.code = 'VEHICLE_NOT_SERVING_SCHOOL';
       throw err;
     }
 
@@ -250,6 +269,7 @@ async function getRequestsForSchool(schoolId, { status, page = 1, per_page = 20,
  * Review (approve/reject) a request.
  */
 async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }) {
+  let parentLinkSkipped = null;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -362,7 +382,17 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
         }
 
         // Create parent record if parent info provided (dedupe by phone if exists)
-        if (data.parent_name || data.parent_phone) {
+        // SCH-STU-8: a phone the driver typed that already has a LINE account
+        // would let that account see the new pupil the moment the school
+        // approves. Skip the guardian link and tell the school to add it.
+        let phoneAlreadyBound = false;
+        if (data.parent_phone) {
+          const [[bound]] = await conn.query(
+            'SELECT 1 AS ok FROM line_bindings WHERE phone = ? AND is_active = TRUE LIMIT 1', [data.parent_phone]);
+          phoneAlreadyBound = !!bound;
+        }
+        if (phoneAlreadyBound) parentLinkSkipped = 'PHONE_ALREADY_BOUND';
+        if (!phoneAlreadyBound && (data.parent_name || data.parent_phone)) {
           let parentId;
           if (data.parent_phone) {
             // Try to find existing parent by phone to avoid duplicates
@@ -420,7 +450,7 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
     });
 
     await conn.commit();
-    return { id: requestId, status };
+    return parentLinkSkipped ? { id: requestId, status, parent_link_skipped: parentLinkSkipped } : { id: requestId, status };
   } catch (err) {
     await conn.rollback();
     throw err;

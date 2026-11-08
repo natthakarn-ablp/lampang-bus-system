@@ -206,14 +206,21 @@ router.get('/children/:id/history', requireParentLineAuth, parentLimiter, async 
 
     // Audit 2026-06-18 (limitations): clamp the window so a huge ?days can't scan
     // unbounded history.
-    const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 90);
+    // P-09 (parent audit 2026-11-08, owner-approved): at most 30 days, and
+    // never from before the day this LINE account was bound — a newly (maybe
+    // wrongly) bound account must not read months of a child's travel pattern.
+    const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 30);
     const [rows] = await pool.query(
       `SELECT check_date, session, status, checked_at
        FROM checkin_logs
        WHERE student_id = ? AND check_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         AND check_date >= COALESCE(
+               (SELECT DATE(lb.bound_at) FROM line_bindings lb
+                 WHERE lb.line_user_id = ? AND lb.is_active = TRUE LIMIT 1),
+               '1000-01-01')
        ORDER BY check_date DESC, checked_at DESC
        LIMIT 500`,
-      [studentId, days]
+      [studentId, days, req.lineUserId]
     );
 
     sendSuccess(res, { student: child, history: rows });

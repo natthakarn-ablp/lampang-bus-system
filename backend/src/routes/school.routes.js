@@ -1208,6 +1208,7 @@ router.post('/students/move', async (req, res, next) => {
       [vehicle_id || null, student_id, schoolId, st.grade]
     );
     if (!updated.affectedRows) return sendError(res, 'ข้อมูลนักเรียนเปลี่ยนไป กรุณาโหลดรายชื่อใหม่', [], 409);
+    await require('../services/pickupCleanup.service').clearStalePickupAssignments(pool, student_id);  // SCH-STU-7
 
     await logAudit({
       userId: req.user.id, action: 'UPDATE', entityType: 'student', entityId: student_id,
@@ -1249,6 +1250,7 @@ router.delete('/students/:id', async (req, res, next) => {
       `UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL WHERE id = ? AND school_id = ? AND is_deleted = FALSE`,
       [studentId, schoolId]
     );
+    await require('../services/pickupCleanup.service').clearStalePickupAssignments(conn, studentId);  // SCH-STU-7
     await logAudit({
       userId: req.user.id, action: 'DELETE', entityType: 'student', entityId: studentId,
       oldValue: {
@@ -2149,6 +2151,7 @@ router.post('/students/import', importExportLimiter, requireFullSchoolScope, imp
                r.grade || null, r.classroom || null, vehicleId,
                morningEnabled, eveningEnabled, getCurrentTermCachedSync(), existing.id]
             );
+            await require('../services/pickupCleanup.service').clearStalePickupAssignments(conn, existing.id);  // SCH-STU-7
             effectiveStudentId = existing.id;
           } else {
             // New student: surrogate id = MAX(id)+1 (10.13A-24B fallback — id is

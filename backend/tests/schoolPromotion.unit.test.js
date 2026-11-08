@@ -38,6 +38,7 @@ function makeDb(initial, { promoted = [] } = {}) {
         state.students.filter((s) => params[1].includes(s.id)).forEach((s) => { s.is_deleted = true; s.vehicle_id = null; });
         return [{ affectedRows: params[1].length }];
       }
+      if (q.startsWith('DELETE spp FROM student_pickup_points')) { state.writes.push('pickup-cleanup'); return [{ affectedRows: 0 }]; } // SCH-STU-7
       throw new Error(`unexpected sql: ${q}`);
     }),
   };

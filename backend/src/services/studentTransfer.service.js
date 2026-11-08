@@ -213,6 +213,7 @@ async function approveAndApply(pool, { requestId, adminUserId, adminNote }) {
 
     // Option B: soft-close source, create fresh destination student.
     await conn.query('UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL WHERE id = ?', [st.id]);
+    await require('./pickupCleanup.service').clearStalePickupAssignments(conn, st.id);  // SCH-STU-7
     const newId = await allocateStudentId(conn);
     const cid = crypto.createHash('sha256').update(`transfer-${req.destination_school_id}-${st.student_code}`).digest('hex');
     await conn.query(

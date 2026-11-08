@@ -145,7 +145,10 @@ test('teacher withdraws only a currently assigned-grade pupil with required audi
   expect((await request(app).delete('/api/school/students/12')).status).toBe(200);
   expect(conn.query.mock.calls[0][0]).toMatch(/school_id = \?.*FOR UPDATE/s);
   expect(conn.query.mock.calls[0][1]).toEqual([12, 'SCH1']);
-  expect(writes()).toEqual([[expect.stringContaining('is_deleted = TRUE'), [12, 'SCH1']]]);
+  expect(writes()).toEqual([
+    [expect.stringContaining('is_deleted = TRUE'), [12, 'SCH1']],
+    [expect.stringContaining('DELETE spp FROM student_pickup_points'), [[12]]], // SCH-STU-7
+  ]);
   expect(mockAudit).toHaveBeenCalledWith(expect.objectContaining({ conn, required: true, entityId: 12 }));
   expect(conn.commit).toHaveBeenCalledTimes(1);
 });

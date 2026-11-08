@@ -323,6 +323,7 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
           throw err;
         }
         await conn.query(`UPDATE students SET vehicle_id = ? WHERE id = ?`, [req.vehicle_id, req.student_id]);
+        await require('./pickupCleanup.service').clearStalePickupAssignments(conn, req.student_id);  // SCH-STU-7
       } else if (req.request_type === 'add' && !req.student_id && req.new_student_data) {
         // New student → create student record + assign to vehicle
         const data = typeof req.new_student_data === 'string'
@@ -440,6 +441,7 @@ async function reviewRequest({ requestId, schoolId, status, reviewNote, userId }
           throw err;
         }
         await conn.query(`UPDATE students SET vehicle_id = NULL WHERE id = ?`, [req.student_id]);
+        await require('./pickupCleanup.service').clearStalePickupAssignments(conn, req.student_id);  // SCH-STU-7
       }
     }
 

@@ -711,6 +711,7 @@ async function applyReactivateRow(pool, { row, schoolId, userId, batchId, r }) {
        WHERE id = ?`,
       [n.prefix || null, n.first_name || '-', n.last_name || '-', n.grade || null, n.classroom || null, vehicleId, TERM, st.id]
     );
+    await require('./pickupCleanup.service').clearStalePickupAssignments(conn, st.id);  // SCH-STU-7
     await linkParent(conn, st.id, n.parent_name, n.parent_phone, userId);
     await logAudit({
       userId, action: 'UPDATE', entityType: 'student', entityId: String(st.id), conn,
@@ -934,6 +935,7 @@ async function rollbackRow(pool, { row, schoolId, userId, batchId, reason, r }) 
       await conn.query("UPDATE import_batch_rows SET rollback_status='NOT_SAFE_TO_ROLLBACK' WHERE id=?", [row.id]); await conn.commit(); r.skipped++; r.details.push({ row: row.row_no, status: 'NOT_SAFE_TO_ROLLBACK' }); return;
     }
     await conn.query('UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL WHERE id = ? AND is_deleted = FALSE', [st.id]);
+    await require('./pickupCleanup.service').clearStalePickupAssignments(conn, st.id);  // SCH-STU-7
     await logAudit({ userId, action: 'DELETE', entityType: 'student', entityId: String(st.id), conn,
       oldValue: { is_deleted: false }, newValue: { is_deleted: true, rollback: true, batch_id: batchId, row_no: row.row_no, reason: String(reason || '').slice(0, 200) } });
     await conn.query("UPDATE import_batch_rows SET rollback_status='ROLLED_BACK', rolled_back_at=NOW() WHERE id=?", [row.id]);

@@ -54,9 +54,28 @@ function generateTemporaryPassword() {
   return chars.join('');
 }
 
-async function linkOrCreateDriverForVehicle(conn, { driverName, driverPhone, normalizedPlate, plateNo, vehicleId }) {
+// SCH-VEH-2 (school audit 2026-11-08): a profile found by phone or name may
+// belong to a driver of ANOTHER school. Reusing it here hands the new plate's
+// login (temporary password returned to this school) control of that person's
+// profile, photo and documents. When the caller passes schoolId, a candidate is
+// reused only if that driver already drives a vehicle carrying this school's
+// pupils; otherwise a new profile is created.
+async function driverServesSchool(conn, driverId, schoolId) {
+  const [[row]] = await conn.query(
+    `SELECT 1 AS ok
+       FROM driver_vehicle_assignments dva
+       JOIN students s ON s.vehicle_id = dva.vehicle_id AND s.school_id = ? AND s.is_deleted = FALSE
+      WHERE dva.driver_id = ? AND dva.is_active = TRUE
+      LIMIT 1`,
+    [schoolId, driverId]
+  );
+  return !!row;
+}
+
+async function linkOrCreateDriverForVehicle(conn, { driverName, driverPhone, normalizedPlate, plateNo, vehicleId, schoolId = null }) {
   const name = String(driverName || '').trim();
   const phoneDigits = String(driverPhone || '').replace(/\D/g, '');
+  const reusable = async (id) => (schoolId ? driverServesSchool(conn, id, schoolId) : true);
 
   // (1) Resolve or create the driver PROFILE — reuse instead of duplicating.
   let driverId = null;
@@ -67,14 +86,14 @@ async function linkOrCreateDriverForVehicle(conn, { driverName, driverPhone, nor
        ORDER BY id LIMIT 1`,
       [phoneDigits]
     );
-    if (byPhone) driverId = byPhone.id;
+    if (byPhone && await reusable(byPhone.id)) driverId = byPhone.id;
   }
   if (!driverId) {
     const [[byName]] = await conn.query(
       `SELECT id FROM drivers WHERE is_deleted = FALSE AND TRIM(name) = ? ORDER BY id LIMIT 1`,
       [name]
     );
-    if (byName) driverId = byName.id;
+    if (byName && await reusable(byName.id)) driverId = byName.id;
   }
   if (!driverId) {
     const [created] = await conn.query(

@@ -110,6 +110,12 @@ function classifyImportRow({ row, schoolId, existing = null, crossSchool = false
     }
     return out('SKIP_DUPLICATE_SAME_SCHOOL', 'SKIP', 'รหัสนักเรียนนี้มีอยู่แล้วในโรงเรียนนี้', false, null);
   }
+  // SCH-STU-2 (school audit 2026-11-08): a pupil closed by an APPLIED transfer
+  // now lives at the destination school; re-importing must not revive the old
+  // row (restore already refuses this — AUD-SCH-02).
+  if (existing && existing.is_deleted && existing.transferred_out) {
+    return out('SKIP_TRANSFERRED_OUT', 'SKIP', 'นักเรียนคนนี้โอนย้ายไปโรงเรียนอื่นแล้ว นำเข้าเพื่อกู้คืนไม่ได้ หากต้องการรับกลับให้ใช้คำขอโอนย้าย', false, null);
+  }
   if (existing && existing.is_deleted) {
     return out('SOFT_DELETED_SAME_SCHOOL_REACTIVATE', 'WARNING', 'รหัสนักเรียนนี้เคยถูกลบในโรงเรียนนี้ กรุณายืนยันการกู้คืน', false, 'ยืนยันกู้คืนนักเรียนที่เคยถูกลบ', 'reactivate');
   }

@@ -72,7 +72,7 @@ describe('addRosterStudent — happy path (creates application + roster)', () =>
 
 describe('approveRegistration — scope + preconditions', () => {
   const base = (apsRows, unresolved) => mockPool([
-    [/SELECT approval_status FROM inspection_application_schools/, apsRows],
+    [/approval_status[\s\S]*FROM inspection_application_schools/, apsRows],
     [/COUNT\(\*\) AS unresolved FROM registration_roster_students/, [[{ unresolved }]]],
     [/UPDATE inspection_application_schools/, [{}]],
     [/INSERT INTO audit_logs/, [{}]],
@@ -100,7 +100,7 @@ describe('rejectRegistration', () => {
   });
   test('happy → NEEDS_REVISION', async () => {
     const pool = mockPool([
-      [/SELECT approval_status FROM inspection_application_schools/, [[{ approval_status: 'PENDING_SCHOOL_REVIEW' }]]],
+      [/approval_status[\s\S]*FROM inspection_application_schools/, [[{ approval_status: 'PENDING_SCHOOL_REVIEW' }]]],
       [/UPDATE inspection_application_schools/, [{}]],
       [/INSERT INTO audit_logs/, [{}]],
       [/SELECT submitted_by_driver FROM inspection_application_schools/, [[{ submitted_by_driver: null }]]],

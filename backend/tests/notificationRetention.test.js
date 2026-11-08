@@ -48,13 +48,15 @@ beforeAll(async () => {
   try {
     await c.query("INSERT IGNORE INTO line_users(line_user_id,user_type,verified) VALUES (?, 'parent', FALSE)", [LID]);
     // 6,000 synthetic notifications over ~200 days, mostly sent; 3,000 log rows.
+    // +30 min keeps every row >= 18 min away from the 90/30-day cutoffs, so
+    // the clock moving during the test cannot push a row across a boundary.
     await c.query('SET SESSION cte_max_recursion_depth = 10000');
     await c.query(`INSERT INTO notifications(target_line_user_id,notification_type,student_id,message_json,sent,retry_count,created_at)
       WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n < 6000)
-      SELECT ?, 'system', NULL, JSON_OBJECT('n', n), n % 50 <> 0, 0, NOW() - INTERVAL (n * 48) MINUTE FROM s`, [LID]);
+      SELECT ?, 'system', NULL, JSON_OBJECT('n', n), n % 50 <> 0, 0, NOW() - INTERVAL (n * 48 + 30) MINUTE FROM s`, [LID]);
     await c.query(`INSERT INTO line_message_logs(line_user_id,source_type,message_text,created_at)
       WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM s WHERE n < 3000)
-      SELECT ?, 'user', CONCAT('synthetic ', n), NOW() - INTERVAL (n * 96) MINUTE FROM s`, [LID]);
+      SELECT ?, 'user', CONCAT('synthetic ', n), NOW() - INTERVAL (n * 96 + 30) MINUTE FROM s`, [LID]);
     await c.query('ANALYZE TABLE notifications, line_message_logs');
     plans.before = { queue: await explain(c, QUEUE_SQL), lml: await explain(c, LML_RET_SQL()) };
     if (!(await hasColumn(c, 'notifications', 'claim_token'))) { await runSqlFile(c, '059_notification_dispatch_lease.sql'); applied.push('059'); }

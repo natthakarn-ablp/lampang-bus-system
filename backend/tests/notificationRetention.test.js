@@ -12,6 +12,14 @@ const { pool } = require('../src/config/database');
 const cleanup = require('../scripts/cleanup-notification-logs');
 
 const M = (f) => fs.readFileSync(path.join(__dirname, '../migrations', f), 'utf8');
+// The test connection has multipleStatements off; the owner's mysql CLI apply
+// runs the file as is. Strip comment lines and run each statement.
+async function runSqlFile(c, f) {
+  const body = M(f).split('
+').filter(l => !/^\s*--/.test(l)).join('
+');
+  for (const stmt of body.split(';').map(x => x.trim()).filter(Boolean)) await c.query(stmt);
+}
 const LID = 'U__ret_a';
 const applied = [];
 const plans = {};
@@ -51,8 +59,8 @@ beforeAll(async () => {
       SELECT ?, 'user', CONCAT('synthetic ', n), NOW() - INTERVAL (n * 96) MINUTE FROM s`, [LID]);
     await c.query('ANALYZE TABLE notifications, line_message_logs');
     plans.before = { queue: await explain(c, QUEUE_SQL), lml: await explain(c, LML_RET_SQL()) };
-    if (!(await hasColumn(c, 'notifications', 'claim_token'))) { await c.query(M('059_notification_dispatch_lease.sql')); applied.push('059'); }
-    if (!(await hasIndex(c, 'line_message_logs', 'idx_lml_created'))) { await c.query(M('060_notification_log_retention_indexes.sql')); applied.push('060'); }
+    if (!(await hasColumn(c, 'notifications', 'claim_token'))) { await runSqlFile(c, '059_notification_dispatch_lease.sql'); applied.push('059'); }
+    if (!(await hasIndex(c, 'line_message_logs', 'idx_lml_created'))) { await runSqlFile(c, '060_notification_log_retention_indexes.sql'); applied.push('060'); }
     await c.query('ANALYZE TABLE notifications, line_message_logs');
     plans.after = { queue: await explain(c, QUEUE_SQL), notif: await explain(c, NOTIF_RET_SQL()), lml: await explain(c, LML_RET_SQL()) };
     // Evidence for the PR / docs (CI log).
@@ -66,8 +74,8 @@ afterAll(async () => {
     await c.query('DELETE FROM notifications WHERE target_line_user_id = ?', [LID]);
     await c.query('DELETE FROM line_message_logs WHERE line_user_id = ?', [LID]);
     await c.query('DELETE FROM line_users WHERE line_user_id = ?', [LID]);
-    if (applied.includes('060')) await c.query(M('rollback/060_notification_log_retention_indexes_rollback.sql'));
-    if (applied.includes('059')) await c.query(M('rollback/059_notification_dispatch_lease_rollback.sql'));
+    if (applied.includes('060')) await runSqlFile(c, 'rollback/060_notification_log_retention_indexes_rollback.sql');
+    if (applied.includes('059')) await runSqlFile(c, 'rollback/059_notification_dispatch_lease_rollback.sql');
   } finally { await c.end(); }
   await pool.end();
 });

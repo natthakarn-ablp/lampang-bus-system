@@ -205,11 +205,8 @@ async function getDashboard(schoolId, { gradeFilter = null } = {}) {
 /**
  * Search/list students for a school with optional filters.
  */
-async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has_vehicle, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
-  const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'vehicle_id'];
-  const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
-  const sortDir = order === 'desc' ? 'DESC' : 'ASC';
-
+// Shared WHERE for the student list and its Excel export (same filters).
+function buildStudentListWhere(schoolId, { search, grade, classroom, vehicle_id, has_vehicle, morning_enabled, evening_enabled, gradeFilter = null, include_deleted = false, only_deleted = false }) {
   // Soft-delete visibility. Default (both flags false) keeps the historical
   // contract: active students only. only_deleted powers the "restorable
   // students" view; include_deleted shows both (active + withdrawn).
@@ -258,6 +255,37 @@ async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has
     where += ' AND s.evening_enabled = ?';
     params.push(evening_enabled === 'true' || evening_enabled === true ? 1 : 0);
   }
+
+  return { where, params };
+}
+
+/**
+ * Rows for the student-list Excel export: one row per pupil (no parent join,
+ * so co-guardians cannot duplicate a pupil), active pupils only, capped.
+ * No parent contact, address or CID.
+ */
+async function getStudentExportRows(schoolId, filters, { limit = 5000 } = {}) {
+  const { where, params } = buildStudentListWhere(schoolId, { ...filters, include_deleted: false, only_deleted: false });
+  const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM students s WHERE ${where}`, params);
+  const [rows] = await pool.query(
+    `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+            s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled
+       FROM students s
+       LEFT JOIN vehicles v ON v.id = s.vehicle_id
+      WHERE ${where}
+      ORDER BY s.id ASC
+      LIMIT ?`,
+    [...params, limit]
+  );
+  return { rows, total: Number(total) || 0 };
+}
+
+async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has_vehicle, morning_enabled, evening_enabled, page = 1, per_page = 20, sort = 'first_name', order = 'asc', gradeFilter = null, include_deleted = false, only_deleted = false }) {
+  const allowedSorts = ['id', 'first_name', 'last_name', 'grade', 'classroom', 'vehicle_id'];
+  const sortCol = allowedSorts.includes(sort) ? sort : 'first_name';
+  const sortDir = order === 'desc' ? 'DESC' : 'ASC';
+
+  const { where, params } = buildStudentListWhere(schoolId, { search, grade, classroom, vehicle_id, has_vehicle, morning_enabled, evening_enabled, gradeFilter, include_deleted, only_deleted });
 
   // Count
   const [[{ total }]] = await pool.query(
@@ -612,6 +640,7 @@ async function restoreStudent(db, { schoolId, studentId, actorId, gradeScope = n
 module.exports = {
   getDashboard,
   getStudents,
+  getStudentExportRows,
   getVehicles,
   getStatusToday,
   getEmergencies,

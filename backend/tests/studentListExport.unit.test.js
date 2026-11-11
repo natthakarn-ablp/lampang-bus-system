@@ -67,6 +67,8 @@ test('school export: workbook with expected columns, no parent contact, audited'
   const listSql = mockQuery.mock.calls.find(c => /FROM students s/.test(String(c[0])) && /LIMIT/.test(String(c[0])));
   expect(String(listSql[0])).toMatch(/vehicle_id IS NOT NULL/);
   expect(String(listSql[0])).toMatch(/ORDER BY s\.id ASC/);
+  // one row per pupil: no parent join (co-guardians would duplicate pupils)
+  expect(String(listSql[0])).not.toMatch(/parent_student|parents p/);
   expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ entityType: 'student_list_xlsx' }));
 });
 

@@ -283,22 +283,15 @@ router.get('/students/export', importExportLimiter, async (req, res, next) => {
     const gradeFilter = resolveGradeScope(req);
     const filters = { search, grade, classroom: classroom?.trim(), vehicle_id, has_vehicle };
 
-    const rows = [];
-    let total = 0;
-    for (let page = 1; rows.length < STUDENT_EXPORT_CAP; page++) {
-      // Page by the unique id so LIMIT/OFFSET cannot skip or repeat pupils.
-      const r = await schoolSvc.getStudents(schoolId, { ...filters, page, per_page: 100, sort: 'id', order: 'asc', gradeFilter });
-      total = Number(r.meta.total) || 0;
-      rows.push(...r.students);
-      if (r.students.length < 100 || rows.length >= total) break;
-    }
+    // One row per pupil (no parent join), active only, capped.
+    const { rows, total } = await schoolSvc.getStudentExportRows(schoolId, { ...filters, gradeFilter }, { limit: STUDENT_EXPORT_CAP });
+    const truncated = total > rows.length;
     const gradeRank = (g) => { const i = VALID_GRADE_SCOPES.indexOf(normalizeGrade(g)); return i < 0 ? 999 : i; };
     const list = rows.slice(0, STUDENT_EXPORT_CAP).sort((a, b) =>
       gradeRank(a.grade) - gradeRank(b.grade)
       || String(a.classroom ?? '').localeCompare(String(b.classroom ?? ''), 'th', { numeric: true })
       || String(a.first_name ?? '').localeCompare(String(b.first_name ?? ''), 'th')
       || a.id - b.id);
-    const truncated = total > list.length;
 
     // Pickup point labels (a pupil may be on one point per session).
     const points = new Map();

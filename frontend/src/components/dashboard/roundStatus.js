@@ -8,10 +8,13 @@
  * Colour rules (docs/design/dashboard-redesign.md §3):
  *   neutral  ยังไม่ถึงเวลา / วันหยุด / ไม่มีนักเรียนใช้รถ / ไม่มีข้อมูล
  *   info     กำลังรับส่ง (round open, nothing late yet)
- *   warn     เลยเวลาที่ควรเสร็จแล้ว แต่ยังค้าง · หรือวันก่อนหน้าที่บันทึกค้าง
+ *   warn     เลยเวลาที่ควรเสร็จแล้ว แต่ยังค้าง · หมดรอบแล้วยังไม่ยืนยัน
+ *            · หรือวันก่อนหน้าที่บันทึกค้าง
  *   success  ครบแล้ว
- *   danger   only for real problems: data conflict, or pupils still not
- *            confirmed after the round has closed today
+ *   danger   only for real problems: data conflict or an emergency.
+ *            A round that has closed is a result to review, not an alarm:
+ *            nothing more can be done inside it, so dayStatus() reports it
+ *            as a calm "สรุปวันนี้" instead of a red headline.
  *
  * Round times: the only server-side setting is DRIVER_SESSION_SWITCH_HOUR
  * (default 12, the morning/evening split also used by TeacherCheck and
@@ -116,7 +119,8 @@ export function roundStatus({ session = 'morning', done = 0, expected = 0, date,
     case 'overdue':
       return { ...base, state: 'overdue', tone: 'warn', label: `ค้าง ${fmt(pending)} คน`, detail: `เลย ${hhmm(t.dueBy)} น. แล้ว · ${verb}แล้ว ${progress}` };
     case 'closed':
-      return { ...base, state: 'not_delivered', tone: 'danger', label: `ยังไม่ยืนยัน ${fmt(pending)} คน`, detail: `หมดรอบแล้ว ยังไม่ยืนยันว่า${verb} ${fmt(pending)} คน` };
+      // Short card status only; dayStatus() says "หมดรอบแล้ว" once for the screen.
+      return { ...base, state: 'not_delivered', tone: 'warn', label: `ยังไม่ยืนยัน ${fmt(pending)} คน`, detail: `${verb}แล้ว ${progress}` };
     case 'past':
     default:
       return { ...base, state: 'incomplete_record', tone: 'warn', label: `ค้าง ${fmt(pending)} คน`, detail: `บันทึกไว้ ${progress}` };
@@ -152,12 +156,36 @@ export function dayStatus(rounds = [], { emergencies = 0 } = {}) {
   if (worst.tone === 'danger') {
     return { tone: 'danger', headline: `${name(worst)}: ${worst.label}`, sub: worst.detail, focus: worst.session };
   }
-  if (worst.tone === 'warn') {
-    return { tone: 'warn', headline: `${name(worst)}ยังค้าง ${fmt(worst.pending)} คน`, sub: worst.detail, focus: worst.session };
+  // A round still running (or just past due) is what can be acted on now, so
+  // it always headlines over a round that has already finished.
+  const overdue = list.find(r => r.state === 'overdue');
+  if (overdue) {
+    return { tone: 'warn', headline: `${name(overdue)}ยังค้าง ${fmt(overdue.pending)} คน`, sub: overdue.detail, focus: overdue.session };
   }
   const active = list.find(r => r.state === 'in_progress' || r.state === 'waiting');
   if (active) {
     return { tone: active.tone, headline: `${name(active)}: ${active.label}`, sub: active.detail, focus: active.session };
+  }
+  // Finished rounds with pupils not confirmed: a calm summary of the result,
+  // said once. Neutral, not red: the round is over, only follow-up is left.
+  const finished = list.filter(r => r.state === 'not_delivered' || r.state === 'incomplete_record');
+  if (finished.length > 0) {
+    const later = list.find(r => r.state === 'not_yet');
+    const pastDay = list.every(r => r.phase === 'past' || r.state === 'no_riders');
+    const one = finished.length === 1 ? finished[0] : null;
+    // Between rounds (morning over, evening not started) the summary is of
+    // the morning only; otherwise it covers the whole day.
+    const title = pastDay ? 'สรุปทั้งวัน' : (later && one ? `สรุป${name(one)}` : 'สรุปวันนี้');
+    const headline = one
+      ? `${title}: ${later && !pastDay ? '' : `${name(one)} `}ยืนยันแล้ว ${fmt(one.done)}/${fmt(one.expected)} คน · ยังไม่ยืนยัน ${fmt(one.pending)} คน`
+      : `${title}: ยังไม่ยืนยัน ${finished.map(r => `${name(r)} ${fmt(r.pending)} คน`).join(' · ')}`;
+    const sub = later
+      ? `${name(later)}${later.detail}`
+      : (pastDay ? 'ดูรายชื่อเพื่อตรวจสอบบันทึกของวันนั้น' : 'หมดรอบแล้ว · ดูรายชื่อเพื่อติดตาม');
+    return { tone: 'neutral', kind: 'summary', title, headline, sub, focus: finished[finished.length - 1].session };
+  }
+  if (worst.tone === 'warn') {
+    return { tone: 'warn', headline: `${name(worst)}ยังค้าง ${fmt(worst.pending)} คน`, sub: worst.detail, focus: worst.session };
   }
   const done = list.filter(r => r.state === 'complete');
   const later = list.find(r => r.state === 'not_yet');

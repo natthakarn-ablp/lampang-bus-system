@@ -65,6 +65,10 @@ jobs:
         run: python3 ../ops/database/test-recover-db-actors.py
       - name: Verify encrypted snapshots and immutable cipher-only transfer
         run: bash ../ops/backup/run-synthetic-tests.sh
+      - name: Restore round trip with the production backup/restore scripts (synthetic data)
+        run: bash ../ops/backup/test-restore-roundtrip.sh
+        env:
+          ALLOW_RESTORE_ROUNDTRIP_TEST: synthetic-ci-only
       - name: Verify frontend publication and rollback with synthetic directories
         run: python3 ../scripts/test-publish-frontend.py
 

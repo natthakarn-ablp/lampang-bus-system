@@ -53,6 +53,7 @@ const SCHOOL_NAV = [
   { to: '/school/vehicles',      icon: Bus,           label: 'รถรับส่ง' },
   { to: '/school/emergencies',   icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/reports/daily',        icon: FileText,      label: 'รายงาน' },
+  { to: '/school/safe-travel',   icon: ShieldCheck,   label: 'ประเมินการเดินทางปลอดภัย' },
   { section: MORE },
   { to: '/school/approvals',     icon: CheckSquare,   label: 'คำขอรายชื่อ' },
   { to: '/school/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },

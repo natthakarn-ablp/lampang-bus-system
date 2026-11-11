@@ -52,6 +52,7 @@ const SchoolApprovals      = lazy(() => import('./pages/school/SchoolApprovals')
 const SchoolBulkVehicles   = lazy(() => import('./pages/school/SchoolBulkVehicles'));
 const SchoolAuditLog       = lazy(() => import('./pages/school/SchoolAuditLog'));
 const SchoolPickupMap      = lazy(() => import('./pages/school/SchoolPickupMap'));
+const SchoolSafeTravelAssessment = lazy(() => import('./pages/school/SchoolSafeTravelAssessment'));
 const SchoolLiveVehicles   = lazy(() => import('./pages/school/SchoolLiveVehicles'));
 const SchoolTeacherAccounts = lazy(() => import('./pages/school/SchoolTeacherAccounts'));
 const VehicleVerification    = lazy(() => import('./pages/school/VehicleVerification'));
@@ -281,6 +282,7 @@ export default function App() {
             <Route path="bulk-vehicles" element={<SchoolBulkVehicles />} />
             <Route path="audit-log"    element={<SchoolAuditLog />} />
             <Route path="pickup-map"   element={<SchoolPickupMap />} />
+            <Route path="safe-travel"  element={<SchoolSafeTravelAssessment />} />
             <Route path="live-vehicles" element={<SchoolLiveVehicles />} />
             <Route path="vehicle-track" element={<VehicleTrackReplay role="school" />} />
             <Route path="teacher-accounts" element={<SchoolTeacherAccounts />} />

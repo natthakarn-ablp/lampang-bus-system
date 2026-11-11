@@ -150,10 +150,24 @@ function classifyConfidence({ speedMps, accuracyMeters, distanceM, etaSeconds })
  * Read cached ETAs for a vehicle (today, active session). Used by parent /
  * school / admin ETA endpoints. Returns [] when the feature is off.
  */
-async function getForVehicle(vehicleId, { session = null, now = new Date() } = {}) {
+async function getForVehicle(vehicleId, { session = null, now = new Date(), schoolId = null, affiliationId = null } = {}) {
   if (!env.features.eta) return [];
   const sess = session || currentSession(now);
   const today = dateOnly(now);
+  // SB-A2-03 (same rule as AUD-SCH-01): on a shared vehicle a school or
+  // affiliation does not see points that hold only other tenants' pupils.
+  let scopeSql = '';
+  const scopeParams = [];
+  if (schoolId != null || affiliationId != null) {
+    const own = schoolId != null ? 's.school_id = ?' : 's.school_id IN (SELECT id FROM schools WHERE affiliation_id = ?)';
+    const scope = schoolId != null ? schoolId : affiliationId;
+    scopeSql = `
+        AND (NOT EXISTS (SELECT 1 FROM student_pickup_points spp JOIN students s ON s.id = spp.student_id
+                          WHERE spp.pickup_point_id = pp.id AND s.is_deleted = FALSE AND NOT (${own}))
+             OR EXISTS (SELECT 1 FROM student_pickup_points spp JOIN students s ON s.id = spp.student_id
+                          WHERE spp.pickup_point_id = pp.id AND s.is_deleted = FALSE AND ${own}))`;
+    scopeParams.push(scope, scope);
+  }
   const [rows] = await pool.query(
     `SELECT ep.pickup_point_id, pp.label, pp.sequence, ep.session,
             ep.eta_seconds, ep.eta_at, ep.distance_meters, ep.confidence,
@@ -163,9 +177,9 @@ async function getForVehicle(vehicleId, { session = null, now = new Date() } = {
        JOIN pickup_points pp ON pp.id = ep.pickup_point_id AND pp.is_deleted = FALSE
       WHERE ep.vehicle_id = ?
         AND ep.session = ?
-        AND ep.eta_date = ?
+        AND ep.eta_date = ?${scopeSql}
       ORDER BY pp.sequence, pp.id`,
-    [vehicleId, sess, today]
+    [vehicleId, sess, today, ...scopeParams]
   );
   return rows;
 }

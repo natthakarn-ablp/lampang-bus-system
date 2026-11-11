@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Key, Search } from 'lucide-react';
 import api from '../api/axios';
 import { useAdminContext } from '../hooks/useAdminContext';
+import { validAdminScope } from '../utils/adminScope';
 
 /**
  * Admin school selector — shown at top of school pages when role=admin.
@@ -11,14 +12,23 @@ export function AdminSchoolSelector() {
   const { isAdmin, schoolId, setSchoolId } = useAdminContext();
   const [schools, setSchools] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
     api.get('/province/schools?per_page=200')
-      .then(res => setSchools(res.data.data || []))
+      .then(res => { setSchools(res.data.data || []); setLoaded(true); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [isAdmin]);
+
+  // A remembered school that is no longer in the list (deleted, renamed id,
+  // tampered storage) falls back to "nothing selected". A full page (200) may
+  // be truncated, so only validate against a list known to be complete.
+  useEffect(() => {
+    if (loading || !loaded || !schoolId || schools.length >= 200) return;
+    if (!validAdminScope(schoolId, schools)) setSchoolId('');
+  }, [loading, loaded, schoolId, schools, setSchoolId]);
 
   if (!isAdmin) return null;
 
@@ -27,7 +37,7 @@ export function AdminSchoolSelector() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <label className="text-sm font-semibold text-amber-800 shrink-0 inline-flex items-center gap-1.5">
           <Key className="w-4 h-4" strokeWidth={2} />
-          Admin — เลือกโรงเรียน:
+          ผู้ดูแลระบบ — เลือกโรงเรียน:
         </label>
         <select
           value={schoolId}
@@ -52,14 +62,22 @@ export function AdminAffiliationSelector() {
   const { isAdmin, affiliationId, setAffiliationId } = useAdminContext();
   const [affiliations, setAffiliations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
     api.get('/province/affiliations')
-      .then(res => setAffiliations(res.data.data || []))
+      .then(res => { setAffiliations(res.data.data || []); setLoaded(true); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [isAdmin]);
+
+  // A remembered affiliation that is no longer in the list falls back to
+  // "nothing selected".
+  useEffect(() => {
+    if (loading || !loaded || !affiliationId) return;
+    if (!validAdminScope(affiliationId, affiliations)) setAffiliationId('');
+  }, [loading, loaded, affiliationId, affiliations, setAffiliationId]);
 
   if (!isAdmin) return null;
 
@@ -68,7 +86,7 @@ export function AdminAffiliationSelector() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         <label className="text-sm font-semibold text-amber-800 shrink-0 inline-flex items-center gap-1.5">
           <Key className="w-4 h-4" strokeWidth={2} />
-          Admin — เลือกสังกัด:
+          ผู้ดูแลระบบ — เลือกสังกัด:
         </label>
         <select
           value={affiliationId}

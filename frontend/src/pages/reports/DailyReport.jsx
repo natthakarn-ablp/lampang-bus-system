@@ -9,6 +9,7 @@ import ErrorState from '../../components/ErrorState';
 import { StatusBadge, DataTable, FormField } from '../../components/ui';
 import { StatusHero, ActionList, StatTile, StatGrid, TravelLeaveSummary, roundStatus, dayStatus } from '../../components/dashboard';
 import { ReportHero, ReportSection, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
+import { formatThaiCalendarDate } from '../../utils/thaiTime';
 
 // Where each role acts on a follow-up item (admin has no such page).
 const ROLE_LINKS = {
@@ -70,8 +71,13 @@ export default function DailyReport() {
       <ReportHero eyebrow="รายงานรายวัน" title={reportScopeName(user, data)} subtitle={thaiDate}>
         <FormField label="วันที่ของรายงาน" labelClassName="text-navy-200" className="sm:w-48">
           {ctl => (
-            <input {...ctl} type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
+            <>
+              <input {...ctl} type="date" value={date} onChange={(e) => setDate(e.target.value)}
+                aria-describedby={[ctl['aria-describedby'], `${ctl.id}-be`].filter(Boolean).join(' ')}
+                className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
+              {/* The native picker shows the device's Gregorian format; echo the date in พ.ศ. */}
+              <p id={`${ctl.id}-be`} className="mt-1 text-caption text-navy-100">{formatThaiCalendarDate(date)}</p>
+            </>
           )}
         </FormField>
       </ReportHero>

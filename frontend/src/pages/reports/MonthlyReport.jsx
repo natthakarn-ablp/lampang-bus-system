@@ -12,6 +12,9 @@ import ErrorState from '../../components/ErrorState';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { kpiColor, safePct, levelBadge, topN, bottomN, sortByKpi } from '../../utils/kpi';
 import { ReportHero, ReportSection, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
+import { formatThaiCalendarDate } from '../../utils/thaiTime';
+
+const MONTH_BE_ID = 'monthly-report-month-be';
 
 // A KPI tile is calm unless the number is notably good or below the 85% line.
 const pctTone = v => (v == null || !isFinite(v) ? 'calm' : v >= 95 ? 'success' : v >= 85 ? 'calm' : 'warn');
@@ -126,17 +129,22 @@ export default function MonthlyReport() {
     <div className="p-3 sm:p-6 max-w-6xl mx-auto">
       <ReportHero eyebrow="รายงานรายเดือน" title={reportScopeName(user, data)}
         subtitle={month ? new Date(month + '-01').toLocaleDateString('th-TH', { year: 'numeric', month: 'long' }) : ''}>
-        <div className="flex items-end gap-2">
-          <FormField label="เดือนของรายงาน" labelClassName="text-navy-200">
-            {ctl => (
-              <input {...ctl} type="month" value={month} onChange={(e) => setMonth(e.target.value)}
-                className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
-            )}
-          </FormField>
-          <button onClick={resetMonth}
-            className="focus-ring-inverse text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
-            ปัจจุบัน
-          </button>
+        <div>
+          <div className="flex items-end gap-2">
+            <FormField label="เดือนของรายงาน" labelClassName="text-navy-200">
+              {ctl => (
+                <input {...ctl} type="month" value={month} onChange={(e) => setMonth(e.target.value)}
+                  aria-describedby={[ctl['aria-describedby'], MONTH_BE_ID].filter(Boolean).join(' ')}
+                  className="focus-ring-inverse w-full border border-navy-500 bg-navy-600 text-white rounded-lg px-3 min-h-[44px] text-base sm:text-sm" />
+              )}
+            </FormField>
+            <button onClick={resetMonth}
+              className="focus-ring-inverse text-sm text-navy-100 hover:text-white px-3 min-h-[44px] border border-navy-500 rounded-lg hover:bg-navy-600 active:bg-navy-500 transition">
+              ปัจจุบัน
+            </button>
+          </div>
+          {/* The native picker shows the device's Gregorian format; echo the month in พ.ศ. */}
+          <p id={MONTH_BE_ID} className="mt-1 text-caption text-navy-100">{formatThaiCalendarDate(month)}</p>
         </div>
       </ReportHero>
 

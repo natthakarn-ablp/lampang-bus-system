@@ -1,39 +1,40 @@
 import { useState, useCallback, createContext, useContext, useEffect } from 'react';
 import { useAuth } from './useAuth';
+import { readAdminScope, writeAdminScope } from '../utils/adminScope';
 
 const AdminContext = createContext(null);
 
 /**
  * Provides admin-selected scope context (schoolId, affiliationId).
  * Only meaningful for role=admin. Other roles ignore this entirely.
- * Persists selection in sessionStorage so refresh keeps context.
+ * Persists the selection per browser (localStorage, see utils/adminScope) so
+ * an admin does not have to pick the school / affiliation again every visit.
  */
 export function AdminContextProvider({ children }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
-  const [schoolId, setSchoolIdRaw] = useState(() =>
-    isAdmin ? sessionStorage.getItem('admin_school_id') || '' : ''
-  );
-  const [affiliationId, setAffiliationIdRaw] = useState(() =>
-    isAdmin ? sessionStorage.getItem('admin_affiliation_id') || '' : ''
-  );
+  const [schoolId, setSchoolIdRaw] = useState(() => (isAdmin ? readAdminScope('school') : ''));
+  const [affiliationId, setAffiliationIdRaw] = useState(() => (isAdmin ? readAdminScope('affiliation') : ''));
 
   const setSchoolId = useCallback((id) => {
-    setSchoolIdRaw(id);
-    if (id) sessionStorage.setItem('admin_school_id', id);
-    else sessionStorage.removeItem('admin_school_id');
+    setSchoolIdRaw(id ? String(id) : '');
+    writeAdminScope('school', id);
   }, []);
 
   const setAffiliationId = useCallback((id) => {
-    setAffiliationIdRaw(id);
-    if (id) sessionStorage.setItem('admin_affiliation_id', id);
-    else sessionStorage.removeItem('admin_affiliation_id');
+    setAffiliationIdRaw(id ? String(id) : '');
+    writeAdminScope('affiliation', id);
   }, []);
 
-  // Clear context if user logs out or changes
+  // The auth user is re-hydrated after the first render, so isAdmin is still
+  // false when the initial state above is computed. Load the remembered scope
+  // once the admin is known; clear it from state when the user is not admin.
   useEffect(() => {
-    if (!isAdmin) {
+    if (isAdmin) {
+      setSchoolIdRaw(readAdminScope('school'));
+      setAffiliationIdRaw(readAdminScope('affiliation'));
+    } else {
       setSchoolIdRaw('');
       setAffiliationIdRaw('');
     }

@@ -14,7 +14,7 @@ import { getGradeScope } from '../utils/authScope';
  * Kept as a component rather than the getScopeLabel() string helper because
  * both call sites want the badge, and the string was being hand-copied.
  */
-export default function TeacherScopeChip({ user, note = 'บัญชีครูประจำสายชั้น — เพิ่มและแก้ไขนักเรียน เช็กชื่อในชั้นที่รับผิดชอบ และจัดการรถที่นักเรียนในชั้นใช้' }) {
+export default function TeacherScopeChip({ user, note = 'บัญชีครูประจำสายชั้น · จัดการเฉพาะชั้นนี้' }) {
   const grade = getGradeScope(user);
   if (!grade) return null;
   return (

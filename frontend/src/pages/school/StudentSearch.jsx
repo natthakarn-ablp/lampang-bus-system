@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { GraduationCap } from 'lucide-react';
+import { ChevronDown, GraduationCap, History } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import ErrorState from '../../components/ErrorState';
 import PageHeader from '../../components/PageHeader';
 import {
-  DataTable, TableAction, FilterBar, FormField, Modal, ConfirmDialog, StatusBadge,
+  DataTable, TableAction, RowActionMenu, RowActionMenuItem, FilterBar, FormField, Modal, ConfirmDialog, StatusBadge,
 } from '../../components/ui';
 import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
@@ -429,9 +429,16 @@ export default function StudentSearch() {
         )}
       />
 
-      {!isTeacher && <details className="mb-4 rounded-lg border border-surface-border p-3">
-        <summary className="focus-ring cursor-pointer text-sm text-ink min-h-[44px] flex items-center">ประวัติและเครื่องมือนำเข้าเพิ่มเติม</summary>
-        <div className="flex flex-wrap gap-2 mt-2">
+      {!isTeacher && <details className="group mb-4 rounded-lg border border-surface-border bg-surface-raised">
+        <summary className="focus-ring cursor-pointer list-none [&::-webkit-details-marker]:hidden min-h-[44px] flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface">
+          <History className="w-5 h-5 shrink-0 text-ink-muted" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-ink">ประวัติและเครื่องมือนำเข้าเพิ่มเติม</span>
+            <span className="block text-xs text-ink-muted">ประวัติการนำเข้า ไฟล์ตัวอย่าง และการนำเข้าแบบเดิม</span>
+          </span>
+          <ChevronDown className="w-5 h-5 shrink-0 text-ink-muted transition-transform group-open:rotate-180" aria-hidden="true" />
+        </summary>
+        <div className="flex flex-wrap gap-2 px-3 pb-3 pt-1 border-t border-surface-border">
           <button type="button" onClick={() => setShowHistory(true)} className="focus-ring min-h-[44px] px-3 text-brand-700">ประวัติการนำเข้า</button>
           <button type="button" onClick={handleDownloadTemplate} className="focus-ring min-h-[44px] px-3 text-brand-700">ดาวน์โหลดไฟล์ตัวอย่าง</button>
           <button type="button" onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }} className="focus-ring min-h-[44px] px-3 text-ink-muted">นำเข้าแบบเดิม (สำรอง)</button>
@@ -524,13 +531,17 @@ export default function StudentSearch() {
           ? <TableAction tone="brand" onClick={() => openRestore(s2)}>{isTeacher ? 'กู้คืนเข้าสายชั้นนี้' : 'กู้คืน'}</TableAction>
           : <>
               <TableAction tone="brand" onClick={() => openEdit(s2)}>แก้ข้อมูล</TableAction>
-              <TableAction tone="neutral" onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</TableAction>
-              {!isTeacher && claimEnabled && (
-                <TableAction tone="neutral" onClick={() => issueClaimCodes(null, s2.id)}>ออกรหัสผูก LINE</TableAction>
-              )}
-              {!isTeacher && s2.parent_line_linked && (
-                <TableAction tone="neutral" onClick={() => { setUnlinkReason(''); setUnlinkTarget(s2); }}>ตัดการผูก LINE</TableAction>
-              )}
+              {/* One visible primary action per row; the rest sit in an
+                  overflow menu so the table is not three buttons wide. */}
+              <RowActionMenu label={`การจัดการเพิ่มเติมของ ${s2.prefix || ''}${s2.first_name} ${s2.last_name}`}>
+                <RowActionMenuItem onClick={() => openEdit(s2, 'vehicle')}>{s2.vehicle_id ? 'เปลี่ยนรถ' : 'เลือกรถ'}</RowActionMenuItem>
+                {!isTeacher && claimEnabled && (
+                  <RowActionMenuItem onClick={() => issueClaimCodes(null, s2.id)}>ออกรหัสผูก LINE</RowActionMenuItem>
+                )}
+                {!isTeacher && s2.parent_line_linked && (
+                  <RowActionMenuItem onClick={() => { setUnlinkReason(''); setUnlinkTarget(s2); }}>ตัดการผูก LINE</RowActionMenuItem>
+                )}
+              </RowActionMenu>
             </>}
         empty={{
           icon: GraduationCap,

@@ -13,6 +13,7 @@ export { default as AttentionQueue }   from './AttentionQueue';
 export { default as DailyOperationStatus } from './DailyOperationStatus';
 export { default as ResponsiveDrawer } from './ResponsiveDrawer';
 export { default as DataTable, TableAction } from './DataTable';
+export { default as RowActionMenu, RowActionMenuItem } from './RowActionMenu';
 export { default as FilterBar }        from './FilterBar';
 export { default as ConfirmDialog }    from './ConfirmDialog';
 export { default as FormField }        from './FormField';

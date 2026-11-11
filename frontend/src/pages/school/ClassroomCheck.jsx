@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { CheckCircle2, GraduationCap, Sunrise, Sunset, Undo2 } from 'lucide-react';
+import { CheckCircle2, ChevronDown, CircleHelp, GraduationCap, Sunrise, Sunset, Undo2 } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
@@ -16,8 +16,10 @@ import { PageTransition } from '../../lib/motion';
 import AttendanceTimeDialog, { bangkokTime } from './AttendanceTimeDialog';
 
 const SESSIONS = {
-  morning: { label: 'เช้า', action: 'ถึงโรงเรียน', icon: Sunrise },
-  evening: { label: 'เย็น', action: 'ขึ้นรถกลับบ้าน', icon: Sunset },
+  // `tab` is the short form for the round switch, so it stays on one line at
+  // 390px; `action` is the full wording used in rows and confirmations.
+  morning: { label: 'เช้า', action: 'ถึงโรงเรียน', tab: 'ถึงโรงเรียน', icon: Sunrise },
+  evening: { label: 'เย็น', action: 'ขึ้นรถกลับบ้าน', tab: 'กลับบ้าน', icon: Sunset },
 };
 
 function initialSession(params) {
@@ -192,12 +194,21 @@ export default function ClassroomCheck() {
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
         <PageHeader title="เช็กชื่อรายห้อง" subtitle={grade ? `นักเรียนชั้น ${grade} ที่ใช้รถรับส่ง` : 'เลือกสายชั้น แล้วเช็กชื่อทีละห้องเรียน'} icon={GraduationCap} iconColor="teal" />
         <SchoolWorkflowNav current="attendance" />
-        <AppCard padding="md" className="space-y-1">
-          <p className="font-semibold text-ink">เริ่มต้นใช้รถทุกคน เลือก “มาเอง/กลับเอง” หรือ “ลา” ตามจริง</p>
-          <p className="text-sm text-ink-muted">ตรวจรายชื่อทีละห้อง แล้วกด “บันทึกทั้งห้อง” · การลาใช้เฉพาะรอบที่เลือก</p>
-          <p className="text-sm text-ink-muted">เช้า: ถึงโรงเรียน · เย็น: ขึ้นรถกลับบ้าน · รายการที่คนขับหรือครูบันทึกแล้วจะไม่บันทึกซ้ำ</p>
-          <p className="text-sm text-ink-muted">ยืนยันรายคนเพื่อเก็บเวลาที่กดจริง · บันทึกทั้งห้องเป็นเวลาของชุดนั้น ไม่ใช่เวลารับจริงรายคน</p>
-        </AppCard>
+        {/* Closed by default: on a phone the roster must start on the first
+            screen. The same four rules, one tap away. */}
+        <details className="group rounded-xl border border-surface-border bg-surface-raised">
+          <summary className="focus-ring cursor-pointer list-none [&::-webkit-details-marker]:hidden min-h-[44px] flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-ink hover:bg-surface">
+            <CircleHelp className="w-5 h-5 shrink-0 text-ink-muted" aria-hidden="true" />
+            <span className="flex-1">วิธีใช้หน้านี้</span>
+            <ChevronDown className="w-5 h-5 shrink-0 text-ink-muted transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <ul className="list-disc pl-9 pr-4 pb-3 space-y-1 text-sm text-ink-muted">
+            <li>เริ่มต้นใช้รถทุกคน เลือก “มาเอง/กลับเอง” หรือ “ลา” ตามจริง</li>
+            <li>ตรวจรายชื่อทีละห้อง แล้วกด “บันทึกทั้งห้อง” · การลาใช้เฉพาะรอบที่เลือก</li>
+            <li>เช้า: ถึงโรงเรียน · เย็น: ขึ้นรถกลับบ้าน · รายการที่คนขับหรือครูบันทึกแล้วจะไม่บันทึกซ้ำ</li>
+            <li>ยืนยันรายคนเพื่อเก็บเวลาที่กดจริง · บันทึกทั้งห้องเป็นเวลาของชุดนั้น ไม่ใช่เวลารับจริงรายคน</li>
+          </ul>
+        </details>
 
         <div role="tablist" aria-label="เลือกรอบ" className="grid grid-cols-2 gap-2 p-1 bg-surface border border-surface-border rounded-2xl">
           {Object.entries(SESSIONS).map(([key, cfg]) => {
@@ -205,7 +216,7 @@ export default function ClassroomCheck() {
             return <button key={key} type="button" role="tab" aria-selected={session === key} disabled={locked}
               onClick={() => changeSession(key)}
               className={`focus-ring min-h-[52px] rounded-xl inline-flex items-center justify-center gap-2 px-2 font-semibold transition disabled:opacity-60 ${session === key ? 'bg-brand-700 text-white shadow-soft' : 'text-ink-muted hover:bg-surface-raised'}`}>
-              <Icon className="w-5 h-5" aria-hidden="true" />{cfg.label} · {cfg.action}
+              <Icon className="w-5 h-5 shrink-0" aria-hidden="true" /><span className="whitespace-nowrap">{cfg.label} · {cfg.tab}</span>
             </button>;
           })}
         </div>

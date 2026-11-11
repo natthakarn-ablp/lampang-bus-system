@@ -375,7 +375,7 @@ export default function TransportDashboard() {
               <button type="button" onClick={downloadSafetyReport} disabled={exporting}
                 className="focus-ring inline-flex items-center justify-center gap-1.5 bg-surface-raised hover:bg-surface text-ink text-sm font-medium px-3.5 rounded-xl transition border border-surface-border min-h-[44px] disabled:opacity-50">
                 <FileText className="w-4 h-4" strokeWidth={2} />
-                {exporting ? 'กำลังเตรียมรายงาน…' : 'ส่งออกรายงานรถ CSV'}
+                {exporting ? 'กำลังเตรียมไฟล์…' : 'ดาวน์โหลดรายชื่อรถ (CSV)'}
               </button>
               <Link
                 to="/transport/pickup-map"
@@ -408,27 +408,16 @@ export default function TransportDashboard() {
 
       {!noFleet && <TodoCards items={todos} />}
 
+      {/* Summary row. "ยังไม่ตรวจ" and "ไม่มีข้อมูลประกัน" live only in the
+          ต้องทำวันนี้ cards above (with their buttons) — repeating the same
+          counts here made two adjacent rows show identical numbers. */}
       {!noFleet && (
-        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <section aria-label="สรุปสถานะรถ" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <KpiRingCard
             label="พร้อมใช้งาน"
             pct={readyPct}
             sub={`${ready.toLocaleString('th-TH')} / ${total.toLocaleString('th-TH')} คัน`}
             variant={pctTone(readyPct)}
-          />
-          <KpiRingCard
-            label="ยังไม่ตรวจ"
-            value={notInspected}
-            sub={shareOf(notInspected)}
-            variant={notInspected > 0 ? 'warn' : 'success'}
-            chip={notInspected > 0 ? undefined : 'ไม่มี'}
-          />
-          <KpiRingCard
-            label="ไม่มีข้อมูลประกัน"
-            value={noInsurance}
-            sub={shareOf(noInsurance)}
-            variant={noInsurance > 0 ? 'warn' : 'success'}
-            chip={noInsurance > 0 ? undefined : 'ไม่มี'}
           />
           <KpiRingCard
             label="หมดอายุ / ไม่ผ่าน"
@@ -445,9 +434,12 @@ export default function TransportDashboard() {
         <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-surface-raised border border-surface-border rounded-2xl shadow-soft p-5 flex flex-col gap-3 min-w-0">
             <h3 className="font-bold text-ink">สถานะรถทั้งหมด</h3>
+            {/* Centre shows the fleet size: the readiness % is already the
+                first summary card, and a second big "x%" here competed with
+                the urgent banner for attention. */}
             <DonutChart
               size={150} thickness={22}
-              label={readyPct == null ? '–' : `${readyPct}%`} sublabel="พร้อมใช้งาน"
+              label={total.toLocaleString('th-TH')} sublabel="คันทั้งหมด"
               segments={[
                 { label: 'พร้อมใช้', value: ready, color: '#10B981' },
                 { label: 'ยังไม่พร้อม', value: Math.max(0, total - ready), color: '#F59E0B' },

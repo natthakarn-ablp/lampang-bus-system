@@ -347,6 +347,17 @@ async function beginCheckinTransaction(conn) {
   await conn.beginTransaction();
 }
 
+// SB-B1-05: for call sites that start the transaction before their try/finally,
+// release the pooled connection if starting it fails (otherwise it leaks).
+async function beginCheckinTransactionOrRelease(conn) {
+  try {
+    await beginCheckinTransaction(conn);
+  } catch (err) {
+    conn.release();
+    throw err;
+  }
+}
+
 // ─── _buildCheckinTransaction ─────────────────────────────────────────────────
 
 /**
@@ -903,7 +914,7 @@ async function processSchoolOverride(pool, {
 
   // 4. Reuse driver transaction worker
   const conn = await pool.getConnection();
-  await beginCheckinTransaction(conn);
+  await beginCheckinTransactionOrRelease(conn);
   try {
     const result = await _buildCheckinTransaction(conn, {
       userId,
@@ -1644,7 +1655,7 @@ async function processTeacherCheck(pool, {
     if (onLeave.has(id)) { results.push({ student_id: id, result: 'on_leave' }); continue; }
 
     const conn = await pool.getConnection();
-    await beginCheckinTransaction(conn);
+    await beginCheckinTransactionOrRelease(conn);
     try {
       const scopeParams = [id, schoolId, st.vehicle_id];
       const lockedGrade = gradeFilter ? ' AND grade IN (?)' : '';
@@ -1704,7 +1715,7 @@ async function correctTeacherCheckTime(pool, {
   if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
 
   const conn = await pool.getConnection();
-  await beginCheckinTransaction(conn);
+  await beginCheckinTransactionOrRelease(conn);
   try {
     // Take the student lock before the log lock, matching the check-in path.
     const [[candidate]] = await conn.query('SELECT student_id FROM checkin_logs WHERE id = ?', [id]);

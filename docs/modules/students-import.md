@@ -66,6 +66,7 @@ Mount (`app.js` ~L183-184): `/api/school/promotion` (ก่อน) แล้ว 
 - POST /teacher-check (L902), PATCH /teacher-check/:logId/time (L920), POST /teacher-check/:logId/undo (L933) — คอมเมนต์ L820-824 ระบุ "OPEN to grade teachers"
 - POST /backdated-attendance (L2773, ส่ง `gradeFilter` L2786)
 - **จุดรับส่ง (เจ้าของยืนยัน 2026-11-11)**: POST /pickup-points (รถต้องมีนักเรียนสายชั้นตน, นักเรียนที่ผูกต้องเป็นสายชั้นตน), PUT /pickup-points/:id/students (แทนที่เฉพาะแถวสายชั้นตน ผ่าน `restrictToGrade`), DELETE /pickup-points/:id (ได้เฉพาะจุดที่ไม่มีนักเรียนสายชั้นอื่น/โรงเรียนอื่น — 409 `POINT_SHARED_WITH_OTHER_GRADE`)
+- GET /students/export — Excel รายชื่อนักเรียนตามตัวกรองหน้า "นักเรียน" (ค้นหา/สายชั้น/ห้อง/ผูกรถ) เฉพาะที่ยังไม่ถูกลบ สูงสุด 5,000 คน; ครูถูกจำกัดที่สายชั้นตน; ไม่มีข้อมูลผู้ปกครอง/ที่อยู่; audit `student_list_xlsx`
 - GET /grade-vehicle-summary (+ `?format=xlsx`) — สรุปนักเรียนผูกรถ/ยังไม่ผูกรถตามสายชั้น; บัญชีโรงเรียนเห็นทุกสายชั้น ครูเห็นเฉพาะสายชั้นตน; export เขียน audit `grade_vehicle_summary_xlsx`
 - POST /vehicles (L1501; ห้ามกรอก driver_name/driver_phone/owner_name L1506) และ PUT /vehicles/:id (L1666; แก้ได้เฉพาะ vehicle_type, owner_name, owner_phone L1682)
 

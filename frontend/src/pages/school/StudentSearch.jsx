@@ -136,6 +136,36 @@ export default function StudentSearch() {
     }
   }, [debouncedSearch, grade, classroom, hasVehicle, isTeacher, showDeleted]);
 
+  const [exporting, setExporting] = useState(false);
+  // Excel of the current filter (active pupils only); same filters as the list.
+  async function downloadList() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (grade) params.set('grade', grade);
+      if (isTeacher && classroom) params.set('classroom', classroom);
+      if (hasVehicle) params.set('has_vehicle', hasVehicle);
+      const res = await api.get(`/school/students/export?${params}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const link = document.createElement('a');
+      const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+      link.href = url;
+      link.download = `รายชื่อนักเรียน-${date}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (res.headers?.['x-truncated'] === 'true') toast.info('ไฟล์มีไม่เกิน 5,000 คน — ใช้ตัวกรองเพื่อแบ่งดาวน์โหลด');
+      else toast.success('ดาวน์โหลดรายชื่อแล้ว');
+    } catch {
+      toast.error('ดาวน์โหลดรายชื่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function openDeletedSearch(code) {
     closeAdd();
     setSearch(String(code));
@@ -391,6 +421,10 @@ export default function StudentSearch() {
               className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition">
               สรุปผูกรถตามสายชั้น
             </button>
+            {!showDeleted && <button type="button" onClick={downloadList} disabled={exporting}
+              className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition disabled:opacity-50">
+              {exporting ? 'กำลังดาวน์โหลด…' : 'ดาวน์โหลดรายชื่อ (Excel)'}
+            </button>}
           </div>
         )}
       />

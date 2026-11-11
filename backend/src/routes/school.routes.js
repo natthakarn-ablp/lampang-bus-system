@@ -266,6 +266,91 @@ router.get('/grade-vehicle-summary', exportFormatLimiter, async (req, res, next)
   } catch (err) { next(err); }
 });
 
+// ─── GET /students/export — ดาวน์โหลดรายชื่อนักเรียน (Excel) ตามตัวกรอง ─────────────
+// Same filters as GET /students (search, grade, classroom, vehicle_id,
+// has_vehicle); active pupils only. Grade teachers are pinned to their grade
+// by resolveGradeScope. No parent contact, address or CID in the file.
+// Rate-limited per user and audit-logged before any bytes are sent.
+const STUDENT_EXPORT_CAP = 5000;
+router.get('/students/export', importExportLimiter, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const { search, grade, classroom, vehicle_id, has_vehicle } = req.query;
+    for (const [k, v] of Object.entries({ search, grade, classroom, vehicle_id, has_vehicle })) {
+      if (v !== undefined && (typeof v !== 'string' || v.length > 100)) return sendError(res, `${k} ไม่ถูกต้อง`, [], 400);
+    }
+    const gradeFilter = resolveGradeScope(req);
+    const filters = { search, grade, classroom: classroom?.trim(), vehicle_id, has_vehicle };
+
+    // One row per pupil (no parent join), active only, capped.
+    const { rows, total } = await schoolSvc.getStudentExportRows(schoolId, { ...filters, gradeFilter }, { limit: STUDENT_EXPORT_CAP });
+    const truncated = total > rows.length;
+    const gradeRank = (g) => { const i = VALID_GRADE_SCOPES.indexOf(normalizeGrade(g)); return i < 0 ? 999 : i; };
+    const list = rows.slice(0, STUDENT_EXPORT_CAP).sort((a, b) =>
+      gradeRank(a.grade) - gradeRank(b.grade)
+      || String(a.classroom ?? '').localeCompare(String(b.classroom ?? ''), 'th', { numeric: true })
+      || String(a.first_name ?? '').localeCompare(String(b.first_name ?? ''), 'th')
+      || a.id - b.id);
+
+    // Pickup point labels (a pupil may be on one point per session).
+    const points = new Map();
+    for (let i = 0; i < list.length; i += 500) {
+      const ids = list.slice(i, i + 500).map(s => s.id);
+      if (!ids.length) break;
+      const [pp] = await pool.query(
+        `SELECT spp.student_id, pp.label, pp.session
+           FROM student_pickup_points spp
+           JOIN pickup_points pp ON pp.id = spp.pickup_point_id AND pp.is_deleted = FALSE
+          WHERE spp.student_id IN (?)
+          ORDER BY pp.session, pp.label`, [ids]);
+      for (const r of pp) {
+        const sess = r.session === 'morning' ? ' (เช้า)' : r.session === 'evening' ? ' (เย็น)' : '';
+        points.set(r.student_id, [...(points.get(r.student_id) || []), `${r.label}${sess}`]);
+      }
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('รายชื่อนักเรียน');
+    ws.columns = [
+      { header: 'รหัสนักเรียน', key: 'id', width: 14 },
+      { header: 'คำนำหน้า', key: 'prefix', width: 12 },
+      { header: 'ชื่อ', key: 'first', width: 18 },
+      { header: 'นามสกุล', key: 'last', width: 20 },
+      { header: 'สายชั้น', key: 'grade', width: 10 },
+      { header: 'ห้อง', key: 'room', width: 8 },
+      { header: 'ทะเบียนรถ', key: 'plate', width: 16 },
+      { header: 'รอบเช้า', key: 'am', width: 9 },
+      { header: 'รอบเย็น', key: 'pm', width: 9 },
+      { header: 'จุดรับส่ง', key: 'point', width: 30 },
+    ];
+    ws.getRow(1).font = { bold: true };
+    ws.views = [{ state: 'frozen', ySplit: 1 }];
+    const text = v => (v == null ? '' : String(v));
+    for (const s of list) {
+      // Plain string/number cells (never formulas).
+      ws.addRow({
+        id: s.id, prefix: text(s.prefix), first: text(s.first_name), last: text(s.last_name),
+        grade: text(normalizeGrade(s.grade) || s.grade), room: text(s.classroom),
+        plate: s.vehicle_id ? text(s.plate_no) : 'ยังไม่ผูกรถ',
+        am: s.morning_enabled ? 'ใช้' : '-', pm: s.evening_enabled ? 'ใช้' : '-',
+        point: (points.get(s.id) || []).join(', '),
+      });
+    }
+    if (truncated) ws.addRow({ id: `แสดง ${list.length} จาก ${total} คน — ใช้ตัวกรองเพื่อแบ่งดาวน์โหลด` });
+    const buf = await wb.xlsx.writeBuffer();
+
+    if (!await auditExportBeforeSend(req, res, {
+      entityType: 'student_list_xlsx', entityId: schoolId,
+      metadata: { format: 'xlsx', role: req.user.role, scope: schoolId, grade_scope: gradeFilter || null, filters, rows: list.length, truncated },
+    })) return;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="students_${todayBangkok()}.xlsx"`);
+    if (truncated) res.setHeader('X-Truncated', 'true');
+    return res.send(Buffer.from(buf));
+  } catch (err) { next(err); }
+});
+
 router.get('/students', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);

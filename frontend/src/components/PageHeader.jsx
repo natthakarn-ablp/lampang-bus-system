@@ -78,7 +78,9 @@ export default function PageHeader({
         </div>
 
         {actions && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0 max-w-full">
+            {/* max-w-full + flex-wrap: on a phone several actions wrap instead of
+                running off the right edge (live QA 2026-11-11). */}
             {actions}
           </div>
         )}

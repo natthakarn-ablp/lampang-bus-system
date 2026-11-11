@@ -541,8 +541,9 @@ router.post('/process-notifications', (req, res, next) => {
   if (!cronKey) {
     // Fail CLOSED in production: refuse to run this unauthenticated trigger.
     // (Unreachable in production — env.js requires CRON_API_KEY to boot — kept
-    // as defense-in-depth.) In dev/test allow through for convenience.
-    if (env.app.nodeEnv === 'production') {
+    // as defense-in-depth.) Only development/test allow through.
+    // SB-B1-04: fail closed for anything except development/test.
+    if (env.app.nodeEnv !== 'development' && env.app.nodeEnv !== 'test') {
       return res.status(503).json({ success: false, message: 'Notification processing is not configured', errors: [], data: null });
     }
     return next();

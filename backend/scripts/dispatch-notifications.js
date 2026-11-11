@@ -57,13 +57,20 @@ async function main() {
     return;
   }
 
-  let processed = 0, sent = 0, failed = 0;
+  // SB-B2-04: report every counter the dispatcher returns (the lease
+  // dispatcher adds skipped/retry/unknown/lost/dryRun/errors).
+  const KEYS = ['processed', 'sent', 'failed', 'skipped', 'retry', 'unknown', 'lost', 'dryRun', 'errors'];
+  const tot = Object.fromEntries(KEYS.map((k) => [k, 0]));
+  let error = null;
   for (let i = 0; i < MAX_BATCHES; i++) {
     const r = await lineSvc.processUnsentNotifications(BATCH, MAX_AGE_MIN, PUSH_TYPES);
-    processed += r.processed; sent += r.sent; failed += r.failed;
+    for (const k of KEYS) tot[k] += Number(r[k] || 0);
+    if (r.error) { error = r.error; break; }
     if (r.processed < BATCH) break; // queue drained
   }
-  console.log(`[dispatch] ${new Date().toISOString()} · processed=${processed} sent=${sent} failed=${failed}`);
+  const parts = KEYS.filter((k) => k === 'processed' || k === 'sent' || k === 'failed' || tot[k]).map((k) => `${k}=${tot[k]}`);
+  console.log(`[dispatch] ${new Date().toISOString()} · ${parts.join(' ')}${error ? ` error=${error}` : ''}`);
+  if (error) process.exitCode = 2;
   await pool.end();
 }
 

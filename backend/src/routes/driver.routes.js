@@ -1491,6 +1491,7 @@ router.post('/applications', async (req, res, next) => {
       vehicleId: req.body.vehicle_id,
       driverUserId: req.user.id,
       currentTerm: req.body.current_term,
+      issuingSchoolId: req.body.issuing_school_id,
     });
     return res.status(201).json({ success: true, data, message: 'ยื่นคำขอขึ้นทะเบียนรถเรียบร้อย' });
   } catch (error) { next(error); }

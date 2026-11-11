@@ -92,7 +92,9 @@ router.get('/vehicle/:vehicleId', requireRole('admin', 'province', 'affiliation'
       return sendError(res, "session must be 'morning' or 'evening'", [], 400);
     }
 
-    const etas = await etaSvc.getForVehicle(vehicleId, { session });
+    const scope = req.user.role === 'school' ? { schoolId: req.user.scopeId }
+      : req.user.role === 'affiliation' ? { affiliationId: req.user.scopeId } : {};
+    const etas = await etaSvc.getForVehicle(vehicleId, { session, ...scope });
     return sendSuccess(res, etas);
   } catch (err) { return next(err); }
 });

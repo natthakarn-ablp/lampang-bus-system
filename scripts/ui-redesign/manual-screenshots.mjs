@@ -32,6 +32,10 @@ const { chromium } = createRequire(resolve(root, 'frontend/package.json'))('play
 const OUT = resolve(root, 'docs/manual-html/screenshots');
 const ONLY = (() => { const i = process.argv.indexOf('--only'); return i === -1 ? null : process.argv[i + 1]; })();
 const DRY = process.argv.includes('--dry-run');
+/* --at 2026-11-12T16:00:00+07:00 — ตรึงนาฬิกาของหน้าเว็บ (ไม่ใช่ของเครื่อง)
+   แถบสรุปวันนี้เปลี่ยนข้อความตามเวลา ถ้าถ่ายตอนกลางคืนจะได้ "ยังไม่ถึงเวลา"
+   ทุกภาพ ซึ่งไม่ได้สอนอะไรผู้อ่าน */
+const AT = (() => { const i = process.argv.indexOf('--at'); return i === -1 ? null : new Date(process.argv[i + 1]); })();
 
 /* ขนาดต้องตรงกับภาพเดิม ไม่งั้น layout ของคู่มือขยับ
    เดสก์ท็อป 1440x900 @2x = 2880x1800 · มือถือ 390x844 @2x = 780x1688 */
@@ -181,6 +185,8 @@ const SHOTS = [
   { id: 'school/04-vehicle-verification', url: '/school/vehicle-verification', user: 'school', ...DESKTOP },
   { id: 'school/05-bulk-vehicles', url: '/school/bulk-vehicles', user: 'school', ...DESKTOP },
   { id: 'school/06-pickup-map', url: '/school/pickup-map', user: 'school', ...DESKTOP },
+  // ครูประจำสายชั้นเพิ่ม/แก้/ลบจุดรับส่งของชั้นตนได้ (คู่มือครู หัวข้อจุดรับส่ง)
+  { id: 'school/23-pickup-map-teacher', url: '/school/pickup-map', user: 'teacher', ...DESKTOP },
   { id: 'school/07-live-vehicles', url: '/school/live-vehicles', user: 'school', ...DESKTOP },
   { id: 'school/08-approvals', url: '/school/approvals', user: 'school', ...DESKTOP },
   { id: 'school/09-teacher-accounts', url: '/school/teacher-accounts', user: 'school', ...DESKTOP },
@@ -334,6 +340,7 @@ for (const shot of wanted) {
   });
 
   try {
+    if (AT) await page.clock.setFixedTime(AT);
     if (shot.prepare) await shot.prepare(page);
     await page.goto(BASE + shot.url, { waitUntil: 'networkidle', timeout: 20000 });
     // หน้าโหลดข้อมูลผ่าน effect หลัง networkidle — รอจน skeleton หายไป

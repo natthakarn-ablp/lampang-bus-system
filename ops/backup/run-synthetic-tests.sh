@@ -24,3 +24,4 @@ printf '%s  %s\n' eb7dd1b518f0a307c99cd97782623c5321da049154b04acd2d98d21aa7bc9b
 printf '%s  %s\n' f3f9aff817f9766029e50adf9a7963c169e475b8f10c7927823568a0d9443db7 "$RCLONE_TEST_BIN" | sha256sum -c -
 python3 -W error::ResourceWarning "$fixture_scripts/test-seal-full-backup.py"
 python3 -W error::ResourceWarning "$fixture_scripts/test-copy-sealed-backup.py"
+python3 -W error::ResourceWarning "$fixture_scripts/test-backup-status.py"

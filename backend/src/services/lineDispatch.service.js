@@ -102,6 +102,10 @@ async function claimBatch({ limit, maxAgeMinutes, types, leaseSeconds, db = pool
   const conn = await db.getConnection();
   const token = crypto.randomUUID();
   try {
+    // SB-B2-03: READ COMMITTED so FOR UPDATE locks only the rows it returns
+    // (no next-key/gap locks over the rest of the backlog, which would block
+    // check-in INSERTs into notifications). Applies to the next transaction only.
+    await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
     await conn.beginTransaction();
     const where = ['sent = FALSE', 'retry_count < ?', '(claimed_until IS NULL OR claimed_until < NOW())'];
     const params = [MAX_RETRIES];
@@ -170,26 +174,42 @@ async function dispatchBatch({
   leaseSeconds = DEFAULTS.leaseSeconds, timeoutMs = DEFAULTS.timeoutMs,
   concurrency = DEFAULTS.concurrency, baseUrl, push = pushWithRetryKey,
   token = env.line && env.line.channelAccessToken,
+  nodeEnv = env.app && env.app.nodeEnv,
 } = {}) {
   const line = require('./line.service');
+  // SB-B2-01: without a LINE token nothing can be delivered. Outside
+  // development/test, leave the queue untouched instead of marking rows sent.
+  if (!token && nodeEnv !== 'development' && nodeEnv !== 'test') {
+    console.warn('[LINE] dispatcher: LINE_CHANNEL_ACCESS_TOKEN is not set; queue left untouched');
+    return { processed: 0, sent: 0, failed: 0, skipped: 0, retry: 0, unknown: 0, lost: 0, dryRun: 0, error: 'NO_LINE_TOKEN' };
+  }
   const { token: claim, rows } = await claimBatch({ limit, maxAgeMinutes, types, leaseSeconds, db });
-  const out = { processed: rows.length, sent: 0, failed: 0, skipped: 0, retry: 0, unknown: 0, lost: 0 };
+  const out = { processed: rows.length, sent: 0, failed: 0, skipped: 0, retry: 0, unknown: 0, lost: 0, dryRun: 0 };
   const settled = async (sql, params, bucket) => {
     if (await settle(db, sql, params)) out[bucket]++; else out.lost++;
   };
 
-  await runPool(rows, concurrency, async (n) => {
+  const handle = async (n) => {
     if (Number(n.attempt_count) > 1 && Number(n.key_age_min) >= KEY_SAFE_HOURS * 60) {
       return settled(SETTLE.terminal, ['RETRY_KEY_EXPIRED_OUTCOME_UNKNOWN', 'UNKNOWN', n.id, claim], 'unknown');
     }
     if (n.student_id != null && !(await line.isStillLinkedRecipient(db, n.target_line_user_id, n.student_id))) {
       return settled(SETTLE.terminal, ['RECIPIENT_NO_LONGER_LINKED', 'SKIPPED', n.id, claim], 'skipped');
     }
-    const data = typeof n.message_json === 'string' ? JSON.parse(n.message_json) : n.message_json;
-    const text = line.buildNotificationText(n.notification_type, data);
+    let text;
+    try {
+      const data = typeof n.message_json === 'string' ? JSON.parse(n.message_json) : n.message_json;
+      text = line.buildNotificationText(n.notification_type, data);
+      if (typeof text !== 'string' || !text) throw new Error('empty text');
+    } catch {
+      // SB-B2-02: a row that cannot be rendered will never succeed; give it a
+      // terminal state so it does not abort every run.
+      return settled(SETTLE.terminal, ['RENDER_ERROR', 'FAILED', n.id, claim], 'failed');
+    }
     if (!token) {
+      // development/test only (see guard above); counted as dryRun, not sent.
       console.log('[LINE DRY-RUN] notification', n.id);
-      return settled(SETTLE.dryRun, [n.id, claim], 'sent');
+      return settled(SETTLE.dryRun, [n.id, claim], 'dryRun');
     }
     const r = await push({
       to: n.target_line_user_id, messages: [{ type: 'text', text }],
@@ -199,6 +219,17 @@ async function dispatchBatch({
     if (c.kind === 'accepted') return settled(SETTLE.accepted, [c.requestId, n.id, claim], 'sent');
     if (c.kind === 'failed') return settled(SETTLE.terminal, [c.error, 'FAILED', n.id, claim], 'failed');
     return settled(SETTLE.retry, [c.error, c.unknown ? 'UNKNOWN' : 'PENDING', n.id, claim], c.unknown ? 'unknown' : 'retry');
+  };
+
+  await runPool(rows, concurrency, async (n) => {
+    try {
+      await handle(n);
+    } catch (err) {
+      // Unexpected error (e.g. DB hiccup during the recipient check): the
+      // lease expires and a later run retries the row with the same key.
+      out.errors = (out.errors || 0) + 1;
+      console.error('[LINE] dispatcher: row', n.id, 'error:', err && err.message);
+    }
   });
   return out;
 }

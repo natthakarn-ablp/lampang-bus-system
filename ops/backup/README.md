@@ -117,3 +117,7 @@ The existing GitHub workflow uses standard `ubuntu-latest` runners in this publi
 repository. [GitHub's billing documentation](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
 states these runner minutes are free. This change adds no paid runner, billing
 enrollment, hosted service, artifact storage upload, or production deployment.
+
+## Backup readiness checker (DATA-001)
+
+`backup_status.py` reports local / off-host / readback / restore as separate stages and can send a rate-limited TECH alert. Runbook and current evidence: `docs/ops/backup-restore-readiness.md`. Synthetic restore round trip of the production scripts: `test-restore-roundtrip.sh` (CI only).

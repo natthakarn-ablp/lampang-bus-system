@@ -7,7 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import { StatusBadge, DataTable, FormField } from '../../components/ui';
-import { StatusHero, ActionList, StatTile, StatGrid, TravelLeaveSummary, roundStatus } from '../../components/dashboard';
+import { StatusHero, ActionList, StatTile, StatGrid, TravelLeaveSummary, roundStatus, dayStatus } from '../../components/dashboard';
 import { ReportHero, ReportSection, ExportPanel, reportScopeName } from '../../components/reports/ReportParts';
 
 // Where each role acts on a follow-up item (admin has no such page).
@@ -51,6 +51,19 @@ export default function DailyReport() {
   const emergencies = Number(data?.emergency_count) || 0;
   const links = ROLE_LINKS[user?.role] || {};
   const isToday = date === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  // Pupils still not confirmed in a round that is late, over, or on an earlier day.
+  const followCount = r => (['not_delivered', 'overdue', 'incomplete_record'].includes(r.state) ? r.pending : 0);
+  const followSub = isToday ? 'ดูรายชื่อเพื่อติดตาม' : 'ตรวจบันทึกของวันนั้น';
+  // After the rounds the counts live in "จุดที่ต้องติดตาม" below; the hero only
+  // states the day result, so the same numbers are not said twice.
+  const baseDay = data ? dayStatus([morning, evening], { emergencies }) : null;
+  const heroDay = baseDay?.kind === 'summary'
+    ? {
+      ...baseDay,
+      headline: `${baseDay.title}: ยังยืนยันไม่ครบ`,
+      sub: baseDay.title === 'สรุปวันนี้' ? 'หมดรอบแล้ว · จำนวนอยู่ในจุดที่ต้องติดตามด้านล่าง' : (baseDay.title === 'สรุปทั้งวัน' ? 'จำนวนอยู่ในจุดที่ต้องติดตามด้านล่าง' : baseDay.sub),
+    }
+    : baseDay;
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto">
@@ -74,7 +87,7 @@ export default function DailyReport() {
           {/* ── 1. Answer first: status per round ── */}
           <StatusHero
             className="mb-5"
-            emergencies={emergencies}
+            day={heroDay}
             rounds={[{ status: morning }, { status: evening }]}
           />
 
@@ -85,8 +98,8 @@ export default function DailyReport() {
             hideWhenEmpty
             items={[
               { key: 'em', tone: 'danger', count: emergencies, title: `เหตุฉุกเฉิน ${emergencies} รายการ`, sub: 'ดูรายละเอียดและติดตามผล', to: links.emergency, actionLabel: 'ดูเหตุฉุกเฉิน' },
-              { key: 'm', tone: morning.tone, count: ['not_delivered', 'overdue', 'incomplete_record'].includes(morning.state) ? morning.pending : 0, title: `รอบเช้ายังไม่ยืนยัน ${morning.pending} คน`, sub: morning.detail },
-              { key: 'e', tone: evening.tone, count: ['not_delivered', 'overdue', 'incomplete_record'].includes(evening.state) ? evening.pending : 0, title: `รอบเย็นยังไม่ยืนยัน ${evening.pending} คน`, sub: evening.detail },
+              { key: 'm', tone: morning.tone, count: followCount(morning), title: 'รอบเช้ายังไม่ยืนยัน', sub: followSub },
+              { key: 'e', tone: evening.tone, count: followCount(evening), title: 'รอบเย็นยังไม่ยืนยัน', sub: followSub },
             ].map(i => (i.key === 'em' || !isToday ? i : { ...i, to: links.round, actionLabel: 'ดูรายชื่อ' }))}
           />
 

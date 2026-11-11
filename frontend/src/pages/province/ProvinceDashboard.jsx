@@ -111,9 +111,16 @@ export default function ProvinceDashboard() {
   }).sort((x, y) => (TONE_RANK[x.worst.tone] - TONE_RANK[y.worst.tone]) || (y.pendingTotal - x.pendingTotal));
   const followUp = affRows.filter(r => r.needsFollowUp);
 
+  // Most "not confirmed" pupils come from schools that have not started using
+  // the system at all; when that is most schools, say so and list it first.
+  const schoolUnused = Number(data.school_not_using_recently) || 0;
+  const adoptionGap = schoolTotal > 0 && schoolUnused * 2 > schoolTotal;
+  const baseDay = dayStatus([mStatus, eStatus]);
   const heroDay = emergencyToday
     ? { tone: 'danger', headline: 'มีเหตุฉุกเฉินวันนี้', sub: 'ตรวจสอบเหตุและติดต่อสังกัดที่เกี่ยวข้อง', focus: null }
-    : dayStatus([mStatus, eStatus]);
+    : baseDay.kind === 'summary' && adoptionGap
+      ? { ...baseDay, sub: `โรงเรียน ${fmt(schoolUnused)} จาก ${fmt(schoolTotal)} แห่งยังไม่เริ่มใช้ระบบ` }
+      : baseDay;
   const heroAction = emergencyToday
     ? { label: 'ดูเหตุฉุกเฉิน', to: '/province/emergencies' }
     : followUp.length > 0
@@ -124,7 +131,16 @@ export default function ProvinceDashboard() {
   const riskUrgent = atRiskVehicles.some(v => v.risk_score >= 100);
 
   // ── ActionList: each row says what to do and links to where ──
+  const unusedItem = {
+    // Warn (not info) when most schools are not using the system, so it sorts
+    // above the other follow-ups: it is the reason the round numbers are low.
+    key: 'unused', tone: adoptionGap ? 'warn' : 'info', count: schoolUnused,
+    title: 'โรงเรียนที่ยังไม่เริ่มใช้ระบบ',
+    sub: `ไม่มีการใช้งานใน 14 วัน จาก ${fmt(schoolTotal)} โรงเรียน · ติดต่อให้เริ่มเช็กชื่อ`,
+    to: '/province/schools', actionLabel: 'ดูรายชื่อ',
+  };
   const actions = [
+    adoptionGap && unusedItem,
     {
       key: 'emergency', tone: emergencyToday ? 'danger' : 'warn', count: emergencies7d,
       title: emergencyToday ? 'เหตุฉุกเฉินใน 7 วัน (มีเหตุวันนี้ ต้องตรวจสอบ)' : 'เหตุฉุกเฉินในรอบ 7 วัน',
@@ -152,12 +168,7 @@ export default function ProvinceDashboard() {
       sub: `สัญญาณเก่า ${fmt(data.vehicle_stale)} · ยังไม่มีตำแหน่ง ${fmt(data.vehicle_no_location)} คัน`,
       to: '/province/live-vehicles', actionLabel: 'ดูแผนที่รถ',
     },
-    {
-      key: 'unused', tone: 'info', count: data.school_not_using_recently ?? 0,
-      title: 'โรงเรียนที่ยังไม่เริ่มใช้ระบบ',
-      sub: `ไม่มีการใช้งานใน 14 วัน จาก ${fmt(schoolTotal)} โรงเรียน · ติดต่อให้เริ่มเช็กชื่อ`,
-      to: '/province/schools', actionLabel: 'ดูรายชื่อ',
-    },
+    !adoptionGap && unusedItem,
   ].filter(Boolean);
 
   return (

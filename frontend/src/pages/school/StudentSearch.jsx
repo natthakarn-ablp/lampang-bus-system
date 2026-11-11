@@ -12,6 +12,7 @@ import ImportPreviewModal from './ImportPreviewModal';
 import ImportHistoryModal from './ImportHistoryModal';
 import StudentTransferModal from './StudentTransferModal';
 import AddStudentModal from './AddStudentModal';
+import GradeVehicleSummaryModal from './GradeVehicleSummaryModal';
 import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import VehicleSelect from '../../components/VehicleSelect';
 import Pagination from '../../components/Pagination';
@@ -41,6 +42,7 @@ export default function StudentSearch() {
   const isTeacher = isGradeTeacher(user);
   const [params, setParams] = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
+  const [showGradeSummary, setShowGradeSummary] = useState(false);
   useEffect(() => { if (params.get('add') === 'one') setShowAdd(true); }, [params]);
   function closeAdd() {
     setShowAdd(false);
@@ -385,6 +387,10 @@ export default function StudentSearch() {
               className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition">
               เพิ่มหลายคนจากไฟล์
             </button>}
+            <button type="button" onClick={() => setShowGradeSummary(true)}
+              className="focus-ring text-sm bg-surface-raised hover:bg-surface active:bg-surface-border text-ink border border-surface-border px-3 min-h-[44px] rounded-lg transition">
+              สรุปผูกรถตามสายชั้น
+            </button>
           </div>
         )}
       />
@@ -397,6 +403,7 @@ export default function StudentSearch() {
           <button type="button" onClick={() => { setShowImport(true); setImportResult(null); setImportFile(null); }} className="focus-ring min-h-[44px] px-3 text-ink-muted">นำเข้าแบบเดิม (สำรอง)</button>
         </div>
       </details>}
+      {showGradeSummary && <GradeVehicleSummaryModal onClose={() => setShowGradeSummary(false)} />}
       {showAdd && <AddStudentModal initialVehicleId={params.get('vehicle_id') || ''} onClose={closeAdd} onFindDeleted={openDeletedSearch} onApplied={() => { fetchStudents(1); if (isTeacher) setClassroomRefresh(n => n + 1); }} />}
 
       {isTeacher && classroomsError && <ErrorState message="โหลดรายชื่อห้องไม่สำเร็จ" className="mb-4" onRetry={() => setClassroomRefresh(n => n + 1)} />}

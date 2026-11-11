@@ -21,7 +21,9 @@ const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเ
 export default function SchoolPickupMap() {
   const { user } = useAuth();
   const toast = useToast();
-  const isTeacher = isGradeTeacher(user); // read-only for grade teacher
+  // Grade teachers may add/edit/delete points for their own grade (backend
+  // enforces the grade limits; owner decision 2026-11-11).
+  const isTeacher = isGradeTeacher(user);
   const [points, setPoints] = useState([]);
   const [sessionFilter, setSessionFilter] = useState('all');
   const [vehicleFilter, setVehicleFilter] = useState('all');
@@ -87,8 +89,8 @@ export default function SchoolPickupMap() {
       <PageHeader
         icon={MapIcon}
         title="แผนที่จุดรับส่ง"
-        subtitle="จุดรับส่งของนักเรียนในโรงเรียน"
-        actions={!isTeacher && (
+        subtitle={isTeacher ? 'จุดรับส่งของนักเรียนในสายชั้นของท่าน' : 'จุดรับส่งของนักเรียนในโรงเรียน'}
+        actions={(
           <button
             type="button"
             onClick={() => setCreating(true)}
@@ -126,7 +128,7 @@ export default function SchoolPickupMap() {
       ) : filteredPoints.length === 0 ? (
         <AlertBanner variant="info" title="ยังไม่มีจุดรับส่งในขอบเขตนี้">
           {isTeacher
-            ? 'ยังไม่มีจุดรับส่งของระดับชั้นนี้ — ให้บัญชีหลักของโรงเรียนเป็นผู้เพิ่มข้อมูล'
+            ? 'ยังไม่มีจุดรับส่งของสายชั้นนี้ — กดปุ่ม "+ เพิ่มจุดรับส่ง" ด้านบนเพื่อเพิ่มจุดแรก'
             : 'กดปุ่ม "+ เพิ่มจุดรับส่ง" ด้านบนเพื่อเริ่มสร้างจุดแรกของโรงเรียน'}
         </AlertBanner>
       ) : (
@@ -140,8 +142,8 @@ export default function SchoolPickupMap() {
                   point={p}
                   selected={selectedId === p.id}
                   onClick={() => setSelectedId(p.id)}
-                  onEdit={isTeacher ? undefined : () => setEditing(p)}
-                  onDelete={isTeacher ? undefined : () => setConfirmDelete(p)}
+                  onEdit={() => setEditing(p)}
+                  onDelete={() => setConfirmDelete(p)}
                   deleting={deletingId === p.id}
                 />
               ))}

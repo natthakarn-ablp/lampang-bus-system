@@ -43,11 +43,10 @@ describe('GET /pickup-students vehicle_id validation (SB-A2-01)', () => {
     ['object', '?vehicle_id[a]=1'],
     ['object operator', '?vehicle_id[$ne]=1'],
     ['array', '?vehicle_id=1&vehicle_id=2'],
-    ['non-numeric', '?vehicle_id=abc'],
-    ['numeric with suffix', '?vehicle_id=1%20OR%201=1'],
-    ['negative', '?vehicle_id=-1'],
-    ['zero', '?vehicle_id=0'],
-    ['decimal', '?vehicle_id=1.5'],
+    ['spaces/operators', '?vehicle_id=1%20OR%201=1'],
+    ['quote', "?vehicle_id=V-1'"],
+    ['decimal point', '?vehicle_id=1.5'],
+    ['too long', '?vehicle_id=' + 'V'.repeat(21)],
   ])('%s -> 400, service not called', async (_n, qs) => {
     const r = await call(schoolRouter, 'GET', '/pickup-students' + qs);
     expect(r.status).toBe(400);
@@ -60,11 +59,11 @@ describe('GET /pickup-students vehicle_id validation (SB-A2-01)', () => {
     expect(r.status).toBe(400);
   });
 
-  test('valid -> 200 and original string passed downstream', async () => {
-    const r = await call(schoolRouter, 'GET', '/pickup-students?vehicle_id=42');
+  test.each(['V-3fa9c0d1e2b4', 'V-ABCDEF012345', '42'])('real vehicle id %p -> 200, passed downstream unchanged', async (id) => {
+    const r = await call(schoolRouter, 'GET', '/pickup-students?vehicle_id=' + id);
     expect(r.status).toBe(200);
     expect(ppSvc.getStudentsForSchoolAndVehicle).toHaveBeenCalledTimes(1);
-    expect(ppSvc.getStudentsForSchoolAndVehicle.mock.calls[0][1]).toBe('42');
+    expect(ppSvc.getStudentsForSchoolAndVehicle.mock.calls[0][1]).toBe(id);
   });
 });
 

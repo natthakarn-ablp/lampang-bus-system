@@ -353,6 +353,10 @@ router.get('/pickup-students', async (req, res, next) => {
 
     const vehicleId = req.query.vehicle_id;
     if (!vehicleId) return sendError(res, 'vehicle_id required', [], 400);
+    // SB-A2-01: reject arrays/objects (?vehicle_id[a]=1) and non-numeric values.
+    if (typeof vehicleId !== 'string' || !/^[1-9][0-9]{0,15}$/.test(vehicleId)) {
+      return sendError(res, 'vehicle_id ต้องเป็นตัวเลข', [{ field: 'vehicle_id', message: 'vehicle_id ต้องเป็นตัวเลข' }], 400);
+    }
 
     // Phase 6.1 hotfix-4: optional ?session filter excludes students
     // already assigned on this vehicle with a conflicting session.

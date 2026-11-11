@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Sunrise, Sunset, Bus, CheckCircle2, Undo2, Users } from 'lucide-react';
+import { Sunrise, Sunset, Bus, CheckCircle2, ChevronDown, CircleHelp, Undo2, Users } from 'lucide-react';
 import api from '../../api/axios';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
@@ -28,8 +28,10 @@ import AttendanceTimeDialog from './AttendanceTimeDialog';
  */
 
 const SESSIONS = {
-  morning: { label: 'เช้า', verb: 'ถึงโรงเรียน', done: 'ถึงโรงเรียนแล้ว', icon: Sunrise },
-  evening: { label: 'เย็น', verb: 'ขึ้นรถกลับบ้าน', done: 'ขึ้นรถแล้ว', icon: Sunset },
+  // `tab` is the short round-switch label (one line at 390px); `verb` keeps the
+  // full wording for aria-labels and the whole-bus confirmation.
+  morning: { label: 'เช้า', verb: 'ถึงโรงเรียน', tab: 'ถึงโรงเรียน', done: 'ถึงโรงเรียนแล้ว', icon: Sunrise },
+  evening: { label: 'เย็น', verb: 'ขึ้นรถกลับบ้าน', tab: 'กลับบ้าน', done: 'ขึ้นรถแล้ว', icon: Sunset },
 };
 
 function bangkokHour() {
@@ -262,12 +264,19 @@ function VehicleTeacherCheck() {
         />
         <SchoolWorkflowNav current="attendance" />
 
-        <AppCard padding="md" className="space-y-1">
-          <p className="font-semibold text-ink">เห็นเด็กแล้ว แตะชื่อเพื่อบันทึกทันที</p>
-          <p className="text-sm text-ink-muted">เช้า: เด็กถึงโรงเรียน · เย็น: เด็กขึ้นรถกลับบ้าน ไม่ต้องกดบันทึกอีกครั้ง</p>
-          <p className="text-sm text-ink-muted">ใช้ข้อมูลร่วมกับคนขับและครูท่านอื่น หากขึ้นว่าบันทึกแล้ว ไม่ต้องเช็กซ้ำ</p>
-          <p className="text-sm text-ink-muted">แตะรายคนเพื่อเก็บเวลาที่กดจริง · บันทึกทั้งคันเป็นเวลาของชุดนั้น ไม่ใช่เวลารับจริงรายคน</p>
-        </AppCard>
+        <p className="text-sm font-semibold text-ink">เห็นเด็กแล้ว แตะชื่อเพื่อบันทึกทันที</p>
+        <details className="group rounded-xl border border-surface-border bg-surface-raised">
+          <summary className="focus-ring cursor-pointer list-none [&::-webkit-details-marker]:hidden min-h-[44px] flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-ink hover:bg-surface">
+            <CircleHelp className="w-5 h-5 shrink-0 text-ink-muted" aria-hidden="true" />
+            <span className="flex-1">วิธีใช้หน้านี้</span>
+            <ChevronDown className="w-5 h-5 shrink-0 text-ink-muted transition-transform group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <ul className="list-disc pl-9 pr-4 pb-3 space-y-1 text-sm text-ink-muted">
+            <li>เช้า: เด็กถึงโรงเรียน · เย็น: เด็กขึ้นรถกลับบ้าน ไม่ต้องกดบันทึกอีกครั้ง</li>
+            <li>ใช้ข้อมูลร่วมกับคนขับและครูท่านอื่น หากขึ้นว่าบันทึกแล้ว ไม่ต้องเช็กซ้ำ</li>
+            <li>แตะรายคนเพื่อเก็บเวลาที่กดจริง · บันทึกทั้งคันเป็นเวลาของชุดนั้น ไม่ใช่เวลารับจริงรายคน</li>
+          </ul>
+        </details>
 
         {/* Session switch */}
         <div role="tablist" aria-label="เลือกรอบ" className="grid grid-cols-2 gap-2 p-1 bg-surface border border-surface-border rounded-2xl">
@@ -286,8 +295,8 @@ function VehicleTeacherCheck() {
                   active ? 'bg-brand-700 text-white shadow-soft' : 'text-ink-muted hover:bg-surface-raised'
                 }`}
               >
-                <Icon className="w-5 h-5" aria-hidden="true" />
-                {cfg.label} · {cfg.verb}
+                <Icon className="w-5 h-5 shrink-0" aria-hidden="true" />
+                <span className="whitespace-nowrap">{cfg.label} · {cfg.tab}</span>
               </button>
             );
           })}

@@ -23,9 +23,13 @@ export default function SchoolWorkflowNav({ current }) {
           </NavLink>
         ))}
       </div>
-      <p className="mt-2 text-sm text-ink-muted">{teacher
-        ? 'เพิ่มและแก้ไขนักเรียนในชั้นที่รับผิดชอบ จัดการรถที่นักเรียนในชั้นใช้ และเช็กชื่อ'
-        : 'เตรียมรถและรายชื่อครั้งแรกให้ครบ จากนั้นใช้ “เช็กชื่อวันนี้” ในแต่ละวัน'}</p>
+      {/* A grade teacher already sees what the account can do in the scope
+          chip above, and on the daily check page the caption only pushes the
+          roster below the fold — so it is shown to full school accounts on
+          the setup pages only. */}
+      {!teacher && current !== 'attendance' && (
+        <p className="mt-2 text-sm text-ink-muted">เตรียมรถและรายชื่อครั้งแรกให้ครบ จากนั้นใช้ “เช็กชื่อวันนี้” ในแต่ละวัน</p>
+      )}
     </nav>
   );
 }

@@ -449,6 +449,11 @@ router.post('/pickup-points', async (req, res, next) => {
     const studentIds = Array.isArray(req.body.student_ids)
       ? req.body.student_ids.map(Number).filter(Number.isInteger)
       : [];
+    // A teacher's map lists only points holding their grade, so an empty point
+    // they created would vanish from their view: require at least one pupil.
+    if (gradeFilter && studentIds.length === 0) {
+      return sendError(res, 'กรุณาเลือกนักเรียนในสายชั้นของท่านอย่างน้อย 1 คน', [{ field: 'student_ids', message: 'ต้องเลือกนักเรียนอย่างน้อย 1 คน' }], 400);
+    }
 
     if (studentIds.length > 0) {
       const studentsOk = await ppSvc.validateStudentsBelongToSchoolAndVehicle(
@@ -495,6 +500,10 @@ router.delete('/pickup-points/:id', async (req, res, next) => {
     const teacherGrade = teacherGradeScope(req);
     if (teacherGrade) {
       if (!(await ppSvc.isPickupPointVisibleToSchool(id, schoolId))) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+      // An empty point on a bus that carries none of their grade is not theirs.
+      if (!(await ppSvc.vehicleCarriesSchoolGrade(point.vehicle_id, schoolId, teacherGrade))) {
+        return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในรถของสายชั้นท่าน', [], 403);
+      }
       const outside = await ppSvc.countStudentsOnPointOutsideGrade(id, schoolId, teacherGrade);
       if (outside > 0) {
         return sendError(

@@ -36,7 +36,7 @@ function fakeDb(opts = {}) {
     if (/SELECT 1 AS ok FROM students/.test(s)) return [o.carriesGrade ? [{ ok: 1 }] : []];
     if (/COUNT\(\*\) AS matched/.test(s)) return [[{ matched: o.studentsMatched }]];
     if (/AS conflicts/.test(s)) return [[{ conflicts: 0 }]];
-    if (/NOT \(s\.school_id = \? AND s\.grade IN/.test(s)) return [[{ n: o.outsideGrade }]];
+    if (/NOT \(s\.school_id = \? AND s\.grade IS NOT NULL AND s\.grade IN/.test(s)) return [[{ n: o.outsideGrade }]];
     if (/COUNT\(\*\)/.test(s) && /<>/.test(s)) return [[{ n: o.otherSchool }]];
     if (/COUNT\(\*\)/.test(s)) return [[{ n: 1 }]];
     if (/SELECT 1 FROM students/.test(s)) return [[{ 1: 1 }]];
@@ -101,6 +101,26 @@ describe('grade teacher pickup-point writes', () => {
     expect(res.status).toBe(409);
     expect(res.body.errors[0].code).toBe('POINT_SHARED_WITH_OTHER_GRADE');
     expect(mockQuery.mock.calls.some(c => /UPDATE pickup_points/.test(String(c[0])))).toBe(false);
+  });
+
+  test('outside-grade count treats NULL-grade same-school pupils as outside', async () => {
+    mockUser = TEACHER; fakeDb({ outsideGrade: 1 });
+    await request(app).delete('/api/school/pickup-points/5');
+    const q = mockQuery.mock.calls.find(c => /NOT \(s\.school_id = \?/.test(String(c[0])));
+    expect(String(q[0])).toMatch(/s\.grade IS NOT NULL AND s\.grade IN/);
+  });
+
+  test('teacher cannot delete a point on a bus without their grade', async () => {
+    mockUser = TEACHER; fakeDb({ carriesGrade: false });
+    const res = await request(app).delete('/api/school/pickup-points/5');
+    expect(res.status).toBe(403);
+  });
+
+  test('teacher must pick at least one pupil when creating a point', async () => {
+    mockUser = TEACHER; fakeDb();
+    const res = await request(app).post('/api/school/pickup-points').send({ ...BODY, student_ids: [] });
+    expect(res.status).toBe(400);
+    expect(mockConn.query).not.toHaveBeenCalled();
   });
 
   test('teacher can delete a point used only by their grade', async () => {

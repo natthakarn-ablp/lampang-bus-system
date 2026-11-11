@@ -685,7 +685,8 @@ async function countStudentsOnPointOutsideGrade(pointId, schoolId, gradeFilter) 
       FROM student_pickup_points spp
       JOIN students s ON s.id = spp.student_id
      WHERE spp.pickup_point_id = ? AND s.is_deleted = FALSE
-       AND NOT (s.school_id = ? AND s.grade IN (?))
+       AND NOT (s.school_id = ? AND s.grade IS NOT NULL AND s.grade IN (?))
+       -- ^ a same-school pupil with no grade counts as outside (NULL-safe)
   `, [pointId, schoolId, gradeEquivalents(gradeFilter)]);
   return Number(row && row.n) || 0;
 }

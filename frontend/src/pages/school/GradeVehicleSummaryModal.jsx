@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../../api/axios';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
-import { AlertBanner, Modal } from '../../components/ui';
+import { AlertBanner, DataTable, Modal } from '../../components/ui';
 
 const SECONDARY = 'focus-ring min-h-[44px] px-4 rounded-lg border border-surface-border text-ink hover:bg-surface disabled:opacity-50';
 const PRIMARY = 'focus-ring min-h-[44px] px-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-medium disabled:opacity-50';
@@ -78,23 +78,24 @@ export default function GradeVehicleSummaryModal({ onClose }) {
             {data.grades.length === 0 ? (
               <AlertBanner variant="info">ยังไม่มีรายชื่อนักเรียน</AlertBanner>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-surface-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-surface text-ink-muted">
-                    <tr>
-                      <th scope="col" className="text-left px-3 py-2">สายชั้น</th>
-                      <th scope="col" className="text-right px-3 py-2">ทั้งหมด</th>
-                      <th scope="col" className="text-right px-3 py-2">ผูกรถแล้ว</th>
-                      <th scope="col" className="text-right px-3 py-2">ยังไม่ผูกรถ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.grades.map(g => (
-                      <GradeRows key={g.grade} g={g} open={open} toggle={toggle} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <DataTable
+                  caption="จำนวนนักเรียนผูกรถแยกตามสายชั้น"
+                  rowKey={g => g.grade}
+                  rows={data.grades}
+                  columns={[
+                    { key: 'grade', header: 'สายชั้น', primary: true, cell: g => g.grade },
+                    { key: 'total', header: 'ทั้งหมด', numeric: true, cell: g => g.total },
+                    { key: 'with', header: 'ผูกรถแล้ว', numeric: true, cell: g => (
+                      <CountButton count={g.with_vehicle} active={open === `${g.grade}|with`} onClick={() => toggle(`${g.grade}|with`)} tone="text-success-ink" />
+                    ) },
+                    { key: 'without', header: 'ยังไม่ผูกรถ', numeric: true, cell: g => (
+                      <CountButton count={g.without_vehicle} active={open === `${g.grade}|without`} onClick={() => toggle(`${g.grade}|without`)} tone="text-warn-ink" />
+                    ) },
+                  ]}
+                />
+                <StudentList data={data} open={open} />
+              </>
             )}
             <p className="text-xs text-ink-muted">กดตัวเลขเพื่อดูรายชื่อ · ไฟล์ Excel มี 3 แผ่นงาน: สรุปตามสายชั้น, ผูกรถแล้ว, ยังไม่ผูกรถ</p>
           </div>
@@ -122,39 +123,23 @@ function CountButton({ count, active, onClick, tone }) {
   );
 }
 
-function GradeRows({ g, open, toggle }) {
-  const withKey = `${g.grade}|with`;
-  const withoutKey = `${g.grade}|without`;
-  const list = open === withKey ? g.students_with_vehicle : open === withoutKey ? g.students_without_vehicle : null;
+function StudentList({ data, open }) {
+  if (!open) return null;
+  const [grade, kind] = open.split('|');
+  const g = data.grades.find(x => x.grade === grade);
+  if (!g) return null;
+  const list = kind === 'with' ? g.students_with_vehicle : g.students_without_vehicle;
   return (
-    <>
-      <tr className="border-t border-surface-border">
-        <th scope="row" className="text-left px-3 py-2 font-medium">{g.grade}</th>
-        <td className="text-right px-3 py-2 tabular-nums">{g.total}</td>
-        <td className="text-right px-3 py-1">
-          <CountButton count={g.with_vehicle} active={open === withKey} onClick={() => toggle(withKey)} tone="text-success-ink" />
-        </td>
-        <td className="text-right px-3 py-1">
-          <CountButton count={g.without_vehicle} active={open === withoutKey} onClick={() => toggle(withoutKey)} tone="text-warn-ink" />
-        </td>
-      </tr>
-      {list && (
-        <tr className="bg-surface/50">
-          <td colSpan={4} className="px-3 py-2">
-            <p className="text-xs text-ink-muted mb-1">
-              {g.grade} · {open === withKey ? 'ผูกรถแล้ว' : 'ยังไม่ผูกรถ'} {list.length} คน
-            </p>
-            <ul className="divide-y divide-surface-border">
-              {list.map(s => (
-                <li key={s.id} className="py-1.5 flex flex-wrap justify-between gap-x-3">
-                  <span>{fullName(s)} <span className="text-ink-muted">· ห้อง {s.classroom || '-'} · รหัส {s.id}</span></span>
-                  {s.plate_no && <span className="text-ink-muted">รถ {s.plate_no}</span>}
-                </li>
-              ))}
-            </ul>
-          </td>
-        </tr>
-      )}
-    </>
+    <section aria-live="polite" className="rounded-lg border border-surface-border p-3">
+      <h3 className="text-sm font-medium mb-1">{g.grade} · {kind === 'with' ? 'ผูกรถแล้ว' : 'ยังไม่ผูกรถ'} {list.length} คน</h3>
+      <ul className="divide-y divide-surface-border text-sm">
+        {list.map(s => (
+          <li key={s.id} className="py-1.5 flex flex-wrap justify-between gap-x-3">
+            <span>{fullName(s)} <span className="text-ink-muted">· ห้อง {s.classroom || '-'} · รหัส {s.id}</span></span>
+            {s.plate_no && <span className="text-ink-muted">รถ {s.plate_no}</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

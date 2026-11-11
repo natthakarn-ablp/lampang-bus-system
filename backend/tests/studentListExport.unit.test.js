@@ -66,6 +66,7 @@ test('school export: workbook with expected columns, no parent contact, audited'
   // filters reached the query
   const listSql = mockQuery.mock.calls.find(c => /FROM students s/.test(String(c[0])) && /LIMIT/.test(String(c[0])));
   expect(String(listSql[0])).toMatch(/vehicle_id IS NOT NULL/);
+  expect(String(listSql[0])).toMatch(/ORDER BY s\.id ASC/);
   expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ entityType: 'student_list_xlsx' }));
 });
 

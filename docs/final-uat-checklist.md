@@ -139,7 +139,7 @@ Evidence/Notes:
 | T3 | Document expiry cards | เห็นรายการรถใกล้หมดประกัน / ใกล้หมดอายุการตรวจสภาพ | ▢ |
 | T4 | Inspection flow | เปิด `/transport/verification` → รับคำขอจากโรงเรียน → ลง checklist ครบ → ผลผ่านต้องมีวันหมดอายุ → สถานะรถตรงกับคิวและ dashboard | ▢ |
 | T5 | Pickup map | เปิด map → เห็นจุดรับ-ส่งแต่ละรถ; **ไม่ระบุชื่อนักเรียนรายบุคคล** | ▢ |
-| T6 | Action row | เห็นปุ่ม "ตรวจรับรองรถ" และ "ส่งออกรายงานรถ CSV" ที่ด้านบน | ▢ |
+| T6 | Action row | เห็นปุ่ม "ตรวจรับรองรถ" และ "ดาวน์โหลดรายชื่อรถ (CSV)" ที่ด้านบน | ▢ |
 | T7 | Safety export | CSV มีเฉพาะทะเบียน/ประเภทรถ/ผลตรวจ/วันหมดอายุ ไม่มีชื่อหรือรหัสนักเรียน เบอร์โทร หมายเหตุ หรือไฟล์หลักฐาน; role อื่น 403; audit EXPORT | ▢ |
 | T8 | Hidden permission | เปิด `/school` หรือ `/parent` → 403 | ▢ |
 | T9 | Mobile 375px | layout ใช้ได้, ไม่มี horizontal scroll | ▢ |

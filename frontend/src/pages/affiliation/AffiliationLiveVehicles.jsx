@@ -172,7 +172,7 @@ export default function AffiliationLiveVehicles() {
           <DashboardSection title="แผนที่">
             {!hasAnyCoords ? (
               <AlertBanner variant="info" title="ยังไม่มีรถที่กำลังส่งตำแหน่ง">
-                เมื่อคนขับเปิด "เริ่มส่งตำแหน่ง" จากหน้า Dashboard ของตน รถจะปรากฏบนแผนที่ทันที
+                เมื่อคนขับเปิด "เริ่มส่งตำแหน่ง" จากหน้า "ภาพรวมวันนี้" ของตน รถจะปรากฏบนแผนที่ทันที
               </AlertBanner>
             ) : (
               <div className="h-[55vh] min-h-[340px] lg:h-[60vh] lg:min-h-[400px] rounded-xl overflow-hidden border border-surface-border">

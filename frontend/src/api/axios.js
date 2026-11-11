@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { notifyRateLimited } from '../utils/rateLimitNotice';
+import { readAdminScope } from '../utils/adminScope';
 
 const api = axios.create({
   baseURL: '/api',
@@ -17,7 +18,7 @@ api.interceptors.request.use((config) => {
     if (user.role === 'admin') {
       const url = config.url || '';
       if (url.startsWith('/school/') || url === '/school') {
-        const sid = sessionStorage.getItem('admin_school_id');
+        const sid = readAdminScope('school');
         if (sid) {
           config.params = { ...config.params, school_id: sid };
           // Also inject into body for POST/PUT
@@ -27,7 +28,7 @@ api.interceptors.request.use((config) => {
         }
       }
       if (url.startsWith('/affiliation/') || url === '/affiliation') {
-        const aid = sessionStorage.getItem('admin_affiliation_id');
+        const aid = readAdminScope('affiliation');
         if (aid) {
           config.params = { ...config.params, affiliation_id: aid };
         }

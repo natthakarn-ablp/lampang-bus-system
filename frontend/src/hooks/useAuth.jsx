@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, createContext, useContext } from 'react';
 import api from '../api/axios';
+import { snapshotAdminScopes, restoreAdminScopes } from '../utils/adminScope';
 
 const AuthContext = createContext(null);
 
@@ -45,7 +46,12 @@ export function AuthProvider({ children }) {
         refresh_token: localStorage.getItem('refresh_token'),
       });
     } catch { /* ignore network errors on logout */ }
+    // The admin's chosen school/affiliation is remembered per browser, not
+    // per login — keep it across the clear (it is only a scope hint; the
+    // backend checks access on every request).
+    const scopes = snapshotAdminScopes();
     localStorage.clear();
+    restoreAdminScopes(scopes);
     setUser(null);
     setFeatures(null);
   }, []);

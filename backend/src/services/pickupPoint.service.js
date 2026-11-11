@@ -577,6 +577,11 @@ async function replacePickupPointStudents(pointId, studentIds, ctx = {}) {
   // off the same physical stop. The driver flow owns the whole vehicle and passes
   // no restriction.
   const restrictSchool = ctx.restrictToSchoolId || null;
+  // Grade teacher: only rows of their own grade (within their school) are
+  // replaced; other grades' pupils on the same point are left untouched.
+  const restrictGrade = restrictSchool && ctx.restrictToGrade ? gradeEquivalents(ctx.restrictToGrade) : null;
+  const gradeSql = restrictGrade ? ' AND s.grade IN (?)' : '';
+  const scopeParams = restrictGrade ? [pointId, restrictSchool, restrictGrade] : [pointId, restrictSchool];
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -587,8 +592,8 @@ async function replacePickupPointStudents(pointId, studentIds, ctx = {}) {
       ? await conn.query(
           `SELECT spp.student_id FROM student_pickup_points spp
            JOIN students s ON s.id = spp.student_id
-           WHERE spp.pickup_point_id = ? AND s.school_id = ?`,
-          [pointId, restrictSchool]
+           WHERE spp.pickup_point_id = ? AND s.school_id = ?${gradeSql}`,
+          scopeParams
         )
       : await conn.query(
           `SELECT student_id FROM student_pickup_points WHERE pickup_point_id = ?`,
@@ -604,8 +609,8 @@ async function replacePickupPointStudents(pointId, studentIds, ctx = {}) {
       await conn.query(
         `DELETE spp FROM student_pickup_points spp
          JOIN students s ON s.id = spp.student_id
-         WHERE spp.pickup_point_id = ? AND s.school_id = ?`,
-        [pointId, restrictSchool]
+         WHERE spp.pickup_point_id = ? AND s.school_id = ?${gradeSql}`,
+        scopeParams
       );
     } else {
       await conn.query(
@@ -657,13 +662,43 @@ async function validateStudentsBelongToVehicle(studentIds, vehicleId) {
   return matched === studentIds.length;
 }
 
-async function validateStudentsBelongToSchoolAndVehicle(studentIds, schoolId, vehicleId) {
+async function validateStudentsBelongToSchoolAndVehicle(studentIds, schoolId, vehicleId, { gradeFilter = null } = {}) {
   if (!Array.isArray(studentIds) || studentIds.length === 0) return true;
+  const ids = [...new Set(studentIds)];
+  const gradeSql = gradeFilter ? ' AND grade IN (?)' : '';
+  const params = gradeFilter ? [ids, schoolId, vehicleId, gradeEquivalents(gradeFilter)] : [ids, schoolId, vehicleId];
   const [[{ matched }]] = await pool.query(`
     SELECT COUNT(*) AS matched FROM students
-    WHERE id IN (?) AND school_id = ? AND vehicle_id = ? AND is_deleted = FALSE
-  `, [studentIds, schoolId, vehicleId]);
-  return matched === studentIds.length;
+    WHERE id IN (?) AND school_id = ? AND vehicle_id = ? AND is_deleted = FALSE${gradeSql}
+  `, params);
+  return Number(matched) === ids.length;
+}
+
+/**
+ * Grade teacher: live pupils on this point that are NOT their own grade in
+ * their own school (other grades or other schools). A teacher may delete a
+ * point only when this is 0.
+ */
+async function countStudentsOnPointOutsideGrade(pointId, schoolId, gradeFilter) {
+  const [[row]] = await pool.query(`
+    SELECT COUNT(*) AS n
+      FROM student_pickup_points spp
+      JOIN students s ON s.id = spp.student_id
+     WHERE spp.pickup_point_id = ? AND s.is_deleted = FALSE
+       AND NOT (s.school_id = ? AND s.grade IS NOT NULL AND s.grade IN (?))
+       -- ^ a same-school pupil with no grade counts as outside (NULL-safe)
+  `, [pointId, schoolId, gradeEquivalents(gradeFilter)]);
+  return Number(row && row.n) || 0;
+}
+
+/** Grade teacher: the vehicle carries at least one live pupil of their grade. */
+async function vehicleCarriesSchoolGrade(vehicleId, schoolId, gradeFilter) {
+  const [[row]] = await pool.query(`
+    SELECT 1 AS ok FROM students
+     WHERE vehicle_id = ? AND school_id = ? AND is_deleted = FALSE AND grade IN (?)
+     LIMIT 1
+  `, [vehicleId, schoolId, gradeEquivalents(gradeFilter)]);
+  return !!row;
 }
 
 /**
@@ -995,6 +1030,8 @@ module.exports = {
   validateStudentsBelongToSchoolAndVehicle,
   validateVehicleServesSchool,
   countOtherSchoolStudentsOnPoint,
+  countStudentsOnPointOutsideGrade,
+  vehicleCarriesSchoolGrade,
   isPickupPointVisibleToSchool,
   createPickupPointWithStudents,
   // Phase 6.1 hotfix-4 — duplicate-assignment guard

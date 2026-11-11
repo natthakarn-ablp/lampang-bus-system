@@ -239,6 +239,33 @@ router.get('/students/deleted-search', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── GET /grade-vehicle-summary — นักเรียนผูกรถ/ยังไม่ผูกรถ แยกตามสายชั้น ──────────
+// School main account: every grade. Grade teacher: own grade only
+// (resolveGradeScope). ?format=xlsx downloads the same data as Excel
+// (rate-limited per user and audit-logged before any bytes are sent).
+router.get('/grade-vehicle-summary', exportFormatLimiter, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const gvs = require('../services/gradeVehicleSummary.service');
+    const gradeFilter = resolveGradeScope(req);
+    const summary = await gvs.getGradeVehicleSummary(schoolId, { gradeFilter });
+
+    if (req.query.format === 'xlsx') {
+      const buf = await gvs.buildGradeVehicleWorkbook(summary);
+      if (!await auditExportBeforeSend(req, res, {
+        entityType: 'grade_vehicle_summary_xlsx', entityId: schoolId,
+        metadata: { format: 'xlsx', role: req.user.role, scope: schoolId, grade_scope: gradeFilter || null, rows: summary.totals.total },
+      })) return;
+      const name = `grade-vehicle-summary_${todayBangkok()}.xlsx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+      return res.send(Buffer.from(buf));
+    }
+    return sendSuccess(res, summary);
+  } catch (err) { next(err); }
+});
+
 router.get('/students', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
@@ -383,7 +410,9 @@ router.get('/pickup-students', async (req, res, next) => {
  *  - every student_id must belong to this school AND this vehicle
  *    (validateStudentsBelongToSchoolAndVehicle)
  */
-router.post('/pickup-points', requireFullSchoolScope, async (req, res, next) => {
+// Grade teachers may create points too (owner decision 2026-11-11), limited to
+// vehicles carrying their grade and pupils of their grade.
+router.post('/pickup-points', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -412,14 +441,23 @@ router.post('/pickup-points', requireFullSchoolScope, async (req, res, next) => 
     // Scope: vehicle must serve this school
     const ok = await ppSvc.validateVehicleServesSchool(req.body.vehicle_id, schoolId);
     if (!ok) return sendError(res, 'รถคันนี้ไม่ได้ให้บริการโรงเรียนนี้', [], 400);
+    const gradeFilter = teacherGradeScope(req);
+    if (gradeFilter && !(await ppSvc.vehicleCarriesSchoolGrade(req.body.vehicle_id, schoolId, gradeFilter))) {
+      return sendError(res, 'รถคันนี้ไม่มีนักเรียนในสายชั้นของท่าน', [], 400);
+    }
 
     const studentIds = Array.isArray(req.body.student_ids)
       ? req.body.student_ids.map(Number).filter(Number.isInteger)
       : [];
+    // A teacher's map lists only points holding their grade, so an empty point
+    // they created would vanish from their view: require at least one pupil.
+    if (gradeFilter && studentIds.length === 0) {
+      return sendError(res, 'กรุณาเลือกนักเรียนในสายชั้นของท่านอย่างน้อย 1 คน', [{ field: 'student_ids', message: 'ต้องเลือกนักเรียนอย่างน้อย 1 คน' }], 400);
+    }
 
     if (studentIds.length > 0) {
       const studentsOk = await ppSvc.validateStudentsBelongToSchoolAndVehicle(
-        studentIds, schoolId, req.body.vehicle_id
+        studentIds, schoolId, req.body.vehicle_id, { gradeFilter }
       );
       if (!studentsOk) return sendError(res, 'นักเรียนบางรายไม่ใช่ของโรงเรียนหรือรถคันนี้', [], 400);
 
@@ -443,7 +481,7 @@ router.post('/pickup-points', requireFullSchoolScope, async (req, res, next) => 
 
 // ─── DELETE /pickup-points/:id — ลบจุดรับส่งของรถที่ให้บริการโรงเรียนนี้ ──────────
 // School self-service cleanup of an obsolete pickup point (soft-delete).
-router.delete('/pickup-points/:id', requireFullSchoolScope, async (req, res, next) => {
+router.delete('/pickup-points/:id', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -458,6 +496,24 @@ router.delete('/pickup-points/:id', requireFullSchoolScope, async (req, res, nex
     // school-teacher-02: a point shared with another school's pupils is not
     // this school's to delete — it may only take its own pupils off it (PUT
     // /pickup-points/:id/students already restricts to this school's rows).
+    // Grade teacher: only a point holding no pupils outside their own grade.
+    const teacherGrade = teacherGradeScope(req);
+    if (teacherGrade) {
+      if (!(await ppSvc.isPickupPointVisibleToSchool(id, schoolId))) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+      // An empty point on a bus that carries none of their grade is not theirs.
+      if (!(await ppSvc.vehicleCarriesSchoolGrade(point.vehicle_id, schoolId, teacherGrade))) {
+        return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในรถของสายชั้นท่าน', [], 403);
+      }
+      const outside = await ppSvc.countStudentsOnPointOutsideGrade(id, schoolId, teacherGrade);
+      if (outside > 0) {
+        return sendError(
+          res,
+          'จุดรับส่งนี้มีนักเรียนสายชั้นอื่นใช้อยู่ จึงลบไม่ได้ — ให้แก้ไขรายชื่อเพื่อนำนักเรียนในสายชั้นของท่านออกจากจุดนี้แทน',
+          [{ code: 'POINT_SHARED_WITH_OTHER_GRADE' }],
+          409
+        );
+      }
+    }
     const others = await ppSvc.countOtherSchoolStudentsOnPoint(id, schoolId);
     if (others > 0) {
       return sendError(
@@ -516,7 +572,7 @@ router.get('/pickup-points/:id/assignable-students', async (req, res, next) => {
  *   - every student_id must belong to this school AND that vehicle
  *   - no conflicts with OTHER pickup points (excludes self-point)
  */
-router.put('/pickup-points/:id/students', requireFullSchoolScope, async (req, res, next) => {
+router.put('/pickup-points/:id/students', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -539,7 +595,7 @@ router.put('/pickup-points/:id/students', requireFullSchoolScope, async (req, re
 
     if (studentIds.length > 0) {
       const studentsOk = await ppSvc.validateStudentsBelongToSchoolAndVehicle(
-        studentIds, schoolId, point.vehicle_id
+        studentIds, schoolId, point.vehicle_id, { gradeFilter: teacherGradeScope(req) }
       );
       if (!studentsOk) return sendError(res, 'นักเรียนบางรายไม่ใช่ของโรงเรียนหรือรถคันนี้', [], 400);
 
@@ -556,6 +612,8 @@ router.put('/pickup-points/:id/students', requireFullSchoolScope, async (req, re
       // Audit 2026-06-18 (authz-scope): only this school's students may be
       // removed from a shared point — other schools' rows are preserved.
       restrictToSchoolId: schoolId,
+      // Grade teacher: only their own grade's rows are replaced.
+      restrictToGrade: teacherGradeScope(req),
     });
 
     return sendSuccess(res, result, 'อัปเดตรายชื่อนักเรียนสำเร็จ');

@@ -71,6 +71,7 @@ const AffEmergencyList     = lazy(() => import('./pages/affiliation/AffEmergency
 const AffSchoolAccounts    = lazy(() => import('./pages/affiliation/AffSchoolAccounts'));
 const AffUserManagement    = lazy(() => import('./pages/affiliation/AffUserManagement'));
 const AffAuditLog          = lazy(() => import('./pages/affiliation/AffAuditLog'));
+const VehicleTripsReport   = lazy(() => import('./pages/shared/VehicleTripsReport'));
 const AffiliationLiveVehicles = lazy(() => import('./pages/affiliation/AffiliationLiveVehicles'));
 const AffiliationPickupMap   = lazy(() => import('./pages/affiliation/AffiliationPickupMap'));
 const AffTransferRequests   = lazy(() => import('./pages/affiliation/AffTransferRequests'));
@@ -288,6 +289,7 @@ export default function App() {
             <Route path="live-vehicles" element={<SchoolLiveVehicles />} />
             <Route path="vehicle-track" element={<VehicleTrackReplay role="school" />} />
             <Route path="teacher-accounts" element={<SchoolTeacherAccounts />} />
+            <Route path="vehicle-trips" element={<VehicleTripsReport role="school" />} />
             <Route path="homeroom-teachers" element={<SchoolHomeroomTeachers />} />
             <Route path="year-promotion" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><SchoolYearPromotion /></PrivateRoute>} />
             <Route path="registration-review" element={<SchoolRegistrationReview />} />
@@ -312,6 +314,7 @@ export default function App() {
             <Route path="accounts"    element={<AffSchoolAccounts />} />
             <Route path="users"       element={<AffUserManagement />} />
             <Route path="audit-log"   element={<AffAuditLog />} />
+            <Route path="vehicle-trips" element={<VehicleTripsReport role="affiliation" />} />
             <Route path="live-vehicles" element={<AffiliationLiveVehicles />} />
             <Route path="vehicle-track" element={<VehicleTrackReplay role="affiliation" />} />
             <Route path="pickup-map"  element={<AffiliationPickupMap />} />
@@ -337,6 +340,7 @@ export default function App() {
             <Route path="emergencies"  element={<ProvEmergencyList />} />
             <Route path="audit-log"    element={<ProvAuditLog />} />
             <Route path="unit-accounts" element={<ProvUnitAccounts />} />
+            <Route path="vehicle-trips" element={<VehicleTripsReport role="province" />} />
             <Route path="live-vehicles" element={<ProvinceLiveVehicles />} />
             <Route path="vehicle-track" element={<VehicleTrackReplay role="province" />} />
             <Route path="pickup-map"   element={<ProvincePickupMap />} />

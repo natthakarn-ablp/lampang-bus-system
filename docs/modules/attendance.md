@@ -67,3 +67,6 @@ DB-free: `cd backend && npx jest --config jest.unit.config.js --runInBand "(atte
 ## ความเสี่ยงที่ทราบ
 - `checkin.service.js` 1861 บรรทัด รวม driver/override/teacher/void ในไฟล์เดียว
 - `driver.routes.js` 1553 บรรทัด และ `school.routes.js` 2804 บรรทัด ถือ handler ของโมดูลนี้ปนกับโมดูลอื่น
+
+## หลายเที่ยวต่อรอบ (2026-11-12)
+คนขับเริ่มเที่ยวถัดไปพร้อมเหตุผล (`/api/driver/trips`) เมื่อรถว่างและเที่ยวปัจจุบันมีเด็กขึ้นแล้ว · ตาราง `vehicle_trips` (migration 062) ไม่แก้ `checkin_logs` · โรงเรียน/สังกัด/จังหวัดดูสรุปที่ `/api/*/vehicle-trips` · flag `FEATURE_MULTI_TRIP` — รายละเอียด: [docs/ops/multi-trip.md](../ops/multi-trip.md)

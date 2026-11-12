@@ -31,6 +31,7 @@ const vllSvc = require('../services/vehicleLocation.service');
 const { makeTrackHandlers } = require('./vehicleTrackHandlers');
 const { trackingInfo } = require('../utils/gpsTrackingWindow');
 const checkinSvc = require('../services/checkin.service');
+const tripSvc = require('../services/vehicleTrip.service');
 const homeroomSvc = require('../services/homeroom.service');
 const { consumePolicyAction } = require('../utils/policyActionEvidence');
 
@@ -3027,6 +3028,29 @@ router.delete('/homeroom-teachers/:id', requireFullSchoolScope, async (req, res,
       schoolId, id, actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
     });
     return sendSuccess(res, out, 'ลบรายชื่อครูแล้ว');
+  } catch (err) { next(err); }
+});
+
+function tripsEnabled(res) {
+  if (tripSvc.enabled()) return true;
+  sendError(res, 'ยังไม่เปิดใช้การบันทึกหลายเที่ยว', [], 404);
+  return false;
+}
+
+// GET /api/school/vehicle-trips?date_from&date_to — buses of this school's pupils
+// that ran extra trips, with the drivers' reasons (FEATURE_MULTI_TRIP).
+router.get('/vehicle-trips', async (req, res, next) => {
+  try {
+    if (!tripsEnabled(res)) return;
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const range = tripSvc.parseRange(req.query);
+    const rows = await tripSvc.tripSummary(pool, {
+      ...range,
+      vehicleScopeSql: 'SELECT DISTINCT vehicle_id FROM students WHERE school_id = ? AND vehicle_id IS NOT NULL',
+      vehicleScopeParams: [schoolId],
+    });
+    return sendSuccess(res, { ...range, rows });
   } catch (err) { next(err); }
 });
 

@@ -11,6 +11,8 @@ import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
 import LiveLocationToggle from '../../components/LiveLocationToggle';
+import TripPanel from '../../components/TripPanel';
+import { useAuth } from '../../hooks/useAuth';
 import { PageTransition, PulseDot } from '../../lib/motion';
 import {
   resolveSession,
@@ -55,6 +57,7 @@ function groupBySchool(students) {
 export default function DriverDashboard() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { features } = useAuth();
 
   const [session, setSession] = useState(null);
   const sessionRef = useRef(null);
@@ -393,6 +396,11 @@ export default function DriverDashboard() {
               </div>
             );
           })()}
+
+          {/* ── Several trips per round (FEATURE_MULTI_TRIP) ── */}
+          {features?.multiTrip && !allDone && (
+            <TripPanel session={session} pendingCount={pending.length} refreshKey={roster} onChanged={fetchData} />
+          )}
 
           {/* ── Primary action area ── */}
           <div className="mb-5">

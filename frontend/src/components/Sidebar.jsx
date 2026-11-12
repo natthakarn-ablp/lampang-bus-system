@@ -65,6 +65,7 @@ const SCHOOL_NAV = [
   { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
   { to: '/school/homeroom-teachers', icon: UserCheck, label: 'ครูประจำชั้น' },
   { to: '/school/year-promotion', icon: GraduationCap, label: 'เลื่อนชั้นปีการศึกษาใหม่' },
+  { to: '/school/vehicle-trips', icon: Route,        label: 'รถที่วิ่งหลายเที่ยว' },
   { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
   { to: '/my-policy',             icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
@@ -86,6 +87,7 @@ const AFFILIATION_NAV = [
   { to: '/affiliation/vehicle-requests',  icon: Wrench,  label: 'คำขอเกี่ยวกับรถ' },
   { to: '/affiliation/users',       icon: UserCog,       label: 'จัดการผู้ใช้งาน' },
   { to: '/affiliation/accounts',    icon: Key,           label: 'เพิ่มโรงเรียนใหม่' },
+  { to: '/affiliation/vehicle-trips', icon: Route,     label: 'รถที่วิ่งหลายเที่ยว' },
   { to: '/affiliation/audit-log',   icon: FileText,      label: 'ประวัติการแก้ไข' },
   { to: '/my-policy',                icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
@@ -106,6 +108,7 @@ const PROVINCE_NAV = [
   { to: '/province/readiness',    icon: ShieldCheck,   label: 'ความพร้อมเปิดใช้งาน' },
   { to: '/admin/route-deviations', icon: Route,        label: 'การเบี่ยงเส้นทาง' },
   { to: '/province/unit-accounts', icon: Key,          label: 'บัญชีสังกัดและขนส่ง' },
+  { to: '/province/vehicle-trips', icon: Route,       label: 'รถที่วิ่งหลายเที่ยว' },
   { to: '/province/audit-log',    icon: FileText,      label: 'ประวัติการแก้ไข' },
   { to: '/my-policy',              icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
   { to: '/participation',       icon: Inbox,         label: 'เรื่องที่ต้องมีส่วนร่วม' },
@@ -208,6 +211,10 @@ function navItemsForUser(user, features) {
     '/participation/summary': 'participationCases',
     // Homeroom teachers per room (migration 061) — dark until the flag is on.
     '/school/homeroom-teachers': 'homeroomTeachers',
+    // Several trips per round (migration 062) — dark until the flag is on.
+    '/school/vehicle-trips': 'multiTrip',
+    '/affiliation/vehicle-trips': 'multiTrip',
+    '/province/vehicle-trips': 'multiTrip',
   };
   const filtered = base.filter(item => {
     if (!item.to) return true;

@@ -40,6 +40,7 @@ const lineSvc           = require('../services/line.service');
 const driverShiftSvc    = require('../services/driverShift.service');
 const safetyPolicySvc   = require('../services/safetyPolicy.service');
 const emergencySvc      = require('../services/emergency.service');
+const tripSvc           = require('../services/vehicleTrip.service');
 // Phase 11A — Intelligent Tracking Layer (2026-06-23). Lazy-required inside
 // the /vehicle-location hook so the modules are only loaded when their
 // feature flag is on; this keeps the driver router's startup cost flat on
@@ -250,6 +251,38 @@ router.get('/roster', async (req, res, next) => {
   } catch (err) {
     return next(err);
   }
+});
+
+function tripsEnabled(res) {
+  if (tripSvc.enabled()) return true;
+  sendError(res, 'ยังไม่เปิดใช้การบันทึกหลายเที่ยว', [], 404);
+  return false;
+}
+
+// ─── Several trips per round (FEATURE_MULTI_TRIP, migration 062) ───────────
+// GET  /api/driver/trips?session=morning|evening → current trip, on-board count, reasons
+// POST /api/driver/trips { session, reason_code, reason_text? } → start the next trip
+router.get('/trips', async (req, res, next) => {
+  try {
+    if (!tripsEnabled(res)) return;
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+    return sendSuccess(res, await tripSvc.getTripState(pool, vehicle.vehicle_id, req.query.session));
+  } catch (err) { return next(err); }
+});
+
+router.post('/trips', async (req, res, next) => {
+  try {
+    if (!tripsEnabled(res)) return;
+    const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
+    if (!vehicle) return sendError(res, 'ไม่พบรถที่ลงทะเบียน', [], 404);
+    const { session, reason_code, reason_text } = req.body || {};
+    const out = await tripSvc.startNextTrip(pool, {
+      vehicleId: vehicle.vehicle_id, session, reasonCode: reason_code, reasonText: reason_text,
+      actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, `เริ่มเที่ยวที่ ${out.trip_no} แล้ว`, null, 201);
+  } catch (err) { return next(err); }
 });
 
 // ─── GET /api/driver/pickup-points ──────────────────────────────────────────

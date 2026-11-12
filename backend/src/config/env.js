@@ -344,6 +344,10 @@ const env = {
     // account edits the list; shown on room check, student list/Excel, driver
     // student list and parent LINE status. Needs migration 061.
     homeroomTeachers: process.env.FEATURE_HOMEROOM_TEACHERS === 'true',
+    // Several trips per round (owner decision 2026-11-12): driver starts the
+    // next trip with a reason; school/affiliation/province see trips + reasons.
+    // Needs migration 062.
+    multiTrip: process.env.FEATURE_MULTI_TRIP === 'true',
     // Phase 4 — participatory-administration cases + append-only event log.
     // Dark by default: when false the /api/participation router is not
     // mounted, so the existing system is byte-for-byte unchanged. Migration

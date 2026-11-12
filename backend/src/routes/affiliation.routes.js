@@ -18,6 +18,7 @@ const affSvc = require('../services/affiliation.service');
 const { buildAffiliationSchoolsWorkbook } = require('../utils/affiliationSchoolsWorkbook');
 const affAdminSvc = require('../services/affiliationAdmin.service');
 const affUsersSvc = require('../services/affiliationUsers.service');
+const tripSvc = require('../services/vehicleTrip.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const { makeTrackHandlers } = require('./vehicleTrackHandlers');
 const { trackingInfo } = require('../utils/gpsTrackingWindow');
@@ -1011,5 +1012,29 @@ router.post('/vehicle-requests/:id/reject', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+
+function tripsEnabled(res) {
+  if (tripSvc.enabled()) return true;
+  sendError(res, 'ยังไม่เปิดใช้การบันทึกหลายเที่ยว', [], 404);
+  return false;
+}
+
+// GET /api/affiliation/vehicle-trips?date_from&date_to — buses serving this
+// affiliation's schools that ran extra trips, with reasons (FEATURE_MULTI_TRIP).
+router.get('/vehicle-trips', async (req, res, next) => {
+  try {
+    if (!tripsEnabled(res)) return;
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const range = tripSvc.parseRange(req.query);
+    const rows = await tripSvc.tripSummary(pool, {
+      ...range,
+      vehicleScopeSql: `SELECT DISTINCT s.vehicle_id FROM students s JOIN schools sc ON sc.id = s.school_id
+                         WHERE sc.affiliation_id = ? AND s.vehicle_id IS NOT NULL`,
+      vehicleScopeParams: [affId],
+    });
+    return sendSuccess(res, { ...range, rows });
+  } catch (err) { next(err); }
+});
 
 module.exports = router;

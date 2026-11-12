@@ -321,6 +321,10 @@ async function assertParentFeatureMigrationsPresent() {
     enabled: env.features.homeroomTeachers, envName: 'FEATURE_HOMEROOM_TEACHERS',
     migration: '061_homeroom_teachers.sql', required: [['homeroom_teachers']],
   });
+  await assertFeatureSchema({
+    enabled: env.features.multiTrip, envName: 'FEATURE_MULTI_TRIP',
+    migration: '062_vehicle_trips.sql', required: [['vehicle_trips']],
+  });
 }
 
 async function start() {

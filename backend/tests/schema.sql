@@ -1370,6 +1370,25 @@ CREATE TABLE IF NOT EXISTS homeroom_teachers (
   CONSTRAINT fk_homeroom_school FOREIGN KEY (school_id) REFERENCES schools (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 062_vehicle_trips.sql (added with the migration; FEATURE_MULTI_TRIP)
+CREATE TABLE IF NOT EXISTS vehicle_trips (
+  id           INT                         NOT NULL AUTO_INCREMENT,
+  vehicle_id   VARCHAR(20)                 NOT NULL,
+  check_date   DATE                        NOT NULL,
+  session      ENUM('morning','evening')   NOT NULL,
+  trip_no      TINYINT UNSIGNED            NOT NULL,
+  reason_code  VARCHAR(30)                 NOT NULL,
+  reason_text  VARCHAR(200)                NULL,
+  started_by   INT                         NULL,
+  started_at   TIMESTAMP                   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  after_log_id BIGINT                      NOT NULL DEFAULT 0,  -- checkin_logs.id at start; the trip owns later rows
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_vehicle_trip (vehicle_id, check_date, session, trip_no),
+  INDEX idx_vehicle_trips_date (check_date),
+  CONSTRAINT fk_vehicle_trips_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles (id),
+  CONSTRAINT chk_vehicle_trips_no CHECK (trip_no BETWEEN 2 AND 9)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

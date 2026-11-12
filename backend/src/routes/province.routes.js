@@ -10,6 +10,7 @@ const { readIdParam } = require('../utils/pathParams');
 const { isCalendarDate } = require('../utils/calendarDate');
 const { pool } = require('../config/database');
 const provSvc = require('../services/province.service');
+const tripSvc = require('../services/vehicleTrip.service');
 const provAdminSvc = require('../services/provinceAdmin.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const { makeTrackHandlers } = require('./vehicleTrackHandlers');
@@ -345,6 +346,25 @@ router.post('/unit-accounts/:id/reset-password', async (req, res, next) => {
     });
     return sendSuccess(res, result, 'รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้ต้องตั้งรหัสใหม่เมื่อเข้าสู่ระบบครั้งถัดไป');
   } catch (err) { return next(err); }
+});
+
+function tripsEnabled(res) {
+  if (tripSvc.enabled()) return true;
+  sendError(res, 'ยังไม่เปิดใช้การบันทึกหลายเที่ยว', [], 404);
+  return false;
+}
+
+// GET /api/province/vehicle-trips?date_from&date_to — every bus in the province
+// that ran extra trips, with reasons (FEATURE_MULTI_TRIP). No phone numbers (§5.5).
+router.get('/vehicle-trips', async (req, res, next) => {
+  try {
+    if (!tripsEnabled(res)) return;
+    const range = tripSvc.parseRange(req.query);
+    const rows = await tripSvc.tripSummary(pool, {
+      ...range, vehicleScopeSql: 'SELECT id FROM vehicles', vehicleScopeParams: [],
+    });
+    return sendSuccess(res, { ...range, rows });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

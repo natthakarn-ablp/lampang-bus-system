@@ -525,7 +525,7 @@ export default function StudentSearch() {
           <label className="text-sm text-ink-muted inline-flex items-center gap-2">
             แสดงหน้าละ
             <select value={perPage} onChange={e => setPerPage(Number(e.target.value))}
-              className="focus-ring bg-surface-raised border border-surface-border rounded-lg px-2 min-h-[44px] text-sm text-ink">
+              className="focus-ring bg-surface-raised border border-surface-border rounded-lg px-2 min-h-[44px] text-base text-ink">
               {[20, 50, 100].map(n => <option key={n} value={n}>{n} คน</option>)}
             </select>
           </label>

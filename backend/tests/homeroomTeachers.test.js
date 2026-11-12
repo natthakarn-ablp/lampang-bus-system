@@ -79,7 +79,7 @@ test('add a teacher with a phone (normalised), then it reaches the other pages',
   expect(row).toEqual({ phone: '0812345678', school_id: '__TSCH' });
 
   const list = await asSchool(request(app).get('/api/school/students?search=__Test'));
-  const pupil = list.body.data.students.find((s) => s.id === 99999);
+  const pupil = list.body.data.find((s) => s.id === 99999);
   expect(pupil.homeroom_teachers).toEqual([{ name: 'ครูสมใจ ใจดี', phone: '0812345678' }]);
 
   const roster = await asDriver(request(app).get('/api/driver/roster'));
@@ -125,7 +125,7 @@ test('flag off: endpoints 404 and the student list carries no teacher field', as
   try {
     expect((await asSchool(request(app).get('/api/school/homeroom-teachers'))).status).toBe(404);
     const list = await asSchool(request(app).get('/api/school/students?search=__Test'));
-    const pupil = list.body.data.students.find((s) => s.id === 99999);
+    const pupil = list.body.data.find((s) => s.id === 99999);
     expect(pupil.homeroom_teachers).toBeUndefined();
   } finally {
     env.features.homeroomTeachers = true;

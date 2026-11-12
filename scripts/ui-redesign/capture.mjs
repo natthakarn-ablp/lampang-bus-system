@@ -826,6 +826,20 @@ const TEACHER_CHECK = {
 
 const COMMON = {
   '/api/driver/roster':         { data: DRIVER_ROSTER },
+  // FEATURE_MULTI_TRIP is on in production-feature-flags.json (2026-11-12),
+  // so the driver dashboard mounts TripPanel and asks for the trip state.
+  '/api/driver/trips':          { data: {
+    current_trip: 1, trips: [], boarded: 2, on_board: 2, boarded_this_trip: 2, can_start_next: false,
+    reasons: [
+      { code: 'SEATS', label: 'ที่นั่งไม่พอ' },
+      { code: 'MULTI_SCHOOL', label: 'รับหลายโรงเรียน' },
+      { code: 'LONG_ROUTE', label: 'เส้นทางไกล / หลายจุดรับ' },
+      { code: 'OTHER', label: 'อื่น ๆ' },
+    ],
+  } },
+  '/api/school/vehicle-trips':      { data: { rows: [] } },
+  '/api/affiliation/vehicle-trips': { data: { rows: [] } },
+  '/api/province/vehicle-trips':    { data: { rows: [] } },
   '/api/driver/pretrip-status': { data: { done: false } },
   '/api/driver/status-today':   { data: { current_session: 'evening', summary: { total: 5, boarded: 2, remaining: 3 } } },
   '/api/driver/vehicle-location': { data: { latitude: 18.2888, longitude: 99.4908, recorded_at: '2026-08-27T09:12:00+07:00', is_sending: false } },

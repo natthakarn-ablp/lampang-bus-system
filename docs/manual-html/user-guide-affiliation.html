@@ -155,7 +155,7 @@ blockquote.callout ul{margin:6px 0;}
 <li>เตือนโรงเรียนที่ยังมีรายการค้าง</li>
 <li>ดูตำแหน่งรถ และเหตุฉุกเฉินจากรถในสังกัด</li>
 <li>ดูจำนวนโรงเรียน นักเรียน และรถ แล้วส่งออกเป็นไฟล์ Excel</li>
-<li>เพิ่มโรงเรียนใหม่ สร้างบัญชี และตั้งรหัสผ่านใหม่ให้โรงเรียนในสังกัด</li>
+<li>เพิ่มโรงเรียนใหม่ และจัดการบัญชีหลักของโรงเรียนในสังกัด (สร้าง แก้ชื่อ ตั้งรหัสผ่านใหม่ ปิด/เปิด ลบ และกู้คืน) ที่เมนู <strong>จัดการผู้ใช้งาน</strong></li>
 <li>อนุมัติคำขอย้ายนักเรียนและคำขอเกี่ยวกับรถ จากโรงเรียนในสังกัด</li>
 </ul>
 <blockquote class="callout tip">
@@ -171,7 +171,7 @@ blockquote.callout ul{margin:6px 0;}
 <p class="fl-legend"><span><i class="fl-sw" style="background:#1e5fa8;border-color:#1e5fa8"></i>เริ่ม / จบ</span><span><i class="fl-sw" style="background:#fff;border-color:#1e5fa8"></i>ขั้นตอนที่คุณทำ</span><span><i class="fl-sw" style="background:#fff7e6;border-color:#e8a33d"></i>◆ จุดตัดสินใจ</span><span><i class="fl-sw" style="background:#f3f5f9;border-color:#9aa6bd;border-style:dashed"></i>งานของบทบาทอื่น</span><span><i class="fl-sw" style="background:#fdeeee;border-color:#d64545"></i>เหตุด่วน</span></p>
 <div class="flow" role="group" aria-label="งานประจำวัน"><div class="flow-title">งานประจำวัน</div><div class="fl-node start">เข้าสู่ระบบ — หน้า <strong>ภาพรวมสังกัด</strong> เปิดเอง</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node">อ่านแถบสรุปวันนี้ และรายการ <strong>ต้องทำวันนี้</strong></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node decision">มีโรงเรียนยังค้างไหม? (แถบสีเหลือง)</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-branch"><div class="fl-col"><span class="fl-lbl">ใช่</span><div class="fl-node">ดู <strong>โรงเรียนที่ต้องติดตาม</strong> แล้วกดคัดลอกข้อความแจ้งโรงเรียน หรือโทรตาม</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node other"><span class="fl-who">โรงเรียน / ครู</span>เช็กชื่อให้ครบ</div></div><div class="fl-col"><span class="fl-lbl no">ไม่ใช่</span><div class="fl-node">ไม่ต้องทำอะไรเพิ่ม</div></div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node">อยากรู้ว่ารถอยู่ไหน เปิด <strong>ตำแหน่งรถ</strong></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node">เปิด <strong>เหตุฉุกเฉิน</strong> ดูเหตุจากรถในสังกัด</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node end ok">รู้ว่าวันนี้โรงเรียนไหนครบ โรงเรียนไหนยังค้าง</div></div>
 <div class="flow" role="group" aria-label="อนุมัติคำขอโอนย้ายนักเรียน"><div class="flow-title">อนุมัติคำขอโอนย้ายนักเรียน</div><div class="fl-node other"><span class="fl-who">โรงเรียน</span>ส่งคำขอโอนย้าย</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node start"><strong>เพิ่มเติม</strong> › <strong>คำขอโอนย้ายนักเรียน</strong> › เลือก <strong>รออนุมัติ</strong> › <strong>รายละเอียด</strong></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node decision">ช่อง <strong>ทิศทาง</strong> เป็น <strong>ภายในสังกัด</strong> ไหม?</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-branch"><div class="fl-col"><span class="fl-lbl">ใช่</span><div class="fl-node">กด <strong>อนุมัติ</strong> หรือ <strong>ไม่อนุมัติ</strong> แล้วกดยืนยันอีกครั้ง</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node end ok">อนุมัติแล้ว นักเรียนย้ายไปโรงเรียนปลายทาง</div></div><div class="fl-col"><span class="fl-lbl no">ข้ามสังกัด</span><div class="fl-node">สถานะ <strong>รอโรงเรียนปลายทาง</strong> — สังกัดดูได้อย่างเดียว</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node other"><span class="fl-who">โรงเรียนปลายทาง</span>อนุมัติหรือไม่อนุมัติเอง</div></div></div></div>
-<div class="flow" role="group" aria-label="งานอื่นที่ทำเมื่อจำเป็น"><div class="flow-title">งานอื่นที่ทำเมื่อจำเป็น</div><div class="fl-chain"><div class="fl-node other"><span class="fl-who">โรงเรียน</span>ส่งคำขอเกี่ยวกับรถ</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>เพิ่มเติม</strong> › <strong>คำขอเกี่ยวกับรถ</strong> › <strong>รออนุมัติ</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node">อ่านรายละเอียด</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end"><strong>อนุมัติ</strong> / <strong>ไม่อนุมัติ</strong> แล้วยืนยัน</div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-chain"><div class="fl-node">มีโรงเรียนใหม่</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>เพิ่มโรงเรียนใหม่</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">ส่งชื่อผู้ใช้และรหัสผ่านให้โรงเรียน</div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-chain"><div class="fl-node">โรงเรียนลืมรหัส</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>เพิ่มโรงเรียนใหม่</strong> › ตาราง <strong>บัญชีที่สร้างล่าสุด</strong> › <strong>รีเซ็ตรหัส</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">แจ้งรหัสใหม่ (โรงเรียนต้องเปลี่ยนเมื่อเข้าระบบ)</div></div></div>
+<div class="flow" role="group" aria-label="งานอื่นที่ทำเมื่อจำเป็น"><div class="flow-title">งานอื่นที่ทำเมื่อจำเป็น</div><div class="fl-chain"><div class="fl-node other"><span class="fl-who">โรงเรียน</span>ส่งคำขอเกี่ยวกับรถ</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>เพิ่มเติม</strong> › <strong>คำขอเกี่ยวกับรถ</strong> › <strong>รออนุมัติ</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node">อ่านรายละเอียด</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end"><strong>อนุมัติ</strong> / <strong>ไม่อนุมัติ</strong> แล้วยืนยัน</div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-chain"><div class="fl-node">มีโรงเรียนใหม่</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>เพิ่มโรงเรียนใหม่</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">ส่งชื่อผู้ใช้และรหัสผ่านให้โรงเรียน</div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-chain"><div class="fl-node">โรงเรียนลืมรหัส</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>เพิ่มเติม</strong> › <strong>จัดการผู้ใช้งาน</strong> › <strong>รีเซ็ตรหัส</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">แจ้งรหัสใหม่ (โรงเรียนต้องเปลี่ยนเมื่อเข้าระบบ)</div></div></div>
 <!-- flowchart:end -->
 
 <h2>เริ่มต้นใช้งาน</h2>
@@ -210,7 +210,7 @@ blockquote.callout ul{margin:6px 0;}
 <thead><tr><th>กลุ่ม</th><th>เมนู</th></tr></thead>
 <tbody>
 <tr><td>ใช้ทุกวัน</td><td>ภาพรวมสังกัด · โรงเรียนในสังกัด · ข้อมูลนักเรียน · รถรับส่ง · ตำแหน่งปัจจุบัน · แผนที่จุดรับส่ง · เหตุฉุกเฉิน · รายงาน</td></tr>
-<tr><td>เพิ่มเติม</td><td>คำขอโอนย้ายนักเรียน · คำขอเกี่ยวกับรถ · เพิ่มโรงเรียนใหม่ · ประวัติการแก้ไข · นโยบายและสิทธิของฉัน · เรื่องที่ต้องมีส่วนร่วม · สรุปการมีส่วนร่วม</td></tr>
+<tr><td>เพิ่มเติม</td><td>คำขอโอนย้ายนักเรียน · คำขอเกี่ยวกับรถ · จัดการผู้ใช้งาน · เพิ่มโรงเรียนใหม่ · ประวัติการแก้ไข · นโยบายและสิทธิของฉัน · เรื่องที่ต้องมีส่วนร่วม · สรุปการมีส่วนร่วม</td></tr>
 </tbody>
 </table>
 <p><img src="screenshots/shared/sidebar-more.png" alt="เมนูด้านซ้ายเมื่อเปิดกลุ่มเพิ่มเติม"></p>
@@ -400,18 +400,29 @@ blockquote.callout ul{margin:6px 0;}
 </ol>
 <p>ทำเสร็จแล้วจะขึ้นว่า "นำเข้าสำเร็จ" พร้อมจำนวนบัญชีที่สร้าง แถวที่ไม่ผ่านจะถูกข้าม</p>
 
-<h3>จัดการบัญชีโรงเรียน (ตั้งรหัสผ่านใหม่ / ปิด-เปิดบัญชี)</h3>
-<p>ใช้เมื่อโรงเรียนลืมรหัสผ่าน หรือต้องการหยุดใช้บัญชี คุณทำเองได้ ไม่ต้องติดต่อผู้ดูแลระบบ</p>
+<h3>จัดการผู้ใช้งาน (บัญชีหลักของโรงเรียนในสังกัด)</h3>
+<p>ใช้เมื่อโรงเรียนลืมรหัสผ่าน ต้องแก้ชื่อบัญชี หยุดใช้บัญชี หรือสร้างบัญชีให้โรงเรียนที่มีในระบบแล้ว คุณทำเองได้ ไม่ต้องติดต่อผู้ดูแลระบบ หน้านี้เห็นเฉพาะบัญชีหลักของโรงเรียนในสังกัดของคุณ</p>
 <ol>
-<li>เปิดหน้า <strong>เพิ่มโรงเรียนใหม่</strong> แล้วเลื่อนลงไปที่ตาราง <strong>บัญชีที่สร้างล่าสุด</strong></li>
-<li>หาโรงเรียนที่ต้องการ (มีหลายหน้า กด <strong>ถัดไป</strong> เพื่อดูต่อ)</li>
-<li>ตั้งรหัสผ่านใหม่: กด <strong>รีเซ็ตรหัส</strong> พิมพ์ <strong>รหัสผ่านใหม่</strong> และ <strong>ยืนยันรหัสผ่านใหม่</strong> แล้วกด <strong>รีเซ็ตรหัสผ่าน</strong></li>
-<li>ปิดบัญชี: กด <strong>ปิดบัญชี</strong> แล้วกดยืนยัน (เปิดคืนได้ด้วยปุ่ม <strong>เปิดบัญชี</strong>)</li>
+<li>กด <strong>เพิ่มเติม</strong> แล้วกด <strong>จัดการผู้ใช้งาน</strong></li>
+<li>พิมพ์ชื่อผู้ใช้ ชื่อ หรือชื่อโรงเรียนในช่องค้นหา</li>
+<li>ที่แถวของบัญชี เลือกงานที่ต้องการ:
+<ul>
+<li><strong>แก้ชื่อ</strong> — แก้ชื่อที่แสดง แล้วกด <strong>บันทึก</strong></li>
+<li><strong>รีเซ็ตรหัส</strong> — พิมพ์ <strong>รหัสผ่านใหม่</strong> แล้วกด <strong>รีเซ็ตรหัสผ่าน</strong> แจ้งรหัสใหม่ให้โรงเรียน โรงเรียนต้องเปลี่ยนรหัสเมื่อเข้าระบบ และทุกเครื่องที่เปิดบัญชีนี้ค้างไว้จะถูกออกจากระบบ</li>
+<li><strong>ปิดบัญชี</strong> / <strong>เปิดบัญชี</strong> — กดแล้วกดยืนยัน</li>
+<li><strong>ลบ</strong> — กดแล้วกด <strong>ลบบัญชี</strong> เพื่อยืนยัน</li>
+</ul>
+</li>
+<li>สร้างบัญชีให้โรงเรียนที่มีในระบบแล้ว: กด <strong>สร้างบัญชีโรงเรียน</strong> เลือก <strong>โรงเรียน</strong> พิมพ์ <strong>ชื่อผู้ใช้ (รหัส OBEC 6 หลัก)</strong> แล้วกด <strong>สร้างบัญชี</strong> รหัสผ่านเริ่มต้นคือรหัสโรงเรียน</li>
+<li>กู้คืนบัญชีที่ลบไป: กดปุ่ม <strong>บัญชีที่ลบแล้ว</strong> ด้านบนตาราง แล้วกด <strong>กู้คืน</strong> ที่แถวนั้น บัญชีจะกลับมาในสถานะ <strong>ปิด</strong> กด <strong>เปิดบัญชี</strong> เมื่อพร้อมให้โรงเรียนใช้</li>
 </ol>
-<p>ตั้งรหัสใหม่เสร็จจะขึ้นว่า "รีเซ็ตรหัสผ่านสำเร็จ" แจ้งรหัสใหม่ให้โรงเรียน โรงเรียนต้องเปลี่ยนรหัสอีกครั้งเมื่อเข้าระบบ</p>
+<p><strong>ป้ายสถานะ:</strong> <strong>ใช้งาน</strong> (เขียว) · <strong>รอเปลี่ยนรหัส</strong> (เหลือง — ยังไม่ได้เปลี่ยนรหัสเริ่มต้น) · <strong>ปิด</strong> (แดง)</p>
 <blockquote class="callout tip">
 <p>💡 รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัว ห้ามเดาง่าย เช่น 12345678 และห้ามเหมือนชื่อผู้ใช้</p>
-<p>ปิดบัญชีแล้ว ข้อมูลของโรงเรียนไม่ถูกลบ</p>
+<p>ปิดหรือลบบัญชีแล้ว ข้อมูลนักเรียนและรถของโรงเรียนไม่ถูกลบ ทุกการแก้ไขถูกบันทึกใน <strong>ประวัติการแก้ไข</strong></p>
+</blockquote>
+<blockquote class="callout note">
+<p>ℹ️ บัญชีครูประจำสายชั้นไม่อยู่ในหน้านี้ โรงเรียนจัดการเองที่เมนู <strong>บัญชีครูประจำสายชั้น</strong> · โรงเรียนที่ยังไม่มีในระบบ ให้เพิ่มที่ <strong>เพิ่มโรงเรียนใหม่</strong> (หัวข้อด้านบน)</p>
 </blockquote>
 
 <h3>อนุมัติคำขอโอนย้ายนักเรียน</h3>
@@ -509,7 +520,7 @@ blockquote.callout ul{margin:6px 0;}
 <tr><td>"ไม่สามารถเชื่อมต่อระบบได้"</td><td>ตรวจอินเทอร์เน็ต แล้วลองใหม่</td></tr>
 <tr><td>เปลี่ยนรหัสผ่านแล้วถูกให้เข้าระบบใหม่</td><td>ปกติ เข้าใหม่ด้วยรหัสใหม่</td></tr>
 <tr><td>กดแจ้งเตือนแล้ว โรงเรียนบอกว่าไม่ได้รับ</td><td>ปุ่มนี้แค่คัดลอกข้อความ ต้องนำไปส่งทาง LINE หรือโทรเอง</td></tr>
-<tr><td>โรงเรียนลืมรหัสผ่าน</td><td>ตั้งรหัสใหม่ให้ที่ <strong>เพิ่มโรงเรียนใหม่</strong> › ตาราง <strong>บัญชีที่สร้างล่าสุด</strong> › <strong>รีเซ็ตรหัส</strong></td></tr>
+<tr><td>โรงเรียนลืมรหัสผ่าน</td><td>ตั้งรหัสใหม่ให้ที่ <strong>เพิ่มเติม</strong> › <strong>จัดการผู้ใช้งาน</strong> › <strong>รีเซ็ตรหัส</strong></td></tr>
 <tr><td>โรงเรียนขึ้น "ยังไม่เข้าใช้" หลายวัน</td><td>โทรหาโรงเรียน ส่งชื่อผู้ใช้ให้ หรือตั้งรหัสผ่านใหม่ให้</td></tr>
 <tr><td>ยอดรถรวมของสังกัดน้อยกว่ารถของทุกโรงเรียนรวมกัน</td><td>ปกติ รถที่รับส่งหลายโรงเรียนนับคันละครั้ง</td></tr>
 <tr><td>"ดาวน์โหลด Excel ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"</td><td>รอสักครู่ แล้วกด <strong>ส่งออก Excel</strong> อีกครั้ง</td></tr>

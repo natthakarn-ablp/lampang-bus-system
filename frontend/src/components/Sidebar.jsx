@@ -4,7 +4,7 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart, ScrollText, History,
+  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart, ScrollText, History, UserCog,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
@@ -83,6 +83,7 @@ const AFFILIATION_NAV = [
   { section: MORE },
   { to: '/affiliation/transfer-requests', icon: Users,   label: 'คำขอโอนย้ายนักเรียน' },
   { to: '/affiliation/vehicle-requests',  icon: Wrench,  label: 'คำขอเกี่ยวกับรถ' },
+  { to: '/affiliation/users',       icon: UserCog,       label: 'จัดการผู้ใช้งาน' },
   { to: '/affiliation/accounts',    icon: Key,           label: 'เพิ่มโรงเรียนใหม่' },
   { to: '/affiliation/audit-log',   icon: FileText,      label: 'ประวัติการแก้ไข' },
   { to: '/my-policy',                icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },

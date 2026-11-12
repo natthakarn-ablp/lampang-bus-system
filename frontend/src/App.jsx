@@ -68,6 +68,7 @@ const AffVehicleList       = lazy(() => import('./pages/affiliation/AffVehicleLi
 const AffDailyStatus       = lazy(() => import('./pages/affiliation/AffDailyStatus'));
 const AffEmergencyList     = lazy(() => import('./pages/affiliation/AffEmergencyList'));
 const AffSchoolAccounts    = lazy(() => import('./pages/affiliation/AffSchoolAccounts'));
+const AffUserManagement    = lazy(() => import('./pages/affiliation/AffUserManagement'));
 const AffAuditLog          = lazy(() => import('./pages/affiliation/AffAuditLog'));
 const AffiliationLiveVehicles = lazy(() => import('./pages/affiliation/AffiliationLiveVehicles'));
 const AffiliationPickupMap   = lazy(() => import('./pages/affiliation/AffiliationPickupMap'));
@@ -307,6 +308,7 @@ export default function App() {
             <Route path="status"      element={<AffDailyStatus />} />
             <Route path="emergencies" element={<AffEmergencyList />} />
             <Route path="accounts"    element={<AffSchoolAccounts />} />
+            <Route path="users"       element={<AffUserManagement />} />
             <Route path="audit-log"   element={<AffAuditLog />} />
             <Route path="live-vehicles" element={<AffiliationLiveVehicles />} />
             <Route path="vehicle-track" element={<VehicleTrackReplay role="affiliation" />} />

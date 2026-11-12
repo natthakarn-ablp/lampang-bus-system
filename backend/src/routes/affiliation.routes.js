@@ -17,6 +17,7 @@ const { pool } = require('../config/database');
 const affSvc = require('../services/affiliation.service');
 const { buildAffiliationSchoolsWorkbook } = require('../utils/affiliationSchoolsWorkbook');
 const affAdminSvc = require('../services/affiliationAdmin.service');
+const affUsersSvc = require('../services/affiliationUsers.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const { makeTrackHandlers } = require('./vehicleTrackHandlers');
 const { trackingInfo } = require('../utils/gpsTrackingWindow');
@@ -447,6 +448,93 @@ router.put('/school-accounts/:id', async (req, res, next) => {
       isActive: is_active, userId: req.user.id,
     });
     return sendSuccess(res, result, 'อัปเดตสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+// ─── User management: school MAIN accounts of this affiliation ──────────────
+// Owner decision 2026-11-12 ("ให้สิทธิ์สังกัดในการจัดการผู้ใช้ในสังกัดตนเอง",
+// scope = school main accounts). Scope is enforced in affiliationUsers.service
+// from the JWT affiliation; grade-teacher sub-accounts are excluded.
+
+function actorCtx(req) {
+  return { actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] };
+}
+
+router.get('/users', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const status = req.query.status === 'deleted' ? 'deleted' : 'active';
+    const rows = await affUsersSvc.listMainAccounts(pool, affId, { status });
+    return sendSuccess(res, rows);
+  } catch (err) { next(err); }
+});
+
+router.post('/users', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const { school_id, username, display_name } = req.body || {};
+    if (!school_id || !username) return sendError(res, 'กรุณาเลือกโรงเรียนและกรอกชื่อผู้ใช้', [], 400);
+    if (display_name !== undefined && String(display_name).length > 200) {
+      return sendError(res, 'ชื่อที่แสดงยาวได้ไม่เกิน 200 ตัวอักษร', [], 400);
+    }
+    const result = await affAdminSvc.createSchoolAccount({
+      affiliationId: affId, schoolId: String(school_id), username: String(username).trim(),
+      displayName: display_name ? String(display_name).trim() : undefined, userId: req.user.id,
+    });
+    return sendSuccess(res, result, 'สร้างบัญชีสำเร็จ รหัสผ่านเริ่มต้นคือรหัสโรงเรียน', null, 201);
+  } catch (err) { next(err); }
+});
+
+router.put('/users/:id', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
+    const { display_name, is_active } = req.body || {};
+    const result = await affUsersSvc.updateMainAccount(pool, {
+      affiliationId: affId, accountId, displayName: display_name, isActive: is_active, ...actorCtx(req),
+    });
+    return sendSuccess(res, result, 'บันทึกแล้ว');
+  } catch (err) { next(err); }
+});
+
+router.post('/users/:id/reset-password', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
+    const { password } = req.body || {};
+    if (!password) return sendError(res, 'กรุณากรอกรหัสผ่านใหม่', [], 400);
+    const result = await affUsersSvc.resetMainPassword(pool, {
+      affiliationId: affId, accountId, newPassword: password, ...actorCtx(req),
+    });
+    return sendSuccess(res, result, 'รีเซ็ตรหัสผ่านสำเร็จ — โรงเรียนต้องเปลี่ยนรหัสเมื่อเข้าระบบครั้งถัดไป');
+  } catch (err) { next(err); }
+});
+
+router.delete('/users/:id', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
+    const result = await affUsersSvc.deleteMainAccount(pool, { affiliationId: affId, accountId, ...actorCtx(req) });
+    return sendSuccess(res, result, 'ลบบัญชีแล้ว (กู้คืนได้ที่แท็บ "บัญชีที่ลบแล้ว")');
+  } catch (err) { next(err); }
+});
+
+router.post('/users/:id/restore', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่', [], 403);
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
+    const result = await affUsersSvc.restoreMainAccount(pool, { affiliationId: affId, accountId, ...actorCtx(req) });
+    return sendSuccess(res, result, 'กู้คืนบัญชีแล้ว บัญชียังปิดอยู่ กด "เปิดบัญชี" เมื่อพร้อมใช้งาน');
   } catch (err) { next(err); }
 });
 

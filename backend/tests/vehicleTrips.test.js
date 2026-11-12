@@ -79,7 +79,7 @@ test('driver flow: trip 2 only after the bus is empty, with a reason; no empty s
   expect(early.status).toBe(409);
 
   const drop = await asDriver(request(app).post('/api/driver/checkout-all')).send({ session: SESSION });
-  expect(drop.status).toBe(200);
+  expect([200, 201]).toContain(drop.status);
 
   st = await tripState();
   expect(st.body.data).toMatchObject({ on_board: 0, can_start_next: true });

@@ -88,6 +88,54 @@ blockquote.callout ul{margin:6px 0;}
   table,blockquote,h2,h3,figure,img{page-break-inside:avoid;}
   main img{box-shadow:none;}
 }
+/* flowchart:css:start */
+.flow{margin:18px 0 28px; padding:18px 14px 16px; background:#f8fafd; border:1px solid var(--line);
+  border-radius:12px; display:flex; flex-direction:column; align-items:center;}
+.flow-title{align-self:stretch; text-align:center; font-weight:700; font-size:16.5px; color:var(--accent-dark); margin:0 0 12px;}
+.fl-node{width:100%; max-width:460px; background:#fff; border:2px solid var(--accent); border-radius:10px;
+  padding:7px 14px; text-align:center; font-size:15.5px; line-height:1.55; color:var(--ink);}
+.fl-node.start,.fl-node.end{background:var(--accent); border-color:var(--accent); color:#fff; border-radius:999px; font-weight:600;}
+.fl-node.end.ok{background:#1f8a4c; border-color:#1f8a4c;}
+.fl-node.start strong,.fl-node.end strong{color:#fff;}
+.fl-node.decision{background:#fff7e6; border-color:#e8a33d; color:#7a4d06; font-weight:600;}
+.fl-node.decision::before{content:"◆ "; color:#e8a33d;}
+.fl-node.alert{background:#fdeeee; border-color:#d64545; color:#8a1f1f; font-weight:600;}
+.fl-node.alert strong{color:inherit;}
+.fl-node.other{border-style:dashed; border-color:#9aa6bd; background:#f3f5f9;}
+.fl-who{display:inline-block; font-size:12.5px; font-weight:700; line-height:1.5; background:var(--accent-soft);
+  color:var(--accent-dark); border:1px solid #c9dcf2; border-radius:6px; padding:0 7px; margin:0 6px 0 0; vertical-align:1px;}
+.fl-node.start .fl-who,.fl-node.end .fl-who{background:rgba(255,255,255,.18); color:#fff; border-color:rgba(255,255,255,.4);}
+.fl-arrow{width:2px; height:20px; background:#8a96ad; position:relative; margin:2px 0 9px; flex:none;}
+.fl-arrow::after{content:""; position:absolute; left:-5px; bottom:-7px; border-left:6px solid transparent;
+  border-right:6px solid transparent; border-top:8px solid #8a96ad;}
+.fl-branch{display:flex; gap:12px; width:100%; max-width:720px; justify-content:center; align-items:stretch;}
+.fl-col{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center;
+  border:1px dashed #c5cede; border-radius:10px; padding:8px 8px 10px; background:#fff;}
+.fl-col > .fl-node{max-width:none;}
+.fl-lbl{font-size:13px; font-weight:700; border-radius:999px; padding:0 12px; margin-bottom:6px; background:#e7f5ec; color:#1f6b3d;}
+.fl-lbl.no{background:#fdeeee; color:#8a1f1f;}
+.fl-lbl.mid{background:#fff7e6; color:#7a4d06;}
+.fl-phase{align-self:stretch; text-align:center; font-size:13.5px; font-weight:700; color:var(--muted);
+  border-top:1px dashed #c5cede; margin:12px 0 10px; padding-top:8px;}
+.fl-loop{font-size:13.5px; color:var(--ink-soft); background:#eef1f6; border-radius:8px; padding:3px 12px; margin:0 0 8px;}
+.fl-chain{display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px 4px; width:100%; margin:4px 0;}
+.fl-chain .fl-node{width:auto; max-width:260px; font-size:14.5px; padding:5px 11px;}
+.fl-chain .fl-to{color:#8a96ad; font-weight:700; font-size:18px; line-height:1;}
+.fl-legend{font-size:13px; color:var(--muted); text-align:center; margin:6px 0 0;}
+.fl-legend span{display:inline-block; margin:0 8px; white-space:nowrap;}
+.fl-sw{display:inline-block; width:14px; height:10px; border-radius:3px; border:2px solid; vertical-align:0; margin-right:4px;}
+@media (max-width:640px){
+  .flow{padding:14px 8px;}
+  .fl-branch{flex-direction:column; align-items:stretch;}
+  .fl-chain{flex-direction:column;}
+  .fl-chain .fl-to{transform:rotate(90deg);}
+  .fl-chain .fl-node{max-width:100%;}
+}
+@media print{
+  .flow{background:#fff; break-inside:avoid; page-break-inside:avoid;}
+  .fl-node,.fl-col{break-inside:avoid;}
+}
+/* flowchart:css:end */
 </style>
 </head>
 <body>
@@ -97,7 +145,7 @@ blockquote.callout ul{margin:6px 0;}
 <main>
 <h1>คู่มือใช้งานระบบรถรับส่งนักเรียนจังหวัดลำปาง</h1>
 <blockquote class="callout note">
-<p>เว็บไซต์ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong> · ปรับปรุง 24 ต.ค. 2569 · ภาพในคู่มือเป็นข้อมูลตัวอย่าง</p>
+<p>เว็บไซต์ <strong><a href="https://schoolbuslampang.com" target="_blank" rel="noopener">https://schoolbuslampang.com</a></strong> · ปรับปรุง 12 พ.ย. 2569 · ภาพในคู่มือเป็นข้อมูลตัวอย่าง</p>
 </blockquote>
 <p>หน้านี้คือสารบัญของคู่มือทั้งหมด เลือกเล่มตามงานที่คุณทำ ทุกเล่มเขียนเป็นขั้นตอนสั้น ๆ อ่านบนมือถือได้</p>
 
@@ -129,6 +177,16 @@ blockquote.callout ul{margin:6px 0;}
 <li>สรุปภาพรวมให้โรงเรียน สังกัด และจังหวัด</li>
 </ul>
 <p>แต่ละคนเห็นเฉพาะข้อมูลที่ตัวเองดูแล เช่น โรงเรียนเห็นเฉพาะนักเรียนของโรงเรียนตัวเอง</p>
+
+<!-- flowchart:start -->
+<h2 id="flowchart">ระบบทำงานร่วมกันอย่างไร (Flowchart)</h2>
+<p>ภาพรวมว่าแต่ละบทบาทส่งงานต่อกันอย่างไร แต่ละคู่มือมี Flowchart ของบทบาทนั้นอยู่ในหัวข้อ <strong>ภาพรวมขั้นตอนการทำงาน</strong>: <a href="user-guide-driver.html#flowchart">คนขับ</a> · <a href="user-guide-teacher.html#flowchart">ครูเช็กชื่อ</a> · <a href="user-guide-school.html#flowchart">โรงเรียน</a> · <a href="user-guide-affiliation.html#flowchart">สังกัด/เขต</a> · <a href="user-guide-province.html#flowchart">จังหวัด</a> · <a href="user-guide-transport.html#flowchart">ขนส่ง</a> · <a href="user-guide-admin.html#flowchart">ผู้ดูแลระบบ</a> · <a href="user-guide-parent.html#flowchart">ผู้ปกครอง</a></p>
+<p class="fl-legend"><span><i class="fl-sw" style="background:#1e5fa8;border-color:#1e5fa8"></i>เริ่ม / จบ</span><span><i class="fl-sw" style="background:#fff;border-color:#1e5fa8"></i>ขั้นตอนที่คุณทำ</span><span><i class="fl-sw" style="background:#fff7e6;border-color:#e8a33d"></i>◆ จุดตัดสินใจ</span><span><i class="fl-sw" style="background:#f3f5f9;border-color:#9aa6bd;border-style:dashed"></i>งานของบทบาทอื่น</span><span><i class="fl-sw" style="background:#fdeeee;border-color:#d64545"></i>เหตุด่วน</span></p>
+<div class="flow" role="group" aria-label="1. เตรียมระบบ (ทำครั้งแรก)"><div class="flow-title">1. เตรียมระบบ (ทำครั้งแรก)</div><div class="fl-node start"><span class="fl-who">ผู้ดูแลระบบ / สังกัด</span>สร้างบัญชีโรงเรียน</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node"><span class="fl-who">โรงเรียน</span>เพิ่มรถ นักเรียน และบัญชีครูประจำสายชั้น</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node"><span class="fl-who">คนขับ</span>ส่งรายชื่อเด็กในรถ และแนบเอกสาร</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node"><span class="fl-who">โรงเรียน</span>ตรวจรายชื่อ อนุมัติ แล้วส่งรถไปตรวจสภาพ</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node"><span class="fl-who">ขนส่ง</span>ตรวจสภาพและรับรองรถ</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node end ok">รถพร้อมใช้งาน</div><div class="fl-phase">ผู้ปกครองทำคู่กันได้</div><div class="fl-chain"><div class="fl-node"><span class="fl-who">ผู้ปกครอง</span>ผูกบัญชีใน LINE</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><span class="fl-who">โรงเรียน</span>อนุมัติผู้ปกครอง</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">เห็นข้อมูลลูก</div></div></div>
+<div class="flow" role="group" aria-label="2. ทุกวัน (รอบเช้าและรอบเย็น)"><div class="flow-title">2. ทุกวัน (รอบเช้าและรอบเย็น)</div><div class="fl-branch"><div class="fl-col"><span class="fl-lbl">บนรถ</span><div class="fl-node"><span class="fl-who">คนขับ</span>ตรวจรถ · ส่งตำแหน่ง · เช็กชื่อ · จบรอบ</div></div><div class="fl-col"><span class="fl-lbl">ที่โรงเรียน</span><div class="fl-node"><span class="fl-who">ครู / โรงเรียน</span>เช็กชื่อรายห้อง</div></div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node">ระบบรวมสถานะรับส่งของเด็กแต่ละคน (ไม่นับซ้ำ)</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-branch"><div class="fl-col"><span class="fl-lbl">ผู้ปกครอง</span><div class="fl-node"><span class="fl-who">ผู้ปกครอง</span>พิมพ์ <strong>สถานะ</strong> ใน LINE</div></div><div class="fl-col"><span class="fl-lbl">หน่วยงาน</span><div class="fl-node"><span class="fl-who">โรงเรียน → สังกัด → จังหวัด</span>ดูภาพรวม และตามคนที่ยังค้าง</div></div></div></div>
+<div class="flow" role="group" aria-label="3. เมื่อเกิดเหตุฉุกเฉิน"><div class="flow-title">3. เมื่อเกิดเหตุฉุกเฉิน</div><div class="fl-node alert"><span class="fl-who">คนขับ</span>กดปุ่มแดง <strong>ฉุกเฉิน</strong></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node">ระบบส่งการ์ดแจ้งเหตุเข้ากลุ่ม LINE ของระบบ</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node end"><span class="fl-who">โรงเรียน · สังกัด · จังหวัด · ผู้ดูแลระบบ</span>เปิดดูที่หน้า <strong>เหตุฉุกเฉิน</strong> และติดตาม</div></div>
+<div class="flow" role="group" aria-label="4. คำขอที่ต้องอนุมัติ"><div class="flow-title">4. คำขอที่ต้องอนุมัติ</div><div class="fl-node start"><span class="fl-who">โรงเรียน</span>ขอโอนย้ายนักเรียน / คำขอเกี่ยวกับรถ</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node decision">โอนย้ายข้ามสังกัดไหม?</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-branch"><div class="fl-col"><span class="fl-lbl">ไม่ใช่ (สังกัดเดียวกัน) และคำขอรถ</span><div class="fl-node other"><span class="fl-who">สังกัด หรือ ผู้ดูแลระบบ</span>อนุมัติ</div></div><div class="fl-col"><span class="fl-lbl no">ใช่</span><div class="fl-node other"><span class="fl-who">โรงเรียนปลายทาง</span>อนุมัติรับเข้า</div></div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node end ok">ระบบย้ายข้อมูลเมื่ออนุมัติแล้ว</div></div>
+<!-- flowchart:end -->
 
 <h2>หน้าจอทุกบัญชีอ่านแบบเดียวกัน</h2>
 <ul>
@@ -206,6 +264,6 @@ blockquote.callout ul{margin:6px 0;}
 <p>เอกสารงานเซิร์ฟเวอร์และการสำรองข้อมูลของทีมงานไม่ได้เผยแพร่บนเว็บนี้ ทีมงานเปิดอ่านได้จากคลังโค้ดของโครงการ</p>
 </main>
 </div>
-<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · ปรับปรุง 24 ต.ค. 2569</footer>
+<footer class="docfoot">ระบบรถรับส่งนักเรียนจังหวัดลำปาง · schoolbuslampang.com · ปรับปรุง 12 พ.ย. 2569</footer>
 </body>
 </html>

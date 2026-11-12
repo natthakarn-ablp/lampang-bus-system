@@ -1381,6 +1381,7 @@ CREATE TABLE IF NOT EXISTS vehicle_trips (
   reason_text  VARCHAR(200)                NULL,
   started_by   INT                         NULL,
   started_at   TIMESTAMP                   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  after_log_id BIGINT                      NOT NULL DEFAULT 0,  -- checkin_logs.id at start; the trip owns later rows
   PRIMARY KEY (id),
   UNIQUE KEY uq_vehicle_trip (vehicle_id, check_date, session, trip_no),
   INDEX idx_vehicle_trips_date (check_date),

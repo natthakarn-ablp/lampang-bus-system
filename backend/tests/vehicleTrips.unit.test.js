@@ -20,6 +20,7 @@ function fakeDb({ lastTrip = 1, boarded = 3, onBoard = 0, trips = [], thisTrip =
       if (/MAX\(trip_no\)/.test(sql)) return [[{ trip_no: lastTrip }]];
       if (/COUNT\(\*\) AS boarded/.test(sql)) return [[{ boarded, on_board: onBoard }]];
       if (/COUNT\(DISTINCT cl.student_id\)/.test(sql)) return [[{ n: thisTrip ?? boarded }]];
+      if (/MAX\(id\), 0\) AS last_id/.test(sql)) return [[{ last_id: 41 }]];
       if (/INSERT INTO vehicle_trips/.test(sql)) return [{ insertId: 1 }];
       if (/INSERT INTO audit_logs/.test(sql)) return [{}];
       if (/FROM vehicle_trips/.test(sql)) return [trips];
@@ -82,7 +83,7 @@ describe('startNextTrip', () => {
     expect(out).toMatchObject({ trip_no: 2, reason_code: 'SEATS', reason_label: 'ที่นั่งไม่พอ' });
     expect(db.conn.calls[0].sql).toMatch(/FOR UPDATE/);
     const ins = db.conn.calls.find((c) => /INSERT INTO vehicle_trips/.test(c.sql));
-    expect(ins.params).toEqual(['V-1', 'morning', 2, 'SEATS', null, 7]);
+    expect(ins.params).toEqual(['V-1', 'morning', 2, 'SEATS', null, 7, 41]);
     expect(db.conn.calls.some((c) => /INSERT INTO audit_logs/.test(c.sql))).toBe(true);
     expect(db.conn.commit).toHaveBeenCalled();
   });

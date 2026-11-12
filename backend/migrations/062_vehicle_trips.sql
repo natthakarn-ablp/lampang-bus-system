@@ -2,8 +2,9 @@
 -- Several trips per round (owner decision 2026-11-12): a bus that cannot carry
 -- every child at once drops the first group, then the driver taps "เริ่มเที่ยว
 -- ถัดไป" and picks a reason. One row per extra trip (trip_no >= 2); trip 1 is
--- implicit. A check-in belongs to the trip whose started_at it follows, so
--- checkin_logs is not altered.
+-- implicit. A check-in belongs to the latest trip whose after_log_id (the
+-- highest checkin_logs.id when it started) it exceeds, so checkin_logs is not
+-- altered and same-second timestamps cannot misplace a boarding.
 --
 -- ADDITIVE ONLY. One new table; nothing reads or writes it until
 -- FEATURE_MULTI_TRIP=true (index.js refuses to boot with the flag on and this
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS vehicle_trips (
   reason_text  VARCHAR(200)                NULL,
   started_by   INT                         NULL,
   started_at   TIMESTAMP                   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  after_log_id BIGINT                      NOT NULL DEFAULT 0,  -- checkin_logs.id at start; the trip owns later rows
   PRIMARY KEY (id),
   UNIQUE KEY uq_vehicle_trip (vehicle_id, check_date, session, trip_no),
   INDEX idx_vehicle_trips_date (check_date),

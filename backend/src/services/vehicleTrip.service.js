@@ -71,8 +71,10 @@ async function boardingCounts(db, vehicleId, session) {
 }
 
 /**
- * Pupils who boarded (CHECKED_IN rows) in the CURRENT trip: since the last
- * vehicle_trips.started_at, or all of today's round while still on trip 1.
+ * Pupils who boarded (CHECKED_IN rows) in the CURRENT trip: rows after the
+ * trip's after_log_id (the highest checkin_logs.id when it started), or all of
+ * today's round while still on trip 1. Ids, not timestamps — a boarding in the
+ * same second as the trip start must stay in the earlier trip.
  * A next trip needs at least one — so trips cannot be stacked empty.
  */
 async function boardedThisTrip(db, vehicleId, session, currentTrip) {
@@ -81,10 +83,10 @@ async function boardedThisTrip(db, vehicleId, session, currentTrip) {
        FROM checkin_logs cl
       WHERE cl.vehicle_id = ? AND cl.check_date = CURDATE() AND cl.session = ?
         AND cl.status = 'CHECKED_IN'
-        AND cl.checked_at >= COALESCE(
-              (SELECT started_at FROM vehicle_trips
+        AND cl.id > COALESCE(
+              (SELECT after_log_id FROM vehicle_trips
                 WHERE vehicle_id = ? AND check_date = CURDATE() AND session = ? AND trip_no = ?),
-              '1000-01-01')`,
+              0)`,
     [vehicleId, session, vehicleId, session, currentTrip],
   );
   return Number(row?.n || 0);
@@ -151,10 +153,15 @@ async function startNextTrip(db, { vehicleId, session, reasonCode, reasonText, a
     if (onBoard > 0) throw httpError(`ยังมีนักเรียนบนรถ ${onBoard} คน กรุณาส่งลงให้ครบก่อนเริ่มเที่ยวถัดไป`, 409, 'STILL_ON_BOARD');
 
     const tripNo = current + 1;
+    const [[mark]] = await conn.query(
+      `SELECT COALESCE(MAX(id), 0) AS last_id FROM checkin_logs
+        WHERE vehicle_id = ? AND check_date = CURDATE() AND session = ?`,
+      [vehicleId, session],
+    );
     await conn.query(
-      `INSERT INTO vehicle_trips (vehicle_id, check_date, session, trip_no, reason_code, reason_text, started_by)
-       VALUES (?, CURDATE(), ?, ?, ?, ?, ?)`,
-      [vehicleId, session, tripNo, reasonCode, text || null, actorId],
+      `INSERT INTO vehicle_trips (vehicle_id, check_date, session, trip_no, reason_code, reason_text, started_by, after_log_id)
+       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?)`,
+      [vehicleId, session, tripNo, reasonCode, text || null, actorId, Number(mark?.last_id || 0)],
     );
     await logAudit({
       userId: actorId, action: 'CREATE', entityType: 'vehicle_trip', entityId: `${vehicleId}:${session}:${tripNo}`,

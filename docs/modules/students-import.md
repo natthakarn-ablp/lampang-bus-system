@@ -86,3 +86,6 @@ DB-free: `cd backend && npx jest --config jest.unit.config.js --runInBand "(scho
 
 ## ครูประจำชั้นรายห้อง (2026-11-12)
 ตาราง `homeroom_teachers` (migration 061) แก้ได้เฉพาะบัญชีหลักของโรงเรียน ผ่าน `/api/school/homeroom-teachers` และ `services/homeroom.service.js` · แนบชื่อครูเข้ากับรายชื่อนักเรียน/Excel, หน้าเช็กชื่อรายห้อง, รายชื่อของคนขับ และสถานะ LINE ผ่าน `attachHomeroomTeachers()` เมื่อ `FEATURE_HOMEROOM_TEACHERS=true` — รายละเอียดและขั้นตอนเปิดใช้: [docs/ops/homeroom-teachers.md](../ops/homeroom-teachers.md)
+
+## ลบนักเรียนหลายคน (2026-11-12)
+`POST /api/school/students/bulk-delete { student_ids: [...] }` (≤500) — กติกาเดียวกับ `DELETE /students/:id` ทุกคน (โรงเรียนตาม token, ยังไม่ถูกลบ, ครูสายชั้นเฉพาะชั้นตน), soft delete + ถอดรถ + ล้างจุดรับส่ง + audit รายคน ใน transaction เดียว · id ที่ไม่เข้าเงื่อนไขส่งกลับใน `skipped` ไม่ถูกแตะ · หน้าจอ: ช่องเลือก + "ลบที่เลือก" ใน `StudentSearch.jsx` (เลือกทีละหน้า, หน้าละ 20/50/100)

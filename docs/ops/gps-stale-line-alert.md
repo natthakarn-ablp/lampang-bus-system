@@ -24,6 +24,8 @@
 
 ไม่เกี่ยวกับตัวตรวจ STALLED เดิมใน `routeDeviation.service.js` (ผูกกับกะ `vehicle_operating_shifts` และค่า speed) ซึ่งยังปิดอยู่
 
+ต้องรันจากโฟลเดอร์ `backend/` เพราะ `config/env.js` โหลด `.env` จากโฟลเดอร์ที่รันอยู่ (รันจากที่อื่นจะขึ้น `Missing required environment variables`)
+
 ## ค่าที่ตั้งได้ (backend/.env)
 
 | ตัวแปร | ค่าเริ่มต้น | ความหมาย |
@@ -37,11 +39,11 @@
 
 1. deploy โค้ดตามปกติ
 2. ทดลองแบบไม่ส่ง (ช่วงมีรถวิ่ง):
-   `cd /home/schoolbus/apps/lampang-bus-system && node backend/scripts/gps-stale-alert.js`
+   `cd /home/schoolbus/apps/lampang-bus-system/backend && node scripts/gps-stale-alert.js`
    — แสดงรถที่ตรวจ ข้อความที่ "จะส่ง" และเหตุผลที่ข้าม ไม่ส่งและไม่เขียนอะไร
 3. เปิด flag: `bash scripts/enable-feature-flag.sh FEATURE_GPS_STALE_ALERT true` (สำรอง .env ให้เอง) แล้วอัปเดต `scripts/production-feature-flags.json`
 4. เพิ่ม cron (เครื่องเป็น UTC แต่สคริปต์ตรวจช่วงเวลาไทยเอง จึงรันทุก 5 นาทีได้):
-   `*/5 * * * * cd /home/schoolbus/apps/lampang-bus-system && node backend/scripts/gps-stale-alert.js --apply >> /home/schoolbus/logs/gps-stale-alert.log 2>&1`
+   `*/5 * * * * cd /home/schoolbus/apps/lampang-bus-system/backend && node scripts/gps-stale-alert.js --apply >> /home/schoolbus/logs/gps-stale-alert.log 2>&1`
 5. ปิด: ลบบรรทัด cron หรือตั้ง flag เป็น false
 
 ## โควตา LINE

@@ -1426,6 +1426,78 @@ router.delete('/students/:id', async (req, res, next) => {
   } finally { if (conn) conn.release(); }
 });
 
+// ─── POST /students/bulk-delete — ลบนักเรียนหลายคนพร้อมกัน ────────────────────
+// Owner request 2026-11-12: schools that test-imported many rows need to clear
+// them without deleting one by one. Same rule as DELETE /students/:id for every
+// id: same school, not already deleted, a grade teacher only within their own
+// grade; soft delete (restorable from "รายชื่อที่ลบ"), vehicle unlinked, stale
+// pickup assignments cleared, one audit row per pupil — all in ONE transaction,
+// so either every eligible pupil is withdrawn or none is. Ids that are not
+// eligible are reported back, never touched.
+const BULK_DELETE_MAX = 500;
+
+router.post('/students/bulk-delete', async (req, res, next) => {
+  let conn;
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const raw = Array.isArray(req.body?.student_ids) ? req.body.student_ids : null;
+    if (!raw || raw.length === 0) return sendError(res, 'กรุณาเลือกนักเรียนอย่างน้อย 1 คน', [], 400);
+    const ids = [...new Set(raw.map(Number))];
+    if (ids.some(id => !Number.isInteger(id) || id <= 0)) return sendError(res, 'รายการนักเรียนไม่ถูกต้อง', [], 400);
+    if (ids.length > BULK_DELETE_MAX) return sendError(res, `ลบได้ครั้งละไม่เกิน ${BULK_DELETE_MAX} คน`, [], 400);
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [rows] = await conn.query(
+      `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+              s.vehicle_id, v.plate_no
+         FROM students s
+         LEFT JOIN vehicles v ON v.id = s.vehicle_id
+        WHERE s.id IN (${ids.map(() => '?').join(',')}) AND s.school_id = ? AND s.is_deleted = FALSE
+        FOR UPDATE`,
+      [...ids, schoolId]
+    );
+    const teacherGrade = teacherGradeScope(req);
+    const eligible = rows.filter(st => !teacherGrade || normalizeGrade(st.grade) === teacherGrade);
+    const eligibleIds = new Set(eligible.map(st => st.id));
+    const skipped = ids.filter(id => !eligibleIds.has(id));
+    if (eligible.length === 0) {
+      await conn.rollback();
+      return sendError(res, 'ไม่พบนักเรียนที่ลบได้ในรายการที่เลือก', [{ code: 'NONE_ELIGIBLE', skipped }], 404);
+    }
+
+    const pickupCleanup = require('../services/pickupCleanup.service');
+    await conn.query(
+      `UPDATE students SET is_deleted = TRUE, deleted_at = NOW(), vehicle_id = NULL
+        WHERE id IN (${eligible.map(() => '?').join(',')}) AND school_id = ? AND is_deleted = FALSE`,
+      [...eligible.map(st => st.id), schoolId]
+    );
+    for (const st of eligible) {
+      await pickupCleanup.clearStalePickupAssignments(conn, st.id);  // SCH-STU-7
+      await logAudit({
+        userId: req.user.id, action: 'DELETE', entityType: 'student', entityId: st.id,
+        oldValue: {
+          student_name: `${st.prefix || ''}${st.first_name} ${st.last_name}`,
+          grade: st.grade, classroom: st.classroom,
+          vehicle_id: st.vehicle_id, plate_no: st.plate_no,
+        },
+        newValue: { action: 'withdraw', is_deleted: true, bulk: true, bulk_size: eligible.length },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn, required: true,
+      });
+    }
+    await conn.commit();
+
+    return sendSuccess(res, { deleted: eligible.length, deleted_ids: [...eligibleIds], skipped },
+      skipped.length
+        ? `ลบนักเรียน ${eligible.length} คนแล้ว · ข้าม ${skipped.length} คน (ลบไปแล้ว หรืออยู่นอกขอบเขตที่รับผิดชอบ)`
+        : `ลบนักเรียน ${eligible.length} คนแล้ว กู้คืนได้ที่ "รายชื่อที่ลบ"`);
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    next(err);
+  } finally { if (conn) conn.release(); }
+});
+
 // ─── POST /students/:id/restore — กู้คืนนักเรียนที่ถูกลบ (ในขอบเขตโรงเรียน) ─────
 // Reverses DELETE /students/:id (withdraw). Operators previously had to hand-run
 // UPDATE students SET is_deleted=FALSE for a mis-deleted student.

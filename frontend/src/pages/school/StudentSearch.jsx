@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, GraduationCap, History } from 'lucide-react';
 import api from '../../api/axios';
@@ -66,6 +66,12 @@ export default function StudentSearch() {
     () => new URLSearchParams(window.location.search).get('has_vehicle') || ''
   );
   const [showDeleted, setShowDeleted] = useState(false);
+  // Bulk delete (owner request 2026-11-12): rows picked on the current page.
+  const [perPage, setPerPage] = useState(20);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const selectHeaderRef = useRef(null);
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Edit modal state
@@ -119,7 +125,7 @@ export default function StudentSearch() {
       }
       const params = new URLSearchParams();
       params.set('page', page);
-      params.set('per_page', '20');
+      params.set('per_page', String(perPage));
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (grade) params.set('grade', grade);
       if (isTeacher && classroom) params.set('classroom', classroom);
@@ -134,7 +140,7 @@ export default function StudentSearch() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, grade, classroom, hasVehicle, isTeacher, showDeleted]);
+  }, [debouncedSearch, grade, classroom, hasVehicle, isTeacher, showDeleted, perPage]);
 
   const [exporting, setExporting] = useState(false);
   // Excel of the current filter (active pupils only); same filters as the list.
@@ -401,6 +407,35 @@ export default function StudentSearch() {
   ];
   const hasFilter = Boolean(debouncedSearch || grade || classroom || hasVehicle || showDeleted);
 
+  // ── Bulk delete ── selection is per page; it is cleared whenever the rows change.
+  const selectableIds = useMemo(() => (showDeleted ? [] : [...new Set(students.map(s2 => s2.id))]), [students, showDeleted]);
+  const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
+  const someSelected = selectableIds.some(id => selectedIds.has(id));
+  useEffect(() => { setSelectedIds(new Set()); }, [students, showDeleted]);
+  useEffect(() => {
+    if (selectHeaderRef.current) selectHeaderRef.current.indeterminate = someSelected && !allSelected;
+  }, [someSelected, allSelected]);
+  function toggleOne(id) {
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+  function toggleAllOnPage() {
+    setSelectedIds(allSelected ? new Set() : new Set(selectableIds));
+  }
+  const selectedRows = students.filter((s2, i, arr) => selectedIds.has(s2.id) && arr.findIndex(x => x.id === s2.id) === i);
+  async function handleBulkDelete() {
+    if (bulkDeleting || selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const res = await api.post('/school/students/bulk-delete', { student_ids: [...selectedIds] });
+      toast.success(res.data?.message || `ลบนักเรียน ${res.data?.data?.deleted || 0} คนแล้ว`);
+      setConfirmBulkDelete(false);
+      setSelectedIds(new Set());
+      fetchStudents(meta.page);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ลบไม่สำเร็จ');
+    } finally { setBulkDeleting(false); }
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <SchoolWorkflowNav current="students" />
@@ -485,8 +520,44 @@ export default function StudentSearch() {
         </div>
       )}
 
+      {!showDeleted && (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <label className="text-sm text-ink-muted inline-flex items-center gap-2">
+            แสดงหน้าละ
+            <select value={perPage} onChange={e => setPerPage(Number(e.target.value))}
+              className="focus-ring bg-surface-raised border border-surface-border rounded-lg px-2 min-h-[44px] text-sm text-ink">
+              {[20, 50, 100].map(n => <option key={n} value={n}>{n} คน</option>)}
+            </select>
+          </label>
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-sm font-medium text-ink">เลือกแล้ว {selectedIds.size} คน</span>
+              <button type="button" onClick={() => setConfirmBulkDelete(true)}
+                className="focus-ring text-sm bg-danger-soft text-danger-ink hover:bg-danger-soft/70 font-medium px-4 min-h-[44px] rounded-lg transition">
+                ลบที่เลือก ({selectedIds.size})
+              </button>
+              <button type="button" onClick={() => setSelectedIds(new Set())}
+                className="focus-ring text-sm text-ink-muted hover:text-ink hover:bg-surface px-3 min-h-[44px] rounded-lg transition">
+                ยกเลิกการเลือก
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <DataTable
         caption={showDeleted ? 'รายชื่อนักเรียนที่ลบในขอบเขตที่รับผิดชอบ' : 'รายชื่อนักเรียนของโรงเรียน'}
+        selection={showDeleted ? undefined : {
+          selected: selectedIds,
+          headerRef: selectHeaderRef,
+          allSelected,
+          selectAllDisabled: selectableIds.length === 0,
+          selectAllLabel: allSelected ? 'ยกเลิกการเลือกทั้งหมด' : 'เลือกทั้งหมดในหน้านี้',
+          onToggleAll: toggleAllOnPage,
+          onToggle: s2 => toggleOne(s2.id),
+          isSelectable: () => true,
+          rowLabel: s2 => `เลือก ${s2.prefix || ''}${s2.first_name} ${s2.last_name}`,
+        }}
         loading={loading}
         error={error || null}
         onRetry={() => fetchStudents(meta.page)}
@@ -563,6 +634,18 @@ export default function StudentSearch() {
           onPage={(p) => fetchStudents(p)}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`ลบนักเรียน ${selectedIds.size} คน?`}
+        itemName={selectedRows.slice(0, 5).map(s2 => `${s2.prefix || ''}${s2.first_name} ${s2.last_name}`).join(', ')
+          + (selectedRows.length > 5 ? ` และอีก ${selectedRows.length - 5} คน` : '')}
+        description="นักเรียนที่เลือกจะหายจากรายชื่อ การเช็กชื่อ และรายชื่อในรถ กู้คืนได้ทีละคนที่ตัวกรอง &quot;รายชื่อที่ลบ&quot; ทุกรายการถูกบันทึกในประวัติการแก้ไข"
+        confirmLabel={`ลบ ${selectedIds.size} คน`}
+        loading={bulkDeleting}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
 
       {/* ── Import Preview (primary, Phase 10.13A-26B) ── */}
       <ImportPreviewModal open={showPreview} onClose={() => setShowPreview(false)} onApplied={() => fetchStudents(1)} />

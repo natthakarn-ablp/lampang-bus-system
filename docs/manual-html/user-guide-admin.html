@@ -88,6 +88,54 @@ blockquote.callout ul{margin:6px 0;}
   table,blockquote,h2,h3,figure,img{page-break-inside:avoid; break-inside:avoid;}
   main img{box-shadow:none; max-height:90vh; width:auto;}
 }
+/* flowchart:css:start */
+.flow{margin:18px 0 28px; padding:18px 14px 16px; background:#f8fafd; border:1px solid var(--line);
+  border-radius:12px; display:flex; flex-direction:column; align-items:center;}
+.flow-title{align-self:stretch; text-align:center; font-weight:700; font-size:16.5px; color:var(--accent-dark); margin:0 0 12px;}
+.fl-node{width:100%; max-width:460px; background:#fff; border:2px solid var(--accent); border-radius:10px;
+  padding:7px 14px; text-align:center; font-size:15.5px; line-height:1.55; color:var(--ink);}
+.fl-node.start,.fl-node.end{background:var(--accent); border-color:var(--accent); color:#fff; border-radius:999px; font-weight:600;}
+.fl-node.end.ok{background:#1f8a4c; border-color:#1f8a4c;}
+.fl-node.start strong,.fl-node.end strong{color:#fff;}
+.fl-node.decision{background:#fff7e6; border-color:#e8a33d; color:#7a4d06; font-weight:600;}
+.fl-node.decision::before{content:"◆ "; color:#e8a33d;}
+.fl-node.alert{background:#fdeeee; border-color:#d64545; color:#8a1f1f; font-weight:600;}
+.fl-node.alert strong{color:inherit;}
+.fl-node.other{border-style:dashed; border-color:#9aa6bd; background:#f3f5f9;}
+.fl-who{display:inline-block; font-size:12.5px; font-weight:700; line-height:1.5; background:var(--accent-soft);
+  color:var(--accent-dark); border:1px solid #c9dcf2; border-radius:6px; padding:0 7px; margin:0 6px 0 0; vertical-align:1px;}
+.fl-node.start .fl-who,.fl-node.end .fl-who{background:rgba(255,255,255,.18); color:#fff; border-color:rgba(255,255,255,.4);}
+.fl-arrow{width:2px; height:20px; background:#8a96ad; position:relative; margin:2px 0 9px; flex:none;}
+.fl-arrow::after{content:""; position:absolute; left:-5px; bottom:-7px; border-left:6px solid transparent;
+  border-right:6px solid transparent; border-top:8px solid #8a96ad;}
+.fl-branch{display:flex; gap:12px; width:100%; max-width:720px; justify-content:center; align-items:stretch;}
+.fl-col{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center;
+  border:1px dashed #c5cede; border-radius:10px; padding:8px 8px 10px; background:#fff;}
+.fl-col > .fl-node{max-width:none;}
+.fl-lbl{font-size:13px; font-weight:700; border-radius:999px; padding:0 12px; margin-bottom:6px; background:#e7f5ec; color:#1f6b3d;}
+.fl-lbl.no{background:#fdeeee; color:#8a1f1f;}
+.fl-lbl.mid{background:#fff7e6; color:#7a4d06;}
+.fl-phase{align-self:stretch; text-align:center; font-size:13.5px; font-weight:700; color:var(--muted);
+  border-top:1px dashed #c5cede; margin:12px 0 10px; padding-top:8px;}
+.fl-loop{font-size:13.5px; color:var(--ink-soft); background:#eef1f6; border-radius:8px; padding:3px 12px; margin:0 0 8px;}
+.fl-chain{display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px 4px; width:100%; margin:4px 0;}
+.fl-chain .fl-node{width:auto; max-width:260px; font-size:14.5px; padding:5px 11px;}
+.fl-chain .fl-to{color:#8a96ad; font-weight:700; font-size:18px; line-height:1;}
+.fl-legend{font-size:13px; color:var(--muted); text-align:center; margin:6px 0 0;}
+.fl-legend span{display:inline-block; margin:0 8px; white-space:nowrap;}
+.fl-sw{display:inline-block; width:14px; height:10px; border-radius:3px; border:2px solid; vertical-align:0; margin-right:4px;}
+@media (max-width:640px){
+  .flow{padding:14px 8px;}
+  .fl-branch{flex-direction:column; align-items:stretch;}
+  .fl-chain{flex-direction:column;}
+  .fl-chain .fl-to{transform:rotate(90deg);}
+  .fl-chain .fl-node{max-width:100%;}
+}
+@media print{
+  .flow{background:#fff; break-inside:avoid; page-break-inside:avoid;}
+  .fl-node,.fl-col{break-inside:avoid;}
+}
+/* flowchart:css:end */
 </style>
 </head>
 <body>
@@ -125,6 +173,14 @@ blockquote.callout ul{margin:6px 0;}
 <p>กดชื่อหมวดเพื่อเปิดหรือปิดรายการ ถ้าหาเมนูไม่เจอ ให้กดเปิดหมวด <strong>เพิ่มเติม</strong> ก่อน</p>
 <p><img src="screenshots/shared/sidebar-more.png" alt="แถบเมนูด้านซ้ายเมื่อเปิดหมวด เพิ่มเติม"></p>
 <p><em>ภาพ: การเปิดหมวด เพิ่มเติม (ภาพจากบัญชีโรงเรียน ของผู้ดูแลระบบมีหมวดมากกว่า แต่กดแบบเดียวกัน)</em></p>
+
+<!-- flowchart:start -->
+<h2 id="flowchart">ภาพรวมขั้นตอนการทำงาน (Flowchart)</h2>
+<p>ผู้ดูแลระบบเริ่มทุกวันที่ศูนย์ควบคุมระบบ แล้วจัดการงานค้างตามลำดับ รายละเอียดอยู่ในหัวข้อด้านล่าง</p>
+<p class="fl-legend"><span><i class="fl-sw" style="background:#1e5fa8;border-color:#1e5fa8"></i>เริ่ม / จบ</span><span><i class="fl-sw" style="background:#fff;border-color:#1e5fa8"></i>ขั้นตอนที่คุณทำ</span><span><i class="fl-sw" style="background:#fff7e6;border-color:#e8a33d"></i>◆ จุดตัดสินใจ</span><span><i class="fl-sw" style="background:#f3f5f9;border-color:#9aa6bd;border-style:dashed"></i>งานของบทบาทอื่น</span><span><i class="fl-sw" style="background:#fdeeee;border-color:#d64545"></i>เหตุด่วน</span></p>
+<div class="flow" role="group" aria-label="งานประจำวัน"><div class="flow-title">งานประจำวัน</div><div class="fl-node start">เข้าสู่ระบบ — หน้า <strong>ศูนย์ควบคุมระบบ</strong> เปิดเอง</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node">อ่านรายการ <strong>ต้องทำวันนี้</strong> (กดได้ทั้งแถว)</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node decision">มีคำขอค้างไหม?</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-branch"><div class="fl-col"><span class="fl-lbl">ใช่</span><div class="fl-node"><strong>คำขอโอนย้ายนักเรียน</strong> / <strong>คำขอเกี่ยวกับรถ</strong> › <strong>รออนุมัติ</strong> › <strong>เปิดดู</strong></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node">อนุมัติ หรือ ไม่อนุมัติ พิมพ์ <strong>หมายเหตุผู้ดูแล</strong> (ต้องกรอก) แล้วยืนยัน</div></div><div class="fl-col"><span class="fl-lbl no">ไม่ใช่</span><div class="fl-node">ข้ามไปขั้นถัดไป</div></div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node decision">มี <strong>ผู้ใช้ที่ต้องดูแล</strong> ไหม?</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-branch"><div class="fl-col"><span class="fl-lbl">ใช่</span><div class="fl-node"><strong>จัดการผู้ใช้งาน</strong>: สร้าง · รีเซ็ตรหัส · ระงับ ตามปัญหา</div></div><div class="fl-col"><span class="fl-lbl no">ไม่ใช่</span><div class="fl-node">ข้ามไปขั้นถัดไป</div></div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node">เปิด <strong>เรื่องที่ต้องมีส่วนร่วม</strong> ดูเรื่องใหม่</div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-node end ok">ไม่มีงานค้าง — ระบบทำงานปกติ</div></div>
+<div class="flow" role="group" aria-label="งานอื่นที่ทำเมื่อจำเป็น"><div class="flow-title">งานอื่นที่ทำเมื่อจำเป็น</div><div class="fl-chain"><div class="fl-node">คนขับเข้าระบบไม่ได้ หรือข้อมูลรถ-คนขับผิด</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>สุขภาพข้อมูลคนขับ</strong> › <strong>เครื่องมือจัดการคนขับ</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">กู้คืนบัญชี / ย้ายไปรถใหม่ / ปิดใช้งาน</div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-chain"><div class="fl-node">ขึ้นภาคเรียนใหม่</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>ตั้งค่าระบบ</strong> › <strong>ภาคเรียนปัจจุบัน</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">กด <strong>ตั้งเป็นปัจจุบัน</strong></div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-chain"><div class="fl-node">หน่วยงานขอให้ช่วย</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node">เปิดหน้าของโรงเรียน สังกัด จังหวัด หรือขนส่ง</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">ช่วยแก้ปัญหาแทน</div></div><div class="fl-arrow" aria-hidden="true"></div><div class="fl-chain"><div class="fl-node">ต้องตรวจย้อนหลัง</div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node"><strong>ประวัติการใช้งาน</strong></div><span class="fl-to" aria-hidden="true">→</span><div class="fl-node end">ค้นหา / ดาวน์โหลดไฟล์</div></div></div>
+<!-- flowchart:end -->
 
 <h2>เริ่มต้นใช้งาน</h2>
 <h3>เข้าสู่ระบบ</h3>

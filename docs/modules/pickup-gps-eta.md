@@ -22,6 +22,7 @@ Route deviation (`routeDeviation.routes.js:25`, admin/province): GET /
 - `services/pickupPoint.service.js` (1011) — `replacePickupPointStudents` (L572), `createPickupPointWithStudents` (L720), `getReadOnlyPickupMap` (L809); `pickupCleanup.service.js` (28)
 - `services/eta.service.js` (247) `refreshForVehicle`; `geofence.service.js` (473) `checkForVehicle`, `notifyParentsForPickupPoint`; `routeDeviation.service.js` (432) `checkForVehicle`, `detectStalled`, `detectLate`
 - `utils/gpsTrackingWindow.js` (97) — `isWithinTrackingWindow`, `configuredWindows` (env `GPS_TRACKING_WINDOWS`, ค่าเริ่มต้น 05:00-09:00,15:00-19:00)
+- `services/gpsStaleAlert.service.js` + `scripts/gps-stale-alert.js` (cron) — แจ้งกลุ่ม LINE แจ้งเหตุเมื่อ GPS รถในรอบที่ยังไม่จบค้างจุดเดิม/หยุดส่งเกิน 20 นาที (`FEATURE_GPS_STALE_ALERT`) → [docs/ops/gps-stale-line-alert.md](../ops/gps-stale-line-alert.md)
 
 ## ข้อมูลที่รับผิดชอบ
 - `pickup_points`, `student_pickup_points` — 016_pickup_points.sql

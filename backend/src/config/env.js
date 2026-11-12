@@ -307,6 +307,10 @@ const env = {
     eta: process.env.FEATURE_ETA === 'true',
     geofence: process.env.FEATURE_GEOFENCE === 'true',
     routeDeviation: process.env.FEATURE_ROUTE_DEVIATION === 'true',
+    // LINE alert to the emergency group when a bus on an open round sends the
+    // same position, or nothing, for GPS_STALE_ALERT_MINUTES (owner request
+    // 2026-11-12). Read by backend/scripts/gps-stale-alert.js (cron); no route.
+    gpsStaleAlert: process.env.FEATURE_GPS_STALE_ALERT === 'true',
     // Phase 10.14 — driver-initiated vehicle registration roster + per-school
     // approval. Dark by default: when false the /api/{driver,school}/registrations
     // routers are not mounted, so the existing system is byte-for-byte unchanged.
@@ -356,6 +360,10 @@ const env = {
     deviationRadiusM: parseInt(process.env.DEVIATION_RADIUS_M || '500', 10),
     delayThresholdMin: parseInt(process.env.DELAY_THRESHOLD_MIN || '10', 10),
     stalledThresholdMin: parseInt(process.env.STALLED_THRESHOLD_MIN || '15', 10),
+    // gpsStaleAlert.service: minutes without movement / without any fix, and the
+    // radius (m) inside which positions count as "the same place".
+    gpsStaleAlertMinutes: Math.max(5, parseInt(process.env.GPS_STALE_ALERT_MINUTES || '20', 10) || 20),
+    gpsStaleRadiusM: Math.max(20, parseInt(process.env.GPS_STALE_RADIUS_M || '75', 10) || 75),
     etaMinConfidenceSpeedMps: parseFloat(process.env.ETA_MIN_CONFIDENCE_SPEED_MPS || '1.5'),
     // Fallback speed when the driver app omits speed from the GPS ping.
     // Must be a realistic urban average, NOT the confidence threshold (1.5 m/s

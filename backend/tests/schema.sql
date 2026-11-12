@@ -1353,6 +1353,23 @@ CREATE TABLE line_bind_lockouts (
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+-- 061_homeroom_teachers.sql (added with the migration; FEATURE_HOMEROOM_TEACHERS)
+CREATE TABLE IF NOT EXISTS homeroom_teachers (
+  id            INT           NOT NULL AUTO_INCREMENT,
+  school_id     VARCHAR(10)   NOT NULL,
+  grade         VARCHAR(20)   NOT NULL,
+  classroom     VARCHAR(20)   NOT NULL DEFAULT '',
+  teacher_name  VARCHAR(150)  NOT NULL,
+  phone         VARCHAR(20)   NULL,
+  created_by    INT           NULL,
+  updated_by    INT           NULL,
+  created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_homeroom_room (school_id, grade, classroom),
+  CONSTRAINT fk_homeroom_school FOREIGN KEY (school_id) REFERENCES schools (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

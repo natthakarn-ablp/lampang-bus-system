@@ -1,6 +1,6 @@
 // Match the stored-grade variants accepted by backend/utils/gradeScope.
 // Display grouping must not hide pupils whose grade is stored as e.g. 'ป. 5'.
-function attendanceGrade(value) {
+export function attendanceGrade(value) {
   const raw = String(value || '').trim();
   const compact = raw.replace(/[๐-๙]/g, digit => '๐๑๒๓๔๕๖๗๘๙'.indexOf(digit)).replace(/\s+/g, '');
   for (const [pattern, prefix] of [
@@ -46,4 +46,20 @@ export function classroomPlan(room, selectedLeaveIds, selectedSelfIds = new Set(
     leaveIds: pending.filter(st => selectedLeaveIds.has(st.id)).map(st => st.id),
     selfIds: pending.filter(st => selectedSelfIds.has(st.id) && !selectedLeaveIds.has(st.id)).map(st => st.id),
   };
+}
+
+/**
+ * Homeroom teacher names per room for the classroom check page
+ * (FEATURE_HOMEROOM_TEACHERS): `homerooms` is the API's
+ * [{ grade, classroom, teachers: [{ name, phone }] }]. Keys use the same grade
+ * normalisation as groupTeacherClassrooms so "ป1" and "ป.1" land in one room.
+ */
+export function homeroomLookup(homerooms = []) {
+  const map = new Map();
+  for (const h of homerooms || []) {
+    const key = JSON.stringify([attendanceGrade(h.grade), String(h.classroom || '').trim()]);
+    const list = map.get(key) || [];
+    map.set(key, [...list, ...(h.teachers || [])]);
+  }
+  return (room) => map.get(room.key) || [];
 }

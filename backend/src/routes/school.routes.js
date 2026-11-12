@@ -31,6 +31,7 @@ const vllSvc = require('../services/vehicleLocation.service');
 const { makeTrackHandlers } = require('./vehicleTrackHandlers');
 const { trackingInfo } = require('../utils/gpsTrackingWindow');
 const checkinSvc = require('../services/checkin.service');
+const homeroomSvc = require('../services/homeroom.service');
 const { consumePolicyAction } = require('../utils/policyActionEvidence');
 
 /**
@@ -324,6 +325,7 @@ router.get('/students/export', importExportLimiter, async (req, res, next) => {
       { header: 'รอบเย็น', key: 'pm', width: 9 },
       { header: 'จุดรับส่ง', key: 'point', width: 30 },
     ];
+    if (homeroomSvc.enabled()) ws.columns = [...ws.columns, { header: 'ครูประจำชั้น', key: 'homeroom', width: 34 }];
     ws.getRow(1).font = { bold: true };
     ws.views = [{ state: 'frozen', ySplit: 1 }];
     const text = v => (v == null ? '' : String(v));
@@ -335,6 +337,7 @@ router.get('/students/export', importExportLimiter, async (req, res, next) => {
         plate: s.vehicle_id ? text(s.plate_no) : 'ยังไม่ผูกรถ',
         am: s.morning_enabled ? 'ใช้' : '-', pm: s.evening_enabled ? 'ใช้' : '-',
         point: (points.get(s.id) || []).join(', '),
+        ...(homeroomSvc.enabled() ? { homeroom: homeroomSvc.formatTeachers(s.homeroom_teachers) } : {}),
       });
     }
     if (truncated) ws.addRow({ id: `แสดง ${list.length} จาก ${total} คน — ใช้ตัวกรองเพื่อแบ่งดาวน์โหลด` });
@@ -1040,8 +1043,13 @@ router.get('/teacher-check', async (req, res, next) => {
     if (!['morning', 'evening'].includes(session)) {
       return sendError(res, "session ต้องเป็น 'morning' หรือ 'evening'", [], 400);
     }
+    const gradeFilter = resolveGradeScope(req);
     const data = await checkinSvc.getTeacherRoster(pool, {
-      schoolId, gradeFilter: resolveGradeScope(req), session, userId: req.user.id,
+      schoolId, gradeFilter, session, userId: req.user.id,
+    });
+    // Homeroom teachers per room (FEATURE_HOMEROOM_TEACHERS); [] while off.
+    data.homerooms = await homeroomSvc.teachersBySchool(pool, schoolId, {
+      grades: gradeFilter ? gradeEquivalents(gradeFilter) : null,
     });
     return sendSuccess(res, data);
   } catch (err) { next(err); }
@@ -2940,6 +2948,85 @@ router.post('/backdated-attendance', async (req, res, next) => {
       reason,
     });
     return sendSuccess(res, result, 'บันทึกการเช็คชื่อย้อนหลังแล้ว', null, 201);
+  } catch (err) { next(err); }
+});
+
+// ─── Homeroom teachers per classroom (owner decision 2026-11-12) ────────────
+// FEATURE_HOMEROOM_TEACHERS + migration 061. Read: every school account (a
+// grade teacher sees only their grade). Write: the school MAIN account only
+// (requireFullSchoolScope), scoped to the token's school by the service.
+
+function homeroomEnabled(res) {
+  if (homeroomSvc.enabled()) return true;
+  sendError(res, 'ยังไม่เปิดใช้ข้อมูลครูประจำชั้น', [], 404);
+  return false;
+}
+
+function homeroomSchoolId(req, res) {
+  const schoolId = resolveSchoolId(req);
+  if (!schoolId) {
+    sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    return null;
+  }
+  return schoolId;
+}
+
+function homeroomInput(body = {}) {
+  return {
+    grade: body.grade, classroom: body.classroom,
+    teacherName: body.teacher_name, phone: body.phone,
+  };
+}
+
+router.get('/homeroom-teachers', async (req, res, next) => {
+  try {
+    if (!homeroomEnabled(res)) return;
+    const schoolId = homeroomSchoolId(req, res);
+    if (!schoolId) return;
+    const gradeScope = resolveGradeScope(req);
+    const grades = gradeScope ? gradeEquivalents(gradeScope) : null;
+    const rooms = await homeroomSvc.listRooms(pool, schoolId, { grades });
+    return sendSuccess(res, { rooms, can_edit: !(req.user.role === 'school' && req.user.gradeScope) });
+  } catch (err) { next(err); }
+});
+
+router.post('/homeroom-teachers', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    if (!homeroomEnabled(res)) return;
+    const schoolId = homeroomSchoolId(req, res);
+    if (!schoolId) return;
+    const out = await homeroomSvc.addTeacher(pool, {
+      schoolId, input: homeroomInput(req.body), actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, 'เพิ่มครูประจำชั้นแล้ว', null, 201);
+  } catch (err) { next(err); }
+});
+
+router.put('/homeroom-teachers/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    if (!homeroomEnabled(res)) return;
+    const schoolId = homeroomSchoolId(req, res);
+    if (!schoolId) return;
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const out = await homeroomSvc.updateTeacher(pool, {
+      schoolId, id, input: homeroomInput(req.body), actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, 'บันทึกแล้ว');
+  } catch (err) { next(err); }
+});
+
+router.delete('/homeroom-teachers/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    if (!homeroomEnabled(res)) return;
+    const schoolId = homeroomSchoolId(req, res);
+    if (!schoolId) return;
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const out = await homeroomSvc.deleteTeacher(pool, {
+      schoolId, id, actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, out, 'ลบรายชื่อครูแล้ว');
   } catch (err) { next(err); }
 });
 

@@ -234,6 +234,9 @@ router.get('/roster', async (req, res, next) => {
 
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
     const students = await checkinSvc.getRoster(pool, vehicle.vehicle_id, session);
+    // Homeroom teacher + phone per child (FEATURE_HOMEROOM_TEACHERS; no-op off),
+    // so the driver knows whom to call about a child.
+    await require('../services/homeroom.service').attachHomeroomTeachers(pool, students);
 
     return sendSuccess(res, {
       vehicle: {

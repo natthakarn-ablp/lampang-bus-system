@@ -340,6 +340,10 @@ const env = {
     // Co-guardians (migration 058): the primary parent invites up to two more
     // LINE accounts. Off = every binding read is plain line_bindings again.
     coGuardian: process.env.FEATURE_CO_GUARDIAN === 'true',
+    // Homeroom teachers per classroom (owner decision 2026-11-12): school main
+    // account edits the list; shown on room check, student list/Excel, driver
+    // student list and parent LINE status. Needs migration 061.
+    homeroomTeachers: process.env.FEATURE_HOMEROOM_TEACHERS === 'true',
     // Phase 4 — participatory-administration cases + append-only event log.
     // Dark by default: when false the /api/participation router is not
     // mounted, so the existing system is byte-for-byte unchanged. Migration

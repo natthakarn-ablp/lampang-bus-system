@@ -4,7 +4,7 @@ import {
   BarChart3, ClipboardList, AlertTriangle, User, GraduationCap, Bus,
   CheckSquare, Plus, FileText, Key, Landmark, Building2, Home, Users,
   Activity, Ruler, TrendingUp, Package, Target, Map, Wrench, ChevronDown, X,
-  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart, ScrollText, History, UserCog,
+  ShieldAlert, ShieldCheck, MapPin, Route, Calendar, LogOut, Inbox, PieChart, ScrollText, History, UserCog, UserCheck,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { isGradeTeacher, getGradeScope } from '../utils/authScope';
@@ -63,6 +63,7 @@ const SCHOOL_NAV = [
   { to: '/school/vehicle-verification', icon: CheckSquare, label: 'ส่งตรวจและรับรองรถ' },
   { to: '/school/bulk-vehicles', icon: Plus,          label: 'เพิ่มรถรับส่ง' },
   { to: '/school/teacher-accounts', icon: Users,      label: 'บัญชีครูประจำสายชั้น' },
+  { to: '/school/homeroom-teachers', icon: UserCheck, label: 'ครูประจำชั้น' },
   { to: '/school/year-promotion', icon: GraduationCap, label: 'เลื่อนชั้นปีการศึกษาใหม่' },
   { to: '/school/audit-log',     icon: FileText,      label: 'ประวัติการแก้ไข' },
   { to: '/my-policy',             icon: ScrollText,    label: 'นโยบายและสิทธิของฉัน' },
@@ -205,6 +206,8 @@ function navItemsForUser(user, features) {
     '/participation': 'participationCases',
     // The summary reads the same router, so it is dark with the same flag.
     '/participation/summary': 'participationCases',
+    // Homeroom teachers per room (migration 061) — dark until the flag is on.
+    '/school/homeroom-teachers': 'homeroomTeachers',
   };
   const filtered = base.filter(item => {
     if (!item.to) return true;

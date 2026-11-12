@@ -1,6 +1,7 @@
 'use strict';
 
 const { pool } = require('../config/database');
+const homeroomSvc = require('./homeroom.service');
 const { activeBindingsSql } = require('./lineBindingSource');
 const { gradeEquivalents, normalizeGrade } = require('../utils/gradeScope');
 const { logAudit } = require('../utils/audit');
@@ -268,7 +269,7 @@ async function getStudentExportRows(schoolId, filters, { limit = 5000 } = {}) {
   const { where, params } = buildStudentListWhere(schoolId, { ...filters, include_deleted: false, only_deleted: false });
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM students s WHERE ${where}`, params);
   const [rows] = await pool.query(
-    `SELECT s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+    `SELECT s.id, s.school_id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled
        FROM students s
        LEFT JOIN vehicles v ON v.id = s.vehicle_id
@@ -277,6 +278,7 @@ async function getStudentExportRows(schoolId, filters, { limit = 5000 } = {}) {
       LIMIT ?`,
     [...params, limit]
   );
+  await homeroomSvc.attachHomeroomTeachers(pool, rows);
   return { rows, total: Number(total) || 0 };
 }
 
@@ -296,7 +298,7 @@ async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has
   // Data
   const offset = (page - 1) * per_page;
   const [students] = await pool.query(
-    `SELECT s.id, s.student_code, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+    `SELECT s.id, s.school_id, s.student_code, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             s.vehicle_id, v.plate_no, s.morning_enabled, s.evening_enabled,
             s.dropoff_address, s.is_deleted, s.deleted_at,
             p.name AS parent_name, p.phone AS parent_phone,
@@ -322,6 +324,7 @@ async function getStudents(schoolId, { search, grade, classroom, vehicle_id, has
   const sanitized = gradeFilter
     ? withLine.map(({ parent_phone, dropoff_address, ...rest }) => rest)
     : withLine;
+  await homeroomSvc.attachHomeroomTeachers(pool, sanitized);
 
   return {
     students: sanitized,

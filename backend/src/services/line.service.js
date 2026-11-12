@@ -257,7 +257,7 @@ async function getChildrenByBoundPhone(lineUserId) {
   // detection.
   const [rows] = await pool.query(
     `SELECT DISTINCT
-            s.id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
+            s.id, s.school_id, s.prefix, s.first_name, s.last_name, s.grade, s.classroom,
             sc.name AS school_name, v.plate_no,
             (SELECT d.name
                FROM drivers d
@@ -275,6 +275,8 @@ async function getChildrenByBoundPhone(lineUserId) {
      WHERE  lb.line_user_id = ? AND lb.is_active = TRUE`,
     [lineUserId]
   );
+  // Homeroom teachers of each child's room (FEATURE_HOMEROOM_TEACHERS; no-op off).
+  await require('./homeroom.service').attachHomeroomTeachers(pool, rows);
   return rows;
 }
 
@@ -1099,6 +1101,13 @@ function buildChildSection(child, status, idx, total) {
         color: '#374151',
         wrap: true,
       },
+      ...(child.homeroom_teachers && child.homeroom_teachers.length ? [{
+        type: 'text',
+        text: `👩‍🏫 ครูประจำชั้น: ${require('./homeroom.service').formatTeachers(child.homeroom_teachers)}`,
+        size: 'sm',
+        color: '#374151',
+        wrap: true,
+      }] : []),
     ],
   });
 
@@ -1254,6 +1263,9 @@ function buildParentStatusText(childrenWithStatus) {
     msg += `\n   รอบเย็น: ${eLabel}`;
     msg += `\n   🚌 รถ: ${child.plate_no || '-'}`;
     msg += `\n   👤 ผู้ขับ: ${child.driver_name || '-'}`;
+    if (child.homeroom_teachers && child.homeroom_teachers.length) {
+      msg += `\n   👩‍🏫 ครูประจำชั้น: ${require('./homeroom.service').formatTeachers(child.homeroom_teachers)}`;
+    }
     msg += '\n';
   });
   msg += '\nข้อมูลนี้แสดงเฉพาะบุตรหลานที่ผูกบัญชีไว้เท่านั้น';

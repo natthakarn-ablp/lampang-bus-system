@@ -83,3 +83,6 @@ DB-free: `cd backend && npx jest --config jest.unit.config.js --runInBand "(scho
 - `school.routes.js` 2804 บรรทัด รวมนักเรียน/รถ/ลา/จุดรับ/ครู/ย้ายโรงเรียน ในไฟล์เดียว; export `resolveGradeScope` ท้ายไฟล์ (L2804) ให้ module อื่นใช้
 - `studentImportPreview.service.js` 965 บรรทัด
 - POST /students/import แบบเดิม (L1933-2236) ยาว ~300 บรรทัดใน route โดยตรง
+
+## ครูประจำชั้นรายห้อง (2026-11-12)
+ตาราง `homeroom_teachers` (migration 061) แก้ได้เฉพาะบัญชีหลักของโรงเรียน ผ่าน `/api/school/homeroom-teachers` และ `services/homeroom.service.js` · แนบชื่อครูเข้ากับรายชื่อนักเรียน/Excel, หน้าเช็กชื่อรายห้อง, รายชื่อของคนขับ และสถานะ LINE ผ่าน `attachHomeroomTeachers()` เมื่อ `FEATURE_HOMEROOM_TEACHERS=true` — รายละเอียดและขั้นตอนเปิดใช้: [docs/ops/homeroom-teachers.md](../ops/homeroom-teachers.md)

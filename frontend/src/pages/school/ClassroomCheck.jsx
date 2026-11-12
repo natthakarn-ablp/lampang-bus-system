@@ -11,7 +11,7 @@ import { useToast } from '../../components/Toast';
 import { AppCard, ConfirmDialog, FormField, StatusBadge } from '../../components/ui';
 import { useAuth } from '../../hooks/useAuth';
 import { getGradeScope } from '../../utils/authScope';
-import { groupTeacherClassrooms, classroomPlan } from '../../utils/classroomAttendance';
+import { groupTeacherClassrooms, classroomPlan, homeroomLookup } from '../../utils/classroomAttendance';
 import { PageTransition } from '../../lib/motion';
 import AttendanceTimeDialog, { bangkokTime } from './AttendanceTimeDialog';
 
@@ -75,6 +75,7 @@ export default function ClassroomCheck() {
 
   const data = roster?.session === session ? roster : null;
   const rooms = useMemo(() => groupTeacherClassrooms(data?.vehicles || []), [data]);
+  const teachersOf = useMemo(() => homeroomLookup(data?.homerooms || []), [data]);
   const grades = useMemo(() => [...new Set(rooms.map(room => room.grade))], [rooms]);
   const activeGrade = grade || (grades.includes(selectedGrade) ? selectedGrade : '');
   const visibleRooms = rooms.filter(room => room.grade === activeGrade);
@@ -247,6 +248,9 @@ export default function ClassroomCheck() {
             <div className="px-4 py-4 bg-surface border-b border-surface-border">
               <h2 className="text-lg font-bold text-ink">{room.grade} / {room.classroom ? `ห้อง ${room.classroom}` : 'ไม่ระบุห้อง'}</h2>
               <p className="text-sm text-ink-muted">{room.students.length} คน · ใช้รถ {done} · {session === 'morning' ? 'มาเอง' : 'กลับเอง'} {selfCount} · ลา {onLeave} · รอบันทึก {pending}</p>
+              {teachersOf(room).length > 0 && (
+                <p className="text-sm text-ink mt-1">ครูประจำชั้น: {teachersOf(room).map(t => t.name).join(', ')}</p>
+              )}
             </div>
             <ul className="divide-y divide-surface-border">
               {room.students.map(student => {

@@ -497,6 +497,10 @@ export default function StudentSearch() {
             cell: s2 => <span className="font-medium text-ink">{s2.prefix}{s2.first_name} {s2.last_name}</span> },
           { key: 'grade', header: 'ชั้น/ห้อง', secondary: true,
             cell: s2 => formatGradeClass(s2.grade, s2.classroom) },
+          ...(features?.homeroomTeachers ? [{ key: 'homeroom', header: 'ครูประจำชั้น',
+            cell: s2 => (Array.isArray(s2.homeroom_teachers) && s2.homeroom_teachers.length
+              ? s2.homeroom_teachers.map(t => t.name).join(', ')
+              : <span className="text-ink-muted">-</span>) }] : []),
           { key: 'code', header: 'รหัส', cell: s2 => <span className="tabular-nums">{s2.student_code ?? s2.id}</span> },
           { key: 'plate', header: 'ทะเบียนรถ', align: 'center',
             cell: s2 => (s2.plate_no

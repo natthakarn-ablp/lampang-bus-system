@@ -14,6 +14,7 @@
     "geofence":              { "env": "FEATURE_GEOFENCE",                "enabled": false, "since": null },
     "routeDeviation":        { "env": "FEATURE_ROUTE_DEVIATION",         "enabled": false, "since": null },
     "gpsStaleAlert":         { "env": "FEATURE_GPS_STALE_ALERT",         "enabled": false, "since": null },
+    "homeroomTeachers":      { "env": "FEATURE_HOMEROOM_TEACHERS",       "enabled": false, "since": null },
     "parentConsentRequired": { "env": "FEATURE_PARENT_CONSENT_REQUIRED", "enabled": false, "since": null },
     "parentLeave":           { "env": "FEATURE_PARENT_LEAVE",            "enabled": true,  "since": "2026-11-08 11:56 น." },
     "parentClaimCode":       { "env": "FEATURE_PARENT_CLAIM_CODE",       "enabled": true,  "since": "2026-11-08 11:56 น." },

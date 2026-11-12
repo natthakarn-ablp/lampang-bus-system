@@ -6,6 +6,11 @@ import { ACTION_LABEL } from '../../utils/session';
 import { useToast } from '../../components/Toast';
 import { formatGradeClass } from '../../utils/student';
 
+function formatTeacherPhone(phone) {
+  const d = String(phone || '');
+  return /^0\d{8,9}$/.test(d) ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : d;
+}
+
 export default function CheckinPanel({ student, session, onDone }) {
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
@@ -42,6 +47,20 @@ export default function CheckinPanel({ student, session, onDone }) {
               {formatGradeClass(student.grade, student.classroom)}
               {student.school_name && <span className="text-ink-muted"> · {student.school_name}</span>}
             </p>
+            {Array.isArray(student.homeroom_teachers) && student.homeroom_teachers.length > 0 && (
+              <p className="text-sm text-ink mt-0.5">
+                ครูประจำชั้น:{' '}
+                {student.homeroom_teachers.map((t, i) => (
+                  <span key={`${t.name}-${i}`}>
+                    {i > 0 && ', '}
+                    {t.name}
+                    {t.phone && (
+                      <> (<a href={`tel:${t.phone}`} className="text-brand-700 underline">{formatTeacherPhone(t.phone)}</a>)</>
+                    )}
+                  </span>
+                ))}
+              </p>
+            )}
           </div>
 
           {isDone && (

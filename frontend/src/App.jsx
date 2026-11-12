@@ -43,6 +43,7 @@ const DriverVehicleRegistration = lazy(() => import('./pages/driver/DriverVehicl
 const SchoolLayout         = lazy(() => import('./pages/school/SchoolLayout'));
 const SchoolDashboard      = lazy(() => import('./pages/school/SchoolDashboard'));
 const TeacherCheck         = lazy(() => import('./pages/school/TeacherCheck'));
+const SchoolHomeroomTeachers = lazy(() => import('./pages/school/SchoolHomeroomTeachers'));
 const BackdatedAttendance  = lazy(() => import('./pages/school/BackdatedAttendance'));
 const StudentSearch        = lazy(() => import('./pages/school/StudentSearch'));
 const SchoolYearPromotion = lazy(() => import('./pages/school/SchoolYearPromotion'));
@@ -287,6 +288,7 @@ export default function App() {
             <Route path="live-vehicles" element={<SchoolLiveVehicles />} />
             <Route path="vehicle-track" element={<VehicleTrackReplay role="school" />} />
             <Route path="teacher-accounts" element={<SchoolTeacherAccounts />} />
+            <Route path="homeroom-teachers" element={<SchoolHomeroomTeachers />} />
             <Route path="year-promotion" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><SchoolYearPromotion /></PrivateRoute>} />
             <Route path="registration-review" element={<SchoolRegistrationReview />} />
             <Route path="transfer-requests" element={<PrivateRoute allowedRoles={['school', 'admin']} allowGradeTeacher={false}><SchoolTransferRequests /></PrivateRoute>} />

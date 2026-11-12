@@ -317,6 +317,10 @@ async function assertParentFeatureMigrationsPresent() {
     enabled: env.features.coGuardian, envName: 'FEATURE_CO_GUARDIAN',
     migration: '058_co_guardians.sql', required: [['line_co_guardians'], ['line_guardian_invites']],
   });
+  await assertFeatureSchema({
+    enabled: env.features.homeroomTeachers, envName: 'FEATURE_HOMEROOM_TEACHERS',
+    migration: '061_homeroom_teachers.sql', required: [['homeroom_teachers']],
+  });
 }
 
 async function start() {

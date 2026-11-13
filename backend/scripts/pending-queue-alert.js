@@ -9,8 +9,8 @@
 // Logic: backend/src/services/pendingQueue.service.js.
 //
 // Run from backend/ (env.js reads backend/.env from the working directory):
-//   cd backend && node scripts/pending-queue-alert.js            # write alerts
-//   cd backend && node scripts/pending-queue-alert.js --dry-run  # report only
+//   cd backend && /usr/local/bin/node scripts/pending-queue-alert.js            # write alerts
+//   cd backend && /usr/local/bin/node scripts/pending-queue-alert.js --dry-run  # report only
 //
 // Idempotent: each alert's dedupe key is its audit entity_id, so re-running
 // the same day (or every hour) creates nothing new. Cron: docs/ops/automation-crons.md

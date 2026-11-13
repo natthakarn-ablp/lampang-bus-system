@@ -6,9 +6,9 @@
 // Logic: backend/src/services/dailySnapshot.service.js.
 //
 // Run from backend/ (env.js reads backend/.env from the working directory):
-//   cd backend && node scripts/daily-snapshot.js                    # today (Asia/Bangkok)
-//   cd backend && node scripts/daily-snapshot.js --date 2026-11-13  # a given date
-//   cd backend && node scripts/daily-snapshot.js --dry-run          # compute + print, write nothing
+//   cd backend && /usr/local/bin/node scripts/daily-snapshot.js                    # today (Asia/Bangkok)
+//   cd backend && /usr/local/bin/node scripts/daily-snapshot.js --date 2026-11-13  # a given date
+//   cd backend && /usr/local/bin/node scripts/daily-snapshot.js --dry-run          # compute + print, write nothing
 //
 // Idempotent: if any system snapshot already exists for the date (manual,
 // baseline or auto) it does nothing. Run it after the evening round so the

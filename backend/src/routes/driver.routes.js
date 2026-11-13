@@ -1602,9 +1602,21 @@ router.post('/applications', async (req, res, next) => {
     const data = await verification.createDriverApplication(pool, {
       vehicleId: req.body.vehicle_id,
       driverUserId: req.user.id,
-      currentTerm: req.body.current_term,
+      issuingSchoolId: req.body.issuing_school_id || null,
     });
     return res.status(201).json({ success: true, data, message: 'ยื่นคำขอขึ้นทะเบียนรถเรียบร้อย' });
+  } catch (error) { next(error); }
+});
+
+// Rider schools of one of the driver's vehicles: who may be the issuing school.
+router.get('/applications/rider-schools', async (req, res, next) => {
+  try {
+    const verification = require('../services/vehicleVerification.service');
+    const data = await verification.listDriverVehicleSchools(pool, {
+      vehicleId: req.query.vehicle_id ? String(req.query.vehicle_id) : null,
+      driverUserId: req.user.id,
+    });
+    return res.json({ success: true, data });
   } catch (error) { next(error); }
 });
 

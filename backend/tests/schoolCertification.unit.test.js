@@ -169,6 +169,8 @@ describe('service scope', () => {
       [/FROM vehicle_inspection_applications a\s+JOIN vehicles v/, [[{
         id: 5, status: 'READY_TO_PRINT', vehicle_id: 'V1', issuing_school_id: 'B', requested_by: 9,
       }]]],
+      [/FROM inspection_application_schools/, [[]]],
+      [/SELECT 1 AS ok FROM students/, [[]]],
     ]);
     await expect(svc.issueCertificate(db, { applicationId: 5, schoolId: 'A', userId: 1 }))
       .rejects.toMatchObject({ statusCode: 404 });
@@ -180,7 +182,7 @@ describe('service scope', () => {
     env.features.schoolCertification = true;
     const db = fakeConn([[/FROM school_transport_certificates\s+WHERE id = \? FOR UPDATE/, [[{
       id: 3, cert_no: 'B/2569-2/0001', school_id: 'B', vehicle_id: 'V1', revoked_at: null,
-    }]]]]);
+    }]]], [/SELECT 1 AS ok FROM students/, [[]]]]);
     await expect(svc.revokeCertificate(db, { certificateId: 3, schoolId: 'A', userId: 1, reason: 'ไม่ผ่านเกณฑ์' }))
       .rejects.toMatchObject({ statusCode: 404 });
     await expect(svc.revokeCertificate(db, { certificateId: 3, schoolId: 'B', userId: 1, reason: '' }))
@@ -193,6 +195,7 @@ describe('service scope', () => {
     term.invalidateTermCache();
     const today = todayBangkok();
     const closed = term.addCalendarDays(today, -10);
+    const currentTerm = await term.getCurrentTerm({ query: async () => [[]] });
     const db = fakeConn([
       [/c\.revoked_at IS NULL AND c\.valid_until >= \?/, [[]]],
       [/FROM vehicle_inspection_applications a\s+JOIN vehicles v/, [[{
@@ -206,8 +209,15 @@ describe('service scope', () => {
       [/FROM users u JOIN drivers d/, [[{ driver_id: 4, driver_name: 'สมชาย' }]]],
       [/FROM vehicle_documents/, [[]]],
       [/FROM driver_documents/, [[]]],
-      [/COUNT\(\*\) AS n FROM students/, [[{ n: 6 }]]],
+      [/COUNT\(\*\) AS n\s+FROM students s/, [[
+        { school_id: 'A', school_name: 'โรงเรียนเอ', n: 6 },
+        { school_id: 'B', school_name: 'โรงเรียนบี', n: 3 },
+      ]]],
       [/WHERE c\.application_id = \? ORDER BY c\.id DESC LIMIT 1/, [[]]],
+      [/WHERE c\.vehicle_id = \? AND c\.school_id <> \?/, [[{
+        id: 70, cert_no: 'B/x/0001', school_id: 'B', school_name: 'โรงเรียนบี', term_id: currentTerm,
+        valid_until: '2099-01-01', revoked_at: new Date(), revoke_reason: 'ไม่ผ่านเกณฑ์',
+      }]]],
       [/SELECT id FROM schools WHERE id = \? FOR UPDATE/, [[{ id: 'A' }]]],
       [/SELECT cert_no FROM school_transport_certificates/, [[{ cert_no: 'A/x/0001' }, { cert_no: 'A/x/0003' }]]],
       [/INSERT INTO school_transport_certificates/, [{ insertId: 77 }]],
@@ -219,11 +229,44 @@ describe('service scope', () => {
     expect(ins.params[0]).toBe(`A/${termId}/0004`);
     expect(ins.params[6]).toBe('2027-03-31');
     const snapshot = JSON.parse(ins.params[8]);
-    expect(snapshot).toMatchObject({ pupil_count: 6, caretaker_name: 'นางดูแล' });
+    expect(snapshot).toMatchObject({
+      pupil_count: 6, total_pupil_count: 9, school_count: 2, caretaker_name: 'นางดูแล',
+      schools: [{ school_name: 'โรงเรียนเอ', pupil_count: 6 }, { school_name: 'โรงเรียนบี', pupil_count: 3 }],
+    });
     expect(JSON.stringify(snapshot)).not.toMatch(/first_name|student_id|cid/);
     expect(out.created).toBe(true);
-    expect(out.warnings).toEqual(expect.arrayContaining(['OUTSIDE_WINDOW', 'DOCUMENTS_MISSING']));
+    expect(out.warnings).toEqual(expect.arrayContaining(['OUTSIDE_WINDOW', 'DOCUMENTS_MISSING', 'REVOKED_BY_OTHER_SCHOOL']));
     expect(db.calls.some((c) => /INSERT INTO audit_logs/.test(c.sql))).toBe(true);
+  });
+
+  test('shared vehicle: a rider school gets 403 (not 404) on issue and revoke, and may print', async () => {
+    env.features.schoolCertification = true;
+    const rides = [/SELECT 1 AS ok FROM students/, [[{ ok: 1 }]]];
+    const issueDb = fakeConn([
+      [/FROM vehicle_inspection_applications a\s+JOIN vehicles v/, [[{
+        id: 5, status: 'READY_TO_PRINT', vehicle_id: 'V1', issuing_school_id: 'A', issuing_school_name: 'โรงเรียนเอ',
+      }]]],
+      [/FROM inspection_application_schools/, [[{ ok: 1 }]]],
+      rides,
+    ]);
+    await expect(svc.issueCertificate(issueDb, { applicationId: 5, schoolId: 'B', userId: 1 }))
+      .rejects.toMatchObject({ statusCode: 403, errors: [expect.objectContaining({ code: 'ISSUING_SCHOOL_REQUIRED' })] });
+    const revokeDb = fakeConn([[/FROM school_transport_certificates\s+WHERE id = \? FOR UPDATE/, [[{
+      id: 3, cert_no: 'A/2569-2/0001', school_id: 'A', vehicle_id: 'V1', revoked_at: null,
+    }]]], rides]);
+    await expect(svc.revokeCertificate(revokeDb, { certificateId: 3, schoolId: 'B', userId: 1, reason: 'ไม่ผ่านเกณฑ์' }))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(revokeDb.calls.some((c) => /UPDATE school_transport_certificates/.test(c.sql))).toBe(false);
+    const row = { id: 3, cert_no: 'A/2569-2/0001', school_id: 'A', vehicle_id: 'V1', valid_until: '2099-01-01' };
+    const viewDb = fakeConn([[/WHERE c\.id = \?/, [[row]]], rides]);
+    await expect(svc.getCertificateForViewer(viewDb, { certificateId: 3, viewer: { role: 'school', schoolId: 'B' } }))
+      .resolves.toMatchObject({ cert_no: 'A/2569-2/0001' });
+    const teacherDb = fakeConn([[/WHERE c\.id = \?/, [[row]]], rides]);
+    await expect(svc.getCertificateForViewer(teacherDb, { certificateId: 3, viewer: { role: 'school', schoolId: 'B', gradeScope: 'ป.1' } }))
+      .rejects.toMatchObject({ statusCode: 404 });
+    const strangerDb = fakeConn([[/WHERE c\.id = \?/, [[row]]], [/SELECT 1 AS ok FROM students/, [[]]]]);
+    await expect(svc.getCertificateForViewer(strangerDb, { certificateId: 3, viewer: { role: 'school', schoolId: 'Z' } }))
+      .rejects.toMatchObject({ statusCode: 404 });
   });
 
   test('existing valid certificate is returned, not re-issued', async () => {

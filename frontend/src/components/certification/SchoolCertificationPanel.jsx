@@ -160,7 +160,7 @@ export default function SchoolCertificationPanel({ applications = [], onChanged 
       <AppCard>
         <div className="flex items-center gap-2">
           <FileText className="h-5 w-5 text-ink-muted" strokeWidth={2.2} aria-hidden="true" />
-          <h2 className="text-lg font-bold text-ink">หนังสือรับรองการรับส่งนักเรียนที่ออกแล้ว</h2>
+          <h2 className="text-lg font-bold text-ink">หนังสือรับรองการรับส่งนักเรียน</h2>
         </div>
         {certificates.length === 0 ? (
           <p className="mt-3 text-sm text-ink-muted">ยังไม่มีหนังสือรับรอง — ออกได้เมื่อกด "ตรวจสอบถูกต้อง" หรือ "ยืนยันข้อมูลพร้อมพิมพ์" ในคำขอ</p>
@@ -172,6 +172,11 @@ export default function SchoolCertificationPanel({ applications = [], onChanged 
                 <li key={cert.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-ink">{cert.cert_no} · {cert.plate_no}</p>
+                    {cert.is_issuer === false && (
+                      <p className="text-sm text-ink">
+                        ออกโดย{cert.school_name} — รถที่นักเรียนของโรงเรียนท่านใช้ร่วม (ดูและพิมพ์ได้ เพิกถอนไม่ได้)
+                      </p>
+                    )}
                     <p className="text-sm text-ink-muted">
                       มีผลถึง {thaiDate(cert.valid_until)}{cert.expiring ? ' (ใกล้หมดอายุ)' : ''}
                       {cert.revoke_reason ? ` · เหตุผลเพิกถอน: ${cert.revoke_reason}` : ''}
@@ -183,7 +188,7 @@ export default function SchoolCertificationPanel({ applications = [], onChanged 
                       <FileDown className="h-4 w-4" strokeWidth={2.2} aria-hidden="true" />
                       PDF
                     </button>
-                    {cert.state === 'VALID' && (
+                    {cert.state === 'VALID' && cert.is_issuer !== false && (
                       <button type="button" className={buttonDanger} onClick={() => { setRevokeReason(''); setRevokeTarget(cert); }}>
                         เพิกถอน
                       </button>

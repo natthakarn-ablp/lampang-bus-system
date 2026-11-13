@@ -491,7 +491,9 @@ describe('migration 063 + boot guard', () => {
   test('flag defaults off', () => {
     const example = fs.readFileSync(path.join(root, '.env.example'), 'utf8');
     expect(example).toMatch(/^FEATURE_SCHOOL_CERTIFICATION=false$/m);
+    // Production state is recorded separately: on since 2026-11-14 after the
+    // owner applied migration 063 (scripts/production-feature-flags.json).
     const flags = JSON.parse(fs.readFileSync(path.join(root, '../scripts/production-feature-flags.json'), 'utf8'));
-    expect(flags.flags.schoolCertification.enabled).toBe(false);
+    expect(flags.flags.schoolCertification.env).toBe('FEATURE_SCHOOL_CERTIFICATION');
   });
 });

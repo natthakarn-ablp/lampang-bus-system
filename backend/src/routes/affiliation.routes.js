@@ -316,6 +316,69 @@ router.get('/emergencies', async (req, res, next) => {
 });
 
 /**
+ * POST /api/affiliation/emergencies/:id/close
+ * Close an emergency of a vehicle used by a school in this affiliation
+ * (owner decision 2026-11-13). Note required; history kept (note + audit).
+ */
+router.post('/emergencies/:id/close', async (req, res, next) => {
+  try {
+    const affId = resolveAffiliationId(req);
+    if (!affId) return sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const emSvc = require('../services/emergencyAdmin.service');
+    const b = req.body || {};
+    const out = await emSvc.closeEmergencyScoped(pool, {
+      id, result: b.result, note: b.note,
+      actor: { id: req.user.id, role: req.user.role, name: req.user.displayName || req.user.username, ip: req.ip, userAgent: req.headers['user-agent'] },
+      scope: { affiliationId: affId },
+    });
+    return sendSuccess(res, out, 'ปิดเหตุฉุกเฉินแล้ว');
+  } catch (err) { next(err); }
+});
+
+// ─── Driver account of a vehicle used by a school in this affiliation ───────
+// Owner decision 2026-11-13: same actions as the school (reset password,
+// edit driver details, change driver). Scope proven in the service.
+const driverAcctSvc = require('../services/driverAccountSelfService.service');
+function affDriverCtx(req, res, affId) {
+  if (!affId) { sendError(res, 'ไม่พบข้อมูลเขตพื้นที่ที่ผูกกับบัญชีนี้', [], 403); return null; }
+  return {
+    scope: { affiliationId: affId },
+    actor: { id: req.user.id, role: req.user.role, ip: req.ip, userAgent: req.headers['user-agent'] },
+  };
+}
+
+router.post('/vehicles/:id/driver/reset-password', async (req, res, next) => {
+  try {
+    const ctx = affDriverCtx(req, res, resolveAffiliationId(req));
+    if (!ctx) return;
+    const out = await driverAcctSvc.resetDriverPassword(pool, { vehicleId: req.params.id, ...ctx });
+    return sendSuccess(res, out, 'รีเซ็ตรหัสผ่านคนขับแล้ว รหัสชั่วคราวแสดงครั้งเดียว คนขับต้องเปลี่ยนรหัสเมื่อเข้าสู่ระบบ');
+  } catch (err) { next(err); }
+});
+
+router.put('/vehicles/:id/driver', async (req, res, next) => {
+  try {
+    const ctx = affDriverCtx(req, res, resolveAffiliationId(req));
+    if (!ctx) return;
+    const b = req.body || {};
+    const out = await driverAcctSvc.updateDriverDetails(pool, { vehicleId: req.params.id, ...ctx, name: b.name, phone: b.phone });
+    return sendSuccess(res, out, 'แก้ไขข้อมูลคนขับแล้ว');
+  } catch (err) { next(err); }
+});
+
+router.post('/vehicles/:id/driver/replace', async (req, res, next) => {
+  try {
+    const ctx = affDriverCtx(req, res, resolveAffiliationId(req));
+    if (!ctx) return;
+    const b = req.body || {};
+    const out = await driverAcctSvc.replaceDriver(pool, { vehicleId: req.params.id, ...ctx, name: b.name, phone: b.phone, reason: b.reason });
+    return sendSuccess(res, out, 'เปลี่ยนคนขับแล้ว คนขับเดิมเข้าระบบไม่ได้อีก รหัสชั่วคราวแสดงครั้งเดียว');
+  } catch (err) { next(err); }
+});
+
+/**
  * GET /api/affiliation/vehicles-at-risk?limit=10
  * Top N vehicles serving this affiliation, scored by inspection +
  * insurance state. Same scoring formula as /province/vehicles-at-risk.

@@ -14,6 +14,7 @@ Flag `FEATURE_DRIVER_REGISTRATION` (`env.features.driverRegistration`, `app.js:1
 - เอกสาร (flag): GET /api/documents/:docType/:id/file (`documents.routes.js:39`; role driver/school/transport/admin, ครูประจำชั้นถูกบล็อก L27)
 - โรงเรียน (`school.routes.js`): GET /vehicles (L272), /vehicles/all (L1440), /vehicles/check-plate (L1462), POST /vehicles (L1501), PUT /vehicles/:id (L1666), คำขอรถ GET/POST /vehicles/requests (L2452-2474, full-scope)
 - admin (`admin.routes.js`): POST /drivers/preflight (L2083), POST /drivers/:userId/restore|deactivate|reassign-vehicle (L2090-2112), POST /driver-assignments/:assignmentId/end (L2127), GET /driver-integrity (L2077), DELETE /vehicles/:id (L2163), PUT /vehicles/:id (L2181), POST /vehicles/:id/merge (L2202), GET/POST /vehicle-requests (L2008-2037)
+- บัญชีคนขับของรถ (เจ้าของยืนยัน 2026-11-13, บัญชีผูกกับรถ username = ทะเบียน): โรงเรียน (บัญชีหลัก) `POST /api/school/vehicles/:id/driver/reset-password`, `PUT /api/school/vehicles/:id/driver` (แก้ชื่อ/เบอร์คนเดิม), `POST /api/school/vehicles/:id/driver/replace` (เปลี่ยนคนขับ: โปรไฟล์ใหม่ + ย้ายงานมอบหมาย + รีเซ็ตรหัส คนขับเดิมหลุดทันที); สังกัดใช้ path เดียวกันใต้ `/api/affiliation`. scope = มีนักเรียนของโรงเรียน/โรงเรียนในเขตอยู่บนรถ (`students.vehicle_id`) — `services/driverAccountSelfService.service.js`
 - ขนส่ง: POST /api/transport/vehicles (`transport.routes.js:36`), GET /vehicles/check-plate (L23)
 
 ## โค้ดหลัก

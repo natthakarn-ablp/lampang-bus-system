@@ -131,6 +131,7 @@ const ADMIN_NAV = [
   { to: '/admin',                 icon: Home,        label: 'ศูนย์ควบคุมระบบ' },
   { to: '/admin/transfer-requests', icon: Users,     label: 'คำขอโอนย้ายนักเรียน' },
   { to: '/admin/vehicle-requests', icon: Wrench,     label: 'คำขอเกี่ยวกับรถ' },
+  { to: '/admin/emergencies',     icon: AlertTriangle, label: 'เหตุฉุกเฉิน' },
   { to: '/admin/users',           icon: Users,       label: 'จัดการผู้ใช้งาน' },
   { to: '/province',              icon: Map,         label: 'ภาพรวมจังหวัด' },
   { to: '/province/students',     icon: GraduationCap, label: 'ข้อมูลนักเรียน' },

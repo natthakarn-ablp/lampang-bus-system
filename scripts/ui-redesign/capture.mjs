@@ -854,6 +854,11 @@ const COMMON = {
   '/api/school/status-today':   { data: STATUS_TODAY },
   '/api/school/leaves':         { data: LEAVES },
   '/api/school/emergencies':    EMERGENCIES_PAGED,
+  '/api/admin/emergencies':     EMERGENCIES_PAGED,
+  // Driver's own open emergencies ("แก้ไขแล้ว" button on /driver/emergency).
+  '/api/driver/emergencies/open': { data: [
+    { id: 4, vehicle_id: 'V-1', plate_no: 'กข-1111 ลำปาง', detail: 'รถเสียระหว่างทาง (ตัวอย่าง)', note: null, result: null, reported_at: '2026-08-27T07:20:00+07:00' },
+  ] },
   '/api/school/live-vehicles':  { data: LIVE_VEHICLES },
   '/api/school/audit-logs':     AUDIT_ROWS_GENERIC,
   '/api/school/teacher-accounts': { data: [

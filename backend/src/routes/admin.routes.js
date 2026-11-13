@@ -2297,6 +2297,23 @@ router.patch('/emergencies/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Close with a required note, keeping history (appends to note + audit row),
+// the same path school / affiliation / province / driver use.
+router.post('/emergencies/:id/close', async (req, res, next) => {
+  try {
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const emSvc = require('../services/emergencyAdmin.service');
+    const b = req.body || {};
+    const out = await emSvc.closeEmergencyScoped(pool, {
+      id, result: b.result, note: b.note,
+      actor: { id: req.user.id, role: 'admin', name: req.user.displayName || req.user.username, ip: req.ip, userAgent: req.headers['user-agent'] },
+      scope: { all: true },
+    });
+    return sendSuccess(res, out, 'ปิดเหตุฉุกเฉินแล้ว');
+  } catch (err) { next(err); }
+});
+
 router.delete('/emergencies/:id', async (req, res, next) => {
   try {
     const id = readIdParam(req, res, 'id');

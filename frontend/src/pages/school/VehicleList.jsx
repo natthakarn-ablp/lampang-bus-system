@@ -7,6 +7,7 @@ import PlateSearchInput from '../../components/PlateSearchInput';
 import PageHeader from '../../components/PageHeader';
 import SchoolWorkflowNav from '../../components/SchoolWorkflowNav';
 import VehicleRosterCard from '../../components/VehicleRosterCard';
+import DriverAccountActions from '../../components/DriverAccountActions';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
@@ -138,6 +139,9 @@ export default function VehicleList() {
                       <Pencil className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
                       แก้ไขข้อมูลรถ
                     </TableAction>
+                    {user?.role === 'school' && !isTeacher && (
+                      <DriverAccountActions vehicle={v} basePath="/school" onChanged={load} />
+                    )}
                   </div>
                 ) : null}
               />
@@ -195,7 +199,7 @@ export default function VehicleList() {
               <p className="text-caption text-ink-muted mt-1">ข้อมูลประกันให้เจ้าของรถหรือคนขับแก้ไขในระบบคนขับ</p>
             </div>
             <p className="text-caption text-ink-muted">
-              ข้อมูลคนขับ ให้คนขับแก้ไขเองในหน้าโปรไฟล์คนขับ
+              ชื่อและเบอร์คนขับ แก้ได้ที่ปุ่ม "แก้ไขข้อมูลคนขับ" หรือ "เปลี่ยนคนขับ" ในการ์ดรถ
             </p>
           </form>
         </Modal>

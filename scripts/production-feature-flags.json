@@ -21,8 +21,8 @@
     "parentClaimCode":       { "env": "FEATURE_PARENT_CLAIM_CODE",       "enabled": true,  "since": "2026-11-08 11:56 น." },
     "parentClaimCodeRequired": { "env": "FEATURE_PARENT_CLAIM_CODE_REQUIRED", "enabled": false, "since": null },
     "coGuardian":            { "env": "FEATURE_CO_GUARDIAN",             "enabled": true,  "since": "2026-11-08 11:56 น." },
-    "recoverySchool":        { "env": "FEATURE_RECOVERY_SCHOOL",         "enabled": false, "since": null },
-    "recoveryDriver":        { "env": "FEATURE_RECOVERY_DRIVER",         "enabled": false, "since": null }
+    "recoverySchool":        { "env": "FEATURE_RECOVERY_SCHOOL",         "enabled": true, "since": "2026-11-13 15:52 น." },
+    "recoveryDriver":        { "env": "FEATURE_RECOVERY_DRIVER",         "enabled": true, "since": "2026-11-13 15:53 น." }
   },
   "settings": {
     "adminRecoveryRequireCode": {

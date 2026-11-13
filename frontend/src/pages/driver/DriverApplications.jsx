@@ -59,6 +59,10 @@ export default function DriverApplications() {
   const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState('');
+  // A vehicle shared by several schools: the driver names the school that
+  // reviews the application and issues the certificate.
+  const [riderSchools, setRiderSchools] = useState([]);
+  const [issuingSchool, setIssuingSchool] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [timeline, setTimeline] = useState({});
@@ -81,15 +85,32 @@ export default function DriverApplications() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  useEffect(() => {
+    setRiderSchools([]);
+    setIssuingSchool('');
+    if (!selectedVehicle) return;
+    api.get('/driver/applications/rider-schools', { params: { vehicle_id: selectedVehicle } })
+      .then(res => {
+        const list = Array.isArray(res.data?.data) ? res.data.data : [];
+        setRiderSchools(list);
+        setIssuingSchool(list[0]?.school_id || '');
+      })
+      .catch(() => {});
+  }, [selectedVehicle]);
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (!selectedVehicle) { toast.error('กรุณาเลือกรถ'); return; }
     setSubmitting(true);
     try {
-      await api.post('/driver/applications', { vehicle_id: Number(selectedVehicle) });
+      await api.post('/driver/applications', {
+        vehicle_id: selectedVehicle,
+        ...(issuingSchool ? { issuing_school_id: issuingSchool } : {}),
+      });
       toast.success('ยื่นคำขอขึ้นทะเบียนรถสำเร็จ');
       setShowForm(false);
       setSelectedVehicle('');
+      setIssuingSchool('');
       fetchData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'ยื่นคำขอไม่สำเร็จ');
@@ -154,6 +175,19 @@ export default function DriverApplications() {
                   </select>
                 )}
               </FormField>
+              {riderSchools.length > 1 && (
+                <FormField label="ยื่นให้โรงเรียน (ผู้ตรวจเอกสารและออกหนังสือรับรอง)"
+                  helper={`รถคันนี้รับส่งนักเรียน ${riderSchools.length} โรงเรียน — โรงเรียนอื่นจะเห็นสถานะและหนังสือรับรองด้วย`}>
+                  {ctl => (
+                    <select {...ctl} value={issuingSchool} onChange={e => setIssuingSchool(e.target.value)}
+                      className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                      {riderSchools.map(s => (
+                        <option key={s.school_id} value={s.school_id}>{s.school_name} ({s.pupil_count} คน)</option>
+                      ))}
+                    </select>
+                  )}
+                </FormField>
+              )}
               <div className="flex gap-2">
                 <button type="submit" disabled={submitting}
                   className="inline-flex items-center gap-1.5 bg-brand-700 hover:bg-brand-800 disabled:opacity-50 text-surface-raised text-sm font-medium px-4 py-2 rounded-lg transition min-h-[44px]">

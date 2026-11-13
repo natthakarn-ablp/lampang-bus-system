@@ -1255,6 +1255,9 @@ async function abortInspectionAttempt(pool, {
 async function createDriverApplication(pool, {
   vehicleId,
   driverUserId,
+  // Optional: which rider school reviews the application and issues the
+  // certificate. A vehicle shared by several schools must be able to name it.
+  issuingSchoolId: requestedIssuingSchoolId = null,
 }) {
   if (!vehicleId || !driverUserId) {
     throw appError('vehicleId และ driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
@@ -1313,8 +1316,21 @@ async function createDriverApplication(pool, {
     );
     if (!schools.length) throw appError('รถคันนี้ยังไม่มีนักเรียนผูกอยู่', 400, 'NO_CURRENT_RIDERS');
 
-    // Use the first school as issuing school (primary school)
-    const issuingSchoolId = schools[0].school_id;
+    // Issuing school: the one the driver named (must have pupils on the
+    // vehicle), else the school with the most riders (ties: by name). It used
+    // to be the alphabetically first school, which a driver of a vehicle shared
+    // by 3 schools could neither see nor change.
+    let issuingSchoolId;
+    if (requestedIssuingSchoolId) {
+      const chosen = schools.find((row) => String(row.school_id) === String(requestedIssuingSchoolId));
+      if (!chosen) {
+        throw appError('โรงเรียนที่เลือกไม่มีนักเรียนใช้รถคันนี้', 400, 'ISSUING_SCHOOL_NOT_RIDER');
+      }
+      issuingSchoolId = chosen.school_id;
+    } else {
+      const riders = (row) => Math.max(Number(row.morning_rider_count) || 0, Number(row.evening_rider_count) || 0);
+      issuingSchoolId = schools.reduce((best, row) => (riders(row) > riders(best) ? row : best), schools[0]).school_id;
+    }
 
     // Check for active application
     const activeKey = `${vehicleId}|${currentTerm}`;
@@ -1428,6 +1444,37 @@ async function createDriverApplication(pool, {
   }
 }
 
+/**
+ * Rider schools of a vehicle the driver is authorized on — the choices for
+ * the issuing school when filing an application. Counts + names only.
+ */
+async function listDriverVehicleSchools(pool, { vehicleId, driverUserId }) {
+  if (!vehicleId || !driverUserId) {
+    throw appError('vehicleId และ driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
+  }
+  const [[assignment]] = await pool.query(
+    `SELECT dva.id FROM driver_vehicle_assignments dva
+       JOIN users u ON u.driver_id = dva.driver_id
+      WHERE dva.vehicle_id = ? AND u.id = ? AND dva.is_active = TRUE
+        AND dva.authorization_status = 'AUTHORIZED'
+      LIMIT 1`,
+    [vehicleId, driverUserId]
+  );
+  if (!assignment) {
+    throw appError('คุณไม่ใช่คนขับที่ได้รับอนุญาตของรถคันนี้', 403, 'DRIVER_NOT_AUTHORIZED_FOR_VEHICLE');
+  }
+  const [rows] = await pool.query(
+    `SELECT s.school_id, sc.name AS school_name, COUNT(*) AS pupil_count
+       FROM students s
+       JOIN schools sc ON sc.id = s.school_id AND sc.is_deleted = FALSE
+      WHERE s.vehicle_id = ? AND s.is_deleted = FALSE
+      GROUP BY s.school_id, sc.name
+      ORDER BY pupil_count DESC, sc.name`,
+    [vehicleId]
+  );
+  return rows.map((r) => ({ ...r, pupil_count: Number(r.pupil_count) || 0 }));
+}
+
 async function listDriverApplications(pool, { driverUserId, status = null } = {}) {
   if (!driverUserId) {
     throw appError('driverUserId จำเป็นต้องระบุ', 400, 'MISSING_REQUIRED_FIELDS');
@@ -1525,6 +1572,7 @@ module.exports = {
   refreshVehicleEligibility,
   createApplication,
   createDriverApplication,
+  listDriverVehicleSchools,
   listDriverApplications,
   listSchoolApplications,
   getApplication,

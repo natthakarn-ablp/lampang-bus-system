@@ -215,6 +215,20 @@ function thaiDate(iso) {
   return d.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Bangkok' });
 }
 
+/**
+ * "N คน" — and, for a vehicle shared by several schools, the total and each
+ * school's count ("รวมทุกโรงเรียน 9 คน: ก 4, ข 3, ค 2"). Counts and school
+ * names only; the snapshot never holds a pupil's name.
+ */
+function pupilLine(snap = {}) {
+  const own = Number(snap.pupil_count) || 0;
+  const schools = Array.isArray(snap.schools) ? snap.schools : [];
+  if (schools.length <= 1) return `${own} คน`;
+  const total = Number(snap.total_pupil_count) || schools.reduce((s, r) => s + (Number(r.pupil_count) || 0), 0);
+  const parts = schools.map((r) => `${r.school_name || '-'} ${Number(r.pupil_count) || 0}`).join(', ');
+  return `${own} คน (รถคันนี้รับส่งนักเรียน ${schools.length} โรงเรียน รวม ${total} คน: ${parts})`;
+}
+
 function renderCertificatePdf(doc, c) {
   let fontName = 'Helvetica';
   let fontBold = 'Helvetica-Bold';
@@ -246,7 +260,7 @@ function renderCertificatePdf(doc, c) {
     ['ทะเบียนรถ', c.plate_no || snap.plate_no || '-'],
     ['ประเภทรถ', c.vehicle_type || snap.vehicle_type || '-'],
     ['ชื่อผู้ขับรถ', c.driver_name || snap.driver_name || '-'],
-    ['จำนวนนักเรียนที่รับส่ง', `${Number(snap.pupil_count) || 0} คน`],
+    ['จำนวนนักเรียนที่รับส่ง', pupilLine(snap)],
     ['ผู้ดูแลนักเรียนประจำรถ', snap.caretaker_name
       ? `${snap.caretaker_name}${snap.caretaker_phone ? ` (โทร ${snap.caretaker_phone})` : ''}` : '-'],
     ['ภาคเรียน', c.term_id || '-'],

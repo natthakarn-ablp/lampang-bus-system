@@ -187,7 +187,10 @@ function VerificationHistoryRow({ application, onOpen }) {
   );
 }
 
-function VerificationPacket({ selected, qr, busy, isGradeTeacher, certification, onBack, onMarkReady, onReview, onCancel, onChanged }) {
+function VerificationPacket({ selected, qr, busy, isGradeTeacher, isIssuer = true, certification, onBack, onMarkReady, onReview, onCancel, onChanged }) {
+  // A vehicle shared by several schools: only the issuing school acts on the
+  // application; the other rider schools follow it read-only.
+  const canAct = !isGradeTeacher && isIssuer;
   return (
     <AppCard className="motion-safe:animate-fade-in-up motion-reduce:animate-none print:animate-none print:shadow-none print:border-0">
       <div className="flex flex-wrap justify-between gap-3 border-b border-surface-border pb-4 print:border-slate-400">
@@ -244,6 +247,12 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, certification,
             </p>
           </div>
 
+          {!isIssuer && (
+            <AlertBanner variant="info" className="print:hidden">
+              คำขอนี้ยื่นต่อ{selected.issuing_school_name || 'โรงเรียนอื่น'} ซึ่งเป็นผู้ตรวจเอกสารและออกหนังสือรับรอง —
+              โรงเรียนของท่านมีนักเรียนใช้รถคันนี้ จึงดูสถานะและหนังสือรับรองได้ (แก้ไขไม่ได้)
+            </AlertBanner>
+          )}
           {certification && !isGradeTeacher && (
             <CertificateChecklistCard applicationId={selected.id} status={selected.status} onChanged={onChanged} />
           )}
@@ -280,7 +289,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, certification,
         >
           กลับไปเลือกรถ
         </button>
-        {selected.status === 'PENDING_SCHOOL_REVIEW' && !isGradeTeacher && (
+        {selected.status === 'PENDING_SCHOOL_REVIEW' && canAct && (
           <>
             <button
               type="button"
@@ -301,7 +310,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, certification,
             </button>
           </>
         )}
-        {selected.status === 'DRAFT' && !isGradeTeacher && (
+        {selected.status === 'DRAFT' && canAct && (
           <button
             type="button"
             disabled={busy}
@@ -322,7 +331,7 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, certification,
             พิมพ์ใบส่งตรวจ
           </button>
         )}
-        {CANCELLABLE_STATUSES.has(selected.status) && !isGradeTeacher && (
+        {CANCELLABLE_STATUSES.has(selected.status) && canAct && (
           <button
             type="button"
             disabled={busy}
@@ -579,6 +588,7 @@ export default function VehicleVerification() {
           qr={qr}
           busy={busy}
           isGradeTeacher={isGradeTeacher}
+          isIssuer={user?.role === 'admin' || String(selected.issuing_school_id) === String(user?.scope_id)}
           certification={certification}
           onChanged={load}
           onBack={() => { setSelected(null); setConfirmAction(null); setActionReason(''); }}

@@ -14,6 +14,8 @@
 | โรงเรียนนัดขนส่งมาตรวจทุกคันที่โรงเรียนวันเดียว | โรงเรียนเลือกคำขอที่พร้อมตรวจหลายคัน + เสนอวัน → ขนส่งยืนยันวัน → ตรวจเสร็จ |
 | มาตรฐานรถ (ป้ายส้มอักษรดำ+ไฟเหลืองอำพัน, ไม่ติดฟิล์ม, ไม่มีที่ยืน, สองแถวมีประตูท้าย, รถตู้ที่นั่งแถวตอน, ค้อนทุบกระจก/ชะแลง) | แบบตรวจ `LAMPANG_SCHOOLBUS` **version 2** = หัวข้อเดิมทั้งหมด + 6 หัวข้อใหม่ (สองแถว/รถตู้ เลือก "ไม่เกี่ยวข้อง" ได้) ใช้เฉพาะเมื่อเปิด flag; การตรวจที่เริ่มไว้แล้วใช้แบบเดิมจนจบ |
 
+**รถร่วมหลายโรงเรียน** (ทดสอบตามแผนผังด้วยข้อมูลสมมุติ 2026-11-14 — รถสองแถว 1 คันรับนักเรียน 3 โรงเรียน, `backend/tests/certThreeSchoolScenario.test.js`): คนขับเลือก "ยื่นให้โรงเรียน" ได้เมื่อรถมีนักเรียนหลายโรงเรียน (ไม่เลือก = โรงเรียนที่มีนักเรียนมากที่สุด) · โรงเรียนผู้ออกเท่านั้นที่ตรวจ/ออก/เพิกถอน/นัดตรวจ — โรงเรียนอื่นได้ 403 · โรงเรียนอื่นที่มีนักเรียนใช้รถ **เห็นสถานะคำขอ รายการเอกสาร และหนังสือรับรอง (ดาวน์โหลด PDF ได้) แบบอ่านอย่างเดียว** ("รถคันนี้มีหนังสือรับรองจาก<โรงเรียนผู้ออก> เลขที่ … ถึง …") · PDF แสดงจำนวนนักเรียนรวมทุกโรงเรียน · เลยกำหนดยื่นใหม่ แจ้งเฉพาะโรงเรียนผู้ออก + ขนส่ง (โรงเรียนอื่นเห็นในรายการคำขอ) · แก้ไขพร้อมกัน: หน้า "ขึ้นทะเบียนรถ" ของคนขับส่ง `vehicle_id` เป็นตัวเลข (รหัสรถจริงเป็น `V-…`) ทำให้ยื่นคำขอจากหน้าจอไม่ได้เลย — แก้แล้ว
+
 อื่น ๆ: eligibility ของรถเพิ่มเหตุผล `CERTIFICATE_MISSING` / `CERTIFICATE_EXPIRED` / `CERTIFICATE_REVOKED` และ "ใกล้หมดอายุ" เมื่อหนังสือรับรองเหลือ ≤30 วัน · งานรออนุมัติ: ขนส่งเห็น "คำขอนัดตรวจรถที่โรงเรียน", โรงเรียนเห็น "หนังสือรับรองรถใกล้หมดอายุ (30 วัน)" (ไม่แจ้งเตือน) · ไม่มีการส่ง LINE
 
 ## migration 063 ทำอะไร (additive)
@@ -45,7 +47,7 @@
 - `backend/src/services/schoolCertification.service.js` (กติกาทั้งหมด), `backend/src/routes/certification.routes.js` (`/api/certification/*`, 404 ทุกเส้นเมื่อปิด flag)
 - จุดเชื่อม: `vehicleVerification.service.js` (`computeEligibility`, `startInspection`, `finalizeInspection`, `reviewApplication`, `transitionSchoolApplication`), `pendingQueue.service.js` (คิว AP/CE/FX), `driverDocuments.service.js` (ประเภทเอกสาร)
 - หน้าจอ: `frontend/src/components/certification/*` บนหน้า ส่งตรวจและรับรองรถ (โรงเรียน), ตรวจรับรองรถ (ขนส่ง), ขึ้นทะเบียนรถ + แนบเอกสาร (คนขับ)
-- ทดสอบ: `backend/tests/schoolCertification.unit.test.js`, `schoolCertificationRoutes.unit.test.js` (ไม่ใช้ DB), `schoolCertification.test.js` (MySQL ใน CI)
+- ทดสอบ: `backend/tests/schoolCertification.unit.test.js`, `schoolCertificationRoutes.unit.test.js` (ไม่ใช้ DB), `schoolCertification.test.js`, `certThreeSchoolScenario.test.js` (MySQL ใน CI)
 
 ## ยังไม่ทำในรอบนี้
 - ไม่มีการลงนามดิจิทัล — PDF มีช่องลงนามผู้อำนวยการว่างไว้ให้ลงมือชื่อ

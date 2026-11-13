@@ -243,9 +243,37 @@ async function safeRows(db, sql, params) {
 }
 
 /**
+ * True when a live pupil of `schoolId` rides `vehicleId`. One vehicle often
+ * carries pupils of several schools (owner test 2026-11-14: a songthaew with
+ * pupils of 3 schools); every such school may SEE the vehicle's certificates,
+ * only the issuing school may issue or revoke them.
+ */
+async function schoolRidesVehicle(db, schoolId, vehicleId) {
+  if (!schoolId || !vehicleId) return false;
+  const [[row]] = await db.query(
+    `SELECT 1 AS ok FROM students
+      WHERE vehicle_id = ? AND school_id = ? AND is_deleted = FALSE LIMIT 1`,
+    [vehicleId, schoolId]
+  );
+  return Boolean(row);
+}
+
+/** Linked to the application (a rider school when it was filed) or rides the vehicle now. */
+async function schoolRelatedToApplication(db, app, schoolId) {
+  if (!schoolId) return false;
+  const [[link]] = await db.query(
+    'SELECT 1 AS ok FROM inspection_application_schools WHERE application_id = ? AND school_id = ? LIMIT 1',
+    [app.id, schoolId]
+  );
+  return Boolean(link) || schoolRidesVehicle(db, schoolId, app.vehicle_id);
+}
+
+/**
  * The application as the school sees it for certification. `issuingOnly`
- * requires the caller's school to be the issuing school (issue/revoke paths);
- * otherwise any linked school may read it.
+ * requires the caller's school to be the issuing school (issue/revoke paths):
+ * another rider school of the same vehicle gets 403 ISSUING_SCHOOL_REQUIRED
+ * (it can see the application), an unrelated school 404. Otherwise any
+ * related school may read it.
  */
 async function loadApplicationForSchool(db, { applicationId, schoolId, issuingOnly = false, lock = false }) {
   const [[app]] = await db.query(
@@ -259,20 +287,16 @@ async function loadApplicationForSchool(db, { applicationId, schoolId, issuingOn
       ${lock ? 'FOR UPDATE' : ''}`,
     [applicationId]
   );
-  if (!app) throw appError('ไม่พบคำขอ หรือคุณไม่มีสิทธิ์ดูคำขอนี้', 404, 'APPLICATION_NOT_FOUND');
+  const notFound = () => appError('ไม่พบคำขอ หรือคุณไม่มีสิทธิ์ดูคำขอนี้', 404, 'APPLICATION_NOT_FOUND');
+  if (!app) throw notFound();
+  if (String(app.issuing_school_id) === String(schoolId)) return app;
+  const related = await schoolRelatedToApplication(db, app, schoolId);
+  if (!related) throw notFound(); // another school's vehicle: answer as for a missing row
   if (issuingOnly) {
-    if (String(app.issuing_school_id) !== String(schoolId)) {
-      // Another school's vehicle: answer as for a missing row.
-      throw appError('ไม่พบคำขอ หรือคุณไม่มีสิทธิ์ดูคำขอนี้', 404, 'APPLICATION_NOT_FOUND');
-    }
-  } else {
-    const [[link]] = await db.query(
-      'SELECT 1 AS ok FROM inspection_application_schools WHERE application_id = ? AND school_id = ? LIMIT 1',
-      [applicationId, schoolId]
+    throw appError(
+      `เฉพาะโรงเรียนผู้ออกหนังสือรับรอง (${app.issuing_school_name || app.issuing_school_id}) เท่านั้นที่ออกหรือเพิกถอนได้`,
+      403, 'ISSUING_SCHOOL_REQUIRED', { issuing_school_id: app.issuing_school_id }
     );
-    if (!link && String(app.issuing_school_id) !== String(schoolId)) {
-      throw appError('ไม่พบคำขอ หรือคุณไม่มีสิทธิ์ดูคำขอนี้', 404, 'APPLICATION_NOT_FOUND');
-    }
   }
   return app;
 }
@@ -335,17 +359,33 @@ async function getDocumentChecklist(db, { applicationId, schoolId, app = null })
   const driverDocs = driver ? await safeRows(db,
     `SELECT id, doc_type, review_status FROM driver_documents
       WHERE driver_id = ? AND is_deleted = FALSE`, [driver.driver_id]) : [];
-  const [[pupils]] = await db.query(
-    `SELECT COUNT(*) AS n FROM students
-      WHERE vehicle_id = ? AND school_id = ? AND is_deleted = FALSE`,
-    [application.vehicle_id, schoolId || application.issuing_school_id]
+  // Pupils per school on this vehicle (counts and school names only). The
+  // PUPIL_LIST item counts the issuing school's own pupils, whoever is looking.
+  const [pupilRows] = await db.query(
+    `SELECT s.school_id, sc.name AS school_name, COUNT(*) AS n
+       FROM students s
+       JOIN schools sc ON sc.id = s.school_id
+      WHERE s.vehicle_id = ? AND s.is_deleted = FALSE
+      GROUP BY s.school_id, sc.name
+      ORDER BY sc.name`,
+    [application.vehicle_id]
   );
+  const pupilsBySchool = (pupilRows || []).map((r) => ({
+    school_id: r.school_id, school_name: r.school_name, pupil_count: Number(r.n) || 0,
+  }));
+  const own = pupilsBySchool.find((r) => String(r.school_id) === String(application.issuing_school_id));
+  const totalPupils = pupilsBySchool.reduce((sum, r) => sum + r.pupil_count, 0);
   const items = buildChecklistItems({
     vehicleDocs, driverDocs,
     requireCompulsoryInsurance: Boolean(window && window.require_compulsory_insurance),
-    pupilCount: Number(pupils && pupils.n) || 0,
+    pupilCount: own ? own.pupil_count : 0,
     caretaker: { name: application.caretaker_name, phone: application.caretaker_phone },
   });
+  const pupilItem = items.find((i) => i.code === 'PUPIL_LIST');
+  if (pupilItem) {
+    pupilItem.total_count = totalPupils;
+    pupilItem.schools = pupilsBySchool;
+  }
   const state = windowState(window);
   return {
     application: {
@@ -363,7 +403,33 @@ async function getDocumentChecklist(db, { applicationId, schoolId, app = null })
     items,
     missing: items.filter((i) => i.required && !i.present).map((i) => i.code),
     certificate: await latestCertificateForApplication(db, application.id),
+    // Every other rider school of a shared vehicle reads this, read-only.
+    viewer_is_issuer: !schoolId || String(schoolId) === String(application.issuing_school_id),
+    // The same vehicle's certificates from the other rider schools (latest per school).
+    other_school_certificates: await otherSchoolCertificates(db, application.vehicle_id, application.issuing_school_id),
   };
+}
+
+/** Latest certificate per school for a vehicle, excluding `exceptSchoolId`. */
+async function otherSchoolCertificates(db, vehicleId, exceptSchoolId) {
+  const [rows] = await db.query(
+    `SELECT c.id, c.cert_no, c.school_id, sc.name AS school_name, c.term_id,
+            DATE_FORMAT(c.valid_until, '%Y-%m-%d') AS valid_until, c.revoked_at, c.revoke_reason
+       FROM school_transport_certificates c
+       JOIN schools sc ON sc.id = c.school_id
+      WHERE c.vehicle_id = ? AND c.school_id <> ?
+      ORDER BY c.id DESC LIMIT 50`,
+    [vehicleId, exceptSchoolId]
+  );
+  const seen = new Set();
+  const out = [];
+  for (const r of rows || []) {
+    if (seen.has(String(r.school_id))) continue;
+    seen.add(String(r.school_id));
+    const st = certificateState(r);
+    out.push({ ...r, state: st.state, expiring: st.expiring });
+  }
+  return out;
 }
 
 // ─── Certificates ───────────────────────────────────────────────────────────
@@ -453,6 +519,11 @@ async function issueCertificateInTx(conn, { applicationId, schoolId, userId }) {
   const pupilItem = checklist.items.find((i) => i.code === 'PUPIL_LIST');
   const snapshot = {
     pupil_count: pupilItem ? pupilItem.count : 0,
+    // Shared vehicle: every rider school's count (school names, never pupils).
+    total_pupil_count: pupilItem && pupilItem.total_count != null ? pupilItem.total_count : (pupilItem ? pupilItem.count : 0),
+    school_count: pupilItem && pupilItem.schools ? pupilItem.schools.length : 1,
+    schools: pupilItem && pupilItem.schools
+      ? pupilItem.schools.map((r) => ({ school_name: r.school_name, pupil_count: r.pupil_count })) : [],
     caretaker_name: app.caretaker_name || null,
     caretaker_phone: app.caretaker_phone || null,
     plate_no: app.plate_no,
@@ -472,6 +543,12 @@ async function issueCertificateInTx(conn, { applicationId, schoolId, userId }) {
   const warnings = [];
   if (checklist.outside_window) warnings.push('OUTSIDE_WINDOW');
   if (checklist.missing.length) warnings.push('DOCUMENTS_MISSING');
+  // Another rider school revoked its certificate for this vehicle this term:
+  // still issued (each school answers for its own pupils), but say so.
+  if ((checklist.other_school_certificates || [])
+    .some((c) => c.state === 'REVOKED' && String(c.term_id) === String(termId))) {
+    warnings.push('REVOKED_BY_OTHER_SCHOOL');
+  }
   await logAudit({
     userId, action: 'CREATE', entityType: 'school_transport_certificate', entityId: String(ins.insertId),
     newValue: {
@@ -528,7 +605,12 @@ async function revokeCertificate(pool, { certificateId, schoolId, userId, reason
     const [[cert]] = await conn.query(
       `SELECT id, cert_no, school_id, vehicle_id, revoked_at FROM school_transport_certificates
         WHERE id = ? FOR UPDATE`, [certificateId]);
-    if (!cert || String(cert.school_id) !== String(schoolId)) {
+    if (!cert) throw appError('ไม่พบหนังสือรับรอง', 404, 'CERTIFICATE_NOT_FOUND');
+    if (String(cert.school_id) !== String(schoolId)) {
+      // A rider school of a shared vehicle sees the certificate but cannot revoke it.
+      if (await schoolRidesVehicle(conn, schoolId, cert.vehicle_id)) {
+        throw appError('เฉพาะโรงเรียนผู้ออกหนังสือรับรองเท่านั้นที่เพิกถอนได้', 403, 'ISSUING_SCHOOL_REQUIRED');
+      }
       throw appError('ไม่พบหนังสือรับรอง', 404, 'CERTIFICATE_NOT_FOUND');
     }
     if (cert.revoked_at) throw appError('หนังสือรับรองนี้ถูกเพิกถอนแล้ว', 409, 'CERTIFICATE_ALREADY_REVOKED');
@@ -555,17 +637,26 @@ async function revokeCertificate(pool, { certificateId, schoolId, userId, reason
   return { id: Number(certificateId), revoked: true };
 }
 
+/**
+ * The certificates a school sees: those it issued, plus (read-only) those
+ * other schools issued for a vehicle its own pupils ride now (shared vehicle).
+ * `is_issuer` tells the two apart; only the issuer may revoke.
+ */
 async function listSchoolCertificates(db, { schoolId }) {
   const [rows] = await db.query(
-    `SELECT ${CERT_COLUMNS}, v.plate_no, a.request_no, a.status AS application_status
+    `SELECT ${CERT_COLUMNS}, v.plate_no, a.request_no, a.status AS application_status,
+            sc.name AS school_name
        FROM school_transport_certificates c
        JOIN vehicles v ON v.id = c.vehicle_id
        JOIN vehicle_inspection_applications a ON a.id = c.application_id
+       JOIN schools sc ON sc.id = c.school_id
       WHERE c.school_id = ?
-      ORDER BY c.id DESC LIMIT 500`,
-    [schoolId]
+         OR EXISTS (SELECT 1 FROM students s
+                     WHERE s.vehicle_id = c.vehicle_id AND s.school_id = ? AND s.is_deleted = FALSE)
+      ORDER BY (c.school_id = ?) DESC, c.id DESC LIMIT 500`,
+    [schoolId, schoolId, schoolId]
   );
-  return rows.map((r) => mapCertificate(r));
+  return rows.map((r) => ({ ...mapCertificate(r), is_issuer: String(r.school_id) === String(schoolId) }));
 }
 
 async function listVehicleCertificates(db, { vehicleId }) {
@@ -581,7 +672,8 @@ async function listVehicleCertificates(db, { vehicleId }) {
 }
 
 /**
- * One certificate for printing. school: own; driver: a certificate of the
+ * One certificate for printing. school: own, or one for a vehicle its pupils
+ * ride (shared vehicle, read-only); driver: a certificate of the
  * vehicle they drive (driverVehicleId) or of an application they submitted;
  * transport/admin: any. Everything else answers 404.
  */
@@ -601,7 +693,10 @@ async function getCertificateForViewer(db, { certificateId, viewer, driverVehicl
   if (!row) throw notFound();
   const role = viewer && viewer.role;
   if (role === 'school') {
-    if (viewer.gradeScope || String(row.school_id) !== String(viewer.schoolId)) throw notFound();
+    if (viewer.gradeScope || !viewer.schoolId) throw notFound();
+    // Own certificate, or (read-only) one for a vehicle the school's pupils ride.
+    if (String(row.school_id) !== String(viewer.schoolId)
+      && !await schoolRidesVehicle(db, viewer.schoolId, row.vehicle_id)) throw notFound();
   } else if (role === 'driver') {
     const own = String(row.requested_by) === String(viewer.userId)
       || (driverVehicleId && String(row.vehicle_id) === String(driverVehicleId));
@@ -827,6 +922,8 @@ module.exports = {
   getWindowSummary,
   setWindow,
   getDocumentChecklist,
+  schoolRidesVehicle,
+  otherSchoolCertificates,
   latestCertificateForApplication,
   validCertificateForApplication,
   governingCertificateForVehicle,

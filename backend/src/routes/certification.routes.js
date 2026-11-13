@@ -24,6 +24,12 @@ const { pool } = require('../config/database');
 const env = require('../config/env');
 const svc = require('../services/schoolCertification.service');
 const checkinSvc = require('../services/checkin.service');
+const { createUserKeyedLimiter, REPORT_EXPORT_BUDGET } = require('../middleware/rateLimiters');
+const { toBangkokDate } = require('../utils/thaiTime');
+
+// The certificate PDF is an export (audited before bytes leave): same budget
+// as /api/reports (40 / 5 min per user; skipped under test).
+const certificatePdfLimiter = createUserKeyedLimiter(REPORT_EXPORT_BUDGET);
 
 const router = express.Router();
 
@@ -227,7 +233,7 @@ function renderCertificatePdf(doc, c) {
   doc.font(fontName).fontSize(14).text(c.school_name || snap.school_name || '', { align: 'center' });
   doc.moveDown(0.3);
   doc.fontSize(13).text(`เลขที่ ${c.cert_no}`, { align: 'right' });
-  doc.text(`ออกให้ ณ วันที่ ${thaiDate(c.issued_at ? new Date(c.issued_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }) : null)}`, { align: 'right' });
+  doc.text(`ออกให้ ณ วันที่ ${thaiDate(c.issued_at ? toBangkokDate(c.issued_at) : null)}`, { align: 'right' });
   doc.moveDown(1);
   doc.fontSize(15).text(
     `${c.school_name || snap.school_name || 'โรงเรียน'} รับรองว่ารถตามรายละเอียดด้านล่าง ได้ยื่นเอกสารประกอบ`
@@ -268,7 +274,7 @@ function renderCertificatePdf(doc, c) {
   ).fillColor('#000000');
 }
 
-router.get('/certificates/:id/pdf', requireRole('school', 'driver', 'transport', 'admin'), async (req, res, next) => {
+router.get('/certificates/:id/pdf', certificatePdfLimiter, requireRole('school', 'driver', 'transport', 'admin'), async (req, res, next) => {
   try {
     const certificateId = readIdParam(req, res, 'id'); if (certificateId === null) return undefined;
     const viewer = {

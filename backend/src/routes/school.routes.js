@@ -2780,7 +2780,7 @@ router.post('/vehicles/requests', requireFullSchoolScope, async (req, res, next)
       platePrefix: b.plate_prefix, plateNumber: b.plate_number, province: b.province, inputPlate: b.input_plate,
       reason: b.reason, importBatchId: b.import_batch_id, importRowId: b.import_row_id,
     });
-    return sendSuccess(res, out, 'ส่งคำขอแล้ว · รอผู้ดูแลระบบตรวจสอบ', null, 201);
+    return sendSuccess(res, out, 'ส่งคำขอแล้ว · รอสังกัดของโรงเรียนตรวจสอบ', null, 201);
   } catch (err) { next(err); }
 });
 

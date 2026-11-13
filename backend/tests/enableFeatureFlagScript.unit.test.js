@@ -571,6 +571,15 @@ describe('enable-feature-flag.sh source', () => {
     expect([...declared].sort().join(' ')).toBe([...read].sort().join(' '));
   });
 
+  it('every KNOWN_FLAGS token is a bare flag name the case match can hit', () => {
+    // 2026-11-14: a literal "\nFEATURE_SCHOOL_CERTIFICATION" passed the test
+    // above (the regex finds FEATURE_… inside it) but `case " $KNOWN_FLAGS "`
+    // never matched, so the flag could not be enabled on production.
+    const body = code.match(/^KNOWN_FLAGS="([\s\S]*?)"$/m)[1].replace(/\\\r?\n/g, ' ');
+    const tokens = body.split(/\s+/).filter(Boolean);
+    expect(tokens.filter((t) => !/^FEATURE_[A-Z0-9_]+$/.test(t))).toEqual([]);
+  });
+
   it('guards the same flag pairs env.js refuses to boot on', () => {
     for (const pair of ['FEATURE_QR_LEVEL3', 'FEATURE_PARENT_CONSENT_REQUIRED']) {
       expect(ENV_JS).toMatch(new RegExp(`source\\.${pair} === 'true' && source\\.FEATURE_VEHICLE_QR !== 'true'`));

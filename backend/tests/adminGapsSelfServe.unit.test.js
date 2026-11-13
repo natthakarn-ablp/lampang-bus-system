@@ -156,6 +156,18 @@ describe('vehicleAdmin.vehicleImpact', () => {
     expect(c.calls.every(([s]) => /^\s*SELECT/.test(s))).toBe(true);
   });
 
+  test('names the driver login a merge would close (username = this plate)', async () => {
+    const c = makeConn((sql) => {
+      if (/FROM vehicles WHERE id = \?/.test(sql)) return [[{ id: 'V-1', plate_no: 'นข 1 ลำปาง', vehicle_type: 'รถตู้', is_deleted: 0 }]];
+      if (/FROM users\s+WHERE role = 'driver'/.test(sql)) return [[{ id: 41, username: 'นข1ลำปาง', is_active: 1 }]];
+      if (/COUNT/.test(sql)) return [[{ n: 0 }]];
+      return dflt(sql);
+    });
+    const out = await vehicleAdmin.vehicleImpact({ query: c.query }, 'V-1');
+    expect(out.driver_login).toEqual({ id: 41, username: 'นข1ลำปาง', is_active: true });
+    expect(c.calls.every(([s]) => /^\s*SELECT/.test(s))).toBe(true);
+  });
+
   test('404 for an unknown vehicle', async () => {
     await expect(vehicleAdmin.vehicleImpact({ query: makeConn(dflt).query }, 'nope'))
       .rejects.toMatchObject({ statusCode: 404 });

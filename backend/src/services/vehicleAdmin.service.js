@@ -12,10 +12,26 @@
 // every fn so the service is unit-testable with a mock pool/conn.
 
 const { logAudit } = require('../utils/audit');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 const PI = require('../utils/plateIdentity');
 const { validatePlateNo, isProvinceVariant, normalizePlate } = require('../utils/vehiclePlate');
 
 const err = (msg, code) => { const e = new Error(msg); e.statusCode = code; return e; };
+
+// Live driver logins named after a plate. A driver's username IS the plate as
+// typed at account creation, matched with the same space/dash/case-insensitive
+// normalization fixPlate uses. `excludeNormalized` keeps a login that also
+// matches another plate (the merge winner's) out of the result.
+const DRIVER_LOGIN_SQL = `SELECT id, username, is_active FROM users
+  WHERE role = 'driver' AND is_deleted = FALSE
+    AND REPLACE(REPLACE(LOWER(username), ' ', ''), '-', '') = ?`;
+function plateLoginFilter(plateNo, excludePlateNo) {
+  const own = normalizePlate(plateNo);
+  const other = excludePlateNo ? normalizePlate(excludePlateNo) : null;
+  // If both plates normalize to the same string the login cannot be told apart
+  // from the kept vehicle's → never touch it.
+  return { own, skip: !own || (other !== null && other === own) };
+}
 
 // Tables whose vehicle_id is operational history/links we REPOINT to the winner.
 // Order is irrelevant for plain UPDATEs (all RESTRICT FKs point at vehicles.id,
@@ -349,11 +365,21 @@ async function vehicleImpact(pool, vehicleId) {
        JOIN drivers d ON d.id = dva.driver_id
       WHERE dva.vehicle_id = ? AND dva.is_active = TRUE
       ORDER BY dva.id DESC LIMIT 1`, [vehicleId]);
+  // Owner decision 2026-11-13: a merge closes the driver login named after
+  // this (source) plate. Preview which login that would be.
+  let driverLogin = null;
+  const f = plateLoginFilter(v.plate_no);
+  if (!f.skip) {
+    const [logins] = await pool.query(`${DRIVER_LOGIN_SQL} ORDER BY id LIMIT 1`, [f.own]);
+    const u = logins && logins[0];
+    if (u) driverLogin = { id: u.id, username: u.username, is_active: !!u.is_active };
+  }
   return {
     vehicle: { id: v.id, plate_no: v.plate_no, vehicle_type: v.vehicle_type, is_deleted: !!v.is_deleted },
     active_students: Number(att.active_students) || 0,
     active_assignments: Number(att.active_assignments) || 0,
     driver_name: d ? d.name : null,
+    driver_login: driverLogin,
     moves,
     cleared,
   };
@@ -414,15 +440,38 @@ async function mergeVehicles(pool, { vehicleId, intoVehicleId, actorId, reason =
     // 4) Soft-delete the loser (frees its active_canonical_plate automatically).
     await conn.query('UPDATE vehicles SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ? AND is_deleted = FALSE', [vehicleId]);
 
+    // 5) Owner decision 2026-11-13: close the driver login named after the
+    //    merged-away plate. Not deleted — deactivated, every existing token
+    //    killed (password_changed_at), LINE recovery binding released. A login
+    //    that also matches the kept plate is the kept vehicle's → untouched.
+    const closedLogins = [];
+    const f = plateLoginFilter(loser.plate_no, winner.plate_no);
+    if (!f.skip) {
+      const [logins] = await conn.query(`${DRIVER_LOGIN_SQL} FOR UPDATE`, [f.own]);
+      for (const u of logins || []) {
+        await conn.query('UPDATE users SET is_active = FALSE, password_changed_at = NOW() WHERE id = ?', [u.id]);
+        const released = await releaseRecoveryBinding(conn, u.id);
+        closedLogins.push({ user_id: u.id, username: u.username, was_active: !!u.is_active, recovery_channels_released: released });
+        await logAudit({
+          userId: actorId, action: 'UPDATE', entityType: 'user', entityId: String(u.id), conn,
+          oldValue: { username: u.username, is_active: !!u.is_active },
+          newValue: { is_active: false, reason: 'vehicle_merged', merged_vehicle_id: vehicleId,
+                      merged_plate_no: loser.plate_no, into_vehicle_id: intoVehicleId,
+                      recovery_channels_released: released },
+          ipAddress, userAgent,
+        });
+      }
+    }
+
     await logAudit({
       userId: actorId, action: 'UPDATE', entityType: 'vehicle', entityId: String(vehicleId), conn,
       oldValue: { id: loser.id, plate_no: loser.plate_no, is_deleted: !!loser.is_deleted },
       newValue: { merged_into: intoVehicleId, into_plate_no: winner.plate_no, is_deleted: true,
-                  reason: String(reason).slice(0, 500), repointed: counts },
+                  reason: String(reason).slice(0, 500), repointed: counts, driver_logins_closed: closedLogins },
       ipAddress, userAgent,
     });
     await conn.commit();
-    return { id: vehicleId, merged_into: intoVehicleId, status: 'MERGED', repointed: counts };
+    return { id: vehicleId, merged_into: intoVehicleId, status: 'MERGED', repointed: counts, driver_logins_closed: closedLogins };
   } catch (e) {
     await conn.rollback();
     throw e;

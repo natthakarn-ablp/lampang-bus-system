@@ -51,7 +51,7 @@ export function canBindRecoveryFor(user, features) {
  * `recoveryRole` is the policy role whose LINE recovery covers that account.
  */
 export const RECOVERY_CONTACTS = Object.freeze([
-  { key: 'school',  label: 'โรงเรียน (บัญชีหลัก)', recoveryRole: 'school', contact: 'ติดต่อสังกัด (เขตพื้นที่) ให้รีเซ็ตรหัสผ่าน' },
+  { key: 'school',  label: 'โรงเรียน (บัญชีหลัก)', recoveryRole: 'school', contact: 'ติดต่อสังกัดให้รีเซ็ตรหัสผ่าน' },
   { key: 'teacher', label: 'ครูประจำสายชั้น', recoveryRole: 'school', contact: 'ติดต่อบัญชีหลักของโรงเรียนให้รีเซ็ตรหัสผ่าน' },
   { key: 'driver',  label: 'คนขับ (บัญชีรถ)', recoveryRole: 'driver', contact: 'ติดต่อผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
   { key: 'unit',    label: 'สังกัดและขนส่ง', recoveryRole: null, contact: 'ติดต่อจังหวัดหรือผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },

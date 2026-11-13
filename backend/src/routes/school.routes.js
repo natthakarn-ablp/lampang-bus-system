@@ -572,8 +572,67 @@ router.post('/pickup-points', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ─── DELETE /pickup-points/:id — ลบจุดรับส่งของรถที่ให้บริการโรงเรียนนี้ ──────────
-// School self-service cleanup of an obsolete pickup point (soft-delete).
+// ─── Pickup-point write scope (owner decision 2026-11-13) ────────────────────
+// Pickup points belong to one school's own pupils and are never shared with
+// another school, so the school MAIN account and grade teachers (own grade)
+// add / edit / delete them without admin. A point is in a caller's write scope
+// when (no migration — derived from the existing schema):
+//   • its vehicle carries at least one live pupil of the caller's school; and
+//   • no live pupil of ANOTHER school is assigned to it (safety guard → 409
+//     naming the school(s); per owner this should never happen); and
+//   • grade teacher only: the vehicle carries a live pupil of their grade and
+//     every live pupil on the point is a same-school pupil of that grade
+//     (otherwise 409 POINT_SHARED_WITH_OTHER_GRADE). An empty point on such a
+//     vehicle counts — that is how a point they just emptied stays theirs.
+// Returns the point row, or null after sending the error response.
+async function loadSchoolWritablePoint(req, res, id, schoolId, verb) {
+  const point = await ppSvc.getPickupPointById(id);
+  if (!point) { sendError(res, 'ไม่พบจุดรับส่ง', [], 404); return null; }
+  if (!(await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId))) {
+    sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในขอบเขตโรงเรียนของท่าน', [], 403);
+    return null;
+  }
+  if (!(await ppSvc.isPickupPointVisibleToSchool(id, schoolId))) { sendError(res, 'ไม่พบจุดรับส่ง', [], 404); return null; }
+  const teacherGrade = teacherGradeScope(req);
+  if (teacherGrade) {
+    if (!(await ppSvc.vehicleCarriesSchoolGrade(point.vehicle_id, schoolId, teacherGrade))) {
+      sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในรถของสายชั้นท่าน', [], 403);
+      return null;
+    }
+    const outside = await ppSvc.countStudentsOnPointOutsideGrade(id, schoolId, teacherGrade);
+    if (outside > 0) {
+      sendError(
+        res,
+        `จุดรับส่งนี้มีนักเรียนสายชั้นอื่นใช้อยู่ จึง${verb}ไม่ได้ — ให้แก้ไขรายชื่อเพื่อนำนักเรียนในสายชั้นของท่านออกจากจุดนี้ หรือแจ้งบัญชีหลักของโรงเรียน`,
+        [{ code: 'POINT_SHARED_WITH_OTHER_GRADE' }],
+        409
+      );
+      return null;
+    }
+  }
+  const others = await ppSvc.countOtherSchoolStudentsOnPoint(id, schoolId);
+  if (others > 0) {
+    sendOtherSchoolConflict(res, await ppSvc.getOtherSchoolUsageOnPoint(id, schoolId), others, verb);
+    return null;
+  }
+  return point;
+}
+
+function sendOtherSchoolConflict(res, usage, total, verb) {
+  const names = (usage || []).map(u => `${u.school_name} ${u.count} คน`).join(', ');
+  const who = names ? `นักเรียนของโรงเรียนอื่นใช้อยู่ (${names})` : `นักเรียนของโรงเรียนอื่นใช้อยู่ ${total} คน`;
+  return sendError(
+    res,
+    `จุดรับส่งนี้มี${who} จึง${verb}ไม่ได้ — จุดรับส่งต้องเป็นของนักเรียนโรงเรียนเดียว กรุณาแจ้งผู้ดูแลระบบให้แยกจุด หรือสร้างจุดใหม่แล้วย้ายนักเรียนของโรงเรียนท่านไปจุดนั้น`,
+    [{ code: 'POINT_SHARED_WITH_OTHER_SCHOOL', schools: (usage || []).map(u => u.school_name) }],
+    409
+  );
+}
+
+// ─── DELETE /pickup-points/:id — ลบจุดรับส่งของนักเรียนโรงเรียนตน ─────────────
+// School main account + grade teacher (own grade), owner decision 2026-11-13.
+// One transaction: re-check guards, clear every pupil's reference to the point
+// (student_pickup_points), soft-delete the point, audit with cleared pupil ids.
 router.delete('/pickup-points/:id', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
@@ -581,62 +640,40 @@ router.delete('/pickup-points/:id', async (req, res, next) => {
     const id = readIdParam(req, res, 'id');
     if (id === null) return;
 
-    const point = await ppSvc.getPickupPointById(id);
-    if (!point) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
-    // Scope: the point's vehicle must serve this school
-    const serves = await ppSvc.validateVehicleServesSchool(point.vehicle_id, schoolId);
-    if (!serves) return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในขอบเขตโรงเรียนของท่าน', [], 403);
-    // school-teacher-02: a point shared with another school's pupils is not
-    // this school's to delete — it may only take its own pupils off it (PUT
-    // /pickup-points/:id/students already restricts to this school's rows).
-    // Grade teacher: only a point holding no pupils outside their own grade.
-    const teacherGrade = teacherGradeScope(req);
-    if (teacherGrade) {
-      if (!(await ppSvc.isPickupPointVisibleToSchool(id, schoolId))) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
-      // An empty point on a bus that carries none of their grade is not theirs.
-      if (!(await ppSvc.vehicleCarriesSchoolGrade(point.vehicle_id, schoolId, teacherGrade))) {
-        return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในรถของสายชั้นท่าน', [], 403);
-      }
-      const outside = await ppSvc.countStudentsOnPointOutsideGrade(id, schoolId, teacherGrade);
-      if (outside > 0) {
-        return sendError(
-          res,
-          'จุดรับส่งนี้มีนักเรียนสายชั้นอื่นใช้อยู่ จึงลบไม่ได้ — ให้แก้ไขรายชื่อเพื่อนำนักเรียนในสายชั้นของท่านออกจากจุดนี้แทน',
-          [{ code: 'POINT_SHARED_WITH_OTHER_GRADE' }],
-          409
-        );
-      }
-    }
-    const others = await ppSvc.countOtherSchoolStudentsOnPoint(id, schoolId);
-    if (others > 0) {
-      return sendError(
-        res,
-        'จุดรับส่งนี้มีนักเรียนของโรงเรียนอื่นใช้อยู่ จึงลบไม่ได้ — ให้แก้ไขรายชื่อเพื่อนำนักเรียนของโรงเรียนท่านออกจากจุดนี้แทน',
-        [{ code: 'POINT_SHARED_WITH_OTHER_SCHOOL' }],
-        409
-      );
-    }
+    const point = await loadSchoolWritablePoint(req, res, id, schoolId, 'ลบ');
+    if (!point) return;
 
-    await ppSvc.softDeletePickupPoint(id);
-    await logAudit({
-      userId: req.user.id, action: 'DELETE', entityType: 'pickup_point', entityId: id,
-      oldValue: { vehicle_id: point.vehicle_id, label: point.label, latitude: point.latitude, longitude: point.longitude },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    const result = await ppSvc.deletePickupPointForSchool(id, {
+      schoolId,
+      gradeFilter: teacherGradeScope(req),
+      actorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      scope: teacherGradeScope(req) ? 'grade_teacher' : 'school',
     });
-    return sendSuccess(res, null, 'ลบจุดรับส่งสำเร็จ');
+    if (result.conflict === 'OTHER_SCHOOL') {
+      return sendOtherSchoolConflict(res, await ppSvc.getOtherSchoolUsageOnPoint(id, schoolId), 1, 'ลบ');
+    }
+    if (result.conflict === 'OTHER_GRADE') {
+      return sendError(res, 'จุดรับส่งนี้มีนักเรียนสายชั้นอื่นใช้อยู่ จึงลบไม่ได้', [{ code: 'POINT_SHARED_WITH_OTHER_GRADE' }], 409);
+    }
+    if (!result.deleted) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    const cleared = result.cleared_student_ids.length;
+    return sendSuccess(
+      res,
+      { id, cleared_students: cleared },
+      cleared > 0 ? `ลบจุดรับส่งสำเร็จ — นักเรียน ${cleared} คนยังไม่มีจุดรับส่ง กรุณากำหนดจุดใหม่` : 'ลบจุดรับส่งสำเร็จ'
+    );
   } catch (err) { next(err); }
 });
 
-// ─── PUT /pickup-points/:id — แก้ชื่อ/พิกัด/หมายเหตุจุดรับส่ง (บัญชีหลักโรงเรียน) ───
-// Mirrors PUT /api/admin/pickup-points/:id for the school MAIN account
-// (2026-11-13). Grade teachers keep their existing own-grade rights only
-// (create / delete / edit pupils), so this route is requireFullSchoolScope.
-// Scope: the point's vehicle must serve this school and the point must be
-// visible to it; a point shared with another school's pupils is not this
-// school's to move (same rule as DELETE). Only label/latitude/longitude/notes
-// are editable — session/sequence stay with admin (they can collide with
-// other assignments on the vehicle).
-router.put('/pickup-points/:id', requireFullSchoolScope, async (req, res, next) => {
+// ─── PUT /pickup-points/:id — แก้ชื่อ/พิกัด/หมายเหตุจุดรับส่ง ─────────────────────
+// Mirrors PUT /api/admin/pickup-points/:id. School main account (#175) and,
+// since owner decision 2026-11-13, grade teachers for points of their own
+// grade — same write scope as DELETE (loadSchoolWritablePoint). Only
+// label/latitude/longitude/notes are editable — session/sequence stay with
+// admin (they can collide with other assignments on the vehicle).
+router.put('/pickup-points/:id', async (req, res, next) => {
   try {
     const schoolId = resolveSchoolId(req);
     if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
@@ -669,29 +706,20 @@ router.put('/pickup-points/:id', requireFullSchoolScope, async (req, res, next) 
     if (errors.length) return sendError(res, 'ข้อมูลจุดรับส่งไม่ถูกต้อง', errors, 400);
     if (!Object.keys(input).length) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
 
-    const oldRow = await ppSvc.getPickupPointById(id);
-    if (!oldRow) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
-    if (!(await ppSvc.validateVehicleServesSchool(oldRow.vehicle_id, schoolId))) {
-      return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในขอบเขตโรงเรียนของท่าน', [], 403);
-    }
-    if (!(await ppSvc.isPickupPointVisibleToSchool(id, schoolId))) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
-    const others = await ppSvc.countOtherSchoolStudentsOnPoint(id, schoolId);
-    if (others > 0) {
-      return sendError(
-        res,
-        'จุดรับส่งนี้มีนักเรียนของโรงเรียนอื่นใช้อยู่ จึงแก้ไขตำแหน่งไม่ได้ — สร้างจุดใหม่แล้วย้ายนักเรียนของโรงเรียนท่านไปจุดนั้นแทน',
-        [{ code: 'POINT_SHARED_WITH_OTHER_SCHOOL' }],
-        409
-      );
-    }
+    const oldRow = await loadSchoolWritablePoint(req, res, id, schoolId, 'แก้ไข');
+    if (!oldRow) return;
 
     const ok = await ppSvc.updatePickupPoint(id, input);
     if (!ok) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
     const newRow = await ppSvc.getPickupPointById(id);
+    const grade = teacherGradeScope(req);
     await logAudit({
       userId: req.user.id, action: 'UPDATE', entityType: 'pickup_point', entityId: id,
       oldValue: { label: oldRow.label, latitude: oldRow.latitude, longitude: oldRow.longitude, notes: oldRow.notes },
-      newValue: { label: newRow?.label, latitude: newRow?.latitude, longitude: newRow?.longitude, notes: newRow?.notes, scope: 'school' },
+      newValue: {
+        label: newRow?.label, latitude: newRow?.latitude, longitude: newRow?.longitude, notes: newRow?.notes,
+        scope: grade ? 'grade_teacher' : 'school', grade_scope: grade,
+      },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
     return sendSuccess(res, newRow, 'อัปเดตจุดรับส่งสำเร็จ');

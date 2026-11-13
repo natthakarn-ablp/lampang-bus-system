@@ -22,8 +22,9 @@ const SESSION_LABEL = { morning: 'รอบเช้า', evening: 'รอบเ
 export default function SchoolPickupMap() {
   const { user } = useAuth();
   const toast = useToast();
-  // Grade teachers may add/edit/delete points for their own grade (backend
-  // enforces the grade limits; owner decision 2026-11-11).
+  // Pickup points belong to the school's own pupils (owner decision
+  // 2026-11-13): the main account and grade teachers (own grade — backend
+  // enforces the limits) add, edit name/position and delete them.
   const isTeacher = isGradeTeacher(user);
   const [points, setPoints] = useState([]);
   const [sessionFilter, setSessionFilter] = useState('all');
@@ -33,8 +34,7 @@ export default function SchoolPickupMap() {
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);  // null | { ...point }
-  // School MAIN account only: name / coordinates of a point (backend
-  // requireFullSchoolScope; grade teachers keep their pupil-list rights).
+  // Name / coordinates / note of a point (main account + own-grade teacher).
   const [editingLocation, setEditingLocation] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   // window.confirm named nothing and could not say what survives the delete.
@@ -61,8 +61,8 @@ export default function SchoolPickupMap() {
   const handleDelete = useCallback(async (point) => {
     setDeletingId(point.id);
     try {
-      await api.delete(`/school/pickup-points/${point.id}`);
-      toast.success('ลบจุดรับส่งสำเร็จ');
+      const res = await api.delete(`/school/pickup-points/${point.id}`);
+      toast.success(res?.data?.message || 'ลบจุดรับส่งสำเร็จ');
       if (selectedId === point.id) setSelectedId(null);
       setConfirmDelete(null);
       fetchPoints(sessionFilter);
@@ -147,7 +147,7 @@ export default function SchoolPickupMap() {
                   selected={selectedId === p.id}
                   onClick={() => setSelectedId(p.id)}
                   onEdit={() => setEditing(p)}
-                  onEditLocation={isTeacher ? undefined : () => setEditingLocation(p)}
+                  onEditLocation={() => setEditingLocation(p)}
                   onDelete={() => setConfirmDelete(p)}
                   deleting={deletingId === p.id}
                 />
@@ -178,7 +178,9 @@ export default function SchoolPickupMap() {
         open={Boolean(confirmDelete)}
         title="ลบจุดรับส่งนี้?"
         itemName={confirmDelete?.label}
-        description="นักเรียนในจุดนี้จะไม่ถูกลบออกจากรถ แต่จะไม่มีจุดรับส่งจนกว่าจะกำหนดใหม่"
+        description={(confirmDelete?.students?.length || 0) > 0
+          ? `นักเรียน ${confirmDelete.students.length} คนจะถูกนำออกจากจุดนี้ (ยังอยู่ในรถคันเดิม) และจะไม่มีจุดรับส่งจนกว่าจะกำหนดจุดใหม่`
+          : 'จุดนี้ไม่มีนักเรียน ลบได้ทันที'}
         confirmLabel="ลบจุดรับส่ง"
         loading={deletingId === confirmDelete?.id}
         onConfirm={() => handleDelete(confirmDelete)}
@@ -511,7 +513,7 @@ function PickupPointRow({ point, selected, onClick, onEdit, onEditLocation, onDe
   );
 }
 
-/* ── Edit name / coordinates / note of a point (school main account) ── */
+/* ── Edit name / coordinates / note of a point (main account + own-grade teacher) ── */
 function EditPointLocationModal({ point, onClose, onSaved }) {
   const toast = useToast();
   const [form, setForm] = useState(() => ({
@@ -621,7 +623,7 @@ function EditPointLocationModal({ point, onClose, onSaved }) {
           onChange={v => update('notes', v)}
         />
         <p className="text-caption text-ink-muted">
-          รอบเดินรถและรายชื่อนักเรียนแก้ที่ปุ่ม "แก้ไขรายชื่อนักเรียน" · จุดที่มีนักเรียนโรงเรียนอื่นใช้ร่วมจะย้ายตำแหน่งไม่ได้
+          รายชื่อนักเรียนแก้ที่ปุ่ม "แก้ไขรายชื่อนักเรียน" · ครูประจำชั้นแก้ได้เฉพาะจุดที่มีแต่นักเรียนในสายชั้นของตน
         </p>
       </form>
     </Modal>

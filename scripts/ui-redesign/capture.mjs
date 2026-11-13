@@ -2026,6 +2026,14 @@ const SHOTS = [
   { id: '67b-school-pickup-location', url: '/school/pickup-map', user: 'school', vps: ['mobile', 'desktop'],
     act: async page => { await page.getByRole('button', { name: 'แก้ชื่อ/ตำแหน่ง', exact: true }).first().click(); },
     expect: ['[role=dialog]', 'text=ป้ายชื่อจุด', 'input[type=number]', 'button:has-text("บันทึก")'] },
+  // Owner decision 2026-11-13: grade teachers edit name/position of their own
+  // grade's points too, and either account deletes with a confirm.
+  { id: '67c-teacher-pickup-location', url: '/school/pickup-map', user: 'teacher', vps: ['mobile'],
+    act: async page => { await page.getByRole('button', { name: 'แก้ชื่อ/ตำแหน่ง', exact: true }).first().click(); },
+    expect: ['[role=dialog]', 'text=ป้ายชื่อจุด', 'input[type=number]', 'button:has-text("บันทึก")'] },
+  { id: '67d-school-pickup-delete', url: '/school/pickup-map', user: 'school', vps: ['mobile'],
+    act: async page => { await page.getByRole('button', { name: 'ลบ', exact: true }).first().click(); },
+    expect: ['[role=alertdialog]', 'button:has-text("ลบจุดรับส่ง")'] },
   // School main account moves a teacher to another grade / disables it.
   { id: '33b-teacher-edit', url: '/school/teacher-accounts', user: 'school', vps: ['mobile', 'desktop'],
     act: async page => { await page.getByRole('button', { name: /แก้ไข \/ ย้ายชั้น/ }).first().click(); },

@@ -47,7 +47,14 @@ function fakeDb(opts = {}) {
 beforeEach(() => {
   mockQuery.mockReset();
   mockConn.query.mockReset();
-  mockConn.query.mockImplementation(async (sql) => (/INSERT INTO pickup_points/.test(String(sql)) ? [{ insertId: 77 }] : [[]]));
+  mockConn.commit.mockClear(); mockConn.rollback.mockClear();
+  mockConn.query.mockImplementation(async (sql) => {
+    const q = String(sql);
+    if (/INSERT INTO pickup_points/.test(q)) return [{ insertId: 77 }];
+    if (/FOR UPDATE/.test(q)) return [[POINT]];
+    if (/COUNT\(\*\)/.test(q)) return [[{ n: 0 }]];
+    return [[]];
+  });
 });
 
 const findConn = (re) => mockConn.query.mock.calls.find(c => re.test(String(c[0])));
@@ -127,6 +134,62 @@ describe('grade teacher pickup-point writes', () => {
     mockUser = TEACHER; fakeDb();
     const res = await request(app).delete('/api/school/pickup-points/5');
     expect(res.status).toBe(200);
+  });
+
+  // Owner decision 2026-11-13: delete clears every pupil reference in the same
+  // transaction as the soft delete, and the audit row (written on the same
+  // connection) records the cleared pupils.
+  test('delete clears pupil references + soft-deletes + audits in one transaction', async () => {
+    const { logAudit } = require('../src/utils/audit');
+    logAudit.mockClear();
+    mockUser = TEACHER; fakeDb();
+    mockConn.query.mockImplementation(async (sql) => {
+      const q = String(sql);
+      if (/FOR UPDATE/.test(q)) return [[POINT]];
+      if (/COUNT\(\*\)/.test(q)) return [[{ n: 0 }]];
+      if (/SELECT student_id FROM student_pickup_points/.test(q)) return [[{ student_id: 11 }, { student_id: 12 }]];
+      return [{ affectedRows: 1 }];
+    });
+    const res = await request(app).delete('/api/school/pickup-points/5');
+    expect(res.status).toBe(200);
+    expect(res.body.data.cleared_students).toBe(2);
+    const sqls = mockConn.query.mock.calls.map(c => String(c[0]).replace(/\s+/g, ' '));
+    const iDel = sqls.findIndex(s => /DELETE FROM student_pickup_points WHERE pickup_point_id = \?/.test(s));
+    const iSoft = sqls.findIndex(s => /UPDATE pickup_points SET is_deleted = TRUE/.test(s));
+    expect(iDel).toBeGreaterThan(-1);
+    expect(iSoft).toBeGreaterThan(iDel);
+    // the in-transaction grade re-check ran with the teacher's grade
+    expect(sqls.some(s => /NOT \(s\.school_id = \? AND s\.grade IS NOT NULL/.test(s))).toBe(true);
+    expect(mockConn.commit).toHaveBeenCalled();
+    // nothing deleted outside the transaction
+    expect(mockQuery.mock.calls.some(c => /UPDATE pickup_points|DELETE FROM student_pickup_points/.test(String(c[0])))).toBe(false);
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'DELETE', entityType: 'pickup_point', entityId: 5, conn: mockConn,
+      oldValue: expect.objectContaining({ student_ids: [11, 12] }),
+      newValue: expect.objectContaining({ cleared_student_ids: [11, 12], scope: 'grade_teacher', grade_scope: 'ป.1' }),
+    }));
+  });
+
+  test('a pupil of another school assigned mid-flight aborts the delete (409, rollback)', async () => {
+    mockUser = SCHOOL; fakeDb();
+    mockConn.query.mockImplementation(async (sql) => {
+      const q = String(sql);
+      if (/FOR UPDATE/.test(q)) return [[POINT]];
+      if (/<>/.test(q)) return [[{ n: 1 }]];
+      return [[]];
+    });
+    const res = await request(app).delete('/api/school/pickup-points/5');
+    expect(res.status).toBe(409);
+    expect(res.body.errors[0].code).toBe('POINT_SHARED_WITH_OTHER_SCHOOL');
+    expect(mockConn.rollback).toHaveBeenCalled();
+    expect(mockConn.query.mock.calls.some(c => /DELETE FROM student_pickup_points|UPDATE pickup_points/.test(String(c[0])))).toBe(false);
+  });
+
+  test('school main account delete has no grade re-check', async () => {
+    mockUser = SCHOOL; fakeDb();
+    const res = await request(app).delete('/api/school/pickup-points/5');
+    expect(res.status).toBe(200);
+    expect(mockConn.query.mock.calls.some(c => /s\.grade IN/.test(String(c[0])))).toBe(false);
   });
 });
 

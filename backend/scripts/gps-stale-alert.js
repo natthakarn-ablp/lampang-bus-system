@@ -4,13 +4,15 @@
 // GPS_STALE_ALERT_MINUTES (default 20) during a round that still has children
 // on board. Logic: backend/src/services/gpsStaleAlert.service.js.
 //
-// Usage:
-//   node backend/scripts/gps-stale-alert.js           # DRY-RUN (default): report only, sends and writes nothing
-//   node backend/scripts/gps-stale-alert.js --apply   # send to the LINE emergency group (needs FEATURE_GPS_STALE_ALERT=true)
+// Run from backend/ — config/env.js loads .env from the working directory.
+//
+// Usage (from backend/):
+//   node scripts/gps-stale-alert.js           # DRY-RUN (default): report only, sends and writes nothing
+//   node scripts/gps-stale-alert.js --apply   # send to the LINE emergency group (needs FEATURE_GPS_STALE_ALERT=true)
 //
 // Cron (every 5 minutes; the script itself does nothing outside the GPS
 // tracking windows, so the schedule does not need to know the server's UTC offset):
-//   */5 * * * * cd /home/schoolbus/apps/lampang-bus-system && node backend/scripts/gps-stale-alert.js --apply >> /home/schoolbus/logs/gps-stale-alert.log 2>&1
+//   */5 * * * * cd /home/schoolbus/apps/lampang-bus-system/backend && node scripts/gps-stale-alert.js --apply >> /home/schoolbus/logs/gps-stale-alert.log 2>&1
 
 const env = require('../src/config/env');
 const { pool } = require('../src/config/database');

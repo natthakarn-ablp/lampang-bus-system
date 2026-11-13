@@ -107,6 +107,67 @@ describe('vehicleAdmin.correctVehicle (non-plate fields) + mergeVehicles', () =>
   });
 });
 
+describe('vehicleAdmin.mergeVehicles — closes the merged-away plate driver login', () => {
+  const LOSER = { id: 'V-1', plate_no: 'นข-1 ลำปาง', is_deleted: 0 };
+  const WINNER = { id: 'V-2', plate_no: 'นข 2 ลำปาง', is_deleted: 0 };
+  const mk = ({ logins = [], winner = WINNER, failOn = null } = {}) => makeConn((sql, params) => {
+    if (failOn && failOn.test(sql)) throw new Error('boom');
+    if (/SELECT \* FROM vehicles WHERE id = \?/.test(sql)) return [[params[0] === 'V-1' ? LOSER : winner]];
+    if (/active_vehicle_id = \? LIMIT 1/.test(sql)) return [[]];
+    if (/FROM users\s+WHERE role = 'driver'/.test(sql)) {
+      return [logins.filter((u) => u.username.replace(/[\s-]/g, '').toLowerCase() === params[0])];
+    }
+    return dflt(sql);
+  });
+  const run = (c) => vehicleAdmin.mergeVehicles(poolOf(c), { vehicleId: 'V-1', intoVehicleId: 'V-2', actorId: 7, reason: 'รถซ้ำ' });
+  const userUpdates = (c) => c.calls.filter(([s]) => /^\s*UPDATE users/.test(s));
+
+  test('deactivates the source-plate login, bumps password_changed_at, releases LINE binding, audits', async () => {
+    const c = mk({ logins: [{ id: 41, username: 'นข1ลำปาง', is_active: 1 }, { id: 42, username: 'นข 2 ลำปาง', is_active: 1 }] });
+    const out = await run(c);
+    expect(c.commit).toHaveBeenCalled();
+    const ups = userUpdates(c);
+    expect(ups).toHaveLength(1);
+    expect(ups[0][0]).toMatch(/is_active = FALSE/);
+    expect(ups[0][0]).toMatch(/password_changed_at = NOW\(\)/);
+    expect(ups[0][1]).toEqual([41]);
+    expect(issued(c, /DELETE FROM user_recovery_channels WHERE user_id = \?/)).toBe(true);
+    expect(c.calls.filter(([s]) => /user_recovery_channels/.test(s)).every(([, p]) => p[0] === 41)).toBe(true);
+    expect(issued(c, /DELETE FROM users/)).toBe(false);
+    expect(out.driver_logins_closed).toEqual([
+      { user_id: 41, username: 'นข1ลำปาง', was_active: true, recovery_channels_released: 1 },
+    ]);
+    const audits = c.calls.filter(([s]) => /INSERT INTO audit_logs/.test(s)).map(([, p]) => JSON.stringify(p));
+    expect(audits.some((a) => /vehicle_merged/.test(a))).toBe(true);
+    expect(audits.some((a) => /driver_logins_closed/.test(a))).toBe(true);
+  });
+
+  test('no login on the source plate → no user writes, merge still succeeds', async () => {
+    const c = mk({ logins: [{ id: 42, username: 'นข 2 ลำปาง', is_active: 1 }] });
+    const out = await run(c);
+    expect(out.status).toBe('MERGED');
+    expect(userUpdates(c)).toHaveLength(0);
+    expect(issued(c, /user_recovery_channels/)).toBe(false);
+    expect(out.driver_logins_closed).toEqual([]);
+  });
+
+  test('a login that also matches the kept plate is never touched', async () => {
+    const c = mk({ winner: { ...WINNER, plate_no: 'นข 1 ลำปาง' }, logins: [{ id: 42, username: 'นข1ลำปาง', is_active: 1 }] });
+    const out = await run(c);
+    expect(userUpdates(c)).toHaveLength(0);
+    expect(issued(c, /FROM users\s+WHERE role = 'driver'/)).toBe(false);
+    expect(out.driver_logins_closed).toEqual([]);
+  });
+
+  test('rolls back (no commit) when closing the login fails', async () => {
+    const c = mk({ logins: [{ id: 41, username: 'นข1ลำปาง', is_active: 1 }], failOn: /DELETE FROM user_recovery_channels/ });
+    await expect(run(c)).rejects.toThrow('boom');
+    expect(c.rollback).toHaveBeenCalled();
+    expect(c.commit).not.toHaveBeenCalled();
+    expect(c.release).toHaveBeenCalled();
+  });
+});
+
 describe('checkin.voidCheckin', () => {
   const log = { id: 5, term_id: 't', vehicle_id: 'V-1', plate_no: 'p', student_id: 9, cid_hash: 'h', student_name: 'ด.ช.ก', session: 'morning', status: 'CHECKED_IN', check_date: '2026-06-27' };
   const handler = (over = {}) => (sql) => {

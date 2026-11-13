@@ -41,7 +41,7 @@ Flag `FEATURE_DRIVER_REGISTRATION` (`env.features.driverRegistration`, `app.js:1
 
 ## กติกาสำคัญ
 - ทะเบียนซ้ำ (normalized) ห้ามสร้าง — UNIQUE ใน migration 024:58 และตรวจก่อนด้วย `vehicleDedup.preflightStatus`
-- ลบ/แก้/รวมรถ: transaction + `FOR UPDATE` + audit — `vehicleAdmin.service.js:83-84,118-120,139-140,215,238`; `mergeVehicles` ย้าย FK ลูกตามลำดับที่ปลอดภัย (คอมเมนต์ L8)
+- ลบ/แก้/รวมรถ: transaction + `FOR UPDATE` + audit — `vehicleAdmin.service.js:83-84,118-120,139-140,215,238`; `mergeVehicles` ย้าย FK ลูกตามลำดับที่ปลอดภัย (คอมเมนต์ L8) และปิดบัญชีคนขับที่ชื่อผู้ใช้ = ทะเบียนรถที่ถูกรวม (is_active=FALSE + password_changed_at=NOW() + `releaseRecoveryBinding`, audit reason `vehicle_merged`; ไม่ลบ, ไม่แตะบัญชีของรถที่เก็บไว้) ใน transaction เดียวกัน — owner 2026-11-13; GET /vehicles/:id/impact คืน `driver_login` ให้ dialog แสดงก่อนยืนยัน
 - คนขับ 1 คนเปิดกะได้ 1 กะ และรถ 1 คันมี 1 กะเปิด (`uq_open_shift_driver`, `uq_open_shift_vehicle`, migration 039:66-67); `startShift` ล็อกแถวคนขับ/กะ — `driverShift.service.js:66-106`
 - Lifecycle คนขับ (ปิดบัญชี/ย้ายรถ/จบ assignment) audit ทุกครั้ง — `driverLifecycle.service.js:83,109,122,135`
 - เอกสาร: path ต้องอยู่ใน `uploads/documents` (กัน path traversal) — `driverDocuments.service.js:34,59-66`; เพิ่มเอกสารล็อกรถ `FOR UPDATE` ใน transaction — L131-133; การดูไฟล์ถูก audit ก่อนส่งด้วย `auditExportBeforeSend` — `documents.routes.js:78`

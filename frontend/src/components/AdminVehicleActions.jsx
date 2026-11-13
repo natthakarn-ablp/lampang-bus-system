@@ -15,6 +15,8 @@ import { useToast } from './Toast';
  * admin sees what will be detached or moved before confirming. A reason is
  * always required. Deleting a vehicle that still has pupils or an active
  * driver needs the explicit "ลบทั้งที่ยังใช้งานอยู่" tick (sent as force).
+ * A merge also closes the driver login named after the merged-away plate
+ * (owner decision 2026-11-13); impact.driver_login names it beforehand.
  */
 
 const TABLE_LABEL = {
@@ -183,8 +185,14 @@ export default function AdminVehicleActions({ vehicle, onChanged }) {
                   </div>
                 )}
                 <p className="text-sm text-warn-ink">
-                  ถ้ารถปลายทางมีคนขับที่มอบหมายอยู่แล้ว การมอบหมายคนขับของคันนี้จะสิ้นสุด · บัญชีคนขับ (ชื่อผู้ใช้ = ทะเบียนเดิม) ไม่ถูกย้าย
-                  ตรวจที่หน้าจัดการผู้ใช้หลังรวม
+                  ถ้ารถปลายทางมีคนขับที่มอบหมายอยู่แล้ว การมอบหมายคนขับของคันนี้จะสิ้นสุด
+                </p>
+                <p className="text-sm text-warn-ink">
+                  {impact.driver_login
+                    ? <>บัญชีคนขับของทะเบียนเดิม (<strong>{impact.driver_login.username}</strong>) จะถูกปิดทันที
+                      คนที่ใช้บัญชีนี้อยู่จะออกจากระบบ และการผูก LINE กู้รหัสผ่านจะถูกยกเลิก
+                      คนขับต้องเข้าด้วยบัญชีของรถปลายทาง</>
+                    : 'ไม่พบบัญชีคนขับที่ใช้ทะเบียนเดิม'}
                 </p>
                 <FormField label="ค้นทะเบียนรถปลายทาง" value={query} onChange={(v) => { setQuery(v); setTarget(null); }}
                   placeholder="พิมพ์อย่างน้อย 2 ตัวอักษร" helper="เลือกรถคันที่ถูกต้องที่จะเก็บไว้" />

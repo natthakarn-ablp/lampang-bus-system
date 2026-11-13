@@ -24,6 +24,7 @@ const bcrypt = require('bcrypt');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const { validatePassword } = require('../utils/passwordPolicy');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 
 const BCRYPT_COST = 12;
 const DISPLAY_NAME_MAX = 200;
@@ -114,16 +115,35 @@ async function resetMainPassword(db, { affiliationId, accountId, newPassword, ac
   if (!pw.ok) throw httpError(pw.message, 400);
 
   const hash = await bcrypt.hash(String(newPassword), BCRYPT_COST);
-  await db.query(
-    'UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?',
-    [hash, accountId],
-  );
-  await logAudit({
-    userId: actorId, action: 'UPDATE', entityType: 'user', entityId: accountId,
-    newValue: { action: 'reset_password', target_username: account.username, by: 'affiliation' },
-    ipAddress: ip, userAgent, conn: db,
-  });
-  return { id: accountId, username: account.username };
+  // The affiliation resetting a main account is how that account changes
+  // hands (owner decision 2026-11-13), so it also releases the LINE recovery
+  // binding of the previous holder.
+  const conn = await db.getConnection();
+  let released = 0;
+  try {
+    await conn.beginTransaction();
+    await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [accountId]);
+    await conn.query(
+      'UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?',
+      [hash, accountId],
+    );
+    released = await releaseRecoveryBinding(conn, accountId);
+    await logAudit({
+      userId: actorId, action: 'UPDATE', entityType: 'user', entityId: accountId,
+      newValue: {
+        action: 'reset_password', target_username: account.username, by: 'affiliation',
+        recovery_channels_released: released,
+      },
+      ipAddress: ip, userAgent, conn,
+    });
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* keep the original error */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+  return { id: accountId, username: account.username, recovery_channels_released: released };
 }
 
 /**

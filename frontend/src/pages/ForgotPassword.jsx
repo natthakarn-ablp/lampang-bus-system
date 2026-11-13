@@ -5,11 +5,19 @@ import api from '../api/axios';
 import ErrorState from '../components/ErrorState';
 import LoadingState from '../components/LoadingState';
 import { AlertBanner, FormField } from '../components/ui';
+import { RECOVERY_CONTACTS, enabledRecoveryRolesFromConfig } from '../utils/passwordRecovery';
+
+const ROLE_LABEL = {
+  admin: 'ผู้ดูแลระบบ',
+  school: 'โรงเรียน/ครูประจำสายชั้น',
+  driver: 'คนขับ (ทะเบียนรถ)',
+};
 
 const LOGO = '/brand/school-safe-logo.webp';
 
 export default function ForgotPassword() {
   const [enabled, setEnabled] = useState(null);
+  const [roles, setRoles] = useState([]);
   const [username, setUsername] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -20,7 +28,11 @@ export default function ForgotPassword() {
     setEnabled(null);
     setConfigError('');
     api.get('/auth/recovery/config')
-      .then((res) => setEnabled(Boolean(res.data.data?.admin_password_recovery)))
+      .then((res) => {
+        const open = enabledRecoveryRolesFromConfig(res.data.data);
+        setRoles(open);
+        setEnabled(open.length > 0);
+      })
       .catch(() => setConfigError('ตรวจสอบสถานะบริการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
   }, []);
 
@@ -46,7 +58,11 @@ export default function ForgotPassword() {
         <img src={LOGO} alt="School Safe Connect" className="mx-auto h-16 w-16 rounded-full border border-brand-100 bg-white object-cover" />
         <div className="mt-5 text-center">
           <h1 className="text-2xl font-black text-brand-900">ลืมรหัสผ่าน</h1>
-          <p className="mt-2 text-sm leading-6 text-ink-muted">ระยะแรกเปิดสำหรับบัญชีผู้ดูแลระบบที่ผูก LINE แล้ว</p>
+          <p className="mt-2 text-sm leading-6 text-ink-muted">
+            {roles.length > 0
+              ? `ใช้ได้กับบัญชี${roles.map((r) => ROLE_LABEL[r] || r).join(' ')} ที่ผูก LINE ไว้แล้วในเมนู “ความปลอดภัยบัญชี”`
+              : 'ใช้ได้กับบัญชีที่ผูก LINE ไว้แล้ว'}
+          </p>
         </div>
 
         {enabled === null && !configError && <LoadingState compact message="กำลังตรวจสอบบริการกู้คืนรหัสผ่าน…" />}
@@ -55,14 +71,19 @@ export default function ForgotPassword() {
 
         {enabled === false && !configError && (
           <AlertBanner variant="warn" className="mt-6" title="ยังไม่เปิดใช้บริการนี้">
-            กรุณาติดต่อผู้ดูแลระบบระดับจังหวัดเพื่อรีเซ็ตรหัสผ่านตามขั้นตอนเดิม
+            <ul className="space-y-1">
+              {RECOVERY_CONTACTS.map((row) => (
+                <li key={row.key}><span className="font-semibold">{row.label}:</span> {row.contact}</li>
+              ))}
+            </ul>
           </AlertBanner>
         )}
 
         {enabled && !done && (
           <form onSubmit={submit} className="mt-6 space-y-4">
             <FormField
-              label="ชื่อผู้ใช้ผู้ดูแลระบบ"
+              label="ชื่อผู้ใช้"
+              helper={roles.includes('driver') ? 'คนขับ: ใช้ทะเบียนรถเหมือนตอนเข้าสู่ระบบ' : undefined}
               value={username}
               onChange={setUsername}
               autoComplete="username"

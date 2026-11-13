@@ -16,6 +16,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../components/Toast';
 import { ROLE_HOME } from '../App';
 import api from '../api/axios';
+import { RECOVERY_CONTACTS, enabledRecoveryRolesFromConfig } from '../utils/passwordRecovery';
 
 // Token-based styles for each error class. Full border + soft semantic
 // background + readable ink (DESIGN.md: status is never color-only and never a
@@ -48,12 +49,15 @@ export default function Login() {
   const [loading,  setLoading]  = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [adminRecoveryEnabled, setAdminRecoveryEnabled] = useState(false);
+  // Roles whose LINE self-service recovery is open right now. Fails closed:
+  // if the policy cannot be read, no recovery link is shown and every role
+  // sees who to contact instead.
+  const [recoveryRoles, setRecoveryRoles] = useState([]);
 
   useEffect(() => {
     api.get('/auth/recovery/config')
-      .then((res) => setAdminRecoveryEnabled(Boolean(res.data.data?.admin_password_recovery)))
-      .catch(() => setAdminRecoveryEnabled(false));
+      .then((res) => setRecoveryRoles(enabledRecoveryRolesFromConfig(res.data.data)))
+      .catch(() => setRecoveryRoles([]));
   }, []);
 
   async function handleSubmit(e) {
@@ -300,11 +304,19 @@ export default function Login() {
                 {showHelp && (
                   <div id="login-support-help" className="mt-2 rounded-lg border border-brand-100 bg-brand-50 p-3 leading-6 text-ink motion-safe:animate-fade-in">
                     <p className="font-bold">ช่องทางขอความช่วยเหลือ</p>
-                    <p className="mt-1">โรงเรียนและคนขับ: ติดต่อผู้ดูแลบัญชีของโรงเรียน</p>
-                    <p>ต้นสังกัด ขนส่ง และจังหวัด: ติดต่อผู้ดูแลระบบระดับจังหวัด</p>
-                    {adminRecoveryEnabled && (
+                    <ul className="mt-1 space-y-1">
+                      {RECOVERY_CONTACTS.map((row) => (
+                        <li key={row.key}>
+                          <span className="font-semibold">{row.label}:</span>{' '}
+                          {row.recoveryRole && recoveryRoles.includes(row.recoveryRole)
+                            ? `กู้เองผ่าน LINE ที่ผูกไว้ (ปุ่มด้านล่าง) หรือ${row.contact}`
+                            : row.contact}
+                        </li>
+                      ))}
+                    </ul>
+                    {recoveryRoles.length > 0 && (
                       <Link to="/forgot-password" className="focus-ring mt-3 inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-white px-3 font-bold text-brand-700 shadow-sm hover:bg-surface">
-                        ผู้ดูแลระบบ: รีเซ็ตผ่าน LINE
+                        ลืมรหัสผ่าน (กู้ผ่าน LINE)
                       </Link>
                     )}
                   </div>

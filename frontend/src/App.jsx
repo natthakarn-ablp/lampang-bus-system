@@ -396,9 +396,11 @@ export default function App() {
               returns the user to this page rather than to the parent screen.
               Open to every role whose recovery CAN be enabled; whether it
               actually is remains the server's decision, read from
-              /auth/recovery/config, and the page says so when it is not. */}
+              /auth/recovery/config, and the page says so when it is not.
+              school (main account and grade teachers) and driver were added
+              after owner decision 2026-11-13. */}
           <Route path="/parent/link/admin-recovery" element={
-            <PrivateRoute allowedRoles={['admin', 'province', 'affiliation', 'transport']}>
+            <PrivateRoute allowedRoles={['admin', 'province', 'affiliation', 'transport', 'school', 'driver']}>
               <Layout><AdminAccountSecurity /></Layout>
             </PrivateRoute>
           } />

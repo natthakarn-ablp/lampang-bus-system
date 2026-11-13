@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Menu, Bell, ChevronDown, LogOut, KeyRound, PanelLeftClose, PanelLeftOpen, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getGradeScope } from '../utils/authScope';
+import { canBindRecoveryFor } from '../utils/passwordRecovery';
 import api from '../api/axios';
 import { PulseDot } from '../lib/motion';
 
@@ -58,9 +59,13 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
   // shows for them; the page itself asks the server whether recovery is open
   // for that role and explains when it is not, so a role whose decision gates
   // are still unconfirmed sees a clear message instead of a dead end.
-  const RECOVERY_ROLES = ['admin', 'province', 'affiliation', 'transport'];
+  // admin, school (main account and grade teachers) and driver show it only
+  // while their own flag is on (canBindRecoveryFor), because for them the
+  // decision gates are confirmed and the flag is the whole answer — a school
+  // or a driver should not meet a menu entry that leads to "not open yet".
+  const RECOVERY_ROLES = ['admin', 'province', 'affiliation', 'transport', 'school', 'driver'];
   const canBindRecovery = RECOVERY_ROLES.includes(user?.role)
-    && (user?.role !== 'admin' || features?.adminPasswordRecovery);
+    && canBindRecoveryFor(user, features);
 
   // Pending-requests bell (admin only) — aggregates transfer + vehicle + roster.
   const [bellOpen, setBellOpen] = useState(false);

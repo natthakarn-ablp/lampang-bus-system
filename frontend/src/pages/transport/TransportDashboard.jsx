@@ -15,6 +15,7 @@ import {
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import PageHeader from '../../components/PageHeader';
+import PendingQueueCard from '../../components/PendingQueueCard';
 import { PageTransition } from '../../lib/motion';
 import { todayBangkok } from '../../utils/thaiTime';
 import usePolicyAction from '../../hooks/usePolicyAction';
@@ -405,6 +406,8 @@ export default function TransportDashboard() {
       })()}
 
       <TodayBanner {...banner} />
+
+      <PendingQueueCard />
 
       {!noFleet && <TodoCards items={todos} />}
 

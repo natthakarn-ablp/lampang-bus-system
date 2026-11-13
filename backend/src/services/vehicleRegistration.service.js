@@ -495,6 +495,135 @@ async function rejectRegistration(pool, { applicationId, schoolId, userId, reaso
   }
 }
 
+// ─── Approved roster → students.vehicle_id (school confirms) ─────────────────
+// Approving a registration records the school's decision on the DRIVER'S
+// roster; it never wrote students.vehicle_id, so the approved children were
+// still not on that bus anywhere else in the system (attendance, driver
+// roster, pickup map). After approval the school may now apply it: it sees
+// each matched child's current vehicle and confirms which ones to assign.
+// A child already on another vehicle is moved only when explicitly chosen.
+// No schema change: matched_student_id already links roster → student.
+
+async function loadApprovedSlice(db, { applicationId, schoolId, lock = false }) {
+  const [[aps]] = await db.query(
+    `SELECT aps.approval_status, a.status AS application_status, a.vehicle_id, v.plate_no, v.is_deleted AS vehicle_deleted
+       FROM inspection_application_schools aps
+       JOIN vehicle_inspection_applications a ON a.id = aps.application_id
+       JOIN vehicles v ON v.id = a.vehicle_id
+      WHERE aps.application_id = ? AND aps.school_id = ?${lock ? ' FOR UPDATE' : ''}`,
+    [applicationId, schoolId]
+  );
+  if (!aps) throw appError('ไม่ใช่คำขอของโรงเรียนนี้', 403, 'NOT_THIS_SCHOOL');
+  if (INACTIVE_APPLICATION.includes(aps.application_status)) {
+    throw appError('คำขอนี้ถูกยกเลิกหรือหมดอายุแล้ว', 409, 'APPLICATION_INACTIVE');
+  }
+  if (aps.approval_status !== 'APPROVED') {
+    throw appError('ต้องอนุมัติคำขอก่อนจึงจะจัดนักเรียนขึ้นรถได้', 409, 'NOT_APPROVED');
+  }
+  if (aps.vehicle_deleted) throw appError('รถคันนี้ถูกปิดใช้งานแล้ว', 409, 'VEHICLE_INACTIVE');
+  return aps;
+}
+
+function assignmentState(row, vehicleId) {
+  if (row.vehicle_id == null) return 'NO_VEHICLE';
+  return String(row.vehicle_id) === String(vehicleId) ? 'ON_THIS_VEHICLE' : 'OTHER_VEHICLE';
+}
+
+async function previewRosterAssignment(pool, { applicationId, schoolId }) {
+  if (!schoolId) throw appError('ไม่พบขอบเขตโรงเรียน', 403, 'SCHOOL_SCOPE_REQUIRED');
+  const aps = await loadApprovedSlice(pool, { applicationId, schoolId });
+  const [rows] = await pool.query(
+    `SELECT DISTINCT s.id AS student_id, TRIM(CONCAT_WS(' ', s.prefix, s.first_name, s.last_name)) AS full_name,
+            s.grade, s.classroom, s.vehicle_id, cv.plate_no AS current_plate
+       FROM registration_roster_students r
+       JOIN students s ON s.id = r.matched_student_id AND s.school_id = r.school_id AND s.is_deleted = FALSE
+       LEFT JOIN vehicles cv ON cv.id = s.vehicle_id
+      WHERE r.application_id = ? AND r.school_id = ? AND r.match_status = 'MATCHED'
+      ORDER BY s.grade, s.classroom, full_name`,
+    [applicationId, schoolId]
+  );
+  const students = rows.map((r) => ({
+    student_id: r.student_id,
+    full_name: r.full_name,
+    grade: r.grade,
+    classroom: r.classroom,
+    current_vehicle_id: r.vehicle_id,
+    current_plate: r.current_plate || null,
+    state: assignmentState(r, aps.vehicle_id),
+  }));
+  return {
+    application_id: Number(applicationId),
+    vehicle_id: aps.vehicle_id,
+    plate_no: aps.plate_no,
+    students,
+    counts: {
+      on_this_vehicle: students.filter((s) => s.state === 'ON_THIS_VEHICLE').length,
+      no_vehicle: students.filter((s) => s.state === 'NO_VEHICLE').length,
+      other_vehicle: students.filter((s) => s.state === 'OTHER_VEHICLE').length,
+    },
+  };
+}
+
+async function assignApprovedRoster(pool, { applicationId, schoolId, userId, studentIds }) {
+  if (!schoolId) throw appError('ไม่พบขอบเขตโรงเรียน', 403, 'SCHOOL_SCOPE_REQUIRED');
+  const wanted = [...new Set((Array.isArray(studentIds) ? studentIds : []).map(Number))]
+    .filter((n) => Number.isInteger(n) && n > 0);
+  if (!wanted.length) throw appError('กรุณาเลือกนักเรียนที่จะจัดขึ้นรถ', 400, 'STUDENTS_REQUIRED');
+  if (wanted.length > 200) throw appError('เลือกได้ไม่เกิน 200 คนต่อครั้ง', 400, 'TOO_MANY_STUDENTS');
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const aps = await loadApprovedSlice(conn, { applicationId, schoolId, lock: true });
+    // Only children this school matched on THIS approved roster, still live in
+    // this school. Locked so a concurrent move/withdraw cannot interleave.
+    const [rows] = await conn.query(
+      `SELECT s.id, s.vehicle_id, s.grade, s.classroom
+         FROM students s
+        WHERE s.id IN (?) AND s.school_id = ? AND s.is_deleted = FALSE
+          AND EXISTS (SELECT 1 FROM registration_roster_students r
+                       WHERE r.application_id = ? AND r.school_id = ? AND r.match_status = 'MATCHED'
+                         AND r.matched_student_id = s.id)
+        FOR UPDATE`,
+      [wanted, schoolId, applicationId, schoolId]
+    );
+    const found = new Map(rows.map((r) => [Number(r.id), r]));
+    const notOnRoster = wanted.filter((id) => !found.has(id));
+    if (notOnRoster.length) {
+      throw appError('มีนักเรียนที่ไม่อยู่ในรายชื่อที่อนุมัติของรถคันนี้', 400, 'NOT_ON_APPROVED_ROSTER', { student_ids: notOnRoster });
+    }
+    const assigned = [];
+    const unchanged = [];
+    for (const id of wanted) {
+      const st = found.get(id);
+      if (st.vehicle_id != null && String(st.vehicle_id) === String(aps.vehicle_id)) { unchanged.push(id); continue; }
+      const [upd] = await conn.query(
+        'UPDATE students SET vehicle_id = ? WHERE id = ? AND school_id = ? AND is_deleted = FALSE',
+        [aps.vehicle_id, id, schoolId]
+      );
+      if (!upd.affectedRows) throw appError('ข้อมูลนักเรียนเปลี่ยนไป กรุณาโหลดใหม่', 409, 'STUDENT_CHANGED');
+      await logAudit({
+        userId, action: 'UPDATE', entityType: 'student', entityId: String(id),
+        oldValue: { vehicle_id: st.vehicle_id, grade: st.grade, classroom: st.classroom },
+        newValue: { vehicle_id: aps.vehicle_id, action: 'move_vehicle', source: 'vehicle_registration', application_id: Number(applicationId) },
+        conn, required: true,
+      });
+      assigned.push(id);
+    }
+    if (assigned.length) {
+      // SCH-STU-7: a pickup point belongs to a vehicle; drop ones the move invalidated.
+      await require('./pickupCleanup.service').clearStalePickupAssignments(conn, assigned);
+    }
+    await conn.commit();
+    return { application_id: Number(applicationId), vehicle_id: aps.vehicle_id, assigned, unchanged };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
+}
+
 // ─── Driver LINE notification (best-effort; never throws) ────────────────────
 
 async function notifyDriverUser(pool, driverUserId, text) {
@@ -592,4 +721,6 @@ module.exports = {
   approveRegistration,
   rejectRegistration,
   isVehicleEligible,
+  previewRosterAssignment,
+  assignApprovedRoster,
 };

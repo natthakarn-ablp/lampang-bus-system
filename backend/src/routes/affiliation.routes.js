@@ -170,6 +170,10 @@ function auditRowsToCsv(rows) {
 // All affiliation routes require authentication + role 'affiliation' or 'admin'
 router.use(authenticate, requireRole('affiliation', 'admin'));
 
+// Requests waiting for this role (badge + งานรออนุมัติ page) — pendingQueue.service.js
+router.get('/pending-summary', require('./pendingSummaryHandler').pendingSummaryHandler());
+
+
 function resolveAffiliationId(req) {
   if (req.user.role === 'admin') return req.query.affiliation_id || null;
   return req.user.scopeId;

@@ -335,6 +335,31 @@ schoolRouter.post('/:applicationId/approve', requireFullSchoolScope, async (req,
   } catch (error) { return next(error); }
 });
 
+// After approval: which matched children are (not yet) on this vehicle, and
+// apply the ones the school confirms (vehicleRegistration.service).
+schoolRouter.get('/:applicationId/assignment', async (req, res, next) => {
+  try {
+    const schoolId = schoolScope(req);
+    if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
+    const applicationId = readIdParam(req, res, 'applicationId');
+    if (applicationId === null) return;
+    return sendSuccess(res, await reg.previewRosterAssignment(pool, { applicationId, schoolId }));
+  } catch (error) { return next(error); }
+});
+
+schoolRouter.post('/:applicationId/assign-students', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = schoolScope(req);
+    if (!schoolId) return sendError(res, 'กรุณาระบุโรงเรียน', SCOPE_ERR, 400);
+    const applicationId = readIdParam(req, res, 'applicationId');
+    if (applicationId === null) return;
+    const out = await reg.assignApprovedRoster(pool, {
+      applicationId, schoolId, userId: req.user.id, studentIds: req.body && req.body.student_ids,
+    });
+    return sendSuccess(res, out, `จัดนักเรียนขึ้นรถแล้ว ${out.assigned.length} คน`);
+  } catch (error) { return next(error); }
+});
+
 schoolRouter.post('/:applicationId/reject', requireFullSchoolScope, async (req, res, next) => {
   try {
     const schoolId = schoolScope(req);

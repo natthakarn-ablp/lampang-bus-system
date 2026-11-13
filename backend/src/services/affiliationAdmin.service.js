@@ -170,6 +170,25 @@ async function toggleSchoolAccount({ affiliationId, accountId, isActive, userId 
 /**
  * Create a new school + user account in a single transaction.
  */
+/**
+ * Lock the affiliation row (shared) and require it to be live. Deactivating an
+ * affiliation (orgEntities.deactivateAffiliation) checks that it has no schools;
+ * without this lock a create/import racing it, or an admin passing a closed
+ * affiliation_id, would put a live school under a closed affiliation.
+ */
+async function lockLiveAffiliation(conn, affiliationId) {
+  const [rows] = await conn.query(
+    'SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE FOR SHARE',
+    [affiliationId]
+  );
+  if (!rows.length) {
+    const err = new Error('สังกัดนี้ถูกปิดใช้งานหรือไม่มีในระบบ ไม่สามารถเพิ่มโรงเรียนได้');
+    err.statusCode = 409;
+    err.code = 'AFFILIATION_INACTIVE';
+    throw err;
+  }
+}
+
 async function createSchoolWithAccount({ affiliationId, schoolCode, schoolName, username, userId }) {
   // Validate school code: must be digits, used as school.id and as initial password
   if (!/^\d{6,10}$/.test(schoolCode)) {
@@ -191,6 +210,7 @@ async function createSchoolWithAccount({ affiliationId, schoolCode, schoolName, 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await lockLiveAffiliation(conn, affiliationId);
 
     // Check duplicate school code
     const [[existingSchool]] = await conn.query(
@@ -440,6 +460,7 @@ async function commitSchoolImport(rawRows, affiliationId, userId) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    await lockLiveAffiliation(conn, affiliationId);
 
     // Snapshot DB state inside the transaction (read consistency).
     const [schoolRows] = await conn.query(`SELECT id FROM schools`);

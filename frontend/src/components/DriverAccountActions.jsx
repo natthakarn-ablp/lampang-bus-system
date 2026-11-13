@@ -72,59 +72,62 @@ export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
   const inactive = vehicle.driver_account_active === 0 || vehicle.driver_account_active === false;
   const noFormMode = mode === 'reset' || mode === 'reactivate';
 
-  if (inactive) {
-    return (
-      <>
+  return (
+    <>
+      {inactive ? (
         <TableAction tone="brand" onClick={() => open('reactivate')} aria-label={`เปิดใช้งานบัญชีคนขับ ${vehicle.plate_no}`}>
           <UserCheck className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
           เปิดใช้งานบัญชีคนขับ
         </TableAction>
-        {mode === 'reactivate' && (
-          <Modal
-            title={titles.reactivate}
-            dismissible={!saving}
-            onClose={() => { if (!lock.current) setMode(null); }}
-            footer={
-              <>
-                <button type="button" disabled={saving} onClick={() => setMode(null)} className={btn}>ยกเลิก</button>
-                <button type="button" onClick={submit} className={primary} disabled={saving}>
-                  {saving ? 'กำลังบันทึก…' : 'เปิดใช้งาน'}
-                </button>
-              </>
-            }
-          >
-            <p className="text-sm text-ink-muted mb-3">
-              รถ {vehicle.plate_no} · บัญชีคนขับถูกปิดใช้งานอยู่ (เช่น ผู้ดูแลระบบปิดไว้)
-            </p>
-            <p className="text-sm text-ink">
-              เปิดแล้วคนขับเข้าสู่ระบบด้วยรหัสผ่านเดิมได้ทันที ถ้าเป็นคนขับคนใหม่หรือจำรหัสไม่ได้
-              ให้ใช้ "เปลี่ยนคนขับ" หรือ "รีเซ็ตรหัสผ่านคนขับ" หลังเปิดใช้งาน ระบบบันทึกประวัติการเปิดใช้งาน
-            </p>
-            {error && <p role="alert" className="text-sm text-danger-ink mt-3">{error}</p>}
-          </Modal>
-        )}
-      </>
-    );
-  }
-
-  return (
-    <>
-      <TableAction tone="neutral" onClick={() => open('reset')}>
-        <KeyRound className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
-        รีเซ็ตรหัสผ่านคนขับ
-      </TableAction>
-      {vehicle.driver_name && (
-        <TableAction tone="neutral" onClick={() => open('edit')}>
-          <UserCog className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
-          แก้ไขข้อมูลคนขับ
-        </TableAction>
+      ) : (
+        <>
+          <TableAction tone="neutral" onClick={() => open('reset')}>
+            <KeyRound className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
+            รีเซ็ตรหัสผ่านคนขับ
+          </TableAction>
+          {vehicle.driver_name && (
+            <TableAction tone="neutral" onClick={() => open('edit')}>
+              <UserCog className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
+              แก้ไขข้อมูลคนขับ
+            </TableAction>
+          )}
+        </>
       )}
+      {/* Also offered while the account is switched off: replacing the driver
+          rotates the password and re-enables the account in one step, so the
+          previous driver never regains access in between. */}
       <TableAction tone="neutral" onClick={() => open('replace')}>
         <UserPlus className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
         เปลี่ยนคนขับ
       </TableAction>
 
-      {mode && (
+      {mode === 'reactivate' && (
+        <Modal
+          title={titles.reactivate}
+          dismissible={!saving}
+          onClose={() => { if (!lock.current) setMode(null); }}
+          footer={
+            <>
+              <button type="button" disabled={saving} onClick={() => setMode(null)} className={btn}>ยกเลิก</button>
+              <button type="button" onClick={submit} className={primary} disabled={saving}>
+                {saving ? 'กำลังบันทึก…' : 'เปิดใช้งาน'}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-muted mb-3">
+            รถ {vehicle.plate_no} · บัญชีคนขับถูกปิดใช้งานอยู่ (เช่น ผู้ดูแลระบบปิดไว้)
+          </p>
+          <p className="text-sm text-ink">
+            ใช้เมื่อคนขับคนเดิมกลับมาขับต่อ คนขับเข้าสู่ระบบใหม่ด้วยรหัสผ่านเดิม
+            ถ้าเปลี่ยนเป็นคนขับคนใหม่ ให้กด "เปลี่ยนคนขับ" แทนโดยไม่ต้องเปิดใช้งานก่อน
+            (คนขับเดิมจะเข้าระบบไม่ได้) ระบบบันทึกประวัติการเปิดใช้งาน
+          </p>
+          {error && <p role="alert" className="text-sm text-danger-ink mt-3">{error}</p>}
+        </Modal>
+      )}
+
+      {mode && mode !== 'reactivate' && (
         <Modal
           title={titles[mode]}
           dismissible={!saving}
@@ -153,6 +156,7 @@ export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
               <p className="text-sm text-warn-ink">
                 ใช้เมื่อเปลี่ยนเป็นคนขับคนใหม่ คนขับเดิมจะเข้าระบบไม่ได้อีก (รหัสผ่านถูกรีเซ็ต)
                 ประวัติการรับส่งเดิมยังอยู่ครบ
+                {inactive && ' บัญชีที่ถูกปิดไว้จะเปิดใช้งานให้คนขับคนใหม่พร้อมกัน'}
               </p>
             )}
             {mode !== 'reset' && (

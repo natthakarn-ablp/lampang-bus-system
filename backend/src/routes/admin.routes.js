@@ -516,6 +516,19 @@ router.put('/users/:id', async (req, res, next) => {
       if (block.warning) reactivationWarning = block.reason;
     }
 
+    // 2026-11-13 — an affiliation account is not re-enabled while its
+    // affiliation is closed (same rule as the province account edit/restore:
+    // restore the affiliation first). When the request also sends a role, the
+    // new scope goes through validateRoleScope (live affiliations only) below.
+    if (reactivating && user.role === 'affiliation' && !(role && VALID_ROLES.includes(role))) {
+      const [[aff]] = await pool.query(
+        'SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE', [user.scope_id]
+      );
+      if (!aff) {
+        return sendError(res, 'สังกัดของบัญชีนี้ถูกปิดใช้งานแล้ว กรุณาเปิดใช้งานสังกัดก่อน', [{ code: 'AFFILIATION_INACTIVE' }], 409);
+      }
+    }
+
     const updates = [];
     const params = [];
     if (display_name !== undefined) { updates.push('display_name = ?'); params.push(display_name); }

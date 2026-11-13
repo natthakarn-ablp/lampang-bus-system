@@ -260,6 +260,75 @@ describe('driverAccountSelfService.reactivateDriverAccount', () => {
       .rejects.toMatchObject({ statusCode: 409, errors: [{ code: 'DRIVER_REACTIVATION_BLOCKED' }] });
     expect(issued(c, /UPDATE users/)).toBe(false);
   });
+
+  test('reactivate revokes earlier sessions (password_changed_at) and reopens the plate assignment', async () => {
+    const c = conn();
+    const out = await driverAcct.reactivateDriverAccount(poolOf(c), { vehicleId: 'V-1', scope: { schoolId: 'S1' }, actor });
+    expect(callOf(c, /UPDATE users SET is_active = TRUE/)[0]).toMatch(/password_changed_at = NOW\(\)/);
+    const ins = callOf(c, /INSERT INTO driver_vehicle_assignments/);
+    expect(ins[1]).toEqual([7, 'V-1']);
+    expect(out.assignment_restored).toBe(true);
+    expect(JSON.parse(auditRow(c).new)).toMatchObject({ sessions_revoked: true, assignment_restored: true });
+  });
+
+  test('reactivate leaves assignments alone when the vehicle already has an active driver', async () => {
+    const base = conn();
+    const c2 = makeConn(async (sql, params) => {
+      if (/FROM driver_vehicle_assignments WHERE vehicle_id = \? AND is_active = TRUE/.test(sql)) return [[{ id: 3 }]];
+      return base.query(sql, params);
+    });
+    const out = await driverAcct.reactivateDriverAccount(poolOf(c2), { vehicleId: 'V-1', scope: { schoolId: 'S1' }, actor });
+    expect(out.assignment_restored).toBe(false);
+    expect(issued(c2, /INSERT INTO driver_vehicle_assignments/)).toBe(false);
+  });
+});
+
+// ─── 4b. Reset / replace hand a switched-off plate account to a driver ──────
+describe('driverAccountSelfService reset/replace on a switched-off account', () => {
+  const vehicle = { id: 'V-1', plate_no: 'นข 1 ลำปาง' };
+  const actor = { id: 9, role: 'school', ip: '1.1.1.1', userAgent: 'jest' };
+  const conn = ({ account = { id: 50, username: 'นข1ลำปาง', driver_id: 7, is_active: 0 }, linkedSibling = false } = {}) =>
+    makeConn((sql) => {
+      if (/FROM vehicles WHERE id = \? AND is_deleted = FALSE FOR UPDATE/.test(sql)) return [[vehicle]];
+      if (/SELECT 1 AS ok FROM students/.test(sql)) return [[{ ok: 1 }]];
+      if (/FROM users\s+WHERE role = 'driver' AND is_deleted = FALSE/.test(sql)) return [account ? [account] : []];
+      if (/driver_id IS NOT NULL/.test(sql)) return [linkedSibling ? [{ id: 49, n: 'นข1ลำปาง' }] : []];
+      if (/SELECT id FROM vehicles WHERE is_deleted = FALSE/.test(sql)) return [[{ id: 'V-1' }]];
+      return dflt(sql);
+    });
+
+  test('replace re-enables the account with the new password in the same UPDATE', async () => {
+    const c = conn();
+    await driverAcct.replaceDriver(poolOf(c), { vehicleId: 'V-1', scope: { schoolId: 'S1' }, actor, name: 'สมศักดิ์ ใจดี', phone: '0812345678' });
+    const upd = callOf(c, /UPDATE users SET driver_id = \?/);
+    expect(upd[0]).toMatch(/password_changed_at = NOW\(\), is_active = TRUE/);
+    expect(issued(c, /UPDATE users SET is_active = TRUE/)).toBe(false);
+    expect(c.commit).toHaveBeenCalled();
+  });
+
+  test('reset re-enables the account with the new password in the same UPDATE', async () => {
+    const c = conn();
+    await driverAcct.resetDriverPassword(poolOf(c), { vehicleId: 'V-1', scope: { schoolId: 'S1' }, actor });
+    const upd = callOf(c, /UPDATE users SET password_hash = \?/);
+    expect(upd[0]).toMatch(/is_active = TRUE/);
+    expect(JSON.parse(auditRow(c).new)).toMatchObject({ action: 'reset_password', reactivated: true });
+  });
+
+  test('an active account keeps the plain UPDATE (no is_active write)', async () => {
+    const c = conn({ account: { id: 50, username: 'นข1ลำปาง', driver_id: 7, is_active: 1 } });
+    await driverAcct.resetDriverPassword(poolOf(c), { vehicleId: 'V-1', scope: { schoolId: 'S1' }, actor });
+    expect(callOf(c, /UPDATE users SET password_hash = \?/)[0]).not.toMatch(/is_active/);
+  });
+
+  test('a dedupe duplicate stays off: replace and reset both 409 with no write', async () => {
+    for (const fn of ['replaceDriver', 'resetDriverPassword']) {
+      const c = conn({ account: { id: 50, username: 'นข1ลำปาง', driver_id: null, is_active: 0 }, linkedSibling: true });
+      await expect(driverAcct[fn](poolOf(c), { vehicleId: 'V-1', scope: { schoolId: 'S1' }, actor, name: 'สมศักดิ์ ใจดี', phone: '0812345678' }))
+        .rejects.toMatchObject({ statusCode: 409, errors: [{ code: 'DRIVER_REACTIVATION_BLOCKED' }] });
+      expect(issued(c, /UPDATE users/)).toBe(false);
+      expect(issued(c, /INSERT INTO drivers/)).toBe(false);
+    }
+  });
 });
 
 // ─── Route wiring ───────────────────────────────────────────────────────────
@@ -270,6 +339,11 @@ describe('route wiring', () => {
     expect(src).toMatch(/router\.post\('\/affiliations\/:id\/deactivate'/);
     expect(src).toMatch(/router\.post\('\/affiliations\/:id\/restore'/);
     expect(src).toMatch(/router\.get\('\/affiliations\/deactivated'/);
+  });
+
+  test('admin user edit will not re-enable an affiliation account of a closed affiliation', () => {
+    const src = read('backend/src/routes/admin.routes.js');
+    expect(src).toMatch(/reactivating && user\.role === 'affiliation'[\s\S]{0,300}FROM affiliations WHERE id = \? AND is_deleted = FALSE[\s\S]{0,300}AFFILIATION_INACTIVE[\s\S]{0,20}409/);
   });
 
   test('school reactivate needs the full school scope (not a grade teacher)', () => {

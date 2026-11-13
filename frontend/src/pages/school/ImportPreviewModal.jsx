@@ -215,7 +215,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
   }
 
   // Phase 10.13B-7 — from a VEHICLE_SOFT_DELETED row, request a vehicle restore
-  // (admin-approved). Never auto-restores.
+  // (approved by the school's affiliation or admin). Never auto-restores.
   async function requestVehicleRestore(r) {
     try {
       await api.post('/school/vehicles/requests', {
@@ -225,7 +225,7 @@ export default function ImportPreviewModal({ open, onClose, onApplied }) {
         reason: `จากการนำเข้า ชุด #${batchId} แถว ${r.row_number}`,
       });
       setRequestedVehicle((p) => new Set(p).add(r.row_number));
-      toast.success('ส่งคำขอกู้คืนรถแล้ว · รอผู้ดูแลระบบตรวจสอบ');
+      toast.success('ส่งคำขอกู้คืนรถแล้ว · รอสังกัดของโรงเรียนอนุมัติ');
     } catch (err) { toast.error(err.response?.data?.message || 'ส่งคำขอไม่สำเร็จ'); }
   }
 

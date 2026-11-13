@@ -238,7 +238,7 @@ export default function SchoolBulkVehicles() {
   }
 
   // Phase 10.13C — from a soft-deleted-plate collision, request a vehicle restore
-  // (admin-approved, 10.13B-7). Never auto-restores; mirrors ImportPreviewModal.
+  // (approved by the school's affiliation or admin, 10.13B-7). Never auto-restores; mirrors ImportPreviewModal.
   async function requestRestore(i, info) {
     if (!canRestore || !info || savingRef.current || restoringRef.current.has(i) || requestedRestore.has(i)) return;
     restoringRef.current.add(i);
@@ -251,7 +251,7 @@ export default function SchoolBulkVehicles() {
         reason: 'จากหน้าเพิ่มรถ — ทะเบียนตรงกับรถที่ถูกปิดใช้งานแล้ว',
       });
       setRequestedRestore((s) => new Set(s).add(i));
-      toast.success('ส่งคำขอกู้คืนรถแล้ว · รอผู้ดูแลระบบตรวจสอบ');
+      toast.success('ส่งคำขอกู้คืนรถแล้ว · รอสังกัดของโรงเรียนอนุมัติ');
     } catch (err) {
       if (err.response?.data?.errors?.[0]?.code === 'PENDING_REQUEST_EXISTS') {
         setRequestedRestore((s) => new Set(s).add(i));
@@ -463,9 +463,9 @@ export default function SchoolBulkVehicles() {
               {!r.uncertain && restoreInfo ? (
                 <div className="mt-2 text-xs bg-blue-50 border border-blue-300 text-blue-800 rounded-lg px-3 py-2">
                   <div className="font-medium">รถทะเบียนนี้ถูกปิดใช้งานอยู่ ({restoreInfo.existing_plate})</div>
-                  <div className="mt-0.5">ต้องการใช้งานต่อ ส่งคำขอให้ผู้ดูแลระบบกู้คืนรถคันนี้ (ไม่กู้คืนทันที)</div>
+                  <div className="mt-0.5">ต้องการใช้งานต่อ ส่งคำขอให้สังกัดของโรงเรียนอนุมัติกู้คืนรถคันนี้ (ไม่กู้คืนทันที)</div>
                   {requestedRestore.has(i) ? (
-                    <div className="mt-1.5 font-medium text-success-ink">ส่งคำขอแล้ว · รอผู้ดูแลระบบอนุมัติ</div>
+                    <div className="mt-1.5 font-medium text-success-ink">ส่งคำขอแล้ว · รอสังกัดของโรงเรียนอนุมัติ</div>
                   ) : canRestore ? (
                     <button type="button" onClick={() => requestRestore(i, restoreInfo)} disabled={saving || restoring[i]}
                       className="focus-ring mt-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 min-h-[44px] rounded-lg transition disabled:opacity-50">

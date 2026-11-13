@@ -24,6 +24,9 @@
  *                          the plate account is relinked and its password reset
  *                          so the previous driver loses access immediately.
  *
+ * Reset and replace also release the account's LINE password-recovery binding
+ * (utils/recoveryBinding) in the same transaction.
+ *
  * The plaintext temporary password is returned once to the caller and is never
  * stored or written to the audit log.
  */
@@ -32,6 +35,7 @@ const bcrypt = require('bcrypt');
 const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
 const { generateTemporaryPassword } = require('./driverProfile.service');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 
 const BCRYPT_COST = 12;
 const NAME_MAX = 100;   // drivers.name VARCHAR(100)
@@ -164,11 +168,15 @@ async function resetDriverPassword(pool, { vehicleId, scope, actor }) {
     const account = await findPlateAccount(conn, vehicle, { lock: true });
     requireActive(account);
     const temporaryPassword = await setTemporaryPassword(conn, account.id);
+    // The previous holder's LINE recovery binding must go with the reset, or
+    // they could request a fresh reset link (accountRecoveryPolicy, #177).
+    const recoveryReleased = await releaseRecoveryBinding(conn, account.id);
     await logAudit({
       ...auditCtx(actor), action: 'UPDATE', entityType: 'user', entityId: account.id, conn, required: true,
       newValue: {
         action: 'reset_password', account_type: 'driver', target_username: account.username,
         vehicle_id: vehicle.id, must_change_password: true, sessions_revoked: true,
+        recovery_binding_released: recoveryReleased,
         actor_role: actor.role, actor_scope: scope.schoolId ? { school_id: scope.schoolId } : scope.affiliationId ? { affiliation_id: scope.affiliationId } : 'all',
       },
     });
@@ -279,6 +287,7 @@ async function replaceDriver(pool, { vehicleId, scope, actor, name, phone, reaso
 
     let username;
     let userId;
+    let recoveryReleased = 0;
     const temporaryPassword = generateTemporaryPassword();
     const hash = await bcrypt.hash(temporaryPassword, BCRYPT_COST);
     if (account) {
@@ -290,6 +299,8 @@ async function replaceDriver(pool, { vehicleId, scope, actor, name, phone, reaso
       );
       username = account.username;
       userId = account.id;
+      // New person on the plate account: drop the old driver's LINE recovery binding.
+      recoveryReleased = await releaseRecoveryBinding(conn, account.id);
     } else {
       try {
         const [ins] = await conn.query(
@@ -317,7 +328,8 @@ async function replaceDriver(pool, { vehicleId, scope, actor, name, phone, reaso
       newValue: {
         action: 'replace_driver', vehicle_id: vehicle.id, driver_id: newDriverId, driver_name: cleanNameValue,
         driver_phone: cleanPhoneValue, user_id: userId, account_created: !account,
-        password_reset: true, sessions_revoked: !!account, actor_role: actor.role,
+        password_reset: true, sessions_revoked: !!account, recovery_binding_released: recoveryReleased,
+        actor_role: actor.role,
         reason: reason ? String(reason).slice(0, 200) : null,
       },
     });

@@ -19,8 +19,10 @@
  * requires editing this file, which means it lands in a diff next to the
  * signed decision that justifies it — an env var alone can never open a role.
  *
- * Every role except `admin` ships with unconfirmed gates and no flag, which is
- * the honest state: the mechanism is ready, the decisions are not.
+ * `admin`, `school` (main account and grade-teacher sub-accounts) and `driver`
+ * have confirmed gates — school and driver by owner decision 2026-11-13 — and
+ * each still needs its flag. `province`, `affiliation` and `transport` stay
+ * closed on unconfirmed gates.
  */
 
 /** Roles that authenticate with a password in `users`. */
@@ -93,36 +95,65 @@ const ROLE_POLICIES = Object.freeze({
     gatesConfirmed: false,
     requiresApproverRole: 'admin',
   },
+  // ── school + grade-teacher sub-accounts: owner decision 2026-11-13 ──────────
+  //
+  // One flag covers both kinds of `role = 'school'` account: the school's main
+  // account and the grade-teacher sub-accounts (users.grade_scope set).
+  // Recovery is always keyed by the `users` row, so the two never share a
+  // binding: a binding is created only for req.user.id while that user is
+  // signed in, /request resolves by the exact username, and one LINE identity
+  // can hold only one account (UNIQUE provider, provider_subject — migration
+  // 049). A teacher therefore cannot recover the main account, nor the main
+  // account a teacher's, and a reset changes only password columns, never the
+  // SCOPE_PRESERVED_COLUMNS above (school_id lives in scope_id).
   school: {
     role: 'school',
     envFlag: 'FEATURE_RECOVERY_SCHOOL',
     phase: 'Phase 4 — school and teacher sub-accounts',
-    identityModel: 'undecided',
-    extraControls: 'ต้องผ่าน school ownership/approval และมีขั้นตอนเปลี่ยนผู้รับผิดชอบ; บัญชีย่อยครูผูก LINE รายบุคคลและต้องคง school_id/grade_scope เดิม',
-    decisionGates: [
-      'school_main_account_ownership_evidence',
-      'teacher_subaccount_binds_separately',
-      'revocation_window_on_transfer',
-    ],
-    gatesConfirmed: false,
-    requiresApproverRole: 'affiliation',
+    identityModel: 'school_main_account_and_personal_teacher_subaccounts',
+    extraControls: 'บัญชีหลักผูก LINE ของผู้ถือบัญชีหลัก; บัญชีย่อยครูผูก LINE รายบุคคลและคง school_id/grade_scope เดิม; เมื่อเปลี่ยนผู้รับผิดชอบ โรงเรียนรีเซ็ตรหัสผ่านบัญชีครู (สังกัดรีเซ็ตบัญชีหลัก) ซึ่งยกเลิกการผูก LINE เดิมทันที หรือผู้ถือบัญชียกเลิกการผูกเอง',
+    // All three gates closed by owner decision 2026-11-13.
+    decisionGates: [],
+    decisionsRecorded: {
+      school_main_account_ownership_evidence:
+        'owner decision 2026-11-13: ผู้ที่เข้าสู่ระบบบัญชีหลักด้วยรหัสผ่านปัจจุบันแล้วผูก LINE ของตนคือผู้ถือบัญชีหลัก (สังกัดเป็นผู้สร้าง/รีเซ็ตบัญชีหลัก)',
+      teacher_subaccount_binds_separately:
+        'owner decision 2026-11-13: ครูแต่ละคนผูก LINE กับบัญชีย่อยของตนเอง แยกจากบัญชีหลัก',
+      // Revocation is immediate rather than a window: every password reset
+      // performed by someone else releases the binding
+      // (backend/src/utils/recoveryBinding.js).
+      revocation_window_on_transfer:
+        'owner decision 2026-11-13: เมื่อโอนย้ายหรือเปลี่ยนผู้รับผิดชอบ โรงเรียนรีเซ็ตรหัสผ่านบัญชีครู (สังกัดรีเซ็ตบัญชีหลัก) ซึ่งยกเลิกการผูก LINE เดิมทันที หรือผู้ถือบัญชียกเลิกการผูก LINE',
+    },
+    gatesConfirmed: true,
+    requiresApproverRole: null,
   },
+  // ── driver: owner decision 2026-11-13 ──────────────────────────────────────
+  //
+  // The driver account IS the vehicle account (username = plate). The owner
+  // accepts that whoever has the LINE bound to that account can recover it; on
+  // a vehicle shared between shifts that is whoever bound it while signed in.
   driver: {
     role: 'driver',
     envFlag: 'FEATURE_RECOVERY_DRIVER',
     phase: 'Phase 5 — drivers',
-    identityModel: 'undecided',
-    // The unresolved conflict the roadmap names: login is by plate number, but
-    // a LINE account is a person. One driver resetting a plate-shared account
-    // would lock out the other shift.
-    extraControls: 'โรงเรียนรับรองตัวตน; ห้ามคนขับคนหนึ่ง reset บัญชีรถหรือคนขับคนอื่น',
-    decisionGates: [
-      'driver_username_is_person_or_vehicle',
-      'multi_shift_vehicle_requires_separate_accounts_or_school_approval',
-      'driver_change_of_vehicle_or_shift_handling',
-    ],
-    gatesConfirmed: false,
-    requiresApproverRole: 'school',
+    identityModel: 'vehicle_account',
+    extraControls: 'บัญชีคนขับคือบัญชีของรถ (ชื่อผู้ใช้ = ทะเบียนรถ) ผู้ที่มี LINE ที่ผูกกับบัญชีรถกู้รหัสผ่านได้; เมื่อเปลี่ยนคนขับ รีเซ็ตรหัสผ่านบัญชีรถ ซึ่งยกเลิกการผูก LINE เดิมทันที หรือผู้ถือบัญชียกเลิกการผูกเอง',
+    decisionGates: [],
+    decisionsRecorded: {
+      driver_username_is_person_or_vehicle:
+        'owner decision 2026-11-13: บัญชีคนขับผูกกับรถ (username = ทะเบียนรถ) ไม่ใช่บุคคล',
+      multi_shift_vehicle_requires_separate_accounts_or_school_approval:
+        'owner decision 2026-11-13: ยอมรับว่าผู้ที่มี LINE ที่ผูกกับบัญชีรถกู้บัญชีนั้นได้ ไม่ต้องแยกบัญชีหรือรออนุมัติ',
+      // On this code base the server path that resets a driver password for
+      // someone else is admin.routes.js POST /users/:id/reset-password; it
+      // releases the binding through utils/recoveryBinding.js, and any future
+      // school-side driver reset must call the same helper.
+      driver_change_of_vehicle_or_shift_handling:
+        'owner decision 2026-11-13: เมื่อเปลี่ยนคนขับ รีเซ็ตรหัสผ่านบัญชีรถ (ยกเลิกการผูก LINE เดิมทันที) หรือผู้ถือบัญชียกเลิกการผูก LINE',
+    },
+    gatesConfirmed: true,
+    requiresApproverRole: null,
   },
 });
 
@@ -185,6 +216,7 @@ function recoveryPolicySummary(source = process.env) {
       phase: policy.phase,
       identity_model: policy.identityModel,
       decision_gates: policy.decisionGates,
+      decisions_recorded: Object.keys(policy.decisionsRecorded || {}),
       gates_confirmed: policy.gatesConfirmed,
       requires_approver_role: policy.requiresApproverRole,
     };

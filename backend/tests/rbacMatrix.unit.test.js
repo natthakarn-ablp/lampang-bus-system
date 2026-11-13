@@ -106,7 +106,24 @@ describe('RBAC coverage', () => {
     // CLAUDE.md §8: province is oversight, not data entry. A new province
     // write should be a deliberate decision, not a drift.
     const provinceWrites = routes.filter((r) => r.write && r.roles.includes('province') && !r.roles.includes('school'));
-    expect(provinceWrites.length).toBeLessThanOrEqual(2);
+    // Deliberate 2026-11-13 (§8 rows "จัดการผู้ใช้" + "จัดการสังกัด/โรงเรียน"):
+    // the province manages affiliation/transport accounts and the
+    // affiliation/school tree so the admin is not the only one who can.
+    // Only these exact paths are allowed; anything else still counts.
+    const SELF_SERVE = new Set([
+      '/api/province/unit-accounts',
+      '/api/province/unit-accounts/:id',
+      '/api/province/unit-accounts/:id/restore',
+      '/api/province/affiliations',
+      '/api/province/affiliations/:id',
+      '/api/province/schools/:id',
+      '/api/province/schools/:id/deactivate',
+      '/api/province/schools/:id/restore',
+    ]);
+    const selfServe = provinceWrites.filter((r) => SELF_SERVE.has(r.path));
+    expect(selfServe.every((r) => r.roles.every((role) => ['province', 'admin'].includes(role)))).toBe(true);
+    expect(selfServe.length).toBeLessThanOrEqual(9);
+    expect(provinceWrites.length - selfServe.length).toBeLessThanOrEqual(2);
   });
 
   it('never lets driver or transport reach an admin user-management route', () => {

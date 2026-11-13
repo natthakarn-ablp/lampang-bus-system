@@ -55,19 +55,50 @@ describe('recovery scope', () => {
   });
 });
 
+/** Roles whose gates a human has confirmed (school + driver: owner decision 2026-11-13). */
+const CONFIRMED = ['admin', 'school', 'driver'];
+const STILL_CLOSED = ['province', 'affiliation', 'transport'];
+
 describe('decision gates outrank feature flags', () => {
-  it('keeps every role but admin closed even with every flag on', () => {
+  it('opens only the confirmed roles even with every flag on', () => {
     const enabled = enabledRecoveryRoles(ALL_FLAGS_ON);
-    expect(enabled).toEqual(['admin']);
+    expect(enabled).toEqual(['admin', 'school', 'driver']);
   });
 
   it('reports unconfirmed gates as the blocker, not the flag', () => {
-    for (const role of LOGIN_ROLES) {
-      if (role === 'admin') continue;
+    for (const role of STILL_CLOSED) {
       const status = recoveryStatusForRole(role, ALL_FLAGS_ON);
       expect(status.enabled).toBe(false);
       expect(status.reason).toBe('decision_gates_unconfirmed');
     }
+  });
+
+  // Full matrix: every role × its own flag on/off × every other flag on/off.
+  // A role opens iff its gates are confirmed AND its own flag is exactly
+  // 'true'; no other role's flag can open it.
+  describe.each(LOGIN_ROLES)('gate/flag matrix for %s', (role) => {
+    const flag = ROLE_POLICIES[role].envFlag;
+    const others = Object.fromEntries(
+      LOGIN_ROLES.filter((r) => r !== role).map((r) => [ROLE_POLICIES[r].envFlag, 'true'])
+    );
+    it.each([
+      ['own flag off, others off', {}, false],
+      ['own flag off, others on', others, false],
+      ['own flag on, others off', { [flag]: 'true' }, CONFIRMED.includes(role)],
+      ['own flag on, others on', { ...others, [flag]: 'true' }, CONFIRMED.includes(role)],
+    ])('%s', (_label, source, expected) => {
+      expect(isRecoveryEnabledForRole(role, source)).toBe(expected);
+      const { reason } = recoveryStatusForRole(role, source);
+      if (expected) expect(reason).toBeNull();
+      else if (!CONFIRMED.includes(role)) expect(reason).toBe('decision_gates_unconfirmed');
+      else expect(reason).toBe('feature_flag_off');
+    });
+  });
+
+  it('school and driver flags are independent of each other and of admin', () => {
+    expect(enabledRecoveryRoles({ FEATURE_RECOVERY_SCHOOL: 'true' })).toEqual(['school']);
+    expect(enabledRecoveryRoles({ FEATURE_RECOVERY_DRIVER: 'true' })).toEqual(['driver']);
+    expect(enabledRecoveryRoles({ FEATURE_ADMIN_PASSWORD_RECOVERY: 'true' })).toEqual(['admin']);
   });
 
   it('requires the flag as well once gates are confirmed', () => {
@@ -110,22 +141,53 @@ describe('unconfirmed roles carry the decisions they are waiting on', () => {
     }
   });
 
-  it('records the unresolved driver identity conflict', () => {
-    // Login is by plate number, but a LINE account is a person: one driver
-    // resetting a plate-shared account would lock out the other shift.
-    const gates = ROLE_POLICIES.driver.decisionGates;
-    expect(gates).toContain('driver_username_is_person_or_vehicle');
-    expect(ROLE_POLICIES.driver.identityModel).toBe('undecided');
-    expect(ROLE_POLICIES.driver.requiresApproverRole).toBe('school');
-  });
-
-  it('marks admin as the only role with a settled identity model', () => {
-    expect(ROLE_POLICIES.admin.identityModel).toBe('personal');
-    expect(ROLE_POLICIES.admin.decisionGates).toEqual([]);
-    for (const role of LOGIN_ROLES) {
-      if (role === 'admin') continue;
+  it('keeps province, affiliation and transport undecided', () => {
+    for (const role of STILL_CLOSED) {
+      expect(ROLE_POLICIES[role].gatesConfirmed).toBe(false);
       expect(ROLE_POLICIES[role].identityModel).toBe('undecided');
     }
+  });
+});
+
+describe('owner decision 2026-11-13: school, grade teachers and drivers', () => {
+  it('records the driver decision: the account is the vehicle', () => {
+    const p = ROLE_POLICIES.driver;
+    expect(p.gatesConfirmed).toBe(true);
+    expect(p.identityModel).toBe('vehicle_account');
+    expect(p.decisionGates).toEqual([]);
+    expect(Object.keys(p.decisionsRecorded).sort()).toEqual([
+      'driver_change_of_vehicle_or_shift_handling',
+      'driver_username_is_person_or_vehicle',
+      'multi_shift_vehicle_requires_separate_accounts_or_school_approval',
+    ]);
+  });
+
+  it('records the school decision: main account plus separately bound teachers', () => {
+    const p = ROLE_POLICIES.school;
+    expect(p.gatesConfirmed).toBe(true);
+    expect(p.identityModel).toBe('school_main_account_and_personal_teacher_subaccounts');
+    expect(p.decisionGates).toEqual([]);
+    expect(Object.keys(p.decisionsRecorded).sort()).toEqual([
+      'revocation_window_on_transfer',
+      'school_main_account_ownership_evidence',
+      'teacher_subaccount_binds_separately',
+    ]);
+    expect(p.extraControls).toContain('grade_scope');
+  });
+
+  it('cites the decision in every recorded gate', () => {
+    for (const role of ['school', 'driver']) {
+      for (const text of Object.values(ROLE_POLICIES[role].decisionsRecorded)) {
+        expect(text).toContain('owner decision 2026-11-13');
+      }
+    }
+  });
+
+  it('every confirmed role either has no open gate or records why', () => {
+    for (const role of CONFIRMED) {
+      expect(ROLE_POLICIES[role].decisionGates).toEqual([]);
+    }
+    expect(ROLE_POLICIES.admin.identityModel).toBe('personal');
   });
 });
 
@@ -139,7 +201,9 @@ describe('policy summary', () => {
       if (!row.enabled) expect(row.blocked_reason).toBeTruthy();
       expect(row.phase).toBeTruthy();
     }
-    expect(summary.enabled_roles).toEqual(['admin']);
+    expect(summary.enabled_roles).toEqual(['admin', 'school', 'driver']);
+    expect(summary.roles.driver.decisions_recorded.length).toBe(3);
+    expect(summary.roles.province.decisions_recorded).toEqual([]);
     expect(summary.parent.gates_confirmed).toBe(false);
   });
 

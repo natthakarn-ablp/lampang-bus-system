@@ -120,12 +120,18 @@ function validateFeatureDependencies(source = process.env) {
       + '(the /api/consent router is the only way a parent can grant consent)'
     );
   }
-  if (source.FEATURE_ADMIN_PASSWORD_RECOVERY === 'true') {
+  // Every LINE recovery flag needs LIFF (to bind), LINE push (to deliver the
+  // link) and an HTTPS public URL (the link itself).
+  for (const flag of ['FEATURE_ADMIN_PASSWORD_RECOVERY', 'FEATURE_RECOVERY_SCHOOL', 'FEATURE_RECOVERY_DRIVER']) {
+    if (source[flag] !== 'true') continue;
     if (!String(source.LINE_LIFF_ID || '').trim()) {
-      throw new Error('FEATURE_ADMIN_PASSWORD_RECOVERY requires LINE_LIFF_ID');
+      if (flag === 'FEATURE_ADMIN_PASSWORD_RECOVERY') {
+        throw new Error('FEATURE_ADMIN_PASSWORD_RECOVERY requires LINE_LIFF_ID');
+      }
+      throw new Error(`${flag} requires LINE_LIFF_ID`);
     }
     if (!String(source.LINE_CHANNEL_ACCESS_TOKEN || '').trim()) {
-      throw new Error('FEATURE_ADMIN_PASSWORD_RECOVERY requires LINE_CHANNEL_ACCESS_TOKEN');
+      throw new Error(`${flag} requires LINE_CHANNEL_ACCESS_TOKEN`);
     }
     let publicUrl;
     try {
@@ -295,6 +301,13 @@ const env = {
     // confirmation message is pushed to that LINE the moment a password is
     // changed.
     adminRecoveryRequireCode: process.env.ADMIN_RECOVERY_REQUIRE_CODE !== 'false',
+    // Self-service LINE password recovery for school accounts (main account
+    // and grade-teacher sub-accounts) and for driver (vehicle) accounts.
+    // Decision gates confirmed by the owner on 2026-11-13 in
+    // config/accountRecoveryPolicy.js; these flags are the remaining switch.
+    // Same requirements as the admin flag: migration 049, LIFF, LINE push.
+    recoverySchool: process.env.FEATURE_RECOVERY_SCHOOL === 'true',
+    recoveryDriver: process.env.FEATURE_RECOVERY_DRIVER === 'true',
     vehicleQr: process.env.FEATURE_VEHICLE_QR === 'true',
     driverShiftSelection: process.env.FEATURE_DRIVER_SHIFT_SELECTION === 'true',
     qrLevel3: process.env.FEATURE_QR_LEVEL3 === 'true',   // Level-3 sensitive viewer (default off, DPO-gated)

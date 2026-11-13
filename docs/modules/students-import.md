@@ -70,7 +70,7 @@ Mount (`app.js` ~L183-184): `/api/school/promotion` (ก่อน) แล้ว 
 - GET /grade-vehicle-summary (+ `?format=xlsx`) — สรุปนักเรียนผูกรถ/ยังไม่ผูกรถตามสายชั้น; บัญชีโรงเรียนเห็นทุกสายชั้น ครูเห็นเฉพาะสายชั้นตน; export เขียน audit `grade_vehicle_summary_xlsx`
 - POST /vehicles (L1501; ห้ามกรอก driver_name/driver_phone/owner_name L1506) และ PUT /vehicles/:id (L1666; แก้ได้เฉพาะ vehicle_type, owner_name, owner_phone L1682)
 
-เส้นที่ถูกบล็อกด้วย `requireFullSchoolScope`: checkin-override, roster-requests PUT, import แบบเดิม/rollback, transfer, vehicle requests, teacher-accounts, claim-codes, parent-line unlink, checkin void, audit-logs; และ `/api/school/promotion/*` ทั้ง router.
+เส้นที่ถูกบล็อกด้วย `requireFullSchoolScope`: checkin-override, roster-requests PUT, import แบบเดิม/rollback, transfer, vehicle requests, teacher-accounts, claim-codes, parent-line unlink, checkin void, audit-logs, PUT /pickup-points/:id (แก้ชื่อ/พิกัดจุด — 2026-11-13); และ `/api/school/promotion/*` ทั้ง router.
 
 ### นโยบายที่รอเจ้าของยืนยัน
 เจ้าของระบบยังไม่ได้ยืนยันว่าสิทธิ์เขียนข้างต้นเป็นนโยบายที่ตั้งใจหรือไม่ เอกสารนี้ไม่ระบุว่าโค้ดถูกหรือผิด. ต้องรอการตัดสินใจก่อนแก้ CLAUDE.md §8 หรือโค้ด.

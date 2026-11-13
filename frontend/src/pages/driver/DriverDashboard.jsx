@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bus, Sunrise, Sunset, AlertTriangle, CheckCircle2, Check, X,
-  Clock, Building2, ClipboardList, RotateCcw,
+  Clock, Building2, ClipboardList, RotateCcw, Undo2,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
@@ -26,6 +26,16 @@ import { isDriverNotLinked, driverErrorMessage } from '../../utils/driverErrors'
 import { formatGradeClass } from '../../utils/student';
 
 const POLL_INTERVAL = 30_000;
+
+const RECENT_STATUS_LABEL = {
+  CHECKED_IN: 'ขึ้นรถ', CHECKED_OUT: 'ลงรถ', CANCELLED: 'ยกเลิกแล้ว', ABSENT: 'ขาด',
+};
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
+}
 
 const LEAVE_LABEL = { morning: 'ลาเช้า', evening: 'ลาเย็น', both: 'ลาทั้งวัน' };
 
@@ -76,6 +86,11 @@ export default function DriverDashboard() {
   const [actionLoading, setActionLoading] = useState({});
   const [leaveLoading, setLeaveLoading] = useState({});
   const [showIndividual, setShowIndividual] = useState(false);
+  // "ยกเลิกรายการที่กดผิด" — void one of today's own taps (backend
+  // POST /driver/checkin/:logId/void; only rows the server marks can_void).
+  const [voidTarget, setVoidTarget] = useState(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidSaving, setVoidSaving] = useState(false);
 
   // Pre-trip gate
   const [pretripDone, setPretripDone] = useState(null); // null=loading, object={done,checked_at,all_pass}
@@ -233,7 +248,27 @@ export default function DriverDashboard() {
     }
   }
 
+  async function handleVoid() {
+    const reason = voidReason.trim();
+    if (!voidTarget || !reason || voidSaving) return;
+    setVoidSaving(true);
+    try {
+      await api.post(`/driver/checkin/${voidTarget.id}/void`, { reason });
+      toast.success('ยกเลิกรายการแล้ว');
+      setVoidTarget(null);
+      setVoidReason('');
+      setCheckedOut(false);
+      await fetchData();
+    } catch (err) {
+      if (err.response?.status === 409) await fetchData();
+      toast.error(driverErrorMessage(err, 'ยกเลิกรายการไม่สำเร็จ'));
+    } finally {
+      setVoidSaving(false);
+    }
+  }
+
   const s = status?.summary;
+  const recent = Array.isArray(status?.recent) ? status.recent : [];
 
   if (!session) {
     return <div className="p-6 text-center text-lg text-ink-muted">กำลังตรวจสอบโหมด…</div>;
@@ -548,12 +583,98 @@ export default function DriverDashboard() {
             <p className="text-center text-ink-muted py-10 text-lg">ไม่มีนักเรียนในรถ</p>
           )}
 
+          {recent.length > 0 && (
+            <details className="mb-6 rounded-2xl border border-surface-border bg-surface-raised">
+              <summary className="cursor-pointer select-none px-4 min-h-[48px] flex items-center gap-2 text-base font-semibold text-ink">
+                <Undo2 className="w-4 h-4 text-ink-muted" strokeWidth={2.2} aria-hidden="true" />
+                รายการล่าสุดวันนี้ · ยกเลิกรายการที่กดผิด
+              </summary>
+              <ul className="divide-y divide-surface-border border-t border-surface-border">
+                {recent.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                    <div className="min-w-0">
+                      <p className={`truncate text-base text-ink ${r.status === 'CANCELLED' ? 'line-through text-ink-muted' : ''}`}>
+                        {r.student_name}
+                      </p>
+                      <p className="text-sm text-ink-muted">
+                        {SESSION_LABEL[r.session] || r.session} · {RECENT_STATUS_LABEL[r.status] || r.status}
+                        {r.checked_at ? ` · ${formatTime(r.checked_at)}` : ''}
+                      </p>
+                    </div>
+                    {r.can_void && (
+                      <button
+                        type="button"
+                        onClick={() => { setVoidTarget(r); setVoidReason(''); }}
+                        className="focus-ring shrink-0 inline-flex items-center gap-1 rounded-xl border border-danger/30 bg-danger-soft px-3 min-h-[44px] text-sm font-semibold text-danger-ink transition hover:opacity-90"
+                      >
+                        ยกเลิกรายการที่กดผิด
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="px-4 pb-3 pt-1 text-sm text-ink-muted">
+                ยกเลิกได้เฉพาะรายการของวันนี้ที่คุณกดเอง และเป็นรายการล่าสุดของนักเรียนคนนั้น
+              </p>
+            </details>
+          )}
+
           <p className="text-center text-xs text-ink-muted mt-6 inline-flex items-center gap-1.5 justify-center">
             <PulseDot color="bg-success" size="sm" />
             รีเฟรชอัตโนมัติทุก 30 วินาที
           </p>
         </>
       )}
+      {voidTarget && (
+        <Modal
+          title="ยกเลิกรายการที่กดผิด?"
+          onClose={() => { if (!voidSaving) setVoidTarget(null); }}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setVoidTarget(null)}
+                disabled={voidSaving}
+                className="focus-ring px-4 min-h-[44px] text-base font-medium rounded-xl border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50"
+              >
+                ไม่ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleVoid}
+                disabled={voidSaving || !voidReason.trim()}
+                className="focus-ring px-4 min-h-[44px] text-base font-semibold rounded-xl bg-danger-ink hover:bg-danger-ink/90 text-white transition disabled:opacity-60"
+              >
+                {voidSaving ? 'กำลังยกเลิก…' : 'ยืนยันยกเลิกรายการ'}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-base text-ink">
+              <span className="font-semibold">{voidTarget.student_name}</span>
+              {' · '}{SESSION_LABEL[voidTarget.session] || voidTarget.session}
+              {' · '}{RECENT_STATUS_LABEL[voidTarget.status] || voidTarget.status}
+            </p>
+            <p className="text-sm text-ink-muted">
+              ระบบเก็บประวัติรายการเดิมไว้ และนักเรียนจะกลับไปอยู่ในรายชื่อที่ต้องเช็กชื่อของรอบนี้
+            </p>
+            <FormField label="เหตุผล" required helper="เช่น กดผิดคน, นักเรียนไม่ได้ขึ้นรถ">
+              {ctl => (
+                <textarea
+                  {...ctl}
+                  rows={3}
+                  maxLength={500}
+                  value={voidReason}
+                  onChange={e => setVoidReason(e.target.value)}
+                  className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 py-2 text-base text-ink transition"
+                />
+              )}
+            </FormField>
+          </div>
+        </Modal>
+      )}
+
       <ConfirmDialog
         open={Boolean(confirmCancelLeave)}
         title="ยกเลิกการลาของนักเรียนคนนี้?"

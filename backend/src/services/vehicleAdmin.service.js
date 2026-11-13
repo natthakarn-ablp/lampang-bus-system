@@ -13,7 +13,7 @@
 
 const { logAudit } = require('../utils/audit');
 const PI = require('../utils/plateIdentity');
-const { validatePlateNo, isProvinceVariant } = require('../utils/vehiclePlate');
+const { validatePlateNo, isProvinceVariant, normalizePlate } = require('../utils/vehiclePlate');
 
 const err = (msg, code) => { const e = new Error(msg); e.statusCode = code; return e; };
 
@@ -132,6 +132,126 @@ async function softDeleteVehicle(pool, { vehicleId, actorId, force = false, reas
   } finally { conn.release(); }
 }
 
+// Validate a new plate for vehicleId and run the dedup guards against OTHER
+// active vehicles (normalized, canonical, province-variant). Shared by the
+// admin correction and the transport/admin plate-typo fix.
+async function checkPlateChange(conn, vehicleId, rawPlate) {
+  const validation = validatePlateNo(rawPlate);
+  if (!validation.valid) { const e = err(validation.error, 400); e.errors = [{ code: 'VALIDATION_ERROR' }]; throw e; }
+  const { trimmed, normalized } = validation;
+
+  // normalized_plate collision (whitespace/dash variant) on another ACTIVE row.
+  const [[dupNorm]] = await conn.query(
+    'SELECT id, plate_no FROM vehicles WHERE normalized_plate = ? AND is_deleted = FALSE AND id <> ? LIMIT 1',
+    [normalized, vehicleId]);
+  if (dupNorm) { const e = err('ทะเบียนรถนี้ซ้ำกับรถที่ใช้งานอยู่ในระบบ', 409); e.errors = [{ code: 'DUPLICATE_ACTIVE_VEHICLE', vehicle_id: dupNorm.id, plate_no: dupNorm.plate_no }]; throw e; }
+
+  // canonical (province-alias-aware) collision on another ACTIVE row.
+  const canonical = PI.canonicalPlateForStorage(trimmed);
+  if (canonical) {
+    const [[dupCanon]] = await conn.query(
+      'SELECT id, plate_no FROM vehicles WHERE canonical_plate = ? AND is_deleted = FALSE AND id <> ? LIMIT 1',
+      [canonical, vehicleId]);
+    if (dupCanon) { const e = err('ทะเบียนรถนี้ซ้ำกับรถที่ใช้งานอยู่ (จับคู่จากชื่อจังหวัด)', 409); e.errors = [{ code: 'DUPLICATE_ACTIVE_VEHICLE', vehicle_id: dupCanon.id, plate_no: dupCanon.plate_no }]; throw e; }
+  }
+
+  // province-omitted/variant guard (mirrors transport add + school onboarding).
+  const [variantRows] = await conn.query(
+    `SELECT plate_no, normalized_plate FROM vehicles
+     WHERE is_deleted = FALSE AND id <> ?
+       AND (normalized_plate LIKE CONCAT(?, '%') OR ? LIKE CONCAT(normalized_plate, '%'))`,
+    [vehicleId, normalized, normalized]);
+  const variants = variantRows.filter((c) => isProvinceVariant(c.normalized_plate, normalized));
+  if (variants.length) {
+    const e = err('พบทะเบียนรถใกล้เคียงในระบบ กรุณาตรวจสอบทะเบียนและจังหวัด', 409);
+    e.errors = [{ code: 'DUPLICATE_OR_INCOMPLETE_PLATE', candidates: variants.map((c) => ({ plate_no: c.plate_no, duplicate_type: 'PROVINCE_VARIANT' })) }];
+    throw e;
+  }
+
+  return { trimmed, normalized, canonical };
+}
+
+/**
+ * Plate-typo fix (transport + admin), 2026-11-13.
+ *
+ * A driver's login username IS the plate as typed when the driver account was
+ * created (driverProfile.service.js), and login matches username exactly. So a
+ * plate fix that left the username alone would strand the driver on the old
+ * typo. In ONE transaction this: validates the new plate with the same dedup
+ * guards as the admin correction, renames the vehicle, renames every live
+ * driver login whose username normalizes to the OLD plate, and writes one
+ * audit row with both. If the new username is already taken by any account
+ * (uq_users_username covers soft-deleted rows too) the whole fix is refused
+ * with 409 and nothing changes. Sessions are NOT ended: a driver mid-route
+ * keeps working and uses the new plate at the next login.
+ */
+async function fixPlate(pool, { vehicleId, newPlate, reason, actorId, actorRole = null, ipAddress = null, userAgent = null }) {
+  const why = String(reason || '').trim();
+  if (!why) throw err('กรุณาระบุเหตุผลในการแก้ทะเบียน', 400);
+  if (!String(newPlate || '').trim()) throw err('กรุณากรอกทะเบียนใหม่', 400);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[v]] = await conn.query('SELECT * FROM vehicles WHERE id = ? FOR UPDATE', [vehicleId]);
+    if (!v) throw err('ไม่พบรถคันนี้', 404);
+    if (v.is_deleted) throw err('รถคันนี้ถูกลบแล้ว กรุณากู้คืนก่อนแก้ไข', 409);
+    if (String(newPlate).trim() === v.plate_no) throw err('ทะเบียนใหม่เหมือนทะเบียนเดิม', 400);
+
+    const { trimmed, normalized, canonical } = await checkPlateChange(conn, vehicleId, newPlate);
+    const oldNormalized = normalizePlate(v.plate_no);
+
+    // Driver logins named after the old plate (same normalization as
+    // driverProfile.service.js uses to find them).
+    const [drivers] = await conn.query(
+      `SELECT id, username FROM users
+        WHERE role = 'driver' AND is_deleted = FALSE
+          AND REPLACE(REPLACE(LOWER(username), ' ', ''), '-', '') = ?
+        FOR UPDATE`,
+      [oldNormalized]);
+    if (drivers.length) {
+      const [[taken]] = await conn.query(
+        'SELECT id FROM users WHERE username = ? AND id NOT IN (?) LIMIT 1',
+        [trimmed, drivers.map((d) => d.id)]);
+      if (taken) {
+        const e = err('ชื่อผู้ใช้คนขับตามทะเบียนใหม่มีอยู่ในระบบแล้ว แก้ทะเบียนไม่ได้ กรุณาแจ้งผู้ดูแลระบบ', 409);
+        e.errors = [{ code: 'DRIVER_USERNAME_TAKEN' }];
+        throw e;
+      }
+      if (drivers.length > 1) {
+        const e = err('พบบัญชีคนขับมากกว่าหนึ่งบัญชีที่ใช้ทะเบียนเดิม กรุณาแจ้งผู้ดูแลระบบตรวจสอบ', 409);
+        e.errors = [{ code: 'DRIVER_USERNAME_AMBIGUOUS', count: drivers.length }];
+        throw e;
+      }
+    }
+
+    try {
+      await conn.query(
+        'UPDATE vehicles SET plate_no = ?, normalized_plate = ?, canonical_plate = ? WHERE id = ?',
+        [trimmed, normalized, canonical, vehicleId]);
+      for (const d of drivers) {
+        await conn.query('UPDATE users SET username = ? WHERE id = ?', [trimmed, d.id]);
+      }
+    } catch (e) {
+      if (e && e.code === 'ER_DUP_ENTRY') { const d = err('ทะเบียนรถหรือชื่อผู้ใช้คนขับนี้มีอยู่ในระบบแล้ว', 409); d.errors = [{ code: 'DUPLICATE_ACTIVE_VEHICLE' }]; throw d; }
+      throw e;
+    }
+
+    const driverRenames = drivers.map((d) => ({ user_id: d.id, old_username: d.username, new_username: trimmed }));
+    await logAudit({
+      userId: actorId, action: 'UPDATE', entityType: 'vehicle', entityId: String(vehicleId), conn, required: true,
+      oldValue: { plate_no: v.plate_no, normalized_plate: v.normalized_plate, canonical_plate: v.canonical_plate },
+      newValue: { action: 'fix_plate', plate_no: trimmed, normalized_plate: normalized, canonical_plate: canonical,
+                  reason: why.slice(0, 500), by_role: actorRole, driver_usernames: driverRenames },
+      ipAddress, userAgent,
+    });
+    await conn.commit();
+    return { id: vehicleId, old_plate_no: v.plate_no, plate_no: trimmed, driver_usernames: driverRenames };
+  } catch (e) {
+    await conn.rollback();
+    throw e;
+  } finally { conn.release(); }
+}
+
 // ── GOAL #3b — correct plate_no + editable vehicle fields (dedup-guarded) ─────
 async function correctVehicle(pool, { vehicleId, actorId, patch = {}, ipAddress = null, userAgent = null }) {
   const conn = await pool.getConnection();
@@ -148,37 +268,7 @@ async function correctVehicle(pool, { vehicleId, actorId, patch = {}, ipAddress 
     // Plate correction: re-derive normalized + canonical, re-run the dedup guard
     // against OTHER active vehicles so it can never collide.
     if (patch.plate_no != null && String(patch.plate_no).trim() !== v.plate_no) {
-      const validation = validatePlateNo(patch.plate_no);
-      if (!validation.valid) { const e = err(validation.error, 400); e.errors = [{ code: 'VALIDATION_ERROR' }]; throw e; }
-      const { trimmed, normalized } = validation;
-
-      // normalized_plate collision (whitespace/dash variant) on another ACTIVE row.
-      const [[dupNorm]] = await conn.query(
-        'SELECT id, plate_no FROM vehicles WHERE normalized_plate = ? AND is_deleted = FALSE AND id <> ? LIMIT 1',
-        [normalized, vehicleId]);
-      if (dupNorm) { const e = err('ทะเบียนรถนี้ซ้ำกับรถที่ใช้งานอยู่ในระบบ', 409); e.errors = [{ code: 'DUPLICATE_ACTIVE_VEHICLE', vehicle_id: dupNorm.id, plate_no: dupNorm.plate_no }]; throw e; }
-
-      // canonical (province-alias-aware) collision on another ACTIVE row.
-      const canonical = PI.canonicalPlateForStorage(trimmed);
-      if (canonical) {
-        const [[dupCanon]] = await conn.query(
-          'SELECT id, plate_no FROM vehicles WHERE canonical_plate = ? AND is_deleted = FALSE AND id <> ? LIMIT 1',
-          [canonical, vehicleId]);
-        if (dupCanon) { const e = err('ทะเบียนรถนี้ซ้ำกับรถที่ใช้งานอยู่ (จับคู่จากชื่อจังหวัด)', 409); e.errors = [{ code: 'DUPLICATE_ACTIVE_VEHICLE', vehicle_id: dupCanon.id, plate_no: dupCanon.plate_no }]; throw e; }
-      }
-
-      // province-omitted/variant guard (mirrors transport add + school onboarding).
-      const [variantRows] = await conn.query(
-        `SELECT plate_no, normalized_plate FROM vehicles
-         WHERE is_deleted = FALSE AND id <> ?
-           AND (normalized_plate LIKE CONCAT(?, '%') OR ? LIKE CONCAT(normalized_plate, '%'))`,
-        [vehicleId, normalized, normalized]);
-      const variants = variantRows.filter((c) => isProvinceVariant(c.normalized_plate, normalized));
-      if (variants.length) {
-        const e = err('พบทะเบียนรถใกล้เคียงในระบบ กรุณาตรวจสอบทะเบียนและจังหวัด', 409);
-        e.errors = [{ code: 'DUPLICATE_OR_INCOMPLETE_PLATE', candidates: variants.map((c) => ({ plate_no: c.plate_no, duplicate_type: 'PROVINCE_VARIANT' })) }];
-        throw e;
-      }
+      const { trimmed, normalized, canonical } = await checkPlateChange(conn, vehicleId, patch.plate_no);
 
       sets.push('plate_no = ?', 'normalized_plate = ?', 'canonical_plate = ?');
       params.push(trimmed, normalized, canonical);
@@ -297,4 +387,4 @@ async function mergeVehicles(pool, { vehicleId, intoVehicleId, actorId, reason =
   } finally { conn.release(); }
 }
 
-module.exports = { softDeleteVehicle, correctVehicle, mergeVehicles, vehicleAttachments, publicVehicle };
+module.exports = { softDeleteVehicle, correctVehicle, mergeVehicles, vehicleAttachments, publicVehicle, checkPlateChange, fixPlate };

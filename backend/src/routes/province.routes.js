@@ -12,6 +12,7 @@ const { pool } = require('../config/database');
 const provSvc = require('../services/province.service');
 const tripSvc = require('../services/vehicleTrip.service');
 const provAdminSvc = require('../services/provinceAdmin.service');
+const orgSvc = require('../services/orgEntities.service');
 const vllSvc = require('../services/vehicleLocation.service');
 const { makeTrackHandlers } = require('./vehicleTrackHandlers');
 const { trackingInfo } = require('../utils/gpsTrackingWindow');
@@ -365,6 +366,127 @@ router.post('/unit-accounts/:id/reset-password', async (req, res, next) => {
       userAgent: req.headers['user-agent'],
     });
     return sendSuccess(res, result, 'รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้ต้องตั้งรหัสใหม่เมื่อเข้าสู่ระบบครั้งถัดไป');
+  } catch (err) { return next(err); }
+});
+
+// ─── Full unit-account management (2026-11-13) ───────────────────────────────
+// Create / rename / deactivate / delete / restore affiliation and transport
+// accounts. MANAGED_ROLES is enforced inside provinceAdmin.service on every
+// query; anything else answers 404.
+
+function actorCtx(req) {
+  return { actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'] };
+}
+
+/** GET /api/province/unit-accounts/deleted — soft-deleted, restorable. */
+router.get('/unit-accounts/deleted', async (req, res, next) => {
+  try {
+    const rows = await provAdminSvc.listDeletedManagedAccounts(pool);
+    return sendSuccess(res, rows, 'OK', { total: rows.length });
+  } catch (err) { return next(err); }
+});
+
+/** POST /api/province/unit-accounts { role, username, display_name?, scope_id? } */
+router.post('/unit-accounts', async (req, res, next) => {
+  try {
+    const { role, username, display_name, scope_id } = req.body || {};
+    if (!role || !username) return sendError(res, 'กรุณาเลือกประเภทบัญชีและกรอกชื่อผู้ใช้', [], 400);
+    const result = await provAdminSvc.createUnitAccount(pool, {
+      role: String(role), username, displayName: display_name, scopeId: scope_id, ...actorCtx(req),
+    });
+    return sendSuccess(res, result,
+      'สร้างบัญชีสำเร็จ — จดรหัสผ่านชั่วคราวไว้ตอนนี้ ระบบจะไม่แสดงอีก ผู้ใช้ต้องเปลี่ยนรหัสเมื่อเข้าครั้งแรก', null, 201);
+  } catch (err) { return next(err); }
+});
+
+/** PUT /api/province/unit-accounts/:id { display_name?, is_active? } */
+router.put('/unit-accounts/:id', async (req, res, next) => {
+  try {
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
+    const { display_name, is_active } = req.body || {};
+    const result = await provAdminSvc.updateUnitAccount(pool, {
+      accountId, displayName: display_name, isActive: is_active, ...actorCtx(req),
+    });
+    return sendSuccess(res, result, 'บันทึกแล้ว');
+  } catch (err) { return next(err); }
+});
+
+/** DELETE /api/province/unit-accounts/:id — soft delete. */
+router.delete('/unit-accounts/:id', async (req, res, next) => {
+  try {
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
+    const result = await provAdminSvc.deleteUnitAccount(pool, { accountId, ...actorCtx(req) });
+    return sendSuccess(res, result, 'ลบบัญชีแล้ว (กู้คืนได้ที่แท็บ "บัญชีที่ลบแล้ว")');
+  } catch (err) { return next(err); }
+});
+
+/** POST /api/province/unit-accounts/:id/restore — comes back deactivated. */
+router.post('/unit-accounts/:id/restore', async (req, res, next) => {
+  try {
+    const accountId = readIdParam(req, res, 'id');
+    if (accountId === null) return;
+    const result = await provAdminSvc.restoreUnitAccount(pool, { accountId, ...actorCtx(req) });
+    return sendSuccess(res, result, 'กู้คืนบัญชีแล้ว บัญชียังปิดอยู่ กด "เปิดบัญชี" เมื่อพร้อมใช้งาน');
+  } catch (err) { return next(err); }
+});
+
+// ─── Organisation tree: affiliations + schools (2026-11-13) ──────────────────
+// Province and admin (router guard). Soft delete only; deactivating a school
+// is blocked (409) while it has active students or open inspection requests.
+
+/** POST /api/province/affiliations { id, name } */
+router.post('/affiliations', async (req, res, next) => {
+  try {
+    const { id, name } = req.body || {};
+    const result = await orgSvc.createAffiliation(pool, { id, name, ...actorCtx(req) });
+    return sendSuccess(res, result, 'เพิ่มสังกัดแล้ว', null, 201);
+  } catch (err) { return next(err); }
+});
+
+/** PUT /api/province/affiliations/:id { name } */
+router.put('/affiliations/:id', async (req, res, next) => {
+  try {
+    const { name } = req.body || {};
+    const result = await orgSvc.renameAffiliation(pool, { id: req.params.id, name, ...actorCtx(req) });
+    return sendSuccess(res, result, 'บันทึกชื่อสังกัดแล้ว');
+  } catch (err) { return next(err); }
+});
+
+/** GET /api/province/schools/deactivated — schools that can be restored. */
+router.get('/schools/deactivated', async (req, res, next) => {
+  try {
+    const rows = await orgSvc.listDeactivatedSchools(pool);
+    return sendSuccess(res, rows, 'OK', { total: rows.length });
+  } catch (err) { return next(err); }
+});
+
+/** PUT /api/province/schools/:id { name?, affiliation_id? } — rename / move. */
+router.put('/schools/:id', async (req, res, next) => {
+  try {
+    const { name, affiliation_id } = req.body || {};
+    const result = await orgSvc.updateSchool(pool, {
+      schoolId: req.params.id, name, affiliationId: affiliation_id, ...actorCtx(req),
+    });
+    return sendSuccess(res, result, result.changed ? 'บันทึกข้อมูลโรงเรียนแล้ว' : 'ไม่มีข้อมูลเปลี่ยนแปลง');
+  } catch (err) { return next(err); }
+});
+
+/** POST /api/province/schools/:id/deactivate { reason? } */
+router.post('/schools/:id/deactivate', async (req, res, next) => {
+  try {
+    const { reason } = req.body || {};
+    const result = await orgSvc.deactivateSchool(pool, { schoolId: req.params.id, reason, ...actorCtx(req) });
+    return sendSuccess(res, result, 'ปิดใช้งานโรงเรียนแล้ว และปิดบัญชีของโรงเรียนนี้แล้ว');
+  } catch (err) { return next(err); }
+});
+
+/** POST /api/province/schools/:id/restore */
+router.post('/schools/:id/restore', async (req, res, next) => {
+  try {
+    const result = await orgSvc.restoreSchool(pool, { schoolId: req.params.id, ...actorCtx(req) });
+    return sendSuccess(res, result, 'กู้คืนโรงเรียนแล้ว บัญชีของโรงเรียนยังปิดอยู่ ให้สังกัดเปิดบัญชีเมื่อพร้อม');
   } catch (err) { return next(err); }
 });
 

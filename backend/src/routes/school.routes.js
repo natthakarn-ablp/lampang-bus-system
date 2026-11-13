@@ -623,6 +623,77 @@ router.delete('/pickup-points/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── PUT /pickup-points/:id — แก้ชื่อ/พิกัด/หมายเหตุจุดรับส่ง (บัญชีหลักโรงเรียน) ───
+// Mirrors PUT /api/admin/pickup-points/:id for the school MAIN account
+// (2026-11-13). Grade teachers keep their existing own-grade rights only
+// (create / delete / edit pupils), so this route is requireFullSchoolScope.
+// Scope: the point's vehicle must serve this school and the point must be
+// visible to it; a point shared with another school's pupils is not this
+// school's to move (same rule as DELETE). Only label/latitude/longitude/notes
+// are editable — session/sequence stay with admin (they can collide with
+// other assignments on the vehicle).
+router.put('/pickup-points/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+
+    const body = req.body || {};
+    const present = (k) => body[k] !== undefined && body[k] !== null && body[k] !== '';
+    const input = {};
+    const errors = [];
+    if (body.label !== undefined) {
+      const label = String(body.label || '').trim();
+      if (!label) errors.push({ field: 'label', message: 'กรุณาระบุชื่อจุดรับส่ง' });
+      else if (label.length > 100) errors.push({ field: 'label', message: 'ชื่อจุดรับส่งต้องไม่เกิน 100 ตัวอักษร' });
+      else input.label = label;
+    }
+    if (present('latitude') !== present('longitude')) {
+      errors.push({ field: 'latitude', message: 'ต้องระบุละติจูดและลองจิจูดพร้อมกัน' });
+    } else if (present('latitude')) {
+      const lat = parseFloat(body.latitude);
+      const lng = parseFloat(body.longitude);
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) errors.push({ field: 'latitude', message: 'latitude must be a number in [-90, 90]' });
+      if (!Number.isFinite(lng) || lng < -180 || lng > 180) errors.push({ field: 'longitude', message: 'longitude must be a number in [-180, 180]' });
+      input.latitude = lat; input.longitude = lng;
+    }
+    if (body.notes !== undefined) {
+      if (body.notes !== null && String(body.notes).length > 255) errors.push({ field: 'notes', message: 'หมายเหตุต้องไม่เกิน 255 ตัวอักษร' });
+      else input.notes = body.notes;
+    }
+    if (errors.length) return sendError(res, 'ข้อมูลจุดรับส่งไม่ถูกต้อง', errors, 400);
+    if (!Object.keys(input).length) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
+
+    const oldRow = await ppSvc.getPickupPointById(id);
+    if (!oldRow) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    if (!(await ppSvc.validateVehicleServesSchool(oldRow.vehicle_id, schoolId))) {
+      return sendError(res, 'จุดรับส่งนี้ไม่ได้อยู่ในขอบเขตโรงเรียนของท่าน', [], 403);
+    }
+    if (!(await ppSvc.isPickupPointVisibleToSchool(id, schoolId))) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    const others = await ppSvc.countOtherSchoolStudentsOnPoint(id, schoolId);
+    if (others > 0) {
+      return sendError(
+        res,
+        'จุดรับส่งนี้มีนักเรียนของโรงเรียนอื่นใช้อยู่ จึงแก้ไขตำแหน่งไม่ได้ — สร้างจุดใหม่แล้วย้ายนักเรียนของโรงเรียนท่านไปจุดนั้นแทน',
+        [{ code: 'POINT_SHARED_WITH_OTHER_SCHOOL' }],
+        409
+      );
+    }
+
+    const ok = await ppSvc.updatePickupPoint(id, input);
+    if (!ok) return sendError(res, 'ไม่พบจุดรับส่ง', [], 404);
+    const newRow = await ppSvc.getPickupPointById(id);
+    await logAudit({
+      userId: req.user.id, action: 'UPDATE', entityType: 'pickup_point', entityId: id,
+      oldValue: { label: oldRow.label, latitude: oldRow.latitude, longitude: oldRow.longitude, notes: oldRow.notes },
+      newValue: { label: newRow?.label, latitude: newRow?.latitude, longitude: newRow?.longitude, notes: newRow?.notes, scope: 'school' },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, newRow, 'อัปเดตจุดรับส่งสำเร็จ');
+  } catch (err) { next(err); }
+});
+
 /**
  * GET /api/school/pickup-points/:id/assignable-students
  * Phase 6.1 hotfix-7: edit-students modal feed. Returns the school's
@@ -2778,7 +2849,7 @@ router.post('/vehicles/requests', requireFullSchoolScope, async (req, res, next)
       platePrefix: b.plate_prefix, plateNumber: b.plate_number, province: b.province, inputPlate: b.input_plate,
       reason: b.reason, importBatchId: b.import_batch_id, importRowId: b.import_row_id,
     });
-    return sendSuccess(res, out, 'ส่งคำขอแล้ว · รอผู้ดูแลระบบตรวจสอบ', null, 201);
+    return sendSuccess(res, out, 'ส่งคำขอแล้ว · รอสังกัดของโรงเรียนตรวจสอบ', null, 201);
   } catch (err) { next(err); }
 });
 
@@ -2841,6 +2912,7 @@ router.get('/live-vehicles', async (req, res, next) => {
 const bcrypt = require('bcrypt');
 const BCRYPT_COST_TEACHER = 12;
 const { validatePassword } = require('../utils/passwordPolicy');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 
 router.get('/teacher-accounts', requireFullSchoolScope, async (req, res, next) => {
   try {
@@ -2957,22 +3029,39 @@ router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, asyn
     }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST_TEACHER);
-    await pool.query(
-      // Phase 10.12D — set password_changed_at = NOW() so any refresh token
-      // issued before the reset is rejected (H3 — invalidate old sessions).
-      `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW()
-       WHERE id = ?`,
-      [hash, userId]
-    );
+    // A reset by the school is how a teacher account changes hands (owner
+    // decision 2026-11-13), so it also releases the teacher's LINE recovery
+    // binding — otherwise the previous holder could recover the account again.
+    // Only password columns change; school/grade scope stays as it was.
+    let released = 0;
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
+      await conn.query(
+        // Phase 10.12D — set password_changed_at = NOW() so any refresh token
+        // issued before the reset is rejected (H3 — invalidate old sessions).
+        `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW()
+         WHERE id = ?`,
+        [hash, userId]
+      );
+      released = await releaseRecoveryBinding(conn, userId);
+      await logAudit({
+        userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
+        newValue: { username: target.username, action_detail: 'reset_password', must_change_password: true,
+                    account_type: 'grade_teacher', recovery_channels_released: released },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+      });
+      await conn.commit();
+    } catch (err) {
+      try { await conn.rollback(); } catch { /* keep the original error */ }
+      throw err;
+    } finally {
+      conn.release();
+    }
 
-    await logAudit({
-      userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
-      newValue: { username: target.username, action_detail: 'reset_password', must_change_password: true,
-                  account_type: 'grade_teacher' },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-
-    return sendSuccess(res, null, 'รีเซ็ตรหัสผ่านสำเร็จ');
+    return sendSuccess(res, { recovery_channels_released: released },
+      released ? 'รีเซ็ตรหัสผ่านสำเร็จ และยกเลิก LINE ที่ผูกไว้สำหรับกู้รหัสผ่านแล้ว' : 'รีเซ็ตรหัสผ่านสำเร็จ');
   } catch (err) { next(err); }
 });
 
@@ -2993,19 +3082,168 @@ router.delete('/teacher-accounts/:id', requireFullSchoolScope, async (req, res, 
     );
     if (!target) return sendError(res, 'ไม่พบบัญชีครูในโรงเรียนนี้', [], 404);
 
+    // Deleting also releases the teacher's LINE recovery binding, as the admin
+    // and affiliation delete paths do: one LINE identity may hold only one
+    // account, and a deleted account can never sign in to unbind it itself.
+    let released = 0;
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
+      await conn.query(
+        `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), is_active = FALSE
+         WHERE id = ?`,
+        [userId]
+      );
+      released = await releaseRecoveryBinding(conn, userId);
+      await logAudit({
+        userId: req.user.id, action: 'DELETE', entityType: 'user', entityId: userId,
+        oldValue: { username: target.username, grade_scope: target.grade_scope, account_type: 'grade_teacher' },
+        newValue: { recovery_channels_released: released },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+      });
+      await conn.commit();
+    } catch (err) {
+      try { await conn.rollback(); } catch { /* keep the original error */ }
+      throw err;
+    } finally {
+      conn.release();
+    }
+
+    return sendSuccess(res, { recovery_channels_released: released }, 'ลบบัญชีครูประจำสายชั้นสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+/* ── School self-management of teacher accounts (2026-11-13) ──────────────
+ * The school MAIN account (requireFullSchoolScope) can, for its OWN school's
+ * grade-teacher sub-accounts only:
+ *   GET   /teacher-accounts/deleted      soft-deleted teachers (restore picker)
+ *   PATCH /teacher-accounts/:id          { grade_scope?, display_name?, is_active? }
+ *   POST  /teacher-accounts/:id/restore  undo a soft delete (restored DISABLED)
+ * so a new school year no longer means delete + recreate every teacher.
+ * Every lookup pins role='school' AND scope_id=<this school> AND grade_scope
+ * IS NOT NULL — a main account (grade_scope NULL) is never reachable here and
+ * grade_scope can never be cleared (no teacher → main-account promotion).
+ */
+router.get('/teacher-accounts/deleted', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const [rows] = await pool.query(
+      `SELECT id, username, display_name, grade_scope, deleted_at
+       FROM users
+       WHERE role = 'school' AND scope_type = 'SCHOOL' AND scope_id = ?
+         AND grade_scope IS NOT NULL AND is_deleted = TRUE
+       ORDER BY deleted_at DESC, username
+       LIMIT 200`,
+      [schoolId]
+    );
+    return sendSuccess(res, rows);
+  } catch (err) { next(err); }
+});
+
+router.patch('/teacher-accounts/:id', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
+
+    const body = req.body || {};
+    if (rejectOverLongFields(res, body, { display_name: 200 })) return;
+    const errors = [];
+    if (body.grade_scope !== undefined && !isValidGradeScope(body.grade_scope)) {
+      errors.push({ field: 'grade_scope', message: `ระดับชั้นต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_GRADE_SCOPES.join(', ')}` });
+    }
+    if (body.is_active !== undefined && typeof body.is_active !== 'boolean') {
+      errors.push({ field: 'is_active', message: 'is_active ต้องเป็น true หรือ false' });
+    }
+    if (body.display_name !== undefined && !String(body.display_name || '').trim()) {
+      errors.push({ field: 'display_name', message: 'ชื่อแสดงต้องไม่ว่าง' });
+    }
+    if (errors.length) return sendError(res, 'ข้อมูลไม่ถูกต้อง', errors, 400);
+
+    const [[target]] = await pool.query(
+      `SELECT id, username, display_name, grade_scope, is_active FROM users
+       WHERE id = ? AND role = 'school' AND scope_type = 'SCHOOL' AND scope_id = ?
+         AND grade_scope IS NOT NULL AND is_deleted = FALSE
+       LIMIT 1`,
+      [userId, schoolId]
+    );
+    if (!target) return sendError(res, 'ไม่พบบัญชีครูในโรงเรียนนี้', [], 404);
+
+    const updates = [];
+    const params = [];
+    const newValue = {};
+    const nextGrade = body.grade_scope !== undefined ? String(body.grade_scope).trim() : null;
+    if (nextGrade !== null && nextGrade !== target.grade_scope) {
+      updates.push('grade_scope = ?'); params.push(nextGrade); newValue.grade_scope = nextGrade;
+    }
+    if (body.display_name !== undefined && String(body.display_name).trim() !== target.display_name) {
+      const dn = String(body.display_name).trim();
+      updates.push('display_name = ?'); params.push(dn); newValue.display_name = dn;
+    }
+    if (body.is_active !== undefined && (body.is_active ? 1 : 0) !== (target.is_active ? 1 : 0)) {
+      updates.push('is_active = ?'); params.push(body.is_active ? 1 : 0); newValue.is_active = body.is_active;
+    }
+    if (!updates.length) return sendSuccess(res, { id: userId, unchanged: true }, 'ไม่มีข้อมูลเปลี่ยนแปลง');
+    // The JWT carries grade_scope: a grade change must end existing sessions so
+    // the teacher cannot keep working on the old grade until the token expires.
+    if (newValue.grade_scope !== undefined) updates.push('password_changed_at = NOW()');
+
+    params.push(userId, schoolId);
     await pool.query(
-      `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), is_active = FALSE
-       WHERE id = ?`,
-      [userId]
+      `UPDATE users SET ${updates.join(', ')}
+       WHERE id = ? AND role = 'school' AND scope_id = ? AND grade_scope IS NOT NULL AND is_deleted = FALSE`,
+      params
     );
 
     await logAudit({
-      userId: req.user.id, action: 'DELETE', entityType: 'user', entityId: userId,
-      oldValue: { username: target.username, grade_scope: target.grade_scope, account_type: 'grade_teacher' },
+      userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
+      oldValue: { username: target.username, grade_scope: target.grade_scope,
+                  display_name: target.display_name, is_active: !!target.is_active,
+                  account_type: 'grade_teacher' },
+      newValue: { ...newValue, account_type: 'grade_teacher' },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
-    return sendSuccess(res, null, 'ลบบัญชีครูประจำสายชั้นสำเร็จ');
+    return sendSuccess(res, { id: userId, ...newValue }, 'แก้ไขบัญชีครูสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+router.post('/teacher-accounts/:id/restore', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const userId = readIdParam(req, res, 'id');
+    if (userId === null) return;
+
+    const [[target]] = await pool.query(
+      `SELECT id, username, grade_scope FROM users
+       WHERE id = ? AND role = 'school' AND scope_type = 'SCHOOL' AND scope_id = ?
+         AND grade_scope IS NOT NULL AND is_deleted = TRUE
+       LIMIT 1`,
+      [userId, schoolId]
+    );
+    if (!target) return sendError(res, 'ไม่พบบัญชีครูที่ถูกลบในโรงเรียนนี้', [], 404);
+
+    // Restored DISABLED, like admin restore — the school re-enables it on purpose.
+    await pool.query(
+      `UPDATE users SET is_deleted = FALSE, deleted_at = NULL, is_active = FALSE
+       WHERE id = ? AND role = 'school' AND scope_id = ? AND grade_scope IS NOT NULL AND is_deleted = TRUE`,
+      [userId, schoolId]
+    );
+
+    await logAudit({
+      userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
+      oldValue: { is_deleted: true },
+      newValue: { action: 'restore', is_deleted: false, is_active: false, username: target.username,
+                  grade_scope: target.grade_scope, account_type: 'grade_teacher' },
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+
+    return sendSuccess(res, { id: userId, is_active: false },
+      'กู้คืนบัญชีครูสำเร็จ (สถานะปิดใช้งาน — กดเปิดใช้งานเมื่อพร้อม)');
   } catch (err) { next(err); }
 });
 

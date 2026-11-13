@@ -10,7 +10,7 @@
 คนขับ (`/api/driver`, `driver.routes.js`):
 - POST /api/driver/checkin (L459), /checkout (L493), /checkin-all (L527), /checkout-all (L563) — ขึ้น/ลงรถรายคนและทั้งคัน
 - GET /api/driver/roster (L227), GET /status-today (L736) — รายชื่อ+สถานะวันนี้
-- POST /api/driver/checkin/:logId/void (L1528) — ยกเลิกรายการของตน
+- POST /api/driver/checkin/:logId/void (L1528) — ยกเลิกรายการของตน (`restorePriorDone`; UI ปุ่ม "ยกเลิกรายการที่กดผิด" ใน DriverDashboard แสดงเฉพาะแถว `recent[].can_void` จาก GET /api/driver/status-today = รายการวันนี้ที่คนขับกดเอง และเป็นรายการล่าสุดของนักเรียน/รอบนั้น)
 - POST /api/driver/emergency (L594) — ดู [admin-ops.md](admin-ops.md)
 
 โรงเรียน (`/api/school`, `school.routes.js`):

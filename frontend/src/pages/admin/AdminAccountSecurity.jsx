@@ -8,6 +8,32 @@ import { AlertBanner, AppCard, ConfirmDialog, FormField } from '../../components
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../components/Toast';
 import { getLiffIdToken, resolveLineUserId } from '../../utils/liff';
+import { RECOVERY_FEATURE_BY_ROLE } from '../../utils/passwordRecovery';
+
+// Per-role wording. The page used to address everyone as "ผู้ดูแลระบบ" and
+// send them back to /admin; schools, grade teachers and drivers now use it too.
+const PAGE_COPY = {
+  admin: {
+    subtitle: 'ตั้งค่าการกู้คืนรหัสผ่านของผู้ดูแลระบบผ่าน LINE',
+    home: { label: 'ผู้ดูแลระบบ', to: '/admin' },
+    closed: 'ผู้ดูแลระบบต้องติดตั้ง migration 049 และเปิด feature flag หลังผ่านการทดสอบ LINE OA จริง',
+  },
+  school: {
+    subtitle: 'ผูก LINE ของท่านกับบัญชีนี้ เพื่อกู้รหัสผ่านได้เองเมื่อจำไม่ได้ — บัญชีครูแต่ละคนผูก LINE ของตนเอง แยกจากบัญชีหลักของโรงเรียน',
+    home: { label: 'โรงเรียน', to: '/school' },
+    closed: 'ยังไม่เปิดใช้การกู้รหัสผ่านผ่าน LINE สำหรับบัญชีโรงเรียน หากลืมรหัสผ่าน ครูประจำสายชั้นติดต่อบัญชีหลักของโรงเรียน บัญชีหลักติดต่อสังกัด',
+  },
+  driver: {
+    subtitle: 'ผูก LINE กับบัญชีรถคันนี้ เพื่อกู้รหัสผ่านได้เองเมื่อจำไม่ได้ — ผู้ที่ถือ LINE ที่ผูกไว้จะกู้บัญชีรถนี้ได้',
+    home: { label: 'คนขับ', to: '/driver' },
+    closed: 'ยังไม่เปิดใช้การกู้รหัสผ่านผ่าน LINE สำหรับบัญชีคนขับ หากลืมรหัสผ่านกรุณาติดต่อผู้ดูแลระบบ',
+  },
+  default: {
+    subtitle: 'ตั้งค่าการกู้คืนรหัสผ่านผ่าน LINE',
+    home: null,
+    closed: 'ยังไม่เปิดใช้การกู้รหัสผ่านผ่าน LINE สำหรับบัญชีประเภทนี้ หากลืมรหัสผ่านกรุณาติดต่อจังหวัดหรือผู้ดูแลระบบ',
+  },
+};
 
 function formatThaiDate(value) {
   if (!value) return '-';
@@ -24,6 +50,11 @@ export default function AdminAccountSecurity() {
   // carries the admin flag, so ask the policy endpoint rather than guess, and
   // fall back to the admin flag while that answer is in flight.
   const [roleEnabled, setRoleEnabled] = useState(null);
+  // Used only if the policy endpoint cannot be read: the role's own login
+  // flag (admin, school, driver); roles without one fail closed.
+  const fallbackFlag = RECOVERY_FEATURE_BY_ROLE[user?.role];
+  const fallbackEnabled = fallbackFlag ? Boolean(features?.[fallbackFlag]) : false;
+  const copy = PAGE_COPY[user?.role] || PAGE_COPY.default;
   const toast = useToast();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -54,11 +85,11 @@ export default function AdminAccountSecurity() {
         if (cancelled) return;
         const roles = res.data?.data?.policy?.roles;
         const mine = user?.role && roles ? roles[user.role] : null;
-        setRoleEnabled(mine ? Boolean(mine.enabled) : Boolean(features?.adminPasswordRecovery));
+        setRoleEnabled(mine ? Boolean(mine.enabled) : fallbackEnabled);
       })
-      .catch(() => { if (!cancelled) setRoleEnabled(Boolean(features?.adminPasswordRecovery)); });
+      .catch(() => { if (!cancelled) setRoleEnabled(fallbackEnabled); });
     return () => { cancelled = true; };
-  }, [user?.role, features?.adminPasswordRecovery]);
+  }, [user?.role, fallbackEnabled]);
 
   useEffect(() => {
     // null means the policy answer has not arrived yet — wait rather than
@@ -173,7 +204,7 @@ export default function AdminAccountSecurity() {
 
   function downloadCodes() {
     const content = [
-      'School Safe Connect - รหัสกู้คืนบัญชีผู้ดูแลระบบ',
+      `School Safe Connect - รหัสกู้คืนบัญชี ${user?.username || ''}`.trim(),
       'เก็บเป็นความลับ แต่ละรหัสใช้ได้ครั้งเดียว',
       '',
       ...codes,
@@ -182,7 +213,7 @@ export default function AdminAccountSecurity() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'school-safe-connect-admin-recovery-codes.txt';
+    anchor.download = 'school-safe-connect-recovery-codes.txt';
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -192,13 +223,13 @@ export default function AdminAccountSecurity() {
       <PageHeader
         icon={ShieldCheck}
         title="ความปลอดภัยบัญชี"
-        subtitle="ตั้งค่าการกู้คืนรหัสผ่านของผู้ดูแลระบบผ่าน LINE"
-        breadcrumb={[{ label: 'ผู้ดูแลระบบ', to: '/admin' }, { label: 'ความปลอดภัยบัญชี' }]}
+        subtitle={copy.subtitle}
+        breadcrumb={copy.home ? [copy.home, { label: 'ความปลอดภัยบัญชี' }] : [{ label: 'ความปลอดภัยบัญชี' }]}
       />
 
       {roleEnabled === false ? (
         <AlertBanner variant="warn" title="ยังไม่เปิดใช้การกู้คืนรหัสผ่าน">
-          ผู้ดูแลระบบต้องติดตั้ง migration 049 และเปิด feature flag หลังผ่านการทดสอบ LINE OA จริง
+          {copy.closed}
         </AlertBanner>
       ) : loading ? (
         <LoadingState message="กำลังตรวจสอบสถานะความปลอดภัยบัญชี…" />

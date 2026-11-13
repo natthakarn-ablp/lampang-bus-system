@@ -61,6 +61,7 @@ async function cleanup() {
   if (uids.length) {
     await q('DELETE FROM emergency_logs WHERE reported_by IN (?)', [uids]);
     await q('DELETE FROM audit_logs WHERE user_id IN (?)', [uids]);
+    await q('DELETE FROM user_recovery_channels WHERE user_id IN (?)', [uids]);
     await q('DELETE FROM revoked_tokens WHERE user_id IN (?)', [uids]).catch(() => {});
     await q('DELETE FROM users WHERE id IN (?)', [uids]);
   }
@@ -184,10 +185,15 @@ describe('driver account self-service (school / affiliation)', () => {
     // auth compares whole seconds (iat < password_changed_at): the driver's
     // token must be issued in an earlier second than the reset, or it survives.
     await new Promise((r) => setTimeout(r, 1100));
+    // The current holder has bound LINE for self-service recovery (#177).
+    const [acct0] = await q('SELECT id FROM users WHERE username = ?', [P_SHARED]);
+    await q("INSERT INTO user_recovery_channels (user_id, provider, provider_subject) VALUES (?, 'LINE', '__sd_line_shared')", [acct0.id]);
     const resB = await as('schoolB', request(app).post(`/api/school/vehicles/${V_SHARED}/driver/reset-password`));
     expect(resB.status).toBe(200);
     expect(resB.body.data.username).toBe(P_SHARED);
     expect(resB.body.data.temporary_password).toMatch(/^[a-z2-9]{8}$/);
+    // a school reset releases the previous holder's LINE recovery binding
+    expect(await q('SELECT 1 FROM user_recovery_channels WHERE user_id = ?', [acct0.id])).toHaveLength(0);
 
     // the driver's previous token is rejected (password_changed_at > iat)
     await new Promise((r) => setTimeout(r, 1100));
@@ -228,11 +234,14 @@ describe('driver account self-service (school / affiliation)', () => {
 
   test('affiliation A changes the driver of the A-only vehicle: new profile, old access gone', async () => {
     await new Promise((r) => setTimeout(r, 1100)); // whole-second iat, see above
+    const [acctA] = await q('SELECT id FROM users WHERE username = ?', [P_AONLY]);
+    await q("INSERT INTO user_recovery_channels (user_id, provider, provider_subject) VALUES (?, 'LINE', '__sd_line_aonly')", [acctA.id]);
     const res = await as('affA', request(app).post(`/api/affiliation/vehicles/${V_AONLY}/driver/replace`))
       .send({ name: '__SD คนขับใหม่', phone: '0822222222', reason: 'เปลี่ยนคนขับ' });
     expect(res.status).toBe(200);
     const newDriverId = res.body.data.driver_id;
     expect(newDriverId).not.toBe(driverIds[V_AONLY]);
+    expect(await q('SELECT 1 FROM user_recovery_channels WHERE user_id = ?', [acctA.id])).toHaveLength(0);
     const active = await q('SELECT driver_id FROM driver_vehicle_assignments WHERE vehicle_id = ? AND is_active = TRUE', [V_AONLY]);
     expect(active.map((a) => a.driver_id)).toEqual([newDriverId]);
     const [u] = await q('SELECT driver_id, display_name, must_change_password FROM users WHERE username = ?', [P_AONLY]);

@@ -407,6 +407,11 @@ const ASSIGN_STATE = {
   OTHER_VEHICLE:   'อยู่รถคันอื่น',
 };
 
+// The driver's roster marks each child เช้า / เย็น / เช้า-เย็น. Assigning sets the
+// child's sessions to that marker (PICKUP_LABEL above); no marker keeps the
+// current sessions.
+const isDone = s => s.state === 'ON_THIS_VEHICLE' && !s.sessions_pending;
+
 function RosterAssignmentPanel({ applicationId }) {
   const toast = useToast();
   const [data, setData] = useState(null);
@@ -419,7 +424,9 @@ function RosterAssignmentPanel({ applicationId }) {
       const res = await api.get(`/school/registrations/${applicationId}/assignment`);
       const d = res?.data?.data || null;
       setData(d);
-      setPicked(new Set((d?.students || []).filter(s => s.state === 'NO_VEHICLE').map(s => s.student_id)));
+      setPicked(new Set((d?.students || [])
+        .filter(s => s.state === 'NO_VEHICLE' || (s.state === 'ON_THIS_VEHICLE' && s.sessions_pending))
+        .map(s => s.student_id)));
     } catch {
       setData(null);
     }
@@ -448,18 +455,18 @@ function RosterAssignmentPanel({ applicationId }) {
   }
 
   if (!data || !data.students.length) return null;
-  const pending = data.students.filter(s => s.state !== 'ON_THIS_VEHICLE');
+  const pending = data.students.filter(s => !isDone(s));
   const moving = data.students.filter(s => picked.has(s.student_id) && s.state === 'OTHER_VEHICLE').length;
 
   return (
     <div className="mt-6 rounded-xl border border-surface-border bg-surface-raised px-4 py-4">
       <h3 className="text-base font-semibold text-ink">จัดนักเรียนที่อนุมัติขึ้นรถ {data.plate_no}</h3>
       <p className="mt-1 text-xs text-ink-muted">
-        การอนุมัติยังไม่ได้ย้ายนักเรียนขึ้นรถคันนี้ เลือกคนที่ต้องการแล้วกดยืนยัน — อยู่รถคันนี้แล้ว {data.counts.on_this_vehicle} · ยังไม่มีรถ {data.counts.no_vehicle} · อยู่รถคันอื่น {data.counts.other_vehicle}
+        การอนุมัติยังไม่ได้ย้ายนักเรียนขึ้นรถคันนี้ เลือกคนที่ต้องการแล้วกดยืนยัน รอบเช้า/เย็นของนักเรียนจะตั้งตามที่คนขับระบุ (ถ้าไม่ระบุจะคงเดิม) — อยู่รถคันนี้แล้ว {data.counts.on_this_vehicle} · ยังไม่มีรถ {data.counts.no_vehicle} · อยู่รถคันอื่น {data.counts.other_vehicle}
       </p>
       <ul className="mt-3 space-y-1">
         {data.students.map(s => {
-          const done = s.state === 'ON_THIS_VEHICLE';
+          const done = isDone(s);
           return (
             <li key={s.student_id}>
               <label className={`flex min-h-[44px] items-center gap-3 rounded-lg px-2 ${done ? 'opacity-70' : 'cursor-pointer hover:bg-surface'}`}>
@@ -467,9 +474,15 @@ function RosterAssignmentPanel({ applicationId }) {
                   checked={done || picked.has(s.student_id)} onChange={() => toggle(s.student_id)} />
                 <span className="flex-1 text-sm text-ink">
                   {s.full_name}{s.grade ? ` (${abbreviateGrade(s.grade)})` : ''}
+                  {s.pickup_type && (
+                    <span className="ml-1.5 inline-block rounded-full bg-navy-50 px-1.5 py-0.5 text-[11px] font-medium text-navy-700">
+                      {PICKUP_LABEL[s.pickup_type]}
+                    </span>
+                  )}
                 </span>
                 <span className={`text-xs ${s.state === 'OTHER_VEHICLE' ? 'text-warn-ink' : 'text-ink-muted'}`}>
                   {ASSIGN_STATE[s.state]}{s.state === 'OTHER_VEHICLE' && s.current_plate ? ` ${s.current_plate}` : ''}
+                  {s.state === 'ON_THIS_VEHICLE' && s.sessions_pending ? ' · ปรับรอบเช้า/เย็น' : ''}
                 </span>
               </label>
             </li>

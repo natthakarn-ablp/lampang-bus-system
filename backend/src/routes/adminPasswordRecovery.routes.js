@@ -13,6 +13,7 @@ const { verifyIdToken } = require('../services/lineIdToken.service');
 const { isVerificationUnavailable } = require('../utils/lineVerificationError');
 const { sendTextMessage } = require('../services/line.service');
 const { logAudit } = require('../utils/audit');
+const recoveryBindingAlert = require('../services/recoveryBindingAlert.service');
 const { validatePassword } = require('../utils/passwordPolicy');
 const { sendSuccess, sendError } = require('../utils/response');
 const {
@@ -271,6 +272,9 @@ async function handleLinkLine(req, res, next) {
       conn,
     });
     await conn.commit();
+    // In-app alert (audit_logs) for the school main account when a grade
+    // teacher or a driver binds — after commit, never LINE, never throws.
+    await recoveryBindingAlert.recordBindingChange(pool, { userId: user.id, linked: true });
     res.set('Cache-Control', 'no-store');
     return sendSuccess(res, { recovery_codes: codes }, 'ผูก LINE สำหรับกู้คืนรหัสผ่านสำเร็จ');
   } catch (error) {
@@ -360,6 +364,7 @@ async function handleUnlinkLine(req, res, next) {
       ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
     });
     await conn.commit();
+    await recoveryBindingAlert.recordBindingChange(pool, { userId: user.id, linked: false });
     return sendSuccess(res, null, 'ยกเลิกการผูก LINE สำหรับกู้คืนรหัสผ่านแล้ว');
   } catch (error) {
     if (conn) try { await conn.rollback(); } catch { /* preserve original error */ }

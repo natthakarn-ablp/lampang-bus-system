@@ -954,7 +954,9 @@ const COMMON = {
 
   // GET /api/<role>/pending-summary — backend/src/services/pendingQueue.service.js
   // (TopNavbar bell + PendingQueueCard on each approver dashboard).
-  '/api/school/pending-summary': { data: PENDING_SUMMARY('school') },
+  '/api/school/pending-summary': { data: { ...PENDING_SUMMARY('school'), recovery_alerts: [
+    { id: 9201, created_at: '2026-11-13T02:00:00Z', kind: 'LINE_RECOVERY_LINKED', subject_role: 'school', subject_name: 'ครูตัวอย่าง', grade_scope: 'ป.1', plate_no: null },
+  ] } },
   '/api/affiliation/pending-summary': { data: PENDING_SUMMARY('affiliation') },
   '/api/province/pending-summary': { data: PENDING_SUMMARY('province') },
   '/api/transport/pending-summary': { data: PENDING_SUMMARY('transport') },

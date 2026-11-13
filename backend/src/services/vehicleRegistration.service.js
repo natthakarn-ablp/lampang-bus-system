@@ -524,6 +524,32 @@ async function loadApprovedSlice(db, { applicationId, schoolId, lock = false }) 
   return aps;
 }
 
+// The driver's roster row carries pickup_type (MORNING / EVENING / BOTH /
+// NULL). When the school assigns a child from that roster, the marker becomes
+// the child's sessions (students.morning_enabled / evening_enabled). A child
+// listed more than once keeps the union of its markers; NULL rows say nothing,
+// so a child with no marker at all keeps its current sessions.
+const PICKUP_TYPE_SQL = `(SELECT GROUP_CONCAT(DISTINCT r2.pickup_type ORDER BY r2.pickup_type)
+                            FROM registration_roster_students r2
+                           WHERE r2.application_id = ? AND r2.school_id = ? AND r2.match_status = 'MATCHED'
+                             AND r2.matched_student_id = s.id AND r2.pickup_type IS NOT NULL)`;
+
+function sessionsFromPickupTypes(value) {
+  const types = String(value == null ? '' : value).split(',').map((t) => t.trim().toUpperCase())
+    .filter((t) => ['MORNING', 'EVENING', 'BOTH'].includes(t));
+  if (!types.length) return null;
+  return {
+    morning_enabled: types.some((t) => t === 'MORNING' || t === 'BOTH'),
+    evening_enabled: types.some((t) => t === 'EVENING' || t === 'BOTH'),
+  };
+}
+
+function pickupLabel(sessions) {
+  if (!sessions) return null;
+  if (sessions.morning_enabled && sessions.evening_enabled) return 'BOTH';
+  return sessions.morning_enabled ? 'MORNING' : 'EVENING';
+}
+
 function assignmentState(row, vehicleId) {
   if (row.vehicle_id == null) return 'NO_VEHICLE';
   return String(row.vehicle_id) === String(vehicleId) ? 'ON_THIS_VEHICLE' : 'OTHER_VEHICLE';
@@ -534,23 +560,33 @@ async function previewRosterAssignment(pool, { applicationId, schoolId }) {
   const aps = await loadApprovedSlice(pool, { applicationId, schoolId });
   const [rows] = await pool.query(
     `SELECT DISTINCT s.id AS student_id, TRIM(CONCAT_WS(' ', s.prefix, s.first_name, s.last_name)) AS full_name,
-            s.grade, s.classroom, s.vehicle_id, cv.plate_no AS current_plate
+            s.grade, s.classroom, s.vehicle_id, cv.plate_no AS current_plate,
+            s.morning_enabled, s.evening_enabled,
+            ${PICKUP_TYPE_SQL} AS pickup_types
        FROM registration_roster_students r
        JOIN students s ON s.id = r.matched_student_id AND s.school_id = r.school_id AND s.is_deleted = FALSE
        LEFT JOIN vehicles cv ON cv.id = s.vehicle_id
       WHERE r.application_id = ? AND r.school_id = ? AND r.match_status = 'MATCHED'
       ORDER BY s.grade, s.classroom, full_name`,
-    [applicationId, schoolId]
+    [applicationId, schoolId, applicationId, schoolId]
   );
-  const students = rows.map((r) => ({
-    student_id: r.student_id,
-    full_name: r.full_name,
-    grade: r.grade,
-    classroom: r.classroom,
-    current_vehicle_id: r.vehicle_id,
-    current_plate: r.current_plate || null,
-    state: assignmentState(r, aps.vehicle_id),
-  }));
+  const students = rows.map((r) => {
+    const sessions = sessionsFromPickupTypes(r.pickup_types);
+    return {
+      student_id: r.student_id,
+      full_name: r.full_name,
+      grade: r.grade,
+      classroom: r.classroom,
+      current_vehicle_id: r.vehicle_id,
+      current_plate: r.current_plate || null,
+      state: assignmentState(r, aps.vehicle_id),
+      // What assigning will set (null = the roster has no marker; sessions kept).
+      pickup_type: pickupLabel(sessions),
+      current_sessions: { morning_enabled: !!r.morning_enabled, evening_enabled: !!r.evening_enabled },
+      sessions_pending: !!sessions && (sessions.morning_enabled !== !!r.morning_enabled
+        || sessions.evening_enabled !== !!r.evening_enabled),
+    };
+  });
   return {
     application_id: Number(applicationId),
     vehicle_id: aps.vehicle_id,
@@ -578,14 +614,15 @@ async function assignApprovedRoster(pool, { applicationId, schoolId, userId, stu
     // Only children this school matched on THIS approved roster, still live in
     // this school. Locked so a concurrent move/withdraw cannot interleave.
     const [rows] = await conn.query(
-      `SELECT s.id, s.vehicle_id, s.grade, s.classroom
+      `SELECT s.id, s.vehicle_id, s.grade, s.classroom, s.morning_enabled, s.evening_enabled,
+              ${PICKUP_TYPE_SQL} AS pickup_types
          FROM students s
         WHERE s.id IN (?) AND s.school_id = ? AND s.is_deleted = FALSE
           AND EXISTS (SELECT 1 FROM registration_roster_students r
                        WHERE r.application_id = ? AND r.school_id = ? AND r.match_status = 'MATCHED'
                          AND r.matched_student_id = s.id)
         FOR UPDATE`,
-      [wanted, schoolId, applicationId, schoolId]
+      [applicationId, schoolId, wanted, schoolId, applicationId, schoolId]
     );
     const found = new Map(rows.map((r) => [Number(r.id), r]));
     const notOnRoster = wanted.filter((id) => !found.has(id));
@@ -594,28 +631,57 @@ async function assignApprovedRoster(pool, { applicationId, schoolId, userId, stu
     }
     const assigned = [];
     const unchanged = [];
+    const sessionsUpdated = [];
     for (const id of wanted) {
       const st = found.get(id);
-      if (st.vehicle_id != null && String(st.vehicle_id) === String(aps.vehicle_id)) { unchanged.push(id); continue; }
+      const onThis = st.vehicle_id != null && String(st.vehicle_id) === String(aps.vehicle_id);
+      const before = { morning_enabled: !!st.morning_enabled, evening_enabled: !!st.evening_enabled };
+      // Only a roster marker changes the sessions; no marker keeps them as they are.
+      const marked = sessionsFromPickupTypes(st.pickup_types);
+      const after = marked || before;
+      const sessionsChange = after.morning_enabled !== before.morning_enabled
+        || after.evening_enabled !== before.evening_enabled;
+      if (onThis && !sessionsChange) { unchanged.push(id); continue; }
+
+      const sets = [];
+      const params = [];
+      if (!onThis) { sets.push('vehicle_id = ?'); params.push(aps.vehicle_id); }
+      if (sessionsChange) {
+        sets.push('morning_enabled = ?', 'evening_enabled = ?');
+        params.push(after.morning_enabled ? 1 : 0, after.evening_enabled ? 1 : 0);
+      }
       const [upd] = await conn.query(
-        'UPDATE students SET vehicle_id = ? WHERE id = ? AND school_id = ? AND is_deleted = FALSE',
-        [aps.vehicle_id, id, schoolId]
+        `UPDATE students SET ${sets.join(', ')} WHERE id = ? AND school_id = ? AND is_deleted = FALSE`,
+        [...params, id, schoolId]
       );
       if (!upd.affectedRows) throw appError('ข้อมูลนักเรียนเปลี่ยนไป กรุณาโหลดใหม่', 409, 'STUDENT_CHANGED');
+      const oldValue = { vehicle_id: st.vehicle_id, grade: st.grade, classroom: st.classroom };
+      const newValue = {
+        vehicle_id: aps.vehicle_id,
+        action: onThis ? 'set_sessions' : 'move_vehicle',
+        source: 'vehicle_registration',
+        application_id: Number(applicationId),
+      };
+      if (sessionsChange) {
+        Object.assign(oldValue, before);
+        Object.assign(newValue, after, { pickup_type: pickupLabel(marked) });
+        sessionsUpdated.push(id);
+      }
       await logAudit({
         userId, action: 'UPDATE', entityType: 'student', entityId: String(id),
-        oldValue: { vehicle_id: st.vehicle_id, grade: st.grade, classroom: st.classroom },
-        newValue: { vehicle_id: aps.vehicle_id, action: 'move_vehicle', source: 'vehicle_registration', application_id: Number(applicationId) },
-        conn, required: true,
+        oldValue, newValue, conn, required: true,
       });
-      assigned.push(id);
+      if (onThis) unchanged.push(id);
+      else assigned.push(id);
     }
     if (assigned.length) {
       // SCH-STU-7: a pickup point belongs to a vehicle; drop ones the move invalidated.
       await require('./pickupCleanup.service').clearStalePickupAssignments(conn, assigned);
     }
     await conn.commit();
-    return { application_id: Number(applicationId), vehicle_id: aps.vehicle_id, assigned, unchanged };
+    return {
+      application_id: Number(applicationId), vehicle_id: aps.vehicle_id, assigned, unchanged, sessions_updated: sessionsUpdated,
+    };
   } catch (error) {
     await conn.rollback();
     throw error;

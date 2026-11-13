@@ -2044,6 +2044,75 @@ router.put('/vehicles/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Driver account of a vehicle (owner decision 2026-11-13) ────────────────
+// The driver login belongs to the vehicle (username = plate). Every school
+// whose pupils ride the vehicle may reset its password and change the driver;
+// scope is proven in driverAccountSelfService (students.vehicle_id link).
+// Main school account only — grade teachers cannot manage accounts.
+const driverAcctSvc = require('../services/driverAccountSelfService.service');
+function driverActor(req) {
+  return { id: req.user.id, role: req.user.role, ip: req.ip, userAgent: req.headers['user-agent'] };
+}
+function driverScopeForSchool(req, res) {
+  const schoolId = resolveSchoolId(req);
+  if (!schoolId) {
+    sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    return null;
+  }
+  return { schoolId };
+}
+
+router.post('/vehicles/:id/driver/reset-password', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const scope = driverScopeForSchool(req, res);
+    if (!scope) return;
+    const out = await driverAcctSvc.resetDriverPassword(pool, { vehicleId: req.params.id, scope, actor: driverActor(req) });
+    return sendSuccess(res, out, 'รีเซ็ตรหัสผ่านคนขับแล้ว รหัสชั่วคราวแสดงครั้งเดียว คนขับต้องเปลี่ยนรหัสเมื่อเข้าสู่ระบบ');
+  } catch (err) { next(err); }
+});
+
+router.put('/vehicles/:id/driver', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const scope = driverScopeForSchool(req, res);
+    if (!scope) return;
+    const b = req.body || {};
+    const out = await driverAcctSvc.updateDriverDetails(pool, {
+      vehicleId: req.params.id, scope, actor: driverActor(req), name: b.name, phone: b.phone,
+    });
+    return sendSuccess(res, out, 'แก้ไขข้อมูลคนขับแล้ว');
+  } catch (err) { next(err); }
+});
+
+router.post('/vehicles/:id/driver/replace', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const scope = driverScopeForSchool(req, res);
+    if (!scope) return;
+    const b = req.body || {};
+    const out = await driverAcctSvc.replaceDriver(pool, {
+      vehicleId: req.params.id, scope, actor: driverActor(req), name: b.name, phone: b.phone, reason: b.reason,
+    });
+    return sendSuccess(res, out, 'เปลี่ยนคนขับแล้ว คนขับเดิมเข้าระบบไม่ได้อีก รหัสชั่วคราวแสดงครั้งเดียว');
+  } catch (err) { next(err); }
+});
+
+// ─── POST /emergencies/:id/close — โรงเรียนปิดเหตุฉุกเฉินของรถที่นักเรียนใช้ ─────
+router.post('/emergencies/:id/close', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const emSvc = require('../services/emergencyAdmin.service');
+    const b = req.body || {};
+    const out = await emSvc.closeEmergencyScoped(pool, {
+      id, result: b.result, note: b.note,
+      actor: { id: req.user.id, role: req.user.role, name: req.user.displayName || req.user.username, ip: req.ip, userAgent: req.headers['user-agent'] },
+      scope: { schoolId },
+    });
+    return sendSuccess(res, out, 'ปิดเหตุฉุกเฉินแล้ว');
+  } catch (err) { next(err); }
+});
+
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 // Audit trail for school actions
 

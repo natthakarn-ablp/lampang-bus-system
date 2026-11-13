@@ -45,7 +45,8 @@ export function canBindRecoveryFor(user, features) {
  * as the server routes actually allow on this code base:
  *  - school main account → affiliation (POST /api/affiliation/users/:id/reset-password)
  *  - grade teacher       → the school's main account (POST /api/school/teacher-accounts/:id/reset-password)
- *  - driver (vehicle)    → admin only (POST /api/admin/users/:id/reset-password)
+ *  - driver (vehicle)    → any school whose pupils ride the vehicle (POST /api/school/vehicles/:id/driver/reset-password),
+ *                          its affiliation (POST /api/affiliation/vehicles/:id/driver/reset-password) or admin
  *  - affiliation, transport → province (POST /api/province/unit-accounts/:id/reset-password) or admin
  *  - province            → admin
  * `recoveryRole` is the policy role whose LINE recovery covers that account.
@@ -53,7 +54,7 @@ export function canBindRecoveryFor(user, features) {
 export const RECOVERY_CONTACTS = Object.freeze([
   { key: 'school',  label: 'โรงเรียน (บัญชีหลัก)', recoveryRole: 'school', contact: 'ติดต่อสังกัดให้รีเซ็ตรหัสผ่าน' },
   { key: 'teacher', label: 'ครูประจำสายชั้น', recoveryRole: 'school', contact: 'ติดต่อบัญชีหลักของโรงเรียนให้รีเซ็ตรหัสผ่าน' },
-  { key: 'driver',  label: 'คนขับ (บัญชีรถ)', recoveryRole: 'driver', contact: 'ติดต่อผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
+  { key: 'driver',  label: 'คนขับ (บัญชีรถ)', recoveryRole: 'driver', contact: 'ติดต่อโรงเรียนที่ใช้รถคันนี้ให้รีเซ็ตรหัสผ่าน' },
   { key: 'unit',    label: 'สังกัดและขนส่ง', recoveryRole: null, contact: 'ติดต่อจังหวัดหรือผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
   { key: 'province', label: 'จังหวัด', recoveryRole: null, contact: 'ติดต่อผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
   { key: 'admin',   label: 'ผู้ดูแลระบบ', recoveryRole: 'admin', contact: 'ติดต่อผู้ดูแลระบบอีกบัญชีหนึ่งให้รีเซ็ตรหัสผ่าน' },

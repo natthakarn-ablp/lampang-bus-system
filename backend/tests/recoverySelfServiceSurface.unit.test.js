@@ -109,10 +109,11 @@ describe('the login page offers LINE recovery to every open role', () => {
     const contact = (key) => helper.match(new RegExp(`key: '${key}'[^}]+contact: '([^']+)'`))[1];
     expect(contact('school')).toContain('สังกัด');
     expect(contact('teacher')).toContain('บัญชีหลักของโรงเรียน');
-    expect(contact('driver')).toContain('ผู้ดูแลระบบ');
+    // 2026-11-13 (PR #178): schools that use the vehicle can reset its driver.
+    expect(contact('driver')).toContain('โรงเรียน');
     expect(contact('unit')).toContain('จังหวัด');
     expect(contact('province')).toContain('ผู้ดูแลระบบ');
-    // The old text sent drivers to the school, which has no driver reset route.
+    // The old Login text (pre-recovery) is gone.
     expect(login).not.toContain('โรงเรียนและคนขับ: ติดต่อผู้ดูแลบัญชีของโรงเรียน');
   });
 });

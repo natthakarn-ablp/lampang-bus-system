@@ -119,13 +119,19 @@ describe('readiness fixture matches the service payload', () => {
 });
 
 describe('the emergency pages survive a response without meta', () => {
+  // 2026-11-13: the school / affiliation / province (and admin) emergency pages
+  // now render the shared EmergencyListView, which owns the fetch.
   const pages = [
     'frontend/src/pages/school/EmergencyList.jsx',
     'frontend/src/pages/affiliation/AffEmergencyList.jsx',
     'frontend/src/pages/province/ProvEmergencyList.jsx',
   ];
 
-  it.each(pages)('%s falls back instead of storing undefined', (rel) => {
+  it.each(pages)('%s delegates to the shared list view', (rel) => {
+    expect(read(rel)).toContain("from '../../components/EmergencyListView'");
+  });
+
+  it.each(['frontend/src/components/EmergencyListView.jsx'])('%s falls back instead of storing undefined', (rel) => {
     const src = read(rel);
     // The exact defect: setMeta(res.data.meta) with no fallback, followed by
     // meta.total on the next render.

@@ -7,6 +7,7 @@ import ErrorState from '../../components/ErrorState';
 import { FormField } from '../../components/ui';
 import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
+import DriverOpenEmergencies from '../../components/DriverOpenEmergencies';
 
 // Geolocation timeout per Phase 10.3E-HF2 design decision: try for 8s,
 // then give up and let the driver submit anyway. Emergency reporting must
@@ -190,6 +191,8 @@ export default function EmergencyPage() {
           iconColor="red"
         />
       </div>
+
+      <DriverOpenEmergencies />
 
       <form onSubmit={handleSubmit} className="bg-surface-raised rounded-2xl border border-surface-border shadow-soft p-6 space-y-5">
         <FormField label="รายละเอียด" required>

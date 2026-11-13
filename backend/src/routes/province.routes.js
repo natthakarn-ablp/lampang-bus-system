@@ -190,6 +190,26 @@ router.get('/emergencies', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * POST /api/province/emergencies/:id/close
+ * Province may close any emergency (owner decision 2026-11-13). Note required;
+ * history kept in the emergency note + audit_logs.
+ */
+router.post('/emergencies/:id/close', async (req, res, next) => {
+  try {
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const emSvc = require('../services/emergencyAdmin.service');
+    const b = req.body || {};
+    const out = await emSvc.closeEmergencyScoped(pool, {
+      id, result: b.result, note: b.note,
+      actor: { id: req.user.id, role: req.user.role, name: req.user.displayName || req.user.username, ip: req.ip, userAgent: req.headers['user-agent'] },
+      scope: { all: true },
+    });
+    return sendSuccess(res, out, 'ปิดเหตุฉุกเฉินแล้ว');
+  } catch (err) { next(err); }
+});
+
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 
 router.get('/audit-logs', exportFormatLimiter, async (req, res, next) => {

@@ -181,6 +181,9 @@ describe('driver account self-service (school / affiliation)', () => {
   });
 
   test('both schools of the shared vehicle may reset; old sessions die; temp password works', async () => {
+    // auth compares whole seconds (iat < password_changed_at): the driver's
+    // token must be issued in an earlier second than the reset, or it survives.
+    await new Promise((r) => setTimeout(r, 1100));
     const resB = await as('schoolB', request(app).post(`/api/school/vehicles/${V_SHARED}/driver/reset-password`));
     expect(resB.status).toBe(200);
     expect(resB.body.data.username).toBe(P_SHARED);
@@ -224,6 +227,7 @@ describe('driver account self-service (school / affiliation)', () => {
   });
 
   test('affiliation A changes the driver of the A-only vehicle: new profile, old access gone', async () => {
+    await new Promise((r) => setTimeout(r, 1100)); // whole-second iat, see above
     const res = await as('affA', request(app).post(`/api/affiliation/vehicles/${V_AONLY}/driver/replace`))
       .send({ name: '__SD คนขับใหม่', phone: '0822222222', reason: 'เปลี่ยนคนขับ' });
     expect(res.status).toBe(200);

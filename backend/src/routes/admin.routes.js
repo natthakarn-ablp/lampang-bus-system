@@ -10,6 +10,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 const { auditExportBeforeSend } = require('../utils/exportAudit');
 const adminSvc = require('../services/admin.service');
 const termSvc = require('../services/term.service');
@@ -545,7 +546,7 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
       return sendError(res, 'รหัสผ่านใหม่จำเป็น', [], 400);
     }
 
-    const [[user]] = await pool.query('SELECT id, username FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
+    const [[user]] = await pool.query('SELECT id, username, role FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
 
     // Strength check after the lookup so the username-equality rule sees the
@@ -556,20 +557,43 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
     }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST);
-    await pool.query(
-      // Phase 10.12D — set password_changed_at = NOW() so any refresh token
-      // issued before the reset is rejected (H3 — invalidate old sessions).
-      'UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?',
-      [hash, userId]
-    );
+    // School and driver accounts change hands by being reset (owner decision
+    // 2026-11-13, config/accountRecoveryPolicy.js), so resetting one also
+    // releases its LINE recovery binding — otherwise the previous holder's
+    // LINE could recover the account again. Admin targets keep the behaviour
+    // they have had since admin recovery shipped.
+    const releasesBinding = user.role === 'school' || user.role === 'driver';
+    let released = 0;
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(
+        // Phase 10.12D — set password_changed_at = NOW() so any refresh token
+        // issued before the reset is rejected (H3 — invalidate old sessions).
+        'UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?',
+        [hash, userId]
+      );
+      if (releasesBinding) released = await releaseRecoveryBinding(conn, userId);
+      await logAudit({
+        userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
+        newValue: {
+          action: 'reset_password', target_username: user.username,
+          ...(releasesBinding ? { recovery_channels_released: released } : {}),
+        },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+      });
+      await conn.commit();
+    } catch (err) {
+      try { await conn.rollback(); } catch { /* keep the original error */ }
+      throw err;
+    } finally {
+      conn.release();
+    }
 
-    await logAudit({
-      userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
-      newValue: { action: 'reset_password', target_username: user.username },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-
-    return sendSuccess(res, null, 'รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อ login ครั้งถัดไป');
+    return sendSuccess(res, releasesBinding ? { recovery_channels_released: released } : null,
+      released
+        ? 'รีเซ็ตรหัสผ่านสำเร็จ และยกเลิก LINE ที่ผูกไว้สำหรับกู้รหัสผ่านแล้ว — ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อ login ครั้งถัดไป'
+        : 'รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อ login ครั้งถัดไป');
   } catch (err) { next(err); }
 });
 

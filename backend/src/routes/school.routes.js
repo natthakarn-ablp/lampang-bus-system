@@ -2772,6 +2772,7 @@ router.get('/live-vehicles', async (req, res, next) => {
 const bcrypt = require('bcrypt');
 const BCRYPT_COST_TEACHER = 12;
 const { validatePassword } = require('../utils/passwordPolicy');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 
 router.get('/teacher-accounts', requireFullSchoolScope, async (req, res, next) => {
   try {
@@ -2888,22 +2889,39 @@ router.post('/teacher-accounts/:id/reset-password', requireFullSchoolScope, asyn
     }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST_TEACHER);
-    await pool.query(
-      // Phase 10.12D — set password_changed_at = NOW() so any refresh token
-      // issued before the reset is rejected (H3 — invalidate old sessions).
-      `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW()
-       WHERE id = ?`,
-      [hash, userId]
-    );
+    // A reset by the school is how a teacher account changes hands (owner
+    // decision 2026-11-13), so it also releases the teacher's LINE recovery
+    // binding — otherwise the previous holder could recover the account again.
+    // Only password columns change; school/grade scope stays as it was.
+    let released = 0;
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
+      await conn.query(
+        // Phase 10.12D — set password_changed_at = NOW() so any refresh token
+        // issued before the reset is rejected (H3 — invalidate old sessions).
+        `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW()
+         WHERE id = ?`,
+        [hash, userId]
+      );
+      released = await releaseRecoveryBinding(conn, userId);
+      await logAudit({
+        userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
+        newValue: { username: target.username, action_detail: 'reset_password', must_change_password: true,
+                    account_type: 'grade_teacher', recovery_channels_released: released },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+      });
+      await conn.commit();
+    } catch (err) {
+      try { await conn.rollback(); } catch { /* keep the original error */ }
+      throw err;
+    } finally {
+      conn.release();
+    }
 
-    await logAudit({
-      userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
-      newValue: { username: target.username, action_detail: 'reset_password', must_change_password: true,
-                  account_type: 'grade_teacher' },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-
-    return sendSuccess(res, null, 'รีเซ็ตรหัสผ่านสำเร็จ');
+    return sendSuccess(res, { recovery_channels_released: released },
+      released ? 'รีเซ็ตรหัสผ่านสำเร็จ และยกเลิก LINE ที่ผูกไว้สำหรับกู้รหัสผ่านแล้ว' : 'รีเซ็ตรหัสผ่านสำเร็จ');
   } catch (err) { next(err); }
 });
 
@@ -2924,19 +2942,35 @@ router.delete('/teacher-accounts/:id', requireFullSchoolScope, async (req, res, 
     );
     if (!target) return sendError(res, 'ไม่พบบัญชีครูในโรงเรียนนี้', [], 404);
 
-    await pool.query(
-      `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), is_active = FALSE
-       WHERE id = ?`,
-      [userId]
-    );
+    // Deleting also releases the teacher's LINE recovery binding, as the admin
+    // and affiliation delete paths do: one LINE identity may hold only one
+    // account, and a deleted account can never sign in to unbind it itself.
+    let released = 0;
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
+      await conn.query(
+        `UPDATE users SET is_deleted = TRUE, deleted_at = NOW(), is_active = FALSE
+         WHERE id = ?`,
+        [userId]
+      );
+      released = await releaseRecoveryBinding(conn, userId);
+      await logAudit({
+        userId: req.user.id, action: 'DELETE', entityType: 'user', entityId: userId,
+        oldValue: { username: target.username, grade_scope: target.grade_scope, account_type: 'grade_teacher' },
+        newValue: { recovery_channels_released: released },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+      });
+      await conn.commit();
+    } catch (err) {
+      try { await conn.rollback(); } catch { /* keep the original error */ }
+      throw err;
+    } finally {
+      conn.release();
+    }
 
-    await logAudit({
-      userId: req.user.id, action: 'DELETE', entityType: 'user', entityId: userId,
-      oldValue: { username: target.username, grade_scope: target.grade_scope, account_type: 'grade_teacher' },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-
-    return sendSuccess(res, null, 'ลบบัญชีครูประจำสายชั้นสำเร็จ');
+    return sendSuccess(res, { recovery_channels_released: released }, 'ลบบัญชีครูประจำสายชั้นสำเร็จ');
   } catch (err) { next(err); }
 });
 

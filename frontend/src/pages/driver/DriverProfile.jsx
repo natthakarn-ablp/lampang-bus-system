@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { User } from 'lucide-react';
+import { User, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import { useToast } from '../../components/Toast';
@@ -39,6 +41,7 @@ function isKnownVehicleType(val) {
 }
 
 export default function DriverProfile() {
+  const { features } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notLinked, setNotLinked] = useState(false);
@@ -427,6 +430,17 @@ export default function DriverProfile() {
           className="focus-ring w-full sm:w-auto inline-flex items-center justify-center bg-surface hover:bg-surface-border active:bg-surface-border text-ink text-sm px-5 min-h-[44px] rounded-lg border border-surface-border transition">
           เปลี่ยนรหัสผ่าน
         </button>
+      )}
+
+      {/* LINE self-service recovery (FEATURE_RECOVERY_DRIVER, owner decision
+          2026-11-13). Shown only while the flag is on; the page it opens asks
+          the server again before allowing a binding. */}
+      {features?.recoveryDriver && (
+        <Link to="/parent/link/admin-recovery"
+          className="focus-ring w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-surface hover:bg-surface-border active:bg-surface-border text-ink text-sm px-5 min-h-[44px] rounded-lg border border-surface-border transition">
+          <ShieldCheck className="w-4 h-4" aria-hidden="true" />
+          ผูก LINE สำหรับกู้รหัสผ่าน
+        </Link>
       )}
     </div>
   );

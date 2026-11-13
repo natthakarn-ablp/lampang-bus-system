@@ -75,7 +75,39 @@ function recoveryEnvSource() {
   return {
     ...process.env,
     FEATURE_ADMIN_PASSWORD_RECOVERY: env.features.adminPasswordRecovery ? 'true' : 'false',
+    // School (main + grade-teacher) and driver flags follow the same rule:
+    // env.features is what the login response hands the frontend, so the
+    // menu and the server can never disagree about whether a role is open.
+    FEATURE_RECOVERY_SCHOOL: env.features.recoverySchool ? 'true' : 'false',
+    FEATURE_RECOVERY_DRIVER: env.features.recoveryDriver ? 'true' : 'false',
   };
+}
+
+/**
+ * Who the LINE messages address. They used to say "ผู้ดูแลระบบ" to everyone;
+ * once schools, teachers and drivers can bind, that would tell a driver they
+ * are an administrator and send them to the wrong person when something looks
+ * wrong.
+ */
+const ACCOUNT_LABEL = Object.freeze({
+  admin: 'ผู้ดูแลระบบ',
+  school: 'บัญชีโรงเรียน',
+  driver: 'บัญชีรถ/คนขับ',
+});
+
+function accountLabel(role) {
+  return ACCOUNT_LABEL[role] || 'บัญชีผู้ใช้';
+}
+
+/** Who to tell when a recovery message arrives that the holder did not ask for. */
+const REPORT_TO = Object.freeze({
+  admin: 'ผู้ดูแลระบบ',
+  school: 'โรงเรียนหรือสังกัด',
+  driver: 'โรงเรียนหรือผู้ดูแลระบบ',
+});
+
+function reportTo(role) {
+  return REPORT_TO[role] || 'ผู้ดูแลระบบ';
 }
 
 /**
@@ -191,7 +223,7 @@ async function handleLinkLine(req, res, next) {
 
     const delivery = await sendTextMessage(
       verified.userId,
-      'กำลังยืนยัน LINE สำหรับกู้คืนรหัสผ่านผู้ดูแลระบบ School Safe Connect หากคุณไม่ได้ดำเนินการ กรุณาติดต่อผู้ดูแลระบบทันที'
+      `กำลังยืนยัน LINE สำหรับกู้คืนรหัสผ่าน${accountLabel(req.user.role)} School Safe Connect (${user.username}) หากคุณไม่ได้ดำเนินการ กรุณาติดต่อ${reportTo(req.user.role)}ทันที`
     );
     if (!isDelivered(delivery)) {
       return sendError(res, 'ไม่สามารถส่งข้อความถึง LINE นี้ได้ กรุณาเพิ่มเพื่อน LINE OA แล้วลองใหม่', [], 502);
@@ -227,7 +259,10 @@ async function handleLinkLine(req, res, next) {
       entityType: 'user_recovery_channel',
       entityId: user.id,
       newValue: {
+        // Action names stay as first shipped so existing audit queries keep
+        // matching; account_role says whose binding it was.
         action: 'admin_line_recovery_linked',
+        account_role: req.user.role,
         provider: 'LINE',
         recovery_codes_issued: codes.length,
       },
@@ -321,7 +356,7 @@ async function handleUnlinkLine(req, res, next) {
     await conn.query("DELETE FROM user_recovery_channels WHERE user_id = ? AND provider = 'LINE'", [user.id]);
     await logAudit({
       userId: user.id, action: 'DELETE', entityType: 'user_recovery_channel', entityId: user.id,
-      newValue: { action: 'admin_line_recovery_unlinked', provider: 'LINE' },
+      newValue: { action: 'admin_line_recovery_unlinked', account_role: req.user.role, provider: 'LINE' },
       ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
     });
     await conn.commit();
@@ -381,7 +416,7 @@ router.post('/request', requestLimiter, requireFeature, async (req, res, next) =
   let committed = false;
   try {
     const [[row]] = await pool.query(
-      `SELECT u.id, u.display_name, rc.provider_subject
+      `SELECT u.id, u.role, u.display_name, rc.provider_subject
          FROM users u
          JOIN user_recovery_channels rc ON rc.user_id = u.id
           AND rc.provider = 'LINE' AND rc.is_verified = TRUE
@@ -424,9 +459,13 @@ router.post('/request', requestLimiter, requireFeature, async (req, res, next) =
       );
       await conn.commit();
       committed = true;
+      // The code sentence used to be unconditional, which told every holder
+      // to look for a code the server would not ask for when
+      // ADMIN_RECOVERY_REQUIRE_CODE=false.
+      const codeLine = env.features.adminRecoveryRequireCode ? ' และต้องใช้รหัสกู้คืน 1 ชุดร่วมด้วย' : '';
       const delivery = await sendTextMessage(
         lockedChannel.provider_subject,
-        `คำขอเปลี่ยนรหัสผ่าน School Safe Connect\nลิงก์นี้ใช้ได้ ${RESET_TTL_MINUTES} นาที และต้องใช้รหัสกู้คืน 1 ชุดร่วมด้วย\n${resetUrl(rawToken)}\nหากคุณไม่ได้ขอเปลี่ยนรหัสผ่าน ไม่ต้องกดลิงก์และกรุณาแจ้งผู้ดูแลระบบ`
+        `คำขอเปลี่ยนรหัสผ่าน${accountLabel(row.role)} School Safe Connect (${username})\nลิงก์นี้ใช้ได้ ${RESET_TTL_MINUTES} นาที${codeLine}\n${resetUrl(rawToken)}\nหากคุณไม่ได้ขอเปลี่ยนรหัสผ่าน ไม่ต้องกดลิงก์และกรุณาแจ้ง${reportTo(row.role)}`
       );
       await pool.query(
         `UPDATE password_reset_requests
@@ -436,7 +475,9 @@ router.post('/request', requestLimiter, requireFeature, async (req, res, next) =
       );
       await logAudit({
         userId: row.id, action: 'UPDATE', entityType: 'password_reset_request', entityId: requestId,
-        newValue: { action: 'admin_password_reset_requested', delivered: isDelivered(delivery) },
+        newValue: {
+          action: 'admin_password_reset_requested', account_role: row.role, delivered: isDelivered(delivery),
+        },
         ipAddress: req.ip, userAgent: req.headers['user-agent'],
       });
     }
@@ -475,7 +516,7 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[reset]] = await conn.query(
-      `SELECT pr.id, pr.user_id, pr.failed_attempts, u.username, u.password_hash,
+      `SELECT pr.id, pr.user_id, pr.failed_attempts, u.username, u.role, u.password_hash,
               rc.provider_subject
          FROM password_reset_requests pr
          JOIN users u ON u.id = pr.user_id
@@ -544,6 +585,7 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
       userId: reset.user_id, action: 'UPDATE', entityType: 'user', entityId: reset.user_id,
       newValue: {
         action: 'admin_password_recovered',
+        account_role: reset.role,
         method: code ? 'LINE_AND_RECOVERY_CODE' : 'LINE_LINK_ONLY',
         recovery_code_required: requireCode,
       },
@@ -554,7 +596,10 @@ router.post('/complete', completeLimiter, requireFeature, async (req, res, next)
     try {
       await sendTextMessage(
         reset.provider_subject,
-        'เปลี่ยนรหัสผ่านผู้ดูแลระบบ School Safe Connect สำเร็จแล้ว เซสชันเดิมถูกยกเลิก กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่'
+        // Admin keeps the exact sentence production has been sending.
+        reset.role === 'admin' || !reset.role
+          ? 'เปลี่ยนรหัสผ่านผู้ดูแลระบบ School Safe Connect สำเร็จแล้ว เซสชันเดิมถูกยกเลิก กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่'
+          : `เปลี่ยนรหัสผ่าน${accountLabel(reset.role)} School Safe Connect (${reset.username}) สำเร็จแล้ว เซสชันเดิมถูกยกเลิก กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่ หากคุณไม่ได้ดำเนินการ กรุณาแจ้ง${reportTo(reset.role)}ทันที`
       );
     } catch (notifyError) {
       console.error('[ADMIN_RECOVERY] password changed but confirmation push failed', {

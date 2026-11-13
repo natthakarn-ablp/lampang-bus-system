@@ -20,7 +20,9 @@
     "parentLeave":           { "env": "FEATURE_PARENT_LEAVE",            "enabled": true,  "since": "2026-11-08 11:56 น." },
     "parentClaimCode":       { "env": "FEATURE_PARENT_CLAIM_CODE",       "enabled": true,  "since": "2026-11-08 11:56 น." },
     "parentClaimCodeRequired": { "env": "FEATURE_PARENT_CLAIM_CODE_REQUIRED", "enabled": false, "since": null },
-    "coGuardian":            { "env": "FEATURE_CO_GUARDIAN",             "enabled": true,  "since": "2026-11-08 11:56 น." }
+    "coGuardian":            { "env": "FEATURE_CO_GUARDIAN",             "enabled": true,  "since": "2026-11-08 11:56 น." },
+    "recoverySchool":        { "env": "FEATURE_RECOVERY_SCHOOL",         "enabled": false, "since": null },
+    "recoveryDriver":        { "env": "FEATURE_RECOVERY_DRIVER",         "enabled": false, "since": null }
   },
   "settings": {
     "adminRecoveryRequireCode": {
@@ -30,7 +32,7 @@
     }
   },
   "roles_recovery_closed": {
-    "_comment": "บทบาทที่กลไกกู้รหัสผ่านพร้อมแล้วแต่ยังปิดด้วยเหตุ decision_gates_unconfirmed ไม่ใช่ข้อจำกัดทางเทคนิค",
+    "_comment": "บทบาทที่ยังกู้รหัสผ่านผ่าน LINE ไม่ได้บน production: province/affiliation/transport ปิดด้วย decision_gates_unconfirmed; school/driver เจ้าของยืนยัน gate แล้ว 2026-11-13 แต่ยังปิดเพราะ flag recoverySchool/recoveryDriver ยังไม่เปิด",
     "province": false,
     "affiliation": false,
     "school": false,

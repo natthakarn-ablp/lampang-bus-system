@@ -4,6 +4,7 @@ const { pool } = require('../config/database');
 const bcrypt = require('bcrypt');
 const { logAudit } = require('../utils/audit');
 const { validatePassword } = require('../utils/passwordPolicy');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 
 /**
  * Get school user accounts under an affiliation, newest first.
@@ -117,17 +118,32 @@ async function resetSchoolPassword({ affiliationId, accountId, newPassword, user
   // password_changed_at = NOW() so any access/refresh token issued before this
   // reset is rejected (mirrors admin/school reset paths — was the only reset path
   // missing it, leaving a compromised session valid for up to the refresh TTL).
-  await pool.query(
-    `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?`,
-    [hash, accountId]
-  );
+  // A reset by someone else is how a school account changes hands (owner
+  // decision 2026-11-13), so it also releases the LINE recovery binding.
+  const conn = await pool.getConnection();
+  let released = 0;
+  try {
+    await conn.beginTransaction();
+    await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [accountId]);
+    await conn.query(
+      `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?`,
+      [hash, accountId]
+    );
+    released = await releaseRecoveryBinding(conn, accountId);
+    await logAudit({
+      userId, action: 'UPDATE', entityType: 'user', entityId: accountId,
+      newValue: { action: 'password_reset', recovery_channels_released: released },
+      conn,
+    });
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* keep the original error */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
 
-  await logAudit({
-    userId, action: 'UPDATE', entityType: 'user', entityId: accountId,
-    newValue: { action: 'password_reset' },
-  });
-
-  return { id: accountId, username: account.username };
+  return { id: accountId, username: account.username, recovery_channels_released: released };
 }
 
 /**

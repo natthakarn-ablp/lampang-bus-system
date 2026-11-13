@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { GraduationCap, Plus, Trash2, CheckCircle2, Clock, ChevronDown, Paperclip, Eye, FileText, Users, Check } from 'lucide-react';
 import api from '../../api/axios';
+import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../components/Toast';
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
@@ -322,7 +323,15 @@ const DOC_TYPES = [
   { kind: 'driver', code: 'DRIVER_LICENCE', label: 'ใบขับขี่' },
   { kind: 'vehicle', code: 'OTHER', label: 'เอกสารอื่น ๆ' },
 ];
-const DOC_LABEL = Object.fromEntries(DOC_TYPES.map((d) => [d.code, d.label]));
+// School transport certification (มพบ. 2564, FEATURE_SCHOOL_CERTIFICATION):
+// the school's document list also asks for the driver's ID card and a photo
+// of the vehicle. Offered only while the flag is on (the server refuses them
+// otherwise).
+const CERT_DOC_TYPES = [
+  { kind: 'driver', code: 'ID_CARD', label: 'สำเนาบัตรประชาชน' },
+  { kind: 'vehicle', code: 'VEHICLE_PHOTO', label: 'รูปถ่ายรถ' },
+];
+const DOC_LABEL = Object.fromEntries([...DOC_TYPES, ...CERT_DOC_TYPES].map((d) => [d.code, d.label]));
 const DOC_REVIEW = {
   PENDING: { label: 'รอตรวจ', cls: 'bg-amber-100 text-amber-800 border-amber-300' },
   APPROVED: { label: 'ผ่านแล้ว', cls: 'bg-green-100 text-green-800 border-green-300' },
@@ -336,6 +345,7 @@ function ReviewPill({ status }) {
 
 function DriverDocuments() {
   const toast = useToast();
+  const { features } = useAuth();
   const fileRef = useRef(null);
   const pendingType = useRef(null);
   const [docs, setDocs] = useState({ vehicle_id: null, vehicle_documents: [], driver_documents: [] });
@@ -435,7 +445,7 @@ function DriverDocuments() {
         <div className="bg-white rounded-2xl border-2 border-gray-200 p-4 mt-4">
           <p className="text-lg font-medium text-gray-800 mb-3">แนบเอกสารอะไร?</p>
           <div className="grid grid-cols-1 gap-2">
-            {DOC_TYPES.map((t) => (
+            {(features?.schoolCertification ? [...CERT_DOC_TYPES, ...DOC_TYPES] : DOC_TYPES).map((t) => (
               <button key={t.code} onClick={() => chooseType(t)}
                 className="w-full text-lg font-medium rounded-2xl py-4 border-2 bg-white border-gray-300 text-gray-700 active:bg-blue-50 active:border-blue-400 text-left px-4">
                 {t.label}

@@ -21,6 +21,8 @@ import ErrorState from '../../components/ErrorState';
 import AppCard from '../../components/ui/AppCard';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { AlertBanner, CommandHero, ConfirmDialog, DataTable, FormField, StatusStepRail } from '../../components/ui';
+import SchoolCertificationPanel from '../../components/certification/SchoolCertificationPanel';
+import CertificateChecklistCard from '../../components/certification/CertificateChecklistCard';
 
 const STATUS = {
   PENDING_SCHOOL_REVIEW: ['รอตรวจสอบ', 'warn'],
@@ -185,7 +187,7 @@ function VerificationHistoryRow({ application, onOpen }) {
   );
 }
 
-function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMarkReady, onReview, onCancel }) {
+function VerificationPacket({ selected, qr, busy, isGradeTeacher, certification, onBack, onMarkReady, onReview, onCancel, onChanged }) {
   return (
     <AppCard className="motion-safe:animate-fade-in-up motion-reduce:animate-none print:animate-none print:shadow-none print:border-0">
       <div className="flex flex-wrap justify-between gap-3 border-b border-surface-border pb-4 print:border-slate-400">
@@ -241,6 +243,20 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
               จำนวนสูงสุดรวมต่อรอบ: {selected.peak_rider_count} คน
             </p>
           </div>
+
+          {certification && !isGradeTeacher && (
+            <CertificateChecklistCard applicationId={selected.id} status={selected.status} onChanged={onChanged} />
+          )}
+          {certification && selected.fix_overdue && (
+            <AlertBanner variant="danger" icon={AlertTriangle}>
+              เลยกำหนดยื่นใหม่ (ภายใน 15 วัน ถึง {selected.fix_deadline}) — ติดต่อคนขับให้แก้ไขและยื่นตรวจอีกครั้ง
+            </AlertBanner>
+          )}
+          {certification && !selected.fix_overdue && selected.fix_deadline && ['NEEDS_FIX', 'FAILED'].includes(selected.status) && (
+            <AlertBanner variant="warn" icon={Clock3}>
+              ต้องแก้ไขและยื่นตรวจใหม่ภายใน {selected.fix_deadline}
+            </AlertBanner>
+          )}
 
           <div className="rounded-xl border border-surface-border bg-surface p-4">
             <h3 className="font-semibold text-ink">พื้นที่รับส่งโดยสรุป</h3>
@@ -325,7 +341,9 @@ function VerificationPacket({ selected, qr, busy, isGradeTeacher, onBack, onMark
 }
 
 export default function VehicleVerification() {
-  const { user } = useAuth();
+  const { user, features } = useAuth();
+  // School transport certification (มพบ. 2564, FEATURE_SCHOOL_CERTIFICATION).
+  const certification = Boolean(features?.schoolCertification);
   const toast = useToast();
   const [vehicles, setVehicles] = useState([]);
   const [applications, setApplications] = useState([]);
@@ -405,8 +423,12 @@ export default function VehicleVerification() {
   async function review(approved) {
     setBusy(true);
     try {
-      await api.post(`/verification/applications/${selected.id}/review`, { approved });
-      toast.success(approved ? 'ตรวจสอบถูกต้อง คำขอพร้อมดำเนินการต่อ' : 'ปฏิเสธคำขอแล้ว');
+      const res = await api.post(`/verification/applications/${selected.id}/review`, { approved });
+      const issued = res.data?.data?.certificate;
+      const outside = (res.data?.data?.warnings || []).includes('OUTSIDE_WINDOW');
+      toast.success(approved
+        ? (issued ? `ออกหนังสือรับรองเลขที่ ${issued.cert_no} แล้ว${outside ? ' (นอกช่วงรับเอกสาร)' : ''}` : 'ตรวจสอบถูกต้อง คำขอพร้อมดำเนินการต่อ')
+        : 'ปฏิเสธคำขอแล้ว');
       await load();
       if (approved) {
         await openApplication(selected.id);
@@ -557,6 +579,8 @@ export default function VehicleVerification() {
           qr={qr}
           busy={busy}
           isGradeTeacher={isGradeTeacher}
+          certification={certification}
+          onChanged={load}
           onBack={() => { setSelected(null); setConfirmAction(null); setActionReason(''); }}
           onMarkReady={markReady}
           onReview={(approved) => {
@@ -590,6 +614,10 @@ export default function VehicleVerification() {
           />
         )}
       </ConfirmDialog>
+
+      {!selected && certification && !isGradeTeacher && (
+        <SchoolCertificationPanel applications={applications} onChanged={load} />
+      )}
 
       {!selected && applications.some(application => application.status === 'PASSED') && (
         <AlertBanner variant="success" icon={CheckCircle2} className="print:hidden">

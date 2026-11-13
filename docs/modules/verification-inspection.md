@@ -15,10 +15,12 @@ Verification (`verification.routes.js`, `router.use(requireFullSchoolScope)` L38
 - เอกสาร (flag): GET /transport/documents/vehicle/:vehicleId (L339), GET /transport/documents/driver/:driverId (L345), POST /transport/documents/:kind/:id/review (L353)
 - admin: POST /api/admin/verification/applications/:id/cancel (`admin.routes.js:2142`)
 - รับช่วง/ยกเลิกแทน (2026-11-13): POST /transport/attempts/:id/takeover (transport/admin, เหตุผล ≥5 ตัวอักษร — `inspected_by` ย้ายมาเป็นผู้กด, audit เก็บผู้ตรวจเดิม); GET /oversight/applications/stuck และ POST /oversight/applications/:id/cancel (transport ทั้งจังหวัด / affiliation เฉพาะโรงเรียนในสังกัด / admin) — ยกเลิกได้เมื่อคำขอไม่เคลื่อนไหว ≥3 วัน พร้อมเหตุผล; สังกัดยกเลิกไม่ได้ถ้ามีการตรวจค้าง (`overrideCancelApplication`, `takeoverInspectionAttempt`)
+- รับรองรถโรงเรียน มพบ. 2564 (flag `FEATURE_SCHOOL_CERTIFICATION`, migration 063, 2026-11-14; `routes/certification.routes.js` mount `/api/certification` — 404 ทุกเส้นเมื่อปิด flag, ครูสายชั้น 403): โรงเรียน GET/PUT /school/window, GET /school/applications/:id/checklist, POST /school/applications/:id/certificate, GET /school/certificates, POST /school/certificates/:id/revoke, GET/POST /school/appointments, POST /school/appointments/:id/cancel · คนขับ GET /driver/overview, PUT /driver/caretaker · ขนส่ง/admin GET /transport/appointments, POST /transport/appointments/:id/confirm|done · GET /certificates/:id/pdf (โรงเรียนตน/คนขับรถตน/ขนส่ง/admin, audit EXPORT ก่อนส่ง) — รายละเอียด [docs/ops/apply-063.md](../ops/apply-063.md)
 - คนขับยื่นคำขอ: `/api/driver/applications*` (`driver.routes.js:1487-1510`, `createDriverApplication` ใน vehicleVerification.service.js:1012)
 
 ## โค้ดหลัก
 - `services/vehicleVerification.service.js` (1285) — `computeEligibility` (L50), `refreshVehicleEligibility` (L141), `createApplication` (L244), `transitionSchoolApplication` (L525), `startInspection` (L710), `finalizeInspection` (L783), `abortInspectionAttempt` (L908), `createDriverApplication` (L1012), `reviewApplication` (L1207)
+- `services/schoolCertification.service.js` — หนังสือรับรอง (`issueCertificateInTx` เลขที่ `<school>/<term>/<0001>` ใต้ล็อกแถวโรงเรียน, มีผลถึงสิ้นภาคเรียนจาก `term.service.getTermEndDate`), `revokeCertificate`, `getDocumentChecklist`, ช่วงรับเอกสาร, ผู้ดูแลนักเรียน, นัดตรวจ; กติกา pure: `capExpiryToTerm`, `fixDeadlineFor` (+15 วัน), `certificateReasons`
 - `services/transport.service.js` (631) — `getDashboard`, `getVehicles`, `createInspection` (L430), `updateInspection` (L486), `deleteInspection` (L582), `getSafetyExportRows`, `assertLegacyWritable` (L60)
 - `services/transportIncident.service.js` (109) — `getIncidentVehicle` (รายชื่อ roster ฉุกเฉิน ถูก audit แยก)
 - `services/driverDocuments.service.js` — `reviewDocument` ([vehicles-drivers.md](vehicles-drivers.md)); `config/transportPermissionContract.js`, `driverPermissionContract.js`
@@ -28,6 +30,7 @@ Verification (`verification.routes.js`, `router.use(requireFullSchoolScope)` L38
 - `inspection_checklist_templates`, `inspection_checklist_items`, `vehicle_inspection_applications`, `inspection_application_schools`, `inspection_attempts`, `inspection_checklist_results`, `inspection_evidence` — 038_shared_vehicle_verification.sql
 - `driver_qualifications` — 039_driver_pool_and_shifts.sql; `vehicle_documents`, `driver_documents` — 045_driver_documents.sql (เจ้าของโค้ด: vehicles-drivers)
 - คอลัมน์ verification/eligibility บน `vehicles` เพิ่มใน 038 (ยังไม่ได้ตรวจชื่อคอลัมน์ครบ)
+- `school_transport_certificates`, `school_certification_windows`, `inspection_appointments`, `inspection_appointment_vehicles`, `vehicles.caretaker_*`, `vehicle_inspection_applications.fix_deadline`, แบบตรวจ `LAMPANG_SCHOOLBUS` v2 — 063_school_transport_certification.sql
 
 ## จุดเชื่อม
 - การลงทะเบียนรถของคนขับสร้าง/ใช้ application เดียวกัน (`vehicleRegistration.ensureApplicationForVehicle`) → [vehicles-drivers.md](vehicles-drivers.md)
@@ -43,10 +46,12 @@ Verification (`verification.routes.js`, `router.use(requireFullSchoolScope)` L38
 - คำขอ 1 คัน 1 ใบที่ active: `active_request_key` UNIQUE — migration 038:49; `createApplication` ล็อกซ้ำที่ `vehicleRegistration.service.js:50` (ผ่านทางลงทะเบียน)
 - ครูประจำชั้นถูกปฏิเสธทั้ง router (อ่านด้วย) — `verification.routes.js:36-38`
 - `eligibility` จะเป็น `SUSPENDED` ถ้ารถถูกระงับ — `vehicleVerification.service.js:189`
+- เมื่อเปิด `FEATURE_SCHOOL_CERTIFICATION`: อนุมัติคำขอจากคนขับ (`reviewApplication`) หรือยืนยันพร้อมพิมพ์ (`transitionSchoolApplication` → READY_TO_PRINT) ออกหนังสือรับรองใน transaction เดียวกัน (นอกช่วงรับเอกสาร = เตือน ไม่บล็อก) · `startInspection` ตอบ 409 `CERTIFICATE_REQUIRED` ถ้าไม่มีหนังสือรับรองที่ยังมีผล (admin ข้ามได้) · `finalizeInspection` ผ่าน = วันหมดอายุ default/สูงสุด = สิ้นภาคเรียน (400 `EXPIRY_AFTER_TERM_END`), ต้องแก้ไข/ไม่ผ่าน = `fix_deadline` วันนี้+15 · `computeEligibility` เพิ่ม `CERTIFICATE_MISSING|EXPIRED|REVOKED` และ EXPIRING ≤30 วัน · แบบตรวจ v2 ใช้เฉพาะตอนเปิด flag (`resolveChecklistTemplate`); ปิด flag = พฤติกรรมเดิมทุกอย่าง
+- คิวงานรอ (`pendingQueue.service.js`, flag เดียวกัน): `inspection_appointments` (ขนส่ง), `certificate_expiring` (โรงเรียน, ไม่แจ้งเตือน), `fix_overdue` (แจ้งโรงเรียนผู้ออกและขนส่งครั้งเดียวทันทีที่เลยกำหนด ไม่ยกเลิกอัตโนมัติ)
 
 ## การทดสอบ
-DB-free: `cd backend && npx jest --config jest.unit.config.js --runInBand "(transportInspectionHardening|transportIncident|transportIncidentRoute|transportPermissionWorkflow|transportRoleSafety|transportVehicles|transportExportRoute|inspectionMgmt|verificationTeacherBlock|verificationTimelineScope|vehicleVerificationDriverScope|licenceDateBoundary|driverPermissionWorkflow)"`
-ต้องใช้ MySQL test DB (`npm run test:ci`): `vehicleVerification.test.js`, `verificationRoutes.test.js`, `transportCanonicalInspection.test.js`, `transportIncident.test.js`, `transportDateShape.test.js`, `transportVehicleDedup.test.js`. Frontend: `frontend/tests/transportIncidentView.test.mjs`.
+DB-free: `cd backend && npx jest --config jest.unit.config.js --runInBand "(schoolCertification|transportInspectionHardening|transportIncident|transportIncidentRoute|transportPermissionWorkflow|transportRoleSafety|transportVehicles|transportExportRoute|inspectionMgmt|verificationTeacherBlock|verificationTimelineScope|vehicleVerificationDriverScope|licenceDateBoundary|driverPermissionWorkflow)"`
+ต้องใช้ MySQL test DB (`npm run test:ci`): `schoolCertification.test.js`, `vehicleVerification.test.js`, `verificationRoutes.test.js`, `transportCanonicalInspection.test.js`, `transportIncident.test.js`, `transportDateShape.test.js`, `transportVehicleDedup.test.js`. Frontend: `frontend/tests/transportIncidentView.test.mjs`.
 
 ## ความเสี่ยงที่ทราบ
 - `vehicleVerification.service.js` 1285 บรรทัด (ใหญ่ที่สุดในกลุ่ม service ของรถ)

@@ -13,6 +13,8 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import { StatusStepRail, FormField} from '../../components/ui';
 import { PageTransition } from '../../lib/motion';
 import { auditActionTh } from '../../constants/auditLabels';
+import { useAuth } from '../../hooks/useAuth';
+import DriverCertificationCard from '../../components/certification/DriverCertificationCard';
 
 const STATUS = {
   PENDING_SCHOOL_REVIEW: ['รอโรงเรียนตรวจสอบ', 'warn'],
@@ -50,6 +52,7 @@ function statusToStep(status) {
 
 export default function DriverApplications() {
   const toast = useToast();
+  const { features } = useAuth();
   const [applications, setApplications] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -132,6 +135,9 @@ export default function DriverApplications() {
           </div>
           }
         />
+
+        {/* School certificate + caretaker (มพบ. 2564, FEATURE_SCHOOL_CERTIFICATION) */}
+        {features?.schoolCertification && <DriverCertificationCard />}
 
         {showForm && (
           <AppCard padding="lg" className="border-brand-200">

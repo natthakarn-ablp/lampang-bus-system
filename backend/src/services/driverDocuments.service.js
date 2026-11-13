@@ -19,12 +19,25 @@
 
 const path = require('path');
 const { logAudit } = require('../utils/audit');
+const env = require('../config/env');
 
 const VEHICLE_DOC_TYPES = ['VEHICLE_REGISTRATION', 'COMPULSORY_INSURANCE', 'TAX', 'INSURANCE', 'OTHER'];
 const DRIVER_DOC_TYPES = ['DRIVER_LICENCE', 'OTHER'];
+// Migration 063 (FEATURE_SCHOOL_CERTIFICATION, มพบ. 2564): the school's
+// document list adds a vehicle photo and the driver's ID card. Accepted only
+// while the flag is on — the ENUM values do not exist before 063.
+const CERT_VEHICLE_DOC_TYPES = ['VEHICLE_PHOTO'];
+const CERT_DRIVER_DOC_TYPES = ['ID_CARD'];
+function allowedVehicleDocTypes() {
+  return env.features.schoolCertification ? [...VEHICLE_DOC_TYPES, ...CERT_VEHICLE_DOC_TYPES] : VEHICLE_DOC_TYPES;
+}
+function allowedDriverDocTypes() {
+  return env.features.schoolCertification ? [...DRIVER_DOC_TYPES, ...CERT_DRIVER_DOC_TYPES] : DRIVER_DOC_TYPES;
+}
 const DOC_TYPE_TH = {
   VEHICLE_REGISTRATION: 'เล่มทะเบียนรถ', COMPULSORY_INSURANCE: 'พ.ร.บ.', TAX: 'ป้ายภาษีรถ',
   INSURANCE: 'ประกันภัยรถ', DRIVER_LICENCE: 'ใบขับขี่', OTHER: 'เอกสารอื่น ๆ',
+  VEHICLE_PHOTO: 'รูปถ่ายรถ', ID_CARD: 'สำเนาบัตรประชาชน',
 };
 const REVIEW_DECISIONS = ['APPROVED', 'REJECTED'];
 
@@ -122,7 +135,7 @@ async function addVehicleDocument(pool, {
   vehicleId, docType, storageKey, originalName, mimeType, sha256, fileSize, expiryDate, uploadedBy,
 }) {
   if (!vehicleId) throw appError('ไม่พบรถ', 400, 'VEHICLE_REQUIRED');
-  if (!VEHICLE_DOC_TYPES.includes(docType)) throw appError('ประเภทเอกสารไม่ถูกต้อง', 400, 'BAD_DOC_TYPE');
+  if (!allowedVehicleDocTypes().includes(docType)) throw appError('ประเภทเอกสารไม่ถูกต้อง', 400, 'BAD_DOC_TYPE');
   if (!storageKey || !sha256) throw appError('ไฟล์ไม่สมบูรณ์', 400, 'FILE_REQUIRED');
   const expiry = normExpiry(expiryDate);
 
@@ -152,7 +165,7 @@ async function addDriverDocument(pool, {
   driverId, docType, storageKey, originalName, mimeType, sha256, fileSize, expiryDate, uploadedBy,
 }) {
   if (!driverId) throw appError('ไม่พบคนขับ', 400, 'DRIVER_REQUIRED');
-  if (!DRIVER_DOC_TYPES.includes(docType)) throw appError('ประเภทเอกสารไม่ถูกต้อง', 400, 'BAD_DOC_TYPE');
+  if (!allowedDriverDocTypes().includes(docType)) throw appError('ประเภทเอกสารไม่ถูกต้อง', 400, 'BAD_DOC_TYPE');
   if (!storageKey || !sha256) throw appError('ไฟล์ไม่สมบูรณ์', 400, 'FILE_REQUIRED');
   const expiry = normExpiry(expiryDate);
 
@@ -408,6 +421,8 @@ module.exports = {
   appError,
   VEHICLE_DOC_TYPES,
   DRIVER_DOC_TYPES,
+  allowedVehicleDocTypes,
+  allowedDriverDocTypes,
   DOC_BASE_DIR,
   safeResolveStorageKey,
   schoolOwnsVehicle,

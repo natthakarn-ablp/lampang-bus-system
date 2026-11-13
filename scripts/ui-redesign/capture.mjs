@@ -880,6 +880,14 @@ const COMMON = {
     ],
   } },
   '/api/school/vehicle-trips':      { data: { rows: [] } },
+  // School transport certification (FEATURE_SCHOOL_CERTIFICATION, off in
+  // production-feature-flags.json) — mocked so a capture with the flag on
+  // renders the panels instead of erroring.
+  '/api/certification/school/window':       { data: { term_id: '2569-2', term_end_date: '2027-04-01', window: null, window_state: 'NOT_SET' } },
+  '/api/certification/school/certificates': { data: [] },
+  '/api/certification/school/appointments': { data: [] },
+  '/api/certification/transport/appointments': { data: [] },
+  '/api/certification/driver/overview':     { data: { vehicle_id: 'V1', caretaker: { name: null, phone: null }, certificates: [] } },
   '/api/affiliation/vehicle-trips': { data: { rows: [] } },
   '/api/province/vehicle-trips':    { data: { rows: [] } },
   '/api/driver/pretrip-status': { data: { done: false } },

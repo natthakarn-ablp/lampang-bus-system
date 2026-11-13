@@ -173,6 +173,35 @@ function getCurrentTermCachedSync() {
   return computeTermIdByConvention(today);
 }
 
+/**
+ * Last day of a term by the calendar convention above, as 'YYYY-MM-DD':
+ * term 1 → 11 Oct, term 2 → 1 Apr of the next Gregorian year, term 3 (summer,
+ * rare) → 15 May of the next year. null for a malformed id. Pure.
+ */
+function termEndByConvention(termId) {
+  const m = /^(\d{4})-([123])$/.exec(String(termId || '').trim());
+  if (!m) return null;
+  const ayYear = Number(m[1]) - 543;
+  if (m[2] === '1') return `${ayYear}-10-11`;
+  if (m[2] === '2') return `${ayYear + 1}-04-01`;
+  return `${ayYear + 1}-05-15`;
+}
+
+/**
+ * Last day of a term: terms.end_date when the admin set one, else the
+ * convention. Never throws (a DB error falls back to the convention).
+ */
+async function getTermEndDate(pool, termId) {
+  try {
+    const [rows] = await pool.query(
+      "SELECT DATE_FORMAT(end_date, '%Y-%m-%d') AS end_date FROM terms WHERE id = ? AND end_date IS NOT NULL LIMIT 1",
+      [termId]
+    );
+    if (rows && rows.length && rows[0].end_date) return rows[0].end_date;
+  } catch { /* convention below */ }
+  return termEndByConvention(termId);
+}
+
 async function listTerms(pool) {
   const [rows] = await pool.query(
     'SELECT id, name, start_date, end_date, is_current FROM terms ORDER BY id DESC'
@@ -247,6 +276,9 @@ module.exports = {
   deriveTermIdFromDateSync,
   computeTermIdByConvention,
   nextConventionRollover,
+  termEndByConvention,
+  getTermEndDate,
+  addCalendarDays,
   invalidateTermCache,
   listTerms,
   createTerm,

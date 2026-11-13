@@ -1389,6 +1389,91 @@ CREATE TABLE IF NOT EXISTS vehicle_trips (
   CONSTRAINT chk_vehicle_trips_no CHECK (trip_no BETWEEN 2 AND 9)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 063_school_transport_certification.sql (added with the migration; FEATURE_SCHOOL_CERTIFICATION).
+-- The test schema has no vehicle/driver document tables and no checklist seed,
+-- so only the tables, the two column additions and the status superset are here.
+CREATE TABLE IF NOT EXISTS school_transport_certificates (
+  id              BIGINT        NOT NULL AUTO_INCREMENT,
+  cert_no         VARCHAR(40)   NOT NULL,              -- <school id>/<term id>/<0001>
+  application_id  BIGINT        NOT NULL,
+  vehicle_id      VARCHAR(20)   NOT NULL,
+  school_id       VARCHAR(10)   NOT NULL,
+  driver_id       INT           NULL,
+  term_id         VARCHAR(10)   NOT NULL,              -- e.g. 2569-2 (terms.id, may be convention-only)
+  issued_at       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  valid_until     DATE          NOT NULL,              -- last day of that term
+  issued_by       INT           NOT NULL,
+  revoked_at      TIMESTAMP     NULL,
+  revoked_by      INT           NULL,
+  revoke_reason   VARCHAR(500)  NULL,
+  snapshot_json   JSON          NULL,                  -- pupil count, caretaker, documents checked (no pupil names)
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_stc_cert_no (cert_no),
+  INDEX idx_stc_application (application_id),
+  INDEX idx_stc_vehicle (vehicle_id, valid_until),
+  INDEX idx_stc_school_term (school_id, term_id),
+  CONSTRAINT fk_stc_application FOREIGN KEY (application_id) REFERENCES vehicle_inspection_applications (id),
+  CONSTRAINT fk_stc_vehicle     FOREIGN KEY (vehicle_id)     REFERENCES vehicles (id),
+  CONSTRAINT fk_stc_school      FOREIGN KEY (school_id)      REFERENCES schools (id),
+  CONSTRAINT fk_stc_driver      FOREIGN KEY (driver_id)      REFERENCES drivers (id),
+  CONSTRAINT fk_stc_issued_by   FOREIGN KEY (issued_by)      REFERENCES users (id),
+  CONSTRAINT fk_stc_revoked_by  FOREIGN KEY (revoked_by)     REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS school_certification_windows (
+  school_id                     VARCHAR(10)  NOT NULL,
+  term_id                       VARCHAR(10)  NOT NULL,
+  opens_on                      DATE         NULL,
+  closes_on                     DATE         NULL,
+  criteria_note                 TEXT         NULL,
+  require_compulsory_insurance  BOOLEAN      NOT NULL DEFAULT FALSE,
+  updated_by                    INT          NULL,
+  updated_at                    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (school_id, term_id),
+  CONSTRAINT fk_scw_school  FOREIGN KEY (school_id)  REFERENCES schools (id),
+  CONSTRAINT fk_scw_user    FOREIGN KEY (updated_by) REFERENCES users (id),
+  CONSTRAINT chk_scw_range  CHECK (opens_on IS NULL OR closes_on IS NULL OR opens_on <= closes_on)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS inspection_appointments (
+  id              BIGINT        NOT NULL AUTO_INCREMENT,
+  school_id       VARCHAR(10)   NOT NULL,
+  term_id         VARCHAR(10)   NOT NULL,
+  proposed_date   DATE          NOT NULL,
+  note            VARCHAR(500)  NULL,
+  status          ENUM('REQUESTED','CONFIRMED','DONE','CANCELLED') NOT NULL DEFAULT 'REQUESTED',
+  confirmed_date  DATE          NULL,
+  confirmed_by    INT           NULL,
+  created_by      INT           NOT NULL,
+  created_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_ia_school (school_id, status),
+  INDEX idx_ia_status (status, created_at),
+  CONSTRAINT fk_ia_school       FOREIGN KEY (school_id)    REFERENCES schools (id),
+  CONSTRAINT fk_ia_confirmed_by FOREIGN KEY (confirmed_by) REFERENCES users (id),
+  CONSTRAINT fk_ia_created_by   FOREIGN KEY (created_by)   REFERENCES users (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS inspection_appointment_vehicles (
+  appointment_id  BIGINT  NOT NULL,
+  application_id  BIGINT  NOT NULL,
+  PRIMARY KEY (appointment_id, application_id),
+  INDEX idx_iav_application (application_id),
+  CONSTRAINT fk_iav_appointment FOREIGN KEY (appointment_id) REFERENCES inspection_appointments (id),
+  CONSTRAINT fk_iav_application FOREIGN KEY (application_id) REFERENCES vehicle_inspection_applications (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE vehicles
+  ADD COLUMN caretaker_name  VARCHAR(150) NULL,
+  ADD COLUMN caretaker_phone VARCHAR(20)  NULL;
+
+ALTER TABLE vehicle_inspection_applications
+  ADD COLUMN fix_deadline DATE NULL;
+
+ALTER TABLE vehicle_inspection_applications
+  MODIFY status ENUM('DRAFT','READY_TO_PRINT','SUBMITTED','INSPECTION_PENDING','NEEDS_FIX','PASSED','FAILED','EXPIRED','SUPERSEDED','CANCELLED','PENDING_SCHOOL_REVIEW','REJECTED') NOT NULL DEFAULT 'DRAFT';
+
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;

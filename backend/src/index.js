@@ -330,6 +330,13 @@ async function assertParentFeatureMigrationsPresent() {
     enabled: env.features.multiTrip, envName: 'FEATURE_MULTI_TRIP',
     migration: '062_vehicle_trips.sql', required: [['vehicle_trips']],
   });
+  await assertFeatureSchema({
+    enabled: env.features.schoolCertification, envName: 'FEATURE_SCHOOL_CERTIFICATION',
+    migration: '063_school_transport_certification.sql',
+    required: [['school_transport_certificates'], ['school_certification_windows'],
+      ['inspection_appointments'], ['inspection_appointment_vehicles'],
+      ['vehicles', 'caretaker_name'], ['vehicle_inspection_applications', 'fix_deadline']],
+  });
 }
 
 async function start() {

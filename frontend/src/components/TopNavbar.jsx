@@ -50,6 +50,24 @@ function useDismissable(open, setOpen, ref) {
   }, [open, setOpen, ref]);
 }
 
+function readSeen(key) {
+  if (!key) return 0;
+  try { return Number(localStorage.getItem(key)) || 0; } catch { return 0; }
+}
+
+function recoveryAlertText(a) {
+  const who = a.subject_role === 'driver'
+    ? `คนขับรถ ${a.plate_no || a.subject_name || ''}`.trim()
+    : `ครู${a.grade_scope ? `สายชั้น ${a.grade_scope}` : ''} ${a.subject_name || ''}`.trim();
+  return a.kind === 'LINE_RECOVERY_UNLINKED' ? `${who} ยกเลิกการผูก LINE` : `${who} ผูก LINE แล้ว`;
+}
+
+function formatAlertTime(v) {
+  const d = v ? new Date(v) : null;
+  if (!d || Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollapsed = false }) {
   const { user, features, logout } = useAuth();
   const navigate = useNavigate();
@@ -82,7 +100,23 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
   const { data: summary } = usePendingSummary(user?.role, { enabled: approver });
   const opsAlerts = summary?.ops_alerts || [];
   const roleHome = { school: '/school', affiliation: '/affiliation', province: '/province', transport: '/transport' }[user?.role];
-  const bellTotal = isAdmin ? (pending.total || 0) + opsAlerts.length : (summary?.total || 0);
+  // School main account: LINE-recovery binds/unbinds by its teachers/drivers.
+  // "Unseen" is a per-viewer convenience (localStorage); the server keeps them.
+  const recoveryAlerts = summary?.recovery_alerts || [];
+  const seenKey = user?.id ? `recoveryAlertSeen:${user.id}` : null;
+  const [recoverySeen, setRecoverySeen] = useState(() => readSeen(seenKey));
+  useEffect(() => { setRecoverySeen(readSeen(seenKey)); }, [seenKey]);
+  const recoveryUnseen = recoveryAlerts.filter(a => Number(a.id) > recoverySeen).length;
+  const bellTotal = isAdmin ? (pending.total || 0) + opsAlerts.length : (summary?.total || 0) + recoveryUnseen;
+
+  useEffect(() => {
+    if (!bellOpen || !recoveryAlerts.length || !seenKey) return;
+    const top = Math.max(...recoveryAlerts.map(a => Number(a.id) || 0));
+    if (top > recoverySeen) {
+      setRecoverySeen(top);
+      try { localStorage.setItem(seenKey, String(top)); } catch { /* storage unavailable */ }
+    }
+  }, [bellOpen, recoveryAlerts, recoverySeen, seenKey]);
 
   useEffect(() => {
     if (!isAdmin) return undefined;
@@ -156,7 +190,7 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
             <button
               type="button"
               onClick={() => setBellOpen(o => !o)}
-              className="focus-ring hidden sm:inline-flex items-center justify-center w-11 h-11 rounded-lg text-ink-muted hover:bg-surface hover:text-ink active:bg-surface-border transition relative"
+              className="focus-ring inline-flex items-center justify-center w-11 h-11 rounded-lg text-ink-muted hover:bg-surface hover:text-ink active:bg-surface-border transition relative"
               aria-label="การแจ้งเตือนคำขอที่รอดำเนินการ"
               aria-haspopup="menu"
               aria-expanded={bellOpen}
@@ -170,7 +204,7 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
               )}
             </button>
             {bellOpen && !isAdmin && (
-              <div role="menu" className="absolute right-0 mt-2 w-72 z-modal origin-top-right rounded-xl bg-surface-raised border border-surface-border shadow-elevate animate-fade-in-up overflow-hidden">
+              <div role="menu" className="absolute right-0 mt-2 w-72 max-w-[calc(100vw-1.5rem)] z-modal origin-top-right rounded-xl bg-surface-raised border border-surface-border shadow-elevate animate-fade-in-up overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-surface-border text-xs font-semibold text-ink-muted">งานรออนุมัติ</div>
                 {[
                   ...(summary?.queues || []).map(q => ({ key: q.key, label: q.label, n: q.count, overdue: q.overdue, to: q.link || roleHome })),
@@ -192,10 +226,21 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
                   </button>
                 ))}
                 {!summary?.total && <div className="px-4 py-3 text-xs text-ink-muted text-center">ไม่มีงานค้าง</div>}
+                {recoveryAlerts.length > 0 && (
+                  <>
+                    <div className="px-4 py-2.5 border-y border-surface-border text-xs font-semibold text-ink-muted">การผูก LINE กู้รหัสผ่าน (14 วันล่าสุด)</div>
+                    {recoveryAlerts.slice(0, 5).map(a => (
+                      <div key={a.id} className="px-4 py-2 text-sm text-ink">
+                        <span className={a.kind === 'LINE_RECOVERY_UNLINKED' ? 'text-warn-ink' : ''}>{recoveryAlertText(a)}</span>
+                        <span className="block text-[11px] text-ink-muted">{formatAlertTime(a.created_at)}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             )}
             {bellOpen && isAdmin && (
-              <div role="menu" className="absolute right-0 mt-2 w-64 z-modal origin-top-right rounded-xl bg-surface-raised border border-surface-border shadow-elevate animate-fade-in-up overflow-hidden">
+              <div role="menu" className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-1.5rem)] z-modal origin-top-right rounded-xl bg-surface-raised border border-surface-border shadow-elevate animate-fade-in-up overflow-hidden">
                 {opsAlerts.length > 0 && (
                   <>
                     <div className="px-4 py-2.5 border-b border-surface-border text-xs font-semibold text-danger-ink">แจ้งเตือนระบบ</div>

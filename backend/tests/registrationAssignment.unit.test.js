@@ -15,7 +15,7 @@ function makeDb({ aps, roster = [], students = [] } = {}) {
     if (/FROM inspection_application_schools aps/.test(sql)) return [[aps].filter(Boolean)];
     if (/FROM registration_roster_students r\s+JOIN students s/.test(sql)) return [roster];
     if (/FROM students s\s+WHERE s\.id IN \(\?\)/.test(sql)) {
-      const ids = params[0];
+      const ids = params.find((x) => Array.isArray(x));
       return [students.filter((s) => ids.includes(s.id))];
     }
     if (/INSERT INTO audit_logs/.test(sql)) return [{ insertId: 1 }];
@@ -69,7 +69,7 @@ describe('assignApprovedRoster', () => {
   test('assigns the confirmed children, skips ones already on the vehicle, audits each move', async () => {
     const { pool, calls, conn } = makeDb({ aps: APPROVED, students });
     const out = await svc.assignApprovedRoster(pool, { applicationId: 5, schoolId: 'S1', userId: 9, studentIds: [1, 2, 3] });
-    expect(out).toEqual({ application_id: 5, vehicle_id: 'V1', assigned: [1, 3], unchanged: [2] });
+    expect(out).toEqual({ application_id: 5, vehicle_id: 'V1', assigned: [1, 3], unchanged: [2], sessions_updated: [] });
     const updates = calls.filter((c) => /UPDATE students SET vehicle_id/.test(c.sql));
     expect(updates.map((u) => u.params)).toEqual([['V1', 1, 'S1'], ['V1', 3, 'S1']]);
     const audit = calls.filter((c) => /INSERT INTO audit_logs/.test(c.sql)).map((c) => JSON.parse(c.params[5]));
@@ -93,7 +93,7 @@ describe('assignApprovedRoster', () => {
     const q = calls.find((c) => /FROM students s\s+WHERE s\.id IN/.test(c.sql));
     expect(q.sql).toMatch(/match_status = 'MATCHED'/);
     expect(q.sql).toMatch(/FOR UPDATE/);
-    expect(q.params).toEqual([[1], 'S1', 5, 'S1']);
+    expect(q.params).toEqual([5, 'S1', [1], 'S1', 5, 'S1']);
   });
 
   test('cancelled application or empty selection is refused', async () => {
@@ -102,5 +102,57 @@ describe('assignApprovedRoster', () => {
       .rejects.toMatchObject({ statusCode: 409, errors: [{ code: 'APPLICATION_INACTIVE' }] });
     await expect(svc.assignApprovedRoster(makeDb({ aps: APPROVED }).pool, { applicationId: 5, schoolId: 'S1', userId: 9, studentIds: [] }))
       .rejects.toMatchObject({ statusCode: 400 });
+  });
+});
+
+describe('roster MORNING/EVENING marker → students.morning_enabled / evening_enabled', () => {
+  const both = { morning_enabled: 1, evening_enabled: 1 };
+
+  test('preview reports the marker and whether it would change the child', async () => {
+    const { pool, calls } = makeDb({
+      aps: APPROVED,
+      roster: [
+        { student_id: 1, full_name: 'ก', vehicle_id: null, ...both, pickup_types: 'MORNING' },
+        { student_id: 2, full_name: 'ข', vehicle_id: 'V1', ...both, pickup_types: 'EVENING' },
+        { student_id: 3, full_name: 'ค', vehicle_id: 'V1', ...both, pickup_types: null },
+        { student_id: 4, full_name: 'ง', vehicle_id: 'V1', ...both, pickup_types: 'EVENING,MORNING' },
+      ],
+    });
+    const out = await svc.previewRosterAssignment(pool, { applicationId: 5, schoolId: 'S1' });
+    expect(out.students.map((s) => [s.pickup_type, s.sessions_pending])).toEqual([
+      ['MORNING', true], ['EVENING', true], [null, false], ['BOTH', false],
+    ]);
+    const q = calls.find((c) => /FROM registration_roster_students r\s+JOIN students s/.test(c.sql));
+    expect(q.sql).toMatch(/r2\.pickup_type IS NOT NULL/);
+    expect(q.params).toEqual([5, 'S1', 5, 'S1']);
+  });
+
+  test('assigning applies the marker, keeps sessions when there is none, audits old/new', async () => {
+    const { pool, calls } = makeDb({
+      aps: APPROVED,
+      students: [
+        { id: 1, vehicle_id: null, grade: 'ป.1', classroom: '1', ...both, pickup_types: 'MORNING' },
+        { id: 2, vehicle_id: null, grade: 'ป.1', classroom: '1', morning_enabled: 0, evening_enabled: 1, pickup_types: null },
+        { id: 3, vehicle_id: 'V1', grade: 'ป.1', classroom: '1', ...both, pickup_types: 'EVENING' },
+        { id: 4, vehicle_id: 'V1', grade: 'ป.1', classroom: '1', ...both, pickup_types: 'BOTH' },
+      ],
+    });
+    const out = await svc.assignApprovedRoster(pool, { applicationId: 5, schoolId: 'S1', userId: 9, studentIds: [1, 2, 3, 4] });
+    expect(out).toEqual({
+      application_id: 5, vehicle_id: 'V1', assigned: [1, 2], unchanged: [3, 4], sessions_updated: [1, 3],
+    });
+    const updates = calls.filter((c) => /UPDATE students SET/.test(c.sql));
+    expect(updates.map((u) => [u.sql.match(/SET (.*) WHERE/)[1], u.params])).toEqual([
+      ['vehicle_id = ?, morning_enabled = ?, evening_enabled = ?', ['V1', 1, 0, 1, 'S1']],
+      ['vehicle_id = ?', ['V1', 2, 'S1']],
+      ['morning_enabled = ?, evening_enabled = ?', [0, 1, 3, 'S1']],
+    ]);
+    const audits = calls.filter((c) => /INSERT INTO audit_logs/.test(c.sql))
+      .map((c) => ({ old: JSON.parse(c.params[4]), new: JSON.parse(c.params[5]) }));
+    expect(audits).toHaveLength(3);
+    expect(audits[0].old).toMatchObject({ morning_enabled: true, evening_enabled: true });
+    expect(audits[0].new).toMatchObject({ morning_enabled: true, evening_enabled: false, pickup_type: 'MORNING', action: 'move_vehicle' });
+    expect(audits[1].new).not.toHaveProperty('morning_enabled');
+    expect(audits[2].new).toMatchObject({ action: 'set_sessions', morning_enabled: false, evening_enabled: true, pickup_type: 'EVENING' });
   });
 });

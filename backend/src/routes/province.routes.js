@@ -458,6 +458,35 @@ router.put('/affiliations/:id', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+/** GET /api/province/affiliations/deactivated — affiliations that can be restored. */
+router.get('/affiliations/deactivated', async (req, res, next) => {
+  try {
+    const rows = await orgSvc.listDeactivatedAffiliations(pool);
+    return sendSuccess(res, rows, 'OK', { total: rows.length });
+  } catch (err) { return next(err); }
+});
+
+/**
+ * POST /api/province/affiliations/:id/deactivate { reason? }
+ * 409 while the affiliation still has active schools. Closes its affiliation
+ * accounts in the same transaction.
+ */
+router.post('/affiliations/:id/deactivate', async (req, res, next) => {
+  try {
+    const { reason } = req.body || {};
+    const result = await orgSvc.deactivateAffiliation(pool, { id: req.params.id, reason, ...actorCtx(req) });
+    return sendSuccess(res, result, 'ปิดใช้งานสังกัดแล้ว และปิดบัญชีผู้ใช้ของสังกัดนี้แล้ว');
+  } catch (err) { return next(err); }
+});
+
+/** POST /api/province/affiliations/:id/restore — accounts stay closed. */
+router.post('/affiliations/:id/restore', async (req, res, next) => {
+  try {
+    const result = await orgSvc.restoreAffiliation(pool, { id: req.params.id, ...actorCtx(req) });
+    return sendSuccess(res, result, 'กู้คืนสังกัดแล้ว บัญชีของสังกัดยังปิดอยู่ เปิดได้ที่เมนูบัญชีสังกัดและขนส่ง');
+  } catch (err) { return next(err); }
+});
+
 /** GET /api/province/schools/deactivated — schools that can be restored. */
 router.get('/schools/deactivated', async (req, res, next) => {
   try {

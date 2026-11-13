@@ -382,6 +382,15 @@ router.post('/vehicles/:id/driver/replace', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.post('/vehicles/:id/driver/reactivate', async (req, res, next) => {
+  try {
+    const ctx = affDriverCtx(req, res, resolveAffiliationId(req));
+    if (!ctx) return;
+    const out = await driverAcctSvc.reactivateDriverAccount(pool, { vehicleId: req.params.id, ...ctx });
+    return sendSuccess(res, out, 'เปิดใช้งานบัญชีคนขับแล้ว คนขับเข้าสู่ระบบด้วยรหัสผ่านเดิมได้ หากเปลี่ยนคนขับให้ใช้ "เปลี่ยนคนขับ"');
+  } catch (err) { next(err); }
+});
+
 /**
  * GET /api/affiliation/vehicles-at-risk?limit=10
  * Top N vehicles serving this affiliation, scored by inspection +

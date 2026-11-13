@@ -360,6 +360,10 @@ async function getVehicles(schoolId, { gradeFilter = null } = {}) {
              JOIN drivers d ON d.id = dva.driver_id AND d.is_deleted = FALSE
              WHERE dva.vehicle_id = v.id AND dva.is_active = TRUE
              LIMIT 1) AS driver_phone,
+            (SELECT MIN(u.is_active) FROM users u
+             WHERE u.role = 'driver' AND u.is_deleted = FALSE
+               AND REPLACE(REPLACE(LOWER(u.username), ' ', ''), '-', '')
+                   = COALESCE(v.normalized_plate, REPLACE(REPLACE(LOWER(v.plate_no), ' ', ''), '-', ''))) AS driver_account_active,
             (SELECT va.name FROM vehicle_attendants va
              WHERE va.vehicle_id = v.id LIMIT 1) AS attendant_name,
             (SELECT va.phone FROM vehicle_attendants va

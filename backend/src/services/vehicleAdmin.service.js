@@ -133,8 +133,8 @@ async function softDeleteVehicle(pool, { vehicleId, actorId, force = false, reas
 }
 
 // Validate a new plate for vehicleId and run the dedup guards against OTHER
-// active vehicles (normalized, canonical, province-variant). Shared by the
-// admin correction and the transport/admin plate-typo fix.
+// active vehicles (normalized, canonical, province-variant). Used by the
+// transport/admin plate-typo fix (fixPlate).
 async function checkPlateChange(conn, vehicleId, rawPlate) {
   const validation = validatePlateNo(rawPlate);
   if (!validation.valid) { const e = err(validation.error, 400); e.errors = [{ code: 'VALIDATION_ERROR' }]; throw e; }
@@ -252,7 +252,7 @@ async function fixPlate(pool, { vehicleId, newPlate, reason, actorId, actorRole 
   } finally { conn.release(); }
 }
 
-// ── GOAL #3b — correct plate_no + editable vehicle fields (dedup-guarded) ─────
+// ── GOAL #3b — editable vehicle fields (plate changes go through fixPlate) ────
 async function correctVehicle(pool, { vehicleId, actorId, patch = {}, ipAddress = null, userAgent = null }) {
   const conn = await pool.getConnection();
   try {
@@ -265,14 +265,15 @@ async function correctVehicle(pool, { vehicleId, actorId, patch = {}, ipAddress 
     const params = [];
     const after = {};
 
-    // Plate correction: re-derive normalized + canonical, re-run the dedup guard
-    // against OTHER active vehicles so it can never collide.
+    // Plate changes are NOT made here (2026-11-13). The driver login's username
+    // IS the plate, so a plate edit that left the username alone stranded the
+    // driver on the old plate. fixPlate() renames both in one transaction with
+    // a required reason; this endpoint refuses and points there. Sending the
+    // current plate unchanged is harmless and ignored.
     if (patch.plate_no != null && String(patch.plate_no).trim() !== v.plate_no) {
-      const { trimmed, normalized, canonical } = await checkPlateChange(conn, vehicleId, patch.plate_no);
-
-      sets.push('plate_no = ?', 'normalized_plate = ?', 'canonical_plate = ?');
-      params.push(trimmed, normalized, canonical);
-      after.plate_no = trimmed; after.normalized_plate = normalized; after.canonical_plate = canonical;
+      const e = err('แก้ทะเบียนรถที่นี่ไม่ได้ กรุณาใช้ "แก้ทะเบียน" (POST /api/admin/vehicles/:id/fix-plate พร้อมเหตุผล) เพื่อให้ชื่อผู้ใช้คนขับเปลี่ยนตามทะเบียนใหม่ด้วย', 400);
+      e.errors = [{ field: 'plate_no', code: 'USE_FIX_PLATE' }];
+      throw e;
     }
 
     // Free-text / date fields — null-safe partial update.
@@ -315,6 +316,47 @@ async function correctVehicle(pool, { vehicleId, actorId, patch = {}, ipAddress 
     await conn.rollback();
     throw e;
   } finally { conn.release(); }
+}
+
+// ── Read-only preview for the admin delete / merge dialogs ──────────────────
+// What a delete would detach and what a merge would move: active students and
+// driver assignment (the delete guard) plus row counts of every table
+// mergeVehicles repoints or clears. No writes, no locks.
+async function vehicleImpact(pool, vehicleId) {
+  const [[v]] = await pool.query(
+    'SELECT id, plate_no, vehicle_type, is_deleted FROM vehicles WHERE id = ?', [vehicleId]);
+  if (!v) throw err('ไม่พบรถคันนี้', 404);
+  const att = await vehicleAttachments(pool, vehicleId);
+  const moves = {};
+  for (const table of REPOINT_SIMPLE) {
+    const [[r]] = await pool.query(`SELECT COUNT(*) AS n FROM ${table} WHERE vehicle_id = ?`, [vehicleId]);
+    const n = Number(r && r.n) || 0;
+    if (n) moves[table] = n;
+  }
+  {
+    const [[r]] = await pool.query('SELECT COUNT(*) AS n FROM driver_vehicle_assignments WHERE vehicle_id = ?', [vehicleId]);
+    const n = Number(r && r.n) || 0;
+    if (n) moves.driver_vehicle_assignments = n;
+  }
+  const cleared = {};
+  for (const table of TRANSIENT_DELETE) {
+    const [[r]] = await pool.query(`SELECT COUNT(*) AS n FROM ${table} WHERE vehicle_id = ?`, [vehicleId]);
+    const n = Number(r && r.n) || 0;
+    if (n) cleared[table] = n;
+  }
+  const [[d]] = await pool.query(
+    `SELECT d.name FROM driver_vehicle_assignments dva
+       JOIN drivers d ON d.id = dva.driver_id
+      WHERE dva.vehicle_id = ? AND dva.is_active = TRUE
+      ORDER BY dva.id DESC LIMIT 1`, [vehicleId]);
+  return {
+    vehicle: { id: v.id, plate_no: v.plate_no, vehicle_type: v.vehicle_type, is_deleted: !!v.is_deleted },
+    active_students: Number(att.active_students) || 0,
+    active_assignments: Number(att.active_assignments) || 0,
+    driver_name: d ? d.name : null,
+    moves,
+    cleared,
+  };
 }
 
 // ── GOAL #4 — merge a duplicate vehicle (loser :id) into the winner ──────────
@@ -387,4 +429,4 @@ async function mergeVehicles(pool, { vehicleId, intoVehicleId, actorId, reason =
   } finally { conn.release(); }
 }
 
-module.exports = { softDeleteVehicle, correctVehicle, mergeVehicles, vehicleAttachments, publicVehicle, checkPlateChange, fixPlate };
+module.exports = { softDeleteVehicle, correctVehicle, mergeVehicles, vehicleAttachments, vehicleImpact, publicVehicle, checkPlateChange, fixPlate, REPOINT_SIMPLE, TRANSIENT_DELETE };

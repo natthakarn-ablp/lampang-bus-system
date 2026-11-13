@@ -233,6 +233,15 @@ async function updateUnitAccount(db, { accountId, displayName, isActive, actorId
 
   const account = await findManaged(db, accountId);
   if (!account) throw httpError('ไม่พบบัญชีนี้ หรือไม่ใช่บัญชีสังกัด/ขนส่ง', 404);
+  // A closed สังกัด keeps its accounts off (orgEntities.deactivateAffiliation);
+  // reopening one would sign someone in to an affiliation that is no longer in
+  // the tree. Restore the affiliation first.
+  if (isActive === true && account.role === 'affiliation') {
+    const [[aff]] = await db.query(
+      'SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE', [account.scope_id]
+    );
+    if (!aff) throw httpError('สังกัดของบัญชีนี้ถูกปิดใช้งานแล้ว กรุณากู้คืนสังกัดก่อนเปิดบัญชี', 409);
+  }
 
   await db.query(
     `UPDATE users SET ${updates.join(', ')} WHERE id = ? AND role IN (?)`,

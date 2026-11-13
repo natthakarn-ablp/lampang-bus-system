@@ -1163,6 +1163,7 @@ const COMMON = {
   ] },
   // Province self-serve (2026-11-13): restorable schools and unit accounts.
   '/api/province/schools/deactivated': { data: [], meta: { total: 0 } },
+  '/api/province/affiliations/deactivated': { data: [], meta: { total: 0 } },
   '/api/province/unit-accounts': { data: [
     { id: 901, username: 'aff_demo', role: 'affiliation', display_name: 'สังกัดตัวอย่าง', scope_id: 'AF-1',
       is_active: 1, must_change_password: 0, last_login: null, affiliation_name: 'สังกัดตัวอย่าง' },

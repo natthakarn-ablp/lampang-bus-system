@@ -2152,6 +2152,16 @@ router.post('/verification/applications/:id/cancel', async (req, res, next) => {
 // mistyped plate, or collapse a duplicate. All three are transactional, dedup-
 // guarded (canonical/normalized plate uniqueness), and fully audited. Admin-only
 // via the file-level requireRole('admin'); vehicles are province-shared.
+// Read-only preview for the delete / merge confirm dialogs: active students and
+// driver assignment, plus the row counts a merge would move or clear.
+router.get('/vehicles/:id/impact', async (req, res, next) => {
+  try {
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const data = await vehicleAdmin.vehicleImpact(pool, String(req.params.id).slice(0, 20));
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
 router.delete('/vehicles/:id', async (req, res, next) => {
   try {
     const vehicleAdmin = require('../services/vehicleAdmin.service');
@@ -2170,6 +2180,8 @@ router.delete('/vehicles/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Non-plate fields only. A changed plate_no is refused (400 USE_FIX_PLATE) —
+// use POST /vehicles/:id/fix-plate so the driver login is renamed with it.
 router.put('/vehicles/:id', async (req, res, next) => {
   try {
     const vehicleAdmin = require('../services/vehicleAdmin.service');

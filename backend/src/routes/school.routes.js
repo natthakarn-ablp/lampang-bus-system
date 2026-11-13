@@ -2099,6 +2099,16 @@ router.post('/vehicles/:id/driver/replace', requireFullSchoolScope, async (req, 
   } catch (err) { next(err); }
 });
 
+// Re-enable the plate account the admin deactivated (not a deleted one).
+router.post('/vehicles/:id/driver/reactivate', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const scope = driverScopeForSchool(req, res);
+    if (!scope) return;
+    const out = await driverAcctSvc.reactivateDriverAccount(pool, { vehicleId: req.params.id, scope, actor: driverActor(req) });
+    return sendSuccess(res, out, 'เปิดใช้งานบัญชีคนขับแล้ว คนขับเข้าสู่ระบบด้วยรหัสผ่านเดิมได้ หากเปลี่ยนคนขับให้ใช้ "เปลี่ยนคนขับ"');
+  } catch (err) { next(err); }
+});
+
 // ─── POST /emergencies/:id/close — โรงเรียนปิดเหตุฉุกเฉินของรถที่นักเรียนใช้ ─────
 router.post('/emergencies/:id/close', requireFullSchoolScope, async (req, res, next) => {
   try {

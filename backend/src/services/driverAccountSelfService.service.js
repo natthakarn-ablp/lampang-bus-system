@@ -14,7 +14,7 @@
  * vehicleScopeSql, school.getVehicles, school.getEmergencies): at least one
  * non-deleted pupil of the school has students.vehicle_id = the vehicle.
  *
- * Three actions, all transactional and audited:
+ * Four actions, all transactional and audited:
  *   resetDriverPassword  — new random one-time password, must change at next
  *                          login, password_changed_at = NOW() so every token
  *                          issued before is rejected (auth.js / refresh-token).
@@ -23,6 +23,13 @@
  *                          person, the vehicle's active assignment moves to it,
  *                          the plate account is relinked and its password reset
  *                          so the previous driver loses access immediately.
+ *   reactivateDriverAccount — re-enable the plate account after the admin
+ *                          deactivated it (is_active=FALSE, NOT soft-deleted).
+ *                          Same dedupe guard as the admin user edit
+ *                          (utils/driverReactivation): a duplicate of a linked
+ *                          canonical driver stays off (409). The password is
+ *                          not changed; use reset or "เปลี่ยนคนขับ" after if
+ *                          the person changed.
  *
  * Reset and replace also release the account's LINE password-recovery binding
  * (utils/recoveryBinding) in the same transaction.
@@ -36,6 +43,7 @@ const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
 const { generateTemporaryPassword } = require('./driverProfile.service');
 const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
+const { detectDriverReactivationBlock } = require('../utils/driverReactivation');
 
 const BCRYPT_COST = 12;
 const NAME_MAX = 100;   // drivers.name VARCHAR(100)
@@ -109,7 +117,7 @@ async function findPlateAccount(conn, vehicle, { lock = false } = {}) {
 function requireActive(account) {
   if (!account) throw appError('รถคันนี้ยังไม่มีบัญชีคนขับ กรุณาใช้ "เปลี่ยนคนขับ" เพื่อสร้างบัญชี', 404, 'DRIVER_ACCOUNT_NOT_FOUND');
   if (!account.is_active) {
-    throw appError('บัญชีคนขับของรถคันนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบเพื่อเปิดใช้งาน', 409, 'DRIVER_ACCOUNT_INACTIVE');
+    throw appError('บัญชีคนขับของรถคันนี้ถูกปิดใช้งาน กด "เปิดใช้งานบัญชีคนขับ" ก่อน', 409, 'DRIVER_ACCOUNT_INACTIVE');
   }
 }
 
@@ -341,9 +349,48 @@ async function replaceDriver(pool, { vehicleId, scope, actor, name, phone, reaso
   });
 }
 
+const scopeLabel = (scope) => (scope.schoolId ? { school_id: scope.schoolId }
+  : scope.affiliationId ? { affiliation_id: scope.affiliationId } : 'all');
+
+/**
+ * Re-enable the vehicle's plate account that the admin deactivated. Only a
+ * live (is_deleted = FALSE) account is found by findPlateAccount, so a
+ * soft-deleted one stays with the admin (404 here).
+ */
+async function reactivateDriverAccount(pool, { vehicleId, scope, actor }) {
+  return inTransaction(pool, async (conn) => {
+    const vehicle = await lockScopedVehicle(conn, vehicleId, scope);
+    const account = await findPlateAccount(conn, vehicle, { lock: true });
+    if (!account) {
+      throw appError('รถคันนี้ไม่มีบัญชีคนขับที่เปิดใช้งานได้ หากบัญชีถูกลบ กรุณาติดต่อผู้ดูแลระบบเพื่อกู้คืน', 404, 'DRIVER_ACCOUNT_NOT_FOUND');
+    }
+    if (account.is_active) {
+      throw appError('บัญชีคนขับของรถคันนี้เปิดใช้งานอยู่แล้ว', 409, 'DRIVER_ACCOUNT_ALREADY_ACTIVE');
+    }
+    const block = await detectDriverReactivationBlock(conn, account);
+    if (block.blocked) {
+      throw appError(
+        'เปิดใช้งานบัญชีนี้ไม่ได้ เพราะเป็นบัญชีซ้ำของคนขับที่มีบัญชีหลักอยู่แล้ว กรุณาติดต่อผู้ดูแลระบบ',
+        409, 'DRIVER_REACTIVATION_BLOCKED'
+      );
+    }
+    await conn.query('UPDATE users SET is_active = TRUE WHERE id = ? AND is_active = FALSE', [account.id]);
+    await logAudit({
+      ...auditCtx(actor), action: 'UPDATE', entityType: 'user', entityId: account.id, conn, required: true,
+      oldValue: { is_active: false },
+      newValue: {
+        action: 'reactivate', account_type: 'driver', target_username: account.username, is_active: true,
+        vehicle_id: vehicle.id, actor_role: actor.role, actor_scope: scopeLabel(scope),
+      },
+    });
+    return { vehicle_id: vehicle.id, plate_no: vehicle.plate_no, user_id: account.id, username: account.username, is_active: true };
+  });
+}
+
 module.exports = {
   vehicleInScope,
   resetDriverPassword,
   updateDriverDetails,
   replaceDriver,
+  reactivateDriverAccount,
 };

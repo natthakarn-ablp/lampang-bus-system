@@ -2,8 +2,9 @@
 
 /**
  * orgEntities.service.js — province/admin management of the organisation
- * tree: create and rename an affiliation (สังกัด), rename a school, move a
- * school to another affiliation, deactivate and restore a school.
+ * tree: create, rename, deactivate and restore an affiliation (สังกัด), rename
+ * a school, move a school to another affiliation, deactivate and restore a
+ * school.
  *
  * Until 2026-11-13 none of this had an endpoint; every new สังกัด or renamed
  * school was a database edit by the admin. Callers are /api/province/* (role
@@ -20,6 +21,13 @@
  *     the same transaction, so nobody is left signed in to a school that is no
  *     longer in the tree. Restore does NOT reopen them — the affiliation
  *     reopens what it wants from its "จัดการผู้ใช้งาน" page.
+ *   - An affiliation follows the same rules one level up: deactivation is
+ *     BLOCKED (409) while it still has active (non-deleted) schools, closes
+ *     its affiliation login accounts in the same transaction, and restore
+ *     leaves those accounts off (the province reopens them from "บัญชีสังกัด
+ *     และขนส่ง"). Moving a school into, or restoring a school under, an
+ *     affiliation takes a shared lock on the affiliation row so it cannot race
+ *     a concurrent deactivation.
  *   - Every write is audited inside its transaction (required: true).
  *   - No schema change: affiliations/schools columns as in migration 001.
  */
@@ -104,6 +112,83 @@ async function renameAffiliation(db, { id, name, actorId, ip = null, userAgent =
   });
 }
 
+/** What still depends on an affiliation. Exported for the guard tests. */
+async function affiliationDependencies(conn, affiliationId) {
+  const [[r]] = await conn.query(
+    'SELECT COUNT(*) AS n FROM schools WHERE affiliation_id = ? AND is_deleted = FALSE',
+    [affiliationId]
+  );
+  return { active_schools: Number(r && r.n) || 0 };
+}
+
+async function deactivateAffiliation(db, { id, reason = null, actorId, ip = null, userAgent = null }) {
+  return withTx(db, async (conn) => {
+    const [[aff]] = await conn.query(
+      'SELECT id, name FROM affiliations WHERE id = ? AND is_deleted = FALSE FOR UPDATE', [String(id)]
+    );
+    if (!aff) throw httpError('ไม่พบสังกัดนี้ หรือสังกัดถูกปิดใช้งานแล้ว', 404);
+
+    const deps = await affiliationDependencies(conn, aff.id);
+    if (deps.active_schools > 0) {
+      throw httpError(
+        `ปิดใช้งานสังกัดไม่ได้ เพราะยังมีโรงเรียนที่ใช้งานอยู่ ${deps.active_schools} โรงเรียน — ย้ายโรงเรียนไปสังกัดอื่นหรือปิดใช้งานโรงเรียนก่อน`,
+        409,
+        [{ code: 'AFFILIATION_IN_USE', ...deps }],
+      );
+    }
+
+    const [accounts] = await conn.query(
+      `SELECT id FROM users
+        WHERE role = 'affiliation' AND scope_type = 'AFFILIATION' AND scope_id = ?
+          AND is_deleted = FALSE AND is_active = TRUE`,
+      [aff.id]
+    );
+    const accountIds = accounts.map((r) => r.id);
+    if (accountIds.length) {
+      await conn.query('UPDATE users SET is_active = FALSE WHERE id IN (?)', [accountIds]);
+    }
+    await conn.query('UPDATE affiliations SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [aff.id]);
+    await logAudit({
+      userId: actorId, action: 'DELETE', entityType: 'affiliation', entityId: aff.id,
+      oldValue: { name: aff.name, is_deleted: false },
+      newValue: {
+        is_deleted: true, reason: reason ? String(reason).slice(0, 500) : null,
+        accounts_deactivated: accountIds,
+      },
+      ipAddress: ip, userAgent, conn, required: true,
+    });
+    return { id: aff.id, name: aff.name, is_deleted: true, accounts_deactivated: accountIds.length };
+  });
+}
+
+async function restoreAffiliation(db, { id, actorId, ip = null, userAgent = null }) {
+  return withTx(db, async (conn) => {
+    const [[aff]] = await conn.query(
+      'SELECT id, name FROM affiliations WHERE id = ? AND is_deleted = TRUE FOR UPDATE', [String(id)]
+    );
+    if (!aff) throw httpError('ไม่พบสังกัดที่ถูกปิดใช้งานนี้', 404);
+    await conn.query('UPDATE affiliations SET is_deleted = FALSE, deleted_at = NULL WHERE id = ?', [aff.id]);
+    await logAudit({
+      userId: actorId, action: 'UPDATE', entityType: 'affiliation', entityId: aff.id,
+      oldValue: { is_deleted: true },
+      newValue: { action: 'restore', is_deleted: false, name: aff.name, accounts_reopened: false },
+      ipAddress: ip, userAgent, conn, required: true,
+    });
+    return { id: aff.id, name: aff.name, is_deleted: false };
+  });
+}
+
+async function listDeactivatedAffiliations(db) {
+  const [rows] = await db.query(
+    `SELECT a.id, a.name, a.deleted_at
+       FROM affiliations a
+      WHERE a.is_deleted = TRUE
+      ORDER BY a.deleted_at DESC, a.name
+      LIMIT 500`
+  );
+  return rows;
+}
+
 // ─── Schools ─────────────────────────────────────────────────────────────────
 
 /** Rename and/or move to another (live) affiliation. */
@@ -126,7 +211,7 @@ async function updateSchool(db, { schoolId, name, affiliationId, actorId, ip = n
       if (!target) throw httpError('กรุณาเลือกสังกัดปลายทาง', 400);
       if (target !== school.affiliation_id) {
         const [[aff]] = await conn.query(
-          'SELECT id, name FROM affiliations WHERE id = ? AND is_deleted = FALSE', [target]
+          'SELECT id, name FROM affiliations WHERE id = ? AND is_deleted = FALSE FOR SHARE', [target]
         );
         if (!aff) throw httpError('ไม่พบสังกัดปลายทาง หรือสังกัดถูกปิดใช้งานแล้ว', 400);
         sets.push('affiliation_id = ?'); params.push(aff.id); after.affiliation_id = aff.id;
@@ -218,7 +303,7 @@ async function restoreSchool(db, { schoolId, actorId, ip = null, userAgent = nul
     if (!school) throw httpError('ไม่พบโรงเรียนที่ถูกปิดใช้งานนี้', 404);
     if (school.affiliation_id) {
       const [[aff]] = await conn.query(
-        'SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE', [school.affiliation_id]
+        'SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE FOR SHARE', [school.affiliation_id]
       );
       if (!aff) throw httpError('สังกัดของโรงเรียนนี้ถูกปิดใช้งานแล้ว กรุณาย้ายสังกัดก่อนกู้คืน', 409);
     }
@@ -250,6 +335,10 @@ module.exports = {
   OPEN_APPLICATION_STATUSES,
   createAffiliation,
   renameAffiliation,
+  affiliationDependencies,
+  deactivateAffiliation,
+  restoreAffiliation,
+  listDeactivatedAffiliations,
   updateSchool,
   schoolDependencies,
   deactivateSchool,

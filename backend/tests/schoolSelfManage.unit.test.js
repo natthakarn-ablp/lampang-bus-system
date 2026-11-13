@@ -4,7 +4,8 @@
 //  1. School MAIN account: PATCH (grade / name / enable-disable), list deleted,
 //     restore its OWN grade-teacher accounts. Teacher sub-accounts: 403.
 //  2. School MAIN account: PUT /api/school/pickup-points/:id (label / coords /
-//     notes) for points of its own pupils. Teacher sub-accounts: 403.
+//     notes) for points of its own pupils. Grade teachers too, own grade only
+//     (owner decision 2026-11-13).
 //  3. Admin PUT /api/admin/users/:id accepts grade_scope (teacher grade → grade).
 //  4. Login on a disabled account says so ONLY after the password is verified.
 // DB-free: every query is answered by a fake keyed on SQL text.
@@ -54,7 +55,7 @@ const TEACHERS = [
 const POINT = { id: 5, vehicle_id: 'V-aaaaaaaaaaaa', sequence: 1, label: 'P', latitude: 18.29, longitude: 99.49, session: 'both', notes: null };
 
 function fakeDb(opts = {}) {
-  const o = { servesSchool: true, otherSchool: 0, ...opts };
+  const o = { servesSchool: true, otherSchool: 0, carriesGrade: true, outsideGrade: 0, ...opts };
   mockQuery.mockImplementation(async (sql, params = []) => {
     const s = norm(sql);
     // teacher-account lookups (school routes)
@@ -70,6 +71,9 @@ function fakeDb(opts = {}) {
     // pickup points
     if (/FROM pickup_points/.test(s) && !/student_pickup_points/.test(s)) return [[POINT]];
     if (/SELECT 1 FROM students WHERE vehicle_id = \? AND school_id = \?/.test(s)) return [o.servesSchool ? [{ 1: 1 }] : []];
+    if (/SELECT 1 AS ok FROM students/.test(s)) return [o.carriesGrade ? [{ ok: 1 }] : []];
+    if (/sc\.name AS school_name/.test(s)) return [o.otherSchool ? [{ school_name: 'โรงเรียนบ้านอื่น', n: o.otherSchool }] : []];
+    if (/NOT \(s\.school_id = \?/.test(s)) return [[{ n: o.outsideGrade }]];
     if (/COUNT\(\*\)/.test(s) && /<>/.test(s)) return [[{ n: o.otherSchool }]];
     if (/COUNT\(\*\)/.test(s)) return [[{ n: 1 }]];
     if (/UPDATE pickup_points SET/.test(s)) return [{ affectedRows: 1 }];
@@ -179,11 +183,38 @@ describe('pickup point edit — school main account', () => {
     expect(calls(/UPDATE pickup_points/)).toHaveLength(0);
   });
 
-  test('grade teacher keeps current rights only — no point edit (403)', async () => {
+  test('grade teacher edits a point used only by their grade (owner 2026-11-13)', async () => {
     mockUser = TEACHER_A; fakeDb();
     const res = await request(app).put('/api/school/pickup-points/5').send(BODY);
+    expect(res.status).toBe(200);
+    expect(calls(/UPDATE pickup_points SET/)).toHaveLength(1);
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'UPDATE', entityType: 'pickup_point', entityId: 5,
+      newValue: expect.objectContaining({ scope: 'grade_teacher', grade_scope: 'ป.1' }),
+    }));
+  });
+
+  test('grade teacher cannot edit a point other grades use (409)', async () => {
+    mockUser = TEACHER_A; fakeDb({ outsideGrade: 2 });
+    const res = await request(app).put('/api/school/pickup-points/5').send(BODY);
+    expect(res.status).toBe(409);
+    expect(res.body.errors[0].code).toBe('POINT_SHARED_WITH_OTHER_GRADE');
+    expect(calls(/UPDATE pickup_points/)).toHaveLength(0);
+  });
+
+  test('grade teacher cannot edit a point on a bus without their grade (403)', async () => {
+    mockUser = TEACHER_A; fakeDb({ carriesGrade: false });
+    const res = await request(app).put('/api/school/pickup-points/5').send(BODY);
     expect(res.status).toBe(403);
-    expect(mockQuery).not.toHaveBeenCalled();
+    expect(calls(/UPDATE pickup_points/)).toHaveLength(0);
+  });
+
+  test('409 names the other school using the point', async () => {
+    mockUser = SCHOOL_A; fakeDb({ otherSchool: 3 });
+    const res = await request(app).put('/api/school/pickup-points/5').send(BODY);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toContain('โรงเรียนบ้านอื่น 3 คน');
+    expect(res.body.errors[0].schools).toEqual(['โรงเรียนบ้านอื่น']);
   });
 });
 

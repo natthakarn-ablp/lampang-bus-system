@@ -718,6 +718,101 @@ async function countOtherSchoolStudentsOnPoint(pointId, schoolId) {
 }
 
 /**
+ * Safety guard (owner decision 2026-11-13: points are never shared between
+ * schools): which OTHER schools' live pupils sit on this point, so a 409 can
+ * name the conflict. School names only — no pupil PII.
+ */
+async function getOtherSchoolUsageOnPoint(pointId, schoolId) {
+  const [rows] = await pool.query(`
+    SELECT sc.name AS school_name, COUNT(*) AS n
+      FROM student_pickup_points spp
+      JOIN students s ON s.id = spp.student_id
+      LEFT JOIN schools sc ON sc.id = s.school_id
+     WHERE spp.pickup_point_id = ? AND s.school_id <> ? AND s.is_deleted = FALSE
+     GROUP BY s.school_id, sc.name
+     ORDER BY sc.name
+  `, [pointId, schoolId]);
+  return (Array.isArray(rows) ? rows : [])
+    .filter(r => r && r.school_name)
+    .map(r => ({ school_name: r.school_name, count: Number(r.n) || 0 }));
+}
+
+/**
+ * deletePickupPointForSchool — school / grade-teacher delete (2026-11-13).
+ * One transaction: lock the point, re-check the guards (another school's
+ * pupils; for a grade teacher, pupils outside their grade), clear every pupil
+ * reference (student_pickup_points) so no pupil stays pinned to a dead point,
+ * soft-delete the point, and write the audit row with the cleared pupil ids.
+ * Caller has already checked vehicle scope; the re-check here closes the race
+ * with a concurrent assignment.
+ *
+ * @returns {{ deleted: boolean, conflict?: 'OTHER_SCHOOL'|'OTHER_GRADE', cleared_student_ids?: number[] }}
+ */
+async function deletePickupPointForSchool(pointId, { schoolId, gradeFilter = null, actorId = null, ipAddress = null, userAgent = null, scope = 'school' } = {}) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[point]] = await conn.query(
+      `SELECT id, vehicle_id, label, latitude, longitude, session, notes
+         FROM pickup_points WHERE id = ? AND is_deleted = FALSE FOR UPDATE`,
+      [pointId]
+    );
+    if (!point) { await conn.rollback(); return { deleted: false }; }
+
+    const [[other]] = await conn.query(`
+      SELECT COUNT(*) AS n
+        FROM student_pickup_points spp
+        JOIN students s ON s.id = spp.student_id
+       WHERE spp.pickup_point_id = ? AND s.school_id <> ? AND s.is_deleted = FALSE
+    `, [pointId, schoolId]);
+    if ((Number(other && other.n) || 0) > 0) { await conn.rollback(); return { deleted: false, conflict: 'OTHER_SCHOOL' }; }
+    if (gradeFilter) {
+      const [[outside]] = await conn.query(`
+        SELECT COUNT(*) AS n
+          FROM student_pickup_points spp
+          JOIN students s ON s.id = spp.student_id
+         WHERE spp.pickup_point_id = ? AND s.is_deleted = FALSE
+           AND NOT (s.school_id = ? AND s.grade IS NOT NULL AND s.grade IN (?))
+      `, [pointId, schoolId, gradeEquivalents(gradeFilter)]);
+      if ((Number(outside && outside.n) || 0) > 0) { await conn.rollback(); return { deleted: false, conflict: 'OTHER_GRADE' }; }
+    }
+
+    const [refRows] = await conn.query(
+      `SELECT student_id FROM student_pickup_points WHERE pickup_point_id = ?`,
+      [pointId]
+    );
+    const cleared = (Array.isArray(refRows) ? refRows : []).map(r => r.student_id);
+    await conn.query(`DELETE FROM student_pickup_points WHERE pickup_point_id = ?`, [pointId]);
+    await conn.query(
+      `UPDATE pickup_points SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND is_deleted = FALSE`,
+      [pointId]
+    );
+    await logAudit({
+      userId: actorId,
+      action: 'DELETE',
+      entityType: 'pickup_point',
+      entityId: pointId,
+      oldValue: {
+        vehicle_id: point.vehicle_id, label: point.label,
+        latitude: point.latitude, longitude: point.longitude,
+        session: point.session, notes: point.notes,
+        student_ids: cleared,
+      },
+      newValue: { is_deleted: true, cleared_student_ids: cleared, scope, grade_scope: gradeFilter || null },
+      ipAddress, userAgent, conn,
+    });
+    await conn.commit();
+    return { deleted: true, cleared_student_ids: cleared };
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* swallow */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+/**
  * Whether a point is this school's to see or edit by id: it holds at least one
  * live pupil of the school, or no live pupil at all (an emptied point, listed
  * for the school while its bus serves it). A point holding only other schools'
@@ -1030,6 +1125,8 @@ module.exports = {
   validateStudentsBelongToSchoolAndVehicle,
   validateVehicleServesSchool,
   countOtherSchoolStudentsOnPoint,
+  getOtherSchoolUsageOnPoint,
+  deletePickupPointForSchool,
   countStudentsOnPointOutsideGrade,
   vehicleCarriesSchoolGrade,
   isPickupPointVisibleToSchool,

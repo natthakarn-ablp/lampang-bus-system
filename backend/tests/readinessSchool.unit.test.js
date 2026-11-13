@@ -148,16 +148,23 @@ describe('school-teacher-02 — DELETE /school/pickup-points/:id', () => {
     expect(countCall[1]).toEqual([9, 'SCH1']);
   });
 
-  test('deletes a point used only by this school', async () => {
+  test('deletes a point used only by this school (one transaction, references cleared)', async () => {
     answer([
+      ['FOR UPDATE', point],
+      ['SELECT student_id FROM student_pickup_points', [[{ student_id: 12 }]]],
+      ['DELETE FROM student_pickup_points', [{ affectedRows: 1 }]],
       ['FROM pickup_points\n      WHERE id', point],
       ['FROM students\n    WHERE vehicle_id', [[{ 1: 1 }]]],
       ['FROM student_pickup_points spp', [[{ n: 0 }]]],
       ['UPDATE pickup_points', [{ affectedRows: 1 }]],
     ]);
+    const conn = { query: (...a) => mockQuery(...a), beginTransaction: jest.fn(), commit: jest.fn(), rollback: jest.fn(), release: jest.fn() };
+    mockGetConnection.mockResolvedValue(conn);
     const res = await request(app).delete('/api/school/pickup-points/9').set('x-full-school', '1');
     expect(res.status).toBe(200);
+    expect(res.body.data.cleared_students).toBe(1);
     expect(updateCalls()).toHaveLength(1);
+    expect(conn.commit).toHaveBeenCalled();
   });
 });
 

@@ -22,7 +22,10 @@
     "parentClaimCodeRequired": { "env": "FEATURE_PARENT_CLAIM_CODE_REQUIRED", "enabled": false, "since": null },
     "coGuardian":            { "env": "FEATURE_CO_GUARDIAN",             "enabled": true,  "since": "2026-11-08 11:56 น." },
     "recoverySchool":        { "env": "FEATURE_RECOVERY_SCHOOL",         "enabled": true, "since": "2026-11-13 15:52 น." },
-    "recoveryDriver":        { "env": "FEATURE_RECOVERY_DRIVER",         "enabled": true, "since": "2026-11-13 15:53 น." }
+    "recoveryDriver":        { "env": "FEATURE_RECOVERY_DRIVER",         "enabled": true, "since": "2026-11-13 15:53 น." },
+    "recoveryProvince":      { "env": "FEATURE_RECOVERY_PROVINCE",       "enabled": false, "since": null },
+    "recoveryAffiliation":   { "env": "FEATURE_RECOVERY_AFFILIATION",    "enabled": false, "since": null },
+    "recoveryTransport":     { "env": "FEATURE_RECOVERY_TRANSPORT",      "enabled": false, "since": null }
   },
   "settings": {
     "adminRecoveryRequireCode": {
@@ -32,7 +35,7 @@
     }
   },
   "roles_recovery_closed": {
-    "_comment": "บทบาทที่ยังกู้รหัสผ่านผ่าน LINE ไม่ได้บน production: province/affiliation/transport ปิดด้วย decision_gates_unconfirmed; school/driver เจ้าของยืนยัน gate แล้ว 2026-11-13 แต่ยังปิดเพราะ flag recoverySchool/recoveryDriver ยังไม่เปิด",
+    "_comment": "เจ้าของยืนยัน gate ครบทุกบทบาทแล้ว (school/driver และ province/affiliation/transport — owner decision 2026-11-13); การเปิดจริงบน production ขึ้นกับ flag ในหมวด flags: recoverySchool/recoveryDriver เปิดแล้ว 2026-11-13, recoveryProvince/recoveryAffiliation/recoveryTransport ยังปิด",
     "province": false,
     "affiliation": false,
     "school": false,

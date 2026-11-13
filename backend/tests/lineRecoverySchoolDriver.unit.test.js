@@ -134,6 +134,10 @@ function setFlags({ admin = false, school = false, driver = false } = {}) {
   env.features.adminPasswordRecovery = admin;
   env.features.recoverySchool = school;
   env.features.recoveryDriver = driver;
+  // Unit-account flags (lineRecoveryUnitAccounts.unit.test.js) stay off here.
+  env.features.recoveryProvince = false;
+  env.features.recoveryAffiliation = false;
+  env.features.recoveryTransport = false;
 }
 
 beforeEach(() => {
@@ -183,7 +187,8 @@ describe('the flag decides which roles reach the self-service endpoints', () => 
     [TEACHER, { driver: true }, 404],
     [DRIVER, { school: true }, 404],
     [MAIN, { admin: true }, 404],
-    // Gates still unconfirmed: no flag combination opens affiliation.
+    // Affiliation has its own flag (owner decision 2026-11-13); the school,
+    // driver and admin flags never open it.
     [AFFIL, { admin: true, school: true, driver: true }, 404],
   ])('%o with %o → %i', async (user, flags, status) => {
     setFlags(flags);
@@ -197,7 +202,7 @@ describe('the flag decides which roles reach the self-service endpoints', () => 
     expect(res.body.data.policy.enabled_roles).toEqual(['admin']);
     expect(res.body.data.policy.roles.school.blocked_reason).toBe('feature_flag_off');
     expect(res.body.data.policy.roles.driver.blocked_reason).toBe('feature_flag_off');
-    expect(res.body.data.policy.roles.affiliation.blocked_reason).toBe('decision_gates_unconfirmed');
+    expect(res.body.data.policy.roles.affiliation.blocked_reason).toBe('feature_flag_off');
 
     setFlags({ admin: true, school: true, driver: true });
     res = await request(app).get('/api/auth/recovery/config');
@@ -355,9 +360,12 @@ describe('revocation: a reset by someone else releases the binding', () => {
     expect(body).toMatch(/rollback\(\)/);
   });
 
-  it('admin reset releases only for school and driver targets', () => {
-    const body = slice(read('src/routes/admin.routes.js'), "router.post('/users/:id/reset-password'", 'router.delete(');
-    expect(body).toMatch(/const releasesBinding = user\.role === 'school' \|\| user\.role === 'driver';/);
+  it('admin reset releases for every target role except admin', () => {
+    const src = read('src/routes/admin.routes.js');
+    const body = slice(src, "router.post('/users/:id/reset-password'", 'router.delete(');
+    expect(body).toMatch(/const releasesBinding = RELEASE_BINDING_ON_RESET_ROLES\.includes\(user\.role\);/);
+    expect(src).toMatch(/const RELEASE_BINDING_ON_RESET_ROLES = Object\.freeze\(\['school', 'driver', \.\.\.UNIT_RECOVERY_ROLES\]\);/);
+    expect(src).toMatch(/const UNIT_RECOVERY_ROLES = Object\.freeze\(\['province', 'affiliation', 'transport'\]\);/);
   });
 });
 

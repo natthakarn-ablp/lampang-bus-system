@@ -11,6 +11,9 @@ const ROLE_LABEL = {
   admin: 'ผู้ดูแลระบบ',
   school: 'โรงเรียน/ครูประจำสายชั้น',
   driver: 'คนขับ (ทะเบียนรถ)',
+  province: 'จังหวัด',
+  affiliation: 'สังกัด',
+  transport: 'ขนส่ง',
 };
 
 const LOGO = '/brand/school-safe-logo.webp';

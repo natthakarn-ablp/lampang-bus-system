@@ -11,6 +11,12 @@ const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
+
+// Roles whose LINE recovery binding is released when someone else resets the
+// password (owner decisions 2026-11-13). Unit accounts also release it on
+// deactivate. Admin targets are deliberately absent.
+const UNIT_RECOVERY_ROLES = Object.freeze(['province', 'affiliation', 'transport']);
+const RELEASE_BINDING_ON_RESET_ROLES = Object.freeze(['school', 'driver', ...UNIT_RECOVERY_ROLES]);
 const { auditExportBeforeSend } = require('../utils/exportAudit');
 const adminSvc = require('../services/admin.service');
 const termSvc = require('../services/term.service');
@@ -559,7 +565,31 @@ router.put('/users/:id', async (req, res, next) => {
     if (updates.length === 0) return sendError(res, 'ไม่มีข้อมูลที่ต้องแก้ไข', [], 400);
 
     params.push(userId);
-    await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+
+    // Deactivating a province / affiliation / transport (unit) account also
+    // releases its LINE recovery binding (owner decision 2026-11-13): a closed
+    // office account must not come back later with the former holder's LINE
+    // still able to recover it. Same transaction as the deactivation.
+    const deactivatingUnit = is_active !== undefined && !is_active && Boolean(user.is_active)
+      && UNIT_RECOVERY_ROLES.includes(user.role);
+    let released = 0;
+    if (deactivatingUnit) {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [userId]);
+        await conn.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+        released = await releaseRecoveryBinding(conn, userId);
+        await conn.commit();
+      } catch (e) {
+        try { await conn.rollback(); } catch { /* keep the original error */ }
+        throw e;
+      } finally {
+        conn.release();
+      }
+    } else {
+      await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`, params);
+    }
 
     await logAudit({
       userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
@@ -567,7 +597,8 @@ router.put('/users/:id', async (req, res, next) => {
                   ...(nextGradeScope !== undefined ? { grade_scope: user.grade_scope } : {}) },
       newValue: { display_name, is_active, role,
                   ...(nextGradeScope !== undefined ? { grade_scope: nextGradeScope } : {}),
-                  ...(reactivationWarning ? { reactivation_warning: reactivationWarning } : {}) },
+                  ...(reactivationWarning ? { reactivation_warning: reactivationWarning } : {}),
+                  ...(deactivatingUnit ? { recovery_channels_released: released } : {}) },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
@@ -599,12 +630,12 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
     }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST);
-    // School and driver accounts change hands by being reset (owner decision
-    // 2026-11-13, config/accountRecoveryPolicy.js), so resetting one also
-    // releases its LINE recovery binding — otherwise the previous holder's
-    // LINE could recover the account again. Admin targets keep the behaviour
-    // they have had since admin recovery shipped.
-    const releasesBinding = user.role === 'school' || user.role === 'driver';
+    // School, driver, province, affiliation and transport accounts change hands
+    // by being reset (owner decisions 2026-11-13, config/accountRecoveryPolicy.js),
+    // so resetting one also releases its LINE recovery binding — otherwise the
+    // previous holder's LINE could recover the account again. Admin targets
+    // keep the behaviour they have had since admin recovery shipped.
+    const releasesBinding = RELEASE_BINDING_ON_RESET_ROLES.includes(user.role);
     let released = 0;
     const conn = await pool.getConnection();
     try {

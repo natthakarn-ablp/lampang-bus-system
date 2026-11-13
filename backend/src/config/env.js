@@ -122,7 +122,10 @@ function validateFeatureDependencies(source = process.env) {
   }
   // Every LINE recovery flag needs LIFF (to bind), LINE push (to deliver the
   // link) and an HTTPS public URL (the link itself).
-  for (const flag of ['FEATURE_ADMIN_PASSWORD_RECOVERY', 'FEATURE_RECOVERY_SCHOOL', 'FEATURE_RECOVERY_DRIVER']) {
+  for (const flag of [
+    'FEATURE_ADMIN_PASSWORD_RECOVERY', 'FEATURE_RECOVERY_SCHOOL', 'FEATURE_RECOVERY_DRIVER',
+    'FEATURE_RECOVERY_PROVINCE', 'FEATURE_RECOVERY_AFFILIATION', 'FEATURE_RECOVERY_TRANSPORT',
+  ]) {
     if (source[flag] !== 'true') continue;
     if (!String(source.LINE_LIFF_ID || '').trim()) {
       if (flag === 'FEATURE_ADMIN_PASSWORD_RECOVERY') {
@@ -308,6 +311,11 @@ const env = {
     // Same requirements as the admin flag: migration 049, LIFF, LINE push.
     recoverySchool: process.env.FEATURE_RECOVERY_SCHOOL === 'true',
     recoveryDriver: process.env.FEATURE_RECOVERY_DRIVER === 'true',
+    // Province, affiliation and transport (unit) accounts — decision gates
+    // confirmed by a second owner decision on 2026-11-13. Same requirements.
+    recoveryProvince: process.env.FEATURE_RECOVERY_PROVINCE === 'true',
+    recoveryAffiliation: process.env.FEATURE_RECOVERY_AFFILIATION === 'true',
+    recoveryTransport: process.env.FEATURE_RECOVERY_TRANSPORT === 'true',
     vehicleQr: process.env.FEATURE_VEHICLE_QR === 'true',
     driverShiftSelection: process.env.FEATURE_DRIVER_SHIFT_SELECTION === 'true',
     qrLevel3: process.env.FEATURE_QR_LEVEL3 === 'true',   // Level-3 sensitive viewer (default off, DPO-gated)

@@ -14,12 +14,11 @@
  * a LINE account was routed to admins and called the /admin/* twin. This is
  * the change that makes one page serve them all.
  *
- * What is deliberately NOT done here: no role's decision gates are flipped.
- * backend/src/config/accountRecoveryPolicy.js still has gatesConfirmed false
- * for province, affiliation and transport, so those roles reach the page and
- * are told recovery is not open for them yet. Opening a role is a separate,
- * recorded decision — the policy file says so itself, and the questions are in
- * docs/project-closure/decision-2026-09-07-recovery-roles-questions.md.
+ * Opening a role is a separate, recorded decision in
+ * backend/src/config/accountRecoveryPolicy.js. School and driver were opened
+ * by owner decision 2026-11-13, then province, affiliation and transport (unit
+ * accounts) by a second owner decision the same day; each still needs its own
+ * flag, and the menu entry shows only while that flag is on.
  */
 
 const fs = require('fs');
@@ -72,13 +71,28 @@ describe('who may open the page', () => {
     expect(nav).toMatch(/\{canBindRecovery && \(/);
   });
 
-  it('but shows it to admin, school and driver only while their own flag is on', () => {
+  it('but shows it to each role only while its own flag is on', () => {
     const helper = read('frontend/src/utils/passwordRecovery.js');
     expect(nav).toMatch(/canBindRecoveryFor\(user, features\)/);
     expect(helper).toMatch(/admin: 'adminPasswordRecovery'/);
     expect(helper).toMatch(/school: 'recoverySchool'/);
     expect(helper).toMatch(/driver: 'recoveryDriver'/);
+    expect(helper).toMatch(/province: 'recoveryProvince'/);
+    expect(helper).toMatch(/affiliation: 'recoveryAffiliation'/);
+    expect(helper).toMatch(/transport: 'recoveryTransport'/);
     expect(helper).toMatch(/return Boolean\(features\?\.\[flag\]\)/);
+    // No role is shown the entry unconditionally any more.
+    expect(helper).toMatch(/if \(!flag\) return false;/);
+    expect(helper).not.toMatch(/\['province', 'affiliation', 'transport'\]\.includes\(role\)/);
+  });
+
+  it('every feature key the menu reads is one the server sends at login', () => {
+    const helper = read('frontend/src/utils/passwordRecovery.js');
+    const envJs = read('backend/src/config/env.js');
+    const block = helper.match(/RECOVERY_FEATURE_BY_ROLE = Object\.freeze\(\{([\s\S]*?)\}\)/)[1];
+    const keys = [...block.matchAll(/:\s*'(\w+)'/g)].map((m) => m[1]);
+    expect(keys).toHaveLength(6);
+    for (const key of keys) expect(envJs).toMatch(new RegExp(`\\b${key}: process\\.env\\.`));
   });
 
   it('the driver profile links to it behind the driver flag', () => {
@@ -111,8 +125,15 @@ describe('the login page offers LINE recovery to every open role', () => {
     expect(contact('teacher')).toContain('บัญชีหลักของโรงเรียน');
     // 2026-11-13 (PR #178): schools that use the vehicle can reset its driver.
     expect(contact('driver')).toContain('โรงเรียน');
-    expect(contact('unit')).toContain('จังหวัด');
+    expect(contact('affiliation')).toContain('จังหวัด');
+    expect(contact('transport')).toContain('จังหวัด');
     expect(contact('province')).toContain('ผู้ดูแลระบบ');
+    // Each unit row is tied to its own policy role, so Login shows the LINE
+    // option for it only while that role is open.
+    const recoveryRole = (key) => helper.match(new RegExp(`key: '${key}'[^}]+recoveryRole: '([^']+)'`))[1];
+    expect(recoveryRole('affiliation')).toBe('affiliation');
+    expect(recoveryRole('transport')).toBe('transport');
+    expect(recoveryRole('province')).toBe('province');
     // The old Login text (pre-recovery) is gone.
     expect(login).not.toContain('โรงเรียนและคนขับ: ติดต่อผู้ดูแลบัญชีของโรงเรียน');
   });
@@ -135,13 +156,21 @@ describe('the server, not the page, decides whether recovery is open', () => {
     expect(policy).toMatch(/if \(source\[policy\.envFlag\] !== 'true'\) return \{ enabled: false, reason: 'feature_flag_off' \}/);
   });
 
-  it('the three new roles are still closed pending their decisions', () => {
+  it('province, affiliation and transport are confirmed by owner decision 2026-11-13', () => {
     for (const role of ['province', 'affiliation', 'transport']) {
       const i = policy.indexOf(`role: '${role}',`);
       expect(i).toBeGreaterThan(-1);
-      const block = policy.slice(i, i + 900);
-      expect(block).toMatch(/gatesConfirmed: false/);
-      expect(block).toMatch(/decisionGates: \[/);
+      const j = policy.indexOf('requiresApproverRole', i);
+      const block = policy.slice(i, j);
+      expect(block).toMatch(/gatesConfirmed: true/);
+      expect(block).toMatch(/decisionGates: \[\]/);
+      expect(block).toContain('owner decision 2026-11-13');
+    }
+  });
+
+  it('the account page has its own wording for each unit role', () => {
+    for (const [role, home] of [['province', '/province'], ['affiliation', '/affiliation'], ['transport', '/transport']]) {
+      expect(page).toMatch(new RegExp(`${role}: \\{[\\s\\S]*?to: '${home}'`));
     }
   });
 });
@@ -160,5 +189,11 @@ describe('one authority for reading recovery flags', () => {
 
   it('overlays the live admin flag on the environment', () => {
     expect(route).toMatch(/FEATURE_ADMIN_PASSWORD_RECOVERY: env\.features\.adminPasswordRecovery \? 'true' : 'false'/);
+  });
+
+  it('overlays the unit-account flags the same way', () => {
+    expect(route).toMatch(/FEATURE_RECOVERY_PROVINCE: env\.features\.recoveryProvince \? 'true' : 'false'/);
+    expect(route).toMatch(/FEATURE_RECOVERY_AFFILIATION: env\.features\.recoveryAffiliation \? 'true' : 'false'/);
+    expect(route).toMatch(/FEATURE_RECOVERY_TRANSPORT: env\.features\.recoveryTransport \? 'true' : 'false'/);
   });
 });

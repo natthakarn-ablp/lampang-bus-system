@@ -28,6 +28,24 @@ const PAGE_COPY = {
     home: { label: 'คนขับ', to: '/driver' },
     closed: 'ยังไม่เปิดใช้การกู้รหัสผ่านผ่าน LINE สำหรับบัญชีคนขับ หากลืมรหัสผ่านกรุณาติดต่อผู้ดูแลระบบ',
   },
+  // Unit accounts (owner decision 2026-11-13): whoever holds the account binds
+  // their own LINE; at handover the managing account resets the password,
+  // which releases the binding.
+  province: {
+    subtitle: 'ผูก LINE ของผู้ถือบัญชีจังหวัดในขณะนี้ เพื่อกู้รหัสผ่านได้เองเมื่อจำไม่ได้ — เมื่อส่งมอบบัญชี ผู้ดูแลระบบรีเซ็ตรหัสผ่าน ซึ่งยกเลิกการผูก LINE เดิม',
+    home: { label: 'จังหวัด', to: '/province' },
+    closed: 'ยังไม่เปิดใช้การกู้รหัสผ่านผ่าน LINE สำหรับบัญชีจังหวัด หากลืมรหัสผ่านกรุณาติดต่อผู้ดูแลระบบ',
+  },
+  affiliation: {
+    subtitle: 'ผูก LINE ของผู้ถือบัญชีสังกัดในขณะนี้ เพื่อกู้รหัสผ่านได้เองเมื่อจำไม่ได้ — เมื่อส่งมอบบัญชี จังหวัดหรือผู้ดูแลระบบรีเซ็ตรหัสผ่าน ซึ่งยกเลิกการผูก LINE เดิม',
+    home: { label: 'สังกัด', to: '/affiliation' },
+    closed: 'ยังไม่เปิดใช้การกู้รหัสผ่านผ่าน LINE สำหรับบัญชีสังกัด หากลืมรหัสผ่านกรุณาติดต่อจังหวัดหรือผู้ดูแลระบบ',
+  },
+  transport: {
+    subtitle: 'ผูก LINE ของผู้ถือบัญชีขนส่งในขณะนี้ เพื่อกู้รหัสผ่านได้เองเมื่อจำไม่ได้ — เมื่อส่งมอบบัญชี จังหวัดหรือผู้ดูแลระบบรีเซ็ตรหัสผ่าน ซึ่งยกเลิกการผูก LINE เดิม',
+    home: { label: 'ขนส่ง', to: '/transport' },
+    closed: 'ยังไม่เปิดใช้การกู้รหัสผ่านผ่าน LINE สำหรับบัญชีขนส่ง หากลืมรหัสผ่านกรุณาติดต่อจังหวัดหรือผู้ดูแลระบบ',
+  },
   default: {
     subtitle: 'ตั้งค่าการกู้คืนรหัสผ่านผ่าน LINE',
     home: null,
@@ -51,7 +69,7 @@ export default function AdminAccountSecurity() {
   // fall back to the admin flag while that answer is in flight.
   const [roleEnabled, setRoleEnabled] = useState(null);
   // Used only if the policy endpoint cannot be read: the role's own login
-  // flag (admin, school, driver); roles without one fail closed.
+  // flag (every login role has one); an unknown role fails closed.
   const fallbackFlag = RECOVERY_FEATURE_BY_ROLE[user?.role];
   const fallbackEnabled = fallbackFlag ? Boolean(features?.[fallbackFlag]) : false;
   const copy = PAGE_COPY[user?.role] || PAGE_COPY.default;

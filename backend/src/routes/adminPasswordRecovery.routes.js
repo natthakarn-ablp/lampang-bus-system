@@ -81,6 +81,10 @@ function recoveryEnvSource() {
     // menu and the server can never disagree about whether a role is open.
     FEATURE_RECOVERY_SCHOOL: env.features.recoverySchool ? 'true' : 'false',
     FEATURE_RECOVERY_DRIVER: env.features.recoveryDriver ? 'true' : 'false',
+    // Province, affiliation and transport (owner decision 2026-11-13): same.
+    FEATURE_RECOVERY_PROVINCE: env.features.recoveryProvince ? 'true' : 'false',
+    FEATURE_RECOVERY_AFFILIATION: env.features.recoveryAffiliation ? 'true' : 'false',
+    FEATURE_RECOVERY_TRANSPORT: env.features.recoveryTransport ? 'true' : 'false',
   };
 }
 
@@ -94,6 +98,9 @@ const ACCOUNT_LABEL = Object.freeze({
   admin: 'ผู้ดูแลระบบ',
   school: 'บัญชีโรงเรียน',
   driver: 'บัญชีรถ/คนขับ',
+  province: 'บัญชีจังหวัด',
+  affiliation: 'บัญชีสังกัด',
+  transport: 'บัญชีขนส่ง',
 });
 
 function accountLabel(role) {
@@ -105,6 +112,10 @@ const REPORT_TO = Object.freeze({
   admin: 'ผู้ดูแลระบบ',
   school: 'โรงเรียนหรือสังกัด',
   driver: 'โรงเรียนหรือผู้ดูแลระบบ',
+  // Whoever manages (and can reset) each unit account.
+  province: 'ผู้ดูแลระบบ',
+  affiliation: 'จังหวัดหรือผู้ดูแลระบบ',
+  transport: 'จังหวัดหรือผู้ดูแลระบบ',
 });
 
 function reportTo(role) {

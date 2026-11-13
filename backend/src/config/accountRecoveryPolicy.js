@@ -19,10 +19,10 @@
  * requires editing this file, which means it lands in a diff next to the
  * signed decision that justifies it — an env var alone can never open a role.
  *
- * `admin`, `school` (main account and grade-teacher sub-accounts) and `driver`
- * have confirmed gates — school and driver by owner decision 2026-11-13 — and
- * each still needs its flag. `province`, `affiliation` and `transport` stay
- * closed on unconfirmed gates.
+ * Every login role now has confirmed gates — school and driver by owner
+ * decision 2026-11-13, then province, affiliation and transport (unit
+ * accounts) by a second owner decision the same day — and each still needs
+ * its own flag. Parent LINE re-linking (PARENT_RECOVERY) stays unconfirmed.
  */
 
 /** Roles that authenticate with a password in `users`. */
@@ -53,47 +53,71 @@ const ROLE_POLICIES = Object.freeze({
     gatesConfirmed: true,
     requiresApproverRole: null,
   },
+  // ── province / affiliation / transport: owner decision 2026-11-13 ─────────
+  //
+  // These are unit (office) accounts, not personal ones. The owner decided:
+  // whoever holds the account binds their own LINE while signed in with the
+  // current password; at handover the account that manages it resets the
+  // password, and every such reset releases the LINE binding in the same
+  // transaction (backend/src/utils/recoveryBinding.js) — province accounts are
+  // reset by admin, affiliation and transport accounts by province or admin.
+  // Delete and deactivate release the binding too, so a closed office account
+  // never comes back with the former holder's LINE still attached.
   province: {
     role: 'province',
     envFlag: 'FEATURE_RECOVERY_PROVINCE',
     phase: 'Phase 3 — unit accounts',
-    identityModel: 'undecided',
-    extraControls: 'ต้องมีหนังสือ/รายการมอบหมายและขั้นตอนส่งมอบบัญชี',
-    decisionGates: [
-      'province_account_is_personal_or_shared',
-      'province_line_binding_authority',
-      'province_handover_procedure',
-    ],
-    gatesConfirmed: false,
-    requiresApproverRole: 'admin',
+    identityModel: 'unit_account',
+    extraControls: 'บัญชีหน่วยงานระดับจังหวัด ผู้ถือบัญชีผูก LINE ของตนเอง; เมื่อเปลี่ยนผู้ถือบัญชี ผู้ดูแลระบบรีเซ็ตรหัสผ่าน ซึ่งยกเลิกการผูก LINE เดิมทันที หรือผู้ถือบัญชียกเลิกการผูกเอง',
+    decisionGates: [],
+    decisionsRecorded: {
+      province_account_is_personal_or_shared:
+        'owner decision 2026-11-13: เป็นบัญชีหน่วยงาน ผู้ที่ถือบัญชีอยู่ (เข้าสู่ระบบด้วยรหัสผ่านปัจจุบัน) ผูก LINE ของตนเอง',
+      province_line_binding_authority:
+        'owner decision 2026-11-13: ผู้ถือบัญชีผูก LINE ของตนเองจากเมนู “ความปลอดภัยบัญชี” ไม่ต้องรออนุมัติ',
+      province_handover_procedure:
+        'owner decision 2026-11-13: เมื่อส่งมอบบัญชี ผู้ดูแลระบบรีเซ็ตรหัสผ่านบัญชีจังหวัด ซึ่งยกเลิกการผูก LINE เดิมทันที',
+    },
+    gatesConfirmed: true,
+    requiresApproverRole: null,
   },
   affiliation: {
     role: 'affiliation',
     envFlag: 'FEATURE_RECOVERY_AFFILIATION',
     phase: 'Phase 3 — unit accounts',
-    identityModel: 'undecided',
-    extraControls: 'จำกัดตาม affiliation_id และแจ้งจังหวัดเมื่อเปลี่ยนผู้ถือบัญชี',
-    decisionGates: [
-      'affiliation_account_is_personal_or_shared',
-      'affiliation_line_binding_authority',
-      'affiliation_handover_notifies_province',
-    ],
-    gatesConfirmed: false,
-    requiresApproverRole: 'province',
+    identityModel: 'unit_account',
+    extraControls: 'บัญชีหน่วยงานระดับสังกัด (จำกัดตาม affiliation_id) ผู้ถือบัญชีผูก LINE ของตนเอง; เมื่อเปลี่ยนผู้ถือบัญชี จังหวัดหรือผู้ดูแลระบบรีเซ็ตรหัสผ่าน ซึ่งยกเลิกการผูก LINE เดิมทันที หรือผู้ถือบัญชียกเลิกการผูกเอง',
+    decisionGates: [],
+    decisionsRecorded: {
+      affiliation_account_is_personal_or_shared:
+        'owner decision 2026-11-13: เป็นบัญชีหน่วยงาน ผู้ที่ถือบัญชีอยู่ (เข้าสู่ระบบด้วยรหัสผ่านปัจจุบัน) ผูก LINE ของตนเอง',
+      affiliation_line_binding_authority:
+        'owner decision 2026-11-13: ผู้ถือบัญชีผูก LINE ของตนเองจากเมนู “ความปลอดภัยบัญชี” ไม่ต้องรออนุมัติ',
+      // The province is the account that manages an affiliation account, so a
+      // handover goes through it (or admin) by construction.
+      affiliation_handover_notifies_province:
+        'owner decision 2026-11-13: เมื่อส่งมอบบัญชี จังหวัดหรือผู้ดูแลระบบรีเซ็ตรหัสผ่านบัญชีสังกัด ซึ่งยกเลิกการผูก LINE เดิมทันที',
+    },
+    gatesConfirmed: true,
+    requiresApproverRole: null,
   },
   transport: {
     role: 'transport',
     envFlag: 'FEATURE_RECOVERY_TRANSPORT',
     phase: 'Phase 3 — unit accounts',
-    identityModel: 'undecided',
-    extraControls: 'ต้องมีขั้นตอนส่งมอบบัญชีหน่วยงาน',
-    decisionGates: [
-      'transport_account_is_personal_or_shared',
-      'transport_line_binding_authority',
-      'transport_handover_procedure',
-    ],
-    gatesConfirmed: false,
-    requiresApproverRole: 'admin',
+    identityModel: 'unit_account',
+    extraControls: 'บัญชีหน่วยงานขนส่ง ผู้ถือบัญชีผูก LINE ของตนเอง; เมื่อเปลี่ยนผู้ถือบัญชี จังหวัดหรือผู้ดูแลระบบรีเซ็ตรหัสผ่าน ซึ่งยกเลิกการผูก LINE เดิมทันที หรือผู้ถือบัญชียกเลิกการผูกเอง',
+    decisionGates: [],
+    decisionsRecorded: {
+      transport_account_is_personal_or_shared:
+        'owner decision 2026-11-13: เป็นบัญชีหน่วยงาน ผู้ที่ถือบัญชีอยู่ (เข้าสู่ระบบด้วยรหัสผ่านปัจจุบัน) ผูก LINE ของตนเอง',
+      transport_line_binding_authority:
+        'owner decision 2026-11-13: ผู้ถือบัญชีผูก LINE ของตนเองจากเมนู “ความปลอดภัยบัญชี” ไม่ต้องรออนุมัติ',
+      transport_handover_procedure:
+        'owner decision 2026-11-13: เมื่อส่งมอบบัญชี จังหวัดหรือผู้ดูแลระบบรีเซ็ตรหัสผ่านบัญชีขนส่ง ซึ่งยกเลิกการผูก LINE เดิมทันที',
+    },
+    gatesConfirmed: true,
+    requiresApproverRole: null,
   },
   // ── school + grade-teacher sub-accounts: owner decision 2026-11-13 ──────────
   //

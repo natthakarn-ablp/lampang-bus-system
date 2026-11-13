@@ -14,7 +14,7 @@
  *  processCheckin(pool, params)   ← CHECKED_IN
  *  processCheckout(pool, params)  ← CHECKED_OUT
  *  processCheckinAll(pool, params)
- *  getStatusToday(pool, vehicleId)
+ *  getStatusToday(pool, vehicleId, { userId })
  */
 
 const { sessionTimeError } = require('../utils/sessionTimeWindow');
@@ -758,7 +758,7 @@ async function processCheckoutAll(pool, { userId, vehicleId, plateNo, session, s
  * the configured DRIVER_SESSION_SWITCH_HOUR — this is the source of truth
  * that the frontend should use instead of relying solely on browser clock.
  */
-async function getStatusToday(pool, vehicleId) {
+async function getStatusToday(pool, vehicleId, { userId = null } = {}) {
   const [[summary]] = await pool.query(
     `SELECT
        COUNT(*)                                                         AS total,
@@ -790,16 +790,27 @@ async function getStatusToday(pool, vehicleId) {
     [vehicleId]
   );
 
-  // Recent activity log (last 20 entries today)
-  const [recent] = await pool.query(
-    `SELECT cl.id, cl.student_name, cl.session, cl.status, cl.checked_at
+  // Recent activity log (last 20 entries today).
+  // can_void (2026-11-13, driver "ยกเลิกรายการที่กดผิด"): only the caller's own
+  // tap, still a live CHECKED_IN/CHECKED_OUT, and the LATEST row for that
+  // pupil/session today — voiding an older row under a newer one would reset
+  // the session state the newer row set. The void route re-checks vehicle
+  // ownership and idempotency inside its transaction.
+  const [recentRows] = await pool.query(
+    `SELECT cl.id, cl.student_name, cl.session, cl.status, cl.checked_at,
+            (cl.status IN ('CHECKED_IN', 'CHECKED_OUT')
+             AND cl.checked_by = ?
+             AND NOT EXISTS (SELECT 1 FROM checkin_logs c2
+                              WHERE c2.student_id = cl.student_id AND c2.session = cl.session
+                                AND c2.check_date = cl.check_date AND c2.id > cl.id)) AS can_void
      FROM   checkin_logs cl
      WHERE  cl.vehicle_id  = ?
        AND  cl.check_date  = CURDATE()
-     ORDER BY cl.checked_at DESC
+     ORDER BY cl.checked_at DESC, cl.id DESC
      LIMIT 20`,
-    [vehicleId]
+    [userId, vehicleId]
   );
+  const recent = (recentRows || []).map(r => ({ ...r, can_void: userId != null && !!Number(r.can_void) }));
 
   // Resolve current session server-side in Bangkok time (source of truth for frontend).
   // Uses DRIVER_SESSION_SWITCH_HOUR from env (default 12).

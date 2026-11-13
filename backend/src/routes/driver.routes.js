@@ -772,7 +772,7 @@ router.post('/emergency', async (req, res, next) => {
 router.get('/status-today', async (req, res, next) => {
   try {
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
-    const status  = await checkinSvc.getStatusToday(pool, vehicle.vehicle_id);
+    const status  = await checkinSvc.getStatusToday(pool, vehicle.vehicle_id, { userId: req.user.id });
 
     return sendSuccess(res, {
       vehicle: {
@@ -1579,6 +1579,9 @@ router.post('/checkin/:logId/void', async (req, res, next) => {
       logId:           req.params.logId,
       reason,
       scope:           { kind: 'driver', vehicleId: vehicle.vehicle_id },
+      // Voiding a mistaken drop-off must leave the earlier boarding standing
+      // (same rule as the teacher undo) instead of marking the child not done.
+      restorePriorDone: true,
     });
 
     return sendSuccess(res, result, 'ยกเลิกรายการเช็กอินสำเร็จ', null, 201);

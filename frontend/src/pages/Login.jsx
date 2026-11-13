@@ -83,6 +83,15 @@ export default function Login() {
           hint: 'ระบบระงับชั่วคราวเพื่อความปลอดภัย กรุณาลองใหม่อีกประมาณ 15 นาที\nบัญชีของคุณไม่ได้ถูกปิดใช้งานถาวร',
           type: 'rate',
         });
+      } else if (status === 403 && err.response?.data?.errors?.some((e) => e?.code === 'ACCOUNT_DISABLED')) {
+        // Shown only after the server verified the password; the message names
+        // who can re-enable this account (by role).
+        const contact = serverMsg.replace(/^บัญชีถูกปิดใช้งาน\s*/, '');
+        setError({
+          msg: 'บัญชีถูกปิดใช้งาน',
+          hint: contact || 'กรุณาติดต่อผู้ดูแลระบบ',
+          type: 'disabled',
+        });
       } else if (status === 401 && serverMsg.toLowerCase().includes('disabled')) {
         setError({
           msg: 'บัญชีนี้ถูกปิดการใช้งาน',

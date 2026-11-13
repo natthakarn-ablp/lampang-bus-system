@@ -139,6 +139,16 @@ function expToDate(exp) {
   return new Date(exp * 1000);
 }
 
+/**
+ * Who can re-enable a disabled account, by role (shown only after the
+ * password was verified — see the is_active branch of /login).
+ */
+function disabledAccountContact(user) {
+  if (user.role === 'school' && user.grade_scope) return 'ติดต่อบัญชีหลักของโรงเรียนเพื่อเปิดใช้งาน';
+  if (user.role === 'school') return 'ติดต่อสำนักงานเขตพื้นที่การศึกษาที่โรงเรียนสังกัด หรือผู้ดูแลระบบ';
+  return 'ติดต่อผู้ดูแลระบบ';
+}
+
 // ─── POST /api/auth/login ────────────────────────────────────────────────────
 
 router.post('/login', loginLimiter, async (req, res, next) => {
@@ -178,15 +188,21 @@ router.post('/login', loginLimiter, async (req, res, next) => {
     const user = rows[0];
 
     if (!user.is_active) {
-      await bcrypt.compare(String(password), DUMMY_BCRYPT_HASH); // equalise timing
+      // Same bcrypt cost as every other path (timing unchanged). A WRONG
+      // password on a disabled account still gets the generic message, so a
+      // disabled account is not distinguishable without its password
+      // (Phase 10.13B-1 username-enumeration rule). Only someone who proved
+      // the password learns the account is disabled and whom to contact
+      // (2026-11-13: teachers were told "wrong password" and kept retrying).
+      const disabledPasswordOk = await bcrypt.compare(String(password), user.password_hash);
       await noteLoginFail(lockKey);
       await logAudit({ userId: user.id, action: 'LOGIN', entityType: 'user', entityId: user.id,
-        newValue: { username: user.username, result: 'failed', reason: 'account_disabled' },
+        newValue: { username: user.username, result: 'failed',
+                    reason: disabledPasswordOk ? 'account_disabled' : 'account_disabled_wrong_password' },
         ipAddress: req.ip, userAgent: req.headers['user-agent'] });
-      // Phase 10.13B-1 — return the SAME generic message as wrong-password /
-      // user-not-found so a disabled account is not externally distinguishable
-      // (prevents username enumeration). The real reason is audited above.
-      return sendError(res, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', [], 401);
+      if (!disabledPasswordOk) return sendError(res, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', [], 401);
+      return sendError(res, `บัญชีถูกปิดใช้งาน ${disabledAccountContact(user)}`,
+        [{ code: 'ACCOUNT_DISABLED' }], 403);
     }
 
     const passwordMatch = await bcrypt.compare(String(password), user.password_hash);

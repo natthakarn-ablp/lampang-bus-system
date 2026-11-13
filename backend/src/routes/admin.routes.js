@@ -460,11 +460,29 @@ router.put('/users/:id', async (req, res, next) => {
   try {
     const userId = readIdParam(req, res, 'id');
     if (userId === null) return;
-    const { display_name, is_active, role, scope_id } = req.body;
+    const { display_name, is_active, role, scope_id, grade_scope } = req.body;
     if (rejectOverLongFields(res, req.body, { display_name: 200, scope_id: 20 })) return;
 
-    const [[user]] = await pool.query('SELECT id, username, role, scope_type, scope_id, display_name, is_active, driver_id FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
+    const [[user]] = await pool.query('SELECT id, username, role, scope_type, scope_id, grade_scope, display_name, is_active, driver_id FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
+
+    // 2026-11-13 — move a grade teacher to another grade (new school year)
+    // instead of delete + recreate. Grade → grade only: a teacher is never
+    // promoted to (or a main account demoted from) the full-school account
+    // here, and it cannot be combined with a role change.
+    let nextGradeScope;
+    if (grade_scope !== undefined) {
+      if (role && role !== user.role) {
+        return sendError(res, 'เปลี่ยนบทบาทและระดับชั้นพร้อมกันไม่ได้', [], 400);
+      }
+      if (user.role !== 'school' || !user.grade_scope) {
+        return sendError(res, 'เปลี่ยนระดับชั้นได้เฉพาะบัญชีครูประจำสายชั้น', [], 400);
+      }
+      if (!isValidGradeScope(grade_scope)) {
+        return sendError(res, `grade_scope ต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_GRADE_SCOPES.join(', ')}`, [], 400);
+      }
+      if (String(grade_scope).trim() !== user.grade_scope) nextGradeScope = String(grade_scope).trim();
+    }
 
     // Phase 10.13A-23C — block re-activating a dedupe-disabled / broken driver
     // account (FALSE → TRUE for role='driver'). Runs BEFORE any write so the
@@ -499,6 +517,11 @@ router.put('/users/:id', async (req, res, next) => {
     const params = [];
     if (display_name !== undefined) { updates.push('display_name = ?'); params.push(display_name); }
     if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+    if (nextGradeScope !== undefined) {
+      // The JWT carries grade_scope — end existing sessions on a grade move.
+      updates.push('grade_scope = ?', 'password_changed_at = NOW()');
+      params.push(nextGradeScope);
+    }
     if (role && VALID_ROLES.includes(role)) {
       const scopeType = SCOPED_ROLES[role] || null;
       const scopeError = await validateRoleScope(role, scope_id);
@@ -524,8 +547,11 @@ router.put('/users/:id', async (req, res, next) => {
 
     await logAudit({
       userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
-      oldValue: { display_name: user.display_name, is_active: user.is_active, role: user.role },
-      newValue: { display_name, is_active, role, ...(reactivationWarning ? { reactivation_warning: reactivationWarning } : {}) },
+      oldValue: { display_name: user.display_name, is_active: user.is_active, role: user.role,
+                  ...(nextGradeScope !== undefined ? { grade_scope: user.grade_scope } : {}) },
+      newValue: { display_name, is_active, role,
+                  ...(nextGradeScope !== undefined ? { grade_scope: nextGradeScope } : {}),
+                  ...(reactivationWarning ? { reactivation_warning: reactivationWarning } : {}) },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 

@@ -1973,6 +1973,26 @@ router.put('/vehicles/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── PUT /vehicles/:id/document-expiry (2026-11-13) ──────────────────────────
+// registration / พ.ร.บ. / tax expiry for a vehicle that pupils of THIS school
+// ride. Main school account only (not grade teachers). Audited; eligibility
+// recomputed. Insurance stays with the owner/driver (SCH-VEH-3).
+router.put('/vehicles/:id/document-expiry', requireFullSchoolScope, async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendError(res, req.user.role === 'admin' ? 'กรุณาระบุ school_id' : 'ไม่พบข้อมูลโรงเรียน', [], req.user.role === 'admin' ? 400 : 403);
+    if (!await ppSvc.validateVehicleServesSchool(req.params.id, schoolId)) {
+      return sendError(res, 'ไม่พบรถคันนี้ในโรงเรียนของท่าน', [], 404);
+    }
+    const docSvc = require('../services/vehicleDocumentExpiry.service');
+    const data = await docSvc.updateDocumentExpiry(pool, {
+      vehicleId: req.params.id, body: req.body, actorId: req.user.id, actorRole: req.user.role,
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, data, 'บันทึกวันหมดอายุเอกสารรถแล้ว');
+  } catch (err) { next(err); }
+});
+
 // ─── GET /audit-logs ─────────────────────────────────────────────────────────
 // Audit trail for school actions
 
@@ -2709,7 +2729,7 @@ router.post('/vehicles/requests', requireFullSchoolScope, async (req, res, next)
       platePrefix: b.plate_prefix, plateNumber: b.plate_number, province: b.province, inputPlate: b.input_plate,
       reason: b.reason, importBatchId: b.import_batch_id, importRowId: b.import_row_id,
     });
-    return sendSuccess(res, out, 'ส่งคำขอแล้ว · รอผู้ดูแลระบบตรวจสอบ', null, 201);
+    return sendSuccess(res, out, 'ส่งคำขอแล้ว · รอสังกัดของโรงเรียนตรวจสอบ', null, 201);
   } catch (err) { next(err); }
 });
 

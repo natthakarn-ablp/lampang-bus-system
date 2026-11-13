@@ -2199,6 +2199,21 @@ router.put('/vehicles/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Plate-typo fix that also renames the driver login (vehicleAdmin.fixPlate).
+// Same service as POST /api/transport/vehicles/:id/fix-plate.
+router.post('/vehicles/:id/fix-plate', async (req, res, next) => {
+  try {
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const b = req.body || {};
+    const data = await vehicleAdmin.fixPlate(pool, {
+      vehicleId: req.params.id, newPlate: b.plate_no, reason: b.reason,
+      actorId: req.user.id, actorRole: req.user.role,
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, data, 'แก้ทะเบียนแล้ว');
+  } catch (err) { next(err); }
+});
+
 router.post('/vehicles/:id/merge', async (req, res, next) => {
   try {
     const b = req.body || {};

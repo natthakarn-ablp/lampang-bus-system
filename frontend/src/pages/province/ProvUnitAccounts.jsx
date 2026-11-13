@@ -345,7 +345,7 @@ export default function ProvUnitAccounts() {
             </FormField>
           )}
           <FormField label="ชื่อผู้ใช้" required value={createForm.username} maxLength={100} autoComplete="off"
-            helper="อักษรอังกฤษ ตัวเลข หรือ . _ @ - อย่างน้อย 3 ตัว"
+            helper="อักษรอังกฤษ ตัวเลข หรือ . _ @ - ยาว 3–100 ตัวอักษร"
             onChange={v => setCreateForm({ ...createForm, username: v })} />
           <FormField label="ชื่อที่แสดง" value={createForm.display_name} maxLength={200}
             helper={createForm.role === 'affiliation' ? 'ไม่กรอกจะใช้ชื่อสังกัด' : 'เช่น สำนักงานขนส่งจังหวัดลำปาง'}

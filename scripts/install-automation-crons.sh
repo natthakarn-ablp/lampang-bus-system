@@ -81,7 +81,7 @@ ADDED=0
 CONFLICTS=0
 for spec in "${WANTED[@]}"; do
   IFS='|' read -r script sched log <<< "$spec"
-  line="$sched cd $APP_DIR/backend && node scripts/$script >> $LOG_DIR/$log 2>&1"
+  line="$sched cd $APP_DIR/backend && ${NODE_BIN:-/usr/local/bin/node} scripts/$script >> $LOG_DIR/$log 2>&1"
   present=0
   other=""
   while IFS= read -r existing || [ -n "$existing" ]; do

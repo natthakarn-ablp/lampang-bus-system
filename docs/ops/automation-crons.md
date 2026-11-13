@@ -16,13 +16,13 @@
 
 ```cron
 # คิวงานค้าง: แจ้งในระบบ 08:00 น. เวลาไทย (01:00 UTC)
-0 1 * * * cd /home/schoolbus/apps/lampang-bus-system/backend && node scripts/pending-queue-alert.js >> /home/schoolbus/logs/pending-queue-alert.log 2>&1
+0 1 * * * cd /home/schoolbus/apps/lampang-bus-system/backend && /usr/local/bin/node scripts/pending-queue-alert.js >> /home/schoolbus/logs/pending-queue-alert.log 2>&1
 
 # snapshot รายวัน หลังรอบเย็น 20:00 น. เวลาไทย (13:00 UTC)
-0 13 * * * cd /home/schoolbus/apps/lampang-bus-system/backend && node scripts/daily-snapshot.js >> /home/schoolbus/logs/daily-snapshot.log 2>&1
+0 13 * * * cd /home/schoolbus/apps/lampang-bus-system/backend && /usr/local/bin/node scripts/daily-snapshot.js >> /home/schoolbus/logs/daily-snapshot.log 2>&1
 
 # เฝ้าระวัง backup + /health ทุก 30 นาที (แจ้งแอดมินในระบบไม่เกินวันละครั้งต่อปัญหา)
-*/30 * * * * cd /home/schoolbus/apps/lampang-bus-system/backend && node scripts/ops-watch.js >> /home/schoolbus/logs/ops-watch.log 2>&1
+*/30 * * * * cd /home/schoolbus/apps/lampang-bus-system/backend && /usr/local/bin/node scripts/ops-watch.js >> /home/schoolbus/logs/ops-watch.log 2>&1
 ```
 
 ก่อนติดตั้ง ให้ลองแบบไม่เขียนอะไรก่อน:

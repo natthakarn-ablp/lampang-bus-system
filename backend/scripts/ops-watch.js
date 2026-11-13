@@ -4,8 +4,8 @@
 // Logic: backend/src/services/opsWatch.service.js.
 //
 // Run from backend/ (env.js reads backend/.env from the working directory):
-//   cd backend && node scripts/ops-watch.js            # check, record alerts
-//   cd backend && node scripts/ops-watch.js --dry-run  # check and print only
+//   cd backend && /usr/local/bin/node scripts/ops-watch.js            # check, record alerts
+//   cd backend && /usr/local/bin/node scripts/ops-watch.js --dry-run  # check and print only
 //
 // Settings (backend/.env, all optional):
 //   BACKUP_LOG=/home/schoolbus/backups/lampang-bus/backup.log  (where backup-db.sh's cron writes)

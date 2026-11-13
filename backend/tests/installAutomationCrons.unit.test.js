@@ -45,9 +45,9 @@ esac
 const APP = '/home/schoolbus/apps/lampang-bus-system';
 const LOGS = '/home/schoolbus/logs';
 const LINES = [
-  `0 1 * * * cd ${APP}/backend && node scripts/pending-queue-alert.js >> ${LOGS}/pending-queue-alert.log 2>&1`,
-  `0 13 * * * cd ${APP}/backend && node scripts/daily-snapshot.js >> ${LOGS}/daily-snapshot.log 2>&1`,
-  `*/30 * * * * cd ${APP}/backend && node scripts/ops-watch.js >> ${LOGS}/ops-watch.log 2>&1`,
+  `0 1 * * * cd ${APP}/backend && /usr/local/bin/node scripts/pending-queue-alert.js >> ${LOGS}/pending-queue-alert.log 2>&1`,
+  `0 13 * * * cd ${APP}/backend && /usr/local/bin/node scripts/daily-snapshot.js >> ${LOGS}/daily-snapshot.log 2>&1`,
+  `*/30 * * * * cd ${APP}/backend && /usr/local/bin/node scripts/ops-watch.js >> ${LOGS}/ops-watch.log 2>&1`,
 ];
 const OTHER = [
   '# existing jobs',
@@ -144,7 +144,7 @@ describeWithBash('install-automation-crons.sh', () => {
   });
 
   it('the same script on another schedule: left alone, not duplicated, exit 2, others still added', () => {
-    const variant = `0 2 * * * cd ${APP}/backend && node scripts/ops-watch.js >> ${LOGS}/ops-watch.log 2>&1`;
+    const variant = `0 2 * * * cd ${APP}/backend && /usr/local/bin/node scripts/ops-watch.js >> ${LOGS}/ops-watch.log 2>&1`;
     fx = makeFixture(`${variant}\n`);
     const r = run(fx);
     expect(r.status).toBe(2);

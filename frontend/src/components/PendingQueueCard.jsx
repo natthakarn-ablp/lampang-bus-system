@@ -130,7 +130,7 @@ function StuckApplications({ onChanged }) {
               <span className="text-ink-muted"> · {row.request_no} · ค้าง {row.idle_days} วัน</span>
             </span>
             <button type="button" onClick={() => { setReason(''); setTarget(row); }}
-              className="focus-ring min-h-[44px] rounded-lg border border-danger px-3 text-sm text-danger">
+              className="focus-ring min-h-[44px] rounded-lg border border-danger px-3 text-sm font-semibold text-danger-ink">
               ยกเลิกคำขอแทนโรงเรียน
             </button>
           </li>

@@ -16,7 +16,7 @@
     "gpsStaleAlert":         { "env": "FEATURE_GPS_STALE_ALERT",         "enabled": false, "since": null },
     "homeroomTeachers":      { "env": "FEATURE_HOMEROOM_TEACHERS",       "enabled": true,  "since": "2026-11-12 14:09 น." },
     "multiTrip":             { "env": "FEATURE_MULTI_TRIP",              "enabled": true,  "since": "2026-11-12 17:17 น." },
-    "schoolCertification":   { "env": "FEATURE_SCHOOL_CERTIFICATION",    "enabled": false, "since": null },
+    "schoolCertification":   { "env": "FEATURE_SCHOOL_CERTIFICATION",    "enabled": true,  "since": "2026-11-14 (หลัง migration 063, 2026-11-14 01:57 น.)" },
     "parentConsentRequired": { "env": "FEATURE_PARENT_CONSENT_REQUIRED", "enabled": false, "since": null },
     "parentLeave":           { "env": "FEATURE_PARENT_LEAVE",            "enabled": true,  "since": "2026-11-08 11:56 น." },
     "parentClaimCode":       { "env": "FEATURE_PARENT_CLAIM_CODE",       "enabled": true,  "since": "2026-11-08 11:56 น." },

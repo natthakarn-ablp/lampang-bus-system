@@ -841,7 +841,11 @@ const COMMON = {
   '/api/affiliation/vehicle-trips': { data: { rows: [] } },
   '/api/province/vehicle-trips':    { data: { rows: [] } },
   '/api/driver/pretrip-status': { data: { done: false } },
-  '/api/driver/status-today':   { data: { current_session: 'evening', summary: { total: 5, boarded: 2, remaining: 3 } } },
+  '/api/driver/status-today':   { data: { current_session: 'evening', summary: { total: 5, boarded: 2, remaining: 3 },
+    recent: [
+      { id: 501, student_name: 'เด็กชายตัวอย่าง หนึ่ง', session: 'evening', status: 'CHECKED_IN', checked_at: '2026-08-27T15:40:00+07:00', can_void: true },
+      { id: 500, student_name: 'เด็กหญิงตัวอย่าง สอง', session: 'evening', status: 'CANCELLED', checked_at: '2026-08-27T15:35:00+07:00', can_void: false },
+    ] } },
   '/api/driver/vehicle-location': { data: { latitude: 18.2888, longitude: 99.4908, recorded_at: '2026-08-27T09:12:00+07:00', is_sending: false } },
   '/api/driver/profile':        { data: { id: 1, name: 'คนขับ ตัวอย่าง', phone: '0800000000', plate_no: 'กข-1111 ลำปาง', vehicle_type: 'รถตู้', line_linked: false } },
   '/api/driver/schools':        { data: SCHOOL_ROWS },
@@ -859,6 +863,9 @@ const COMMON = {
   '/api/school/teacher-accounts': { data: [
     { id: 21, username: 'teacher-p4', display_name: 'ครูตัวอย่าง ป.4', grade_scope: 'ป.4', is_active: true, must_change_password: true },
     { id: 22, username: 'teacher-p5', display_name: 'ครูตัวอย่าง ป.5', grade_scope: 'ป.5', is_active: true, must_change_password: false },
+  ] },
+  '/api/school/teacher-accounts/deleted': { data: [
+    { id: 23, username: 'teacher-p6', display_name: 'ครูตัวอย่าง ป.6', grade_scope: 'ป.6', deleted_at: '2026-08-20T09:00:00+07:00' },
   ] },
   '/api/school/roster-requests': { data: [
     { id: 9, driver_name: 'คนขับ ตัวอย่าง ก', plate_no: 'กข-1111 ลำปาง', student_count: 2, status: 'PENDING', created_at: '2026-08-26T10:00:00+07:00' },
@@ -1957,6 +1964,17 @@ const SHOTS = [
     // the school editor additionally picks the vehicle that scopes the pupils
     expect: ['[role=dialog]', 'select', '[role=radiogroup]',
              'text=ป้ายชื่อจุด', 'text=หมายเหตุ', 'button:has-text("บันทึก")'] },
+  // School main account edits a point's name / coordinates (PUT /school/pickup-points/:id).
+  { id: '67b-school-pickup-location', url: '/school/pickup-map', user: 'school', vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: 'แก้ชื่อ/ตำแหน่ง', exact: true }).first().click(); },
+    expect: ['[role=dialog]', 'text=ป้ายชื่อจุด', 'input[type=number]', 'button:has-text("บันทึก")'] },
+  // School main account moves a teacher to another grade / disables it.
+  { id: '33b-teacher-edit', url: '/school/teacher-accounts', user: 'school', vps: ['mobile', 'desktop'],
+    act: async page => { await page.getByRole('button', { name: /แก้ไข \/ ย้ายชั้น/ }).first().click(); },
+    expect: ['[role=dialog]', 'select', 'button:has-text("บันทึก")'] },
+  { id: '33c-teacher-deleted', url: '/school/teacher-accounts', user: 'school', vps: ['mobile'],
+    act: async page => { await page.getByRole('button', { name: /บัญชีที่ลบแล้ว/ }).first().click(); },
+    expect: ['[role=dialog]', 'button:has-text("กู้คืน")'] },
   { id: '42-transport-pickup',  url: '/transport/pickup-map', user: 'transport',   vps: ['desktop'] },
   { id: '43-aff-pickup-map',    url: '/affiliation/pickup-map', user: 'affiliation', vps: ['desktop'] },
 ];

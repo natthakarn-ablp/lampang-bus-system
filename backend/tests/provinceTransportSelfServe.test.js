@@ -12,7 +12,7 @@
  *     blocked (409) while it has students, allowed when empty, restore;
  *   - school / transport tokens cannot reach these province writes (403);
  *   - transport: document expiry + plate fix that renames the driver login;
- *   - school: document expiry only for a vehicle its pupils ride.
+ *   - school: no document-expiry write (transport/admin only, SCH-VEH-3).
  */
 
 require('dotenv').config();
@@ -205,11 +205,11 @@ describe('transport — document expiry and plate fix', () => {
     expect(res.status).toBe(400);
   });
 
-  test('school cannot edit a vehicle its pupils do not ride (404) but can edit its own', async () => {
-    let res = await as(schoolToken)(request(app).put(`/api/school/vehicles/${VEH}/document-expiry`)).send({ tax_expiry: '2027-05-01' });
+  test('school cannot edit document expiry (transport/admin only; no school route, 403 on transport route)', async () => {
+    let res = await as(schoolToken)(request(app).put('/api/school/vehicles/V-test000000ab/document-expiry')).send({ tax_expiry: '2027-05-01' });
     expect(res.status).toBe(404);
-    res = await as(schoolToken)(request(app).put('/api/school/vehicles/V-test000000ab/document-expiry')).send({ tax_expiry: '2027-05-01' });
-    expect(res.status).toBe(200);
+    res = await as(schoolToken)(request(app).put(`/api/transport/vehicles/${VEH}/document-expiry`)).send({ tax_expiry: '2027-05-01' });
+    expect(res.status).toBe(403);
   });
 
   test('plate fix renames the driver login in the same transaction', async () => {

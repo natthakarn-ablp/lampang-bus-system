@@ -95,14 +95,19 @@ export default function UserManagement() {
   // ── Edit user ──
   function openEdit(user) {
     setSelected(user);
-    setForm({ display_name: user.display_name || '', is_active: user.is_active });
+    setForm({ display_name: user.display_name || '', is_active: user.is_active, grade_scope: user.grade_scope || '' });
     setModal('edit');
   }
 
   async function handleEdit() {
     setSaving(true);
     try {
-      await api.put(`/admin/users/${selected.id}`, form);
+      const payload = { display_name: form.display_name, is_active: form.is_active };
+      // Grade teacher → another grade (new school year); never to/from a main account.
+      if (selected.role === 'school' && selected.grade_scope && form.grade_scope && form.grade_scope !== selected.grade_scope) {
+        payload.grade_scope = form.grade_scope;
+      }
+      await api.put(`/admin/users/${selected.id}`, payload);
       toast.success('อัปเดตสำเร็จ');
       setModal(null);
       fetchUsers(meta.page);
@@ -304,6 +309,18 @@ export default function UserManagement() {
         <Modal title={`แก้ไข: ${selected.username}`} onClose={() => setModal(null)}>
           <div className="space-y-3">
             <Field label="ชื่อแสดง" value={form.display_name} onChange={v => setForm({...form, display_name: v})} />
+            {selected.role === 'school' && selected.grade_scope && (
+              <FormField label="ระดับชั้น (ครูประจำสายชั้น)" helper="เปลี่ยนชั้นแล้วครูต้องเข้าสู่ระบบใหม่">
+                {ctl => (
+                  <select {...ctl} value={form.grade_scope || ''}
+                    onChange={e => setForm({...form, grade_scope: e.target.value})}
+                    className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink transition">
+                    {['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6','ม.1','ม.2','ม.3','ม.4','ม.5','ม.6']
+                      .map(g => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                )}
+              </FormField>
+            )}
             <FormField label="สถานะ">
               {ctl => (
                 <select {...ctl} value={form.is_active ? '1' : '0'} onChange={e => setForm({...form, is_active: e.target.value === '1'})}

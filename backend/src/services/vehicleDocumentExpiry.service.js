@@ -7,8 +7,9 @@
  * vehicles.registration_expiry, compulsory_insurance_expiry and tax_expiry,
  * but until 2026-11-13 only the admin PUT /api/admin/vehicles/:id wrote them,
  * so every renewal waited on the admin. This lets the transport office (any
- * vehicle — transport is province-wide) and a school whose pupils ride the
- * vehicle (scope checked by the route) keep them current.
+ * vehicle — transport is province-wide) keep them current. Schools do NOT
+ * write them: a shared vehicle's value would feed eligibility for every school
+ * that rides it (same reasoning as SCH-VEH-3).
  *
  * Only these three DATE columns. insurance_* stays with the vehicle
  * owner/driver (SCH-VEH-3), plate_no has its own audited fix path.

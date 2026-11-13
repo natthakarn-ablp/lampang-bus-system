@@ -294,9 +294,7 @@ describe('route wiring', () => {
     expect(transport).toMatch(/router\.post\('\/vehicles\/:id\/fix-plate'/);
   });
 
-  test('school expiry edit is main-account only and limited to vehicles its pupils ride', () => {
-    const block = school.slice(school.indexOf("router.put('/vehicles/:id/document-expiry'"));
-    expect(block.slice(0, 200)).toMatch(/requireFullSchoolScope/);
-    expect(block.slice(0, 900)).toMatch(/validateVehicleServesSchool\(req\.params\.id, schoolId\)/);
+  test('schools have no document-expiry write (SCH-VEH-3 reasoning)', () => {
+    expect(school).not.toMatch(/document-expiry/);
   });
 });

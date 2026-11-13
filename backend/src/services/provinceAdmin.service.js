@@ -114,8 +114,210 @@ async function resetUnitAccountPassword({ accountId, newPassword, userId, ip = n
   return { id: account.id, username: account.username, role: account.role };
 }
 
+// ─── Full account management (2026-11-13) ────────────────────────────────────
+// Reset alone still left the admin creating, renaming and closing every
+// affiliation and transport account. These mirror the affiliation's school
+// user page (affiliationUsers.service.js, PR #169): same soft delete that
+// releases the recovery LINE binding, restore comes back DEACTIVATED, every
+// write audited. The MANAGED_ROLES filter is applied in every query below.
+
+const USERNAME_RE = /^[A-Za-z0-9._@-]{3,100}$/;
+const DISPLAY_NAME_MAX = 200;
+
+function httpError(message, statusCode) {
+  const e = new Error(message);
+  e.statusCode = statusCode;
+  return e;
+}
+
+/** Soft-deleted affiliation/transport accounts (restorable). */
+async function listDeletedManagedAccounts(db = pool) {
+  const [rows] = await db.query(
+    `SELECT u.id, u.username, u.role, u.display_name, u.scope_id, u.is_active,
+            u.deleted_at, a.name AS affiliation_name
+       FROM users u
+       LEFT JOIN affiliations a ON a.id = u.scope_id AND u.role = 'affiliation'
+      WHERE u.role IN (?) AND u.is_deleted = TRUE
+      ORDER BY u.deleted_at DESC, u.username
+      LIMIT 500`,
+    [MANAGED_ROLES]
+  );
+  return rows;
+}
+
+async function findManaged(conn, accountId, { deleted = false, lock = false } = {}) {
+  const [[row]] = await conn.query(
+    `SELECT id, username, role, display_name, scope_id, is_active
+       FROM users
+      WHERE id = ? AND role IN (?) AND is_deleted = ?
+      ${lock ? 'FOR UPDATE' : ''}`,
+    [accountId, MANAGED_ROLES, deleted]
+  );
+  return row || null;
+}
+
+/**
+ * Create an affiliation or transport account. The server generates the
+ * temporary password, returns it ONCE (never stored in clear, never audited)
+ * and forces a change at first login.
+ */
+async function createUnitAccount(db, { role, username, displayName, scopeId, actorId, ip = null, userAgent = null }) {
+  const { generateTemporaryPassword } = require('./driverProfile.service');
+  if (!MANAGED_ROLES.includes(role)) {
+    throw httpError('จังหวัดสร้างได้เฉพาะบัญชีสังกัดและบัญชีขนส่ง', 400);
+  }
+  const uname = String(username || '').trim();
+  if (!USERNAME_RE.test(uname)) {
+    throw httpError('ชื่อผู้ใช้ต้องเป็นอักษรอังกฤษ ตัวเลข หรือ . _ @ - ยาว 3–100 ตัวอักษร', 400);
+  }
+  const name = String(displayName || '').trim();
+  if (name.length > DISPLAY_NAME_MAX) throw httpError(`ชื่อที่แสดงยาวได้ไม่เกิน ${DISPLAY_NAME_MAX} ตัวอักษร`, 400);
+
+  let scopeType = null;
+  let scope = null;
+  let affName = null;
+  if (role === 'affiliation') {
+    if (!scopeId) throw httpError('กรุณาเลือกสังกัดของบัญชีนี้', 400);
+    const [[aff]] = await db.query(
+      'SELECT id, name FROM affiliations WHERE id = ? AND is_deleted = FALSE', [String(scopeId)]
+    );
+    if (!aff) throw httpError('ไม่พบสังกัดที่เลือก หรือสังกัดถูกปิดใช้งานแล้ว', 400);
+    scopeType = 'AFFILIATION';
+    scope = aff.id;
+    affName = aff.name;
+  }
+
+  // uq_users_username also covers soft-deleted rows.
+  const [[existing]] = await db.query('SELECT id, is_deleted FROM users WHERE username = ?', [uname]);
+  if (existing) {
+    throw httpError(existing.is_deleted
+      ? `ชื่อผู้ใช้ ${uname} เคยถูกใช้โดยบัญชีที่ถูกลบไปแล้ว กรุณาใช้ชื่ออื่น หรือกู้คืนบัญชีเดิมที่แท็บ "บัญชีที่ลบแล้ว"`
+      : `ชื่อผู้ใช้ ${uname} มีอยู่ในระบบแล้ว กรุณาใช้ชื่ออื่น`, 409);
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+  const hash = await bcrypt.hash(temporaryPassword, BCRYPT_COST);
+  const [result] = await db.query(
+    `INSERT INTO users (username, password_hash, role, scope_type, scope_id, display_name, must_change_password)
+     VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+    [uname, hash, role, scopeType, scope, name || affName || uname]
+  );
+  await logAudit({
+    userId: actorId, action: 'CREATE', entityType: 'user', entityId: result.insertId,
+    newValue: { username: uname, role, scope_type: scopeType, scope_id: scope, by_role: 'province' },
+    ipAddress: ip, userAgent, conn: db,
+  });
+  return { id: result.insertId, username: uname, role, scope_id: scope, temporary_password: temporaryPassword };
+}
+
+/** Rename and/or activate/deactivate. Role and scope are never editable here. */
+async function updateUnitAccount(db, { accountId, displayName, isActive, actorId, ip = null, userAgent = null }) {
+  const updates = [];
+  const params = [];
+  const after = {};
+  if (displayName !== undefined) {
+    const name = String(displayName ?? '').trim();
+    if (!name) throw httpError('กรุณากรอกชื่อที่แสดง', 400);
+    if (name.length > DISPLAY_NAME_MAX) throw httpError(`ชื่อที่แสดงยาวได้ไม่เกิน ${DISPLAY_NAME_MAX} ตัวอักษร`, 400);
+    updates.push('display_name = ?');
+    params.push(name);
+    after.display_name = name;
+  }
+  if (isActive !== undefined) {
+    if (typeof isActive !== 'boolean') throw httpError('is_active ต้องเป็น true หรือ false', 400);
+    updates.push('is_active = ?');
+    params.push(isActive);
+    after.is_active = isActive;
+  }
+  if (!updates.length) throw httpError('ไม่มีข้อมูลที่ต้องแก้ไข', 400);
+
+  const account = await findManaged(db, accountId);
+  if (!account) throw httpError('ไม่พบบัญชีนี้ หรือไม่ใช่บัญชีสังกัด/ขนส่ง', 404);
+
+  await db.query(
+    `UPDATE users SET ${updates.join(', ')} WHERE id = ? AND role IN (?)`,
+    [...params, accountId, MANAGED_ROLES]
+  );
+  await logAudit({
+    userId: actorId, action: 'UPDATE', entityType: 'user', entityId: accountId,
+    oldValue: { display_name: account.display_name, is_active: Boolean(account.is_active) },
+    newValue: { ...after, username: account.username, target_role: account.role, by_role: 'province' },
+    ipAddress: ip, userAgent, conn: db,
+  });
+  return { id: accountId, username: account.username, ...after };
+}
+
+/** Soft delete; releases the account-recovery LINE binding like the admin delete. */
+async function deleteUnitAccount(db, { accountId, actorId, ip = null, userAgent = null }) {
+  if (accountId === actorId) throw httpError('ไม่สามารถลบบัญชีของตัวเองได้', 400);
+  const conn = await db.getConnection();
+  let account;
+  let released = 0;
+  try {
+    await conn.beginTransaction();
+    account = await findManaged(conn, accountId, { lock: true });
+    if (!account) throw httpError('ไม่พบบัญชีนี้ หรือไม่ใช่บัญชีสังกัด/ขนส่ง', 404);
+    await conn.query('DELETE FROM password_reset_requests WHERE user_id = ? AND used_at IS NULL', [accountId]);
+    await conn.query('DELETE FROM user_recovery_codes WHERE user_id = ?', [accountId]);
+    const [chan] = await conn.query('DELETE FROM user_recovery_channels WHERE user_id = ?', [accountId]);
+    released = (chan && chan.affectedRows) || 0;
+    await conn.query('UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [accountId]);
+    await logAudit({
+      userId: actorId, action: 'DELETE', entityType: 'user', entityId: accountId,
+      oldValue: { username: account.username, role: account.role, scope_id: account.scope_id },
+      newValue: { recovery_channels_released: released, by_role: 'province' },
+      ipAddress: ip, userAgent, conn, required: true,
+    });
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* keep the original error */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+  return { id: accountId, username: account.username, recovery_channels_released: released };
+}
+
+/** Undo a soft delete; the account comes back DEACTIVATED. */
+async function restoreUnitAccount(db, { accountId, actorId, ip = null, userAgent = null }) {
+  const conn = await db.getConnection();
+  let account;
+  try {
+    await conn.beginTransaction();
+    account = await findManaged(conn, accountId, { deleted: true, lock: true });
+    if (!account) throw httpError('ไม่พบบัญชีที่ถูกลบนี้ หรือไม่ใช่บัญชีสังกัด/ขนส่ง', 404);
+    if (account.role === 'affiliation') {
+      const [[aff]] = await conn.query(
+        'SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE', [account.scope_id]
+      );
+      if (!aff) throw httpError('สังกัดของบัญชีนี้ถูกปิดใช้งานแล้ว กู้คืนบัญชีไม่ได้', 409);
+    }
+    await conn.query(
+      'UPDATE users SET is_deleted = FALSE, deleted_at = NULL, is_active = FALSE WHERE id = ?', [accountId]
+    );
+    await logAudit({
+      userId: actorId, action: 'UPDATE', entityType: 'user', entityId: accountId,
+      oldValue: { is_deleted: true },
+      newValue: { action: 'restore', is_deleted: false, is_active: false, username: account.username, by_role: 'province' },
+      ipAddress: ip, userAgent, conn, required: true,
+    });
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* keep the original error */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+  return { id: accountId, username: account.username, is_active: false };
+}
+
 module.exports = {
   MANAGED_ROLES,
   listManagedAccounts,
   resetUnitAccountPassword,
+  listDeletedManagedAccounts,
+  createUnitAccount,
+  updateUnitAccount,
+  deleteUnitAccount,
+  restoreUnitAccount,
 };

@@ -113,6 +113,7 @@ const UserManagement       = lazy(() => import('./pages/admin/UserManagement'));
 const StudentTransferRequests = lazy(() => import('./pages/admin/StudentTransferRequests'));
 const VehicleRequests      = lazy(() => import('./pages/admin/VehicleRequests'));
 const DriverIntegrity      = lazy(() => import('./pages/admin/DriverIntegrity'));
+const AdminEmergencies     = lazy(() => import('./pages/admin/AdminEmergencies'));
 const AdminGeofences       = lazy(() => import('./pages/admin/AdminGeofences'));
 const AdminRouteDeviations = lazy(() => import('./pages/admin/AdminRouteDeviations'));
 const AdminAuditLog        = lazy(() => import('./pages/admin/AdminAuditLog'));
@@ -396,9 +397,11 @@ export default function App() {
               returns the user to this page rather than to the parent screen.
               Open to every role whose recovery CAN be enabled; whether it
               actually is remains the server's decision, read from
-              /auth/recovery/config, and the page says so when it is not. */}
+              /auth/recovery/config, and the page says so when it is not.
+              school (main account and grade teachers) and driver were added
+              after owner decision 2026-11-13. */}
           <Route path="/parent/link/admin-recovery" element={
-            <PrivateRoute allowedRoles={['admin', 'province', 'affiliation', 'transport']}>
+            <PrivateRoute allowedRoles={['admin', 'province', 'affiliation', 'transport', 'school', 'driver']}>
               <Layout><AdminAccountSecurity /></Layout>
             </PrivateRoute>
           } />
@@ -415,6 +418,11 @@ export default function App() {
           <Route path="/admin/vehicle-requests" element={
             <PrivateRoute allowedRoles={['admin']}>
               <Layout><VehicleRequests /></Layout>
+            </PrivateRoute>
+          } />
+          <Route path="/admin/emergencies" element={
+            <PrivateRoute allowedRoles={['admin']}>
+              <Layout><AdminEmergencies /></Layout>
             </PrivateRoute>
           } />
           <Route path="/admin/driver-integrity" element={

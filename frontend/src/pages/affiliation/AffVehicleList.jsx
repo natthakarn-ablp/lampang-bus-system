@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Bus } from 'lucide-react';
 import api from '../../api/axios';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import PageHeader from '../../components/PageHeader';
 import VehicleRosterCard from '../../components/VehicleRosterCard';
+import DriverAccountActions from '../../components/DriverAccountActions';
+import { useAuth } from '../../hooks/useAuth';
 import EmptyState from '../../components/EmptyState';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
@@ -16,12 +18,14 @@ export default function AffVehicleList() {
   const [error, setError] = useState('');
   const [plateSearch, setPlateSearch] = useState(searchParams.get('plate') || '');
 
-  useEffect(() => {
+  const { user } = useAuth();
+  const load = useCallback(() => {
     api.get('/affiliation/vehicles')
       .then((res) => setVehicles(Array.isArray(res.data.data) ? res.data.data : []))
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => { load(); }, [load]);
 
   const shown = vehicles.filter(
     v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase())
@@ -61,6 +65,13 @@ export default function AffVehicleList() {
                 vehicle={v}
                 studentsPath="/affiliation/students"
                 showContactPhones
+                // Owner decision 2026-11-13: the affiliation may reset / change
+                // the driver of any vehicle used by a school in its scope.
+                actions={user?.role === 'affiliation' ? (
+                  <div className="flex flex-wrap gap-2">
+                    <DriverAccountActions vehicle={v} basePath="/affiliation" onChanged={load} />
+                  </div>
+                ) : null}
               />
             ))}
           </div>

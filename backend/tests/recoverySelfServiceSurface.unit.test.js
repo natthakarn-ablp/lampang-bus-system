@@ -57,21 +57,64 @@ describe('the page talks to the shared endpoints', () => {
 });
 
 describe('who may open the page', () => {
-  it('is routed for the four roles that can hold a binding', () => {
+  // Owner decision 2026-11-13 added school (main account + grade teachers)
+  // and driver; before that this test pinned them OUT.
+  it('is routed for all six login roles', () => {
     const i = app.indexOf('/parent/link/admin-recovery');
     expect(i).toBeGreaterThan(-1);
-    expect(app.slice(i, i + 300)).toMatch(/allowedRoles=\{\['admin', 'province', 'affiliation', 'transport'\]\}/);
+    expect(app.slice(i, i + 300)).toMatch(
+      /allowedRoles=\{\['admin', 'province', 'affiliation', 'transport', 'school', 'driver'\]\}/
+    );
   });
 
-  it('the account menu offers it to the same four', () => {
-    expect(nav).toMatch(/const RECOVERY_ROLES = \['admin', 'province', 'affiliation', 'transport'\]/);
+  it('the account menu lists the same six', () => {
+    expect(nav).toMatch(/const RECOVERY_ROLES = \['admin', 'province', 'affiliation', 'transport', 'school', 'driver'\]/);
     expect(nav).toMatch(/\{canBindRecovery && \(/);
   });
 
-  it('drivers and schools are not among them', () => {
-    const block = nav.match(/const RECOVERY_ROLES[^;]+;/)[0];
-    expect(block).not.toContain("'driver'");
-    expect(block).not.toContain("'school'");
+  it('but shows it to admin, school and driver only while their own flag is on', () => {
+    const helper = read('frontend/src/utils/passwordRecovery.js');
+    expect(nav).toMatch(/canBindRecoveryFor\(user, features\)/);
+    expect(helper).toMatch(/admin: 'adminPasswordRecovery'/);
+    expect(helper).toMatch(/school: 'recoverySchool'/);
+    expect(helper).toMatch(/driver: 'recoveryDriver'/);
+    expect(helper).toMatch(/return Boolean\(features\?\.\[flag\]\)/);
+  });
+
+  it('the driver profile links to it behind the driver flag', () => {
+    const profile = read('frontend/src/pages/driver/DriverProfile.jsx');
+    expect(profile).toMatch(/features\?\.recoveryDriver && \(/);
+    expect(profile).toContain('to="/parent/link/admin-recovery"');
+  });
+});
+
+describe('the login page offers LINE recovery to every open role', () => {
+  const login = read('frontend/src/pages/Login.jsx');
+  const forgot = read('frontend/src/pages/ForgotPassword.jsx');
+  const helper = read('frontend/src/utils/passwordRecovery.js');
+
+  it('reads the open roles from the policy, not only the admin key', () => {
+    expect(login).toMatch(/enabledRecoveryRolesFromConfig\(res\.data\.data\)/);
+    expect(forgot).toMatch(/enabledRecoveryRolesFromConfig\(res\.data\.data\)/);
+    expect(helper).toMatch(/policy\.enabled_roles/);
+  });
+
+  it('labels the link as LINE recovery for any role', () => {
+    expect(login).toContain('ลืมรหัสผ่าน (กู้ผ่าน LINE)');
+    expect(login).not.toContain('ผู้ดูแลระบบ: รีเซ็ตผ่าน LINE');
+  });
+
+  it('names who can actually reset each closed role', () => {
+    // Each contact matches a real reset route on this code base.
+    const contact = (key) => helper.match(new RegExp(`key: '${key}'[^}]+contact: '([^']+)'`))[1];
+    expect(contact('school')).toContain('สังกัด');
+    expect(contact('teacher')).toContain('บัญชีหลักของโรงเรียน');
+    // 2026-11-13 (PR #178): schools that use the vehicle can reset its driver.
+    expect(contact('driver')).toContain('โรงเรียน');
+    expect(contact('unit')).toContain('จังหวัด');
+    expect(contact('province')).toContain('ผู้ดูแลระบบ');
+    // The old Login text (pre-recovery) is gone.
+    expect(login).not.toContain('โรงเรียนและคนขับ: ติดต่อผู้ดูแลบัญชีของโรงเรียน');
   });
 });
 

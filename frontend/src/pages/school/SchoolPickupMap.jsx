@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Map as MapIcon, Bus, Users, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Map as MapIcon, Bus, Users, Plus, Pencil, Trash2, MapPin } from 'lucide-react';
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import {
@@ -10,6 +10,7 @@ import PageHeader from '../../components/PageHeader';
 import PickupMap from '../../components/PickupMap';
 import PickupPointFields from '../../components/PickupPointFields';
 import PickupStudentsModal from '../../components/PickupStudentsModal';
+import PickupCoordPicker from '../../components/PickupCoordPicker';
 import LoadingState from '../../components/LoadingState';
 import ErrorState from '../../components/ErrorState';
 import { classroomLabel } from '../../utils/student';
@@ -32,6 +33,9 @@ export default function SchoolPickupMap() {
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState(null);  // null | { ...point }
+  // School MAIN account only: name / coordinates of a point (backend
+  // requireFullSchoolScope; grade teachers keep their pupil-list rights).
+  const [editingLocation, setEditingLocation] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   // window.confirm named nothing and could not say what survives the delete.
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -143,6 +147,7 @@ export default function SchoolPickupMap() {
                   selected={selectedId === p.id}
                   onClick={() => setSelectedId(p.id)}
                   onEdit={() => setEditing(p)}
+                  onEditLocation={isTeacher ? undefined : () => setEditingLocation(p)}
                   onDelete={() => setConfirmDelete(p)}
                   deleting={deletingId === p.id}
                 />
@@ -179,6 +184,14 @@ export default function SchoolPickupMap() {
         onConfirm={() => handleDelete(confirmDelete)}
         onCancel={() => setConfirmDelete(null)}
       />
+
+      {editingLocation && (
+        <EditPointLocationModal
+          point={editingLocation}
+          onClose={() => setEditingLocation(null)}
+          onSaved={() => { setEditingLocation(null); fetchPoints(sessionFilter); }}
+        />
+      )}
 
       {editing && (
         <PickupStudentsModal
@@ -406,7 +419,7 @@ function CreatePickupModal({ onClose, onCreated }) {
   );
 }
 
-function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }) {
+function PickupPointRow({ point, selected, onClick, onEdit, onEditLocation, onDelete, deleting }) {
   const studentCount = Array.isArray(point.students) ? point.students.length : 0;
   const previewNames = (point.students || []).slice(0, 3)
     .map(s => `${s.first_name} ${s.last_name}`).join(', ');
@@ -471,6 +484,16 @@ function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }
                 {deleting ? 'กำลังลบ…' : 'ลบ'}
               </button>
             )}
+            {onEditLocation && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onEditLocation(); }}
+                className="focus-ring inline-flex items-center gap-1 text-sm font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 active:bg-brand-100 rounded-lg px-2.5 min-h-[44px] transition"
+              >
+                <MapPin className="w-4 h-4" strokeWidth={2} aria-hidden="true" />
+                แก้ชื่อ/ตำแหน่ง
+              </button>
+            )}
             {onEdit && (
               <button
                 type="button"
@@ -485,5 +508,122 @@ function PickupPointRow({ point, selected, onClick, onEdit, onDelete, deleting }
         </div>
       </AppCard>
     </div>
+  );
+}
+
+/* ── Edit name / coordinates / note of a point (school main account) ── */
+function EditPointLocationModal({ point, onClose, onSaved }) {
+  const toast = useToast();
+  const [form, setForm] = useState(() => ({
+    label: point.label || '',
+    latitude: point.latitude ?? '',
+    longitude: point.longitude ?? '',
+    notes: point.notes || '',
+  }));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const coords = (form.latitude !== '' && form.longitude !== '')
+    ? [Number(form.latitude), Number(form.longitude)]
+    : null;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true); setError(null);
+    try {
+      await api.put(`/school/pickup-points/${point.id}`, {
+        label: form.label.trim(),
+        latitude: parseFloat(form.latitude),
+        longitude: parseFloat(form.longitude),
+        notes: form.notes.trim() || null,
+      });
+      toast.success('บันทึกจุดรับส่งแล้ว');
+      onSaved();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={`แก้ชื่อ/ตำแหน่ง: ${point.label}`}
+      size="lg"
+      onClose={() => { if (!saving) onClose(); }}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="focus-ring px-4 min-h-[44px] text-sm font-medium rounded-lg border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50"
+          >
+            ยกเลิก
+          </button>
+          <button
+            type="submit"
+            form="school-pickup-location-form"
+            disabled={saving || !form.label.trim() || form.latitude === '' || form.longitude === ''}
+            className="focus-ring px-4 min-h-[44px] text-sm font-semibold rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white transition disabled:opacity-60 disabled:pointer-events-none"
+          >
+            {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+          </button>
+        </>
+      }
+    >
+      <form id="school-pickup-location-form" onSubmit={handleSubmit} className="space-y-3">
+        {error && <AlertBanner variant="danger">{error}</AlertBanner>}
+        <FormField
+          label="ป้ายชื่อจุด"
+          required
+          maxLength={100}
+          value={form.label}
+          onChange={v => update('label', v)}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="ละติจูด" required>
+            {ctl => (
+              <input
+                {...ctl}
+                type="number" step="any" required min={-90} max={90}
+                value={form.latitude}
+                onChange={e => update('latitude', e.target.value)}
+                className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink tabular-nums transition"
+              />
+            )}
+          </FormField>
+          <FormField label="ลองจิจูด" required>
+            {ctl => (
+              <input
+                {...ctl}
+                type="number" step="any" required min={-180} max={180}
+                value={form.longitude}
+                onChange={e => update('longitude', e.target.value)}
+                className="focus-ring w-full bg-surface-raised border border-surface-border rounded-lg px-3 min-h-[44px] text-base text-ink tabular-nums transition"
+              />
+            )}
+          </FormField>
+        </div>
+        <p className="text-caption text-ink-muted">คลิกบนแผนที่เพื่อย้ายตำแหน่ง</p>
+        <PickupCoordPicker
+          value={coords}
+          onChange={([lat, lng]) => {
+            update('latitude', lat.toFixed(6));
+            update('longitude', lng.toFixed(6));
+          }}
+        />
+        <FormField
+          label="หมายเหตุ (ไม่บังคับ)"
+          maxLength={255}
+          value={form.notes}
+          onChange={v => update('notes', v)}
+        />
+        <p className="text-caption text-ink-muted">
+          รอบเดินรถและรายชื่อนักเรียนแก้ที่ปุ่ม "แก้ไขรายชื่อนักเรียน" · จุดที่มีนักเรียนโรงเรียนอื่นใช้ร่วมจะย้ายตำแหน่งไม่ได้
+        </p>
+      </form>
+    </Modal>
   );
 }

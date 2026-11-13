@@ -4,7 +4,8 @@ import { Bus } from 'lucide-react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
 import Pagination from '../../components/Pagination';
-import { StatusBadge, DataTable, FilterBar } from '../../components/ui';
+import { StatusBadge, DataTable, FilterBar, FormField, Modal, TableAction } from '../../components/ui';
+import { useToast } from '../../components/Toast';
 import { toBangkokDate } from '../../utils/thaiTime';
 
 const RESULT_BADGE = {
@@ -47,6 +48,14 @@ function docExpiryStatus(v) {
 
 export default function TransportVehicleList() {
   const location = useLocation();
+  const toast = useToast();
+  // 2026-11-13 — transport keeps document expiry dates and fixes plate typos
+  // itself (PUT .../document-expiry, POST .../fix-plate), no admin hand-off.
+  const [docTarget, setDocTarget] = useState(null);
+  const [docForm, setDocForm] = useState({});
+  const [plateTarget, setPlateTarget] = useState(null);
+  const [plateForm, setPlateForm] = useState({ plate_no: '', reason: '' });
+  const [saving, setSaving] = useState(false);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -93,6 +102,42 @@ export default function TransportVehicleList() {
   }, [fetchVehicles]);
 
   const searching = search.trim() !== debouncedSearch.trim();
+
+  function openDocs(v) {
+    setDocTarget(v);
+    setDocForm({
+      registration_expiry: toBangkokDate(v.registration_expiry) || '',
+      compulsory_insurance_expiry: toBangkokDate(v.compulsory_insurance_expiry) || '',
+      tax_expiry: toBangkokDate(v.tax_expiry) || '',
+    });
+  }
+  async function saveDocs() {
+    setSaving(true);
+    try {
+      const res = await api.put(`/transport/vehicles/${encodeURIComponent(docTarget.id)}/document-expiry`, docForm);
+      toast.success(res.data?.message || 'บันทึกแล้ว');
+      setDocTarget(null);
+      fetchVehicles(meta.page);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'บันทึกไม่สำเร็จ');
+    } finally { setSaving(false); }
+  }
+  function openPlate(v) {
+    setPlateTarget(v);
+    setPlateForm({ plate_no: v.plate_no || '', reason: '' });
+  }
+  async function savePlate() {
+    setSaving(true);
+    try {
+      const res = await api.post(`/transport/vehicles/${encodeURIComponent(plateTarget.id)}/fix-plate`, plateForm);
+      toast.success(res.data?.message || 'แก้ทะเบียนแล้ว');
+      setPlateTarget(null);
+      fetchVehicles(meta.page);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'แก้ทะเบียนไม่สำเร็จ');
+    } finally { setSaving(false); }
+  }
+  const plateChanged = Boolean(plateTarget && plateForm.plate_no.trim() && plateForm.plate_no.trim() !== plateTarget.plate_no);
 
   const totalPages = Math.ceil(meta.total / meta.per_page) || 1;
 
@@ -143,8 +188,10 @@ export default function TransportVehicleList() {
         onRetry={() => fetchVehicles(meta.page)}
         rows={vehicles}
         rowKey={v => v.id}
-        actionsHeader="ข้อมูลเมื่อเกิดเหตุ"
-        actions={v => <Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} aria-label={`ดูนักเรียนและข้อมูลรถ ${v.plate_no}`} className="focus-ring inline-flex items-center justify-center min-h-12 px-4 py-2 rounded-xl bg-brand-700 text-white font-semibold">ดูนักเรียนและข้อมูลรถ</Link>}
+        actionsHeader="จัดการ"
+        actions={v => <><Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} aria-label={`ดูนักเรียนและข้อมูลรถ ${v.plate_no}`} className="focus-ring inline-flex items-center justify-center min-h-12 px-4 py-2 rounded-xl bg-brand-700 text-white font-semibold">ดูนักเรียนและข้อมูลรถ</Link>
+          <TableAction tone="neutral" onClick={() => openDocs(v)} aria-label={`แก้วันหมดอายุเอกสาร ${v.plate_no}`}>วันหมดอายุเอกสาร</TableAction>
+          <TableAction tone="neutral" onClick={() => openPlate(v)} aria-label={`แก้ทะเบียนพิมพ์ผิด ${v.plate_no}`}>แก้ทะเบียน</TableAction></>}
         columns={[
           { key: 'plate', header: 'ทะเบียนรถ', primary: true,
             cell: v => <Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} className="flex min-h-[44px] items-center whitespace-normal break-words font-semibold text-brand-700 underline focus-ring rounded">{v.plate_no}</Link> },
@@ -186,6 +233,62 @@ export default function TransportVehicleList() {
           description: search ? 'ตรวจทะเบียนและจังหวัด หรือล้างคำค้นเพื่อดูรถทั้งหมด' : statusFilter ? 'ลองเปลี่ยนตัวกรองเพื่อดูผลอื่น' : 'ยังไม่มีข้อมูลรถให้เปิดดู',
         }}
       />
+
+      <Modal
+        open={Boolean(docTarget)}
+        title={`วันหมดอายุเอกสาร: ${docTarget?.plate_no || ''}`}
+        size="sm"
+        onClose={() => { if (!saving) setDocTarget(null); }}
+        footer={
+          <>
+            <button type="button" onClick={() => setDocTarget(null)} disabled={saving}
+              className="focus-ring text-base font-medium px-4 min-h-[44px] rounded-lg border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50">ยกเลิก</button>
+            <button type="submit" form="transport-doc-expiry-form" disabled={saving}
+              className="focus-ring text-base font-semibold px-4 min-h-[44px] rounded-lg bg-brand-600 hover:bg-brand-700 text-white transition disabled:opacity-50">
+              {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+            </button>
+          </>
+        }
+      >
+        <form id="transport-doc-expiry-form" onSubmit={e => { e.preventDefault(); saveDocs(); }} className="space-y-3">
+          <p className="text-sm text-ink-muted">ระบบคำนวณสถานะความพร้อมของรถใหม่ทันทีหลังบันทึก · เว้นว่างหากยังไม่มีข้อมูล · ประกันภัยภาคสมัครใจให้เจ้าของรถหรือคนขับแก้ในระบบคนขับ</p>
+          <FormField label="ทะเบียนรถ (เล่มทะเบียน) หมดอายุ" type="date" value={docForm.registration_expiry}
+            onChange={val => setDocForm({ ...docForm, registration_expiry: val })} />
+          <FormField label="พ.ร.บ. หมดอายุ" type="date" value={docForm.compulsory_insurance_expiry}
+            onChange={val => setDocForm({ ...docForm, compulsory_insurance_expiry: val })} />
+          <FormField label="ภาษีรถหมดอายุ" type="date" value={docForm.tax_expiry}
+            onChange={val => setDocForm({ ...docForm, tax_expiry: val })} />
+        </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(plateTarget)}
+        title="แก้ทะเบียนรถที่พิมพ์ผิด"
+        size="sm"
+        onClose={() => { if (!saving) setPlateTarget(null); }}
+        footer={
+          <>
+            <button type="button" onClick={() => setPlateTarget(null)} disabled={saving}
+              className="focus-ring text-base font-medium px-4 min-h-[44px] rounded-lg border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50">ยกเลิก</button>
+            <button type="submit" form="transport-fix-plate-form" disabled={saving || !plateChanged || !plateForm.reason.trim()}
+              className="focus-ring text-base font-semibold px-4 min-h-[44px] rounded-lg bg-brand-600 hover:bg-brand-700 text-white transition disabled:opacity-50">
+              {saving ? 'กำลังบันทึก…' : 'แก้ทะเบียน'}
+            </button>
+          </>
+        }
+      >
+        <form id="transport-fix-plate-form" onSubmit={e => { e.preventDefault(); savePlate(); }} className="space-y-3">
+          <p className="text-sm text-ink-muted">ทะเบียนเดิม: <strong className="text-ink">{plateTarget?.plate_no}</strong></p>
+          <p className="text-sm text-warn-ink">
+            ชื่อผู้ใช้ของคนขับคือทะเบียนรถ เมื่อแก้แล้วคนขับต้องเข้าสู่ระบบด้วยทะเบียนใหม่ (รหัสผ่านเดิม) กรุณาแจ้งคนขับ ·
+            ถ้าเป็นรถซ้ำสองคันให้แจ้งผู้ดูแลระบบรวมรถแทน
+          </p>
+          <FormField label="ทะเบียนใหม่ (พร้อมจังหวัด)" required value={plateForm.plate_no} placeholder="เช่น นข 1234 ลำปาง"
+            onChange={val => setPlateForm({ ...plateForm, plate_no: val })} />
+          <FormField label="เหตุผล" required value={plateForm.reason} placeholder="เช่น พิมพ์ตัวอักษรผิดตอนเพิ่มรถ"
+            onChange={val => setPlateForm({ ...plateForm, reason: val })} maxLength={500} />
+        </form>
+      </Modal>
 
       {!loading && !searching && !error && totalPages > 1 && (
         <Pagination page={meta.page} totalPages={totalPages} total={meta.total} shown={vehicles.length} unit="คัน" onPage={(p) => fetchVehicles(p)} />

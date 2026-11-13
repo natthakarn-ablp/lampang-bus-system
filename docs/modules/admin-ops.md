@@ -9,6 +9,7 @@ Mount: `/api/admin` (`app.js:192`; `router.use(authenticate, requireRole('admin'
 
 admin.routes.js (2356 บรรทัด) หลัก ๆ:
 - ผู้ใช้: GET /users (L337), POST /users (L376), PUT /users/:id (L458), POST /users/:id/reset-password (L538), DELETE /users/:id (L577), POST /users/:id/restore (L636), GET /users-needing-action (L666), GET /roster-requests-pending (L678)
+- ปิดเหตุฉุกเฉิน (เจ้าของยืนยัน 2026-11-13, ต้องมีบันทึก): `POST /api/{school|affiliation|province|admin}/emergencies/:id/close`, คนขับ `GET /api/driver/emergencies/open` + `POST /api/driver/emergencies/:id/resolve` ("แก้ไขแล้ว") — `emergencyAdmin.service.closeEmergencyScoped` ต่อบรรทัดประวัติท้าย `note` และเขียน audit (role, scope, note); ปิดซ้ำได้ 409. ผลส่ง LINE ของเหตุฉุกเฉินบันทึกเป็น audit `emergency_line_push`
 - ฉุกเฉิน: GET /emergencies (L2253), PATCH /emergencies/:id (L2279), DELETE /emergencies/:id (L2300) — คนขับแจ้งที่ `POST /api/driver/emergency` (`driver.routes.js:594`)
 - สุขภาพ/ปฏิบัติการ: GET /system-health (L996), GET /operations/health (L2049), /operations/capacity-sample (L2062), /operations/route-latency (L2071), GET /pending-requests-count (L1946)
 - วิจัย/snapshot: POST /snapshots/run (L1119), GET /snapshots (L1218), GET /evaluation-summary (L1235), GET /research-export (+/preview) (L1301/1888) — ดู [reports-export.md](reports-export.md)

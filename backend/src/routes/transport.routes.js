@@ -240,6 +240,41 @@ router.get('/vehicles/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── PUT /api/transport/vehicles/:id/document-expiry (2026-11-13) ───────────
+// registration / พ.ร.บ. / tax expiry. Transport is province-wide for vehicles,
+// so any live vehicle is in scope. Audited; eligibility recomputed.
+router.put('/vehicles/:id/document-expiry', async (req, res, next) => {
+  try {
+    const { pool } = require('../config/database');
+    const docSvc = require('../services/vehicleDocumentExpiry.service');
+    const data = await docSvc.updateDocumentExpiry(pool, {
+      vehicleId: req.params.id, body: req.body, actorId: req.user.id, actorRole: req.user.role,
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, data, 'บันทึกวันหมดอายุเอกสารรถแล้ว');
+  } catch (err) { return next(err); }
+});
+
+// ─── POST /api/transport/vehicles/:id/fix-plate (2026-11-13) ────────────────
+// Typo fix with reason. Renames the matching driver login in the same
+// transaction (vehicleAdmin.fixPlate) — the driver logs in with the new plate.
+router.post('/vehicles/:id/fix-plate', async (req, res, next) => {
+  try {
+    const { pool } = require('../config/database');
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const b = req.body || {};
+    const data = await vehicleAdmin.fixPlate(pool, {
+      vehicleId: req.params.id, newPlate: b.plate_no, reason: b.reason,
+      actorId: req.user.id, actorRole: req.user.role,
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    const msg = data.driver_usernames.length
+      ? `แก้ทะเบียนแล้ว — คนขับต้องเข้าสู่ระบบด้วยทะเบียนใหม่ "${data.plate_no}" (รหัสผ่านเดิม)`
+      : 'แก้ทะเบียนแล้ว';
+    return sendSuccess(res, data, msg);
+  } catch (err) { return next(err); }
+});
+
 // ─── GET /api/transport/inspections ─────────────────────────────────────────
 router.get('/inspections', async (req, res, next) => {
   try {

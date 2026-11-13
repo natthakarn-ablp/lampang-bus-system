@@ -10,6 +10,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { readIdParam } = require('../utils/pathParams');
 const { pool } = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 const { auditExportBeforeSend } = require('../utils/exportAudit');
 const adminSvc = require('../services/admin.service');
 const termSvc = require('../services/term.service');
@@ -462,11 +463,29 @@ router.put('/users/:id', async (req, res, next) => {
   try {
     const userId = readIdParam(req, res, 'id');
     if (userId === null) return;
-    const { display_name, is_active, role, scope_id } = req.body;
+    const { display_name, is_active, role, scope_id, grade_scope } = req.body;
     if (rejectOverLongFields(res, req.body, { display_name: 200, scope_id: 20 })) return;
 
-    const [[user]] = await pool.query('SELECT id, username, role, scope_type, scope_id, display_name, is_active, driver_id FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
+    const [[user]] = await pool.query('SELECT id, username, role, scope_type, scope_id, grade_scope, display_name, is_active, driver_id FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
+
+    // 2026-11-13 — move a grade teacher to another grade (new school year)
+    // instead of delete + recreate. Grade → grade only: a teacher is never
+    // promoted to (or a main account demoted from) the full-school account
+    // here, and it cannot be combined with a role change.
+    let nextGradeScope;
+    if (grade_scope !== undefined) {
+      if (role && role !== user.role) {
+        return sendError(res, 'เปลี่ยนบทบาทและระดับชั้นพร้อมกันไม่ได้', [], 400);
+      }
+      if (user.role !== 'school' || !user.grade_scope) {
+        return sendError(res, 'เปลี่ยนระดับชั้นได้เฉพาะบัญชีครูประจำสายชั้น', [], 400);
+      }
+      if (!isValidGradeScope(grade_scope)) {
+        return sendError(res, `grade_scope ต้องเป็นค่าใดค่าหนึ่งใน: ${VALID_GRADE_SCOPES.join(', ')}`, [], 400);
+      }
+      if (String(grade_scope).trim() !== user.grade_scope) nextGradeScope = String(grade_scope).trim();
+    }
 
     // Phase 10.13A-23C — block re-activating a dedupe-disabled / broken driver
     // account (FALSE → TRUE for role='driver'). Runs BEFORE any write so the
@@ -501,6 +520,11 @@ router.put('/users/:id', async (req, res, next) => {
     const params = [];
     if (display_name !== undefined) { updates.push('display_name = ?'); params.push(display_name); }
     if (is_active !== undefined) { updates.push('is_active = ?'); params.push(is_active ? 1 : 0); }
+    if (nextGradeScope !== undefined) {
+      // The JWT carries grade_scope — end existing sessions on a grade move.
+      updates.push('grade_scope = ?', 'password_changed_at = NOW()');
+      params.push(nextGradeScope);
+    }
     if (role && VALID_ROLES.includes(role)) {
       const scopeType = SCOPED_ROLES[role] || null;
       const scopeError = await validateRoleScope(role, scope_id);
@@ -526,8 +550,11 @@ router.put('/users/:id', async (req, res, next) => {
 
     await logAudit({
       userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
-      oldValue: { display_name: user.display_name, is_active: user.is_active, role: user.role },
-      newValue: { display_name, is_active, role, ...(reactivationWarning ? { reactivation_warning: reactivationWarning } : {}) },
+      oldValue: { display_name: user.display_name, is_active: user.is_active, role: user.role,
+                  ...(nextGradeScope !== undefined ? { grade_scope: user.grade_scope } : {}) },
+      newValue: { display_name, is_active, role,
+                  ...(nextGradeScope !== undefined ? { grade_scope: nextGradeScope } : {}),
+                  ...(reactivationWarning ? { reactivation_warning: reactivationWarning } : {}) },
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
 
@@ -548,7 +575,7 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
       return sendError(res, 'รหัสผ่านใหม่จำเป็น', [], 400);
     }
 
-    const [[user]] = await pool.query('SELECT id, username FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
+    const [[user]] = await pool.query('SELECT id, username, role FROM users WHERE id = ? AND is_deleted = FALSE', [userId]);
     if (!user) return sendError(res, 'ไม่พบผู้ใช้', [], 404);
 
     // Strength check after the lookup so the username-equality rule sees the
@@ -559,20 +586,43 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
     }
 
     const hash = await bcrypt.hash(String(password), BCRYPT_COST);
-    await pool.query(
-      // Phase 10.12D — set password_changed_at = NOW() so any refresh token
-      // issued before the reset is rejected (H3 — invalidate old sessions).
-      'UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?',
-      [hash, userId]
-    );
+    // School and driver accounts change hands by being reset (owner decision
+    // 2026-11-13, config/accountRecoveryPolicy.js), so resetting one also
+    // releases its LINE recovery binding — otherwise the previous holder's
+    // LINE could recover the account again. Admin targets keep the behaviour
+    // they have had since admin recovery shipped.
+    const releasesBinding = user.role === 'school' || user.role === 'driver';
+    let released = 0;
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(
+        // Phase 10.12D — set password_changed_at = NOW() so any refresh token
+        // issued before the reset is rejected (H3 — invalidate old sessions).
+        'UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW() WHERE id = ?',
+        [hash, userId]
+      );
+      if (releasesBinding) released = await releaseRecoveryBinding(conn, userId);
+      await logAudit({
+        userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
+        newValue: {
+          action: 'reset_password', target_username: user.username,
+          ...(releasesBinding ? { recovery_channels_released: released } : {}),
+        },
+        ipAddress: req.ip, userAgent: req.headers['user-agent'], conn,
+      });
+      await conn.commit();
+    } catch (err) {
+      try { await conn.rollback(); } catch { /* keep the original error */ }
+      throw err;
+    } finally {
+      conn.release();
+    }
 
-    await logAudit({
-      userId: req.user.id, action: 'UPDATE', entityType: 'user', entityId: userId,
-      newValue: { action: 'reset_password', target_username: user.username },
-      ipAddress: req.ip, userAgent: req.headers['user-agent'],
-    });
-
-    return sendSuccess(res, null, 'รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อ login ครั้งถัดไป');
+    return sendSuccess(res, releasesBinding ? { recovery_channels_released: released } : null,
+      released
+        ? 'รีเซ็ตรหัสผ่านสำเร็จ และยกเลิก LINE ที่ผูกไว้สำหรับกู้รหัสผ่านแล้ว — ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อ login ครั้งถัดไป'
+        : 'รีเซ็ตรหัสผ่านสำเร็จ — ผู้ใช้จะต้องเปลี่ยนรหัสผ่านเมื่อ login ครั้งถัดไป');
   } catch (err) { next(err); }
 });
 
@@ -2141,6 +2191,21 @@ router.put('/vehicles/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Plate-typo fix that also renames the driver login (vehicleAdmin.fixPlate).
+// Same service as POST /api/transport/vehicles/:id/fix-plate.
+router.post('/vehicles/:id/fix-plate', async (req, res, next) => {
+  try {
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const b = req.body || {};
+    const data = await vehicleAdmin.fixPlate(pool, {
+      vehicleId: req.params.id, newPlate: b.plate_no, reason: b.reason,
+      actorId: req.user.id, actorRole: req.user.role,
+      ipAddress: req.ip, userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, data, 'แก้ทะเบียนแล้ว');
+  } catch (err) { next(err); }
+});
+
 router.post('/vehicles/:id/merge', async (req, res, next) => {
   try {
     const b = req.body || {};
@@ -2236,6 +2301,23 @@ router.patch('/emergencies/:id', async (req, res, next) => {
       actorId: req.user.id, ip: req.ip, userAgent: req.headers['user-agent'],
     });
     return sendSuccess(res, out, 'อัปเดตสถานะเหตุฉุกเฉินสำเร็จ');
+  } catch (err) { next(err); }
+});
+
+// Close with a required note, keeping history (appends to note + audit row),
+// the same path school / affiliation / province / driver use.
+router.post('/emergencies/:id/close', async (req, res, next) => {
+  try {
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const emSvc = require('../services/emergencyAdmin.service');
+    const b = req.body || {};
+    const out = await emSvc.closeEmergencyScoped(pool, {
+      id, result: b.result, note: b.note,
+      actor: { id: req.user.id, role: 'admin', name: req.user.displayName || req.user.username, ip: req.ip, userAgent: req.headers['user-agent'] },
+      scope: { all: true },
+    });
+    return sendSuccess(res, out, 'ปิดเหตุฉุกเฉินแล้ว');
   } catch (err) { next(err); }
 });
 

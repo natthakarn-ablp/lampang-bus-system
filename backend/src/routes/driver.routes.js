@@ -730,7 +730,7 @@ router.post('/emergency', async (req, res, next) => {
             WHERE v.id = ?`,
           [vehicle.vehicle_id]
         );
-        await lineSvc.pushEmergencyFlexMessage({
+        const pushResult = await lineSvc.pushEmergencyFlexMessage({
           plateNo:     vehicle.plate_no,
           vehicleType: meta?.vehicle_type,
           driverName:  req.user.display_name || req.user.username || '-',
@@ -741,6 +741,20 @@ router.post('/emergency', async (req, res, next) => {
           latitude:    lat,
           longitude:   lng,
           accuracy:    acc,
+        });
+        // The push outcome used to be discarded, so a silent LINE failure
+        // (missing config, quota, flex rejected + text fallback failed) left
+        // no trace. Log it and keep it on the audit trail of this emergency.
+        const delivery = summarizeLinePush(pushResult);
+        console.log('[LINE_EMERGENCY_FLEX_PUSH]', { emergencyId: report.id, ...delivery });
+        await logAudit({
+          userId:     req.user.id,
+          action:     'CREATE',
+          entityType: 'emergency_line_push',
+          entityId:   report.id,
+          newValue:   delivery,
+          ipAddress:  req.ip,
+          userAgent:  req.headers['user-agent'],
         });
       } catch (pushErr) {
         console.error('[LINE_EMERGENCY_FLEX_PUSH] unexpected error (suppressed):', pushErr.message);
@@ -767,12 +781,74 @@ router.post('/emergency', async (req, res, next) => {
   }
 });
 
+// Reduce pushEmergencyFlexMessage()'s return value to a small, PII-free record
+// (no message text, no coordinates, no LINE ids).
+function summarizeLinePush(r) {
+  if (!r || typeof r !== 'object') return { sent: false, channel: 'unknown' };
+  if (r.dryRun) return { sent: false, channel: 'dry-run' };
+  if (r.skipped) return { sent: false, channel: 'skipped', reason: String(r.skipped).slice(0, 80) };
+  return {
+    sent: r.sent === true,
+    channel: r.channel ? String(r.channel).slice(0, 40) : (r.sent ? 'text' : 'failed'),
+    ...(r.flexError ? { flex_error: String(r.flexError).slice(0, 200) } : {}),
+    ...(r.error ? { error: String(r.error).slice(0, 200) } : {}),
+  };
+}
+
+// Driver's own emergency scope: emergencies they reported, or reported for the
+// vehicle they currently drive. Never gated on a shift (same as POST /emergency).
+async function driverEmergencyScope(req) {
+  let vehicleId = null;
+  try {
+    const v = await checkinSvc.resolveVehicleForEmergency(pool, req.user);
+    vehicleId = v && v.vehicle_id ? v.vehicle_id : null;
+  } catch { /* no vehicle: own reports only */ }
+  return { driverUserId: req.user.id, vehicleId };
+}
+
+// ─── GET /emergencies/open — เหตุที่ยังไม่ปิดของรถตน ───────────────────────────────
+router.get('/emergencies/open', async (req, res, next) => {
+  try {
+    const scope = await driverEmergencyScope(req);
+    const params = [scope.driverUserId];
+    let vehicleClause = '';
+    if (scope.vehicleId) { vehicleClause = ' OR el.vehicle_id = ?'; params.push(scope.vehicleId); }
+    const [rows] = await pool.query(
+      `SELECT el.id, el.vehicle_id, el.plate_no, el.detail, el.note, el.result, el.reported_at
+         FROM emergency_logs el
+        WHERE el.is_deleted = FALSE
+          AND (el.reported_by = ?${vehicleClause})
+          AND (el.result IS NULL OR UPPER(el.result) NOT IN ('RESOLVED','FALSE_ALARM','CLOSED'))
+        ORDER BY el.reported_at DESC
+        LIMIT 20`,
+      params
+    );
+    return sendSuccess(res, rows);
+  } catch (err) { return next(err); }
+});
+
+// ─── POST /emergencies/:id/resolve — คนขับกด "แก้ไขแล้ว" ───────────────────────
+router.post('/emergencies/:id/resolve', async (req, res, next) => {
+  try {
+    const id = readIdParam(req, res, 'id');
+    if (id === null) return;
+    const scope = await driverEmergencyScope(req);
+    const emSvc = require('../services/emergencyAdmin.service');
+    const out = await emSvc.closeEmergencyScoped(pool, {
+      id, result: 'RESOLVED', note: (req.body || {}).note,
+      actor: { id: req.user.id, role: 'driver', name: req.user.displayName || req.user.username, ip: req.ip, userAgent: req.headers['user-agent'] },
+      scope,
+    });
+    return sendSuccess(res, out, 'บันทึกว่าแก้ไขเหตุแล้ว');
+  } catch (err) { return next(err); }
+});
+
 // ─── GET /status-today ────────────────────────────────────────────────────────
 
 router.get('/status-today', async (req, res, next) => {
   try {
     const vehicle = await checkinSvc.getDriverVehicle(pool, req.user);
-    const status  = await checkinSvc.getStatusToday(pool, vehicle.vehicle_id);
+    const status  = await checkinSvc.getStatusToday(pool, vehicle.vehicle_id, { userId: req.user.id });
 
     return sendSuccess(res, {
       vehicle: {
@@ -1579,6 +1655,9 @@ router.post('/checkin/:logId/void', async (req, res, next) => {
       logId:           req.params.logId,
       reason,
       scope:           { kind: 'driver', vehicleId: vehicle.vehicle_id },
+      // Voiding a mistaken drop-off must leave the earlier boarding standing
+      // (same rule as the teacher undo) instead of marking the child not done.
+      restorePriorDone: true,
     });
 
     return sendSuccess(res, result, 'ยกเลิกรายการเช็กอินสำเร็จ', null, 201);

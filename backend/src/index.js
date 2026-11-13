@@ -161,7 +161,8 @@ const REQUIRED_ADMIN_RECOVERY_TABLES = [
 async function assertAdminRecoveryMigrationPresent() {
   // The school and driver recovery flags use the same three tables.
   if (!env.features.adminPasswordRecovery && !env.features.recoverySchool
-      && !env.features.recoveryDriver) return;
+      && !env.features.recoveryDriver && !env.features.recoveryProvince
+      && !env.features.recoveryAffiliation && !env.features.recoveryTransport) return;
   const placeholders = REQUIRED_ADMIN_RECOVERY_TABLES.map(() => '?').join(', ');
   let presentTables;
   try {
@@ -178,7 +179,8 @@ async function assertAdminRecoveryMigrationPresent() {
   if (missing.length) {
     console.error(
       `[app] FATAL: LINE password recovery (FEATURE_ADMIN_PASSWORD_RECOVERY / ` +
-      `FEATURE_RECOVERY_SCHOOL / FEATURE_RECOVERY_DRIVER) requires migration 049 — ` +
+      `FEATURE_RECOVERY_SCHOOL / FEATURE_RECOVERY_DRIVER / FEATURE_RECOVERY_PROVINCE / ` +
+      `FEATURE_RECOVERY_AFFILIATION / FEATURE_RECOVERY_TRANSPORT) requires migration 049 — ` +
       `missing table(s): ${missing.join(', ')}.`
     );
     process.exit(1);

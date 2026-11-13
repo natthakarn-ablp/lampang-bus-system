@@ -33,6 +33,7 @@ const bcrypt = require('bcrypt');
 const { pool } = require('../config/database');
 const { validatePassword } = require('../utils/passwordPolicy');
 const { logAudit } = require('../utils/audit');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 
 const BCRYPT_COST = 12;
 
@@ -86,32 +87,49 @@ async function resetUnitAccountPassword({ accountId, newPassword, userId, ip = n
   }
 
   const hash = await bcrypt.hash(String(newPassword), BCRYPT_COST);
-  await pool.query(
-    `UPDATE users
-        SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW()
-      WHERE id = ?`,
-    [hash, accountId]
-  );
+  // The province resetting an affiliation or transport account is how that
+  // account changes hands (owner decision 2026-11-13), so the reset also
+  // releases the previous holder's LINE recovery binding, in one transaction.
+  const conn = await pool.getConnection();
+  let released = 0;
+  try {
+    await conn.beginTransaction();
+    await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [accountId]);
+    await conn.query(
+      `UPDATE users
+          SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW()
+        WHERE id = ?`,
+      [hash, accountId]
+    );
+    released = await releaseRecoveryBinding(conn, accountId);
+    // `username` is the key the other audit writers already use for the
+    // account acted on (admin's create path and the school teacher reset both
+    // write it), so a search for "what happened to this account" finds this
+    // row too. The four reset paths still disagree on the action key itself —
+    // admin writes action: 'reset_password', the school path writes
+    // action_detail — and that is not resolved here, because changing a value
+    // already in production rewrites the meaning of historical rows and is a
+    // decision of its own.
+    await logAudit({
+      userId, action: 'UPDATE', entityType: 'user', entityId: accountId,
+      newValue: {
+        action: 'password_reset',
+        username: account.username,
+        by_role: 'province',
+        target_role: account.role,
+        recovery_channels_released: released,
+      },
+      ipAddress: ip, userAgent, conn,
+    });
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* keep the original error */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
 
-  // `username` is the key the other audit writers already use for the account
-  // acted on (admin's create path and the school teacher reset both write it),
-  // so a search for "what happened to this account" finds this row too. The
-  // four reset paths still disagree on the action key itself — admin writes
-  // action: 'reset_password', the school path writes action_detail — and that
-  // is not resolved here, because changing a value already in production
-  // rewrites the meaning of historical rows and is a decision of its own.
-  await logAudit({
-    userId, action: 'UPDATE', entityType: 'user', entityId: accountId,
-    newValue: {
-      action: 'password_reset',
-      username: account.username,
-      by_role: 'province',
-      target_role: account.role,
-    },
-    ipAddress: ip, userAgent,
-  });
-
-  return { id: account.id, username: account.username, role: account.role };
+  return { id: account.id, username: account.username, role: account.role, recovery_channels_released: released };
 }
 
 // ─── Full account management (2026-11-13) ────────────────────────────────────
@@ -243,17 +261,41 @@ async function updateUnitAccount(db, { accountId, displayName, isActive, actorId
     if (!aff) throw httpError('สังกัดของบัญชีนี้ถูกปิดใช้งานแล้ว กรุณากู้คืนสังกัดก่อนเปิดบัญชี', 409);
   }
 
-  await db.query(
-    `UPDATE users SET ${updates.join(', ')} WHERE id = ? AND role IN (?)`,
-    [...params, accountId, MANAGED_ROLES]
-  );
-  await logAudit({
-    userId: actorId, action: 'UPDATE', entityType: 'user', entityId: accountId,
-    oldValue: { display_name: account.display_name, is_active: Boolean(account.is_active) },
-    newValue: { ...after, username: account.username, target_role: account.role, by_role: 'province' },
-    ipAddress: ip, userAgent, conn: db,
-  });
-  return { id: accountId, username: account.username, ...after };
+  // Deactivating also releases the LINE recovery binding (owner decision
+  // 2026-11-13), in the same transaction: an office account that is closed
+  // and later reopened for a new holder must not still answer to the former
+  // holder's LINE.
+  const deactivating = isActive === false && Boolean(account.is_active);
+  const conn = await db.getConnection();
+  let released = 0;
+  try {
+    await conn.beginTransaction();
+    await conn.query('SELECT id FROM users WHERE id = ? FOR UPDATE', [accountId]);
+    await conn.query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = ? AND role IN (?)`,
+      [...params, accountId, MANAGED_ROLES]
+    );
+    if (deactivating) released = await releaseRecoveryBinding(conn, accountId);
+    await logAudit({
+      userId: actorId, action: 'UPDATE', entityType: 'user', entityId: accountId,
+      oldValue: { display_name: account.display_name, is_active: Boolean(account.is_active) },
+      newValue: {
+        ...after, username: account.username, target_role: account.role, by_role: 'province',
+        ...(deactivating ? { recovery_channels_released: released } : {}),
+      },
+      ipAddress: ip, userAgent, conn,
+    });
+    await conn.commit();
+  } catch (err) {
+    try { await conn.rollback(); } catch { /* keep the original error */ }
+    throw err;
+  } finally {
+    conn.release();
+  }
+  return {
+    id: accountId, username: account.username, ...after,
+    ...(deactivating ? { recovery_channels_released: released } : {}),
+  };
 }
 
 /** Soft delete; releases the account-recovery LINE binding like the admin delete. */
@@ -266,10 +308,7 @@ async function deleteUnitAccount(db, { accountId, actorId, ip = null, userAgent 
     await conn.beginTransaction();
     account = await findManaged(conn, accountId, { lock: true });
     if (!account) throw httpError('ไม่พบบัญชีนี้ หรือไม่ใช่บัญชีสังกัด/ขนส่ง', 404);
-    await conn.query('DELETE FROM password_reset_requests WHERE user_id = ? AND used_at IS NULL', [accountId]);
-    await conn.query('DELETE FROM user_recovery_codes WHERE user_id = ?', [accountId]);
-    const [chan] = await conn.query('DELETE FROM user_recovery_channels WHERE user_id = ?', [accountId]);
-    released = (chan && chan.affectedRows) || 0;
+    released = await releaseRecoveryBinding(conn, accountId);
     await conn.query('UPDATE users SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [accountId]);
     await logAudit({
       userId: actorId, action: 'DELETE', entityType: 'user', entityId: accountId,

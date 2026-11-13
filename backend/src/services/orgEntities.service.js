@@ -33,6 +33,7 @@
  */
 
 const { logAudit } = require('../utils/audit');
+const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
 
 const AFFILIATION_ID_RE = /^[A-Za-z0-9_-]{1,10}$/;
 const NAME_MAX = 200;
@@ -144,8 +145,15 @@ async function deactivateAffiliation(db, { id, reason = null, actorId, ip = null
       [aff.id]
     );
     const accountIds = accounts.map((r) => r.id);
+    let recoveryReleased = 0;
     if (accountIds.length) {
       await conn.query('UPDATE users SET is_active = FALSE WHERE id IN (?)', [accountIds]);
+      // Closing the affiliation deactivates its accounts, and deactivating an
+      // affiliation account releases its LINE recovery binding (owner decision
+      // 2026-11-13), inside this same transaction.
+      for (const accountId of accountIds) {
+        recoveryReleased += await releaseRecoveryBinding(conn, accountId);
+      }
     }
     await conn.query('UPDATE affiliations SET is_deleted = TRUE, deleted_at = NOW() WHERE id = ?', [aff.id]);
     await logAudit({
@@ -154,6 +162,7 @@ async function deactivateAffiliation(db, { id, reason = null, actorId, ip = null
       newValue: {
         is_deleted: true, reason: reason ? String(reason).slice(0, 500) : null,
         accounts_deactivated: accountIds,
+        recovery_channels_released: recoveryReleased,
       },
       ipAddress: ip, userAgent, conn, required: true,
     });

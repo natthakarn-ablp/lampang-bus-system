@@ -55,23 +55,27 @@ describe('recovery scope', () => {
   });
 });
 
-/** Roles whose gates a human has confirmed (school + driver: owner decision 2026-11-13). */
-const CONFIRMED = ['admin', 'school', 'driver'];
-const STILL_CLOSED = ['province', 'affiliation', 'transport'];
+/**
+ * Roles whose gates a human has confirmed: school + driver, then province,
+ * affiliation and transport (unit accounts) — owner decisions 2026-11-13.
+ */
+const CONFIRMED = ['admin', 'province', 'affiliation', 'school', 'transport', 'driver'];
+const UNIT_ROLES = ['province', 'affiliation', 'transport'];
+const STILL_CLOSED = [];
 
 describe('decision gates outrank feature flags', () => {
   it('opens only the confirmed roles even with every flag on', () => {
     const enabled = enabledRecoveryRoles(ALL_FLAGS_ON);
-    expect(enabled).toEqual(['admin', 'school', 'driver']);
+    expect(enabled).toEqual(['admin', 'province', 'affiliation', 'school', 'transport', 'driver']);
   });
 
-  it('reports unconfirmed gates as the blocker, not the flag', () => {
-    for (const role of STILL_CLOSED) {
-      const status = recoveryStatusForRole(role, ALL_FLAGS_ON);
-      expect(status.enabled).toBe(false);
-      expect(status.reason).toBe('decision_gates_unconfirmed');
+  it('no login role is left on unconfirmed gates', () => {
+    expect(STILL_CLOSED).toEqual([]);
+    for (const role of LOGIN_ROLES) {
+      expect(recoveryStatusForRole(role, ALL_FLAGS_ON).reason).not.toBe('decision_gates_unconfirmed');
     }
   });
+
 
   // Full matrix: every role × its own flag on/off × every other flag on/off.
   // A role opens iff its gates are confirmed AND its own flag is exactly
@@ -141,10 +145,41 @@ describe('unconfirmed roles carry the decisions they are waiting on', () => {
     }
   });
 
-  it('keeps province, affiliation and transport undecided', () => {
-    for (const role of STILL_CLOSED) {
-      expect(ROLE_POLICIES[role].gatesConfirmed).toBe(false);
-      expect(ROLE_POLICIES[role].identityModel).toBe('undecided');
+  it('no login role is still undecided', () => {
+    for (const role of LOGIN_ROLES) {
+      expect(ROLE_POLICIES[role].identityModel).not.toBe('undecided');
+    }
+  });
+});
+
+describe('owner decision 2026-11-13: province, affiliation and transport unit accounts', () => {
+  it.each(UNIT_ROLES)('%s: confirmed as a unit account with every gate recorded', (role) => {
+    const p = ROLE_POLICIES[role];
+    expect(p.gatesConfirmed).toBe(true);
+    expect(p.identityModel).toBe('unit_account');
+    expect(p.decisionGates).toEqual([]);
+    expect(p.requiresApproverRole).toBeNull();
+    expect(Object.keys(p.decisionsRecorded)).toHaveLength(3);
+    for (const text of Object.values(p.decisionsRecorded)) {
+      expect(text).toContain('owner decision 2026-11-13');
+    }
+  });
+
+  it('records who resets each unit account at handover', () => {
+    expect(ROLE_POLICIES.province.decisionsRecorded.province_handover_procedure).toContain('ผู้ดูแลระบบ');
+    expect(ROLE_POLICIES.affiliation.decisionsRecorded.affiliation_handover_notifies_province)
+      .toContain('จังหวัดหรือผู้ดูแลระบบ');
+    expect(ROLE_POLICIES.transport.decisionsRecorded.transport_handover_procedure)
+      .toContain('จังหวัดหรือผู้ดูแลระบบ');
+  });
+
+  it('each unit flag opens only its own role', () => {
+    expect(enabledRecoveryRoles({ FEATURE_RECOVERY_PROVINCE: 'true' })).toEqual(['province']);
+    expect(enabledRecoveryRoles({ FEATURE_RECOVERY_AFFILIATION: 'true' })).toEqual(['affiliation']);
+    expect(enabledRecoveryRoles({ FEATURE_RECOVERY_TRANSPORT: 'true' })).toEqual(['transport']);
+    // Anything but the exact string 'true' keeps the role closed.
+    for (const v of ['1', 'TRUE', 'yes', '']) {
+      expect(enabledRecoveryRoles({ FEATURE_RECOVERY_PROVINCE: v })).toEqual([]);
     }
   });
 });
@@ -201,9 +236,9 @@ describe('policy summary', () => {
       if (!row.enabled) expect(row.blocked_reason).toBeTruthy();
       expect(row.phase).toBeTruthy();
     }
-    expect(summary.enabled_roles).toEqual(['admin', 'school', 'driver']);
+    expect(summary.enabled_roles).toEqual(['admin', 'province', 'affiliation', 'school', 'transport', 'driver']);
     expect(summary.roles.driver.decisions_recorded.length).toBe(3);
-    expect(summary.roles.province.decisions_recorded).toEqual([]);
+    expect(summary.roles.province.decisions_recorded.length).toBe(3);
     expect(summary.parent.gates_confirmed).toBe(false);
   });
 

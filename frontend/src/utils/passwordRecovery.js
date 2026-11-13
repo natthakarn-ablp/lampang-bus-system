@@ -10,6 +10,10 @@ export const RECOVERY_FEATURE_BY_ROLE = Object.freeze({
   admin: 'adminPasswordRecovery',
   school: 'recoverySchool',
   driver: 'recoveryDriver',
+  // Unit accounts — owner decision 2026-11-13 (second decision that day).
+  province: 'recoveryProvince',
+  affiliation: 'recoveryAffiliation',
+  transport: 'recoveryTransport',
 });
 
 /**
@@ -34,9 +38,9 @@ export function canBindRecoveryFor(user, features) {
   const role = user?.role;
   if (!role) return false;
   const flag = RECOVERY_FEATURE_BY_ROLE[role];
-  // province / affiliation / transport: the page itself explains that their
-  // recovery is not open yet (decision gates unconfirmed).
-  if (!flag) return ['province', 'affiliation', 'transport'].includes(role);
+  // Every login role now has confirmed decision gates, so its own flag is the
+  // whole answer; an unknown role never sees the entry.
+  if (!flag) return false;
   return Boolean(features?.[flag]);
 }
 
@@ -55,7 +59,8 @@ export const RECOVERY_CONTACTS = Object.freeze([
   { key: 'school',  label: 'โรงเรียน (บัญชีหลัก)', recoveryRole: 'school', contact: 'ติดต่อสังกัดให้รีเซ็ตรหัสผ่าน' },
   { key: 'teacher', label: 'ครูประจำสายชั้น', recoveryRole: 'school', contact: 'ติดต่อบัญชีหลักของโรงเรียนให้รีเซ็ตรหัสผ่าน' },
   { key: 'driver',  label: 'คนขับ (บัญชีรถ)', recoveryRole: 'driver', contact: 'ติดต่อโรงเรียนที่ใช้รถคันนี้ให้รีเซ็ตรหัสผ่าน' },
-  { key: 'unit',    label: 'สังกัดและขนส่ง', recoveryRole: null, contact: 'ติดต่อจังหวัดหรือผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
-  { key: 'province', label: 'จังหวัด', recoveryRole: null, contact: 'ติดต่อผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
+  { key: 'affiliation', label: 'สังกัด', recoveryRole: 'affiliation', contact: 'ติดต่อจังหวัดหรือผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
+  { key: 'transport', label: 'ขนส่ง', recoveryRole: 'transport', contact: 'ติดต่อจังหวัดหรือผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
+  { key: 'province', label: 'จังหวัด', recoveryRole: 'province', contact: 'ติดต่อผู้ดูแลระบบให้รีเซ็ตรหัสผ่าน' },
   { key: 'admin',   label: 'ผู้ดูแลระบบ', recoveryRole: 'admin', contact: 'ติดต่อผู้ดูแลระบบอีกบัญชีหนึ่งให้รีเซ็ตรหัสผ่าน' },
 ]);

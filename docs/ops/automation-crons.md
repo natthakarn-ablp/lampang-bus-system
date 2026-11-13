@@ -34,6 +34,27 @@ node scripts/daily-snapshot.js --dry-run
 node scripts/ops-watch.js --dry-run
 ```
 
+### ติดตั้งด้วยสคริปต์ — `scripts/install-automation-crons.sh`
+
+ใช้แทนการแก้ `crontab -e` ด้วยมือ (รันในฐานะผู้ใช้ `schoolbus` บนเครื่อง production):
+
+```bash
+cd /home/schoolbus/apps/lampang-bus-system
+bash scripts/install-automation-crons.sh --dry-run   # ดู diff อย่างเดียว ไม่เขียนอะไร
+bash scripts/install-automation-crons.sh             # ติดตั้งจริง
+```
+
+- **idempotent**: บรรทัดที่มีอยู่แล้ว (ตรงกันทุกตัวอักษร ไม่นับช่องว่างหัว-ท้าย) จะไม่ถูกเพิ่มซ้ำ — รันซ้ำกี่ครั้งก็ได้ ครั้งที่สองขึ้นไปจะขึ้น `no change needed` และไม่สร้าง backup.
+- **ไม่ลบ/ไม่แก้บรรทัดอื่น** ใน crontab (backup, health-smoke ฯลฯ อยู่เหมือนเดิม); บรรทัดใหม่ต่อท้ายไฟล์.
+- บรรทัดที่ถูกคอมเมนต์ (`# ...`) ไม่นับว่าติดตั้งแล้ว.
+- ถ้ามีบรรทัด **ที่ยังทำงานอยู่** เรียกสคริปต์เดียวกันแต่เวลา/path ต่างไป สคริปต์จะไม่แตะบรรทัดนั้น ไม่เพิ่มบรรทัดที่สอง (กันรันซ้ำ) แสดง WARNING และจบด้วย exit 2 หลังจัดการบรรทัดอื่นแล้ว — ให้เจ้าของตัดสินเองว่าจะเก็บแบบไหน.
+- พิมพ์ `diff -u` ของ crontab เดิม → ใหม่ทุกครั้งที่มีการเปลี่ยน.
+- ก่อนเขียน สำรอง crontab เดิมไว้ที่ `/home/schoolbus/deploy-state/crontab.backup-<YYYYMMDDTHHMMSSZ>` (เวลา UTC). ย้อนกลับ: `crontab /home/schoolbus/deploy-state/crontab.backup-<stamp>`.
+- หลังเขียน อ่าน `crontab -l` กลับมาเทียบกับสิ่งที่ตั้งใจเขียน ถ้าไม่ตรงจะหยุดและบอกคำสั่งย้อนกลับ.
+- exit code: 0 สำเร็จ/ไม่ต้องเปลี่ยน, 1 ผิดพลาด (ไม่ได้เขียน หรือบอกวิธีย้อน), 2 มีบรรทัดชน (ดูด้านบน).
+- **ไม่ติดตั้ง GPS stale alert** (`backend/scripts/gps-stale-alert.js`) — ตัวนั้นส่ง LINE จึงแยกให้เจ้าของตัดสินเปิดเอง ตาม `docs/ops/gps-stale-line-alert.md`.
+- ทดสอบ: `backend/tests/installAutomationCrons.unit.test.js` (ใช้ `crontab` ปลอมบน PATH ไม่แตะ crontab จริง).
+
 ## 1. คิวงานค้าง — `scripts/pending-queue-alert.js`
 
 ตรรกะ: `backend/src/services/pendingQueue.service.js`. หน้าจอ: กระดิ่งด้านบน (desktop) และการ์ด

@@ -13,6 +13,8 @@ Affiliation (`affiliation.routes.js`): GET /dashboard (L179), /schools (L194), /
 - อนุมัติ: GET /transfer-requests (L806), GET /:id (L816), POST /:id/approve (L828), /:id/reject (L850); GET /vehicle-requests (L866), GET /:id (L876), POST /:id/approve (L888), /:id/reject (L911)
 
 Province (`province.routes.js`): GET /dashboard (L46), /affiliations (L56), /schools (L67), /students (L82), /vehicles (L98), /vehicles-at-risk (L119), /status-today (L129), /trend (L140), /emergencies (L181), /audit-logs (L193), /live-vehicles (L263), /vehicles/:vehicleId/track|track-days (L277-278), /pickup-map (L284), GET /unit-accounts (L324), POST /unit-accounts/:id/reset-password (L332)
+- จัดการบัญชีสังกัด/ขนส่ง (2026-11-13): GET /unit-accounts/deleted, POST /unit-accounts (รหัสชั่วคราวสร้างโดยเซิร์ฟเวอร์ แสดงครั้งเดียว), PUT /unit-accounts/:id (ชื่อ/เปิด-ปิด), DELETE /unit-accounts/:id (soft + ปลด LINE กู้คืน), POST /unit-accounts/:id/restore (กลับมาแบบปิด) — `services/provinceAdmin.service.js`, จำกัด role IN ('affiliation','transport') ทุก query; หน้า `ProvUnitAccounts.jsx`
+- จัดการสังกัด/โรงเรียน (province+admin, 2026-11-13): POST /affiliations, PUT /affiliations/:id, GET /schools/deactivated, PUT /schools/:id (ชื่อ/ย้ายสังกัด), POST /schools/:id/deactivate (409 `SCHOOL_IN_USE` ถ้ายังมีนักเรียน active หรือคำขอตรวจสภาพที่ยังไม่จบ; ปิดบัญชีของโรงเรียนใน transaction เดียวกัน), POST /schools/:id/restore (บัญชียังปิด) — `services/orgEntities.service.js`; หน้า `ProvAffiliationList.jsx`, `ProvSchoolList.jsx`
 - readiness จังหวัด: `/api/readiness` ใน [admin-ops.md](admin-ops.md)
 - รายงาน/export ของสองบทบาทนี้ผ่าน [reports-export.md](reports-export.md)
 

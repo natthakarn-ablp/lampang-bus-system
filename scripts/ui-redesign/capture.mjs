@@ -1106,6 +1106,15 @@ const COMMON = {
     { id: 'SC-1', name: 'โรงเรียนบ้านตัวอย่าง' },
     { id: 'SC-2', name: 'โรงเรียนตัวอย่างสอง' },
   ] },
+  // Province self-serve (2026-11-13): restorable schools and unit accounts.
+  '/api/province/schools/deactivated': { data: [], meta: { total: 0 } },
+  '/api/province/unit-accounts': { data: [
+    { id: 901, username: 'aff_demo', role: 'affiliation', display_name: 'สังกัดตัวอย่าง', scope_id: 'AF-1',
+      is_active: 1, must_change_password: 0, last_login: null, affiliation_name: 'สังกัดตัวอย่าง' },
+    { id: 902, username: 'dlt_demo', role: 'transport', display_name: 'ขนส่งจังหวัดตัวอย่าง', scope_id: null,
+      is_active: 1, must_change_password: 1, last_login: null, affiliation_name: null },
+  ], meta: { total: 2 } },
+  '/api/province/unit-accounts/deleted': { data: [], meta: { total: 0 } },
   '/api/admin/live-vehicles': { data: {
     generated_at: '2026-08-26T01:45:00Z',
     vehicles: [
@@ -1517,6 +1526,7 @@ const SHOTS = [
   { id: '20-prov-schools',      url: '/province/schools',      user: 'province', vps: ['mobile', 'desktop'] },
   { id: '21-prov-vehicles',     url: '/province/vehicles',     user: 'province', vps: ['mobile', 'desktop'] },
   { id: '22-prov-affiliations', url: '/province/affiliations', user: 'province', vps: ['desktop'] },
+  { id: '22b-prov-unit-accounts', url: '/province/unit-accounts', user: 'province', vps: ['mobile', 'desktop'] },
   { id: '23-aff-vehicles',      url: '/affiliation/vehicles',  user: 'affiliation', vps: ['mobile', 'desktop'] },
   { id: '24-school-vehicles',   url: '/school/vehicles',       user: 'school',   vps: ['mobile', 'desktop'] },
   { id: '25-transport-vehicles', url: '/transport/vehicles',   user: 'transport', vps: ['mobile', 'desktop'] },

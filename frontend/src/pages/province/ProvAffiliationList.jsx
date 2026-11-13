@@ -1,31 +1,64 @@
-import { useState, useEffect } from 'react';
-import { Landmark } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Landmark, Plus } from 'lucide-react';
 import api from '../../api/axios';
 import KpiCard from '../../components/KpiCard';
 import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
-import { AppCard, StatusBadge, DataTable } from '../../components/ui';
+import { AppCard, StatusBadge, DataTable, TableAction, FormField, Modal } from '../../components/ui';
+import { useToast } from '../../components/Toast';
 import { kpiColor, safePct, levelBadge, sortByKpi } from '../../utils/kpi';
 
 export default function ProvAffiliationList() {
   const [affiliations, setAffiliations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const toast = useToast();
+  // 2026-11-13 — province/admin add and rename สังกัด here (POST/PUT
+  // /province/affiliations); previously only a database edit by the admin.
+  const [modal, setModal] = useState(null); // { mode: 'create' } | { mode: 'rename', aff }
+  const [form, setForm] = useState({ id: '', name: '' });
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    api.get('/province/affiliations')
+  const load = useCallback(() => {
+    setLoading(true);
+    return api.get('/province/affiliations')
       .then((res) => setAffiliations(Array.isArray(res.data.data) ? res.data.data : []))
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => { load(); }, [load]);
+
+  function openCreate() { setForm({ id: '', name: '' }); setModal({ mode: 'create' }); }
+  function openRename(aff) { setForm({ id: aff.id, name: aff.name || '' }); setModal({ mode: 'rename', aff }); }
+  async function save() {
+    setSaving(true);
+    try {
+      const res = modal.mode === 'create'
+        ? await api.post('/province/affiliations', { id: form.id.trim(), name: form.name })
+        : await api.put(`/province/affiliations/${encodeURIComponent(modal.aff.id)}`, { name: form.name });
+      toast.success(res.data?.message || 'บันทึกแล้ว');
+      setModal(null);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'บันทึกไม่สำเร็จ');
+    } finally { setSaving(false); }
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <PageHeader
         title="สังกัดทั้งหมด"
-        subtitle="สรุปผลการดำเนินงานรายสังกัด"
+        subtitle="สรุปผลการดำเนินงานรายสังกัด · เพิ่มสังกัดใหม่และแก้ชื่อสังกัดได้ที่หน้านี้"
+        actions={
+          <button type="button" onClick={openCreate}
+            className="focus-ring inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-medium px-4 min-h-[44px] rounded-lg transition text-sm">
+            <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+            เพิ่มสังกัด
+          </button>
+        }
       />
 
       {error && <ErrorState message={error} className="mb-4" />}
@@ -73,6 +106,7 @@ export default function ProvAffiliationList() {
                   return <StatusBadge variant={b.variant || 'neutral'}>{b.label}</StatusBadge>;
                 } },
             ]}
+            actions={a => <TableAction tone="brand" onClick={() => openRename(a)} aria-label={`แก้ชื่อสังกัด ${a.name}`}>แก้ชื่อ</TableAction>}
             empty={{ icon: Landmark, title: 'ยังไม่มีสังกัด' }}
           />
 
@@ -112,6 +146,38 @@ export default function ProvAffiliationList() {
           </div>
         </>
       )}
+
+      <Modal
+        open={Boolean(modal)}
+        title={modal?.mode === 'create' ? 'เพิ่มสังกัด' : 'แก้ชื่อสังกัด'}
+        size="sm"
+        onClose={() => { if (!saving) setModal(null); }}
+        footer={
+          <>
+            <button type="button" onClick={() => setModal(null)} disabled={saving}
+              className="focus-ring text-base font-medium px-4 min-h-[44px] rounded-lg border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50">ยกเลิก</button>
+            <button type="submit" form="prov-affiliation-form" disabled={saving || !form.name.trim() || (modal?.mode === 'create' && !form.id.trim())}
+              className="focus-ring text-base font-semibold px-4 min-h-[44px] rounded-lg bg-brand-600 hover:bg-brand-700 text-white transition disabled:opacity-50">
+              {saving ? 'กำลังบันทึก…' : 'บันทึก'}
+            </button>
+          </>
+        }
+      >
+        <form id="prov-affiliation-form" onSubmit={e => { e.preventDefault(); save(); }} className="space-y-3">
+          {modal?.mode === 'create' ? (
+            <FormField label="รหัสสังกัด" required value={form.id} maxLength={10}
+              helper="อักษรอังกฤษหรือตัวเลข ไม่เกิน 10 ตัว เปลี่ยนภายหลังไม่ได้ เช่น LPG3"
+              onChange={v => setForm({ ...form, id: v })} />
+          ) : (
+            <p className="text-sm text-ink-muted">รหัสสังกัด: <span className="font-mono">{form.id}</span></p>
+          )}
+          <FormField label="ชื่อสังกัด" required value={form.name} maxLength={200}
+            onChange={v => setForm({ ...form, name: v })} />
+          {modal?.mode === 'create' && (
+            <p className="text-sm text-ink-muted">หลังเพิ่มสังกัด สร้างบัญชีผู้ใช้ของสังกัดได้ที่เมนู <strong>บัญชีสังกัดและขนส่ง</strong> และย้ายโรงเรียนเข้าสังกัดได้ที่เมนู <strong>โรงเรียนทั้งหมด</strong></p>
+          )}
+        </form>
+      </Modal>
     </div>
   );
 }

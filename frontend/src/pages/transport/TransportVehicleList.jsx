@@ -198,7 +198,7 @@ export default function TransportVehicleList() {
         actions={v => <><Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} aria-label={`ดูนักเรียนและข้อมูลรถ ${v.plate_no}`} className="focus-ring inline-flex items-center justify-center min-h-12 px-4 py-2 rounded-xl bg-brand-700 text-white font-semibold">ดูนักเรียนและข้อมูลรถ</Link>
           <TableAction tone="neutral" onClick={() => openDocs(v)} aria-label={`แก้วันหมดอายุเอกสาร ${v.plate_no}`}>วันหมดอายุเอกสาร</TableAction>
           <TableAction tone="neutral" onClick={() => openPlate(v)} aria-label={`แก้ทะเบียนพิมพ์ผิด ${v.plate_no}`}>แก้ทะเบียน</TableAction>
-          {isAdmin && <AdminVehicleActions vehicle={v} onChanged={() => fetchVehicles(meta.page)} />}</>}
+          <AdminVehicleActions vehicle={v} role={isAdmin ? 'admin' : 'transport'} onChanged={() => fetchVehicles(meta.page)} /></>}
         columns={[
           { key: 'plate', header: 'ทะเบียนรถ', primary: true,
             cell: v => <Link to={`/transport/vehicles/${encodeURIComponent(v.id)}/incident-roster`} className="flex min-h-[44px] items-center whitespace-normal break-words font-semibold text-brand-700 underline focus-ring rounded">{v.plate_no}</Link> },

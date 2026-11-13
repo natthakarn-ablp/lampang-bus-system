@@ -175,6 +175,16 @@ async function rejectVehicleRequest(pool, { requestId, adminUserId, adminNote })
 }
 
 
+// Toast wording for an approve outcome (affiliation + province-override routes).
+// A FAILED restore must not be reported as approved (QA affiliation-09).
+function approveOutcomeMessage(out) {
+  return out.status === 'APPLIED' ? (out.informational ? 'อนุมัติคำขอแล้ว' : 'อนุมัติและกู้คืนรถสำเร็จ')
+    : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
+    : out.status === 'FAILED' && out.reason === 'ACTIVE_CANONICAL_CONFLICT' ? 'ไม่สามารถกู้คืนรถได้ เนื่องจากมีรถทะเบียนเดียวกันที่ใช้งานอยู่แล้ว'
+    : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้'
+    : 'คำขอนี้ไม่อยู่ในสถานะรออนุมัติแล้ว';
+}
+
 // ── Affiliation: list vehicle requests for schools in this affiliation ───────
 async function listForAffiliation(pool, { affiliationId, status = null }) {
   const where = 'WHERE sc.affiliation_id = ?';
@@ -210,5 +220,5 @@ module.exports = {
   createVehicleRequest, listSchoolVehicleRequests, getSchoolVehicleRequest, cancelVehicleRequest,
   listAdminVehicleRequests, countPendingForAdmin, getAdminVehicleRequest, approveVehicleRequest, rejectVehicleRequest,
   listForAffiliation, getDetailForAffiliation,
-  listForAffiliation, getDetailForAffiliation,
+  approveOutcomeMessage,
 };

@@ -849,7 +849,11 @@ function PENDING_SUMMARY(role) {
     admin: [],
   }[role] || [];
   const escalatedItems = ['affiliation', 'province'].includes(role)
-    ? [{ ...item(13, 'ขอเพิ่มนักเรียน · รถ กข-2222 ลำปาง', 9), queue: 'roster_requests', queue_label: 'คำขอปรับรายชื่อนักเรียนบนรถ (จากคนขับ)' }]
+    ? [{ ...item(13, 'ขอเพิ่มนักเรียน · รถ กข-2222 ลำปาง', 9), queue: 'roster_requests', queue_label: 'คำขอปรับรายชื่อนักเรียนบนรถ (จากคนขับ)' },
+      // Province decides these on the affiliation's behalf (อนุมัติ/ไม่อนุมัติ buttons).
+      ...(role === 'province'
+        ? [{ ...item(31, 'โอนย้าย โรงเรียนตัวอย่าง ก → โรงเรียนตัวอย่าง ข', 8), queue: 'transfer_internal', queue_label: 'คำขอโอนย้ายนักเรียนในสังกัด' }]
+        : [])]
     : [];
   const own = queues.reduce((n, q) => n + q.count, 0);
   return {

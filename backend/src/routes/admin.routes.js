@@ -2241,6 +2241,7 @@ router.post('/vehicles/:id/merge', async (req, res, next) => {
       vehicleId: req.params.id,
       intoVehicleId: b.into_vehicle_id,
       actorId: req.user.id,
+      actorRole: req.user.role,
       reason: b.reason,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],

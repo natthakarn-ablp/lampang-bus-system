@@ -45,6 +45,33 @@ router.use(authenticate, requireRole('province', 'admin'));
 // Requests waiting for this role (badge + งานรออนุมัติ page) — pendingQueue.service.js
 router.get('/pending-summary', require('./pendingSummaryHandler').pendingSummaryHandler());
 
+// ─── Decide on the affiliation's behalf after ESCALATE days (2026-11-13) ────
+// POST /api/province/escalated/transfer-requests/:id/approve|reject
+// POST /api/province/escalated/vehicle-requests/:id/approve|reject
+// Refused (409 NOT_ESCALATED_YET) until the request has waited 7 days for the
+// affiliation; then runs the affiliation's own guard + service and audits an
+// override row (by_role). Reject needs a reason. provinceOverride.service.js
+function escalatedDecision(kind, decision) {
+  return async (req, res, next) => {
+    try {
+      const requestId = readIdParam(req, res, 'id');
+      if (requestId === null) return;
+      const b = req.body || {};
+      const { out, message } = await require('../services/provinceOverride.service').decide(pool, {
+        kind, requestId, decision,
+        note: b.reason != null ? b.reason : b.admin_note,
+        actorId: req.user.id, actorRole: req.user.role,
+        ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      });
+      return sendSuccess(res, out, message);
+    } catch (err) { return next(err); }
+  };
+}
+router.post('/escalated/transfer-requests/:id/approve', escalatedDecision('transfer', 'approve'));
+router.post('/escalated/transfer-requests/:id/reject', escalatedDecision('transfer', 'reject'));
+router.post('/escalated/vehicle-requests/:id/approve', escalatedDecision('vehicle', 'approve'));
+router.post('/escalated/vehicle-requests/:id/reject', escalatedDecision('vehicle', 'reject'));
+
 
 /**
  * GET /api/province/dashboard

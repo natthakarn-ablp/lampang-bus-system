@@ -6,6 +6,7 @@ import {
 import api from '../../api/axios';
 import { useToast } from '../../components/Toast';
 import PageHeader from '../../components/PageHeader';
+import PendingQueueCard from '../../components/PendingQueueCard';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
 import { relativeTime } from '../../utils/datetime';
 import { StatusBadge, AlertBanner, DayBars, FoldSection, RoleChip } from '../../components/ui';
@@ -206,6 +207,8 @@ export default function AffiliationDashboard() {
           )}
         />
       </div>
+
+      <PendingQueueCard />
 
       {!loading && failedSections.length > 0 && (
         <AlertBanner variant="danger" title="โหลดข้อมูลบางส่วนไม่สำเร็จ">

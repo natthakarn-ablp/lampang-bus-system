@@ -165,6 +165,10 @@ function auditRowsToCsv(rows) {
 // All school routes require authentication + role 'school' or 'admin'
 router.use(authenticate, requireRole('school', 'admin'));
 
+// Requests waiting for this role (badge + งานรออนุมัติ page) — pendingQueue.service.js
+router.get('/pending-summary', require('./pendingSummaryHandler').pendingSummaryHandler());
+
+
 /**
  * GET /api/school/dashboard
  * Dashboard summary for the school user's own school.

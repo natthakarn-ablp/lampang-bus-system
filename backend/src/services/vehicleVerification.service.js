@@ -524,11 +524,13 @@ async function listTransportQueue(pool, { status = null, search = null } = {}) {
 
 async function transitionSchoolApplication(pool, {
   applicationId, schoolId, userId, nextStatus, allowedStatuses, reason = null,
-  isAdmin = false,
+  isAdmin = false, override = null,
 }) {
   // schoolId is the scope guard for non-admin callers. Admin overrides bypass it
   // and may pass schoolId = null, so it is no longer part of the required set.
-  if (!applicationId || !userId || (!isAdmin && !schoolId)) {
+  // `override` ({ role, guard }) is the transport/affiliation stuck-application
+  // path: it replaces the issuing-school check with its own guard.
+  if (!applicationId || !userId || (!isAdmin && !override && !schoolId)) {
     throw appError('ข้อมูลคำขอ โรงเรียน หรือผู้ใช้ไม่ครบถ้วน', 400, 'MISSING_REQUIRED_FIELDS');
   }
   const conn = await pool.getConnection();
@@ -544,7 +546,18 @@ async function transitionSchoolApplication(pool, {
     if (!application) throw appError('ไม่พบคำขอ', 404, 'APPLICATION_NOT_FOUND');
     // Admin override bypasses the issuing-school scope check; non-admin callers
     // may only act on applications their own school issued.
-    if (!isAdmin && String(application.issuing_school_id) !== String(schoolId)) {
+    if (override) {
+      const [[ctx]] = await conn.query(
+        `SELECT TIMESTAMPDIFF(SECOND, a.updated_at, NOW()) AS idle_s, sc.affiliation_id,
+                (SELECT COUNT(*) FROM inspection_attempts ia
+                  WHERE ia.application_id = a.id AND ia.result = 'IN_PROGRESS') AS open_attempts
+           FROM vehicle_inspection_applications a
+           LEFT JOIN schools sc ON sc.id = a.issuing_school_id
+          WHERE a.id = ?`,
+        [applicationId]
+      );
+      await override.guard({ ...application, ...(ctx || {}) });
+    } else if (!isAdmin && String(application.issuing_school_id) !== String(schoolId)) {
       throw appError('เฉพาะโรงเรียนผู้ออกเอกสารเท่านั้นที่เปลี่ยนสถานะได้', 403, 'ISSUING_SCHOOL_REQUIRED');
     }
     if (!allowedStatuses.includes(application.status)) {
@@ -603,9 +616,11 @@ async function transitionSchoolApplication(pool, {
         status: nextStatus,
         ...(isCancelled ? { reason: reason || null } : {}),
         ...(isAdmin ? { admin_override: true } : {}),
+        ...(override ? { override_role: override.role, issuing_school_id: application.issuing_school_id } : {}),
         ...(abortedAttempts.length ? { aborted_attempts: abortedAttempts } : {}),
       },
       conn,
+      ...(override ? { required: true } : {}),
     });
     await conn.commit();
     return {
@@ -642,6 +657,134 @@ function cancelApplication(pool, { applicationId, schoolId, userId, reason = nul
       'INSPECTION_PENDING', 'NEEDS_FIX', 'PENDING_SCHOOL_REVIEW',
     ],
   });
+}
+
+// ─── Stuck-application override (transport / affiliation) ──────────────────
+// One application per vehicle per term (active_request_key), and before this
+// only the issuing school (or admin) could cancel it — a school that stopped
+// acting left the vehicle unable to get a new application. Transport (whole
+// province) and the issuing school's affiliation may now cancel one that has
+// not changed for STUCK_DAYS, with a reason, audited as an override.
+// Affiliation may not cut short an inspection in progress (that is transport's
+// work: take it over or abort it first).
+const STUCK_DAYS = 3;
+const OVERRIDE_CANCELLABLE = [
+  'DRAFT', 'READY_TO_PRINT', 'SUBMITTED',
+  'INSPECTION_PENDING', 'NEEDS_FIX', 'PENDING_SCHOOL_REVIEW',
+];
+
+function normaliseReason(reason) {
+  const r = String(reason || '').trim();
+  if (r.length < 5) throw appError('กรุณาระบุเหตุผลอย่างน้อย 5 ตัวอักษร', 400, 'REASON_REQUIRED');
+  return r.slice(0, 500);
+}
+
+async function overrideCancelApplication(pool, {
+  applicationId, userId, role, affiliationId = null, reason,
+}) {
+  const why = normaliseReason(reason);
+  if (!['transport', 'affiliation', 'admin'].includes(role)) {
+    throw appError('บทบาทนี้ยกเลิกคำขอแทนโรงเรียนไม่ได้', 403, 'ROLE_NOT_ALLOWED');
+  }
+  if (role === 'affiliation' && !affiliationId) {
+    throw appError('ไม่พบสังกัดของบัญชีนี้', 403, 'AFFILIATION_SCOPE_REQUIRED');
+  }
+  return transitionSchoolApplication(pool, {
+    applicationId, userId, reason: why, schoolId: null,
+    nextStatus: 'CANCELLED',
+    allowedStatuses: OVERRIDE_CANCELLABLE,
+    override: {
+      role,
+      guard: (app) => {
+        if (role === 'affiliation' && String(app.affiliation_id) !== String(affiliationId)) {
+          // Same answer as "not found": do not confirm another area's request exists.
+          throw appError('ไม่พบคำขอ', 404, 'APPLICATION_NOT_FOUND');
+        }
+        if (role !== 'admin' && Number(app.idle_s) < STUCK_DAYS * 86400) {
+          throw appError(`ยกเลิกแทนโรงเรียนได้เมื่อคำขอไม่มีความเคลื่อนไหว ${STUCK_DAYS} วันขึ้นไป`, 409, 'NOT_STUCK_YET', {
+            stuck_days: STUCK_DAYS,
+          });
+        }
+        if (role === 'affiliation' && Number(app.open_attempts) > 0) {
+          throw appError('รถคันนี้กำลังตรวจอยู่ ให้เจ้าหน้าที่ขนส่งรับช่วงหรือยกเลิกการตรวจก่อน', 409, 'INSPECTION_IN_PROGRESS');
+        }
+      },
+    },
+  });
+}
+
+/** Applications that have not moved for STUCK_DAYS — transport: all; affiliation: own area. */
+async function listStuckApplications(pool, { role, affiliationId = null } = {}) {
+  const params = [STUCK_DAYS];
+  let scope = '';
+  if (role === 'affiliation') { scope = ' AND sc.affiliation_id = ?'; params.push(affiliationId); }
+  const [rows] = await pool.query(
+    `SELECT a.id, a.request_no, a.status, a.current_term, a.updated_at,
+            FLOOR(TIMESTAMPDIFF(SECOND, a.updated_at, NOW()) / 86400) AS idle_days,
+            v.plate_no, sc.name AS issuing_school_name,
+            (SELECT COUNT(*) FROM inspection_attempts ia
+              WHERE ia.application_id = a.id AND ia.result = 'IN_PROGRESS') AS open_attempts
+       FROM vehicle_inspection_applications a
+       JOIN vehicles v ON v.id = a.vehicle_id
+       JOIN schools sc ON sc.id = a.issuing_school_id
+      WHERE a.status IN ('DRAFT','READY_TO_PRINT','SUBMITTED','INSPECTION_PENDING','NEEDS_FIX','PENDING_SCHOOL_REVIEW')
+        AND a.updated_at <= DATE_SUB(NOW(), INTERVAL ? DAY)${scope}
+      ORDER BY a.updated_at ASC
+      LIMIT 200`,
+    params
+  );
+  return rows.map((r) => ({ ...r, idle_days: Number(r.idle_days), open_attempts: Number(r.open_attempts) }));
+}
+
+// ─── Inspection takeover ────────────────────────────────────────────────────
+// finalizeInspection / the checklist UI belong to the officer who started the
+// attempt (INSPECTOR_MISMATCH). When that officer is away the attempt was a
+// dead end short of an admin. Any transport user (or admin) may now take it
+// over with a reason: inspected_by moves to them and the audit row keeps who
+// started it. Checklist results are only written at finalize, so nothing the
+// first officer recorded is silently attributed to the second.
+async function takeoverInspectionAttempt(pool, { attemptId, actorUserId, reason }) {
+  const why = normaliseReason(reason);
+  if (!attemptId || !actorUserId) {
+    throw appError('ข้อมูลครั้งการตรวจหรือผู้ใช้ไม่ครบถ้วน', 400, 'MISSING_REQUIRED_FIELDS');
+  }
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [[attempt]] = await conn.query(
+      `SELECT ia.id, ia.application_id, ia.inspected_by, ia.result
+         FROM inspection_attempts ia
+        WHERE ia.id = ?
+        FOR UPDATE`,
+      [attemptId]
+    );
+    if (!attempt) throw appError('ไม่พบครั้งการตรวจ', 404, 'INSPECTION_ATTEMPT_NOT_FOUND');
+    if (attempt.result !== 'IN_PROGRESS') {
+      throw appError('ครั้งการตรวจนี้ถูกสรุปผลแล้ว', 409, 'ATTEMPT_ALREADY_FINALIZED');
+    }
+    if (String(attempt.inspected_by) === String(actorUserId)) {
+      throw appError('ท่านเป็นผู้ตรวจของรายการนี้อยู่แล้ว', 409, 'ALREADY_INSPECTOR');
+    }
+    await conn.query(
+      `UPDATE inspection_attempts SET inspected_by = ?
+        WHERE id = ? AND result = 'IN_PROGRESS'`,
+      [actorUserId, attemptId]
+    );
+    await logAudit({
+      userId: actorUserId, action: 'UPDATE', entityType: 'inspection_attempt',
+      entityId: String(attemptId),
+      oldValue: { inspected_by: attempt.inspected_by },
+      newValue: { inspected_by: actorUserId, takeover: true, reason: why, application_id: attempt.application_id },
+      conn, required: true,
+    });
+    await conn.commit();
+    return { attempt_id: Number(attemptId), inspected_by: actorUserId, previous_inspected_by: attempt.inspected_by };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
+  }
 }
 
 function validateChecklistResults(templateItems, submittedItems, overallResult = null) {
@@ -1282,4 +1425,8 @@ module.exports = {
   startInspection,
   finalizeInspection,
   abortInspectionAttempt,
+  overrideCancelApplication,
+  listStuckApplications,
+  takeoverInspectionAttempt,
+  STUCK_DAYS,
 };

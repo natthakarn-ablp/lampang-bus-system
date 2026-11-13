@@ -199,8 +199,10 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
     setApproving(true);
     try {
       await api.post(`/school/registrations/${applicationId}/approve`);
-      toast.success('อนุมัติคำขอแล้ว');
-      onBack();
+      toast.success('อนุมัติคำขอแล้ว — เลือกนักเรียนที่จะจัดขึ้นรถคันนี้ได้ด้านล่าง');
+      // Stay on the application: the next step (assigning the approved
+      // children to this vehicle) is offered right here.
+      fetchDetail();
     } catch (err) {
       toast.error(err.response?.data?.message || 'อนุมัติไม่สำเร็จ');
     } finally { setApproving(false); }
@@ -344,6 +346,10 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
             ))}
           </div>
 
+          {!isTeacher && detail.approval_status === 'APPROVED' && (
+            <RosterAssignmentPanel applicationId={applicationId} />
+          )}
+
           {/* Vehicle + driver evidence documents */}
           <DocumentReviewPanel apiBase="/school/registrations/documents"
             vehicleId={detail.vehicle_id} driverId={detail.driver_id} canReview={!isTeacher} />
@@ -387,6 +393,111 @@ function RegistrationDetail({ applicationId, isTeacher, onBack }) {
           required
         />
       </ConfirmDialog>
+    </div>
+  );
+}
+
+// After approval: put the approved children on this vehicle (students.vehicle_id).
+// Approving only records the decision on the driver's roster; the school
+// confirms here which children actually move. A child already on another
+// vehicle starts unticked — moving them is a deliberate choice.
+const ASSIGN_STATE = {
+  NO_VEHICLE:      'ยังไม่มีรถ',
+  ON_THIS_VEHICLE: 'อยู่รถคันนี้แล้ว',
+  OTHER_VEHICLE:   'อยู่รถคันอื่น',
+};
+
+function RosterAssignmentPanel({ applicationId }) {
+  const toast = useToast();
+  const [data, setData] = useState(null);
+  const [picked, setPicked] = useState(() => new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get(`/school/registrations/${applicationId}/assignment`);
+      const d = res?.data?.data || null;
+      setData(d);
+      setPicked(new Set((d?.students || []).filter(s => s.state === 'NO_VEHICLE').map(s => s.student_id)));
+    } catch {
+      setData(null);
+    }
+  }, [applicationId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function toggle(id) {
+    setPicked(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function assign() {
+    setSaving(true);
+    try {
+      const res = await api.post(`/school/registrations/${applicationId}/assign-students`, { student_ids: [...picked] });
+      toast.success(res?.data?.message || 'จัดนักเรียนขึ้นรถแล้ว');
+      setConfirmOpen(false);
+      await load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'จัดนักเรียนขึ้นรถไม่สำเร็จ');
+    } finally { setSaving(false); }
+  }
+
+  if (!data || !data.students.length) return null;
+  const pending = data.students.filter(s => s.state !== 'ON_THIS_VEHICLE');
+  const moving = data.students.filter(s => picked.has(s.student_id) && s.state === 'OTHER_VEHICLE').length;
+
+  return (
+    <div className="mt-6 rounded-xl border border-surface-border bg-surface-raised px-4 py-4">
+      <h3 className="text-base font-semibold text-ink">จัดนักเรียนที่อนุมัติขึ้นรถ {data.plate_no}</h3>
+      <p className="mt-1 text-xs text-ink-muted">
+        การอนุมัติยังไม่ได้ย้ายนักเรียนขึ้นรถคันนี้ เลือกคนที่ต้องการแล้วกดยืนยัน — อยู่รถคันนี้แล้ว {data.counts.on_this_vehicle} · ยังไม่มีรถ {data.counts.no_vehicle} · อยู่รถคันอื่น {data.counts.other_vehicle}
+      </p>
+      <ul className="mt-3 space-y-1">
+        {data.students.map(s => {
+          const done = s.state === 'ON_THIS_VEHICLE';
+          return (
+            <li key={s.student_id}>
+              <label className={`flex min-h-[44px] items-center gap-3 rounded-lg px-2 ${done ? 'opacity-70' : 'cursor-pointer hover:bg-surface'}`}>
+                <input type="checkbox" className="h-5 w-5" disabled={done}
+                  checked={done || picked.has(s.student_id)} onChange={() => toggle(s.student_id)} />
+                <span className="flex-1 text-sm text-ink">
+                  {s.full_name}{s.grade ? ` (${abbreviateGrade(s.grade)})` : ''}
+                </span>
+                <span className={`text-xs ${s.state === 'OTHER_VEHICLE' ? 'text-warn-ink' : 'text-ink-muted'}`}>
+                  {ASSIGN_STATE[s.state]}{s.state === 'OTHER_VEHICLE' && s.current_plate ? ` ${s.current_plate}` : ''}
+                </span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      {pending.length > 0 ? (
+        <button type="button" disabled={!picked.size || saving} onClick={() => setConfirmOpen(true)}
+          className="focus-ring mt-3 min-h-[44px] w-full rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto">
+          จัดนักเรียนที่เลือก ({picked.size} คน) ขึ้นรถคันนี้
+        </button>
+      ) : (
+        <p className="mt-3 text-sm text-success-ink">นักเรียนที่อนุมัติทั้งหมดอยู่บนรถคันนี้แล้ว</p>
+      )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        tone="primary"
+        title="ยืนยันจัดนักเรียนขึ้นรถ"
+        description={moving
+          ? `มี ${moving} คนที่จะถูกย้ายออกจากรถคันเดิม จุดรับส่งของรถคันเดิมจะถูกล้าง`
+          : 'นักเรียนที่เลือกจะแสดงในรายชื่อของรถคันนี้ทันที'}
+        itemName={`รถ ${data.plate_no} · ${picked.size} คน`}
+        confirmLabel="ยืนยัน"
+        loading={saving}
+        onConfirm={assign}
+        onCancel={() => { if (!saving) setConfirmOpen(false); }}
+      />
     </div>
   );
 }

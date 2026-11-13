@@ -41,6 +41,10 @@ function auditRowsToCsv(rows) {
 // Province routes: role 'province' or 'admin' (per RBAC matrix)
 router.use(authenticate, requireRole('province', 'admin'));
 
+// Requests waiting for this role (badge + งานรออนุมัติ page) — pendingQueue.service.js
+router.get('/pending-summary', require('./pendingSummaryHandler').pendingSummaryHandler());
+
+
 /**
  * GET /api/province/dashboard
  */

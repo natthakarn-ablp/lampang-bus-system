@@ -568,6 +568,9 @@ export default function VerificationQueue() {
   // Discarding a part-completed inspection is worth a real dialog.
   const [confirmAbort, setConfirmAbort] = useState(false);
   const [abortReason, setAbortReason] = useState('');
+  // Take over an attempt another officer started (they may be away).
+  const [takeoverOpen, setTakeoverOpen] = useState(false);
+  const [takeoverReason, setTakeoverReason] = useState('');
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -656,6 +659,22 @@ export default function VerificationQueue() {
       await open(detail.id);
     } catch (err) {
       toast.error(err.response?.data?.message || 'ยกเลิกการตรวจไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function takeover() {
+    if (!attemptId || takeoverReason.trim().length < 5) return;
+    setBusy(true);
+    try {
+      await api.post(`/verification/transport/attempts/${attemptId}/takeover`, { reason: takeoverReason.trim() });
+      toast.success('รับช่วงการตรวจแล้ว กรอกผลตรวจต่อได้');
+      setTakeoverOpen(false);
+      setTakeoverReason('');
+      await open(detail.id);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'รับช่วงการตรวจไม่สำเร็จ');
     } finally {
       setBusy(false);
     }
@@ -894,8 +913,12 @@ export default function VerificationQueue() {
                 ) : attemptId ? (
                   <AppCard>
                     <AlertBanner variant="info" title="มีเจ้าหน้าที่กำลังตรวจรถคันนี้">
-                      ผู้รับงาน: {activeAttempt?.inspector_name || 'เจ้าหน้าที่ขนส่ง'} · เปิดดูข้อมูลได้ แต่สรุปผลแทนไม่ได้
+                      ผู้รับงาน: {activeAttempt?.inspector_name || 'เจ้าหน้าที่ขนส่ง'} · ถ้าผู้ตรวจเดิมไม่อยู่ กดรับช่วงการตรวจพร้อมระบุเหตุผล แล้วสรุปผลต่อได้
                     </AlertBanner>
+                    <button type="button" disabled={busy} onClick={() => { setTakeoverReason(''); setTakeoverOpen(true); }}
+                      className="focus-ring mt-3 mr-2 min-h-[44px] rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white disabled:opacity-50">
+                      รับช่วงการตรวจ
+                    </button>
                     {canAbortAttempt && (
                       <button type="button" disabled={busy} onClick={() => { setAbortReason(''); setConfirmAbort(true); }}
                         className="focus-ring mt-3 min-h-[44px] rounded-lg border border-danger px-4 text-danger">
@@ -947,6 +970,26 @@ export default function VerificationQueue() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={takeoverOpen}
+        tone="primary"
+        title="รับช่วงการตรวจรถคันนี้?"
+        description="ท่านจะเป็นผู้ตรวจของรายการนี้แทน ระบบบันทึกชื่อผู้ตรวจเดิมและเหตุผลไว้ในประวัติ"
+        confirmLabel="รับช่วงการตรวจ"
+        cancelLabel="ไม่รับช่วง"
+        loading={busy}
+        confirmDisabled={takeoverReason.trim().length < 5}
+        onConfirm={takeover}
+        onCancel={() => { setTakeoverOpen(false); setTakeoverReason(''); }}
+      >
+        <label className="block text-sm font-medium text-ink" htmlFor="transport-takeover-reason">
+          เหตุผลที่รับช่วง (พิมพ์ 5 ตัวอักษรขึ้นไป)
+        </label>
+        <textarea id="transport-takeover-reason" value={takeoverReason} maxLength={500}
+          onChange={event => setTakeoverReason(event.target.value)}
+          className={`${CONTROL_CLS} mt-1 min-h-[88px]`} placeholder="เช่น ผู้ตรวจเดิมลาป่วย" />
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={confirmAbort}

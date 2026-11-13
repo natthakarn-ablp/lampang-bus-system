@@ -21,6 +21,7 @@
 |---|---|
 | [`ops/DEPLOY_CI_GATE.md`](ops/DEPLOY_CI_GATE.md) | deploy ต้องผ่าน CI gate (OPS-001) |
 | [`ops/backup-restore-readiness.md`](ops/backup-restore-readiness.md) | backup 4 ขั้น, แจ้งเตือน, rclone client_id, restore drill |
+| [`ops/automation-crons.md`](ops/automation-crons.md) | cron คิวงานค้าง (แจ้งในระบบ), snapshot รายวัน, เฝ้าระวัง backup/health — เวลา UTC |
 | [`OPERATOR_RUNBOOK.md`](OPERATOR_RUNBOOK.md), [`ops-backup-restore.md`](ops-backup-restore.md), [`ops-data-reset.md`](ops-data-reset.md), [`ops-admin-password-recovery.md`](ops-admin-password-recovery.md) | runbook เดิม — ตรวจกับสคริปต์ก่อนใช้ |
 | [`ops/deploy-record-template.md`](ops/deploy-record-template.md), `ops/deploy-*.md` | แม่แบบ/บันทึก deploy รายครั้ง (ประวัติ) |
 | `../ops/backup/README.md` | เครื่องมือ backup แบบเข้ารหัส + ตัวตรวจสถานะ |

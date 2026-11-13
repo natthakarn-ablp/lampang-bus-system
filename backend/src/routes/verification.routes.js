@@ -326,6 +326,69 @@ router.delete(
   }
 );
 
+// ─── Take over an IN_PROGRESS attempt started by another officer ────────────
+// Any transport user (or admin) with a reason; the attempt's inspected_by moves
+// to the caller so the checklist + finalize work for them. Audited with the
+// previous inspector.
+router.post(
+  '/transport/attempts/:id/takeover',
+  requireRole('transport', 'admin'),
+  async (req, res, next) => {
+    try {
+      const attemptId = readIdParam(req, res, 'id');
+      if (attemptId === null) return;
+      const data = await verification.takeoverInspectionAttempt(pool, {
+        attemptId,
+        actorUserId: req.user.id,
+        reason: req.body.reason,
+      });
+      return sendSuccess(res, data, 'รับช่วงการตรวจแล้ว');
+    } catch (error) { return next(error); }
+  }
+);
+
+// ─── Stuck applications: transport (all) / affiliation (own area) ───────────
+// An application nobody has touched for STUCK_DAYS. The issuing school can
+// still cancel its own any time; these callers may cancel it for them with a
+// reason (vehicleVerification.service overrideCancelApplication).
+function oversightScope(req) {
+  return req.user.role === 'affiliation' ? (req.user.scopeId || null) : null;
+}
+
+router.get(
+  '/oversight/applications/stuck',
+  requireRole('transport', 'affiliation', 'admin'),
+  async (req, res, next) => {
+    try {
+      const affiliationId = oversightScope(req);
+      if (req.user.role === 'affiliation' && !affiliationId) {
+        return sendError(res, 'ไม่พบสังกัดของบัญชีนี้', [{ code: 'AFFILIATION_SCOPE_REQUIRED' }], 403);
+      }
+      const rows = await verification.listStuckApplications(pool, { role: req.user.role, affiliationId });
+      return sendSuccess(res, { stuck_days: verification.STUCK_DAYS, rows });
+    } catch (error) { return next(error); }
+  }
+);
+
+router.post(
+  '/oversight/applications/:id/cancel',
+  requireRole('transport', 'affiliation', 'admin'),
+  async (req, res, next) => {
+    try {
+      const applicationId = readIdParam(req, res, 'id');
+      if (applicationId === null) return;
+      const data = await verification.overrideCancelApplication(pool, {
+        applicationId,
+        userId: req.user.id,
+        role: req.user.role,
+        affiliationId: req.user.role === 'affiliation' ? req.user.scopeId : null,
+        reason: req.body.reason,
+      });
+      return sendSuccess(res, data, 'ยกเลิกคำขอแทนโรงเรียนแล้ว');
+    } catch (error) { return next(error); }
+  }
+);
+
 // ─── Document review (Phase 10.14 supporting evidence; dark-flagged) ─────────
 // Mounted on the unconditional /api/verification router, so each handler 404s
 // when FEATURE_DRIVER_REGISTRATION is off to keep the surface dark.

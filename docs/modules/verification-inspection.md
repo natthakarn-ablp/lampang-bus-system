@@ -14,6 +14,7 @@ Verification (`verification.routes.js`, `router.use(requireFullSchoolScope)` L38
 - ขนส่ง: GET /transport/queue (L205), GET /transport/drivers (L215), POST /transport/vehicles/:id/drivers (L221), POST /transport/drivers/:id/qualification (L239), GET /transport/checklist (L260), POST /transport/applications/:id/start (L266), POST /transport/attempts/:id/finalize (L285), DELETE /transport/attempts/:id (L311)
 - เอกสาร (flag): GET /transport/documents/vehicle/:vehicleId (L339), GET /transport/documents/driver/:driverId (L345), POST /transport/documents/:kind/:id/review (L353)
 - admin: POST /api/admin/verification/applications/:id/cancel (`admin.routes.js:2142`)
+- รับช่วง/ยกเลิกแทน (2026-11-13): POST /transport/attempts/:id/takeover (transport/admin, เหตุผล ≥5 ตัวอักษร — `inspected_by` ย้ายมาเป็นผู้กด, audit เก็บผู้ตรวจเดิม); GET /oversight/applications/stuck และ POST /oversight/applications/:id/cancel (transport ทั้งจังหวัด / affiliation เฉพาะโรงเรียนในสังกัด / admin) — ยกเลิกได้เมื่อคำขอไม่เคลื่อนไหว ≥3 วัน พร้อมเหตุผล; สังกัดยกเลิกไม่ได้ถ้ามีการตรวจค้าง (`overrideCancelApplication`, `takeoverInspectionAttempt`)
 - คนขับยื่นคำขอ: `/api/driver/applications*` (`driver.routes.js:1487-1510`, `createDriverApplication` ใน vehicleVerification.service.js:1012)
 
 ## โค้ดหลัก

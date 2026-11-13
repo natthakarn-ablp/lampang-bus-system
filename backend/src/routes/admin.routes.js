@@ -333,6 +333,9 @@ const { validatePassword } = require('../utils/passwordPolicy');
 // All admin routes require admin role
 router.use(authenticate, requireRole('admin'));
 
+// Requests waiting for this role (badge + งานรออนุมัติ page) — pendingQueue.service.js
+router.get('/pending-summary', require('./pendingSummaryHandler').pendingSummaryHandler({ withOpsAlerts: true }));
+
 // ─── GET /api/admin/users ───────────────────────────────────────────────────
 router.get('/users', async (req, res, next) => {
   try {
@@ -1136,73 +1139,12 @@ router.post('/snapshots/run', async (req, res, next) => {
       }
     }
 
-    // Compute system-wide metrics
-    const [[students]] = await pool.query(
-      `SELECT COUNT(*) AS total,
-              SUM(vehicle_id IS NOT NULL) AS with_vehicle
-       FROM students WHERE is_deleted = FALSE`
-    );
-
-    const [[parentCoverage]] = await pool.query(
-      `SELECT COUNT(DISTINCT ps.student_id) AS cnt
-       FROM parent_student ps JOIN students s ON s.id = ps.student_id AND s.is_deleted = FALSE
-       WHERE ps.approved = TRUE`
-    );
-
-    const [[vehicleStats]] = await pool.query(
-      `SELECT COUNT(*) AS total,
-              SUM(insurance_expiry IS NOT NULL AND insurance_expiry >= CURDATE()) AS with_insurance
-       FROM vehicles WHERE is_deleted = FALSE`
-    );
-
-    const [[inspectionStats]] = await pool.query(
-      `SELECT COUNT(DISTINCT sub.vehicle_id) AS inspected, SUM(sub.result = 'PASSED') AS passed
-       FROM (
-         SELECT vi.vehicle_id, vi.result FROM vehicle_inspections vi
-         INNER JOIN (SELECT vehicle_id, MAX(inspection_date) AS md FROM vehicle_inspections GROUP BY vehicle_id) lat
-         ON vi.vehicle_id = lat.vehicle_id AND vi.inspection_date = lat.md
-       ) sub`
-    );
-
-    const [[completion]] = await pool.query(
-      `SELECT
-         (SELECT COUNT(*) FROM students WHERE is_deleted=FALSE AND morning_enabled=TRUE) AS m_total,
-         (SELECT COUNT(DISTINCT student_id) FROM daily_status WHERE check_date=? AND morning_done=TRUE) AS m_done,
-         (SELECT COUNT(*) FROM students WHERE is_deleted=FALSE AND evening_enabled=TRUE) AS e_total,
-         (SELECT COUNT(DISTINCT student_id) FROM daily_status WHERE check_date=? AND evening_done=TRUE) AS e_done`,
-      [snapshotDate, snapshotDate]
-    );
-
-    const [[userStats]] = await pool.query(
-      `SELECT COUNT(*) AS total, SUM(is_active AND last_login IS NOT NULL) AS active
-       FROM users WHERE is_deleted = FALSE`
-    );
-
-    const [[emergencyStats]] = await pool.query(
-      `SELECT COUNT(*) AS cnt FROM emergency_logs
-       WHERE DATE(reported_at) = ? AND is_deleted = FALSE`, [snapshotDate]
-    );
-
-    // Upsert snapshot
-    await pool.query(
-      `REPLACE INTO daily_snapshots
-       (snapshot_date, scope_type, scope_id,
-        total_students, students_with_vehicle, students_with_parent,
-        total_vehicles, vehicles_with_insurance, vehicles_inspected, vehicles_passed,
-        morning_total, morning_done, evening_total, evening_done,
-        emergency_count, active_users, total_users,
-        is_baseline, baseline_note, run_type, research_phase, created_by)
-       VALUES (?, 'system', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        snapshotDate,
-        students.total, students.with_vehicle, parentCoverage.cnt,
-        vehicleStats.total, vehicleStats.with_insurance || 0,
-        inspectionStats.inspected || 0, inspectionStats.passed || 0,
-        completion.m_total, completion.m_done, completion.e_total, completion.e_done,
-        emergencyStats.cnt, userStats.active || 0, userStats.total,
-        isBaseline, baselineNote, runType, researchPhase, req.user.id,
-      ]
-    );
+    // Compute + store system-wide metrics (shared with scripts/daily-snapshot.js)
+    const snapSvc = require('../services/dailySnapshot.service');
+    const metrics = await snapSvc.computeSystemMetrics(pool, snapshotDate);
+    await snapSvc.writeSystemSnapshot(pool, {
+      snapshotDate, metrics, isBaseline, baselineNote, runType, researchPhase, createdBy: req.user.id,
+    });
 
     await logAudit({
       userId: req.user.id, action: 'CREATE', entityType: 'daily_snapshot', entityId: snapshotDate,

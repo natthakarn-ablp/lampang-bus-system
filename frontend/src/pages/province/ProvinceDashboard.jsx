@@ -19,6 +19,7 @@ import {
   roundStatus, dayStatus,
 } from '../../components/dashboard';
 import PageHeader from '../../components/PageHeader';
+import PendingQueueCard from '../../components/PendingQueueCard';
 import { PageTransition } from '../../lib/motion';
 
 export default function ProvinceDashboard() {
@@ -200,6 +201,8 @@ export default function ProvinceDashboard() {
         day={heroDay}
         action={heroAction}
       />
+
+      <PendingQueueCard />
 
       <ActionList items={actions} hideWhenEmpty afterAlert={heroDay.tone === 'warn' || heroDay.tone === 'danger'} />
 

@@ -18,6 +18,10 @@ const incidentSvc = require('../services/transportIncident.service');
 // All routes require transport or admin role
 router.use(authenticate, requireRole('transport', 'admin'));
 
+// Requests waiting for this role (badge + งานรออนุมัติ page) — pendingQueue.service.js
+router.get('/pending-summary', require('./pendingSummaryHandler').pendingSummaryHandler());
+
+
 // ─── GET /api/transport/vehicles/check-plate (Phase 10.13A-15) ──────────────
 // Read-only duplicate preflight (warns before creating a duplicate). No writes.
 router.get('/vehicles/check-plate', async (req, res, next) => {

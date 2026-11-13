@@ -824,6 +824,44 @@ const TEACHER_CHECK = {
   ],
 };
 
+// Shape of pendingQueue.service getSummary(detail=1). No student names.
+function PENDING_SUMMARY(role) {
+  const item = (id, title, days) => ({ queue: 'x', item_id: String(id), title, school_id: 'S1',
+    school_name: 'โรงเรียนตัวอย่าง ก', affiliation_id: '1', age_days: days, overdue: days >= 3, escalated: days >= 7 });
+  const queues = {
+    school: [
+      { key: 'roster_requests', label: 'คำขอปรับรายชื่อนักเรียนบนรถ (จากคนขับ)', count: 2, overdue: 1, oldest_days: 4,
+        link: '/school/approvals', items: [item(11, 'ขอเพิ่มนักเรียน · รถ กข-1111 ลำปาง', 4), item(12, 'ขอนำนักเรียนออก · รถ กข-1111 ลำปาง', 1)] },
+      { key: 'transfer_incoming', label: 'คำขอรับนักเรียนย้ายเข้า (ต่างสังกัด)', count: 0, overdue: 0, oldest_days: null,
+        link: '/school/transfer-requests', items: [] },
+    ],
+    affiliation: [
+      { key: 'transfer_internal', label: 'คำขอโอนย้ายนักเรียนในสังกัด', count: 1, overdue: 0, oldest_days: 1,
+        link: '/affiliation/transfer-requests', items: [item(21, 'โอนย้าย ก → ข', 1)] },
+      { key: 'vehicle_requests', label: 'คำขอเกี่ยวกับรถ', count: 0, overdue: 0, oldest_days: null,
+        link: '/affiliation/vehicle-requests', items: [] },
+    ],
+    province: [],
+    transport: [
+      { key: 'inspection_waiting', label: 'รถรอตรวจสภาพ', count: 1, overdue: 1, oldest_days: 5,
+        link: '/transport/verification', items: [item(41, 'ตรวจสภาพรถ กข-1111 ลำปาง (VIA-1)', 5)] },
+    ],
+    admin: [],
+  }[role] || [];
+  const escalatedItems = ['affiliation', 'province'].includes(role)
+    ? [{ ...item(13, 'ขอเพิ่มนักเรียน · รถ กข-2222 ลำปาง', 9), queue: 'roster_requests', queue_label: 'คำขอปรับรายชื่อนักเรียนบนรถ (จากคนขับ)' }]
+    : [];
+  const own = queues.reduce((n, q) => n + q.count, 0);
+  return {
+    role, overdue_days: 3, escalate_days: 7,
+    total: own + escalatedItems.length,
+    overdue_total: queues.reduce((n, q) => n + q.overdue, 0),
+    queues,
+    escalated: { count: escalatedItems.length, items: escalatedItems },
+    alerts: [],
+  };
+}
+
 const COMMON = {
   '/api/driver/roster':         { data: DRIVER_ROSTER },
   // FEATURE_MULTI_TRIP is on in production-feature-flags.json (2026-11-12),
@@ -902,6 +940,18 @@ const COMMON = {
   '/api/transport/dashboard':  { data: TRANSPORT_DASH },
   '/api/transport/pickup-map': { data: PICKUP_POINTS },
 
+  // GET /api/<role>/pending-summary — backend/src/services/pendingQueue.service.js
+  // (TopNavbar bell + PendingQueueCard on each approver dashboard).
+  '/api/school/pending-summary': { data: PENDING_SUMMARY('school') },
+  '/api/affiliation/pending-summary': { data: PENDING_SUMMARY('affiliation') },
+  '/api/province/pending-summary': { data: PENDING_SUMMARY('province') },
+  '/api/transport/pending-summary': { data: PENDING_SUMMARY('transport') },
+  '/api/admin/pending-summary': { data: { ...PENDING_SUMMARY('admin'), ops_alerts: [] } },
+  '/api/verification/oversight/applications/stuck': { data: { stuck_days: 3, rows: [
+    { id: 9101, request_no: 'VIA-20261101-ABC123', status: 'READY_TO_PRINT', current_term: '2569-2',
+      updated_at: '2026-11-01T02:00:00Z', idle_days: 12, plate_no: 'กข-1111 ลำปาง',
+      issuing_school_name: 'โรงเรียนตัวอย่าง ก', open_attempts: 0 },
+  ] } },
   // Same shape as admin.routes.js GET /pending-requests-count.
   '/api/admin/pending-requests-count': { data: { total: 4, student_transfer: 2, vehicle: 1, roster: 1 } },
   '/api/admin/system-health': { data: {

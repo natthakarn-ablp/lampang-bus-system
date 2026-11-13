@@ -12,6 +12,7 @@ import StudentStatusTable from '../../components/StudentStatusTable';
 import { useToast } from '../../components/Toast';
 import PlateSearchInput from '../../components/PlateSearchInput';
 import PageHeader from '../../components/PageHeader';
+import PendingQueueCard from '../../components/PendingQueueCard';
 import { SkeletonKpiGrid } from '../../components/Skeleton';
 import SchoolOverrideModal from '../../components/SchoolOverrideModal';
 import {
@@ -299,6 +300,8 @@ export default function SchoolDashboard() {
           </Link>
         </div>
       </div>
+
+      <PendingQueueCard />
 
       {overrideOpen && (
         <SchoolOverrideModal

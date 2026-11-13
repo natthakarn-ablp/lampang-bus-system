@@ -23,9 +23,9 @@
     "coGuardian":            { "env": "FEATURE_CO_GUARDIAN",             "enabled": true,  "since": "2026-11-08 11:56 น." },
     "recoverySchool":        { "env": "FEATURE_RECOVERY_SCHOOL",         "enabled": true, "since": "2026-11-13 15:52 น." },
     "recoveryDriver":        { "env": "FEATURE_RECOVERY_DRIVER",         "enabled": true, "since": "2026-11-13 15:53 น." },
-    "recoveryProvince":      { "env": "FEATURE_RECOVERY_PROVINCE",       "enabled": false, "since": null },
-    "recoveryAffiliation":   { "env": "FEATURE_RECOVERY_AFFILIATION",    "enabled": false, "since": null },
-    "recoveryTransport":     { "env": "FEATURE_RECOVERY_TRANSPORT",      "enabled": false, "since": null }
+    "recoveryProvince":      { "env": "FEATURE_RECOVERY_PROVINCE",       "enabled": true, "since": "2026-11-13 22:38 น." },
+    "recoveryAffiliation":   { "env": "FEATURE_RECOVERY_AFFILIATION",    "enabled": true, "since": "2026-11-13 22:38 น." },
+    "recoveryTransport":     { "env": "FEATURE_RECOVERY_TRANSPORT",      "enabled": true, "since": "2026-11-13 22:38 น." }
   },
   "settings": {
     "adminRecoveryRequireCode": {
@@ -35,7 +35,7 @@
     }
   },
   "roles_recovery_closed": {
-    "_comment": "เจ้าของยืนยัน gate ครบทุกบทบาทแล้ว (school/driver และ province/affiliation/transport — owner decision 2026-11-13); การเปิดจริงบน production ขึ้นกับ flag ในหมวด flags: recoverySchool/recoveryDriver เปิดแล้ว 2026-11-13, recoveryProvince/recoveryAffiliation/recoveryTransport ยังปิด",
+    "_comment": "เจ้าของยืนยัน gate ครบทุกบทบาทแล้ว (school/driver และ province/affiliation/transport — owner decision 2026-11-13); การเปิดจริงบน production ขึ้นกับ flag ในหมวด flags: recoverySchool/recoveryDriver เปิดแล้ว 2026-11-13 15:52 น., recoveryProvince/recoveryAffiliation/recoveryTransport เปิดแล้ว 2026-11-13 22:38 น.",
     "province": false,
     "affiliation": false,
     "school": false,

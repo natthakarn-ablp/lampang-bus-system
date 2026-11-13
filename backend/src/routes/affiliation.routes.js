@@ -1064,12 +1064,7 @@ router.post('/vehicle-requests/:id/approve', async (req, res, next) => {
     // Same outcome wording as the admin route: a FAILED restore must not be
     // reported as approved (QA affiliation-09). The client reads out.status
     // to pick a success or error toast.
-    const msg = out.status === 'APPLIED' ? (out.informational ? 'อนุมัติคำขอแล้ว' : 'อนุมัติและกู้คืนรถสำเร็จ')
-      : out.status === 'ALREADY_APPLIED' ? 'คำขอนี้ดำเนินการไปแล้ว'
-      : out.status === 'FAILED' && out.reason === 'ACTIVE_CANONICAL_CONFLICT' ? 'ไม่สามารถกู้คืนรถได้ เนื่องจากมีรถทะเบียนเดียวกันที่ใช้งานอยู่แล้ว'
-      : out.status === 'FAILED' ? 'ไม่สามารถดำเนินการได้'
-      : 'คำขอนี้ไม่อยู่ในสถานะรออนุมัติแล้ว';
-    return sendSuccess(res, out, msg);
+    return sendSuccess(res, out, vr.approveOutcomeMessage(out));
   } catch (err) { next(err); }
 });
 

@@ -122,10 +122,28 @@ describe('RBAC coverage', () => {
       '/api/province/schools/:id/deactivate',
       '/api/province/schools/:id/restore',
     ]);
-    const selfServe = provinceWrites.filter((r) => SELF_SERVE.has(r.path));
+    // Deliberate 2026-11-13 (§8 rows "โอนย้ายนักเรียน" + "คำขอเกี่ยวกับรถ"):
+    // the province decides on the affiliation's behalf once a request has
+    // waited ESCALATE days (409 before that — provinceOverride.service).
+    const ESCALATED = new Set([
+      '/api/province/escalated/transfer-requests/:id/approve',
+      '/api/province/escalated/transfer-requests/:id/reject',
+      '/api/province/escalated/vehicle-requests/:id/approve',
+      '/api/province/escalated/vehicle-requests/:id/reject',
+    ]);
+    const selfServe = provinceWrites.filter((r) => SELF_SERVE.has(r.path) || ESCALATED.has(r.path));
     expect(selfServe.every((r) => r.roles.every((role) => ['province', 'admin'].includes(role)))).toBe(true);
-    expect(selfServe.length).toBeLessThanOrEqual(11);
+    expect(selfServe.length).toBeLessThanOrEqual(15);
     expect(provinceWrites.length - selfServe.length).toBeLessThanOrEqual(2);
+  });
+
+  it('lets transport merge a duplicate vehicle but never delete one', () => {
+    const merge = routes.find((r) => r.method.toUpperCase() === 'POST' && r.path === '/api/transport/vehicles/:id/merge');
+    expect(merge).toBeDefined();
+    expect([...merge.roles].sort()).toEqual(['admin', 'transport']);
+    const del = routes.filter((r) => r.method.toUpperCase() === 'DELETE' && /^\/api\/[a-z]+\/vehicles\/:id$/.test(r.path));
+    expect(del.length).toBeGreaterThan(0);
+    for (const r of del) expect(r.roles).not.toContain('transport');
   });
 
   it('never lets driver or transport reach an admin user-management route', () => {

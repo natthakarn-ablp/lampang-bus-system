@@ -19,6 +19,7 @@ jest.mock('../src/utils/audit', () => ({ logAudit: jest.fn().mockResolvedValue(u
 jest.mock('../src/services/vehicleRequest.service', () => ({
   getDetailForAffiliation: jest.fn(),
   approveVehicleRequest: jest.fn(),
+  approveOutcomeMessage: jest.requireActual('../src/services/vehicleRequest.service').approveOutcomeMessage,
 }));
 jest.mock('../src/services/studentTransfer.service', () => ({
   getDetailForAffiliation: jest.fn(),

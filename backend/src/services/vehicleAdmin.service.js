@@ -386,7 +386,9 @@ async function vehicleImpact(pool, vehicleId) {
 }
 
 // ── GOAL #4 — merge a duplicate vehicle (loser :id) into the winner ──────────
-async function mergeVehicles(pool, { vehicleId, intoVehicleId, actorId, reason = null, ipAddress = null, userAgent = null }) {
+// Callable by admin (/api/admin) and transport (/api/transport, owner decision
+// 2026-11-13); actorRole lands in both audit rows as by_role.
+async function mergeVehicles(pool, { vehicleId, intoVehicleId, actorId, actorRole = null, reason = null, ipAddress = null, userAgent = null }) {
   if (!intoVehicleId) throw err('กรุณาระบุรถปลายทาง (into_vehicle_id)', 400);
   if (String(vehicleId) === String(intoVehicleId)) throw err('ไม่สามารถรวมรถคันเดียวกันได้', 400);
   if (!String(reason || '').trim()) throw err('กรุณาระบุเหตุผลในการรวมรถ', 400);
@@ -457,7 +459,7 @@ async function mergeVehicles(pool, { vehicleId, intoVehicleId, actorId, reason =
           oldValue: { username: u.username, is_active: !!u.is_active },
           newValue: { is_active: false, reason: 'vehicle_merged', merged_vehicle_id: vehicleId,
                       merged_plate_no: loser.plate_no, into_vehicle_id: intoVehicleId,
-                      recovery_channels_released: released },
+                      recovery_channels_released: released, by_role: actorRole },
           ipAddress, userAgent,
         });
       }
@@ -467,7 +469,8 @@ async function mergeVehicles(pool, { vehicleId, intoVehicleId, actorId, reason =
       userId: actorId, action: 'UPDATE', entityType: 'vehicle', entityId: String(vehicleId), conn,
       oldValue: { id: loser.id, plate_no: loser.plate_no, is_deleted: !!loser.is_deleted },
       newValue: { merged_into: intoVehicleId, into_plate_no: winner.plate_no, is_deleted: true,
-                  reason: String(reason).slice(0, 500), repointed: counts, driver_logins_closed: closedLogins },
+                  reason: String(reason).slice(0, 500), by_role: actorRole,
+                  repointed: counts, driver_logins_closed: closedLogins },
       ipAddress, userAgent,
     });
     await conn.commit();

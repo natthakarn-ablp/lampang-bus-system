@@ -5,14 +5,14 @@ import { FormField, Modal, TableAction } from './ui';
 import { useToast } from './Toast';
 
 /**
- * Admin-only vehicle delete and duplicate merge (2026-11-13). Both endpoints
- * already existed admin-only; this is the screen for them.
+ * Vehicle delete (admin only) and duplicate merge (admin + transport,
+ * owner decision 2026-11-13).
  *
- *   ลบรถ       DELETE /admin/vehicles/:id { reason, force? }
- *   รวมรถซ้ำ    POST   /admin/vehicles/:id/merge { into_vehicle_id, reason }
+ *   ลบรถ       DELETE /admin/vehicles/:id { reason, force? }          — admin only
+ *   รวมรถซ้ำ    POST   /<admin|transport>/vehicles/:id/merge { into_vehicle_id, reason }
  *
- * Each dialog first reads GET /admin/vehicles/:id/impact (read-only) so the
- * admin sees what will be detached or moved before confirming. A reason is
+ * Each dialog first reads GET /<admin|transport>/vehicles/:id/impact (read-only)
+ * so the user sees what will be detached or moved before confirming. A reason is
  * always required. Deleting a vehicle that still has pupils or an active
  * driver needs the explicit "ลบทั้งที่ยังใช้งานอยู่" tick (sent as force).
  * A merge also closes the driver login named after the merged-away plate
@@ -57,7 +57,10 @@ function CountList({ counts }) {
 const btn = 'focus-ring text-base font-medium px-4 min-h-[44px] rounded-lg border border-surface-border text-ink hover:bg-surface transition disabled:opacity-50';
 const danger = 'focus-ring text-base font-semibold px-4 min-h-[44px] rounded-lg bg-danger-ink hover:bg-danger-ink/90 text-white transition disabled:opacity-50';
 
-export default function AdminVehicleActions({ vehicle, onChanged }) {
+// role: 'admin' (merge + delete via /admin) or 'transport' (merge only via /transport).
+export default function AdminVehicleActions({ vehicle, onChanged, role = 'admin' }) {
+  const isAdmin = role === 'admin';
+  const base = isAdmin ? '/admin/vehicles' : '/transport/vehicles';
   const toast = useToast();
   const [mode, setMode] = useState(null); // 'delete' | 'merge'
   const [impact, setImpact] = useState(null);
@@ -75,7 +78,7 @@ export default function AdminVehicleActions({ vehicle, onChanged }) {
   function open(next) {
     setMode(next); setImpact(null); setImpactError(''); setReason(''); setForce(false);
     setError(''); setQuery(''); setMatches([]); setTarget(null);
-    api.get(`/admin/vehicles/${encodeURIComponent(vehicle.id)}/impact`)
+    api.get(`${base}/${encodeURIComponent(vehicle.id)}/impact`)
       .then((res) => setImpact(res.data?.data || null))
       .catch((err) => setImpactError(err.response?.data?.message || 'โหลดข้อมูลผลกระทบไม่สำเร็จ'));
   }
@@ -105,8 +108,8 @@ export default function AdminVehicleActions({ vehicle, onChanged }) {
     if (!canSubmit || lock.current) return;
     lock.current = true; setSaving(true); setError('');
     try {
-      const url = `/admin/vehicles/${encodeURIComponent(vehicle.id)}`;
-      const res = mode === 'delete'
+      const url = `${base}/${encodeURIComponent(vehicle.id)}`;
+      const res = mode === 'delete' && isAdmin
         ? await api.delete(url, { data: { reason: reason.trim(), ...(inUse ? { force: true } : {}) } })
         : await api.post(`${url}/merge`, { into_vehicle_id: target.id, reason: reason.trim() });
       toast.success(res.data?.message || 'บันทึกแล้ว');
@@ -124,10 +127,12 @@ export default function AdminVehicleActions({ vehicle, onChanged }) {
         <GitMerge className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
         รวมรถซ้ำ
       </TableAction>
-      <TableAction tone="danger" onClick={() => open('delete')} aria-label={`ลบรถ ${vehicle.plate_no}`}>
-        <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
-        ลบรถ
-      </TableAction>
+      {isAdmin && (
+        <TableAction tone="danger" onClick={() => open('delete')} aria-label={`ลบรถ ${vehicle.plate_no}`}>
+          <Trash2 className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
+          ลบรถ
+        </TableAction>
+      )}
 
       {mode && (
         <Modal

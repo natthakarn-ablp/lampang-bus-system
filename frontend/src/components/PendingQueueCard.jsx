@@ -160,6 +160,77 @@ function StuckApplications({ onChanged }) {
   );
 }
 
+// Province only (owner decision 2026-11-13): an affiliation request that has
+// waited escalate_days or more can be decided here on the affiliation's behalf.
+// POST /api/province/escalated/<transfer-requests|vehicle-requests>/:id/<approve|reject>
+// — the backend refuses younger items (409) and audits the override.
+const OVERRIDE_PATH = { transfer_internal: 'transfer-requests', vehicle_requests: 'vehicle-requests' };
+
+function EscalatedDecision({ item, onDone }) {
+  const toast = useToast();
+  const [decision, setDecision] = useState(null); // 'approve' | 'reject'
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const segment = OVERRIDE_PATH[item.queue];
+  if (!segment || !item.escalated) return null;
+  const needsReason = decision === 'reject';
+
+  async function submit() {
+    if (!decision || (needsReason && !reason.trim())) return;
+    setBusy(true);
+    try {
+      const res = await api.post(`/province/escalated/${segment}/${encodeURIComponent(item.item_id)}/${decision}`,
+        { reason: reason.trim() });
+      const status = res.data?.data?.status;
+      const ok = decision === 'reject' || status === 'APPLIED';
+      (ok ? toast.success : toast.error)(res.data?.message || 'บันทึกแล้ว');
+      setDecision(null);
+      setReason('');
+      onDone?.();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ทำรายการไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+        <button type="button" onClick={() => { setReason(''); setDecision('approve'); }}
+          className="focus-ring min-h-[44px] rounded-lg bg-brand-700 px-3 text-sm font-semibold text-white">
+          อนุมัติ
+        </button>
+        <button type="button" onClick={() => { setReason(''); setDecision('reject'); }}
+          className="focus-ring min-h-[44px] rounded-lg border border-danger px-3 text-sm font-semibold text-danger-ink">
+          ไม่อนุมัติ
+        </button>
+      </div>
+      <ConfirmDialog
+        open={!!decision}
+        tone={decision === 'reject' ? 'danger' : 'brand'}
+        title={decision === 'reject' ? 'ไม่อนุมัติคำขอนี้แทนสังกัด?' : 'อนุมัติคำขอนี้แทนสังกัด?'}
+        description={`คำขอนี้รอสังกัดพิจารณามา ${item.age_days} วัน ผลจะเหมือนสังกัดเป็นผู้พิจารณา และบันทึกว่าจังหวัดพิจารณาแทน`}
+        itemName={`${item.queue_label} · ${item.title}${item.school_name ? ` · ${item.school_name}` : ''}`}
+        confirmLabel={decision === 'reject' ? 'ไม่อนุมัติ' : 'อนุมัติ'}
+        cancelLabel="ยกเลิก"
+        loading={busy}
+        confirmDisabled={needsReason && !reason.trim()}
+        onConfirm={submit}
+        onCancel={() => { if (!busy) { setDecision(null); setReason(''); } }}
+      >
+        <label className="block text-sm font-medium text-ink" htmlFor={`esc-reason-${item.queue}-${item.item_id}`}>
+          {needsReason ? 'เหตุผลที่ไม่อนุมัติ (จำเป็น)' : 'หมายเหตุ (ไม่บังคับ)'}
+        </label>
+        <textarea id={`esc-reason-${item.queue}-${item.item_id}`} value={reason} maxLength={500}
+          onChange={e => setReason(e.target.value)}
+          className="focus-ring mt-1 min-h-[88px] w-full rounded-lg border border-surface-border bg-surface-raised px-3 py-2 text-base sm:text-sm text-ink"
+          placeholder={needsReason ? 'เช่น ข้อมูลโรงเรียนปลายทางไม่ถูกต้อง' : 'เช่น สังกัดไม่ได้พิจารณาภายในกำหนด'} />
+      </ConfirmDialog>
+    </>
+  );
+}
+
 export default function PendingQueueCard({ className = '' }) {
   const { user } = useAuth();
   const role = user?.role;
@@ -199,7 +270,11 @@ export default function PendingQueueCard({ className = '' }) {
           <p className="text-sm font-semibold text-ink">
             เรื่องที่หน่วยงานระดับล่างค้างเกิน {data.escalate_days} วัน ({data.escalated.count})
           </p>
-          <p className="mt-0.5 text-xs text-ink-muted">โปรดติดตามกับหน่วยงานที่รับผิดชอบ</p>
+          <p className="mt-0.5 text-xs text-ink-muted">
+            {role === 'province'
+              ? `โปรดติดตามกับหน่วยงานที่รับผิดชอบ · คำขอโอนย้ายในสังกัดและคำขอเกี่ยวกับรถ จังหวัดอนุมัติหรือไม่อนุมัติแทนสังกัดได้เมื่อรอครบ ${data.escalate_days} วัน`
+              : 'โปรดติดตามกับหน่วยงานที่รับผิดชอบ'}
+          </p>
           <ul className="mt-2 space-y-1">
             {escalated.slice(0, 20).map(item => (
               <li key={`${item.queue}-${item.item_id}`}
@@ -209,6 +284,7 @@ export default function PendingQueueCard({ className = '' }) {
                   {item.school_name && <span className="text-ink-muted"> · {item.school_name}</span>}
                 </span>
                 <AgePill item={item} overdueDays={data.overdue_days} />
+                {role === 'province' && <EscalatedDecision item={item} onDone={reload} />}
               </li>
             ))}
           </ul>

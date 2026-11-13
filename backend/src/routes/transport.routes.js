@@ -275,6 +275,40 @@ router.post('/vehicles/:id/fix-plate', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
+// ─── Merge a duplicate vehicle (owner decision 2026-11-13) ──────────────────
+// Transport may collapse a duplicate itself instead of asking the admin. Same
+// service, same transaction, same driver-login closing as the admin route
+// (vehicleAdmin.mergeVehicles); the audit rows carry by_role. Delete stays
+// admin-only (DELETE /api/admin/vehicles/:id).
+router.get('/vehicles/:id/impact', async (req, res, next) => {
+  try {
+    const { pool } = require('../config/database');
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const data = await vehicleAdmin.vehicleImpact(pool, String(req.params.id).slice(0, 20));
+    return sendSuccess(res, data);
+  } catch (err) { return next(err); }
+});
+
+router.post('/vehicles/:id/merge', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    if (!b.into_vehicle_id) return sendError(res, 'กรุณาระบุรถปลายทาง (into_vehicle_id)', [], 400);
+    if (!String(b.reason || '').trim()) return sendError(res, 'กรุณาระบุเหตุผลในการรวมรถ', [], 400);
+    const { pool } = require('../config/database');
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const data = await vehicleAdmin.mergeVehicles(pool, {
+      vehicleId: req.params.id,
+      intoVehicleId: b.into_vehicle_id,
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      reason: b.reason,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, data, 'รวมรถซ้ำเรียบร้อย');
+  } catch (err) { return next(err); }
+});
+
 // ─── GET /api/transport/inspections ─────────────────────────────────────────
 router.get('/inspections', async (req, res, next) => {
   try {

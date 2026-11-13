@@ -516,6 +516,19 @@ router.put('/users/:id', async (req, res, next) => {
       if (block.warning) reactivationWarning = block.reason;
     }
 
+    // 2026-11-13 — an affiliation account is not re-enabled while its
+    // affiliation is closed (same rule as the province account edit/restore:
+    // restore the affiliation first). When the request also sends a role, the
+    // new scope goes through validateRoleScope (live affiliations only) below.
+    if (reactivating && user.role === 'affiliation' && !(role && VALID_ROLES.includes(role))) {
+      const [[aff]] = await pool.query(
+        'SELECT id FROM affiliations WHERE id = ? AND is_deleted = FALSE', [user.scope_id]
+      );
+      if (!aff) {
+        return sendError(res, 'สังกัดของบัญชีนี้ถูกปิดใช้งานแล้ว กรุณาเปิดใช้งานสังกัดก่อน', [{ code: 'AFFILIATION_INACTIVE' }], 409);
+      }
+    }
+
     const updates = [];
     const params = [];
     if (display_name !== undefined) { updates.push('display_name = ?'); params.push(display_name); }
@@ -2152,6 +2165,16 @@ router.post('/verification/applications/:id/cancel', async (req, res, next) => {
 // mistyped plate, or collapse a duplicate. All three are transactional, dedup-
 // guarded (canonical/normalized plate uniqueness), and fully audited. Admin-only
 // via the file-level requireRole('admin'); vehicles are province-shared.
+// Read-only preview for the delete / merge confirm dialogs: active students and
+// driver assignment, plus the row counts a merge would move or clear.
+router.get('/vehicles/:id/impact', async (req, res, next) => {
+  try {
+    const vehicleAdmin = require('../services/vehicleAdmin.service');
+    const data = await vehicleAdmin.vehicleImpact(pool, String(req.params.id).slice(0, 20));
+    return sendSuccess(res, data);
+  } catch (err) { next(err); }
+});
+
 router.delete('/vehicles/:id', async (req, res, next) => {
   try {
     const vehicleAdmin = require('../services/vehicleAdmin.service');
@@ -2170,6 +2193,8 @@ router.delete('/vehicles/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Non-plate fields only. A changed plate_no is refused (400 USE_FIX_PLATE) —
+// use POST /vehicles/:id/fix-plate so the driver login is renamed with it.
 router.put('/vehicles/:id', async (req, res, next) => {
   try {
     const vehicleAdmin = require('../services/vehicleAdmin.service');

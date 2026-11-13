@@ -14,7 +14,7 @@
  * vehicleScopeSql, school.getVehicles, school.getEmergencies): at least one
  * non-deleted pupil of the school has students.vehicle_id = the vehicle.
  *
- * Three actions, all transactional and audited:
+ * Four actions, all transactional and audited:
  *   resetDriverPassword  — new random one-time password, must change at next
  *                          login, password_changed_at = NOW() so every token
  *                          issued before is rejected (auth.js / refresh-token).
@@ -23,6 +23,15 @@
  *                          person, the vehicle's active assignment moves to it,
  *                          the plate account is relinked and its password reset
  *                          so the previous driver loses access immediately.
+ *   reactivateDriverAccount — re-enable the plate account after the admin
+ *                          deactivated it (is_active=FALSE, NOT soft-deleted).
+ *                          Same dedupe guard as the admin user edit
+ *                          (utils/driverReactivation): a duplicate of a linked
+ *                          canonical driver stays off (409). The password is
+ *                          not changed but earlier sessions are revoked. For a
+ *                          different person use "เปลี่ยนคนขับ" (or reset)
+ *                          directly: both accept a switched-off account and
+ *                          re-enable it together with the new password.
  *
  * Reset and replace also release the account's LINE password-recovery binding
  * (utils/recoveryBinding) in the same transaction.
@@ -36,6 +45,7 @@ const { logAudit } = require('../utils/audit');
 const { normalizePlate } = require('../utils/vehiclePlate');
 const { generateTemporaryPassword } = require('./driverProfile.service');
 const { releaseRecoveryBinding } = require('../utils/recoveryBinding');
+const { detectDriverReactivationBlock } = require('../utils/driverReactivation');
 
 const BCRYPT_COST = 12;
 const NAME_MAX = 100;   // drivers.name VARCHAR(100)
@@ -106,11 +116,62 @@ async function findPlateAccount(conn, vehicle, { lock = false } = {}) {
   return rows[0] || null;
 }
 
-function requireActive(account) {
+function requireAccount(account) {
   if (!account) throw appError('รถคันนี้ยังไม่มีบัญชีคนขับ กรุณาใช้ "เปลี่ยนคนขับ" เพื่อสร้างบัญชี', 404, 'DRIVER_ACCOUNT_NOT_FOUND');
+}
+
+function requireActive(account) {
+  requireAccount(account);
   if (!account.is_active) {
-    throw appError('บัญชีคนขับของรถคันนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบเพื่อเปิดใช้งาน', 409, 'DRIVER_ACCOUNT_INACTIVE');
+    throw appError('บัญชีคนขับของรถคันนี้ถูกปิดใช้งาน กด "เปิดใช้งานบัญชีคนขับ" ก่อน', 409, 'DRIVER_ACCOUNT_INACTIVE');
   }
+}
+
+/**
+ * Reset and replace may run on an account the admin switched off (not
+ * soft-deleted): they rotate the password and set password_changed_at, so they
+ * re-enable it in the same transaction. That way handing the vehicle to a new
+ * driver never needs "reactivate first", which would briefly give the old
+ * password back to the previous driver. The same dedupe guard as reactivation
+ * applies. Returns true when the account was off (the caller sets is_active).
+ */
+async function guardSwitchedOff(conn, account) {
+  if (!account || account.is_active) return false;
+  const block = await detectDriverReactivationBlock(conn, account);
+  if (block.blocked) {
+    throw appError(
+      'เปิดใช้งานบัญชีนี้ไม่ได้ เพราะเป็นบัญชีซ้ำของคนขับที่มีบัญชีหลักอยู่แล้ว กรุณาติดต่อผู้ดูแลระบบ',
+      409, 'DRIVER_REACTIVATION_BLOCKED'
+    );
+  }
+  return true;
+}
+
+/**
+ * After the admin lifecycle deactivate (driverLifecycle.deactivateDriver) the
+ * driver's assignments are ended too, so re-enabling the plate account alone
+ * would leave a driver who cannot start a shift (DRIVER_NOT_AUTHORIZED) and a
+ * vehicle list with no driver. Reopen the assignment of the account's driver to
+ * this vehicle when the vehicle has no active driver and the driver is not
+ * assigned elsewhere. Returns true when an assignment was created.
+ */
+async function restorePlateAssignment(conn, account, vehicle) {
+  if (!account || !account.driver_id) return false;
+  const [current] = await conn.query(
+    'SELECT id FROM driver_vehicle_assignments WHERE vehicle_id = ? AND is_active = TRUE LIMIT 1 FOR UPDATE',
+    [vehicle.id]
+  );
+  if (current.length) return false;
+  const [elsewhere] = await conn.query(
+    'SELECT id FROM driver_vehicle_assignments WHERE driver_id = ? AND is_active = TRUE LIMIT 1 FOR UPDATE',
+    [account.driver_id]
+  );
+  if (elsewhere.length) return false;
+  await conn.query(
+    'INSERT INTO driver_vehicle_assignments (driver_id, vehicle_id, start_date, is_active) VALUES (?, ?, CURDATE(), TRUE)',
+    [account.driver_id, vehicle.id]
+  );
+  return true;
 }
 
 function cleanName(raw) {
@@ -130,14 +191,14 @@ function cleanPhone(raw) {
   return phone;
 }
 
-async function setTemporaryPassword(conn, userId) {
+async function setTemporaryPassword(conn, userId, { reactivate = false } = {}) {
   const temporaryPassword = generateTemporaryPassword();
   const hash = await bcrypt.hash(temporaryPassword, BCRYPT_COST);
   // password_changed_at = NOW() trips the iat < password_changed_at guard in
   // middleware/auth.js and /refresh-token: every session issued before this
   // moment stops working (same rule as the admin / affiliation reset paths).
   await conn.query(
-    `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW()
+    `UPDATE users SET password_hash = ?, must_change_password = TRUE, password_changed_at = NOW()${reactivate ? ', is_active = TRUE' : ''}
       WHERE id = ?`,
     [hash, userId]
   );
@@ -166,8 +227,10 @@ async function resetDriverPassword(pool, { vehicleId, scope, actor }) {
   return inTransaction(pool, async (conn) => {
     const vehicle = await lockScopedVehicle(conn, vehicleId, scope);
     const account = await findPlateAccount(conn, vehicle, { lock: true });
-    requireActive(account);
-    const temporaryPassword = await setTemporaryPassword(conn, account.id);
+    requireAccount(account);
+    const reactivated = await guardSwitchedOff(conn, account);
+    const temporaryPassword = await setTemporaryPassword(conn, account.id, { reactivate: reactivated });
+    const assignmentRestored = reactivated ? await restorePlateAssignment(conn, account, vehicle) : false;
     // The previous holder's LINE recovery binding must go with the reset, or
     // they could request a fresh reset link (accountRecoveryPolicy, #177).
     const recoveryReleased = await releaseRecoveryBinding(conn, account.id);
@@ -176,7 +239,7 @@ async function resetDriverPassword(pool, { vehicleId, scope, actor }) {
       newValue: {
         action: 'reset_password', account_type: 'driver', target_username: account.username,
         vehicle_id: vehicle.id, must_change_password: true, sessions_revoked: true,
-        recovery_binding_released: recoveryReleased,
+        recovery_binding_released: recoveryReleased, reactivated, assignment_restored: assignmentRestored,
         actor_role: actor.role, actor_scope: scope.schoolId ? { school_id: scope.schoolId } : scope.affiliationId ? { affiliation_id: scope.affiliationId } : 'all',
       },
     });
@@ -251,7 +314,7 @@ async function replaceDriver(pool, { vehicleId, scope, actor, name, phone, reaso
   return inTransaction(pool, async (conn) => {
     const vehicle = await lockScopedVehicle(conn, vehicleId, scope);
     const account = await findPlateAccount(conn, vehicle, { lock: true });
-    if (account && !account.is_active) requireActive(account);
+    const reactivated = await guardSwitchedOff(conn, account);
 
     const [oldAssignments] = await conn.query(
       'SELECT id, driver_id FROM driver_vehicle_assignments WHERE vehicle_id = ? AND is_active = TRUE FOR UPDATE',
@@ -293,7 +356,7 @@ async function replaceDriver(pool, { vehicleId, scope, actor, name, phone, reaso
     if (account) {
       await conn.query(
         `UPDATE users SET driver_id = ?, display_name = ?, password_hash = ?, must_change_password = TRUE,
-                          password_changed_at = NOW()
+                          password_changed_at = NOW()${reactivated ? ', is_active = TRUE' : ''}
           WHERE id = ?`,
         [newDriverId, cleanNameValue, hash, account.id]
       );
@@ -329,6 +392,7 @@ async function replaceDriver(pool, { vehicleId, scope, actor, name, phone, reaso
         action: 'replace_driver', vehicle_id: vehicle.id, driver_id: newDriverId, driver_name: cleanNameValue,
         driver_phone: cleanPhoneValue, user_id: userId, account_created: !account,
         password_reset: true, sessions_revoked: !!account, recovery_binding_released: recoveryReleased,
+        reactivated,
         actor_role: actor.role,
         reason: reason ? String(reason).slice(0, 200) : null,
       },
@@ -341,9 +405,55 @@ async function replaceDriver(pool, { vehicleId, scope, actor, name, phone, reaso
   });
 }
 
+const scopeLabel = (scope) => (scope.schoolId ? { school_id: scope.schoolId }
+  : scope.affiliationId ? { affiliation_id: scope.affiliationId } : 'all');
+
+/**
+ * Re-enable the vehicle's plate account that the admin deactivated. Only a
+ * live (is_deleted = FALSE) account is found by findPlateAccount, so a
+ * soft-deleted one stays with the admin (404 here).
+ */
+async function reactivateDriverAccount(pool, { vehicleId, scope, actor }) {
+  return inTransaction(pool, async (conn) => {
+    const vehicle = await lockScopedVehicle(conn, vehicleId, scope);
+    const account = await findPlateAccount(conn, vehicle, { lock: true });
+    if (!account) {
+      throw appError('รถคันนี้ไม่มีบัญชีคนขับที่เปิดใช้งานได้ หากบัญชีถูกลบ กรุณาติดต่อผู้ดูแลระบบเพื่อกู้คืน', 404, 'DRIVER_ACCOUNT_NOT_FOUND');
+    }
+    if (account.is_active) {
+      throw appError('บัญชีคนขับของรถคันนี้เปิดใช้งานอยู่แล้ว', 409, 'DRIVER_ACCOUNT_ALREADY_ACTIVE');
+    }
+    const block = await detectDriverReactivationBlock(conn, account);
+    if (block.blocked) {
+      throw appError(
+        'เปิดใช้งานบัญชีนี้ไม่ได้ เพราะเป็นบัญชีซ้ำของคนขับที่มีบัญชีหลักอยู่แล้ว กรุณาติดต่อผู้ดูแลระบบ',
+        409, 'DRIVER_REACTIVATION_BLOCKED'
+      );
+    }
+    // password_changed_at = NOW(): any token issued before the deactivation stays
+    // rejected (auth.js / refresh-token); the driver logs in again.
+    await conn.query(
+      'UPDATE users SET is_active = TRUE, password_changed_at = NOW() WHERE id = ? AND is_active = FALSE',
+      [account.id]
+    );
+    const assignmentRestored = await restorePlateAssignment(conn, account, vehicle);
+    await logAudit({
+      ...auditCtx(actor), action: 'UPDATE', entityType: 'user', entityId: account.id, conn, required: true,
+      oldValue: { is_active: false },
+      newValue: {
+        action: 'reactivate', account_type: 'driver', target_username: account.username, is_active: true,
+        sessions_revoked: true, assignment_restored: assignmentRestored,
+        vehicle_id: vehicle.id, actor_role: actor.role, actor_scope: scopeLabel(scope),
+      },
+    });
+    return { vehicle_id: vehicle.id, plate_no: vehicle.plate_no, user_id: account.id, username: account.username, is_active: true, assignment_restored: assignmentRestored };
+  });
+}
+
 module.exports = {
   vehicleInScope,
   resetDriverPassword,
   updateDriverDetails,
   replaceDriver,
+  reactivateDriverAccount,
 };

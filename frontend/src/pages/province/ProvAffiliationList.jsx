@@ -6,9 +6,16 @@ import PageHeader from '../../components/PageHeader';
 import LoadingState from '../../components/LoadingState';
 import EmptyState from '../../components/EmptyState';
 import ErrorState from '../../components/ErrorState';
-import { AppCard, StatusBadge, DataTable, TableAction, FormField, Modal } from '../../components/ui';
+import { AppCard, StatusBadge, DataTable, TableAction, FormField, Modal, FilterBar, ConfirmDialog } from '../../components/ui';
 import { useToast } from '../../components/Toast';
 import { kpiColor, safePct, levelBadge, sortByKpi } from '../../utils/kpi';
+
+function formatDate(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium' });
+}
 
 export default function ProvAffiliationList() {
   const [affiliations, setAffiliations] = useState([]);
@@ -20,14 +27,26 @@ export default function ProvAffiliationList() {
   const [modal, setModal] = useState(null); // { mode: 'create' } | { mode: 'rename', aff }
   const [form, setForm] = useState({ id: '', name: '' });
   const [saving, setSaving] = useState(false);
+  // Deactivate / restore a สังกัด (POST /province/affiliations/:id/deactivate
+  // | /restore). The server refuses (409) while the สังกัด still has active
+  // schools and closes its accounts on deactivation; restore leaves them off.
+  const [view, setView] = useState('active'); // 'active' | 'deactivated'
+  const [deactivated, setDeactivated] = useState([]);
+  const [confirm, setConfirm] = useState(null); // { kind: 'deactivate'|'restore', aff }
+  const [reason, setReason] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
-    return api.get('/province/affiliations')
-      .then((res) => setAffiliations(Array.isArray(res.data.data) ? res.data.data : []))
+    setError('');
+    const req = view === 'deactivated'
+      ? api.get('/province/affiliations/deactivated')
+        .then((res) => setDeactivated(Array.isArray(res.data.data) ? res.data.data : []))
+      : api.get('/province/affiliations')
+        .then((res) => setAffiliations(Array.isArray(res.data.data) ? res.data.data : []));
+    return req
       .catch((err) => setError(err.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [view]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -47,11 +66,28 @@ export default function ProvAffiliationList() {
     } finally { setSaving(false); }
   }
 
+  async function handleConfirm() {
+    if (!confirm) return;
+    const { kind, aff } = confirm;
+    setSaving(true);
+    try {
+      const url = `/province/affiliations/${encodeURIComponent(aff.id)}/${kind}`;
+      const res = kind === 'deactivate' ? await api.post(url, { reason }) : await api.post(url);
+      toast.success(res.data?.message || 'บันทึกแล้ว');
+      setConfirm(null);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'ทำรายการไม่สำเร็จ');
+    } finally { setSaving(false); }
+  }
+
+  const isDeactivatedView = view === 'deactivated';
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <PageHeader
         title="สังกัดทั้งหมด"
-        subtitle="สรุปผลการดำเนินงานรายสังกัด · เพิ่มสังกัดใหม่และแก้ชื่อสังกัดได้ที่หน้านี้"
+        subtitle="สรุปผลการดำเนินงานรายสังกัด · เพิ่มสังกัด แก้ชื่อ ปิดใช้งาน และกู้คืนสังกัดได้ที่หน้านี้"
         actions={
           <button type="button" onClick={openCreate}
             className="focus-ring inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-medium px-4 min-h-[44px] rounded-lg transition text-sm">
@@ -61,9 +97,37 @@ export default function ProvAffiliationList() {
         }
       />
 
+      <FilterBar
+        className="mb-5"
+        chips={{
+          label: 'แสดงสังกัด',
+          value: view,
+          onChange: setView,
+          options: [['active', 'ที่ใช้งานอยู่'], ['deactivated', 'ที่ปิดใช้งานแล้ว']],
+        }}
+      />
+
       {error && <ErrorState message={error} className="mb-4" />}
 
-      {loading ? (
+      {isDeactivatedView ? (
+        <DataTable
+          caption="สังกัดที่ปิดใช้งานแล้ว"
+          loading={loading}
+          rows={deactivated}
+          rowKey={a => a.id}
+          columns={[
+            { key: 'name', header: 'สังกัด', primary: true,
+              cell: a => <span className="font-medium text-ink">{a.name}</span> },
+            { key: 'id', header: 'รหัส', secondary: true, cell: a => <span className="font-mono">{a.id}</span> },
+            { key: 'deleted_at', header: 'ปิดใช้งานเมื่อ', cell: a => formatDate(a.deleted_at) },
+          ]}
+          actions={a => (
+            <TableAction tone="brand" onClick={() => setConfirm({ kind: 'restore', aff: a })}
+              aria-label={`กู้คืนสังกัด ${a.name}`}>กู้คืน</TableAction>
+          )}
+          empty={{ icon: Landmark, title: 'ไม่มีสังกัดที่ปิดใช้งาน' }}
+        />
+      ) : loading ? (
         <LoadingState />
       ) : affiliations.length === 0 ? (
         <EmptyState title="ยังไม่มีสังกัด" />
@@ -106,7 +170,13 @@ export default function ProvAffiliationList() {
                   return <StatusBadge variant={b.variant || 'neutral'}>{b.label}</StatusBadge>;
                 } },
             ]}
-            actions={a => <TableAction tone="brand" onClick={() => openRename(a)} aria-label={`แก้ชื่อสังกัด ${a.name}`}>แก้ชื่อ</TableAction>}
+            actions={a => (
+              <>
+                <TableAction tone="brand" onClick={() => openRename(a)} aria-label={`แก้ชื่อสังกัด ${a.name}`}>แก้ชื่อ</TableAction>
+                <TableAction tone="danger" onClick={() => { setReason(''); setConfirm({ kind: 'deactivate', aff: a }); }}
+                  aria-label={`ปิดใช้งานสังกัด ${a.name}`}>ปิดใช้งาน</TableAction>
+              </>
+            )}
             empty={{ icon: Landmark, title: 'ยังไม่มีสังกัด' }}
           />
 
@@ -146,6 +216,25 @@ export default function ProvAffiliationList() {
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirm)}
+        title={confirm?.kind === 'restore' ? 'กู้คืนสังกัดนี้?' : 'ปิดใช้งานสังกัดนี้?'}
+        itemName={confirm ? `${confirm.aff.name} (${confirm.aff.id})` : ''}
+        description={confirm?.kind === 'restore'
+          ? 'สังกัดจะกลับมาในรายการ บัญชีผู้ใช้ของสังกัดยังปิดอยู่ เปิดได้ที่เมนูบัญชีสังกัดและขนส่งเมื่อพร้อม'
+          : `ปิดได้เฉพาะสังกัดที่ไม่มีโรงเรียนที่ใช้งานอยู่${confirm?.aff?.school_count ? ` (ตอนนี้มี ${confirm.aff.school_count} โรงเรียน ให้ย้ายหรือปิดโรงเรียนที่เมนูจัดการโรงเรียนก่อน)` : ''} บัญชีผู้ใช้ของสังกัดจะถูกปิดด้วย ข้อมูลไม่ถูกลบ กู้คืนได้ที่ "ที่ปิดใช้งานแล้ว"`}
+        confirmLabel={confirm?.kind === 'restore' ? 'กู้คืน' : 'ปิดใช้งาน'}
+        tone={confirm?.kind === 'restore' ? 'brand' : 'danger'}
+        loading={saving}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirm(null)}
+      >
+        {confirm?.kind === 'deactivate' && (
+          <FormField label="เหตุผล (ถ้ามี)" value={reason} maxLength={500}
+            onChange={setReason} placeholder="เช่น ยุบรวมกับสังกัดอื่น" />
+        )}
+      </ConfirmDialog>
 
       <Modal
         open={Boolean(modal)}

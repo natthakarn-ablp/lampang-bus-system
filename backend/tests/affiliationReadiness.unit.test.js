@@ -91,6 +91,7 @@ describe('affiliation-05: bulk import vs soft-deleted usernames', () => {
     const conn = {
       beginTransaction: jest.fn(), commit: jest.fn(), rollback: jest.fn(), release: jest.fn(),
       query: jest.fn()
+        .mockResolvedValueOnce([[{ id: 'AFF001' }]]) // live-affiliation lock
         .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([[{ username: '123456' }]]),
     };
@@ -99,10 +100,41 @@ describe('affiliation-05: bulk import vs soft-deleted usernames', () => {
       [{ rowNum: 2, school_code: '123456', school_name: 'โรงเรียนทดสอบ', initial_password: 'Lampang#2569x' }],
       'AFF001', 7
     );
-    expect(conn.query.mock.calls[1][0]).not.toMatch(/is_deleted/);
-    expect(conn.query).toHaveBeenCalledTimes(2); // no INSERT attempted
+    expect(conn.query.mock.calls[0][0]).toMatch(/FROM affiliations[\s\S]*is_deleted = FALSE[\s\S]*FOR SHARE/);
+    expect(conn.query.mock.calls[2][0]).not.toMatch(/is_deleted/);
+    expect(conn.query).toHaveBeenCalledTimes(3); // no INSERT attempted
     expect(out.summary).toMatchObject({ created: 0, skipped: 1 });
     expect(conn.commit).toHaveBeenCalled();
+  });
+});
+
+describe('school create/import under a closed affiliation', () => {
+  const closedConn = () => ({
+    beginTransaction: jest.fn(), commit: jest.fn(), rollback: jest.fn(), release: jest.fn(),
+    query: jest.fn().mockResolvedValueOnce([[]]), // affiliation lock finds no live row
+  });
+
+  test('createSchoolWithAccount → 409 before any INSERT', async () => {
+    const conn = closedConn();
+    pool.getConnection.mockResolvedValueOnce(conn);
+    await expect(affAdmin.createSchoolWithAccount({
+      affiliationId: 'AFF009', schoolCode: '52000123', schoolName: 'โรงเรียนใหม่', username: '520001', userId: 7,
+    })).rejects.toMatchObject({ statusCode: 409, code: 'AFFILIATION_INACTIVE' });
+    expect(conn.query).toHaveBeenCalledTimes(1);
+    expect(conn.query.mock.calls[0][0]).toMatch(/FOR SHARE/);
+    expect(conn.commit).not.toHaveBeenCalled();
+    expect(conn.rollback).toHaveBeenCalled();
+  });
+
+  test('commitSchoolImport → 409 before any INSERT', async () => {
+    const conn = closedConn();
+    pool.getConnection.mockResolvedValueOnce(conn);
+    await expect(affAdmin.commitSchoolImport(
+      [{ rowNum: 2, school_code: '123456', school_name: 'โรงเรียนทดสอบ', initial_password: 'Lampang#2569x' }],
+      'AFF009', 7
+    )).rejects.toMatchObject({ statusCode: 409 });
+    expect(conn.query).toHaveBeenCalledTimes(1);
+    expect(conn.commit).not.toHaveBeenCalled();
   });
 });
 

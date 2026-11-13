@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { KeyRound, UserCog, UserPlus } from 'lucide-react';
+import { KeyRound, UserCog, UserPlus, UserCheck } from 'lucide-react';
 import api from '../api/axios';
 import { FormField, Modal, TableAction } from './ui';
 import { useToast } from './Toast';
@@ -13,6 +13,10 @@ import { useToast } from './Toast';
  *   แก้ไขข้อมูลคนขับ      PUT  {basePath}/vehicles/:id/driver        (same person)
  *   เปลี่ยนคนขับ          POST {basePath}/vehicles/:id/driver/replace (new person;
  *                         the previous driver loses access at once)
+ *   เปิดใช้งานบัญชีคนขับ   POST {basePath}/vehicles/:id/driver/reactivate — only
+ *                         offered while the account is switched off
+ *                         (vehicle.driver_account_active === 0/false), e.g.
+ *                         after the admin deactivated it.
  *
  * The temporary password is shown once, here, and never again.
  */
@@ -21,7 +25,7 @@ const primary = 'focus-ring text-sm font-semibold px-4 min-h-[44px] rounded-lg b
 
 export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
   const toast = useToast();
-  const [mode, setMode] = useState(null); // 'reset' | 'edit' | 'replace'
+  const [mode, setMode] = useState(null); // 'reset' | 'edit' | 'replace' | 'reactivate'
   const [form, setForm] = useState({ name: '', phone: '', reason: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -44,6 +48,7 @@ export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
     try {
       let res;
       if (mode === 'reset') res = await api.post(`${url}/reset-password`);
+      else if (mode === 'reactivate') res = await api.post(`${url}/reactivate`);
       else if (mode === 'edit') res = await api.put(url, { name: form.name, phone: form.phone });
       else res = await api.post(`${url}/replace`, { name: form.name, phone: form.phone, reason: form.reason });
       const data = res.data?.data || {};
@@ -61,26 +66,68 @@ export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
     }
   }
 
-  const titles = { reset: 'รีเซ็ตรหัสผ่านคนขับ', edit: 'แก้ไขข้อมูลคนขับ', replace: 'เปลี่ยนคนขับ' };
+  const titles = { reset: 'รีเซ็ตรหัสผ่านคนขับ', edit: 'แก้ไขข้อมูลคนขับ', replace: 'เปลี่ยนคนขับ', reactivate: 'เปิดใช้งานบัญชีคนขับ' };
+  // 0 / false = the plate account exists but is switched off; null/undefined =
+  // no account or the list did not say, so the normal actions show.
+  const inactive = vehicle.driver_account_active === 0 || vehicle.driver_account_active === false;
+  const noFormMode = mode === 'reset' || mode === 'reactivate';
 
   return (
     <>
-      <TableAction tone="neutral" onClick={() => open('reset')}>
-        <KeyRound className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
-        รีเซ็ตรหัสผ่านคนขับ
-      </TableAction>
-      {vehicle.driver_name && (
-        <TableAction tone="neutral" onClick={() => open('edit')}>
-          <UserCog className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
-          แก้ไขข้อมูลคนขับ
+      {inactive ? (
+        <TableAction tone="brand" onClick={() => open('reactivate')} aria-label={`เปิดใช้งานบัญชีคนขับ ${vehicle.plate_no}`}>
+          <UserCheck className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
+          เปิดใช้งานบัญชีคนขับ
         </TableAction>
+      ) : (
+        <>
+          <TableAction tone="neutral" onClick={() => open('reset')}>
+            <KeyRound className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
+            รีเซ็ตรหัสผ่านคนขับ
+          </TableAction>
+          {vehicle.driver_name && (
+            <TableAction tone="neutral" onClick={() => open('edit')}>
+              <UserCog className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
+              แก้ไขข้อมูลคนขับ
+            </TableAction>
+          )}
+        </>
       )}
+      {/* Also offered while the account is switched off: replacing the driver
+          rotates the password and re-enables the account in one step, so the
+          previous driver never regains access in between. */}
       <TableAction tone="neutral" onClick={() => open('replace')}>
         <UserPlus className="w-3.5 h-3.5" strokeWidth={2.2} aria-hidden="true" />
         เปลี่ยนคนขับ
       </TableAction>
 
-      {mode && (
+      {mode === 'reactivate' && (
+        <Modal
+          title={titles.reactivate}
+          dismissible={!saving}
+          onClose={() => { if (!lock.current) setMode(null); }}
+          footer={
+            <>
+              <button type="button" disabled={saving} onClick={() => setMode(null)} className={btn}>ยกเลิก</button>
+              <button type="button" onClick={submit} className={primary} disabled={saving}>
+                {saving ? 'กำลังบันทึก…' : 'เปิดใช้งาน'}
+              </button>
+            </>
+          }
+        >
+          <p className="text-sm text-ink-muted mb-3">
+            รถ {vehicle.plate_no} · บัญชีคนขับถูกปิดใช้งานอยู่ (เช่น ผู้ดูแลระบบปิดไว้)
+          </p>
+          <p className="text-sm text-ink">
+            ใช้เมื่อคนขับคนเดิมกลับมาขับต่อ คนขับเข้าสู่ระบบใหม่ด้วยรหัสผ่านเดิม
+            ถ้าเปลี่ยนเป็นคนขับคนใหม่ ให้กด "เปลี่ยนคนขับ" แทนโดยไม่ต้องเปิดใช้งานก่อน
+            (คนขับเดิมจะเข้าระบบไม่ได้) ระบบบันทึกประวัติการเปิดใช้งาน
+          </p>
+          {error && <p role="alert" className="text-sm text-danger-ink mt-3">{error}</p>}
+        </Modal>
+      )}
+
+      {mode && mode !== 'reactivate' && (
         <Modal
           title={titles[mode]}
           dismissible={!saving}
@@ -89,7 +136,7 @@ export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
             <>
               <button type="button" disabled={saving} onClick={() => setMode(null)} className={btn}>ยกเลิก</button>
               <button type="submit" form="driver-account-form" className={primary}
-                disabled={saving || (mode !== 'reset' && !form.name.trim())}>
+                disabled={saving || (!noFormMode && !form.name.trim())}>
                 {saving ? 'กำลังบันทึก…' : mode === 'reset' ? 'รีเซ็ตรหัสผ่าน' : mode === 'replace' ? 'เปลี่ยนคนขับ' : 'บันทึก'}
               </button>
             </>
@@ -109,6 +156,7 @@ export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
               <p className="text-sm text-warn-ink">
                 ใช้เมื่อเปลี่ยนเป็นคนขับคนใหม่ คนขับเดิมจะเข้าระบบไม่ได้อีก (รหัสผ่านถูกรีเซ็ต)
                 ประวัติการรับส่งเดิมยังอยู่ครบ
+                {inactive && ' บัญชีที่ถูกปิดไว้จะเปิดใช้งานให้คนขับคนใหม่พร้อมกัน'}
               </p>
             )}
             {mode !== 'reset' && (

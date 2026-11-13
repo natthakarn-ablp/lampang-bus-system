@@ -116,13 +116,15 @@ describe('RBAC coverage', () => {
       '/api/province/unit-accounts/:id/restore',
       '/api/province/affiliations',
       '/api/province/affiliations/:id',
+      '/api/province/affiliations/:id/deactivate',
+      '/api/province/affiliations/:id/restore',
       '/api/province/schools/:id',
       '/api/province/schools/:id/deactivate',
       '/api/province/schools/:id/restore',
     ]);
     const selfServe = provinceWrites.filter((r) => SELF_SERVE.has(r.path));
     expect(selfServe.every((r) => r.roles.every((role) => ['province', 'admin'].includes(role)))).toBe(true);
-    expect(selfServe.length).toBeLessThanOrEqual(9);
+    expect(selfServe.length).toBeLessThanOrEqual(11);
     expect(provinceWrites.length - selfServe.length).toBeLessThanOrEqual(2);
   });
 

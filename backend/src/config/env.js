@@ -369,6 +369,11 @@ const env = {
     // next trip with a reason; school/affiliation/province see trips + reasons.
     // Needs migration 062.
     multiTrip: process.env.FEATURE_MULTI_TRIP === 'true',
+    // School transport certification — "ล้อที่ 3" of the มพบ. 2564 manual
+    // (owner request 2026-11-14): school intake window + document checklist +
+    // certificate before DLT inspection, permit capped at the term end, 15-day
+    // fix deadline, inspection-day appointments. Needs migration 063.
+    schoolCertification: process.env.FEATURE_SCHOOL_CERTIFICATION === 'true',
     // Phase 4 — participatory-administration cases + append-only event log.
     // Dark by default: when false the /api/participation router is not
     // mounted, so the existing system is byte-for-byte unchanged. Migration

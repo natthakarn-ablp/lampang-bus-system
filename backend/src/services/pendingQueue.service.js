@@ -54,6 +54,8 @@ const DOC_LABEL = {
   INSURANCE: 'ประกันภัย',
   DRIVER_LICENCE: 'ใบขับขี่',
   OTHER: 'เอกสารอื่น',
+  VEHICLE_PHOTO: 'รูปถ่ายรถ',
+  ID_CARD: 'สำเนาบัตรประชาชน',
 };
 
 /**
@@ -216,6 +218,75 @@ const QUEUES = [
            WHERE d.review_status = 'PENDING' AND d.is_deleted = FALSE`,
     title: (r) => `${DOC_LABEL[r.doc_type] || 'เอกสาร'}${r.plate_no ? ` · รถ ${r.plate_no}` : ' · คนขับ'}`,
   },
+  // ─── School transport certification (มพบ. 2564, migration 063) ───────────
+  {
+    key: 'inspection_appointments',
+    code: 'AP',
+    label: 'คำขอนัดตรวจรถที่โรงเรียน',
+    approver: 'transport',
+    escalate: 'province',
+    flag: () => env.features.schoolCertification,
+    link: { transport: '/transport/verification' },
+    sql: `SELECT CAST(ap.id AS CHAR) AS item_id, TIMESTAMPDIFF(SECOND, ap.created_at, NOW()) AS age_s,
+                 ap.school_id, sc.name AS school_name, sc.affiliation_id,
+                 DATE_FORMAT(ap.proposed_date, '%Y-%m-%d') AS proposed_date,
+                 (SELECT COUNT(*) FROM inspection_appointment_vehicles iav
+                   WHERE iav.appointment_id = ap.id) AS vehicle_count
+            FROM inspection_appointments ap
+            JOIN schools sc ON sc.id = ap.school_id
+           WHERE ap.status = 'REQUESTED'`,
+    title: (r) => `นัดตรวจรถที่ ${r.school_name || '-'} ${Number(r.vehicle_count) || 0} คัน · เสนอวันที่ ${r.proposed_date || '-'}`,
+  },
+  {
+    // Not a request anyone decides — a reminder on the school's badge that a
+    // certificate ends within 30 days. Never alerted (noAlert), never escalated.
+    key: 'certificate_expiring',
+    code: 'CE',
+    label: 'หนังสือรับรองรถใกล้หมดอายุ (30 วัน)',
+    approver: 'school',
+    escalate: 'affiliation',
+    noAlert: true,
+    flag: () => env.features.schoolCertification,
+    link: { school: '/school/vehicle-verification' },
+    sql: `SELECT CAST(c.id AS CHAR) AS item_id, 0 AS age_s,
+                 c.school_id, sc.name AS school_name, sc.affiliation_id,
+                 v.plate_no, DATE_FORMAT(c.valid_until, '%Y-%m-%d') AS valid_until
+            FROM school_transport_certificates c
+            JOIN schools sc ON sc.id = c.school_id
+            JOIN vehicles v ON v.id = c.vehicle_id
+           WHERE c.revoked_at IS NULL
+             AND c.valid_until BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+             AND NOT EXISTS (SELECT 1 FROM school_transport_certificates n
+                              WHERE n.vehicle_id = c.vehicle_id AND n.school_id = c.school_id
+                                AND n.revoked_at IS NULL AND n.valid_until > c.valid_until)`,
+    title: (r) => `หนังสือรับรองรถ ${r.plate_no || '-'} หมดอายุ ${r.valid_until || '-'}`,
+  },
+  {
+    // FAILED / NEEDS_FIX past the 15-day fix deadline with no resubmission.
+    // Alerted ONCE to the issuing school and ONCE to transport as soon as it
+    // appears (immediate); nothing is cancelled automatically.
+    key: 'fix_overdue',
+    code: 'FX',
+    label: 'รถไม่ผ่านตรวจ เลยกำหนดยื่นใหม่ (15 วัน)',
+    approver: 'school',
+    escalate: 'transport',
+    immediate: true,
+    flag: () => env.features.schoolCertification,
+    link: { school: '/school/vehicle-verification', transport: '/transport/verification' },
+    sql: `SELECT CAST(a.id AS CHAR) AS item_id,
+                 GREATEST(0, TIMESTAMPDIFF(SECOND, a.fix_deadline, NOW())) AS age_s,
+                 a.issuing_school_id AS school_id, sc.name AS school_name, sc.affiliation_id,
+                 v.plate_no, a.request_no, DATE_FORMAT(a.fix_deadline, '%Y-%m-%d') AS fix_deadline
+            FROM vehicle_inspection_applications a
+            JOIN vehicles v ON v.id = a.vehicle_id
+            JOIN schools sc ON sc.id = a.issuing_school_id
+           WHERE a.status IN ('FAILED','NEEDS_FIX')
+             AND a.fix_deadline IS NOT NULL AND a.fix_deadline < CURDATE()
+             AND NOT EXISTS (SELECT 1 FROM vehicle_inspection_applications n
+                              WHERE n.vehicle_id = a.vehicle_id AND n.id > a.id
+                                AND n.status NOT IN ('CANCELLED','REJECTED'))`,
+    title: (r) => `รถ ${r.plate_no || '-'} (${r.request_no || '-'}) เลยกำหนดยื่นใหม่ ${r.fix_deadline || '-'}`,
+  },
 ];
 
 const BY_KEY = new Map(QUEUES.map((q) => [q.key, q]));
@@ -319,10 +390,11 @@ async function getSummary(db, viewer, { detail = false } = {}) {
   let below = [];
   if (role === 'affiliation') below = queues.filter((q) => q.escalate === 'affiliation');
   if (role === 'province') below = queues.filter((q) => q.escalate === 'province' || q.escalate === 'affiliation');
+  if (role === 'transport') below = queues.filter((q) => q.escalate === 'transport');
   for (const q of below) {
     const items = await loadQueue(db, q, cfg, role === 'affiliation' ? { col: 'affiliation', value: viewer.scopeId } : null);
     for (const i of items) {
-      if (!i.escalated) continue;
+      if (!i.escalated && !q.immediate) continue;
       const t = targetsFor(q, i).escalate;
       if (t.role !== role) continue; // province sees school items only when no affiliation sits between
       live.set(`${q.key}|${i.item_id}`, i);
@@ -388,13 +460,14 @@ function alertKey(queue, itemId, kind) {
 async function computeAlerts(db, cfg = thresholds()) {
   const wanted = [];
   for (const q of activeQueues()) {
+    if (q.noAlert) continue;
     const items = await loadQueue(db, q, cfg, null);
     for (const i of items) {
-      if (!i.overdue) continue;
+      if (!i.overdue && !q.immediate) continue;
       const t = targetsFor(q, i);
       const base = { queue: q.key, item_id: i.item_id, age_days: i.age_days, school_id: i.school_id };
       wanted.push({ key: alertKey(q, i.item_id, 'OVERDUE'), kind: 'OVERDUE', target: t.approver, ...base, title: i.title });
-      if (i.escalated) {
+      if (i.escalated || q.immediate) {
         wanted.push({ key: alertKey(q, i.item_id, 'ESCALATED'), kind: 'ESCALATED', target: t.escalate, ...base, title: i.title });
       }
     }

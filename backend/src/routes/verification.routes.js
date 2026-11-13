@@ -276,6 +276,7 @@ router.post(
         inspectionDate: req.body.inspection_date,
         providerType: req.body.provider_type || 'DLT_OFFICER',
         providerReference: req.body.provider_reference || null,
+        isAdmin: req.user.role === 'admin',
       });
       return sendSuccess(res, data, 'เริ่มบันทึกการตรวจแล้ว', null, 201);
     } catch (error) { return next(error); }

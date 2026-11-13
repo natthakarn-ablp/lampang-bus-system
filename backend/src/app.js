@@ -27,6 +27,7 @@ const GLOBAL_API_LIMITED_PREFIXES = [
   '/api/province',
   '/api/transport',
   '/api/verification',
+  '/api/certification',
   '/api/documents',
   '/api/admin',
   '/api/readiness',
@@ -187,6 +188,9 @@ app.use('/api/reports',     exportLimiter, reportRoutes);
 // ─── Phase 7+ routes ────────────────────────────────────────────────────────
 app.use('/api/transport', require('./routes/transport.routes'));
 app.use('/api/verification', require('./routes/verification.routes'));
+// School transport certification (มพบ. 2564, migration 063). Every path 404s
+// while FEATURE_SCHOOL_CERTIFICATION is off.
+app.use('/api/certification', require('./routes/certification.routes'));
 app.use('/api/parent',    require('./routes/parent.routes'));
 app.use('/api/line',      require('./routes/line.routes'));
 app.use('/api/admin',     require('./routes/admin.routes'));

@@ -30,6 +30,7 @@ describe('global authenticated API rate limiter wiring', () => {
       '/api/province',
       '/api/transport',
       '/api/verification',
+      '/api/certification',
       '/api/documents',
       '/api/admin',
       '/api/readiness',

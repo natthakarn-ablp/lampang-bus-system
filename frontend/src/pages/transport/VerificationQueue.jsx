@@ -24,6 +24,8 @@ import { CommandHero, StatusStepRail, AlertBanner, ConfirmDialog, FilterBar, For
 import DocumentReviewPanel from '../../components/DocumentReviewPanel';
 import { todayBangkok } from '../../utils/thaiTime';
 import { useAuth } from '../../hooks/useAuth';
+import TransportAppointmentsPanel from '../../components/certification/TransportAppointmentsPanel';
+import { CERT_STATE, thaiDate } from '../../components/certification/certificationShared';
 
 const STATUS = {
   DRAFT: ['ฉบับร่าง', 'neutral'],
@@ -99,6 +101,16 @@ function QueueItem({ application, selected, onOpen }) {
       <div className="mt-3 flex flex-wrap gap-2 text-xs text-ink-muted">
         <span className="rounded-full bg-surface px-2.5 py-1">สูงสุด {application.peak_rider_count} คน</span>
         <span className="rounded-full bg-surface px-2.5 py-1">{application.issuing_school_name}</span>
+        {application.certificate !== undefined && (
+          <span className={`rounded-full px-2.5 py-1 ${application.certificate?.state === 'VALID' ? 'bg-success-soft text-success-ink' : 'bg-danger-soft text-danger-ink'}`}>
+            {application.certificate
+              ? `หนังสือรับรอง ${application.certificate.cert_no} · ${(CERT_STATE[application.certificate.state] || [''])[0]} ถึง ${thaiDate(application.certificate.valid_until)}`
+              : 'ยังไม่มีหนังสือรับรองจากโรงเรียน'}
+          </span>
+        )}
+        {application.fix_overdue && (
+          <span className="rounded-full bg-danger-soft px-2.5 py-1 text-danger-ink">เลยกำหนดยื่นใหม่</span>
+        )}
       </div>
     </button>
   );
@@ -139,6 +151,28 @@ function VehicleDetailSummary({ detail }) {
         </div>
         <Badge status={detail.status} />
       </div>
+
+      {detail.certificate !== undefined && (
+        <div className="mt-4 space-y-2">
+          {detail.certificate ? (
+            <AlertBanner variant={detail.certificate.state === 'VALID' ? 'success' : 'danger'} icon={FileCheck2}>
+              หนังสือรับรองการรับส่งนักเรียน เลขที่ {detail.certificate.cert_no} ·{' '}
+              {(CERT_STATE[detail.certificate.state] || [detail.certificate.state])[0]} ถึง {thaiDate(detail.certificate.valid_until)}
+            </AlertBanner>
+          ) : (
+            <AlertBanner variant="warn" icon={AlertTriangle}>
+              ยังไม่มีหนังสือรับรองจากโรงเรียน — เริ่มตรวจไม่ได้จนกว่าโรงเรียนจะออกหนังสือรับรอง
+            </AlertBanner>
+          )}
+          {detail.fix_deadline && ['NEEDS_FIX', 'FAILED'].includes(detail.status) && (
+            <AlertBanner variant={detail.fix_overdue ? 'danger' : 'warn'} icon={AlertTriangle}>
+              {detail.fix_overdue
+                ? `เลยกำหนดยื่นใหม่ (${thaiDate(detail.fix_deadline)})`
+                : `ยื่นตรวจใหม่ได้ถึง ${thaiDate(detail.fix_deadline)} (15 วัน)`}
+            </AlertBanner>
+          )}
+        </div>
+      )}
 
       <div className="mt-5 grid gap-5 md:grid-cols-2">
         <div>
@@ -228,6 +262,7 @@ function StartInspectionCard({ detail, template, onStart, busy }) {
 
 function InspectionChecklistPanel({
   template,
+  termEnd = null,
   checks,
   setCheck,
   passAll,
@@ -364,11 +399,15 @@ function InspectionChecklistPanel({
             {form.result === 'PASSED' && (
               <FormField
                 label="วันหมดอายุ"
-                required
+                required={!termEnd}
                 type="date"
                 value={form.expiry_date}
+                max={termEnd || undefined}
                 onChange={v => setForm(current => ({ ...current, expiry_date: v }))}
-                error={!form.expiry_date ? 'ต้องระบุวันหมดอายุเมื่อผลเป็น “ผ่าน”' : undefined}
+                helper={termEnd ? `ผลตรวจมีอายุไม่เกินหนึ่งภาคเรียน — ไม่เกิน ${thaiDate(termEnd)} (เว้นว่าง = วันสิ้นภาคเรียน)` : undefined}
+                error={termEnd
+                  ? (form.expiry_date && form.expiry_date > termEnd ? `ต้องไม่เกิน ${thaiDate(termEnd)}` : undefined)
+                  : (!form.expiry_date ? 'ต้องระบุวันหมดอายุเมื่อผลเป็น “ผ่าน”' : undefined)}
               />
             )}
 
@@ -553,10 +592,12 @@ const CONTROL_CLS = 'focus-ring min-h-[44px] w-full rounded-lg border border-sur
 
 export default function VerificationQueue() {
   const toast = useToast();
-  const { user } = useAuth();
+  const { user, features } = useAuth();
+  // School transport certification (มพบ. 2564, FEATURE_SCHOOL_CERTIFICATION).
+  const certification = Boolean(features?.schoolCertification);
   const [queue, setQueue] = useState([]);
   const [detail, setDetail] = useState(null);
-  const [template, setTemplate] = useState(null);
+  const [templates, setTemplates] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [attemptId, setAttemptId] = useState(null);
   const [checks, setChecks] = useState({});
@@ -602,7 +643,7 @@ export default function VerificationQueue() {
 
   useEffect(() => {
     api.get('/verification/transport/checklist')
-      .then(res => setTemplate(res.data?.data?.[0] || null))
+      .then(res => setTemplates(res.data?.data || []))
       .catch(() => {});
     loadDrivers();
   }, [loadDrivers]);
@@ -613,6 +654,8 @@ export default function VerificationQueue() {
       const res = await api.get(`/verification/applications/${id}`);
       const data = res.data.data;
       setDetail(data);
+      // Certification on: a pass defaults to (and may not exceed) the term end.
+      if (data.term_end_date) setForm(current => ({ ...current, expiry_date: data.term_end_date }));
       const active = (data.attempts || []).find(attempt => attempt.result === 'IN_PROGRESS');
       setAttemptId(active?.id || null);
       setSelectedDriverId(String(data.drivers?.[0]?.driver_id || ''));
@@ -690,6 +733,15 @@ export default function VerificationQueue() {
   }
   function clearAll() { setChecks({}); }
 
+  // The checklist an attempt began with (version 2 = มพบ. standards, used only
+  // while certification is on); the backend lists the default first.
+  const template = useMemo(() => {
+    const active = detail?.attempts?.find(attempt => attempt.result === 'IN_PROGRESS');
+    return templates.find(t => active && String(t.id) === String(active.checklist_template_id))
+      || templates[0] || null;
+  }, [templates, detail]);
+  const termEnd = certification ? (detail?.term_end_date || null) : null;
+
   const items = template?.items || [];
   const requiredComplete = useMemo(() => items.every(item => checks[item.item_code]?.result), [items, checks]);
 
@@ -708,9 +760,10 @@ export default function VerificationQueue() {
     if (done < items.length) return `ยังตรวจไม่ครบ (เหลือ ${items.length - done} หัวข้อ)`;
     const failNoNote = items.some(item => checks[item.item_code]?.result === 'FAIL' && !checks[item.item_code]?.notes?.trim());
     if (failNoNote) return 'หัวข้อที่ไม่ผ่านต้องระบุรายละเอียด';
-    if (form.result === 'PASSED' && !form.expiry_date) return 'ผลผ่านต้องระบุวันหมดอายุ';
+    if (form.result === 'PASSED' && !form.expiry_date && !termEnd) return 'ผลผ่านต้องระบุวันหมดอายุ';
+    if (form.result === 'PASSED' && termEnd && form.expiry_date > termEnd) return `วันหมดอายุต้องไม่เกิน ${thaiDate(termEnd)}`;
     return '';
-  }, [items, checks, form.result, form.expiry_date]);
+  }, [items, checks, form.result, form.expiry_date, termEnd]);
 
   async function finalize(event) {
     event.preventDefault();
@@ -719,11 +772,12 @@ export default function VerificationQueue() {
       checks[item.item_code]?.result === 'FAIL' && !checks[item.item_code]?.notes?.trim()
     ));
     if (failedWithoutNote) return toast.error('หัวข้อที่ไม่ผ่านต้องระบุรายละเอียด');
-    if (form.result === 'PASSED' && !form.expiry_date) return toast.error('ผลผ่านต้องระบุวันหมดอายุ');
+    if (form.result === 'PASSED' && !form.expiry_date && !termEnd) return toast.error('ผลผ่านต้องระบุวันหมดอายุ');
     setBusy(true);
     try {
       await api.post(`/verification/transport/attempts/${attemptId}/finalize`, {
         ...form,
+        expiry_date: form.expiry_date || null,
         items: items.map(item => ({
           item_code: item.item_code,
           result: checks[item.item_code].result,
@@ -820,6 +874,8 @@ export default function VerificationQueue() {
 
       <StatusStepRail steps={progressSteps(detail, attemptId)} ariaLabel="ขั้นตอนการตรวจและรับรองรถโดยขนส่ง" />
 
+      {certification && <TransportAppointmentsPanel />}
+
       {error && <ErrorState message={error} />}
 
       <div className="grid gap-5 lg:grid-cols-[380px_1fr]">
@@ -899,6 +955,7 @@ export default function VerificationQueue() {
                 {attemptId && template && ownsAttempt ? (
                   <InspectionChecklistPanel
                     template={template}
+                    termEnd={termEnd}
                     checks={checks}
                     setCheck={setCheck}
                     passAll={passAll}

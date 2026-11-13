@@ -1,7 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
-const { getCurrentTerm } = require('./term.service');
+const { getCurrentTerm, getTermEndDate } = require('./term.service');
+const cert = require('./schoolCertification.service');
 
 // Who rides a vehicle (owner decision B1, 2 ต.ค. 2569 — decision memo CS5-05):
 // a live pupil whose vehicle_id points at it, every term, until they are moved,
@@ -55,11 +56,20 @@ function computeEligibility({
   validDriverCount = 0,
   suspended = false,
   today = todayBangkok(),
+  // School transport certificate (FEATURE_SCHOOL_CERTIFICATION). `undefined`
+  // = feature off, not considered; `null` = no certificate.
+  certificate = undefined,
 } = {}) {
   const reasons = [];
   let expiring = false;
 
   if (suspended) reasons.push('VEHICLE_SUSPENDED');
+
+  if (certificate !== undefined) {
+    const c = cert.certificateReasons(certificate, today);
+    reasons.push(...c.reasons);
+    if (c.expiring) expiring = true;
+  }
 
   if (!inspection || inspection.result !== 'PASSED') {
     reasons.push(inspection && inspection.result ? `INSPECTION_${inspection.result}` : 'INSPECTION_MISSING');
@@ -186,6 +196,9 @@ async function refreshVehicleEligibility(executor, vehicleId, {
     [vehicleId, today, today, today]
   );
   const peak = Math.max(Number(riders?.morning_rider_count) || 0, Number(riders?.evening_rider_count) || 0);
+  const certificate = cert.enabled()
+    ? await cert.governingCertificateForVehicle(executor, vehicleId, today)
+    : undefined;
   const eligibility = vehicle.verification_status === 'SUSPENDED'
     ? { status: 'SUSPENDED', reasons: ['VEHICLE_SUSPENDED'] }
     : computeEligibility({
@@ -195,6 +208,7 @@ async function refreshVehicleEligibility(executor, vehicleId, {
       peakRiders: peak,
       validDriverCount: drivers?.valid_driver_count,
       today,
+      certificate,
     });
   await executor.query(
     `UPDATE vehicles
@@ -238,7 +252,26 @@ function mapApplication(row) {
     peak_rider_count: Number(row.peak_rider_count ?? rider.peak_rider_count) || 0,
     total_schools: Number(row.total_schools ?? rider.total_schools) || 0,
     routes: route.routes || [],
+    ...(row.fix_deadline !== undefined ? {
+      fix_deadline: isoDate(row.fix_deadline),
+      fix_overdue: cert.isFixOverdue(row),
+    } : {}),
   };
+}
+
+// Certificate no + validity on list rows (FEATURE_SCHOOL_CERTIFICATION only).
+async function attachCertificates(pool, apps) {
+  if (!cert.enabled() || !apps.length) return apps;
+  const byApp = await cert.certificatesByApplication(pool, apps.map((a) => a.id));
+  return apps.map((a) => {
+    const c = byApp.get(Number(a.id)) || null;
+    return {
+      ...a,
+      certificate: c ? {
+        id: c.id, cert_no: c.cert_no, valid_until: c.valid_until, state: c.state, expiring: c.expiring,
+      } : null,
+    };
+  });
 }
 
 async function createApplication(pool, {
@@ -424,7 +457,7 @@ async function listSchoolApplications(pool, { schoolId, status = null } = {}) {
       ORDER BY a.created_at DESC`,
     params
   );
-  return rows.map(mapApplication);
+  return attachCertificates(pool, rows.map(mapApplication));
 }
 
 async function getApplication(pool, { applicationId, viewer } = {}) {
@@ -473,6 +506,7 @@ async function getApplication(pool, { applicationId, viewer } = {}) {
   );
   const [attempts] = await pool.query(
     `SELECT ia.id, ia.inspected_by, ia.result, ia.provider_type, ia.provider_reference,
+            ia.checklist_template_id,
             ia.inspection_date, ia.expiry_date, ia.notes, ia.finalized_at,
             u.display_name AS inspector_name
        FROM inspection_attempts ia
@@ -492,7 +526,13 @@ async function getApplication(pool, { applicationId, viewer } = {}) {
       ORDER BY FIELD(dva.assignment_role, 'PRIMARY', 'BACKUP'), d.name`,
     [rows[0].vehicle_id]
   );
-  return { ...mapApplication(rows[0]), schools, attempts, drivers };
+  const out = { ...mapApplication(rows[0]), schools, attempts, drivers };
+  if (cert.enabled()) {
+    out.certificate = await cert.latestCertificateForApplication(pool, applicationId);
+    out.term_end_date = await getTermEndDate(pool, await getCurrentTerm(pool));
+    out.fix_days = cert.FIX_DAYS;
+  }
+  return out;
 }
 
 async function listTransportQueue(pool, { status = null, search = null } = {}) {
@@ -519,7 +559,7 @@ async function listTransportQueue(pool, { status = null, search = null } = {}) {
                a.created_at ASC`,
     params
   );
-  return rows.map(mapApplication);
+  return attachCertificates(pool, rows.map(mapApplication));
 }
 
 async function transitionSchoolApplication(pool, {
@@ -606,6 +646,14 @@ async function transitionSchoolApplication(pool, {
       [nextStatus, nextStatus, nextStatus, userId, nextStatus, isCancelled ? reason : null,
         nextStatus, applicationId]
     );
+    // The school confirming the vehicle ready is the school issuing its
+    // หนังสือรับรองการรับส่งนักเรียน (มพบ. 2564), FEATURE_SCHOOL_CERTIFICATION.
+    let issued = null;
+    if (nextStatus === 'READY_TO_PRINT' && !override && cert.enabled()) {
+      issued = await cert.issueCertificateInTx(conn, {
+        applicationId, schoolId: application.issuing_school_id, userId,
+      });
+    }
     await logAudit({
       userId,
       action: 'UPDATE',
@@ -628,6 +676,7 @@ async function transitionSchoolApplication(pool, {
       request_no: application.request_no,
       status: nextStatus,
       ...(abortedAttempts.length ? { aborted_attempts: abortedAttempts } : {}),
+      ...(issued ? { certificate: issued.certificate, warnings: issued.warnings } : {}),
     };
   } catch (error) {
     await conn.rollback();
@@ -828,12 +877,35 @@ function validateChecklistResults(templateItems, submittedItems, overallResult =
   return normalized;
 }
 
+// Checklist version 2 (migration 063, มพบ. 2564 vehicle standards) is used
+// only while FEATURE_SCHOOL_CERTIFICATION is on; off, the newest active
+// version 1.x is used exactly as before (falling back to whatever is active).
+const LEGACY_CHECKLIST_MAX_VERSION = 1;
+function checklistOrderSql() {
+  return cert.enabled()
+    ? 'version_no DESC'
+    : `(version_no <= ${LEGACY_CHECKLIST_MAX_VERSION}) DESC, version_no DESC`;
+}
+
+async function resolveChecklistTemplate(executor) {
+  const [[template]] = await executor.query(
+    `SELECT id, version_no
+       FROM inspection_checklist_templates
+      WHERE template_code = 'LAMPANG_SCHOOLBUS' AND is_active = TRUE
+      ORDER BY ${checklistOrderSql()}
+      LIMIT 1`
+  );
+  return template || null;
+}
+
 async function listChecklistTemplates(pool) {
+  // The template a new attempt would use comes first (the UI's default); the
+  // others stay listed so an attempt begun on another version can be finished.
   const [templates] = await pool.query(
     `SELECT id, template_code, template_name, version_no
        FROM inspection_checklist_templates
       WHERE is_active = TRUE
-      ORDER BY template_code, version_no DESC`
+      ORDER BY (template_code = 'LAMPANG_SCHOOLBUS') DESC, template_code, ${checklistOrderSql()}`
   );
   if (!templates.length) return [];
   const [items] = await pool.query(
@@ -852,7 +924,7 @@ async function listChecklistTemplates(pool) {
 
 async function startInspection(pool, {
   applicationId, inspectorUserId, inspectionDate = todayBangkok(),
-  providerType = 'DLT_OFFICER', providerReference = null,
+  providerType = 'DLT_OFFICER', providerReference = null, isAdmin = false,
 }) {
   if (!applicationId || !inspectorUserId) {
     throw appError('ข้อมูลคำขอหรือเจ้าหน้าที่ไม่ครบถ้วน', 400, 'MISSING_REQUIRED_FIELDS');
@@ -882,13 +954,15 @@ async function startInspection(pool, {
         attempt_id: openAttempt.id,
       });
     }
-    const [[template]] = await conn.query(
-      `SELECT id, version_no
-         FROM inspection_checklist_templates
-        WHERE template_code = 'LAMPANG_SCHOOLBUS' AND is_active = TRUE
-        ORDER BY version_no DESC
-        LIMIT 1`
-    );
+    // มพบ. 2564: DLT inspects only a vehicle its school has certified.
+    if (cert.enabled() && !isAdmin) {
+      const valid = await cert.validCertificateForApplication(conn, applicationId);
+      if (!valid) {
+        throw appError('รถคันนี้ยังไม่มีหนังสือรับรองการรับส่งนักเรียนจากโรงเรียนที่ยังมีผล', 409,
+          'CERTIFICATE_REQUIRED');
+      }
+    }
+    const template = await resolveChecklistTemplate(conn);
     if (!template) throw appError('ไม่พบแบบตรวจที่เปิดใช้งาน', 503, 'ACTIVE_CHECKLIST_NOT_FOUND');
     const [insert] = await conn.query(
       `INSERT INTO inspection_attempts
@@ -930,7 +1004,9 @@ async function finalizeInspection(pool, {
   if (!attemptId || !inspectorUserId || !FINAL_RESULTS.includes(result)) {
     throw appError('ข้อมูลการสรุปผลตรวจไม่ถูกต้อง', 400, 'INVALID_FINALIZATION_INPUT');
   }
-  if (result === 'PASSED' && !expiryDate) {
+  const certOn = cert.enabled();
+  // With certification on, a pass defaults to the term end (filled below).
+  if (result === 'PASSED' && !expiryDate && !certOn) {
     throw appError('ผลผ่านต้องระบุวันหมดอายุการรับรอง', 400, 'EXPIRY_DATE_REQUIRED');
   }
   const conn = await pool.getConnection();
@@ -969,6 +1045,15 @@ async function finalizeInspection(pool, {
       );
     }
     const effectiveInspectionDate = inspectionDate || attempt.inspection_date_iso || isoDate(attempt.inspection_date);
+    // มพบ. 2564: the DLT permit lasts at most one semester.
+    let fixDeadline = null;
+    if (certOn && result === 'PASSED') {
+      const termEnd = await getTermEndDate(conn, await getCurrentTerm(conn));
+      const capped = cert.capExpiryToTerm({ expiryDate, termEnd });
+      if (capped.error) throw appError(capped.error.message, 400, capped.error.code, { term_end: termEnd });
+      expiryDate = capped.expiry;
+    }
+    if (certOn && ['FAILED', 'NEEDS_FIX'].includes(result)) fixDeadline = cert.fixDeadlineFor(todayBangkok());
     // Bound the date fields (no future/absurdly-old inspection date, expiry
     // within a sane window) — same rule as the legacy transport path.
     const dateErr = validateInspectionDates({ result, inspectionDate: effectiveInspectionDate, expiryDate });
@@ -990,6 +1075,13 @@ async function finalizeInspection(pool, {
         WHERE id = ?`,
       [applicationStatus, result, releaseActiveKey, attempt.application_id]
     );
+    if (certOn && result !== 'PENDING') {
+      // Set on FAILED/NEEDS_FIX (finalize date + 15 days), cleared on PASSED.
+      await conn.query(
+        'UPDATE vehicle_inspection_applications SET fix_deadline = ? WHERE id = ?',
+        [fixDeadline, attempt.application_id]
+      );
+    }
     const [legacy] = await conn.query(
       `INSERT INTO vehicle_inspections
         (vehicle_id, inspected_by, inspection_date, expiry_date, result, notes)
@@ -1025,6 +1117,7 @@ async function finalizeInspection(pool, {
       capacity: vehicle && vehicle.certified_capacity,
       peakRiders: rider.peak_rider_count,
       validDriverCount: driverCount && driverCount.valid_driver_count,
+      certificate: certOn ? await cert.governingCertificateForVehicle(conn, attempt.vehicle_id) : undefined,
     });
     await conn.query(
       `UPDATE vehicles
@@ -1036,10 +1129,17 @@ async function finalizeInspection(pool, {
     await logAudit({
       userId: inspectorUserId, action: 'UPDATE', entityType: 'inspection_attempt',
       entityId: String(attemptId), oldValue: { result: 'IN_PROGRESS' },
-      newValue: { result, legacy_inspection_id: legacy.insertId, eligibility }, conn,
+      newValue: {
+        result, legacy_inspection_id: legacy.insertId, eligibility,
+        ...(certOn ? { expiry_date: expiryDate || null, fix_deadline: fixDeadline } : {}),
+      },
+      conn,
     });
     await conn.commit();
-    return { attempt_id: Number(attemptId), application_status: applicationStatus, eligibility };
+    return {
+      attempt_id: Number(attemptId), application_status: applicationStatus, eligibility,
+      ...(certOn ? { expiry_date: expiryDate || null, fix_deadline: fixDeadline } : {}),
+    };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -1344,7 +1444,7 @@ async function listDriverApplications(pool, { driverUserId, status = null } = {}
       ORDER BY a.created_at DESC`,
     params
   );
-  return rows.map(mapApplication);
+  return attachCertificates(pool, rows.map(mapApplication));
 }
 
 async function reviewApplication(pool, {
@@ -1383,17 +1483,29 @@ async function reviewApplication(pool, {
         WHERE id = ?`,
       [nextStatus, nextStatus, nextStatus, userId, nextStatus, notes, nextStatus, applicationId]
     );
+    // Approving = the school issues หนังสือรับรองการรับส่งนักเรียน (มพบ. 2564).
+    // Outside the intake window it is still issued, with a warning.
+    let issued = null;
+    if (approved && cert.enabled()) {
+      issued = await cert.issueCertificateInTx(conn, { applicationId, schoolId, userId });
+    }
     await logAudit({
       userId,
       action: 'UPDATE',
       entityType: 'vehicle_inspection_application',
       entityId: String(applicationId),
       oldValue: { status: application.status },
-      newValue: { status: nextStatus, approved, ...(notes ? { review_notes: notes } : {}) },
+      newValue: {
+        status: nextStatus, approved, ...(notes ? { review_notes: notes } : {}),
+        ...(issued ? { cert_no: issued.certificate.cert_no } : {}),
+      },
       conn,
     });
     await conn.commit();
-    return { id: Number(applicationId), request_no: application.request_no, status: nextStatus };
+    return {
+      id: Number(applicationId), request_no: application.request_no, status: nextStatus,
+      ...(issued ? { certificate: issued.certificate, warnings: issued.warnings } : {}),
+    };
   } catch (error) {
     await conn.rollback();
     throw error;
@@ -1422,6 +1534,7 @@ module.exports = {
   reviewApplication,
   validateChecklistResults,
   listChecklistTemplates,
+  resolveChecklistTemplate,
   startInspection,
   finalizeInspection,
   abortInspectionAttempt,

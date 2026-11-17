@@ -1,6 +1,8 @@
 import { CheckCircle2, XCircle, Check, AlertTriangle } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
+import ErrorState from '../../components/ErrorState';
 import api from '../../api/axios';
 import { FormField } from '../../components/ui';
 import PageHeader from '../../components/PageHeader';
@@ -20,6 +22,9 @@ const CHECKLIST = [
 
 export default function DriverPretrip() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const submitLock = useRef(false);
+  const [statusError, setStatusError] = useState('');
   const toast = useToast();
   const [items, setItems] = useState(() => CHECKLIST.map(c => ({ ...c, ok: true })));
   const [note, setNote] = useState('');
@@ -30,21 +35,16 @@ export default function DriverPretrip() {
   const [alreadyDone, setAlreadyDone] = useState(false);
   const [notLinked, setNotLinked] = useState(false);
 
-  // If today's pretrip is already done, redirect back
-  useEffect(() => {
-    setLoading(true);
-    api.get('/driver/pretrip-status')
-      .then(r => {
-        if (r.data?.data?.done) { setAlreadyDone(true); }
-      })
-      .catch((err) => {
-        // บัญชียังไม่ผูกรถ: บอกตั้งแต่ต้น อย่าปล่อยให้ติ๊กครบ 6 ข้อแล้วค่อย
-        // ล้มเหลวตอนกดบันทึก — เสียเวลาคนขับฟรีและข้อความที่ได้ก็อ่านไม่ออก
+  const loadStatus = useCallback(() => {
+    setLoading(true); setStatusError(''); setNotLinked(false); setAlreadyDone(false);
+    return api.get('/driver/pretrip-status', { timeout: 10000 })
+      .then(r => { if (r.data?.data?.done) setAlreadyDone(true); })
+      .catch(err => {
         if (isDriverNotLinked(err)) setNotLinked(true);
-        /* ข้อผิดพลาดอื่น: ให้ทำรายการตรวจต่อได้ตามเดิม */
-      })
-      .finally(() => setLoading(false));
+        else setStatusError(driverErrorMessage(err, 'ตรวจสอบสถานะรถไม่สำเร็จ'));
+      }).finally(() => setLoading(false));
   }, []);
+  useEffect(() => { loadStatus(); }, [loadStatus]);
 
   const allPass = items.every(i => i.ok);
   const failedItems = items.filter(i => !i.ok);
@@ -54,7 +54,8 @@ export default function DriverPretrip() {
   }
 
   async function handleSubmit(forceAllPass = false) {
-    setSubmitting(true);
+    if (submitLock.current || loading || statusError || notLinked) return;
+    submitLock.current = true; setSubmitting(true);
     try {
       const submitItems = forceAllPass
         ? CHECKLIST.map(c => ({ label: c.label, ok: true }))
@@ -70,9 +71,9 @@ export default function DriverPretrip() {
       setDone(true);
     } catch (err) {
       if (isDriverNotLinked(err)) setNotLinked(true);
-      else toast.error(driverErrorMessage(err, 'บันทึกผลตรวจไม่สำเร็จ'));
+      else setStatusError(driverErrorMessage(err, 'ยังยืนยันผลบันทึกไม่ได้ กรุณาตรวจสอบสถานะอีกครั้ง'));
     } finally {
-      setSubmitting(false);
+      submitLock.current = false; setSubmitting(false);
     }
   }
 
@@ -120,11 +121,22 @@ export default function DriverPretrip() {
   // pre-trip, so the checklist must not flash before it answers.
   if (loading) return <LoadingState />;
 
+  if (statusError) return <div className="p-4 sm:p-5 max-w-lg mx-auto space-y-4">
+    <PageHeader title="ตรวจรถก่อนออก" subtitle="ยังบันทึกไม่ได้จนกว่าจะตรวจสอบรถสำเร็จ" />
+    <p className="text-sm text-ink">ชื่อผู้ใช้ / ทะเบียนบัญชี: <strong>{user?.username || 'ไม่พบข้อมูลบัญชี'}</strong></p>
+    <ErrorState title="ยังตรวจสอบรถของบัญชีนี้ไม่ได้" message={statusError} onRetry={loadStatus} />
+    <p className="text-sm text-ink-muted">หากแจ้งว่าผูกรถหลายคัน ให้แจ้งชื่อผู้ใช้ ภาพข้อความ และเวลาแก่โรงเรียนหรือผู้ดูแล ไม่ต้องส่งรหัสผ่าน และอย่าเพิ่งลบหรือเปลี่ยนการผูกรถเอง</p>
+    <p className="text-sm text-ink-muted">ระหว่างใช้งานไม่ได้ ให้ตรวจรถจริงและจดผลพร้อมเวลาไว้ ข้อความนี้ยังไม่ใช่ผลตรวจที่บันทึกสำเร็จ</p>
+    <div className="flex flex-wrap gap-2"><Link to="/help" className="focus-ring inline-flex items-center min-h-[44px] rounded-lg px-4 text-brand-700 border border-surface-border">วิธีแจ้งปัญหา</Link><Link to="/driver" className="focus-ring inline-flex items-center min-h-[44px] rounded-lg px-4 text-brand-700">กลับหน้าหลัก</Link></div>
+  </div>;
+
   // บัญชียังไม่ผูกรถ — บันทึกผลตรวจไม่ได้เพราะระบบไม่รู้ว่าตรวจรถคันไหน
   if (notLinked) {
     return (
       <div className="p-4 sm:p-5 max-w-lg mx-auto pb-8">
         <PageHeader title="ตรวจรถก่อนออก" />
+        <p className="mb-3 text-sm text-ink">ชื่อผู้ใช้ / ทะเบียนบัญชี: <strong>{user?.username || 'ไม่พบข้อมูลบัญชี'}</strong></p>
+        <p className="text-sm text-ink mb-3">ชื่อผู้ใช้ / ทะเบียนบัญชี: <strong>{user?.username || 'ไม่พบข้อมูลบัญชี'}</strong></p>
         <EmptyState
           icon={AlertTriangle}
           title="บัญชีนี้ยังไม่ได้ผูกกับรถ"

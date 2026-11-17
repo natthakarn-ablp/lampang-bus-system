@@ -1501,6 +1501,11 @@ async function assertPartialFailureShown(page) {
 
 // path, roles that may view it, which viewports, scenario
 const SHOTS = [
+  { id: 'public-release-history', url: '/updates', user: null, vps: ['mobile', 'desktop'], expect: ['h1:has-text("ประวัติการอัปเดต")', 'h2:has-text("รุ่น 2.2.0")'] },
+  { id: 'public-help-center', url: '/help', user: null, vps: ['mobile', 'desktop'], expect: ['h1:has-text("แจ้งปัญหาและขอความช่วยเหลือ")'] },
+  { id: 'driver-pretrip-error', url: '/driver/pretrip', user: 'driver', scenario: 'error', vps: ['mobile', 'desktop'],
+    act: async page => { if (await page.getByRole('button', { name: 'ทุกรายการปกติ — ออกได้', exact: true }).count()) throw new Error('pretrip submit visible while status failed'); },
+    expect: ['text=ยังตรวจสอบรถของบัญชีนี้ไม่ได้', 'button:has-text("ลองใหม่")'] },
   ...['school', 'teacher'].map(user => ({
     id: `attendance-bulk-full-day-${user}`, url: '/school/teacher-check?session=morning', user, vps: ['mobile', 'desktop'],
     act: async page => {

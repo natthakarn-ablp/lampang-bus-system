@@ -23,7 +23,7 @@ export default function PolicyCenter() {
 
   function load() {
     setState((value) => ({ ...value, loading: true, error: '' }));
-    api.get('/policy-notices/catalog')
+    api.get('/policy-notices/catalog', { timeout: 10000 })
       .then(({ data }) => setState({ loading: false, error: '', ...data.data }))
       .catch((err) => setState({
         loading: false, enabled: false, policies: [],
@@ -37,9 +37,15 @@ export default function PolicyCenter() {
     <div className="mx-auto max-w-4xl space-y-5 p-4 sm:p-6">
       <PageHeader title="นโยบายและสิทธิของฉัน" subtitle="อ่านหัวข้อที่ตรงกับหน้าที่และดูว่าแต่ละข้อความจะแสดงเมื่อใด" />
       {state.reviewMode && <div role="status" className="rounded-2xl border border-warn-border bg-warn-soft p-4 text-sm leading-7 text-warn-ink">
-        <p className="font-semibold">ใช้งานจริงเพื่อประชุมคณะทำงานวันที่ 21 ตุลาคม 2569</p>
-        <p>เจ้าของระบบอนุมัติให้นำหน้าต่างนี้ขึ้นระบบจริงเพื่อทดสอบขั้นตอนและรับข้อเสนอแนะ การทำรายการยังเป็นข้อมูลจริงตามสิทธิ์เดิม ส่วนฐานกฎหมาย ระยะเวลาเก็บ ผู้ควบคุมข้อมูล และช่องทางติดต่อเป็นหัวข้อให้คณะทำงานกำหนดก่อนเปิดบันทึกหลักฐานรับทราบทางกฎหมาย</p>
+        <p className="font-semibold">ร่างนโยบายอยู่ระหว่างตรวจทาน</p>
+        <p>หน้านี้เปิดให้อ่านและตรวจทานข้อความ การทำรายการยังเป็นข้อมูลจริงตามสิทธิ์เดิม ยังไม่เปิดบันทึกหลักฐานรับทราบทางกฎหมายจากข้อความร่าง</p>
       </div>}
+      {!state.loading && !state.error && (state.reviewMode || !state.enabled) && <section className="rounded-2xl border border-surface-border bg-surface-raised p-5 space-y-3">
+        <h2 className="text-base font-semibold text-ink">ข้อมูลที่หน่วยงานต้องยืนยันก่อนประกาศฉบับจริง</h2>
+        <ul className="list-disc pl-5 space-y-2 text-sm leading-6 text-ink-muted"><li>ชื่อหน่วยงานผู้ควบคุมข้อมูลและช่องทางติดต่อ/ใช้สิทธิ</li><li>ประเภทข้อมูล วัตถุประสงค์ ฐานการใช้ข้อมูล และผู้ที่ได้รับข้อมูล</li><li>ระยะเวลาเก็บและแนวทางลบหรือทำลายข้อมูล</li><li>ขั้นตอนขอใช้สิทธิ เงื่อนไข ข้อยกเว้น และช่องทางร้องเรียนที่เกี่ยวข้อง</li><li>เลขฉบับ ผู้อนุมัติ และวันที่มีผล</li></ul>
+        <p className="text-sm text-ink-muted">ประวัติการอัปเดตโปรแกรมแยกจากฉบับนโยบาย การเพิ่มฟีเจอร์ไม่ได้หมายถึงการยอมรับนโยบายใหม่โดยอัตโนมัติ</p>
+        <a href="/help" className="focus-ring inline-flex min-h-[44px] items-center px-3 rounded-lg text-brand-700 border border-surface-border">วิธีติดต่อผู้ประสานงาน</a>
+      </section>}
       {state.loading ? <LoadingState /> : state.error ? <ErrorState message={state.error} onRetry={load} />
         : !state.enabled || state.policies.length === 0 ? (
           <EmptyState

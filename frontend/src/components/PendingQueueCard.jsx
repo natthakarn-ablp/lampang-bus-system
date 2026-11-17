@@ -239,7 +239,8 @@ export default function PendingQueueCard({ className = '' }) {
 
   if (teacher || !data) return null;
   const escalated = data.escalated?.items || [];
-  const hasOwn = (data.queues || []).length > 0;
+  const ownQueues = (data.queues || []).filter(queue => Number(queue.count) > 0);
+  const hasOwn = ownQueues.length > 0;
 
   return (
     <AppCard padding="md" className={className}>
@@ -255,13 +256,14 @@ export default function PendingQueueCard({ className = '' }) {
           </span>
         )}
       </div>
+      <details className="mt-2"><summary className="focus-ring min-h-[44px] cursor-pointer text-sm font-medium text-brand-700">ดูรายละเอียดงานอนุมัติและเรื่องรอติดตาม</summary>
       <p className="mt-1 text-xs text-ink-muted">
         ค้างนาน = รอเกิน {data.overdue_days} วัน · รอเกิน {data.escalate_days} วันจะแจ้งหน่วยงานระดับถัดไป
       </p>
 
       {hasOwn && (
         <ul className="mt-2 divide-y divide-surface-border">
-          {data.queues.map(q => <QueueRow key={q.key} queue={q} overdueDays={data.overdue_days} />)}
+          {ownQueues.map(q => <QueueRow key={q.key} queue={q} overdueDays={data.overdue_days} />)}
         </ul>
       )}
 
@@ -299,6 +301,7 @@ export default function PendingQueueCard({ className = '' }) {
       )}
 
       {STUCK_ROLES.includes(role) && <StuckApplications onChanged={reload} />}
+      </details>
     </AppCard>
   );
 }

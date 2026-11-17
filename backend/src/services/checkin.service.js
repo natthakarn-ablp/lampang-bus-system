@@ -1780,7 +1780,9 @@ async function correctTeacherCheckTime(pool, {
     const next = otherEvents.find(event => Number(event.id) > id);
     if (expectedSession && next) throw makeError('มีรายการใหม่แล้ว กรุณาโหลดรายชื่อใหม่', 409);
     if ((previous && time < previous.event_time) || (next && time > next.event_time)) {
-      throw makeError('เวลาใหม่ต้องเรียงตามลำดับรับและส่งนักเรียน', 409);
+      const error = makeError('เวลาใหม่ต้องเรียงตามลำดับรับและส่งนักเรียน', 409);
+      error.errors = [{ code: 'EVENT_TIME_ORDER', earliest_time: previous?.event_time || null, latest_time: next?.event_time || null }];
+      throw error;
     }
 
     const nextLocal = `${log.check_date} ${time}:00`;

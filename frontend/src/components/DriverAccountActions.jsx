@@ -58,12 +58,23 @@ export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
       } else {
         toast.success(res.data?.message || 'บันทึกแล้ว');
       }
-      onChanged?.();
+      if (!data.temporary_password) onChanged?.();
     } catch (err) {
       setError(err.response?.data?.message || 'ดำเนินการไม่สำเร็จ');
     } finally {
       lock.current = false; setSaving(false);
     }
+  }
+
+  function closeCredentials() {
+    setCredentials(null);
+    onChanged?.();
+  }
+  async function copyCredentials() {
+    try {
+      await navigator.clipboard.writeText(`ชื่อผู้ใช้: ${credentials.username}\nรหัสผ่านชั่วคราว: ${credentials.password}`);
+      toast.success('คัดลอกชื่อผู้ใช้และรหัสผ่านแล้ว');
+    } catch { toast.error('คัดลอกไม่ได้ กรุณาจดรหัสจากหน้าต่างนี้'); }
   }
 
   const titles = { reset: 'รีเซ็ตรหัสผ่านคนขับ', edit: 'แก้ไขข้อมูลคนขับ', replace: 'เปลี่ยนคนขับ', reactivate: 'เปิดใช้งานบัญชีคนขับ' };
@@ -179,8 +190,9 @@ export default function DriverAccountActions({ vehicle, basePath, onChanged }) {
       {credentials && (
         <Modal
           title="รหัสผ่านชั่วคราวของคนขับ"
-          onClose={() => setCredentials(null)}
-          footer={<button type="button" onClick={() => setCredentials(null)} className={primary}>บันทึกรหัสแล้ว ปิดหน้าต่าง</button>}
+          dismissible={false}
+          onClose={closeCredentials}
+          footer={<><button type="button" onClick={copyCredentials} className={btn}>คัดลอกชื่อผู้ใช้และรหัสผ่าน</button><button type="button" onClick={closeCredentials} className={primary}>บันทึกรหัสแล้ว ปิดหน้าต่าง</button></>}
         >
           <p className="text-sm text-ink mb-3">แสดงเพียงครั้งเดียว กรุณาจดหรือส่งให้คนขับ คนขับต้องเปลี่ยนรหัสผ่านเมื่อเข้าสู่ระบบครั้งแรก</p>
           <dl className="rounded-lg border border-surface-border bg-surface p-3 text-sm space-y-1">

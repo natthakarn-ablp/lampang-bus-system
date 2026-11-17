@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
     try {
       await api.post('/auth/logout', {
         refresh_token: localStorage.getItem('refresh_token'),
-      });
+      }, { timeout: 10000 });
     } catch { /* ignore network errors on logout */ }
     // The admin's chosen school/affiliation is remembered per browser, not
     // per login — keep it across the clear (it is only a scope hint; the

@@ -37,9 +37,17 @@ async function correctAttendanceTimes(pool, { schoolId, gradeFilter = null, user
     for (const e of entries) {
       const options = { schoolId, gradeFilter, userId, time, ipAddress, userAgent,
         connection: conn, expectedAt: e.expected_at, expectedSession: session };
-      const result = e.kind === 'bus'
-        ? await correctTeacherCheckTime(pool, { ...options, logId: e.id })
-        : await correctSelfTravelTime(pool, { ...options, id: e.id });
+      let result;
+      try {
+        result = e.kind === 'bus'
+          ? await correctTeacherCheckTime(pool, { ...options, logId: e.id })
+          : await correctSelfTravelTime(pool, { ...options, id: e.id });
+      } catch (error) {
+        // Only annotate scoped ordering failures. Never echo unknown/out-of-scope IDs.
+        const order = error.errors?.find(item => item.code === 'EVENT_TIME_ORDER');
+        if (order) error.errors = [{ ...order, entry_index: entries.indexOf(e) }];
+        throw error;
+      }
       if (!result.unchanged) updated++;
     }
     await conn.commit();

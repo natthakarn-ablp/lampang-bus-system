@@ -1,5 +1,6 @@
 import { ChevronDown, Megaphone } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import ReleaseVersion from './ReleaseVersion';
 
 export function releaseAudience(role, gradeScope) {
   if (role === 'school' && gradeScope) return { title: 'ครูขอบเขตสายชั้น',
@@ -23,11 +24,19 @@ export default function ReleaseUpdateNotice({ role, gradeScope = null, className
     <details className="group">
       <summary className="focus-ring flex min-h-[48px] cursor-pointer list-none items-center gap-3 rounded-xl px-4 py-3 [&::-webkit-details-marker]:hidden">
         <Megaphone className="h-5 w-5 shrink-0 text-brand-700" aria-hidden="true" />
-        <span className="flex-1 text-sm font-semibold text-brand-800">อัปเดตระบบ · 17 พ.ย. 2569</span>
+        <span className="flex-1 text-sm font-semibold text-brand-800">อัปเดตระบบ · รุ่น {__RELEASE_VERSION__} · {__RELEASE_DATE__}</span>
         <span className="text-sm text-brand-700">อ่านรายละเอียด</span>
         <ChevronDown className="h-4 w-4 shrink-0 text-brand-700 group-open:rotate-180" aria-hidden="true" />
       </summary>
       <div className="space-y-4 border-t border-brand-200 px-4 py-4 text-sm leading-6">
+        <ReleaseVersion className="text-ink-muted" />
+        <section aria-label="ปรับปรุงการใช้งานรุ่นใหม่" className="space-y-2">
+          <h2 className="font-semibold">สิ่งที่เปลี่ยนในรุ่นนี้</h2>
+          <p>ทุกบัญชี: หน้าลืมรหัสชี้แจงว่าคำขอยังไม่เปลี่ยนรหัสเดิม พร้อมวิธีขอความช่วยเหลือเมื่อไม่ผูก LINE หน้าเปลี่ยนรหัสบังคับออกจากระบบเพื่อเปลี่ยนบัญชีได้</p>
+          {['school', 'affiliation', 'admin'].includes(role) && <p>ผู้จัดการบัญชีรถ: หลังรีเซ็ตรหัสคนขับ หน้าต่างรหัสชั่วคราวจะค้างจนกดปิด กรุณาคัดลอกส่งให้คนขับเป็นการส่วนตัว</p>}
+          {role === 'school' && <p>โรงเรียนและครูสายชั้น: ปรับเวลาพร้อมกันจะแจ้งรายการและช่วงเวลาที่ขัดกัน แก้แล้วลองใหม่ได้ ภาพรวมแยกผู้ยังไม่ผูกรถออกจากยอดรอเช็กชื่อ</p>}
+          {['school', 'affiliation', 'province', 'admin', 'transport'].includes(role) && <p>หน้าภาพรวม: แสดงงานหลักก่อน รายละเอียดงานอนุมัติและรายการเพิ่มเติมเปิดดูได้ตามสิทธิ์เดิม ไม่มีการเพิ่มสิทธิ์หรือเปลี่ยนข้อมูลย้อนหลัง</p>}
+        </section>
         <div>
           <h2 className="font-semibold text-brand-800">สำหรับ{audience.title}</h2>
           <p>{audience.message}</p>

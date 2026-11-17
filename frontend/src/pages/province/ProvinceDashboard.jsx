@@ -204,7 +204,7 @@ export default function ProvinceDashboard() {
 
       <PendingQueueCard />
 
-      <ActionList items={actions} hideWhenEmpty afterAlert={heroDay.tone === 'warn' || heroDay.tone === 'danger'} />
+      <ActionList title="งานติดตามหน่วยงานและข้อมูลที่ควรตรวจสอบ" items={actions} hideWhenEmpty afterAlert={heroDay.tone === 'warn' || heroDay.tone === 'danger'} />
 
       <SectionCard
         title="ความคืบหน้าแยกตามสังกัด"

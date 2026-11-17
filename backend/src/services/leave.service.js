@@ -46,26 +46,32 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
         const err = new Error('ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ'); err.statusCode = 404; throw err;
       }
       const today = todayBangkok();
-      if (leaveDate !== today || !['morning', 'evening'].includes(session)) {
+      if (leaveDate !== today || !['morning', 'evening', 'both'].includes(session)) {
         const err = new Error('บันทึกการลาได้เฉพาะรอบวันนี้'); err.statusCode = 403; throw err;
       }
-      if (!(session === 'morning' ? student.morning_enabled : student.evening_enabled)) {
+      if (!(session === 'both' ? student.morning_enabled || student.evening_enabled : session === 'morning' ? student.morning_enabled : student.evening_enabled)) {
         const err = new Error('นักเรียนไม่ได้ใช้รถในรอบนี้'); err.statusCode = 409; throw err;
       }
+    }
+    // A full-day leave must never conceal an existing bus trip in either round.
+    // The student lock above is shared with check-in and SELF recording.
+    if (gradeScope || (schoolId && session === 'both')) {
       const [[checked]] = await conn.query(
-        `SELECT status FROM checkin_logs WHERE student_id = ? AND session = ?
-          AND check_date = CURDATE() ORDER BY id DESC LIMIT 1`, [studentId, session]
+        `SELECT status FROM checkin_logs c WHERE student_id = ?
+          AND check_date = ? AND (? = 'both' OR session = ?)
+          AND id = (SELECT MAX(c2.id) FROM checkin_logs c2 WHERE c2.student_id = c.student_id
+            AND c2.check_date = c.check_date AND c2.session = c.session)
+          AND status <> 'CANCELLED' LIMIT 1`, [studentId, leaveDate, session, session]
       );
-      if (checked && checked.status !== 'CANCELLED') {
+      if (checked) {
         const err = new Error('มีการเช็กชื่อนักเรียนคนนี้แล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err;
       }
       const [[leave]] = await conn.query(
-        `SELECT id FROM student_leaves WHERE student_id = ? AND leave_date = CURDATE()
-          AND cancelled = FALSE AND session IN (?, 'both') LIMIT 1`, [studentId, session]
+        `SELECT id FROM student_leaves WHERE student_id = ? AND leave_date = ?
+          AND cancelled = FALSE AND (? = 'both' OR session IN (?, 'both')) LIMIT 1`,
+        [studentId, leaveDate, session, session]
       );
-      if (leave) {
-        const err = new Error('บันทึกการลารอบนี้แล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err;
-      }
+      if (leave) { const err = new Error('มีรายการลาหรือเดินทางแล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err; }
     }
 
     let result;
@@ -151,7 +157,7 @@ async function cancelLeaveBySchool(leaveId, userId, schoolId, { gradeScope = nul
     throw err;
   }
   // grade-teacher-03: a grade teacher may undo a leave recorded by mistake, but
-  // only within what they can record — their own grade, today, one round.
+  // only within what they can record — their own grade and today.
   // Outside the grade reads as not found (no existence leak).
   if (gradeScope) {
     if (normalizeGrade(row.grade) !== gradeScope && !gradeEquivalents(gradeScope).includes(row.grade)) {
@@ -159,7 +165,7 @@ async function cancelLeaveBySchool(leaveId, userId, schoolId, { gradeScope = nul
       err.statusCode = 404;
       throw err;
     }
-    if (toBangkokDate(row.leave_date) !== todayBangkok() || !['morning', 'evening'].includes(row.session)) {
+    if (toBangkokDate(row.leave_date) !== todayBangkok() || !['morning', 'evening', 'both'].includes(row.session)) {
       const err = new Error('ครูประจำสายชั้นยกเลิกการลาได้เฉพาะรอบวันนี้ — รายการอื่นให้บัญชีโรงเรียนยกเลิก');
       err.statusCode = 403;
       throw err;

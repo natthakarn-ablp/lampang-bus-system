@@ -71,12 +71,13 @@ describe('grade-teacher-03 — DELETE /school/leaves/:id', () => {
     expect(updateCalls()).toHaveLength(0);
   });
 
-  test('a past-day or whole-day leave stays with the school account', async () => {
+  test('past-day stays with school; own full-day leave today can be cancelled', async () => {
     answer([['FROM student_leaves sl', leaveRow({ leave_date: '2026-01-05' })]]);
     expect((await request(app).delete('/api/school/leaves/55')).status).toBe(403);
-    answer([['FROM student_leaves sl', leaveRow({ session: 'both' })]]);
-    expect((await request(app).delete('/api/school/leaves/55')).status).toBe(403);
     expect(updateCalls()).toHaveLength(0);
+    answer([['FROM student_leaves sl', leaveRow({ session: 'both' })], ['UPDATE student_leaves', [{ affectedRows: 1 }]]]);
+    expect((await request(app).delete('/api/school/leaves/55')).status).toBe(200);
+    expect(updateCalls()).toHaveLength(1);
   });
 
   test('a leave a parent, driver or another account reported is refused (403) and not touched', async () => {
@@ -120,9 +121,9 @@ describe('grade-teacher-03 — getTeacherRoster leave fields', () => {
     expect(st).toMatchObject({ on_leave: true, leave_id: 55, can_undo: false });
   });
 
-  test('a whole-day leave gives leave_id null and no undo button', async () => {
-    const st = await rosterStudent({ leave_session: 'both', leave_id: null, leave_reported_by: null });
-    expect(st).toMatchObject({ on_leave: true, leave_id: null, can_undo: false });
+  test('own whole-day leave can be undone from either round', async () => {
+    const st = await rosterStudent({ leave_session: 'both', leave_id: 55, leave_reported_by: 7 }, 'evening');
+    expect(st).toMatchObject({ on_leave: true, leave_session: 'both', leave_id: 55, can_undo: true });
   });
 
   test('no leave: leave_id null, undo follows the teacher own tap', async () => {

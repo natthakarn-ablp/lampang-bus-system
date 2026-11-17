@@ -40,7 +40,7 @@ for (const width of [390, 1280]) test(`school reset credentials survive reload a
     await page.waitForTimeout(250); assert.equal(gets, initialGets); assert.equal(resets, 1);
     await page.keyboard.press('Escape'); assert.equal(await dialog.isVisible(), true);
     await dialog.getByRole('button', { name: 'คัดลอกชื่อผู้ใช้และรหัสผ่าน' }).click();
-    assert.ok((await page.evaluate(() => window.syntheticClipboard)).includes('SyntheticOnly123!'));
+    assert.equal(await page.evaluate(() => window.syntheticClipboard), 'ชื่อผู้ใช้: รถทดสอบ\nรหัสผ่านชั่วคราว: SyntheticOnly123!');
     assert.equal(await dialog.isVisible(), true);
     await dialog.getByRole('button', { name: 'บันทึกรหัสแล้ว ปิดหน้าต่าง' }).click();
     await page.waitForFunction(() => !document.body.textContent.includes('SyntheticOnly123!'));

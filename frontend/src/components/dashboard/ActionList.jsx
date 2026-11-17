@@ -27,8 +27,7 @@ export default function ActionList({ title = 'ต้องทำวันนี�
   const all = items
     .filter(i => i && (i.unavailable || i.keepZero || Number(i.count) > 0))
     .map((i, idx) => ({ ...i, _idx: idx }))
-    .sort((a, b) => ((ORDER[a.tone] ?? 3) - (ORDER[b.tone] ?? 3)) || (a._idx - b._idx))
-    ;
+    .sort((a, b) => ((ORDER[a.tone] ?? 3) - (ORDER[b.tone] ?? 3)) || (a._idx - b._idx));
   const shown = expanded ? all : all.slice(0, max);
 
   if (shown.length === 0 && hideWhenEmpty) return null;

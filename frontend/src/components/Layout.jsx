@@ -3,6 +3,9 @@ import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopNavbar from './TopNavbar';
 import ResponsiveDrawer from './ui/ResponsiveDrawer';
+import ReleaseUpdateNotice from './ReleaseUpdateNotice';
+import { useAuth } from '../hooks/useAuth';
+import { getGradeScope } from '../utils/authScope';
 
 const COLLAPSE_KEY = 'sidebar:collapsed';
 
@@ -19,6 +22,8 @@ export default function Layout({ children, bottomNav = null }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const location = useLocation();
+  const { user } = useAuth();
+  const showReleaseNotice = !/(^|\/)(emergency|emergencies)(\/|$)/.test(location.pathname);
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -66,6 +71,7 @@ export default function Layout({ children, bottomNav = null }) {
               pathname so each route re-triggers; reduced-motion users get it
               instantly (motion-safe + the global prefers-reduced-motion rule). */}
           <div key={location.pathname} className="motion-safe:animate-fade-in">
+            {showReleaseNotice && <ReleaseUpdateNotice role={user?.role} gradeScope={getGradeScope(user)} className="mx-4 mt-3 sm:mx-6" />}
             {children}
           </div>
         </main>

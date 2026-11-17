@@ -7,6 +7,7 @@ import AppCard from '../../components/ui/AppCard';
 import FormField from '../../components/ui/FormField';
 import { formatGradeClass } from '../../utils/student';
 import ParentConsentModal from '../../components/consent/ParentConsentModal';
+import ReleaseUpdateNotice from '../../components/ReleaseUpdateNotice';
 
 const STATUS_MAP = {
   CHECKED_IN:  { label: 'รับแล้ว',  cls: 'bg-success-soft text-success-ink border-success/30', icon: '✅' },
@@ -389,6 +390,7 @@ export default function ParentStatus() {
       </div>
 
       <div className="max-w-lg mx-auto p-4 pb-8">
+        <ReleaseUpdateNotice role="parent" className="mb-4" />
         {/* ── Children list ── */}
         {view === 'list' && (
           <div className="space-y-4">

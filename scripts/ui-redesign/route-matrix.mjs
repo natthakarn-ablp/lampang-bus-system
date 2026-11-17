@@ -155,7 +155,8 @@ const rows = paths.map(path => {
 
 // Exact route count of the tracked baseline (scripts/ui-redesign/baselines/
 // nav-baseline.json). Re-recording the baseline means updating this too.
-const EXPECTED_ROUTES = 100;
+// Reconciled to deployed9fd2715 inventory114 + approved public history/help2.
+const EXPECTED_ROUTES = 116;
 
 const counts = rows.reduce((m, r) => ((m[r.status] = (m[r.status] || 0) + 1), m), {});
 const unresolved = rows.filter(r => r.status === 'UNCLASSIFIED');

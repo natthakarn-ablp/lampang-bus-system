@@ -17,6 +17,8 @@ import Login from './pages/Login';
 // Lazy: everything past auth. Chunks are grouped by role so each user only
 // downloads what their role uses.
 const ChangePassword       = lazy(() => import('./pages/ChangePassword'));
+const ReleaseHistory       = lazy(() => import('./pages/ReleaseHistory'));
+const HelpCenter           = lazy(() => import('./pages/HelpCenter'));
 const PolicyCenter         = lazy(() => import('./pages/PolicyCenter'));
 const ForgotPassword       = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword        = lazy(() => import('./pages/ResetPassword'));
@@ -231,6 +233,8 @@ export default function App() {
       <BrowserRouter>
         <Suspense fallback={<RouteFallback />}>
         <Routes>
+          <Route path="/updates" element={<ReleaseHistory />} />
+          <Route path="/help" element={<HelpCenter />} />
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />

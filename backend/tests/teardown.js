@@ -32,7 +32,7 @@
 require('./loadTestEnv');
 require('dotenv').config();
 const { assertDisposableTestDatabase } = require('../src/utils/testDatabaseGuard');
-const mysql = require('mysql2/promise');
+const { getTestConnection } = require('./dbHelper');
 
 // The fixtures every suite builds on, seeded by setup.js.
 const TEST_SCHOOL = '__TSCH';
@@ -256,14 +256,7 @@ module.exports = async function globalTeardown() {
   assertDisposableTestDatabase(process.env);
 
   const schema = process.env.DB_NAME || 'lampang_bus';
-  const conn = await mysql.createConnection({
-    host:     process.env.DB_HOST     || 'localhost',
-    port:     parseInt(process.env.DB_PORT || '3306', 10),
-    database: schema,
-    user:     process.env.DB_USER     || 'lampang',
-    password: process.env.DB_PASSWORD || '',
-    charset:  'utf8mb4',
-  });
+  const conn = await getTestConnection();
 
   try {
     const edges = await readForeignKeys(conn, schema);

@@ -330,6 +330,7 @@ export default function TopNavbar({ onOpenDrawer, onToggleSidebar, sidebarCollap
                   ความปลอดภัยบัญชี
                 </button>
               )}
+              {[['/updates', 'ประวัติการอัปเดต'], ['/help', 'แจ้งปัญหา/ขอความช่วยเหลือ']].map(([to, label]) => <button key={to} role="menuitem" onClick={() => { setMenuOpen(false); navigate(to); }} className="focus-ring w-full flex items-center px-4 py-2.5 min-h-[44px] text-sm text-ink hover:bg-surface">{label}</button>)}
               <button
                 role="menuitem"
                 onClick={handleLogout}

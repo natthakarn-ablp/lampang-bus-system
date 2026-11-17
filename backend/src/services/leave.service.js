@@ -53,9 +53,13 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
         const err = new Error('นักเรียนไม่ได้ใช้รถในรอบนี้'); err.statusCode = 409; throw err;
       }
     }
+    const driverToday = userRole === 'driver' && leaveDate === todayBangkok();
+    if (driverToday && !(session === 'both' ? student.morning_enabled || student.evening_enabled : session === 'morning' ? student.morning_enabled : student.evening_enabled)) {
+      const err = new Error('นักเรียนไม่ได้ใช้รถในรอบนี้'); err.statusCode = 409; throw err;
+    }
     // A full-day leave must never conceal an existing bus trip in either round.
     // The student lock above is shared with check-in and SELF recording.
-    if (gradeScope || (schoolId && session === 'both')) {
+    if (gradeScope || (schoolId && session === 'both') || driverToday) {
       const [[checked]] = await conn.query(
         `SELECT status FROM checkin_logs c WHERE student_id = ?
           AND check_date = ? AND (? = 'both' OR session = ?)
@@ -71,7 +75,7 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
           AND cancelled = FALSE AND (? = 'both' OR session IN (?, 'both')) LIMIT 1`,
         [studentId, leaveDate, session, session]
       );
-      if (leave) { const err = new Error('มีรายการลาหรือเดินทางแล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err; }
+      if (leave) { const err = new Error(driverToday ? 'นักเรียนคนนี้ถูกบันทึกการลาในวันนี้แล้ว กรุณาโหลดรายชื่อใหม่' : 'มีรายการลาหรือเดินทางแล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err; }
     }
 
     let result;

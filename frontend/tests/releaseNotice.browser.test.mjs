@@ -29,7 +29,7 @@ for (const width of [390, 1280]) for (const [role, grade, title] of audiences) t
     assert.ok((await summary.boundingBox()).height >= 44);
     await summary.focus(); await page.keyboard.press('Enter');
     await notice.getByRole('heading', { name: `สำหรับ${title}`, exact: true }).waitFor();
-    assert.ok((await notice.innerText()).includes('ระบบไม่ได้เปลี่ยนย้อนหลังเป็นลาทั้งวัน'));
+    assert.ok((await notice.innerText()).includes('ไม่เปลี่ยนข้อมูลการเช็กชื่อหรือรายการลาเดิมย้อนหลัง'));
     assert.equal(await notice.getByRole('link', { name: 'ไปหน้าเช็กชื่อวันนี้' }).count(), role === 'school' ? 1 : 0);
     if (grade) assert.ok((await notice.innerText()).includes(`สายชั้น ${grade}`));
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);

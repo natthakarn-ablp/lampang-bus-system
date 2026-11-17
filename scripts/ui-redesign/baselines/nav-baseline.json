@@ -1,6 +1,16 @@
 {
   "routes": [
     {
+      "path": "/updates",
+      "roles": null,
+      "parent": null
+    },
+    {
+      "path": "/help",
+      "roles": null,
+      "parent": null
+    },
+    {
       "path": "/login",
       "roles": null,
       "parent": null
@@ -131,6 +141,14 @@
       "parent": "/school"
     },
     {
+      "path": "/school/backdated-attendance",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
       "path": "/school/students",
       "roles": [
         "school",
@@ -211,7 +229,23 @@
       "parent": "/school"
     },
     {
+      "path": "/school/safe-travel",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
       "path": "/school/live-vehicles",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/vehicle-track",
       "roles": [
         "school",
         "admin"
@@ -227,7 +261,39 @@
       "parent": "/school"
     },
     {
+      "path": "/school/vehicle-trips",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/homeroom-teachers",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/year-promotion",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
       "path": "/school/registration-review",
+      "roles": [
+        "school",
+        "admin"
+      ],
+      "parent": "/school"
+    },
+    {
+      "path": "/school/transfer-requests",
       "roles": [
         "school",
         "admin"
@@ -291,6 +357,14 @@
       "parent": "/affiliation"
     },
     {
+      "path": "/affiliation/users",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
       "path": "/affiliation/audit-log",
       "roles": [
         "affiliation",
@@ -299,7 +373,23 @@
       "parent": "/affiliation"
     },
     {
+      "path": "/affiliation/vehicle-trips",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
       "path": "/affiliation/live-vehicles",
+      "roles": [
+        "affiliation",
+        "admin"
+      ],
+      "parent": "/affiliation"
+    },
+    {
+      "path": "/affiliation/vehicle-track",
       "roles": [
         "affiliation",
         "admin"
@@ -403,7 +493,23 @@
       "parent": "/province"
     },
     {
+      "path": "/province/vehicle-trips",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
       "path": "/province/live-vehicles",
+      "roles": [
+        "province",
+        "admin"
+      ],
+      "parent": "/province"
+    },
+    {
+      "path": "/province/vehicle-track",
       "roles": [
         "province",
         "admin"
@@ -544,7 +650,9 @@
         "admin",
         "province",
         "affiliation",
-        "transport"
+        "transport",
+        "school",
+        "driver"
       ],
       "parent": null
     },
@@ -564,6 +672,13 @@
     },
     {
       "path": "/admin/vehicle-requests",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/emergencies",
       "roles": [
         "admin"
       ],
@@ -615,6 +730,13 @@
     },
     {
       "path": "/admin/live-vehicles",
+      "roles": [
+        "admin"
+      ],
+      "parent": null
+    },
+    {
+      "path": "/admin/vehicle-track",
       "roles": [
         "admin"
       ],
@@ -851,6 +973,12 @@
         "icon": "CheckSquare"
       },
       {
+        "to": "/school/backdated-attendance",
+        "label": "เช็กชื่อย้อนหลัง",
+        "group": null,
+        "icon": "History"
+      },
+      {
         "to": "/school/students",
         "label": "นักเรียน",
         "group": null,
@@ -861,6 +989,18 @@
         "label": "รถรับส่ง",
         "group": null,
         "icon": "Bus"
+      },
+      {
+        "to": "/school/live-vehicles",
+        "label": "ตำแหน่งปัจจุบัน",
+        "group": null,
+        "icon": "Activity"
+      },
+      {
+        "to": "/school/pickup-map",
+        "label": "แผนที่จุดรับส่ง",
+        "group": null,
+        "icon": "Map"
       },
       {
         "to": "/school/emergencies",
@@ -875,22 +1015,22 @@
         "icon": "FileText"
       },
       {
+        "to": "/school/safe-travel",
+        "label": "ประเมินเดินทางปลอดภัย",
+        "group": null,
+        "icon": "ShieldCheck"
+      },
+      {
         "to": "/school/approvals",
         "label": "คำขอรายชื่อ",
         "group": null,
         "icon": "CheckSquare"
       },
       {
-        "to": "/school/pickup-map",
-        "label": "แผนที่จุดรับส่ง",
+        "to": "/school/transfer-requests",
+        "label": "คำขอโอนย้ายนักเรียน",
         "group": null,
-        "icon": "Map"
-      },
-      {
-        "to": "/school/live-vehicles",
-        "label": "ตำแหน่งปัจจุบัน",
-        "group": null,
-        "icon": "Activity"
+        "icon": "Users"
       },
       {
         "to": "/school/registration-review",
@@ -915,6 +1055,24 @@
         "label": "บัญชีครูประจำสายชั้น",
         "group": null,
         "icon": "Users"
+      },
+      {
+        "to": "/school/homeroom-teachers",
+        "label": "ครูประจำชั้น",
+        "group": null,
+        "icon": "UserCheck"
+      },
+      {
+        "to": "/school/year-promotion",
+        "label": "เลื่อนชั้นปีการศึกษาใหม่",
+        "group": null,
+        "icon": "GraduationCap"
+      },
+      {
+        "to": "/school/vehicle-trips",
+        "label": "รถที่วิ่งหลายเที่ยว",
+        "group": null,
+        "icon": "Route"
       },
       {
         "to": "/school/audit-log",
@@ -967,6 +1125,12 @@
         "icon": "Bus"
       },
       {
+        "to": "/affiliation/status",
+        "label": "สถานะวันนี้",
+        "group": null,
+        "icon": "CheckSquare"
+      },
+      {
         "to": "/affiliation/live-vehicles",
         "label": "ตำแหน่งปัจจุบัน",
         "group": null,
@@ -1003,10 +1167,22 @@
         "icon": "Wrench"
       },
       {
+        "to": "/affiliation/users",
+        "label": "จัดการผู้ใช้งาน",
+        "group": null,
+        "icon": "UserCog"
+      },
+      {
         "to": "/affiliation/accounts",
         "label": "เพิ่มโรงเรียนใหม่",
         "group": null,
         "icon": "Key"
+      },
+      {
+        "to": "/affiliation/vehicle-trips",
+        "label": "รถที่วิ่งหลายเที่ยว",
+        "group": null,
+        "icon": "Route"
       },
       {
         "to": "/affiliation/audit-log",
@@ -1107,6 +1283,12 @@
         "icon": "Key"
       },
       {
+        "to": "/province/vehicle-trips",
+        "label": "รถที่วิ่งหลายเที่ยว",
+        "group": null,
+        "icon": "Route"
+      },
+      {
         "to": "/province/audit-log",
         "label": "ประวัติการแก้ไข",
         "group": null,
@@ -1201,6 +1383,12 @@
         "icon": "Wrench"
       },
       {
+        "to": "/admin/emergencies",
+        "label": "เหตุฉุกเฉิน",
+        "group": null,
+        "icon": "AlertTriangle"
+      },
+      {
         "to": "/admin/users",
         "label": "จัดการผู้ใช้งาน",
         "group": null,
@@ -1285,6 +1473,30 @@
         "icon": "Wrench"
       },
       {
+        "to": "/transport/vehicles",
+        "label": "แก้ทะเบียนและวันหมดอายุเอกสารรถ",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "Bus"
+      },
+      {
+        "to": "/province/affiliations",
+        "label": "จัดการสังกัด",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "Landmark"
+      },
+      {
+        "to": "/province/schools",
+        "label": "จัดการโรงเรียน",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "Building2"
+      },
+      {
+        "to": "/province/unit-accounts",
+        "label": "บัญชีสังกัดและขนส่ง",
+        "group": "ตรวจสอบและสนับสนุน",
+        "icon": "Key"
+      },
+      {
         "to": "/admin/measurement",
         "label": "กรอบวัดผลระบบ",
         "group": "วิจัยและประเมินผล",
@@ -1292,7 +1504,7 @@
       },
       {
         "to": "/admin/research",
-        "label": "เปรียบเทียบ Baseline",
+        "label": "เปรียบเทียบค่าตั้งต้น",
         "group": "วิจัยและประเมินผล",
         "icon": "TrendingUp"
       },
@@ -1304,7 +1516,7 @@
       },
       {
         "to": "/admin/evaluation",
-        "label": "ประเมินผลแยก Role",
+        "label": "ประเมินผลแยกบทบาท",
         "group": "วิจัยและประเมินผล",
         "icon": "Target"
       },

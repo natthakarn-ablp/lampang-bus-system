@@ -83,13 +83,15 @@ async function undoSelfTravel(pool, { id, schoolId, gradeFilter, userId }) {
   finally { conn.release(); }
 }
 
-async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, time, ipAddress = null, userAgent = null }) {
+async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, time, ipAddress = null, userAgent = null, connection = null, expectedAt = null, expectedSession = null }) {
   if (!Number.isSafeInteger(id) || id < 1 || !schoolId || !userId) fail('รายการไม่ถูกต้อง', 400);
   if (typeof time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) fail('กรุณาระบุเวลาแบบ HH:mm', 400);
-  const conn = await pool.getConnection();
+  const conn = connection || await pool.getConnection();
   try {
-    await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
-    await conn.beginTransaction();
+    if (!connection) {
+      await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+      await conn.beginTransaction();
+    }
     const [[candidate]] = await conn.query('SELECT student_id FROM student_leaves WHERE id = ?', [id]);
     if (!candidate) fail('ไม่พบรายการ', 404);
     const params = [candidate.student_id, schoolId];
@@ -106,12 +108,13 @@ async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, 
          FROM student_leaves WHERE id = ? AND student_id = ? AND attendance_kind = 'SELF'
            AND cancelled = FALSE AND leave_date = CURDATE() FOR UPDATE`, [id, student.id]);
     if (!record) fail('แก้เวลาได้เฉพาะรายการมาเองหรือกลับเองของวันนี้', 409);
+    if ((expectedSession && record.session !== expectedSession) || (expectedAt && new Date(record.created_at).getTime() !== new Date(expectedAt).getTime())) fail('รายการเปลี่ยนไปแล้ว กรุณาโหลดรายชื่อใหม่', 409);
     const windowError = sessionTimeError(record.session, time);
     if (windowError) fail(windowError, 400);
     const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
     if (time > clock.now_hm) fail('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
     if (time === record.old_time) {
-      await conn.commit();
+      if (!connection) await conn.commit();
       return { id, recorded_at: record.created_at, unchanged: true };
     }
     const nextLocal = `${record.leave_date} ${time}:00`;
@@ -119,10 +122,10 @@ async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, 
     await logAudit({ conn, required: true, userId, action: 'UPDATE', entityType: 'self_travel_time',
       entityId: String(id), oldValue: { recorded_at_local: record.old_local, session: record.session },
       newValue: { recorded_at_local: nextLocal, session: record.session }, ipAddress, userAgent });
-    await conn.commit();
+    if (!connection) await conn.commit();
     return { id, recorded_at: new Date(`${record.leave_date}T${time}:00+07:00`).toISOString(), time_edited: true };
-  } catch (error) { await conn.rollback(); throw error; }
-  finally { conn.release(); }
+  } catch (error) { if (!connection) await conn.rollback(); throw error; }
+  finally { if (!connection) conn.release(); }
 }
 
 module.exports = { recordSelfTravel, undoSelfTravel, correctSelfTravelTime };

@@ -1536,11 +1536,11 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
             ) AS leave_session,
             (SELECT MAX(sl.id) FROM student_leaves sl
               WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE
-                AND sl.attendance_kind = 'LEAVE' AND sl.session = '${session}'
+                AND sl.attendance_kind = 'LEAVE' AND sl.session IN ('${session}', 'both')
             ) AS leave_id,
             (SELECT sl.reported_by FROM student_leaves sl
               WHERE sl.student_id = s.id AND sl.leave_date = CURDATE() AND sl.cancelled = FALSE
-                AND sl.attendance_kind = 'LEAVE' AND sl.session = '${session}'
+                AND sl.attendance_kind = 'LEAVE' AND sl.session IN ('${session}', 'both')
               ORDER BY sl.id DESC LIMIT 1
             ) AS leave_reported_by
        FROM students s
@@ -1582,6 +1582,7 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
       grade: r.grade,
       classroom: r.classroom,
       on_leave: onLeave,
+      leave_session: r.leave_session || null,
       self_travel: !!r.self_travel,
       self_id: r.self_id || null,
       self_recorded_at: r.self_recorded_at || null,
@@ -1595,7 +1596,7 @@ async function getTeacherRoster(pool, { schoolId, gradeFilter = null, session, u
       checked_by_role: status ? r.checked_by_role || null : null,
       checked_by_name: status ? r.checked_by_name || null : null,
       // Only the teacher's own, still-current tap can be undone from this page.
-      // A leave for this round only (not a whole-day one) that this user
+      // A leave for this round or both rounds that this user
       // recorded can also be cancelled here — grade-teacher-03. A leave a parent,
       // driver or another account reported is not offered; DELETE
       // /school/leaves/:id enforces the same rule for grade teachers.
@@ -1716,7 +1717,7 @@ async function processTeacherCheck(pool, {
 /** Correct today's recorded event time without changing the event or sending another notification. */
 async function correctTeacherCheckTime(pool, {
   userId, ipAddress = null, userAgent = null,
-  schoolId, gradeFilter = null, logId, time,
+  schoolId, gradeFilter = null, logId, time, connection = null, expectedAt = null, expectedSession = null,
 }) {
   const id = Number(logId);
   if (!Number.isSafeInteger(id) || id <= 0) throw makeError('logId ไม่ถูกต้อง', 400);
@@ -1725,8 +1726,8 @@ async function correctTeacherCheckTime(pool, {
   }
   if (!schoolId) throw makeError('ไม่พบข้อมูลโรงเรียน', 400);
 
-  const conn = await pool.getConnection();
-  await beginCheckinTransactionOrRelease(conn);
+  const conn = connection || await pool.getConnection();
+  if (!connection) await beginCheckinTransactionOrRelease(conn);
   try {
     // Take the student lock before the log lock, matching the check-in path.
     const [[candidate]] = await conn.query('SELECT student_id FROM checkin_logs WHERE id = ?', [id]);
@@ -1752,12 +1753,15 @@ async function correctTeacherCheckTime(pool, {
     if (!Number(log.is_today) || !['CHECKED_IN', 'CHECKED_OUT'].includes(log.status)) {
       throw makeError('แก้เวลาได้เฉพาะรายการเช็กชื่อของวันนี้', 409);
     }
+    if ((expectedSession && log.session !== expectedSession) || (expectedAt && new Date(log.checked_at).getTime() !== new Date(expectedAt).getTime())) {
+      throw makeError('รายการเปลี่ยนไปแล้ว กรุณาโหลดรายชื่อใหม่', 409);
+    }
     const windowError = sessionTimeError(log.session, time);
     if (windowError) throw makeError(windowError, 400);
     const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
     if (time > clock.now_hm) throw makeError('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
     if (time === log.old_time) {
-      await conn.commit();
+      if (!connection) await conn.commit();
       return { log_id: id, checked_at: log.checked_at, time_edited: false, unchanged: true };
     }
 
@@ -1774,6 +1778,7 @@ async function correctTeacherCheckTime(pool, {
     );
     const previous = otherEvents.filter(event => Number(event.id) < id).at(-1);
     const next = otherEvents.find(event => Number(event.id) > id);
+    if (expectedSession && next) throw makeError('มีรายการใหม่แล้ว กรุณาโหลดรายชื่อใหม่', 409);
     if ((previous && time < previous.event_time) || (next && time > next.event_time)) {
       throw makeError('เวลาใหม่ต้องเรียงตามลำดับรับและส่งนักเรียน', 409);
     }
@@ -1800,13 +1805,13 @@ async function correctTeacherCheckTime(pool, {
       newValue: { checked_at_local: nextLocal, session: log.session, status: log.status },
       ipAddress, userAgent,
     });
-    await conn.commit();
+    if (!connection) await conn.commit();
     return { log_id: id, checked_at: new Date(`${log.check_date}T${time}:00+07:00`).toISOString(), time_edited: true };
   } catch (err) {
-    await conn.rollback();
+    if (!connection) await conn.rollback();
     throw err;
   } finally {
-    conn.release();
+    if (!connection) conn.release();
   }
 }
 

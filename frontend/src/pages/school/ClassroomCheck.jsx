@@ -14,6 +14,7 @@ import { getGradeScope } from '../../utils/authScope';
 import { groupTeacherClassrooms, classroomPlan, homeroomLookup } from '../../utils/classroomAttendance';
 import { PageTransition } from '../../lib/motion';
 import AttendanceTimeDialog, { bangkokTime } from './AttendanceTimeDialog';
+import AttendanceBulkTimeDialog from './AttendanceBulkTimeDialog';
 
 const SESSIONS = {
   // `tab` is the short form for the round switch, so it stays on one line at
@@ -44,6 +45,8 @@ export default function ClassroomCheck() {
   const [selfIds, setSelfIds] = useState(() => new Set());
   const [confirmRoom, setConfirmRoom] = useState(null);
   const [timeStudent, setTimeStudent] = useState(null);
+  const [bulkTime, setBulkTime] = useState(false);
+  const [leaveMode, setLeaveMode] = useState('both');
   const [saving, setSaving] = useState(false);
   const requestSeq = useRef(0);
   const writeInFlight = useRef(false);
@@ -79,12 +82,13 @@ export default function ClassroomCheck() {
   const grades = useMemo(() => [...new Set(rooms.map(room => room.grade))], [rooms]);
   const activeGrade = grade || (grades.includes(selectedGrade) ? selectedGrade : '');
   const visibleRooms = rooms.filter(room => room.grade === activeGrade);
-  const locked = saving || !!confirmRoom || !!timeStudent;
+  const locked = saving || !!confirmRoom || !!timeStudent || bulkTime;
 
   function changeSession(next) {
     if (next === sessionRef.current || locked || writeInFlight.current) return;
     sessionRef.current = next;
     setSession(next);
+    setLeaveMode('both');
     setLeaveIds(new Set()); setSelfIds(new Set());
     load(next);
   }
@@ -110,7 +114,7 @@ export default function ClassroomCheck() {
     if (locked || loading || !data || writeInFlight.current || room.grade !== activeGrade) return;
     const plan = classroomPlan(room, leaveIds, selfIds);
     if (!plan.presentIds.length && !plan.leaveIds.length && !plan.selfIds.length) return;
-    setConfirmRoom({ ...plan, session, grade: room.grade, room: room.classroom || 'ไม่ระบุห้อง' });
+    setConfirmRoom({ ...plan, session, leaveSession: leaveMode, grade: room.grade, room: room.classroom || 'ไม่ระบุห้อง' });
   }
 
   async function confirmOne(student) {
@@ -122,7 +126,7 @@ export default function ClassroomCheck() {
     setSaving(true);
     try {
       if (mode === 'self') await api.post('/school/self-travel', { student_id: student.id, session: round });
-      else if (mode === 'leave') await api.post('/school/leave', { student_id: student.id, session: round });
+      else if (mode === 'leave') await api.post('/school/leave', { student_id: student.id, session: leaveMode });
       else {
         const response = await api.post('/school/teacher-check', { session: round, student_ids: [student.id] });
         if (response.data?.data?.results?.[0]?.result !== 'ok') {
@@ -153,7 +157,7 @@ export default function ClassroomCheck() {
         await api.post('/school/self-travel', { student_id: studentId, session: snapshot.session });
       }
       for (const studentId of snapshot.leaveIds) {
-        await api.post('/school/leave', { student_id: studentId, session: snapshot.session });
+        await api.post('/school/leave', { student_id: studentId, session: snapshot.leaveSession });
       }
       for (let i = 0; i < snapshot.presentIds.length; i += 200) {
         const ids = snapshot.presentIds.slice(i, i + 200);
@@ -205,7 +209,7 @@ export default function ClassroomCheck() {
           </summary>
           <ul className="list-disc pl-9 pr-4 pb-3 space-y-1 text-sm text-ink-muted">
             <li>เริ่มต้นใช้รถทุกคน เลือก “มาเอง/กลับเอง” หรือ “ลา” ตามจริง</li>
-            <li>ตรวจรายชื่อทีละห้อง แล้วกด “บันทึกทั้งห้อง” · การลาใช้เฉพาะรอบที่เลือก</li>
+            <li>ตรวจรายชื่อทีละห้อง แล้วกด “บันทึกทั้งห้อง” · เริ่มต้นลาทั้งวัน เชื่อมถึงรอบกลับ หากลาครึ่งวันให้เลือกเฉพาะรอบนี้</li>
             <li>เช้า: ถึงโรงเรียน · เย็น: ขึ้นรถกลับบ้าน · รายการที่คนขับหรือครูบันทึกแล้วจะไม่บันทึกซ้ำ</li>
             <li>ยืนยันรายคนเพื่อเก็บเวลาที่กดจริง · บันทึกทั้งห้องเป็นเวลาของชุดนั้น ไม่ใช่เวลารับจริงรายคน</li>
           </ul>
@@ -232,6 +236,20 @@ export default function ClassroomCheck() {
             {grades.map(value => <option key={value} value={value}>{value}</option>)}
           </select>}
         </FormField>}
+
+        {data && activeGrade && <div className="space-y-3">
+          <FormField label="เมื่อเลือกลา" disabled={locked}>
+            {props => <select {...props} value={leaveMode} onChange={e => { setLeaveMode(e.target.value); setLeaveIds(new Set()); }}
+              className="focus-ring w-full min-h-[44px] px-3 rounded-lg border border-surface-border bg-surface-raised text-base text-ink">
+              <option value="both">ลาทั้งวัน (เช้าและกลับ)</option>
+              <option value={session}>ลาเฉพาะรอบ{session === 'morning' ? 'เช้า' : 'กลับ'}</option>
+            </select>}
+          </FormField>
+          <button type="button" onClick={() => setBulkTime(true)} disabled={locked || loading}
+            className="focus-ring w-full min-h-[48px] px-4 rounded-xl border border-brand-700 text-brand-700 font-semibold disabled:opacity-50">
+            ปรับเวลาเช็กชื่อทั้งสายชั้น / ห้อง
+          </button>
+        </div>}
 
         {error && <ErrorState title="โหลดรายชื่อไม่สำเร็จ" message={error} onRetry={() => load()} />}
         {loading && <LoadingState message="กำลังโหลดรายชื่อห้องเรียน…" />}
@@ -297,7 +315,7 @@ export default function ClassroomCheck() {
                     </button>}
                   </div> : <div className="flex items-center gap-2">
                     <StatusBadge variant={student.on_leave ? 'warn' : student.done ? 'success' : 'neutral'}>
-                      {student.self_travel ? (session === 'morning' ? 'มาเอง' : 'กลับเอง') : student.on_leave ? 'ลาแล้ว' : student.done ? 'บันทึกแล้ว' : 'ยังไม่มีรถ'}
+                      {student.self_travel ? (session === 'morning' ? 'มาเอง' : 'กลับเอง') : student.on_leave ? (student.leave_session === 'both' ? 'ลาทั้งวันแล้ว' : 'ลาแล้ว') : student.done ? 'บันทึกแล้ว' : 'ยังไม่มีรถ'}
                     </StatusBadge>
                     {((student.done && student.log_id) || (student.self_travel && student.self_id)) && <button type="button" onClick={() => setTimeStudent(student)} disabled={locked}
                       aria-label={`แก้เวลา ${student.name}`}
@@ -324,9 +342,11 @@ export default function ClassroomCheck() {
         })}
 
         <ConfirmDialog open={Boolean(confirmRoom)} tone="brand" title="บันทึกทั้งห้อง?"
-          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: ใช้รถ ${confirmRoom.presentIds.length} คน · ${confirmRoom.session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${confirmRoom.selfIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็กเป็นชุด ไม่ได้ยืนยันเวลาจริงรายคน` : ''}
+          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: ใช้รถ ${confirmRoom.presentIds.length} คน · ${confirmRoom.session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${confirmRoom.selfIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน (${confirmRoom.leaveSession === 'both' ? 'ทั้งวัน' : 'เฉพาะรอบ'}) ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็กเป็นชุด ไม่ได้ยืนยันเวลาจริงรายคน` : ''}
           confirmLabel="ยืนยันบันทึกทั้งห้อง" loading={saving} onConfirm={saveRoom}
           onCancel={() => { if (!saving) setConfirmRoom(null); }} />
+        {bulkTime && <AttendanceBulkTimeDialog rooms={visibleRooms} grade={activeGrade} session={session}
+          onClose={() => setBulkTime(false)} onSaved={() => load(sessionRef.current, false)} />}
         {timeStudent && <AttendanceTimeDialog key={timeStudent.log_id || `self-${timeStudent.self_id}`} student={timeStudent}
           onClose={() => setTimeStudent(null)} onSaved={() => load(sessionRef.current, false)} />}
       </div>

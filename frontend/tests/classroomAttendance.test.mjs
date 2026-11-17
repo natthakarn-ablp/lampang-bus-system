@@ -18,8 +18,8 @@ test('defaults pending riders to present and excludes done, existing leave and n
     { id: 1 }, { id: 2 }, { id: 3, done: true },
     { id: 4, on_leave: true }, { id: 5, no_vehicle: true },
   ] };
-  assert.deepEqual(classroomPlan(room, new Set()), { presentIds: [1, 2], leaveIds: [] });
-  assert.deepEqual(classroomPlan(room, new Set([2, 3, 4, 5])), { presentIds: [1], leaveIds: [2] });
+  assert.deepEqual(classroomPlan(room, new Set()), { presentIds: [1, 2], leaveIds: [], selfIds: [] });
+  assert.deepEqual(classroomPlan(room, new Set([2, 3, 4, 5])), { presentIds: [1], leaveIds: [2], selfIds: [] });
 });
 
 test('same room number in different grades never shares a save plan', () => {
@@ -36,8 +36,8 @@ test('same room number in different grades never shares a save plan', () => {
   assert.equal(new Set(rooms.map(room => room.key)).size, 3);
   const firstGrade = rooms.find(room => room.grade === 'ป.1');
   const secondGrade = rooms.find(room => room.grade === 'ป.2');
-  assert.deepEqual(classroomPlan(firstGrade, new Set([3])), { presentIds: [1], leaveIds: [3] });
-  assert.deepEqual(classroomPlan(secondGrade, new Set([3])), { presentIds: [2], leaveIds: [] });
+  assert.deepEqual(classroomPlan(firstGrade, new Set([3])), { presentIds: [1], leaveIds: [3], selfIds: [] });
+  assert.deepEqual(classroomPlan(secondGrade, new Set([3])), { presentIds: [2], leaveIds: [], selfIds: [] });
   assert.equal(rooms.find(room => room.grade === 'ไม่ระบุชั้น').students[0].id, 4);
 });
 
@@ -47,4 +47,10 @@ test('stored grade spelling variants remain in the correct grade teacher classro
   assert.deepEqual(rooms.find(room => room.grade === 'ป.5').students.map(st => st.id), [0, 1, 2, 3]);
   assert.deepEqual(rooms.find(room => room.grade === 'อ.2').students.map(st => st.id), [4, 5]);
   assert.deepEqual(rooms.find(room => room.grade === 'ม.1').students.map(st => st.id), [6, 7]);
+});
+
+
+test('a linked full-day leave is never queued as present in the return round', () => {
+  const room = { students: [{ id: 1, on_leave: true, leave_session: 'both' }, { id: 2 }] };
+  assert.deepEqual(classroomPlan(room, new Set(), new Set()), { presentIds: [2], leaveIds: [], selfIds: [] });
 });

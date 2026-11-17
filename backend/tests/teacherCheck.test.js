@@ -333,9 +333,9 @@ describe('grade teacher marks leave from the classroom check', () => {
     expect(count.n).toBe(0);
   });
 
-  test('teacher cannot backdate or mark both rounds from this screen', async () => {
+  test('teacher cannot backdate but can mark full-day leave', async () => {
     expect((await leave(t1, { student_id: STUDENT_ID, session: 'morning', leave_date: '2000-01-01' })).status).toBe(403);
-    expect((await leave(t1, { student_id: STUDENT_ID, session: 'both' })).status).toBe(403);
+    expect((await leave(t1, { student_id: STUDENT_ID, session: 'both' })).status).toBe(201);
   });
 
   test('teacher cannot mark leave after attendance was recorded', async () => {
@@ -434,5 +434,78 @@ describe('teacher check — what the parent sees', () => {
   test('driver taps keep their wording', () => {
     expect(lineSvc.sessionDoneLabel('morning', 'CHECKED_IN')).toBe('ขึ้นรถแล้ว');
     expect(lineSvc.sessionDoneLabel('evening', 'CHECKED_OUT')).toBe('ส่งถึงจุดรับแล้ว');
+  });
+});
+
+
+describe('full-day leave linked to return round', () => {
+  const leave = (token, session) => request(app).post('/api/school/leave')
+    .set('Authorization', `Bearer ${token}`).send({ student_id: STUDENT_ID, session });
+  test.each(['teacher', 'school'])('%s full-day leave excludes both rounds and own teacher may undo', async role => {
+    const token = role === 'teacher' ? t1 : schoolToken;
+    const created = await leave(token, 'both');
+    expect(created.status).toBe(201);
+    for (const session of ['morning', 'evening']) {
+      const roster = await request(app).get(`/api/school/teacher-check?session=${session}`).set('Authorization', `Bearer ${token}`);
+      const st = roster.body.data.vehicles.flatMap(v => v.students).find(s => s.id === STUDENT_ID);
+      expect(st).toMatchObject({ on_leave: true, leave_session: 'both', can_undo: true, leave_id: created.body.data.id });
+      expect((await post(token, { session, student_ids: [STUDENT_ID] })).body.data.results[0].result).toBe('on_leave');
+    }
+    expect((await request(app).delete(`/api/school/leaves/${created.body.data.id}`).set('Authorization', `Bearer ${token}`)).status).toBe(200);
+  });
+  test('morning-only leave does not mark evening absent', async () => {
+    expect((await leave(t1, 'morning')).status).toBe(201);
+    const roster = await request(app).get('/api/school/teacher-check?session=evening').set('Authorization', `Bearer ${t1}`);
+    expect(roster.body.data.vehicles.flatMap(v => v.students).find(s => s.id === STUDENT_ID).on_leave).toBe(false);
+  });
+  test.each(['teacher', 'school'])('%s cannot cover existing evening attendance with full-day leave', async role => {
+    await post(t1, { session: 'evening', student_ids: [STUDENT_ID] });
+    expect((await leave(role === 'teacher' ? t1 : schoolToken, 'both')).status).toBe(409);
+  });
+});
+
+describe('bulk time correction', () => {
+  const patch = (token, entries, session = 'morning') => request(app).patch('/api/school/attendance-times')
+    .set('Authorization', `Bearer ${token}`).send({ session, time: '00:00', entries });
+  async function busEntry() {
+    const result = await post(t1, { session: 'morning', student_ids: [STUDENT_ID] });
+    const id = result.body.data.results[0].log_id;
+    const c = await db();
+    await c.query("UPDATE checkin_logs SET checked_at = TIMESTAMP(CURDATE(), '00:05:00') WHERE id = ?", [id]);
+    const [[r]] = await c.query('SELECT checked_at FROM checkin_logs WHERE id = ?', [id]);
+    await c.end();
+    return { kind: 'bus', id, expected_at: r.checked_at.toISOString() };
+  }
+  test.each(['teacher', 'school'])('%s corrects an in-scope batch and updates the snapshot', async role => {
+    const entry = await busEntry();
+    const res = await patch(role === 'teacher' ? t1 : schoolToken, [entry]);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ updated: 1, unchanged: 0, total: 1 });
+    const c = await db();
+    const [[r]] = await c.query("SELECT DATE_FORMAT(morning_ts, '%H:%i') hm FROM daily_status WHERE student_id = ? AND check_date = CURDATE()", [STUDENT_ID]);
+    await c.end(); expect(r.hm).toBe('00:00');
+  });
+  test('stale, wrong-round and foreign-grade entries are refused', async () => {
+    const entry = await busEntry();
+    expect((await patch(t2, [entry])).status).toBe(404);
+    expect((await patch(t1, [{ ...entry, expected_at: '2000-01-01T00:00:00Z' }])).status).toBe(409);
+    expect((await patch(t1, [entry], 'evening')).status).toBe(409);
+  });
+  test('a later invalid row rolls back earlier time and audit changes', async () => {
+    const entry = await busEntry();
+    expect((await patch(t1, [entry, { ...entry, id: 2147483647 }])).status).toBe(404);
+    const c = await db();
+    const [[r]] = await c.query("SELECT DATE_FORMAT(checked_at, '%H:%i') hm FROM checkin_logs WHERE id = ?", [entry.id]);
+    const [[a]] = await c.query("SELECT COUNT(*) n FROM audit_logs WHERE entity_type = 'checkin_time' AND entity_id = ?", [String(entry.id)]);
+    await c.end(); expect(r.hm).toBe('00:05'); expect(a.n).toBe(0);
+  });
+  test('SELF records are corrected without changing attendance kind', async () => {
+    const created = await request(app).post('/api/school/self-travel').set('Authorization', `Bearer ${t1}`)
+      .send({ student_id: STUDENT_ID, session: 'morning' });
+    const id = created.body.data.id; const c = await db();
+    await c.query("UPDATE student_leaves SET created_at = TIMESTAMP(CURDATE(), '00:05:00') WHERE id = ?", [id]);
+    const [[r]] = await c.query('SELECT created_at FROM student_leaves WHERE id = ?', [id]); await c.end();
+    const res = await patch(t1, [{ kind: 'self', id, expected_at: r.created_at.toISOString() }]);
+    expect(res.status).toBe(200); expect(res.body.data.updated).toBe(1);
   });
 });

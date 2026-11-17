@@ -911,7 +911,7 @@ router.post('/leave', async (req, res, next) => {
     }
     const gradeScope = req.user.role === 'school' ? req.user.gradeScope || null : null;
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
-    if (gradeScope && (leave_date && leave_date !== today || !['morning', 'evening'].includes(session))) {
+    if (gradeScope && (leave_date && leave_date !== today)) {
       return sendError(res, 'ครูประจำสายชั้นบันทึกการลาได้เฉพาะรอบวันนี้', [], 403);
     }
 
@@ -921,7 +921,7 @@ router.post('/leave', async (req, res, next) => {
     );
     if (!st) return sendError(res, 'ไม่พบนักเรียนในโรงเรียนนี้', [], 404);
     if (gradeScope && normalizeGrade(st.grade) !== gradeScope) return sendError(res, 'ไม่พบนักเรียนในสายชั้นที่รับผิดชอบ', [], 404);
-    if (gradeScope && (!st.vehicle_id || !(session === 'morning' ? st.morning_enabled : st.evening_enabled))) {
+    if (gradeScope && (!st.vehicle_id || !(session === 'both' ? st.morning_enabled || st.evening_enabled : session === 'morning' ? st.morning_enabled : st.evening_enabled))) {
       return sendError(res, 'นักเรียนไม่ได้ใช้รถในรอบนี้', [], 409);
     }
 
@@ -1174,6 +1174,19 @@ router.post('/teacher-check', async (req, res, next) => {
       ...teacherActor(req, schoolId), session, studentIds: student_ids,
     });
     return sendSuccess(res, result, `บันทึกแล้ว ${result.recorded} คน`, null, 201);
+  } catch (err) { next(err); }
+});
+
+// One transaction: any stale/out-of-scope row rolls back the entire time batch.
+router.patch('/attendance-times', async (req, res, next) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) return sendNoSchool(req, res);
+    const result = await require('../services/attendanceBulkTime.service').correctAttendanceTimes(pool, {
+      ...teacherActor(req, schoolId), session: req.body?.session,
+      time: req.body?.time, entries: req.body?.entries,
+    });
+    return sendSuccess(res, result, `แก้เวลาแล้ว ${result.updated} รายการ`);
   } catch (err) { next(err); }
 });
 

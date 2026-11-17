@@ -172,10 +172,13 @@ export default function AdminDashboard() {
 
       {/* Admin acts on the queues first; the province summary comes second. */}
       <ActionList
-        items={actions}
+        items={actions.filter(item => !['roster', 'deletes'].includes(item.key))}
         emptyText="ไม่มีคำขอหรืองานค้าง ระบบทำงานปกติ"
       />
 
+      <FoldSection title="รอหน่วยงานอื่นและประวัติย้อนหลัง" subtitle="ข้อมูลติดตามเพิ่มเติม ไม่ใช่งานอนุมัติของผู้ดูแล">
+        <ActionList title="" items={actions.filter(item => ['roster', 'deletes'].includes(item.key))} hideWhenEmpty />
+      </FoldSection>
       <StatusHero
         eyebrow="ภาพรวมทั้งจังหวัดวันนี้"
         rounds={[

@@ -1,3 +1,4 @@
+import ReleaseVersion from './ReleaseVersion';
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
@@ -470,7 +471,8 @@ export default function Sidebar({ onClose, collapsed = false }) {
 
       {!collapsed && (
         <div className="px-5 pb-3 shrink-0">
-          <p className="text-[11px] text-navy-300">Copyright © 2026 Natthakarn S. | v2.0</p>
+          <p className="text-[11px] text-navy-300">Copyright © 2026 Natthakarn S.</p>
+          <ReleaseVersion className="mt-1 text-navy-300" />
         </div>
       )}
     </aside>

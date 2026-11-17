@@ -9,7 +9,7 @@ import { ROLE_HOME } from '../App';
 import { PASSWORD_MIN_LENGTH, PASSWORD_HELPER, PASSWORD_TOO_SHORT } from '../utils/passwordPolicy';
 
 export default function ChangePassword() {
-  const { user, loading, updateUser } = useAuth();
+  const { user, loading, updateUser, logout } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -88,8 +88,7 @@ export default function ChangePassword() {
   const forced = !!user.must_change_password;
   const home = ROLE_HOME[user.role] || '/';
   function cancel() {
-    if (window.history.length > 1) navigate(-1);
-    else navigate(home, { replace: true });
+    navigate(home, { replace: true });
   }
 
   return (
@@ -139,9 +138,15 @@ export default function ChangePassword() {
           {!forced && (
             <button type="button" onClick={cancel} disabled={saving}
               className="focus-ring w-full rounded-lg min-h-[48px] border border-surface-border bg-surface-raised hover:bg-surface text-ink font-medium transition disabled:opacity-50">
-              ยกเลิก
+              ยกเลิกกลับหน้าหลัก
             </button>
           )}
+          {forced && <button type="button" disabled={saving}
+            onClick={async () => { setSaving(true); await logout(); navigate('/login', { replace: true }); }}
+            className="focus-ring w-full min-h-[48px] rounded-lg border border-surface-border text-ink disabled:opacity-50">
+            ออกจากระบบ / เปลี่ยนบัญชี
+          </button>}
+          {forced && <p className="text-sm text-ink-muted">หากไม่ทราบรหัสชั่วคราว ให้ติดต่อผู้ดูแลบัญชีที่รีเซ็ตให้คุณ</p>}
         </form>
       </div>
     </div>

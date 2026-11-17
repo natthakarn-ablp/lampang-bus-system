@@ -105,10 +105,15 @@ export default function ForgotPassword() {
 
         {done && (
           <AlertBanner variant="success" className="mt-6" title="รับคำขอแล้ว">
-            หากบัญชีนี้เปิดใช้การกู้คืน ระบบจะส่งลิงก์ไปยัง LINE ที่ผูกไว้ ลิงก์มีอายุ 15 นาที
+            คำขอนี้ยังไม่เปลี่ยนรหัสผ่านเดิม หากบัญชีนี้เปิดใช้การกู้คืน ระบบจะส่งลิงก์ไปยัง LINE ที่ผูกไว้ ลิงก์มีอายุ 15 นาที
           </AlertBanner>
         )}
 
+        <details className="mt-4 rounded-lg border border-surface-border p-3">
+          <summary className="focus-ring min-h-[44px] cursor-pointer text-sm font-semibold text-ink">ยังไม่ผูก LINE หรือไม่ได้รับลิงก์?</summary>
+          <p className="text-sm text-ink-muted my-2">ให้ผู้ดูแลตามสิทธิ์ตั้งรหัสชั่วคราวและส่งให้คุณเป็นการส่วนตัว รหัสชั่วคราวไม่ส่งผ่าน LINE อัตโนมัติ</p>
+          <ul className="space-y-2 text-sm text-ink">{RECOVERY_CONTACTS.map(row => <li key={row.key}><strong>{row.label}:</strong> {row.contact}</li>)}</ul>
+        </details>
         <Link to="/login" className="focus-ring mt-6 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg font-bold text-brand-700 hover:bg-brand-50">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> กลับหน้าเข้าสู่ระบบ
         </Link>

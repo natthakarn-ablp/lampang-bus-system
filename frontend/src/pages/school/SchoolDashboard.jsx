@@ -161,6 +161,7 @@ export default function SchoolDashboard() {
   const dash = dashOk ? data : null;
 
   const vehicles = statusData?.vehicles || [];
+  const actualVehicles = vehicles.filter(v => v.vehicle_id && v.vehicle_id !== '__none');
   const filtered = vehicles.filter(v => !plateSearch || v.plate_no.toLowerCase().includes(plateSearch.toLowerCase()));
 
   // ── Today's numbers ───────────────────────────────────────────────────────
@@ -188,7 +189,7 @@ export default function SchoolDashboard() {
   let heroAction;
   if (hasPending) {
     heroAction = isTeacher
-      ? { label: 'เช็กชื่อวันนี้', to: '/school/teacher-check' }
+      ? undefined
       : { label: 'ดูรถที่ยังค้าง', onClick: () => openFold('vehicles', vehiclesRef) };
   }
 
@@ -207,18 +208,18 @@ export default function SchoolDashboard() {
   ].filter(Boolean);
 
   // ── Buses / pupils still waiting in the round in focus ────────────────────
-  const waitingBuses = vehicles
+  const waitingBuses = actualVehicles
     .map(v => ({ v, r: vehicleRound(v, rankSession) }))
     .filter(x => x.r.pending > 0)
     .sort((a, b) => b.r.pending - a.r.pending);
-  const waitingPupils = vehicles.flatMap(v => (v.students || []).filter(s => (
+  const waitingPupils = actualVehicles.flatMap(v => (v.students || []).filter(s => (
     rankSession === 'evening'
       ? s.evening_enabled && !isEveningLeave(s) && !s.evening_self && !s.evening_done
       : s.morning_enabled && !isMorningLeave(s) && !s.morning_self && !s.morning_done
   )));
   const roundNotRunning = ['not_yet', 'off_day', 'no_riders', 'unavailable'].includes(focusRound.state);
 
-  const rankRows = vehicles
+  const rankRows = actualVehicles
     .map(v => ({ v, r: vehicleRound(v, rankSession) }))
     .filter(x => x.r.expected > 0)
     .sort((a, b) => (b.r.pending - a.r.pending) || (a.r.done / a.r.expected - b.r.done / b.r.expected))
@@ -264,9 +265,9 @@ export default function SchoolDashboard() {
       <div className="space-y-2">
         <RoleChip role="school" />
         <PageHeader
-          title={PAGE_TITLES.SCHOOL_DASHBOARD}
+          title={isTeacher ? `ภาพรวมชั้น ${gradeScope}` : PAGE_TITLES.SCHOOL_DASHBOARD}
           subtitle={data?.school
-            ? `${data.school.name}${data.school.affiliation_name ? ' · ' + data.school.affiliation_name : ''}${gradeScope ? ` · ชั้น ${gradeScope}` : ''}`
+            ? data.school.name
             : null}
           meta={dateText ? `วันที่ ${dateText}` : null}
           icon={Building2}
@@ -344,7 +345,7 @@ export default function SchoolDashboard() {
             />
           </div>
 
-          <ActionList title="ต้องทำวันนี้" items={actions} afterAlert={dashOk && !!day && (day.tone === 'warn' || day.tone === 'danger')} emptyText="วันนี้ไม่มีงานค้าง" />
+          <ActionList title="ข้อมูลที่ควรตรวจสอบ" items={actions} afterAlert={dashOk && !!day && (day.tone === 'warn' || day.tone === 'danger')} emptyText="วันนี้ไม่มีงานค้าง" />
 
           {/* Grade teacher: their own pupils still waiting, and a way to act. */}
           {isTeacher && !roundNotRunning && waitingPupils.length > 0 && (
@@ -353,15 +354,7 @@ export default function SchoolDashboard() {
               sub={`${waitingPupils.length.toLocaleString('th-TH')} คน ยังไม่ยืนยัน`}
               action={<Link to="/school/teacher-check" className="focus-ring inline-flex min-h-[44px] items-center rounded-lg bg-success-ink px-3 text-sm font-semibold text-white">เช็กชื่อวันนี้</Link>}
             >
-              <ul className="flex flex-col divide-y divide-surface-border">
-                {waitingPupils.slice(0, 8).map(s => (
-                  <li key={s.id} className="py-2 text-sm text-ink">
-                    <span className="font-medium">{s.name}</span>
-                    <span className="text-ink-muted"> · {formatGradeClass(s.grade, s.classroom, '')}</span>
-                  </li>
-                ))}
-              </ul>
-              {waitingPupils.length > 8 && <p className="pt-2 text-sm text-ink-muted">และอีก {(waitingPupils.length - 8).toLocaleString('th-TH')} คน ดูทั้งหมดในหน้าเช็กชื่อ</p>}
+              <p className="text-sm text-ink-muted">แยกห้องเรียนและเลือกเช็กชื่อได้ในหน้าเช็กชื่อวันนี้ ไม่รวมผู้ลา มาเอง/กลับเอง และนักเรียนที่ยังไม่ผูกรถ</p>
             </SectionCard>
           )}
 
@@ -397,12 +390,12 @@ export default function SchoolDashboard() {
           </StatGrid>
 
           {/* Two charts: the last school days, and the buses to chase now */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FoldSection title="แนวโน้มและรายรถ" subtitle="ข้อมูลประกอบ · กดเพื่อดู"><section className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <DayBars
               title="การรับส่ง 7 วันล่าสุด (%)"
-              days={recentDays || []}
+              days={(recentDays || []).map(row => row.today ? { ...row, a: dashOk && morning.expected > 0 && morning.state !== 'conflict' ? pctOf(morning.done, morning.expected) : null, b: dashOk && evening.expected > 0 && evening.state !== 'conflict' ? pctOf(evening.done, evening.expected) : null } : row)}
               failed={recentDays === RECENT_DAYS_FAILED}
-              note="แสดงเฉพาะวันที่มีการเช็กชื่อ"
+              note="วันนี้ใช้จำนวนผู้ใช้รถที่คาดหมายเดียวกับสรุปรอบด้านบน · วันก่อนใช้ข้อมูลรายงานของวันนั้น"
             />
             <RankBars
               title={`รายรถวันนี้ (${rankSession === 'evening' ? 'รอบเย็น' : 'รอบเช้า'})`}
@@ -411,7 +404,7 @@ export default function SchoolDashboard() {
               link={{ label: 'ดูรถทั้งหมด', to: '/school/vehicles' }}
               empty={failed.status ? UNAVAILABLE_SUB : 'ยังไม่มีรถที่มีนักเรียนในรอบนี้'}
             />
-          </section>
+          </section></FoldSection>
 
           {/* Details — folded */}
           <section className="space-y-3">
@@ -420,7 +413,7 @@ export default function SchoolDashboard() {
                 key={`vehicles-${forced.vehicles}`}
                 defaultOpen={forced.vehicles > 0}
                 title={SECTION_TITLES.VEHICLE_STATUS}
-                subtitle={failed.status ? `— คัน · ${UNAVAILABLE_SUB}` : `${vehicles.length} คัน · กดเพื่อดูรายชื่อนักเรียนในแต่ละคัน`}
+                subtitle={failed.status ? `— คัน · ${UNAVAILABLE_SUB}` : `${actualVehicles.length} คัน · กดเพื่อดูรายชื่อนักเรียนในแต่ละคัน (แยกกลุ่มยังไม่มีรถ)`}
               >
                 {failed.status ? (
                   <p className="py-8 text-center text-ink-muted">{UNAVAILABLE_SUB}</p>

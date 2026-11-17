@@ -350,7 +350,7 @@ export default function AffiliationDashboard() {
             {offDay && <p className="mt-4 text-sm text-ink-muted">วันนี้เป็นวันหยุด ไม่ต้องติดตามโรงเรียน</p>}
           </StatusHero>
 
-          <ActionList items={todos} afterAlert={day.tone === 'warn' || day.tone === 'danger'} />
+          <ActionList title="งานติดตามโรงเรียนและข้อมูลที่ควรตรวจสอบ" items={todos} afterAlert={day.tone === 'warn' || day.tone === 'danger'} />
 
           <div ref={foldRefs.schools}>
             <SectionCard

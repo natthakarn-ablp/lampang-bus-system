@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, ChevronRight } from 'lucide-react';
 import { tone } from '../ui/tone';
@@ -21,12 +22,14 @@ const ORDER = { danger: 0, warn: 1, info: 2, neutral: 3, success: 4 };
  *   afterAlert    → neutral "ไม่มีงานอื่นค้าง นอกจากที่แจ้งด้านบน"
  *   otherwise     → one calm green `emptyText` line ('ไม่มีงานค้าง')
  */
-export default function ActionList({ title = 'ต้องทำวันนี้', items = [], max = 6, hideWhenEmpty = false, afterAlert = false, emptyText = 'ไม่มีงานค้าง', className = '' }) {
-  const shown = items
+export default function ActionList({ title = 'ต้องทำวันนี้', items = [], max = 3, hideWhenEmpty = false, afterAlert = false, emptyText = 'ไม่มีงานค้าง', className = '' }) {
+  const [expanded, setExpanded] = useState(false);
+  const all = items
     .filter(i => i && (i.unavailable || i.keepZero || Number(i.count) > 0))
     .map((i, idx) => ({ ...i, _idx: idx }))
     .sort((a, b) => ((ORDER[a.tone] ?? 3) - (ORDER[b.tone] ?? 3)) || (a._idx - b._idx))
-    .slice(0, max);
+    ;
+  const shown = expanded ? all : all.slice(0, max);
 
   if (shown.length === 0 && hideWhenEmpty) return null;
 
@@ -47,6 +50,10 @@ export default function ActionList({ title = 'ต้องทำวันนี�
           {shown.map(item => <ActionRow key={item.key || item._idx} item={item} />)}
         </ul>
       )}
+      {all.length > max && <button type="button" onClick={() => setExpanded(value => !value)} aria-expanded={expanded}
+        className="focus-ring self-start min-h-[44px] px-3 text-sm font-semibold text-brand-700">
+        {expanded ? 'ย่อรายการ' : `ดูงานทั้งหมด (${all.length})`}
+      </button>}
     </section>
   );
 }

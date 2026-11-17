@@ -37,3 +37,19 @@ test.each([
   await expect(correctAttendanceTimes(pool, { ...options(), ...invalid })).rejects.toMatchObject({ statusCode: 400 });
   expect(pool.getConnection).not.toHaveBeenCalled();
 });
+
+test('scoped time-order conflict identifies batch position and preserves rollback', async () => {
+  correctTeacherCheckTime.mockRejectedValueOnce(Object.assign(new Error('order'), {
+    statusCode: 409, errors: [{ code: 'EVENT_TIME_ORDER', earliest_time: '08:15', latest_time: null }],
+  }));
+  await expect(correctAttendanceTimes(pool, options())).rejects.toMatchObject({
+    statusCode: 409, errors: [{ code: 'EVENT_TIME_ORDER', entry_index: 0, earliest_time: '08:15', latest_time: null }],
+  });
+  expect(conn.rollback).toHaveBeenCalledTimes(1); expect(conn.commit).not.toHaveBeenCalled();
+  expect(correctSelfTravelTime).not.toHaveBeenCalled();
+});
+test('scope denial is not enriched with row identifiers', async () => {
+  correctTeacherCheckTime.mockRejectedValueOnce(Object.assign(new Error('not found'), { statusCode: 404 }));
+  await correctAttendanceTimes(pool, options()).then(() => { throw new Error('expected denial'); }, error => { expect(error.statusCode).toBe(404); expect(error.errors).toBeUndefined(); });
+  expect(conn.commit).not.toHaveBeenCalled();
+});

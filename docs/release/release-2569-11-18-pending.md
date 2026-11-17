@@ -24,7 +24,7 @@ PRเก่าที่ถูกแทนจะปิดหลังrelease PR�
 
 ## การทดสอบและเผยแพร่
 Synthetic browser: pretrip400/500ต้องไม่มีปุ่มบันทึก, retryแล้วบันทึกครั้งเดียว, publichistory/helpทุกบริบท, policydraftไม่มีPOSTack, ErrorBoundaryไม่reloadเอง; role announcementและattendance regressionเดิม;6captureใหม่มีmetrics0 และintentionalHTTP500แยกจากnetwork errors
-Focused backend20testsผ่านก่อนcommit FullLinuxCI/strictgates/fullruntime/secret scanและexactmergepushCIต้องผ่านก่อน guardeddeploy scripts/deploy-backend.sh บนfeatแบบfast-forward สำรอง/verifyDBก่อน deploy เก็บbackendrollbackrefและfrontenddist.prev ไม่มีmigrationใหม่หรือproductionข้อมูลเด็ก/รหัส/LINE test writes
+Focused backend21testsผ่านก่อนcommit FullLinuxCI/strictgates/fullruntime/secret scanและexactmergepushCIต้องผ่านก่อน guardeddeploy scripts/deploy-backend.sh บนfeatแบบfast-forward สำรอง/verifyDBก่อน deploy เก็บbackendrollbackrefและfrontenddist.prev ไม่มีmigrationใหม่หรือproductionข้อมูลเด็ก/รหัส/LINE test writes
 
 ## สิ่งที่ยังต้องยืนยัน ไม่ได้ทำโดยเดา
 - ชื่อผู้ใช้จริงของภาพผูกรถหลายคัน: บัญชีที่ตรวจตามคำบอกก่อนหน้าไม่มีซ้ำ จึงไม่ตัด/ย้ายการมอบหมายจริง

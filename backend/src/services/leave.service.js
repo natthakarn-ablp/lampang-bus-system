@@ -75,7 +75,7 @@ async function createLeave({ studentId, vehicleId, leaveDate, session, reason, u
           AND cancelled = FALSE AND (? = 'both' OR session IN (?, 'both')) LIMIT 1`,
         [studentId, leaveDate, session, session]
       );
-      if (leave) { const err = new Error('มีรายการลาหรือเดินทางแล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err; }
+      if (leave) { const err = new Error(driverToday ? 'นักเรียนคนนี้ถูกบันทึกการลาในวันนี้แล้ว กรุณาโหลดรายชื่อใหม่' : 'มีรายการลาหรือเดินทางแล้ว กรุณาโหลดรายชื่อใหม่'); err.statusCode = 409; throw err; }
     }
 
     let result;

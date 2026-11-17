@@ -9,13 +9,14 @@ jest.mock('../src/utils/audit', () => ({ logAudit: jest.fn() }));
 const { createLeave } = require('../src/services/leave.service');
 const { todayBangkok } = require('../src/utils/thaiTime');
 
-function makeConn({ student, checked }) {
+function makeConn({ student, checked, leave }) {
   const inserts = [];
   const conn = {
     query: jest.fn(async (sql) => {
       if (/FROM students/.test(sql)) return [[student]];
       if (/attendance_kind = 'SELF'/.test(sql)) return [[]];
       if (/FROM checkin_logs/.test(sql)) return [[checked]];
+      if (/FROM student_leaves/.test(sql)) return [[leave]];
       if (/INSERT INTO student_leaves/.test(sql)) { inserts.push(sql); return [{ insertId: 9 }]; }
       return [[]];
     }),
@@ -49,4 +50,11 @@ describe('driver createLeave (no gradeScope)', () => {
     mockGetConnection.mockResolvedValue(conn);
     await expect(createLeave({ ...base, leaveDate: todayBangkok() })).resolves.toMatchObject({ id: 9 });
   });
+  test('duplicate leave remains a clear Thai409 without inserting another row', async () => {
+    const conn = makeConn({ student, checked: undefined, leave: { id: 7 } });
+    mockGetConnection.mockResolvedValue(conn);
+    await expect(createLeave({ ...base, leaveDate: todayBangkok() })).rejects.toMatchObject({ statusCode: 409, message: expect.stringMatching(/ถูกบันทึกการลา/) });
+    expect(conn.inserts).toHaveLength(0); expect(conn.commit).not.toHaveBeenCalled(); expect(conn.rollback).toHaveBeenCalled();
+  });
+
 });

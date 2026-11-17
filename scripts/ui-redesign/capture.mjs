@@ -1500,6 +1500,51 @@ async function assertPartialFailureShown(page) {
 
 // path, roles that may view it, which viewports, scenario
 const SHOTS = [
+  ...['school', 'teacher'].map(user => ({
+    id: `attendance-bulk-full-day-${user}`, url: '/school/teacher-check?session=morning', user, vps: ['mobile', 'desktop'],
+    act: async page => {
+      const writes = [];
+      const students = [
+        { id: 201, name: 'นักเรียนตัวอย่างหนึ่ง', grade: 'ป.1', classroom: '1', done: true, status: 'CHECKED_OUT', log_id: 201, checked_at: '2026-11-17T01:00:00Z' },
+        { id: 202, name: 'นักเรียนตัวอย่างสอง', grade: 'ป.1', classroom: '1', done: false },
+        { id: 203, name: 'นักเรียนตัวอย่างสาม', grade: 'ป.1', classroom: '2', done: true, status: 'CHECKED_OUT', log_id: 203, checked_at: '2026-11-17T01:00:00Z' },
+      ];
+      await page.route('**/api/school/teacher-check*', route => route.fulfill({ json: { success: true, data: {
+        vehicles: [{ vehicle_id: 'V-test', plate_no: 'รถตัวอย่าง', students }], homerooms: [],
+      } } }));
+      await page.route('**/api/school/attendance-times', async route => {
+        const body = route.request().postDataJSON(); writes.push({ path: 'time', body });
+        await route.fulfill({ json: { success: true, data: { updated: body.entries.length } } });
+      });
+      await page.route('**/api/school/leave', async route => {
+        const body = route.request().postDataJSON(); writes.push({ path: 'leave', body });
+        Object.assign(students[1], { on_leave: true, leave_session: body.session });
+        await route.fulfill({ status: 201, json: { success: true, data: { id: 202 } } });
+      });
+      await page.reload({ waitUntil: 'networkidle' });
+      if (user === 'school') await page.getByLabel('สายชั้นที่ต้องการเช็กชื่อ').selectOption('ป.1');
+      await page.getByRole('button', { name: 'ปรับเวลาเช็กชื่อทั้งสายชั้น / ห้อง', exact: true }).click();
+      const dialog = page.getByRole('alertdialog', { name: 'ปรับเวลาเช็กชื่อทั้งสายชั้น' });
+      await dialog.getByText('จะปรับ 2 รายการ', { exact: false }).waitFor();
+      await dialog.getByLabel('ห้องที่ต้องการปรับเวลา').selectOption({ label: 'ห้อง 1' });
+      await dialog.getByLabel('เวลาใหม่ตามที่เกิดขึ้นจริง').fill('08:15');
+      await dialog.getByRole('button', { name: 'บันทึกเวลา 1 รายการ', exact: true }).click();
+      await dialog.waitFor({ state: 'hidden' });
+      if (JSON.stringify(writes[0].body.entries.map(e => e.id)) !== '[201]' || writes[0].body.session !== 'morning') throw new Error('bulk time selection crossed room/round');
+      if (await page.getByLabel('เมื่อเลือกลา').inputValue() !== 'both') throw new Error('full-day leave is not the default');
+      await page.getByRole('button', { name: 'เลือกลา นักเรียนตัวอย่างสอง', exact: true }).click();
+      await page.getByRole('button', { name: 'ยืนยันรายคน นักเรียนตัวอย่างสอง', exact: true }).click();
+      await page.getByText('ลาทั้งวันแล้ว', { exact: true }).waitFor();
+      if (writes.at(-1).body.session !== 'both') throw new Error('full-day leave was not persisted as both');
+      await page.getByRole('tab', { name: 'เย็น · กลับบ้าน', exact: true }).click();
+      await page.getByText('ลาทั้งวันแล้ว', { exact: true }).waitFor();
+      if (await page.getByRole('button', { name: 'ยืนยันรายคน นักเรียนตัวอย่างสอง', exact: true }).count()) throw new Error('full-day absent pupil can be checked on return');
+      // Keep the new dialog open so the standard tap/focus/overflow audit also measures it.
+      await page.getByRole('button', { name: 'ปรับเวลาเช็กชื่อทั้งสายชั้น / ห้อง', exact: true }).click();
+    },
+    expect: ['[role=alertdialog]', 'text=ปรับเวลาเช็กชื่อทั้งสายชั้น', 'input[type=time]'],
+  })),
+
   ...['school', 'teacher'].flatMap(user => ['morning', 'evening'].map(session => ({
     id: `attendance-self-${user}-${session}`, url: `/school/teacher-check?session=${session}`, user, vps: ['mobile', 'desktop'],
     act: async page => {
@@ -1524,6 +1569,8 @@ const SHOTS = [
       });
       await page.reload({ waitUntil: 'networkidle' });
       if (user === 'school') await page.getByLabel('สายชั้นที่ต้องการเช็กชื่อ').selectOption('ป.1');
+      // Preserve explicit half-day coverage now that the default is full-day.
+      await page.getByLabel('เมื่อเลือกลา').selectOption(session);
       const selfLabel = session === 'morning' ? 'มาเอง' : 'กลับเอง';
       await page.getByRole('button', { name: `${selfLabel} นักเรียนหนึ่ง`, exact: true }).click();
       await page.getByRole('button', { name: 'เลือกลา นักเรียนสอง', exact: true }).click();

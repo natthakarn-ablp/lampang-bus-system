@@ -342,7 +342,7 @@ export default function ClassroomCheck() {
         })}
 
         <ConfirmDialog open={Boolean(confirmRoom)} tone="brand" title="บันทึกทั้งห้อง?"
-          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: ใช้รถ ${confirmRoom.presentIds.length} คน · ${confirmRoom.session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${confirmRoom.selfIds.length} คน · ลา${confirmRoom.leaveSession === 'both' ? 'ทั้งวัน' : 'เฉพาะรอบ'} ${confirmRoom.leaveIds.length} คน ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็กเป็นชุด ไม่ได้ยืนยันเวลาจริงรายคน` : ''}
+          description={confirmRoom ? `${confirmRoom.grade} ห้อง ${confirmRoom.room} รอบ${SESSIONS[confirmRoom.session].label}: ใช้รถ ${confirmRoom.presentIds.length} คน · ${confirmRoom.session === 'morning' ? 'มาเอง' : 'กลับเอง'} ${confirmRoom.selfIds.length} คน · ลา ${confirmRoom.leaveIds.length} คน (${confirmRoom.leaveSession === 'both' ? 'ทั้งวัน' : 'เฉพาะรอบ'}) ระบบจะบันทึกเฉพาะรายชื่อที่ยังไม่เช็กเป็นชุด ไม่ได้ยืนยันเวลาจริงรายคน` : ''}
           confirmLabel="ยืนยันบันทึกทั้งห้อง" loading={saving} onConfirm={saveRoom}
           onCancel={() => { if (!saving) setConfirmRoom(null); }} />
         {bulkTime && <AttendanceBulkTimeDialog rooms={visibleRooms} grade={activeGrade} session={session}

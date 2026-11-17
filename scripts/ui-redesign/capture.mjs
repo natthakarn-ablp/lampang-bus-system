@@ -1473,8 +1473,9 @@ const PRINT_MEASURE = `(() => {
 async function assertPartialFailureShown(page) {
   const found = await page.evaluate(() => {
     const kpi = document.querySelector('section[aria-label="ตัวเลขหลักวันนี้"], section[aria-label="ตัวเลขประกอบวันนี้"]');
+    const todoTitle = location.pathname.startsWith('/school') ? 'ข้อมูลที่ควรตรวจสอบ' : 'งานติดตามโรงเรียนและข้อมูลที่ควรตรวจสอบ';
     const todo = [...document.querySelectorAll('section')]
-      .find(sec => sec.querySelector(':scope > h2')?.textContent.trim() === 'ต้องทำวันนี้');
+      .find(sec => sec.querySelector(':scope > h2')?.textContent.trim() === todoTitle);
     const leaves = el => (el ? [...el.querySelectorAll('*')].filter(n => n.children.length === 0) : []);
     const texts = [...leaves(kpi), ...leaves(todo)].map(n => n.textContent.trim());
     const attendance = document.querySelector('section[aria-label="แยกการเดินทางและการลา"]');

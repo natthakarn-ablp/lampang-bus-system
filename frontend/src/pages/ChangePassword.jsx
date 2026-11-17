@@ -83,8 +83,8 @@ export default function ChangePassword() {
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
 
-  // sch-09: a forced first-login change keeps the prompt and has no way out;
-  // a voluntary visit (account menu) gets neutral copy and a cancel button.
+  // A forced first-login change cannot enter protected pages; logout remains
+  // available. A voluntary visit can return directly to the role home.
   const forced = !!user.must_change_password;
   const home = ROLE_HOME[user.role] || '/';
   function cancel() {

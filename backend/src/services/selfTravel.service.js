@@ -83,7 +83,8 @@ async function undoSelfTravel(pool, { id, schoolId, gradeFilter, userId }) {
   finally { conn.release(); }
 }
 
-async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, time, ipAddress = null, userAgent = null, connection = null, expectedAt = null, expectedSession = null }) {
+async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, time, ipAddress = null, userAgent = null, connection = null, expectedAt = null, expectedSession = null, checkDate = null }) {
+  if (checkDate !== null) require('./backdatedAttendance.service').assertBackdateWindow(checkDate);
   if (!Number.isSafeInteger(id) || id < 1 || !schoolId || !userId) fail('รายการไม่ถูกต้อง', 400);
   if (typeof time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) fail('กรุณาระบุเวลาแบบ HH:mm', 400);
   const conn = connection || await pool.getConnection();
@@ -106,13 +107,13 @@ async function correctSelfTravelTime(pool, { id, schoolId, gradeFilter, userId, 
               DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS old_local,
               DATE_FORMAT(created_at, '%H:%i') AS old_time
          FROM student_leaves WHERE id = ? AND student_id = ? AND attendance_kind = 'SELF'
-           AND cancelled = FALSE AND leave_date = CURDATE() FOR UPDATE`, [id, student.id]);
-    if (!record) fail('แก้เวลาได้เฉพาะรายการมาเองหรือกลับเองของวันนี้', 409);
+           AND cancelled = FALSE AND leave_date = ${checkDate ? '?' : 'CURDATE()'} FOR UPDATE`, [id, student.id, ...(checkDate ? [checkDate] : [])]);
+    if (!record) fail(checkDate ? 'รายการมาเอง/กลับเองไม่ตรงกับวันที่ย้อนหลังที่เลือก' : 'แก้เวลาได้เฉพาะรายการมาเองหรือกลับเองของวันนี้', 409);
     if ((expectedSession && record.session !== expectedSession) || (expectedAt && new Date(record.created_at).getTime() !== new Date(expectedAt).getTime())) fail('รายการเปลี่ยนไปแล้ว กรุณาโหลดรายชื่อใหม่', 409);
     const windowError = sessionTimeError(record.session, time);
     if (windowError) fail(windowError, 400);
     const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
-    if (time > clock.now_hm) fail('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
+    if (!checkDate && time > clock.now_hm) fail('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
     if (time === record.old_time) {
       if (!connection) await conn.commit();
       return { id, recorded_at: record.created_at, unchanged: true };

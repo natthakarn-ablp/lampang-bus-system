@@ -39,9 +39,9 @@ async function login(creds) {
 
 async function clean(conn) {
   const ids = [STUDENT_ID, OTHER_STUDENT];
-  await conn.query('DELETE FROM checkin_logs   WHERE student_id IN (?) AND check_date = CURDATE()', [ids]);
-  await conn.query('DELETE FROM daily_status   WHERE student_id IN (?) AND check_date = CURDATE()', [ids]);
-  await conn.query('DELETE FROM student_leaves WHERE student_id IN (?) AND leave_date = CURDATE()', [ids]);
+  await conn.query('DELETE FROM checkin_logs   WHERE student_id IN (?) AND check_date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)', [ids]);
+  await conn.query('DELETE FROM daily_status   WHERE student_id IN (?) AND check_date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)', [ids]);
+  await conn.query('DELETE FROM student_leaves WHERE student_id IN (?) AND leave_date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)', [ids]);
   await conn.query('DELETE FROM notifications  WHERE student_id IN (?)', [ids]);
   await conn.query(
     `DELETE FROM audit_logs WHERE entity_type IN ('checkin_teacher','checkin','checkin_time','self_travel','self_travel_time')
@@ -507,5 +507,72 @@ describe('bulk time correction', () => {
     const [[r]] = await c.query('SELECT created_at FROM student_leaves WHERE id = ?', [id]); await c.end();
     const res = await patch(t1, [{ kind: 'self', id, expected_at: r.created_at.toISOString() }]);
     expect(res.status).toBe(200); expect(res.body.data.updated).toBe(1);
+  });
+});
+
+
+describe('backdated bulk time correction (real HTTP and isolated MySQL)', () => {
+  async function fixture() {
+    const result = await post(t1, { session: 'morning', student_ids: [STUDENT_ID] });
+    const id = result.body.data.results[0].log_id;
+    const c = await db();
+    const [[day]] = await c.query("SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 DAY), '%Y-%m-%d') d");
+    await c.query("UPDATE checkin_logs SET check_date = ?, checked_at = TIMESTAMP(?, '08:00:00') WHERE id = ?", [day.d, day.d, id]);
+    await c.query("UPDATE daily_status SET check_date = ?, morning_ts = TIMESTAMP(?, '08:00:00') WHERE student_id = ? AND check_date = CURDATE()", [day.d, day.d, STUDENT_ID]);
+    const [[r]] = await c.query('SELECT checked_at FROM checkin_logs WHERE id = ?', [id]);
+    const [[notice]] = await c.query('SELECT COUNT(*) n FROM notifications WHERE student_id = ?', [STUDENT_ID]);
+    await c.end(); return { notices: notice.n, date: day.d, entry: { kind: 'bus', id, expected_at: r.checked_at.toISOString() } };
+  }
+  const patch = (token, f, entries = [f.entry], checkDate = f.date) => request(app).patch('/api/school/attendance-times')
+    .set('Authorization', `Bearer ${token}`).send({ check_date: checkDate, session: 'morning', time: '08:15', entries });
+  test.each(['teacher','school'])('%s changes historical time and snapshot only, with audit and no notification', async role => {
+    const f = await fixture();
+    const token = role === 'teacher' ? t1 : schoolToken;
+    const roster = await request(app).get(`/api/school/backdated-attendance?date=${f.date}`).set('Authorization', `Bearer ${token}`);
+    expect(roster.status).toBe(200);
+    const pupil = roster.body.data.students.find(s => s.id === STUDENT_ID);
+    expect(pupil.morning.logs.at(-1)).toMatchObject({ log_id: f.entry.id, checked_at: f.entry.expected_at });
+    const res = await patch(token, f); expect(res.status).toBe(200); expect(res.body.data.updated).toBe(1);
+    const c = await db();
+    const [[row]] = await c.query("SELECT DATE_FORMAT(check_date,'%Y-%m-%d') d, DATE_FORMAT(checked_at,'%H:%i') hm, status FROM checkin_logs WHERE id = ?", [f.entry.id]);
+    const [[daily]] = await c.query("SELECT DATE_FORMAT(morning_ts,'%H:%i') hm FROM daily_status WHERE student_id = ? AND check_date = ?", [STUDENT_ID, f.date]);
+    const [[audit]] = await c.query("SELECT COUNT(*) n FROM audit_logs WHERE entity_type = 'checkin_time' AND entity_id = ?", [String(f.entry.id)]);
+    const [[notice]] = await c.query('SELECT COUNT(*) n FROM notifications WHERE student_id = ?', [STUDENT_ID]);
+    await c.end(); expect(row).toEqual({ d: f.date, hm: '08:15', status: 'CHECKED_OUT' }); expect(daily.hm).toBe('08:15'); expect(audit.n).toBe(1); expect(notice.n).toBe(f.notices);
+  });
+  test('wrong grade, stale time, other date and omitted past date cannot write', async () => {
+    const f = await fixture();
+    expect((await patch(t2, f)).status).toBe(404);
+    expect((await patch(t1, f, [{ ...f.entry, expected_at: '2000-01-01T00:00:00Z' }])).status).toBe(409);
+    const older = new Date(Date.parse(f.date + 'T00:00:00Z') - 86400000).toISOString().slice(0,10);
+    expect((await patch(t1, f, [f.entry], older)).status).toBe(409);
+    const res = await request(app).patch('/api/school/attendance-times').set('Authorization', `Bearer ${t1}`).send({ session:'morning',time:'08:15',entries:[f.entry] });
+    expect(res.status).toBe(409);
+  });
+  test('historical SELF remains SELF, with exact roster snapshot; LEAVE cannot be corrected', async () => {
+    const created = await request(app).post('/api/school/self-travel').set('Authorization', `Bearer ${t1}`)
+      .send({student_id:STUDENT_ID,session:'morning'});
+    expect(created.status).toBe(201);
+    const id=created.body.data.id; const c=await db();
+    const [[day]]=await c.query("SELECT DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 DAY),'%Y-%m-%d') d");
+    await c.query("UPDATE student_leaves SET leave_date=?,created_at=TIMESTAMP(?,'08:00:00') WHERE id=?",[day.d,day.d,id]);
+    const [[row]]=await c.query('SELECT created_at FROM student_leaves WHERE id=?',[id]); await c.end();
+    const roster=await request(app).get(`/api/school/backdated-attendance?date=${day.d}`).set('Authorization',`Bearer ${t1}`);
+    expect(roster.body.data.students.find(s=>s.id===STUDENT_ID).morning).toMatchObject({leave:'SELF',self_id:id,self_session:'morning',self_recorded_at:row.created_at.toISOString()});
+    const f={date:day.d,entry:{kind:'self',id,expected_at:row.created_at.toISOString()}};
+    expect((await patch(t1,f)).status).toBe(200);
+    const verify=await db();
+    const [[record]]=await verify.query("SELECT attendance_kind,cancelled,DATE_FORMAT(leave_date,'%Y-%m-%d') d,DATE_FORMAT(created_at,'%H:%i') hm FROM student_leaves WHERE id=?",[id]);
+    expect(record).toMatchObject({attendance_kind:'SELF',cancelled:0,d:day.d,hm:'08:15'});
+    await verify.query("UPDATE student_leaves SET attendance_kind='LEAVE' WHERE id=?",[id]);await verify.end();
+    expect((await patch(t1,f)).status).toBe(409);
+  });
+  test('invalid second record rolls back historical time and audit', async () => {
+    const f = await fixture();
+    expect((await patch(t1, f, [f.entry, {...f.entry, id:2147483647}])).status).toBe(404);
+    const c = await db();
+    const [[row]] = await c.query("SELECT DATE_FORMAT(checked_at,'%H:%i') hm FROM checkin_logs WHERE id=?",[f.entry.id]);
+    const [[audit]] = await c.query("SELECT COUNT(*) n FROM audit_logs WHERE entity_type='checkin_time' AND entity_id=?",[String(f.entry.id)]);
+    await c.end(); expect(row.hm).toBe('08:00'); expect(audit.n).toBe(0);
   });
 });

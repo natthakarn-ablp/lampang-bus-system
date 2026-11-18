@@ -4,7 +4,10 @@ const { correctTeacherCheckTime } = require('./checkin.service');
 const { correctSelfTravelTime } = require('./selfTravel.service');
 function fail(message, statusCode) { const e = new Error(message); e.statusCode = statusCode; throw e; }
 
-async function correctAttendanceTimes(pool, { schoolId, gradeFilter = null, userId, session, time, entries, ipAddress, userAgent }) {
+async function correctAttendanceTimes(pool, { schoolId, gradeFilter = null, userId, session, time, entries, checkDate = null, ipAddress, userAgent }) {
+  // A past date is an explicit, bounded operation. Omitted date keeps the
+  // existing today-only contract for ordinary attendance and old clients.
+  if (checkDate !== null) require('./backdatedAttendance.service').assertBackdateWindow(checkDate);
   if (!schoolId || !userId || !['morning', 'evening'].includes(session)
       || typeof time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)
       || !Array.isArray(entries) || !entries.length || entries.length > 1000) fail('ข้อมูลปรับเวลาไม่ถูกต้อง (ไม่เกิน 1,000 รายการต่อครั้ง)', 400);
@@ -36,7 +39,7 @@ async function correctAttendanceTimes(pool, { schoolId, gradeFilter = null, user
     let updated = 0;
     for (const e of entries) {
       const options = { schoolId, gradeFilter, userId, time, ipAddress, userAgent,
-        connection: conn, expectedAt: e.expected_at, expectedSession: session };
+        connection: conn, expectedAt: e.expected_at, expectedSession: session, checkDate };
       let result;
       try {
         result = e.kind === 'bus'

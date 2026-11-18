@@ -112,6 +112,9 @@ jobs:
       - name: Install Chromium runtime
         run: npx playwright install --with-deps chromium
         working-directory: frontend
+      - name: Verify normal and backdated bulk time workflows
+        run: node --test --test-concurrency=1 tests/attendanceBulkFlow.browser.test.mjs tests/backdatedBulkTime.browser.test.mjs
+        working-directory: frontend
       - name: Start Vite and capture the synthetic UI matrix
         shell: bash
         run: |

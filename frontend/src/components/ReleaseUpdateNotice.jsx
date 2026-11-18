@@ -32,6 +32,7 @@ export default function ReleaseUpdateNotice({ role, gradeScope = null, className
         <ReleaseVersion className="text-ink-muted" />
         <section aria-label="ปรับปรุงการใช้งานรุ่นใหม่" className="space-y-2">
           <h2 className="font-semibold">สิ่งที่เปลี่ยนในรุ่นนี้</h2>
+          {role === 'school' && <p>หน้าเช็กชื่อย้อนหลัง: เลือกวันที่และรอบ แล้วปรับเวลาทั้งสายชั้นหรือเฉพาะห้องได้ แก้เฉพาะรายการที่บันทึกแล้ว คงสถานะลา/มาเอง/กลับเอง และไม่ส่ง LINE ย้อนหลัง</p>}
           <p>รุ่น 2.2.0: เพิ่มประวัติการอัปเดตและวิธีแจ้งปัญหาในเมนูบัญชี หน้าตรวจรถจะหยุดและแจ้งบัญชีที่มีปัญหาตั้งแต่เปิดหน้า ส่วนหน้านโยบายแยกสิ่งที่รอหน่วยงานยืนยันชัดเจนขึ้น</p>
           <Link to="/updates" className="focus-ring inline-flex items-center min-h-[44px] px-3 rounded-lg border border-brand-200 font-semibold text-brand-700">อ่านประวัติการอัปเดตทั้งหมด</Link>
           <p>ทุกบัญชี: หน้าลืมรหัสชี้แจงว่าคำขอยังไม่เปลี่ยนรหัสเดิม พร้อมวิธีขอความช่วยเหลือเมื่อไม่ผูก LINE หน้าเปลี่ยนรหัสบังคับออกจากระบบเพื่อเปลี่ยนบัญชีได้</p>

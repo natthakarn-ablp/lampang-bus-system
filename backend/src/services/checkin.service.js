@@ -1714,11 +1714,12 @@ async function processTeacherCheck(pool, {
   };
 }
 
-/** Correct today's recorded event time without changing the event or sending another notification. */
+/** Correct an explicitly bounded recorded event time without changing the event or sending another notification. */
 async function correctTeacherCheckTime(pool, {
   userId, ipAddress = null, userAgent = null,
-  schoolId, gradeFilter = null, logId, time, connection = null, expectedAt = null, expectedSession = null,
+  schoolId, gradeFilter = null, logId, time, connection = null, expectedAt = null, expectedSession = null, checkDate = null,
 }) {
+  if (checkDate !== null) require('./backdatedAttendance.service').assertBackdateWindow(checkDate);
   const id = Number(logId);
   if (!Number.isSafeInteger(id) || id <= 0) throw makeError('logId ไม่ถูกต้อง', 400);
   if (typeof time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time)) {
@@ -1750,8 +1751,8 @@ async function correctTeacherCheckTime(pool, {
          FROM checkin_logs WHERE id = ? FOR UPDATE`, [id]
     );
     if (!log || Number(log.student_id) !== Number(student.id)) throw makeError('ไม่พบรายการเช็กชื่อ', 404);
-    if (!Number(log.is_today) || !['CHECKED_IN', 'CHECKED_OUT'].includes(log.status)) {
-      throw makeError('แก้เวลาได้เฉพาะรายการเช็กชื่อของวันนี้', 409);
+    if ((checkDate ? log.check_date !== checkDate : !Number(log.is_today)) || !['CHECKED_IN', 'CHECKED_OUT'].includes(log.status)) {
+      throw makeError(checkDate ? 'รายการไม่ตรงกับวันที่ย้อนหลังที่เลือก' : 'แก้เวลาได้เฉพาะรายการเช็กชื่อของวันนี้', 409);
     }
     if ((expectedSession && log.session !== expectedSession) || (expectedAt && new Date(log.checked_at).getTime() !== new Date(expectedAt).getTime())) {
       throw makeError('รายการเปลี่ยนไปแล้ว กรุณาโหลดรายชื่อใหม่', 409);
@@ -1759,22 +1760,22 @@ async function correctTeacherCheckTime(pool, {
     const windowError = sessionTimeError(log.session, time);
     if (windowError) throw makeError(windowError, 400);
     const [[clock]] = await conn.query("SELECT TIME_FORMAT(CURTIME(), '%H:%i') AS now_hm");
-    if (time > clock.now_hm) throw makeError('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
+    if (Number(log.is_today) && time > clock.now_hm) throw makeError('เวลาใหม่ต้องไม่อยู่ในอนาคต', 400);
     if (time === log.old_time) {
       if (!connection) await conn.commit();
       return { log_id: id, checked_at: log.checked_at, time_edited: false, unchanged: true };
     }
 
     const [laterVoids] = await conn.query(
-      `SELECT id FROM checkin_logs WHERE student_id = ? AND session = ? AND check_date = CURDATE()
-        AND status = 'CANCELLED' AND id > ? LIMIT 1`, [student.id, log.session, id]
+      `SELECT id FROM checkin_logs WHERE student_id = ? AND session = ? AND check_date = ?
+        AND status = 'CANCELLED' AND id > ? LIMIT 1`, [student.id, log.session, log.check_date, id]
     );
     if (laterVoids.length) throw makeError('รายการนี้ถูกยกเลิกแล้ว จึงแก้เวลาไม่ได้', 409);
     const [otherEvents] = await conn.query(
       `SELECT id, DATE_FORMAT(checked_at, '%H:%i') AS event_time FROM checkin_logs
-        WHERE student_id = ? AND session = ? AND check_date = CURDATE()
+        WHERE student_id = ? AND session = ? AND check_date = ?
           AND status IN ('CHECKED_IN', 'CHECKED_OUT') AND id <> ? ORDER BY id`,
-      [student.id, log.session, id]
+      [student.id, log.session, log.check_date, id]
     );
     const previous = otherEvents.filter(event => Number(event.id) < id).at(-1);
     const next = otherEvents.find(event => Number(event.id) > id);
@@ -1788,8 +1789,8 @@ async function correctTeacherCheckTime(pool, {
     const nextLocal = `${log.check_date} ${time}:00`;
     await conn.query('UPDATE checkin_logs SET checked_at = ? WHERE id = ?', [nextLocal, id]);
     const [[latest]] = await conn.query(
-      `SELECT id FROM checkin_logs WHERE student_id = ? AND session = ? AND check_date = CURDATE()
-        ORDER BY id DESC LIMIT 1`, [student.id, log.session]
+      `SELECT id FROM checkin_logs WHERE student_id = ? AND session = ? AND check_date = ?
+        ORDER BY id DESC LIMIT 1`, [student.id, log.session, log.check_date]
     );
     // The snapshot follows only the newest event, never an earlier boarding
     // that was followed by a separate drop-off event.
@@ -1797,8 +1798,8 @@ async function correctTeacherCheckTime(pool, {
       const col = log.session === 'morning' ? 'morning' : 'evening';
       await conn.query(
         `UPDATE daily_status SET ${col}_ts = ?
-          WHERE check_date = CURDATE() AND student_id = ? AND ${col}_done = TRUE`,
-        [nextLocal, student.id]
+          WHERE check_date = ? AND student_id = ? AND ${col}_done = TRUE`,
+        [nextLocal, log.check_date, student.id]
       );
     }
     await logAudit({

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { History, Sunrise, Sunset } from 'lucide-react';
 import api from '../../api/axios';
 import PageHeader from '../../components/PageHeader';
@@ -10,7 +10,9 @@ import { AlertBanner, AppCard, ConfirmDialog, FilterBar, FormField, Modal, Statu
 import { formatGradeClass } from '../../utils/student';
 import { PageTransition } from '../../lib/motion';
 import { useAuth } from '../../hooks/useAuth';
-import { isGradeTeacher } from '../../utils/authScope';
+import { getGradeScope, isGradeTeacher } from '../../utils/authScope';
+import { attendanceGrade, groupTeacherClassrooms } from '../../utils/classroomAttendance';
+import AttendanceBulkTimeDialog from './AttendanceBulkTimeDialog';
 
 /**
  * เช็กชื่อย้อนหลัง — a school account records a missed check for one of the
@@ -68,38 +70,58 @@ export default function BackdatedAttendance() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [bulkTime, setBulkTime] = useState(false);
+  const requestSeq = useRef(0);
 
   // { student, status } for the record dialog; { student, log } for void
   const [recordFor, setRecordFor] = useState(null);
   const [voidFor, setVoidFor] = useState(null);
 
   const load = useCallback(async () => {
+    const request = ++requestSeq.current;
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/school/backdated-attendance', { params: { date } });
+      const res = await api.get('/school/backdated-attendance', { params: { date }, timeout: 10000 });
+      if (request !== requestSeq.current) return;
       setData(res.data.data);
     } catch (err) {
+      if (request !== requestSeq.current) return;
       setError(err?.response?.data?.message || 'โหลดข้อมูลไม่สำเร็จ');
       setData(null);
     } finally {
-      setLoading(false);
+      if (request === requestSeq.current) setLoading(false);
     }
   }, [date]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return () => { requestSeq.current++; }; }, [load]);
+
+  const currentData = data?.check_date === date ? data : null;
+  const grades = [...new Set((currentData?.students || []).map(s => attendanceGrade(s.grade)))];
+  const activeGrade = teacher ? attendanceGrade(getGradeScope(user)) : selectedGrade;
+  const bulkRooms = useMemo(() => groupTeacherClassrooms([{ students: (currentData?.students || [])
+    .filter(s => s[session]?.enabled && attendanceGrade(s.grade) === activeGrade)
+    .map(s => {
+      const round = s[session];
+      const latest = round.logs?.at(-1);
+      return { ...s, on_leave: round.leave === 'LEAVE', self_travel: round.leave === 'SELF',
+        self_id: round.self_session === session ? round.self_id : null, self_recorded_at: round.self_recorded_at,
+        log_id: latest?.log_id, checked_at: latest?.checked_at };
+    }) }]), [currentData, session, activeGrade]);
 
   const minDate = data?.min_date || shiftDate(bangkokToday(), -7);
   const maxDate = data?.max_date || shiftDate(bangkokToday(), -1);
   const meta = SESSION_META[session];
 
   const rows = useMemo(() => {
-    const list = (data?.students || []).filter(s => s[meta.enabledKey]?.enabled);
+    const list = (currentData?.students || []).filter(s => s[meta.enabledKey]?.enabled
+      && (!activeGrade || attendanceGrade(s.grade) === activeGrade));
     const q = filter.trim().toLowerCase();
     if (!q) return list;
     return list.filter(s =>
       `${s.name} ${s.grade || ''} ${s.classroom || ''} ${s.plate_no || ''}`.toLowerCase().includes(q));
-  }, [data, filter, meta.enabledKey]);
+  }, [currentData, filter, meta.enabledKey, activeGrade]);
 
   const doneCount = rows.filter(s => s[session].done).length;
 
@@ -108,18 +130,19 @@ export default function BackdatedAttendance() {
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
       <PageHeader
         title="เช็กชื่อย้อนหลัง"
-        subtitle={`บันทึกการขึ้น-ลงรถที่ตกหล่นย้อนหลังได้ไม่เกิน ${data?.max_days ?? 7} วัน ต้องระบุเวลาและเหตุผลทุกครั้ง`}
+        subtitle={`บันทึกการขึ้น-ลงรถที่ตกหล่นย้อนหลังได้ไม่เกิน ${data?.max_days ?? 7} วัน การบันทึกใหม่ต้องระบุเวลาและเหตุผล ส่วนปรับเวลารวมไม่ต้องระบุเหตุผล`}
         icon={History}
       />
 
       <AlertBanner variant="info" title="ข้อควรทราบ">
-        รายการย้อนหลังจะไม่ส่งแจ้งเตือน LINE ถึงผู้ปกครอง และถูกเก็บในประวัติการแก้ไขพร้อมชื่อผู้บันทึกและเหตุผล
+        รายการย้อนหลังจะไม่ส่งแจ้งเตือน LINE ถึงผู้ปกครอง และถูกเก็บในประวัติพร้อมผู้บันทึก · การปรับเวลารวมเก็บเวลาเดิมและเวลาใหม่อัตโนมัติ
         {teacher
           ? ' · รายการของวันนี้ให้ใช้หน้า “เช็กชื่อวันนี้” · หากบันทึกผิด แจ้งบัญชีโรงเรียนให้ยกเลิกรายการ'
           : ' · รายการของวันนี้ให้ใช้ปุ่ม “ยืนยันแทนคนขับ” ที่หน้าแรก'}
       </AlertBanner>
 
       <AppCard>
+        <fieldset disabled={bulkTime || !!recordFor || !!voidFor}>
         <FormField
           label="วันที่"
           type="date"
@@ -147,6 +170,20 @@ export default function BackdatedAttendance() {
           countLabel="คน"
           onClear={() => setFilter('')}
         />
+        {!teacher && <FormField label="สายชั้นที่ต้องการปรับเวลา" className="mt-3">
+          {props => <select {...props} value={selectedGrade} onChange={e => setSelectedGrade(e.target.value)}
+            className="focus-ring w-full min-h-[44px] px-3 rounded-lg border border-surface-border bg-surface-raised text-base text-ink">
+            <option value="">ทุกสายชั้น (เลือกสายชั้นก่อนปรับเวลารวม)</option>
+            {grades.map(grade => <option key={grade} value={grade}>{grade}</option>)}
+          </select>}
+        </FormField>}
+        <button type="button" onClick={() => setBulkTime(true)}
+          disabled={loading || !!error || !currentData || !activeGrade || !bulkRooms.length || !!filter.trim()}
+          className="focus-ring mt-3 min-h-[44px] px-4 rounded-lg border border-brand-700 text-brand-700 text-sm font-semibold disabled:opacity-60">
+          ปรับเวลาเช็กชื่อทั้งสายชั้น / ห้อง
+        </button>
+        {filter.trim() && <p className="text-sm text-ink-muted mt-2">ล้างคำค้นหาก่อนปรับเวลาทั้งสายชั้น / ห้อง</p>}
+        </fieldset>
         <p className="text-sm text-ink mt-3">
           {thaiDate(date)} · {meta.label}
           {data && <span className="text-ink-muted"> · บันทึกแล้ว <span className="tabular-nums">{doneCount}/{rows.length}</span> คน</span>}
@@ -154,7 +191,7 @@ export default function BackdatedAttendance() {
       </AppCard>
 
       <div>
-        {loading ? <LoadingState />
+        {loading || (!currentData && !error) ? <LoadingState />
           : error ? <ErrorState message={error} onRetry={load} />
           : rows.length === 0 ? <EmptyState title="ไม่พบนักเรียนที่ใช้บริการรอบนี้" />
           : (
@@ -187,6 +224,8 @@ export default function BackdatedAttendance() {
           onSaved={() => { setRecordFor(null); toast?.success?.('บันทึกการเช็กชื่อย้อนหลังแล้ว'); load(); }}
         />
       )}
+      {bulkTime && currentData && <AttendanceBulkTimeDialog rooms={bulkRooms} grade={activeGrade} session={session} checkDate={date}
+        onClose={() => setBulkTime(false)} onSaved={load} />}
       {voidFor && (
         <VoidDialog
           {...voidFor}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import api from '../../api/axios';
 import { ConfirmDialog, FormField } from '../../components/ui';
 import { useToast } from '../../components/Toast';
@@ -10,19 +10,21 @@ export function timeEntries(rooms, roomKey = '') {
       expected_at: st.self_travel ? st.self_recorded_at : st.checked_at }));
 }
 
-export default function AttendanceBulkTimeDialog({ rooms, grade, session, onClose, onSaved }) {
+export default function AttendanceBulkTimeDialog({ rooms, grade, session, checkDate, onClose, onSaved }) {
   const toast = useToast();
+  const inFlight = useRef(false);
   const [roomKey, setRoomKey] = useState('');
   const [time, setTime] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const entries = useMemo(() => timeEntries(rooms, roomKey), [rooms, roomKey]);
-  const date = new Date().toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' });
+  const date = (checkDate ? new Date(`${checkDate}T00:00:00+07:00`) : new Date()).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' });
   async function save() {
-    if (saving || !entries.length || !time) return;
+    if (inFlight.current || saving || !entries.length || entries.length > 1000 || !time || error) return;
+    inFlight.current = true;
     setSaving(true); setError('');
     try {
-      const { data } = await api.patch('/school/attendance-times', { session, time, entries });
+      const { data } = await api.patch('/school/attendance-times', { session, time, entries, ...(checkDate ? { check_date: checkDate } : {}) });
       toast.success(`แก้เวลาแล้ว ${data.data.updated} รายการ`);
       await onSaved(); onClose();
     } catch (err) {
@@ -35,7 +37,7 @@ export default function AttendanceBulkTimeDialog({ rooms, grade, session, onClos
       } else {
         setError(err.response?.data?.message || 'ยังยืนยันผลไม่ได้ กรุณาปิดหน้าต่างและโหลดรายชื่อใหม่ก่อนลองอีกครั้ง');
       }
-    } finally { setSaving(false); }
+    } finally { inFlight.current = false; setSaving(false); }
   }
   return <ConfirmDialog open tone="brand" title="ปรับเวลาเช็กชื่อทั้งสายชั้น"
     description={`${date} · ${grade} · รอบ${session === 'morning' ? 'เช้า' : 'กลับ'} แก้เฉพาะเวลารายการที่บันทึกแล้ว ไม่เปลี่ยนสถานะลา และไม่สร้างรายการเช็กชื่อใหม่ ระบบเก็บเวลาเดิมและผู้แก้โดยอัตโนมัติ`}

@@ -1,0 +1,11 @@
+# Release 2.2.1 — backdated bulk attendance time correction
+
+Status: proposed source; not deployed. No migration, production data write, legal activation or LINE notification test.
+
+School accounts choose a grade; grade teachers remain restricted to their own grade. On backdated attendance choose a date within the existing seven-day window and round, then use the shared bulk-time dialog for all rooms or one classroom. Search must be cleared before a bulk operation. Only existing latest bus/SELF records are selected; leave and unrecorded pupils are excluded. No attendance rows are created and SELF/LEAVE status is preserved. Correcting time requires no reason; creating a missed historical attendance row retains its existing mandatory reason.
+
+The existing batch endpoint accepts optional check_date. Omission remains today-only; explicit date is validated on the server and each affected record must match it. Scope, stable student locks, stale snapshots, event ordering, date-specific daily status and required transactional audit stay enforced. Any row failure rolls back the whole batch. No new notification is sent. Keep the existing single-event APIs today-only.
+
+Validation: local 36 browser regressions passed (school/grade, morning/evening, ordinary-day regressions/history/help/release notice), no environmental network failures in successful browser run. Mobile dialog controls >=44px and no overflow. Focused backend3suites23tests pass; build/strict labels/hybrid/page-status/route/nav/diff checks exit0. Full Windows unit run initially blocked by localhost sandbox, then unsandboxed run stopped after no-result hang; do not claim a full local unit PASS. Full Linux CI with disposable MySQL and new HTTP integration tests is required before merge/publication. No local MySQL installer or production DB test is used.
+
+Release needs fresh exact merge CI and separately authorized guarded publication with backup/rollback. Production remains2.2.0/e02b1df while this PR is under review.

@@ -1184,7 +1184,7 @@ router.patch('/attendance-times', async (req, res, next) => {
     if (!schoolId) return sendNoSchool(req, res);
     const result = await require('../services/attendanceBulkTime.service').correctAttendanceTimes(pool, {
       ...teacherActor(req, schoolId), session: req.body?.session,
-      time: req.body?.time, entries: req.body?.entries,
+      time: req.body?.time, entries: req.body?.entries, checkDate: req.body?.check_date ?? null,
     });
     return sendSuccess(res, result, `แก้เวลาแล้ว ${result.updated} รายการ`);
   } catch (err) { next(err); }

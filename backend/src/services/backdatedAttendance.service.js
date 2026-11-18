@@ -147,7 +147,7 @@ async function getBackdatedRoster(pool, { schoolId, gradeFilter = null, checkDat
     [date, ids]
   );
   const [leaves] = await pool.query(
-    `SELECT student_id, session, attendance_kind
+    `SELECT id, student_id, session, attendance_kind, created_at
        FROM student_leaves
       WHERE leave_date = ? AND cancelled = FALSE AND student_id IN (?)`,
     [date, ids]
@@ -160,7 +160,7 @@ async function getBackdatedRoster(pool, { schoolId, gradeFilter = null, checkDat
     const key = `${l.student_id}:${l.session}`;
     const list = live.get(key) || [];
     if (l.status === 'CANCELLED') list.pop();
-    else if (STATUSES.includes(l.status)) list.push({ log_id: l.id, status: l.status, time: hhmm(l.checked_at) });
+    else if (STATUSES.includes(l.status)) list.push({ log_id: l.id, status: l.status, time: hhmm(l.checked_at), checked_at: new Date(l.checked_at).toISOString() });
     live.set(key, list);
   }
   const leaveBy = new Map();
@@ -171,7 +171,7 @@ async function getBackdatedRoster(pool, { schoolId, gradeFilter = null, checkDat
   }
   const leaveFor = (sid, session) => {
     const hit = (leaveBy.get(sid) || []).find(l => l.session === session || l.session === 'both');
-    return hit ? (hit.attendance_kind === 'SELF' ? 'SELF' : 'LEAVE') : null;
+    return hit ? { leave: hit.attendance_kind === 'SELF' ? 'SELF' : 'LEAVE', ...(hit.attendance_kind === 'SELF' ? { self_id: hit.id, self_recorded_at: new Date(hit.created_at).toISOString(), self_session: hit.session } : {}) } : { leave: null };
   };
 
   return {
@@ -187,13 +187,13 @@ async function getBackdatedRoster(pool, { schoolId, gradeFilter = null, checkDat
       morning: {
         enabled: !!s.morning_enabled,
         done: !!s.morning_done,
-        leave: leaveFor(s.id, 'morning'),
+        ...leaveFor(s.id, 'morning'),
         logs: live.get(`${s.id}:morning`) || [],
       },
       evening: {
         enabled: !!s.evening_enabled,
         done: !!s.evening_done,
-        leave: leaveFor(s.id, 'evening'),
+        ...leaveFor(s.id, 'evening'),
         logs: live.get(`${s.id}:evening`) || [],
       },
     })),

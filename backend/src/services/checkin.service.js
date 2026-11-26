@@ -53,7 +53,8 @@ function assertSession(session) {
  * Resolution order (Phase 10.13A-20):
  *   1. If the user is LINKED (users.driver_id set), resolve via the relational
  *      model: driver_vehicle_assignments.driver_id → vehicles (active). Exactly
- *      one active vehicle → return it; multiple → fail closed; zero → fall back.
+ *      one active vehicle → return it; several → the one whose plate is the
+ *      login username, else fail closed; zero → rejected (DP-01).
  *   2. LEGACY fallback (also for unlinked YELLOW users with driver_id NULL):
  *      match the login username to vehicles.plate_no / normalized_plate
  *      (Phase 10.13A-8). normalized_plate is UNIQUE among active vehicles, so at
@@ -132,14 +133,25 @@ async function resolveVehicleShiftIndependent(pool, { username = '', driverId = 
        JOIN   vehicles v ON v.id = dva.vehicle_id AND v.is_deleted = FALSE
        WHERE  dva.driver_id = ? AND dva.is_active = TRUE
        GROUP  BY v.id, v.plate_no
-       LIMIT  2`,
+       LIMIT  50`,
       [driverId]
     );
     if (linked.length === 1) {
       return { vehicle_id: linked[0].vehicle_id, plate_no: linked[0].plate_no, driver_id: Number(driverId), shift_id: null };
     }
     if (linked.length > 1) {
-      // Never guess which vehicle — surface the misconfiguration.
+      // One driver profile shared by several plate accounts (the school added
+      // another vehicle with the same driver name/phone). Each account logs in
+      // AS its plate, so the login itself says which vehicle is meant — but only
+      // among the vehicles this driver is actively assigned to (DP-01 holds).
+      const wanted = normalizePlate(username);
+      const own = wanted
+        ? linked.filter((v) => normalizePlate(String(v.plate_no || '')) === wanted)
+        : [];
+      if (own.length === 1) {
+        return { vehicle_id: own[0].vehicle_id, plate_no: own[0].plate_no, driver_id: Number(driverId), shift_id: null };
+      }
+      // Login does not name one of the assigned vehicles — never guess.
       throw makeError(
         'Multiple active vehicles assigned to this driver — please contact admin',
         400, 'MULTIPLE_ACTIVE_DRIVER_ASSIGNMENTS'
